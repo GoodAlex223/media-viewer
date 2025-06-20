@@ -1,0 +1,15 @@
+{
+  "name": "media_viewer",
+  "version": "1.0.0",
+  "description": "When you're ready, start your application by running: `docker compose up --build`.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "goodalex223",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^36.5.0"
+  }
+}
