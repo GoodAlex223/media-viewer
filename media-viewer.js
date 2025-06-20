@@ -1,8 +1,3 @@
-
-// Require Electron and Node.js modules
-// const { ipcRenderer } = require('electron');
-// const path = require('path');
-
 class MediaViewer {
     constructor() {
         this.mediaFiles = [];
@@ -14,6 +9,12 @@ class MediaViewer {
         
         this.initializeElements();
         this.setupEventListeners();
+        
+        // Check if Electron API is available
+        if (!window.electronAPI) {
+            console.error('Electron API not available');
+            this.showError('Electron API not available. Please make sure you\'re running this in Electron.');
+        }
     }
 
     initializeElements() {
@@ -30,8 +31,10 @@ class MediaViewer {
     }
 
     setupEventListeners() {
-        // Drop zone
+        // Drop zone click
         this.dropZone.addEventListener('click', () => this.openFolderDialog());
+        
+        // Drag and drop
         this.dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             this.dropZone.classList.add('dragover');
@@ -44,7 +47,6 @@ class MediaViewer {
         this.dropZone.addEventListener('drop', (e) => {
             e.preventDefault();
             this.dropZone.classList.remove('dragover');
-            // this.handleFolderDrop(e.dataTransfer.files);
             this.handleFolderDrop(e);
         });
 
@@ -79,17 +81,22 @@ class MediaViewer {
     }
 
     async openFolderDialog() {
-        // if (!window.electronAPI) {
-            // console.error('Electron API not available');
-            // return;
-        // }
+        if (!window.electronAPI) {
+            this.showError('Electron API not available');
+            return;
+        }
+        
         try {
+            console.log('Opening folder dialog...');
             const folderPath = await window.electronAPI.openFolderDialog();
+            console.log('Selected folder:', folderPath);
+            
             if (folderPath) {
                 await this.loadFolder(folderPath);
             }
         } catch (error) {
             console.error('Error opening folder:', error);
+            this.showError(`Failed to open folder dialog: ${error.message}`);
         }
     }
 
@@ -97,103 +104,64 @@ class MediaViewer {
         event.preventDefault();
         this.dropZone.classList.remove('dragover');
         
-        const items = event.dataTransfer.files;
-        if (items.length > 0) {
-        const folderPath = items[0].path;
-        await this.loadFolder(folderPath);
+        // In Electron, dropped folders should have a path property
+        const items = Array.from(event.dataTransfer.files);
+        console.log('Dropped items:', items);
+        
+        if (items.length > 0 && items[0].path) {
+            const folderPath = items[0].path;
+            console.log('Dropped folder path:', folderPath);
+            await this.loadFolder(folderPath);
+        } else {
+            this.showError('Please drop a folder, not individual files');
         }
     }
 
     async loadFolder(folderPath) {
+        if (!window.electronAPI) {
+            this.showError('Electron API not available');
+            return;
+        }
+        
         try {
-            const result = await window.electronAPI.loadFolder(folderPath);
+            console.log('Loading folder:', folderPath);
+            this.showLoadingSpinner();
             
-            if (result.error) {
-                this.showError(result.error);
+            const result = await window.electronAPI.loadFolder(folderPath);
+            console.log('Load result:', result);
+            
+            this.hideLoadingSpinner();
+            
+            if (!result.success) {
+                this.showError(result.error || 'Failed to load folder');
+                return;
+            }
+            
+            if (result.files.length === 0) {
+                this.showError('No media files found in the selected folder');
                 return;
             }
             
             this.mediaFiles = result.files;
-            this.currentFolderPath = window.electronAPI.path.basename(folderPath);
             this.baseFolderPath = folderPath;
+            this.currentFolderPath = window.electronAPI.path.basename(folderPath);
             
             // Parse current folder number from folder name
             const match = this.currentFolderPath.match(/Liked_(\d+)/);
             this.currentFolder = match ? parseInt(match[1]) : 0;
             
             this.currentIndex = 0;
-            this.showMedia();
             this.hideDropZone();
+            this.showMedia();
             this.updateFolderInfo();
             
+            console.log(`Successfully loaded ${this.mediaFiles.length} media files`);
+            
         } catch (error) {
+            this.hideLoadingSpinner();
+            console.error('Error loading folder:', error);
             this.showError(`Failed to load folder: ${error.message}`);
         }
-    }
-
-    async handleFolderSelect(files) {
-        if (files.length === 0) return;
-        
-        // Get folder path from the first file
-        const firstFile = files[0];
-        this.baseFolderPath = firstFile.webkitRelativePath.split('/')[0];
-        
-        // Filter media files
-        const validFiles = Array.from(files).filter(file => {
-            const isMedia = file.type.startsWith('image/') || file.type.startsWith('video/');
-            const isInRootFolder = file.webkitRelativePath.split('/').length === 2; // folder/file.ext
-            return isMedia && isInRootFolder;
-        });
-
-        if (validFiles.length === 0) {
-            alert('No media files found in the selected folder.');
-            return;
-        }
-
-        // Parse current folder number from folder name
-        const folderName = this.baseFolderPath;
-        const match = folderName.match(/Liked_(\d+)/);
-        if (match) {
-            this.currentFolder = parseInt(match[1]);
-        } else {
-            this.currentFolder = 0;
-        }
-
-        this.mediaFiles = validFiles;
-        this.currentFolderPath = this.baseFolderPath;
-        this.currentIndex = 0;
-        this.showMedia();
-        this.hideDropZone();
-        this.updateFolderInfo();
-    }
-
-    readDirectory(entry) {
-        return new Promise((resolve) => {
-            const reader = entry.createReader();
-            const files = [];
-            
-            const readEntries = () => {
-                reader.readEntries((entries) => {
-                    if (entries.length === 0) {
-                        resolve(files);
-                    } else {
-                        entries.forEach(entry => {
-                            if (entry.isFile) {
-                                entry.file((file) => {
-                                    file.webkitRelativePath = entry.fullPath.substring(1);
-                                    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-                                        files.push(file);
-                                    }
-                                });
-                            }
-                        });
-                        readEntries();
-                    }
-                });
-            };
-            
-            readEntries();
-        });
     }
 
     hideDropZone() {
@@ -203,8 +171,23 @@ class MediaViewer {
         this.navInfo.style.display = 'block';
     }
 
-    showMedia() {
-        if (this.mediaFiles.length === 0) return;
+    showDropZone() {
+        this.dropZone.style.display = 'flex';
+        this.controls.style.display = 'none';
+        this.fileInfo.style.display = 'none';
+        this.navInfo.style.display = 'none';
+        
+        if (this.currentMedia) {
+            this.currentMedia.remove();
+            this.currentMedia = null;
+        }
+    }
+
+    async showMedia() {
+        if (this.mediaFiles.length === 0) {
+            this.showDropZone();
+            return;
+        }
 
         // Remove existing media
         if (this.currentMedia) {
@@ -212,18 +195,21 @@ class MediaViewer {
         }
 
         const file = this.mediaFiles[this.currentIndex];
-        const url = URL.createObjectURL(file);
+        console.log('Showing media:', file.name);
+        
+        // Create file URL for Electron
+        const fileUrl = `file://${file.path}`;
 
         // Create media element
         if (file.type.startsWith('image/')) {
             this.currentMedia = document.createElement('img');
-            this.currentMedia.src = url;
+            this.currentMedia.src = fileUrl;
         } else if (file.type.startsWith('video/')) {
             this.currentMedia = document.createElement('video');
-            this.currentMedia.src = url;
+            this.currentMedia.src = fileUrl;
             this.currentMedia.autoplay = true;
             this.currentMedia.loop = true;
-            this.currentMedia.muted = true; // Required for autoplay
+            this.currentMedia.muted = true;
             this.currentMedia.controls = false;
         }
 
@@ -239,8 +225,15 @@ class MediaViewer {
             this.currentMedia.style.display = 'block';
         };
 
+        const onError = (error) => {
+            this.hideLoadingSpinner();
+            console.error('Media load error:', error);
+            this.showError(`Failed to load media: ${file.name}`);
+        };
+
         this.currentMedia.addEventListener('load', onLoad);
         this.currentMedia.addEventListener('loadeddata', onLoad);
+        this.currentMedia.addEventListener('error', onError);
 
         document.querySelector('.media-container').appendChild(this.currentMedia);
 
@@ -256,14 +249,12 @@ class MediaViewer {
         const containerRect = container.getBoundingClientRect();
         
         // Account for padding and controls
-        const availableWidth = containerRect.width - 40; // 20px padding on each side
-        const availableHeight = containerRect.height - 160; // Space for controls and info
+        const availableWidth = containerRect.width - 40;
+        const availableHeight = containerRect.height - 160;
 
         if (this.currentMedia.tagName === 'IMG') {
-            // Wait for image to load to get natural dimensions
             const img = this.currentMedia;
             
-            // Check if image is larger than available space
             if (img.naturalWidth > availableWidth || img.naturalHeight > availableHeight) {
                 const widthRatio = availableWidth / img.naturalWidth;
                 const heightRatio = availableHeight / img.naturalHeight;
@@ -274,14 +265,12 @@ class MediaViewer {
                 img.style.maxWidth = 'none';
                 img.style.maxHeight = 'none';
             } else {
-                // Image fits at 100%, use natural size
                 img.style.width = img.naturalWidth + 'px';
                 img.style.height = img.naturalHeight + 'px';
                 img.style.maxWidth = 'none';
                 img.style.maxHeight = 'none';
             }
         } else if (this.currentMedia.tagName === 'VIDEO') {
-            // For videos, use similar logic
             const video = this.currentMedia;
             
             video.addEventListener('loadedmetadata', () => {
@@ -295,7 +284,6 @@ class MediaViewer {
                     video.style.maxWidth = 'none';
                     video.style.maxHeight = 'none';
                 } else {
-                    // Video fits at 100%, use natural size
                     video.style.width = video.videoWidth + 'px';
                     video.style.height = video.videoHeight + 'px';
                     video.style.maxWidth = 'none';
@@ -355,23 +343,6 @@ class MediaViewer {
         await this.moveCurrentFile(newFolderNumber);
     }
 
-    getBaseFolderPath() {
-        if (!this.baseFolderPath) return '';
-        
-        // Get the parent directory of the current folder
-        const parts = this.baseFolderPath.split('/');
-        if (parts.length > 1) {
-            return parts.slice(0, -1).join('/');
-        }
-        return '';
-    }
-
-    async shouldPromptFolderCreation(targetPath) {
-        // In a real application, you would check if the folder exists
-        // For this demo, we'll always prompt for new folders
-        return true;
-    }
-
     showFolderCreationDialog(folderPath) {
         return new Promise((resolve) => {
             const modal = document.createElement('div');
@@ -426,66 +397,6 @@ class MediaViewer {
         });
     }
 
-    async simulateMoveFile(file, targetFolder, targetFolderPath) {
-        // Show move animation
-        this.showMoveAnimation(targetFolder.includes(String(this.currentFolder + 1)) ? 'like' : 'dislike', targetFolder);
-        
-        // Create download link to simulate file save
-        const blob = new Blob([file], { type: file.type });
-        const url = URL.createObjectURL(blob);
-        
-        // Create a temporary download link
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = file.name; // Just the filename, folder creation is separate
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        
-        // Show instruction to user
-        const instruction = document.createElement('div');
-        instruction.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 15px 20px;
-            border-radius: 10px;
-            font-size: 14px;
-            z-index: 1000;
-            max-width: 350px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        `;
-        
-        instruction.innerHTML = `
-            <strong>📁 File Move Instructions:</strong><br>
-            <div style="margin: 10px 0; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 5px;">
-                <strong>1.</strong> Create folder: <code style="color: #00d4aa;">${targetFolderPath}</code><br>
-                <strong>2.</strong> Move file: <code style="color: #00d4aa;">${file.name}</code>
-            </div>
-            <small style="color: #ccc;">💾 Click to download file</small>
-        `;
-        
-        instruction.addEventListener('click', () => {
-            a.click();
-            instruction.remove();
-        });
-        
-        document.body.appendChild(instruction);
-        
-        // Auto-remove instruction after 8 seconds
-        setTimeout(() => {
-            if (instruction.parentNode) {
-                instruction.remove();
-            }
-            URL.revokeObjectURL(url);
-            a.remove();
-        }, 8000);
-        
-        console.log(`Move ${file.name} to ${targetFolderPath}/${file.name}`);
-        return Promise.resolve();
-    }
-
     showMoveAnimation(action, targetFolder) {
         const notification = document.createElement('div');
         notification.style.cssText = `
@@ -515,6 +426,8 @@ class MediaViewer {
     }
 
     showError(message) {
+        console.error('Error:', message);
+        
         const error = document.createElement('div');
         error.style.cssText = `
             position: fixed;
@@ -540,7 +453,7 @@ class MediaViewer {
         setTimeout(() => {
             error.style.animation = 'slideOut 0.3s ease-in';
             setTimeout(() => error.remove(), 300);
-        }, 3000);
+        }, 4000);
     }
 
     nextMedia() {
@@ -549,6 +462,7 @@ class MediaViewer {
             return;
         }
         
+        this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
         this.showMedia();
     }
 
@@ -559,44 +473,38 @@ class MediaViewer {
         this.showMedia();
     }
 
-    showDropZone() {
-        this.dropZone.style.display = 'flex';
-        this.controls.style.display = 'none';
-        this.fileInfo.style.display = 'none';
-        this.navInfo.style.display = 'none';
-        
-        if (this.currentMedia) {
-            this.currentMedia.remove();
-            this.currentMedia = null;
-        }
-    }
-
     async moveCurrentFile(targetFolderNumber) {
         if (this.mediaFiles.length === 0) return;
         
         const currentFile = this.mediaFiles[this.currentIndex];
         const targetFolderName = `Liked_${targetFolderNumber}`;
-        const targetFolderPath = window.electronAPI.path.join(window.electronAPI.path.dirname(this.baseFolderPath), targetFolderName);
+        const targetFolderPath = window.electronAPI.path.join(
+            window.electronAPI.path.dirname(this.baseFolderPath), 
+            targetFolderName
+        );
         
         try {
             // Check if target folder exists
-            const folderExists = await window.electronAPI.invoke('check-folder-exists', targetFolderPath);
+            const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
             
             if (!folderExists) {
                 const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
                 if (!shouldCreate) return;
                 
-                await window.electronAPI.invoke('create-folder', targetFolderPath);
+                const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                if (!createResult.success) {
+                    throw new Error(createResult.error);
+                }
             }
             
             // Move the file
-            const moveResult = await window.electronAPI.invoke('move-file', {
+            const moveResult = await window.electronAPI.moveFile({
                 sourcePath: currentFile.path,
                 targetFolder: targetFolderPath,
                 fileName: currentFile.name
             });
             
-            if (moveResult.error) {
+            if (!moveResult.success) {
                 throw new Error(moveResult.error);
             }
             
@@ -651,17 +559,9 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// document.addEventListener('DOMContentLoaded', () => {
-    // if (!window.electronAPI) {
-        // console.error('Electron API not available - running in browser?');
-        // // Add fallback behavior if needed
-        // return;
-    // }
-//             
-// });
-const viewer = new MediaViewer();
-
-// // Handle folder selection from main process
-//window.electronAPI.on('folder-selected', (event, folderPath) => {
-//    viewer.loadFolder(folderPath);
-//});
+// Initialize the viewer when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing MediaViewer...');
+    const viewer = new MediaViewer();
+    window.mediaViewer = viewer; // For debugging
+});

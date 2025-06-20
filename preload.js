@@ -1,33 +1,32 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const path = require('path')
+const path = require('path');
 
 console.log('Preload script loading...');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    moveFile: (sourcePath, targetFolder, fileName) => 
-        ipcRenderer.invoke('move-file', sourcePath, targetFolder, fileName),
-
-    checkFolderExists: (folderPath) => 
-        ipcRenderer.invoke('check-folder-exists', folderPath),
+    // File operations
+    moveFile: (data) => ipcRenderer.invoke('move-file', data),
+    checkFolderExists: (folderPath) => ipcRenderer.invoke('check-folder-exists', folderPath),
+    createFolder: (folderPath) => ipcRenderer.invoke('create-folder', folderPath),
     
-    createFolder: (folderPath) => 
-        ipcRenderer.invoke('create-folder', folderPath),
-
+    // Folder operations
     openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'),
     loadFolder: (folderPath) => ipcRenderer.invoke('load-folder', folderPath),
-
-    // Add path methods
+    
+    // IPC invoke wrapper for other operations
+    invoke: (channel, data) => ipcRenderer.invoke(channel, data),
+    
+    // Path utilities
     path: {
         join: (...args) => path.join(...args),
         dirname: (p) => path.dirname(p),
-        basename: (p) => path.basename(p)
+        basename: (p) => path.basename(p),
+        extname: (p) => path.extname(p)
     }
 });
 
-// Optional: Add console warning in development
-if (process.env.NODE_ENV === 'development') {
-    console.log('Preload script initialized');
-}
+window.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, electronAPI available:', !!window.electronAPI);
+});
 
-console.log('Preload script loaded');
-console.log('Exposing API:', Object.keys(window.electronAPI));
+console.log('Preload script loaded successfully');
