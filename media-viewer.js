@@ -497,7 +497,9 @@ class MediaViewer {
             // Move the file back
             const moveResult = await window.electronAPI.moveFile({
                 sourcePath: lastMove.newPath,
-                targetFolder: window.electronAPI.path.dirname(this.baseFolderPath),
+                // targetFolder: window.electronAPI.path.dirname(this.baseFolderPath),
+                targetFolder: this.baseFolderPath,
+                // targetFolder: this.currentFolderPath,
                 fileName: lastMove.fileName
             });
             
@@ -516,11 +518,16 @@ class MediaViewer {
             this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
             this.updateFolderInfo();
             
+            // // If we were at the end of the list, show the restored file
+            // if (this.currentIndex >= this.mediaFiles.length - 1) {
+            //     this.currentIndex = this.mediaFiles.length - 1;
+            //     this.showMedia();
+            // }
             // If we were at the end of the list, show the restored file
-            if (this.currentIndex >= this.mediaFiles.length - 1) {
+            // if (this.currentIndex >= this.mediaFiles.length - 1) {
                 this.currentIndex = this.mediaFiles.length - 1;
                 this.showMedia();
-            }
+            // }
             
         } catch (error) {
             console.error('Error undoing move:', error);

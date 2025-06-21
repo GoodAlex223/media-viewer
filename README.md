@@ -1,3 +1,7 @@
+## 22.06.25 - 00:14
+
+1. medias with cancelled score are moved back to source folder and showed 
+
 ## 22.06.25
 
 1. Move message of move error or success from center to the top of the window. 
