@@ -75,10 +75,11 @@ body {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.media-display:hover {
+/* Only apply hover effect when image is scaled down to fit screen
+.media-display.scaled-down:hover {
     transform: scale(1.02);
     box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
-}
+} */
 
 .controls {
     position: fixed;
