@@ -88,6 +88,14 @@ body {
     display: none;
     gap: 10px;
     z-index: 10;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.controls.show {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .control-btn {
@@ -171,7 +179,6 @@ body {
     max-width: 300px;
 }
 
-.file-info:hover,
 .file-info.show {
     opacity: 1;
     pointer-events: auto;
@@ -329,6 +336,14 @@ body {
     color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.1);
     display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.navigation-info.show {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .video-controls {
@@ -345,6 +360,14 @@ body {
     gap: 10px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 20;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.video-controls.show {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .video-control-btn {
@@ -396,10 +419,12 @@ body {
 .notification-container {
     position: fixed;
     top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 20px;
     z-index: 1500;
     pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
 }
 
 .notification {
@@ -411,7 +436,7 @@ body {
     font-weight: bold;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(10px);
-    animation: slideInTop 0.3s ease-out;
+    animation: slideInLeft 0.3s ease-out;
     margin-bottom: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -438,25 +463,25 @@ body {
     to { opacity: 1; transform: scale(1); }
 }
 
-@keyframes slideInTop {
+@keyframes slideInLeft {
     from {
         opacity: 0;
-        transform: translateX(-50%) translateY(-20px);
+        transform: translateX(-20px);
     }
     to {
         opacity: 1;
-        transform: translateX(-50%) translateY(0);
+        transform: translateX(0);
     }
 }
 
-@keyframes slideOutTop {
+@keyframes slideOutLeft {
     from {
         opacity: 1;
-        transform: translateX(-50%) translateY(0);
+        transform: translateX(0);
     }
     to {
         opacity: 0;
-        transform: translateX(-50%) translateY(-20px);
+        transform: translateX(-20px);
     }
 }
 
@@ -484,5 +509,10 @@ body {
     .file-info {
         max-width: 250px;
         font-size: 11px;
+    }
+    
+    .notification-container {
+        left: 10px;
+        top: 10px;
     }
 }

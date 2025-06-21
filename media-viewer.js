@@ -75,32 +75,31 @@ class MediaViewer {
             if (this.mediaFiles.length === 0) return;
             
             switch(e.key) {
-                case 'ArrowRight':
                 case ' ':
                     e.preventDefault();
                     if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
                         this.togglePlayPause();
-                    } else {
-                        this.handleLike();
                     }
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    this.handleDislike();
                     break;
                 case 'ArrowUp':
                     e.preventDefault();
-                    this.previousMedia();
+                    this.handleLike();
                     break;
                 case 'ArrowDown':
                     e.preventDefault();
-                    this.nextMedia();
+                    this.handleDislike();
                     break;
-                case 'z':
+                case 'ArrowLeft':
+                    e.preventDefault();
                     if (e.ctrlKey) {
-                        e.preventDefault();
                         this.handleCancel();
+                    } else {
+                        this.previousMedia();
                     }
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    this.nextMedia();
                     break;
             }
         });

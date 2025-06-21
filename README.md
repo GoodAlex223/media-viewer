@@ -1,4 +1,35 @@
+## 22.06.25 - 01:17
 
+1. Controls visibility on hover only:
+
+Added opacity: 0 and pointer-events: none to .controls, .navigation-info, and .video-controls by default
+Added .show class styles with opacity: 1 and pointer-events: auto
+The JavaScript already handles showing these on mouse movement and hiding after timeout
+
+2. Notifications moved to left side:
+
+Changed .notification-container position from left: 50%; transform: translateX(-50%) to left: 20px
+Added display: flex; flex-direction: column; align-items: flex-start for proper stacking
+Updated animations from slideInTop/slideOutTop to slideInLeft/slideOutLeft
+Added the new slide animations for left-side movement
+
+3. File info only on hover:
+
+Removed :hover selector from .file-info:hover condition
+Now only .file-info.show will make it visible
+The JavaScript already handles the hover detection for the top-right area
+
+4. Updated notification animation:
+
+Changed the JavaScript showNotification method to use slideOutLeft instead of slideOutTop
+
+The existing JavaScript already has the proper hover detection logic in place - it was just the CSS that needed to be updated to hide elements by default and only show them with the .show class. The hover areas are:
+
+File info: Shows when mouse is in top-right 200px area or hovering over file info
+Controls: Show on any mouse movement, hide after 2 seconds of inactivity
+Video controls: Same behavior as regular controls, but only visible when video is playing
+
+5. Updated shortcuts
 
 ## 22.06.25 - 00:45
 
