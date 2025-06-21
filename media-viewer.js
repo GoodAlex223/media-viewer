@@ -12,6 +12,7 @@ class MediaViewer {
         this.setupEventListeners();
         this.setupHeaderVisibility();
         this.setupFileInfoVisibility();
+        this.setupControlsVisibility(); // Add this line
         
         // Check if Electron API is available
         if (!window.electronAPI) {
@@ -37,6 +38,7 @@ class MediaViewer {
         this.volumeSlider = document.getElementById('volumeSlider');
         this.header = document.getElementById('header');
         this.notificationContainer = document.getElementById('notificationContainer');
+        this.mediaContainer = document.querySelector('.media-container');
     }
 
     setupEventListeners() {
@@ -155,6 +157,69 @@ class MediaViewer {
                 showFileInfo();
             }
         });
+    }
+
+    setupControlsVisibility() {
+        let controlsTimeout;
+        let videoControlsTimeout;
+        
+        const showControls = () => {
+            this.controls.classList.add('show');
+            this.navInfo.classList.add('show');
+            if (this.videoControls.style.display === 'flex') {
+                this.videoControls.classList.add('show');
+            }
+            clearTimeout(controlsTimeout);
+            clearTimeout(videoControlsTimeout);
+        };
+
+        const hideControls = () => {
+            controlsTimeout = setTimeout(() => {
+                this.controls.classList.remove('show');
+                this.navInfo.classList.remove('show');
+            }, 300);
+            
+            videoControlsTimeout = setTimeout(() => {
+                this.videoControls.classList.remove('show');
+            }, 300);
+        };
+
+        // Show controls on mouse movement
+        document.addEventListener('mousemove', () => {
+            if (this.mediaFiles.length > 0) {
+                showControls();
+                clearTimeout(controlsTimeout);
+                clearTimeout(videoControlsTimeout);
+                
+                controlsTimeout = setTimeout(() => {
+                    this.controls.classList.remove('show');
+                    this.navInfo.classList.remove('show');
+                    this.videoControls.classList.remove('show');
+                }, 2000);
+            }
+        });
+
+        // Keep controls visible when hovering over them
+        this.controls.addEventListener('mouseenter', () => {
+            clearTimeout(controlsTimeout);
+            showControls();
+        });
+
+        this.controls.addEventListener('mouseleave', hideControls);
+
+        this.videoControls.addEventListener('mouseenter', () => {
+            clearTimeout(videoControlsTimeout);
+            showControls();
+        });
+
+        this.videoControls.addEventListener('mouseleave', hideControls);
+
+        this.navInfo.addEventListener('mouseenter', () => {
+            clearTimeout(controlsTimeout);
+            showControls();
+        });
+
+        this.navInfo.addEventListener('mouseleave', hideControls);
     }
 
     async openFolderDialog() {
@@ -325,7 +390,7 @@ class MediaViewer {
         this.currentMedia.addEventListener('loadeddata', onLoad);
         this.currentMedia.addEventListener('error', onError);
 
-        document.querySelector('.media-container').appendChild(this.currentMedia);
+        this.mediaContainer.appendChild(this.currentMedia);
 
         // Update UI
         this.updateFileInfo(file);
@@ -335,48 +400,59 @@ class MediaViewer {
     fitMediaToScreen() {
         if (!this.currentMedia) return;
 
-        const container = document.querySelector('.media-container');
-        const containerRect = container.getBoundingClientRect();
-        
-        // Account for controls at the bottom
-        const controlsHeight = 120; // Space for controls
-        const availableWidth = containerRect.width - 40;
-        const availableHeight = containerRect.height - controlsHeight;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
 
         if (this.currentMedia.tagName === 'IMG') {
             const img = this.currentMedia;
             
-            if (img.naturalWidth > availableWidth || img.naturalHeight > availableHeight) {
-                const widthRatio = availableWidth / img.naturalWidth;
-                const heightRatio = availableHeight / img.naturalHeight;
-                const scale = Math.min(widthRatio, heightRatio);
+            // Wait for image to load to get natural dimensions
+            const handleImageLoad = () => {
+                const naturalWidth = img.naturalWidth;
+                const naturalHeight = img.naturalHeight;
                 
-                img.style.width = (img.naturalWidth * scale) + 'px';
-                img.style.height = (img.naturalHeight * scale) + 'px';
-                img.style.maxWidth = 'none';
-                img.style.maxHeight = 'none';
+                // If image is larger than screen in either dimension, fit to screen
+                if (naturalWidth > windowWidth || naturalHeight > windowHeight) {
+                    img.style.width = '100vw';
+                    img.style.height = '100vh';
+                    img.style.objectFit = 'contain';
+                    img.style.maxWidth = 'none';
+                    img.style.maxHeight = 'none';
+                } else {
+                    // If image is smaller than screen, display at natural size
+                    img.style.width = naturalWidth + 'px';
+                    img.style.height = naturalHeight + 'px';
+                    img.style.objectFit = 'none';
+                    img.style.maxWidth = 'none';
+                    img.style.maxHeight = 'none';
+                }
+            };
+            
+            if (img.complete && img.naturalWidth > 0) {
+                handleImageLoad();
             } else {
-                img.style.width = img.naturalWidth + 'px';
-                img.style.height = img.naturalHeight + 'px';
-                img.style.maxWidth = 'none';
-                img.style.maxHeight = 'none';
+                img.addEventListener('load', handleImageLoad);
             }
+            
         } else if (this.currentMedia.tagName === 'VIDEO') {
             const video = this.currentMedia;
             
             const handleVideoMetadata = () => {
-                if (video.videoWidth > availableWidth || video.videoHeight > availableHeight) {
-                    const widthRatio = availableWidth / video.videoWidth;
-                    const heightRatio = availableHeight / video.videoHeight;
-                    const scale = Math.min(widthRatio, heightRatio);
-                    
-                    video.style.width = (video.videoWidth * scale) + 'px';
-                    video.style.height = (video.videoHeight * scale) + 'px';
+                const videoWidth = video.videoWidth;
+                const videoHeight = video.videoHeight;
+                
+                // If video is larger than screen in either dimension, fit to screen
+                if (videoWidth > windowWidth || videoHeight > windowHeight) {
+                    video.style.width = '100vw';
+                    video.style.height = '100vh';
+                    video.style.objectFit = 'contain';
                     video.style.maxWidth = 'none';
                     video.style.maxHeight = 'none';
                 } else {
-                    video.style.width = video.videoWidth + 'px';
-                    video.style.height = video.videoHeight + 'px';
+                    // If video is smaller than screen, display at natural size
+                    video.style.width = videoWidth + 'px';
+                    video.style.height = videoHeight + 'px';
+                    video.style.objectFit = 'none';
                     video.style.maxWidth = 'none';
                     video.style.maxHeight = 'none';
                 }
@@ -413,7 +489,7 @@ class MediaViewer {
         const loading = document.createElement('div');
         loading.className = 'loading';
         loading.innerHTML = '<div class="spinner"></div>Loading...';
-        document.querySelector('.media-container').appendChild(loading);
+        this.mediaContainer.appendChild(loading);
     }
 
     hideLoadingSpinner() {
@@ -497,9 +573,7 @@ class MediaViewer {
             // Move the file back
             const moveResult = await window.electronAPI.moveFile({
                 sourcePath: lastMove.newPath,
-                // targetFolder: window.electronAPI.path.dirname(this.baseFolderPath),
                 targetFolder: this.baseFolderPath,
-                // targetFolder: this.currentFolderPath,
                 fileName: lastMove.fileName
             });
             
@@ -518,16 +592,8 @@ class MediaViewer {
             this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
             this.updateFolderInfo();
             
-            // // If we were at the end of the list, show the restored file
-            // if (this.currentIndex >= this.mediaFiles.length - 1) {
-            //     this.currentIndex = this.mediaFiles.length - 1;
-            //     this.showMedia();
-            // }
-            // If we were at the end of the list, show the restored file
-            // if (this.currentIndex >= this.mediaFiles.length - 1) {
-                this.currentIndex = this.mediaFiles.length - 1;
-                this.showMedia();
-            // }
+            this.currentIndex = this.mediaFiles.length - 1;
+            this.showMedia();
             
         } catch (error) {
             console.error('Error undoing move:', error);

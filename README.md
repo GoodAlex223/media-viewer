@@ -1,3 +1,10 @@
+
+
+## 22.06.25 - 00:45
+
+1. Show media at full width or height of screen if it has width or height larger then screen ones.
+
+
 ## 22.06.25 - 00:14
 
 1. medias with cancelled score are moved back to source folder and showed 
