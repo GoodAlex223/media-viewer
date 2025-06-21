@@ -1,3 +1,14 @@
+## 22.06.25
+
+1. Move message of move error or success from center to the top of the window. 
+2. Now when video is showed and video height is larger then window height video shifts out from window and also like and dislike buttons shifts out from the window. 
+3. Video need to have sound and play/pause button. 
+4. Buttons move to the bottom of the window, make smaller and as squares. 
+5. Header with "Media Viewer" and current folder name with amount of files take up a lot of space on the screen. Make them transparent and at first plan and only show when mouse is over them . New free space is for media. 
+6. Add cancel button that return previous post to this folder and show them. 
+7. Near file name and size and file dimensions and aspect ratio. Make this info showed only on mouse over. 
+8. Separate css styles to separate file. 
+
 ## 21.06.25
 
 Main Issues I Found and Fixed:

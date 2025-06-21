@@ -20,9 +20,9 @@ body {
     top: 0;
     left: 0;
     right: 0;
-    background: rgba(32, 32, 32, 0.1);
+    background: rgba(32, 32, 32, 0.8);
     backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding: 8px 20px;
     display: flex;
     justify-content: space-between;
@@ -40,16 +40,16 @@ body {
 }
 
 .title {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
     color: #ffffff;
 }
 
 .folder-info {
-    font-size: 10px;
+    font-size: 12px;
     color: #a0a0a0;
     background: rgba(255, 255, 255, 0.1);
-    padding: 2px 8px;
+    padding: 4px 10px;
     border-radius: 8px;
 }
 
@@ -61,11 +61,12 @@ body {
     position: relative;
     width: 100vw;
     height: 100vh;
+    padding: 20px;
 }
 
 .media-display {
-    max-width: 100vw;
-    max-height: 100vh;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 120px);
     width: auto;
     height: auto;
     object-fit: contain;
@@ -85,16 +86,16 @@ body {
     left: 50%;
     transform: translateX(-50%);
     display: none;
-    gap: 15px;
+    gap: 10px;
     z-index: 10;
 }
 
 .control-btn {
-    width: 50px;
-    height: 50px;
+    width: 40px;
+    height: 40px;
     border: none;
-    border-radius: 8px;
-    font-size: 20px;
+    border-radius: 6px;
+    font-size: 16px;
     font-weight: bold;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -102,7 +103,7 @@ body {
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(20px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -112,13 +113,13 @@ body {
 }
 
 .like-btn:hover {
-    transform: translateY(-4px) scale(1.1);
-    box-shadow: 0 12px 40px rgba(0, 212, 170, 0.4);
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(0, 212, 170, 0.4);
     background: linear-gradient(135deg, #00e8bb 0%, #00b896 100%);
 }
 
 .like-btn:active {
-    transform: translateY(-2px) scale(1.05);
+    transform: translateY(-1px) scale(1.02);
 }
 
 .dislike-btn {
@@ -127,13 +128,13 @@ body {
 }
 
 .dislike-btn:hover {
-    transform: translateY(-4px) scale(1.1);
-    box-shadow: 0 12px 40px rgba(255, 107, 107, 0.4);
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.4);
     background: linear-gradient(135deg, #ff7979 0%, #fd79a8 100%);
 }
 
 .dislike-btn:active {
-    transform: translateY(-2px) scale(1.05);
+    transform: translateY(-1px) scale(1.02);
 }
 
 .cancel-btn {
@@ -142,13 +143,13 @@ body {
 }
 
 .cancel-btn:hover {
-    transform: translateY(-4px) scale(1.1);
-    box-shadow: 0 12px 40px rgba(255, 165, 0, 0.4);
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(255, 165, 0, 0.4);
     background: linear-gradient(135deg, #ffb84d 0%, #ffa500 100%);
 }
 
 .cancel-btn:active {
-    transform: translateY(-2px) scale(1.05);
+    transform: translateY(-1px) scale(1.02);
 }
 
 .file-info {
@@ -157,7 +158,7 @@ body {
     right: 20px;
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(10px);
-    padding: 10px 16px;
+    padding: 12px 16px;
     border-radius: 12px;
     font-size: 12px;
     color: #ffffff;
@@ -167,6 +168,7 @@ body {
     transition: opacity 0.3s ease;
     pointer-events: none;
     z-index: 200;
+    max-width: 300px;
 }
 
 .file-info:hover,
@@ -177,13 +179,14 @@ body {
 
 #fileName {
     font-weight: bold;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    word-wrap: break-word;
 }
 
 #fileDetails {
-    font-size: 10px;
+    font-size: 11px;
     color: #a0a0a0;
-    line-height: 1.3;
+    line-height: 1.4;
 }
 
 .loading {
@@ -315,14 +318,14 @@ body {
 
 .navigation-info {
     position: fixed;
-    bottom: 90px;
+    bottom: 70px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(10px);
-    padding: 6px 12px;
-    border-radius: 16px;
-    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
     color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.1);
     display: none;
@@ -330,16 +333,16 @@ body {
 
 .video-controls {
     position: fixed;
-    bottom: 140px;
+    bottom: 100px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(10px);
-    padding: 10px 16px;
-    border-radius: 20px;
+    padding: 8px 14px;
+    border-radius: 16px;
     display: none;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 20;
 }
@@ -347,19 +350,20 @@ body {
 .video-control-btn {
     background: none;
     border: none;
-    font-size: 18px;
+    font-size: 16px;
     cursor: pointer;
     color: white;
     transition: transform 0.2s ease;
+    padding: 4px;
 }
 
 .video-control-btn:hover {
-    transform: scale(1.2);
+    transform: scale(1.1);
 }
 
 .volume-slider {
-    width: 80px;
-    height: 4px;
+    width: 60px;
+    height: 3px;
     background: rgba(255, 255, 255, 0.3);
     border-radius: 2px;
     outline: none;
@@ -368,16 +372,16 @@ body {
 
 .volume-slider::-webkit-slider-thumb {
     appearance: none;
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     background: #00d4aa;
     border-radius: 50%;
     cursor: pointer;
 }
 
 .volume-slider::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     background: #00d4aa;
     border-radius: 50%;
     cursor: pointer;
@@ -385,7 +389,7 @@ body {
 }
 
 .volume-icon {
-    font-size: 14px;
+    font-size: 12px;
     color: #a0a0a0;
 }
 
@@ -401,14 +405,14 @@ body {
 .notification {
     background: linear-gradient(135deg, #00d4aa 0%, #00a085 100%);
     color: white;
-    padding: 12px 20px;
-    border-radius: 10px;
-    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
     font-weight: bold;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(10px);
     animation: slideInTop 0.3s ease-out;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -458,22 +462,27 @@ body {
 
 @media (max-width: 768px) {
     .control-btn {
-        width: 45px;
-        height: 45px;
-        font-size: 18px;
+        width: 36px;
+        height: 36px;
+        font-size: 14px;
     }
     
     .controls {
-        gap: 12px;
+        gap: 8px;
         bottom: 15px;
     }
     
     .video-controls {
-        bottom: 80px;
-        padding: 8px 12px;
+        bottom: 85px;
+        padding: 6px 10px;
     }
     
     .navigation-info {
-        bottom: 70px;
+        bottom: 60px;
+    }
+    
+    .file-info {
+        max-width: 250px;
+        font-size: 11px;
     }
 }

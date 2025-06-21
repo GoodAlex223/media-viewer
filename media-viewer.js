@@ -6,9 +6,12 @@ class MediaViewer {
         this.currentMedia = null;
         this.currentFolderPath = '';
         this.baseFolderPath = '';
+        this.moveHistory = []; // Track moved files for undo functionality
         
         this.initializeElements();
         this.setupEventListeners();
+        this.setupHeaderVisibility();
+        this.setupFileInfoVisibility();
         
         // Check if Electron API is available
         if (!window.electronAPI) {
@@ -21,13 +24,19 @@ class MediaViewer {
         this.dropZone = document.getElementById('dropZone');
         this.fileInfo = document.getElementById('fileInfo');
         this.fileName = document.getElementById('fileName');
-        this.fileSize = document.getElementById('fileSize');
+        this.fileDetails = document.getElementById('fileDetails');
         this.folderInfo = document.getElementById('folderInfo');
         this.controls = document.getElementById('controls');
         this.likeBtn = document.getElementById('likeBtn');
         this.dislikeBtn = document.getElementById('dislikeBtn');
+        this.cancelBtn = document.getElementById('cancelBtn');
         this.navInfo = document.getElementById('navInfo');
         this.mediaIndex = document.getElementById('mediaIndex');
+        this.videoControls = document.getElementById('videoControls');
+        this.playPauseBtn = document.getElementById('playPauseBtn');
+        this.volumeSlider = document.getElementById('volumeSlider');
+        this.header = document.getElementById('header');
+        this.notificationContainer = document.getElementById('notificationContainer');
     }
 
     setupEventListeners() {
@@ -53,6 +62,11 @@ class MediaViewer {
         // Control buttons
         this.likeBtn.addEventListener('click', () => this.handleLike());
         this.dislikeBtn.addEventListener('click', () => this.handleDislike());
+        this.cancelBtn.addEventListener('click', () => this.handleCancel());
+
+        // Video controls
+        this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+        this.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
@@ -62,7 +76,11 @@ class MediaViewer {
                 case 'ArrowRight':
                 case ' ':
                     e.preventDefault();
-                    this.handleLike();
+                    if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                        this.togglePlayPause();
+                    } else {
+                        this.handleLike();
+                    }
                     break;
                 case 'ArrowLeft':
                     e.preventDefault();
@@ -76,6 +94,65 @@ class MediaViewer {
                     e.preventDefault();
                     this.nextMedia();
                     break;
+                case 'z':
+                    if (e.ctrlKey) {
+                        e.preventDefault();
+                        this.handleCancel();
+                    }
+                    break;
+            }
+        });
+    }
+
+    setupHeaderVisibility() {
+        let headerTimeout;
+        
+        const showHeader = () => {
+            this.header.classList.add('show');
+            clearTimeout(headerTimeout);
+            headerTimeout = setTimeout(() => {
+                this.header.classList.remove('show');
+            }, 3000);
+        };
+
+        const hideHeader = () => {
+            clearTimeout(headerTimeout);
+            this.header.classList.remove('show');
+        };
+
+        this.header.addEventListener('mouseenter', showHeader);
+        this.header.addEventListener('mouseleave', hideHeader);
+        
+        // Show header on mouse move near top
+        document.addEventListener('mousemove', (e) => {
+            if (e.clientY < 50) {
+                showHeader();
+            }
+        });
+    }
+
+    setupFileInfoVisibility() {
+        let fileInfoTimeout;
+        
+        const showFileInfo = () => {
+            this.fileInfo.classList.add('show');
+            clearTimeout(fileInfoTimeout);
+        };
+
+        const hideFileInfo = () => {
+            fileInfoTimeout = setTimeout(() => {
+                this.fileInfo.classList.remove('show');
+            }, 300);
+        };
+
+        this.fileInfo.addEventListener('mouseenter', showFileInfo);
+        this.fileInfo.addEventListener('mouseleave', hideFileInfo);
+        
+        // Show file info on mouse move near top-right
+        document.addEventListener('mousemove', (e) => {
+            const windowWidth = window.innerWidth;
+            if (e.clientX > windowWidth - 200 && e.clientY < 200) {
+                showFileInfo();
             }
         });
     }
@@ -104,7 +181,6 @@ class MediaViewer {
         event.preventDefault();
         this.dropZone.classList.remove('dragover');
         
-        // In Electron, dropped folders should have a path property
         const items = Array.from(event.dataTransfer.files);
         console.log('Dropped items:', items);
         
@@ -151,6 +227,7 @@ class MediaViewer {
             this.currentFolder = match ? parseInt(match[1]) : 0;
             
             this.currentIndex = 0;
+            this.moveHistory = []; // Reset move history for new folder
             this.hideDropZone();
             this.showMedia();
             this.updateFolderInfo();
@@ -176,6 +253,7 @@ class MediaViewer {
         this.controls.style.display = 'none';
         this.fileInfo.style.display = 'none';
         this.navInfo.style.display = 'none';
+        this.videoControls.style.display = 'none';
         
         if (this.currentMedia) {
             this.currentMedia.remove();
@@ -204,13 +282,25 @@ class MediaViewer {
         if (file.type.startsWith('image/')) {
             this.currentMedia = document.createElement('img');
             this.currentMedia.src = fileUrl;
+            this.videoControls.style.display = 'none';
         } else if (file.type.startsWith('video/')) {
             this.currentMedia = document.createElement('video');
             this.currentMedia.src = fileUrl;
             this.currentMedia.autoplay = true;
             this.currentMedia.loop = true;
-            this.currentMedia.muted = true;
+            this.currentMedia.muted = false; // Enable sound
             this.currentMedia.controls = false;
+            this.currentMedia.volume = parseFloat(this.volumeSlider.value);
+            this.videoControls.style.display = 'flex';
+            
+            // Update play/pause button based on video state
+            this.currentMedia.addEventListener('play', () => {
+                this.playPauseBtn.textContent = '⏸️';
+            });
+            
+            this.currentMedia.addEventListener('pause', () => {
+                this.playPauseBtn.textContent = '▶️';
+            });
         }
 
         this.currentMedia.className = 'media-display';
@@ -248,9 +338,10 @@ class MediaViewer {
         const container = document.querySelector('.media-container');
         const containerRect = container.getBoundingClientRect();
         
-        // Account for padding and controls
+        // Account for controls at the bottom
+        const controlsHeight = 120; // Space for controls
         const availableWidth = containerRect.width - 40;
-        const availableHeight = containerRect.height - 160;
+        const availableHeight = containerRect.height - controlsHeight;
 
         if (this.currentMedia.tagName === 'IMG') {
             const img = this.currentMedia;
@@ -273,7 +364,7 @@ class MediaViewer {
         } else if (this.currentMedia.tagName === 'VIDEO') {
             const video = this.currentMedia;
             
-            video.addEventListener('loadedmetadata', () => {
+            const handleVideoMetadata = () => {
                 if (video.videoWidth > availableWidth || video.videoHeight > availableHeight) {
                     const widthRatio = availableWidth / video.videoWidth;
                     const heightRatio = availableHeight / video.videoHeight;
@@ -289,8 +380,30 @@ class MediaViewer {
                     video.style.maxWidth = 'none';
                     video.style.maxHeight = 'none';
                 }
-            });
+            };
+            
+            if (video.videoWidth && video.videoHeight) {
+                handleVideoMetadata();
+            } else {
+                video.addEventListener('loadedmetadata', handleVideoMetadata);
+            }
         }
+    }
+
+    togglePlayPause() {
+        if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
+        
+        if (this.currentMedia.paused) {
+            this.currentMedia.play();
+        } else {
+            this.currentMedia.pause();
+        }
+    }
+
+    setVolume(value) {
+        if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
+        
+        this.currentMedia.volume = parseFloat(value);
     }
 
     showLoadingSpinner() {
@@ -308,9 +421,38 @@ class MediaViewer {
         if (loading) loading.remove();
     }
 
-    updateFileInfo(file) {
+    async updateFileInfo(file) {
         this.fileName.textContent = file.name;
-        this.fileSize.textContent = this.formatFileSize(file.size);
+        
+        // Get file dimensions and create detailed info
+        let detailsText = this.formatFileSize(file.size);
+        
+        if (this.currentMedia) {
+            if (this.currentMedia.tagName === 'IMG') {
+                const img = this.currentMedia;
+                if (img.naturalWidth && img.naturalHeight) {
+                    const aspectRatio = (img.naturalWidth / img.naturalHeight).toFixed(2);
+                    detailsText += `\n${img.naturalWidth} × ${img.naturalHeight}\nAspect ratio: ${aspectRatio}:1`;
+                }
+            } else if (this.currentMedia.tagName === 'VIDEO') {
+                const video = this.currentMedia;
+                const checkVideoMetadata = () => {
+                    if (video.videoWidth && video.videoHeight) {
+                        const aspectRatio = (video.videoWidth / video.videoHeight).toFixed(2);
+                        detailsText += `\n${video.videoWidth} × ${video.videoHeight}\nAspect ratio: ${aspectRatio}:1`;
+                        this.fileDetails.textContent = detailsText;
+                    }
+                };
+                
+                if (video.videoWidth && video.videoHeight) {
+                    checkVideoMetadata();
+                } else {
+                    video.addEventListener('loadedmetadata', checkVideoMetadata);
+                }
+            }
+        }
+        
+        this.fileDetails.textContent = detailsText;
     }
 
     updateNavigationInfo() {
@@ -341,6 +483,51 @@ class MediaViewer {
         
         const newFolderNumber = Math.max(this.currentFolder - 1, 0);
         await this.moveCurrentFile(newFolderNumber);
+    }
+
+    async handleCancel() {
+        if (this.moveHistory.length === 0) {
+            this.showNotification('No moves to undo', 'error');
+            return;
+        }
+        
+        const lastMove = this.moveHistory.pop();
+        
+        try {
+            // Move the file back
+            const moveResult = await window.electronAPI.moveFile({
+                sourcePath: lastMove.newPath,
+                targetFolder: window.electronAPI.path.dirname(this.baseFolderPath),
+                fileName: lastMove.fileName
+            });
+            
+            if (!moveResult.success) {
+                throw new Error(moveResult.error);
+            }
+            
+            // Add the file back to the current folder's media files
+            this.mediaFiles.push({
+                name: lastMove.fileName,
+                path: lastMove.originalPath,
+                size: lastMove.fileSize,
+                type: lastMove.fileType
+            });
+            
+            this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
+            this.updateFolderInfo();
+            
+            // If we were at the end of the list, show the restored file
+            if (this.currentIndex >= this.mediaFiles.length - 1) {
+                this.currentIndex = this.mediaFiles.length - 1;
+                this.showMedia();
+            }
+            
+        } catch (error) {
+            console.error('Error undoing move:', error);
+            this.showError(`Failed to undo move: ${error.message}`);
+            // Put the move back in history if it failed
+            this.moveHistory.push(lastMove);
+        }
     }
 
     showFolderCreationDialog(folderPath) {
@@ -397,63 +584,22 @@ class MediaViewer {
         });
     }
 
-    showMoveAnimation(action, targetFolder) {
+    showNotification(message, type = 'success') {
         const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(135deg, ${action === 'like' ? '#00d4aa' : '#ff6b6b'} 0%, ${action === 'like' ? '#00a085' : '#ee5a24'} 100%);
-            color: white;
-            padding: 20px 30px;
-            border-radius: 15px;
-            font-size: 18px;
-            font-weight: bold;
-            z-index: 1000;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            backdrop-filter: blur(10px);
-            animation: slideIn 0.3s ease-out;
-        `;
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
         
-        notification.textContent = `${action === 'like' ? '👍' : '👎'} Moving to ${targetFolder}`;
-        document.body.appendChild(notification);
+        this.notificationContainer.appendChild(notification);
         
         setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease-in';
+            notification.style.animation = 'slideOutTop 0.3s ease-in forwards';
             setTimeout(() => notification.remove(), 300);
-        }, 1500);
+        }, 3000);
     }
 
     showError(message) {
         console.error('Error:', message);
-        
-        const error = document.createElement('div');
-        error.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-            color: white;
-            padding: 20px 30px;
-            border-radius: 15px;
-            font-size: 16px;
-            z-index: 1000;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            backdrop-filter: blur(10px);
-            animation: slideIn 0.3s ease-out;
-            max-width: 400px;
-            text-align: center;
-        `;
-        
-        error.textContent = message;
-        document.body.appendChild(error);
-        
-        setTimeout(() => {
-            error.style.animation = 'slideOut 0.3s ease-in';
-            setTimeout(() => error.remove(), 300);
-        }, 4000);
+        this.showNotification(`❌ ${message}`, 'error');
     }
 
     nextMedia() {
@@ -508,10 +654,21 @@ class MediaViewer {
                 throw new Error(moveResult.error);
             }
             
-            // Show success animation
-            this.showMoveAnimation(
-                targetFolderNumber > this.currentFolder ? 'like' : 'dislike', 
-                targetFolderName
+            // Store move in history for undo functionality
+            this.moveHistory.push({
+                fileName: currentFile.name,
+                originalPath: currentFile.path,
+                newPath: moveResult.targetPath,
+                fileSize: currentFile.size,
+                fileType: currentFile.type,
+                fromFolder: this.currentFolder,
+                toFolder: targetFolderNumber
+            });
+            
+            // Show success notification
+            this.showNotification(
+                `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved to ${targetFolderName}`,
+                targetFolderNumber > this.currentFolder ? 'success' : 'dislike'
             );
             
             // Remove current file from array
