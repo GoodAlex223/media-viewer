@@ -14,42 +14,104 @@
 
     <div class="media-container">
         <div class="drop-zone" id="dropZone">
-            <div>📁</div>
-            <div>Select folder to view media files</div>
-            <div style="font-size: 16px; margin-top: 10px; color: #666;">
+            <div class="drop-icon">📁</div>
+            <div class="drop-title">Select folder to view media files</div>
+            <div class="drop-subtitle">
                 Supports: JPG, PNG, GIF, MP4, WebM, MOV
             </div>
         </div>
 
-        <div class="file-info" id="fileInfo">
-            <div id="fileName"></div>
-            <div id="fileDetails"></div>
+        <!-- Loading indicator -->
+        <div class="loading-container" id="loadingContainer">
+            <div class="spinner"></div>
+            <div class="loading-text">Loading media...</div>
         </div>
 
+        <!-- File info panel - moved to avoid header overlap -->
+        <div class="file-info-panel" id="fileInfoPanel">
+            <div class="file-info-header">
+                <div class="file-name" id="fileName"></div>
+                <button class="file-info-toggle" id="fileInfoToggle" title="Toggle file info">ℹ️</button>
+            </div>
+            <div class="file-details" id="fileDetails"></div>
+        </div>
+
+        <!-- Navigation info -->
         <div class="navigation-info" id="navInfo">
             <span id="mediaIndex"></span>
         </div>
 
+        <!-- Video controls -->
         <div class="video-controls" id="videoControls">
-            <button class="video-control-btn" id="playPauseBtn">⏸️</button>
-            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.1" value="1">
-            <span class="volume-icon">🔊</span>
+            <button class="video-control-btn" id="playPauseBtn" title="Play/Pause">⏸️</button>
+            <div class="video-progress-container">
+                <input type="range" class="progress-slider" id="progressSlider" min="0" max="100" value="0">
+                <div class="time-display">
+                    <span id="currentTime">0:00</span> / <span id="totalTime">0:00</span>
+                </div>
+            </div>
+            <div class="volume-container">
+                <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.1" value="1">
+                <span class="volume-icon">🔊</span>
+            </div>
+            <button class="video-control-btn" id="skipBtn" title="Skip to next">⏭️</button>
         </div>
 
+        <!-- Main controls -->
         <div class="controls" id="controls">
-            <button class="control-btn cancel-btn" id="cancelBtn" title="Undo last move">
-                ↶
+            <button class="control-btn cancel-btn" id="cancelBtn" title="Undo last move (Ctrl+Left)">
+                <span class="btn-icon">↶</span>
+                <span class="btn-label">Undo</span>
             </button>
-            <button class="control-btn dislike-btn" id="dislikeBtn" title="Move to previous folder">
-                👎
+            <button class="control-btn dislike-btn" id="dislikeBtn" title="Move to previous folder (Down Arrow)">
+                <span class="btn-icon">👎</span>
+                <span class="btn-label">Dislike</span>
             </button>
-            <button class="control-btn like-btn" id="likeBtn" title="Move to next folder">
-                👍
+            <button class="control-btn like-btn" id="likeBtn" title="Move to next folder (Up Arrow)">
+                <span class="btn-icon">👍</span>
+                <span class="btn-label">Like</span>
             </button>
+        </div>
+
+        <!-- Navigation arrows -->
+        <div class="nav-arrows">
+            <button class="nav-arrow nav-prev" id="navPrev" title="Previous media (Left Arrow)">❮</button>
+            <button class="nav-arrow nav-next" id="navNext" title="Next media (Right Arrow)">❯</button>
         </div>
     </div>
 
+    <!-- Notifications -->
     <div class="notification-container" id="notificationContainer"></div>
+
+    <!-- Keyboard shortcuts help -->
+    <div class="help-overlay" id="helpOverlay">
+        <div class="help-content">
+            <h3>Keyboard Shortcuts</h3>
+            <div class="shortcut-grid">
+                <div class="shortcut-item">
+                    <kbd>↑</kbd> <span>Like (Move to higher folder)</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>↓</kbd> <span>Dislike (Move to lower folder)</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>←</kbd> <span>Previous media</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>→</kbd> <span>Next media</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>Ctrl</kbd> + <kbd>←</kbd> <span>Undo last move</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>Space</kbd> <span>Play/Pause video</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>F1</kbd> <span>Show/Hide this help</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="media-viewer.js"></script>
 </body>

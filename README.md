@@ -1,3 +1,5 @@
+## 22.06.25 - 13:57 -- Moving not fully loaded media: html and css
+
 ## 22.06.25 - 13:08 -- Fixing info bugs: media-viewer.js
 
 ## 22.06.25 - 12:50 -- Fixing info bugs: css
