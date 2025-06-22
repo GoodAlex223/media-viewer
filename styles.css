@@ -31,6 +31,7 @@ body {
     opacity: 0;
     transition: opacity 0.3s ease;
     pointer-events: none;
+    height: 48px; /* Fixed height for header */
 }
 
 .header:hover,
@@ -51,6 +52,10 @@ body {
     background: rgba(255, 255, 255, 0.1);
     padding: 4px 10px;
     border-radius: 8px;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .media-container {
@@ -74,12 +79,6 @@ body {
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-
-/* Only apply hover effect when image is scaled down to fit screen
-.media-display.scaled-down:hover {
-    transform: scale(1.02);
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
-} */
 
 .controls {
     position: fixed;
@@ -163,7 +162,7 @@ body {
 
 .file-info {
     position: fixed;
-    top: 20px;
+    top: 60px; /* Moved below header to avoid overlap */
     right: 20px;
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(10px);
@@ -178,6 +177,7 @@ body {
     pointer-events: none;
     z-index: 200;
     max-width: 300px;
+    word-wrap: break-word;
 }
 
 .file-info.show {
@@ -189,12 +189,17 @@ body {
     font-weight: bold;
     margin-bottom: 6px;
     word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    max-width: 100%;
+    line-height: 1.3;
 }
 
 #fileDetails {
     font-size: 11px;
     color: #a0a0a0;
     line-height: 1.4;
+    white-space: pre-line;
 }
 
 .loading {
@@ -440,6 +445,8 @@ body {
     animation: slideInLeft 0.3s ease-out;
     margin-bottom: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    max-width: 300px;
+    word-wrap: break-word;
 }
 
 .notification.error {
@@ -510,10 +517,19 @@ body {
     .file-info {
         max-width: 250px;
         font-size: 11px;
+        top: 55px; /* Adjust for mobile */
     }
     
     .notification-container {
         left: 10px;
         top: 10px;
+    }
+    
+    .notification {
+        max-width: 250px;
+    }
+    
+    .folder-info {
+        max-width: 200px;
     }
 }

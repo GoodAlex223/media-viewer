@@ -1,3 +1,9 @@
+## 22.06.25 - 12:50 -- Fixing info bugs: css
+
+1. File info overlapping with header - The file info panel and header are both positioned at the top and can overlap
+2. File dimensions and aspect ratio not showing - The code attempts to show dimensions but there are timing issues
+3. Long media names not properly handled - Long filenames can cause layout issues
+
 ## 22.06.25 - 01:17
 
 1. Controls visibility on hover only:
