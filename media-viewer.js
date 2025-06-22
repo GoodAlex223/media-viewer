@@ -6,8 +6,9 @@ class MediaViewer {
         this.currentMedia = null;
         this.currentFolderPath = '';
         this.baseFolderPath = '';
-        this.moveHistory = []; // Track moved files for undo functionality
-        this.isLoading = false; // Add loading state to prevent busy errors
+        this.moveHistory = [];
+        this.isLoading = false;
+        this.isVideoLoading = false;
         
         this.initializeElements();
         this.setupEventListeners();
@@ -15,7 +16,6 @@ class MediaViewer {
         this.setupFileInfoVisibility();
         this.setupControlsVisibility();
         
-        // Check if Electron API is available
         if (!window.electronAPI) {
             console.error('Electron API not available');
             this.showError('Electron API not available. Please make sure you\'re running this in Electron.');
@@ -24,7 +24,7 @@ class MediaViewer {
 
     initializeElements() {
         this.dropZone = document.getElementById('dropZone');
-        this.fileInfo = document.getElementById('fileInfo');
+        this.fileInfo = document.getElementById('fileInfoPanel');
         this.fileName = document.getElementById('fileName');
         this.fileDetails = document.getElementById('fileDetails');
         this.folderInfo = document.getElementById('folderInfo');
@@ -37,16 +37,21 @@ class MediaViewer {
         this.videoControls = document.getElementById('videoControls');
         this.playPauseBtn = document.getElementById('playPauseBtn');
         this.volumeSlider = document.getElementById('volumeSlider');
+        this.progressSlider = document.getElementById('progressSlider');
+        this.currentTime = document.getElementById('currentTime');
+        this.totalTime = document.getElementById('totalTime');
+        this.skipBtn = document.getElementById('skipBtn');
         this.header = document.getElementById('header');
         this.notificationContainer = document.getElementById('notificationContainer');
         this.mediaContainer = document.querySelector('.media-container');
+        this.loadingContainer = document.getElementById('loadingContainer');
+        this.navPrev = document.getElementById('navPrev');
+        this.navNext = document.getElementById('navNext');
     }
 
     setupEventListeners() {
-        // Drop zone click
         this.dropZone.addEventListener('click', () => this.openFolderDialog());
         
-        // Drag and drop
         this.dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             this.dropZone.classList.add('dragover');
@@ -62,18 +67,25 @@ class MediaViewer {
             this.handleFolderDrop(e);
         });
 
-        // Control buttons
         this.likeBtn.addEventListener('click', () => this.handleLike());
         this.dislikeBtn.addEventListener('click', () => this.handleDislike());
         this.cancelBtn.addEventListener('click', () => this.handleCancel());
 
-        // Video controls
         this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
         this.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
+        this.progressSlider.addEventListener('input', (e) => this.seekVideo(e.target.value));
+        this.skipBtn.addEventListener('click', () => this.nextMedia());
 
-        // Keyboard shortcuts
+        this.navPrev.addEventListener('click', () => this.previousMedia());
+        this.navNext.addEventListener('click', () => this.nextMedia());
+
         document.addEventListener('keydown', (e) => {
-            if (this.mediaFiles.length === 0 || this.isLoading) return;
+            if (this.mediaFiles.length === 0) return;
+            
+            if (this.isLoading && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                return;
+            }
             
             switch(e.key) {
                 case ' ':
@@ -84,16 +96,16 @@ class MediaViewer {
                     break;
                 case 'ArrowUp':
                     e.preventDefault();
-                    this.handleLike();
+                    if (!this.isLoading) this.handleLike();
                     break;
                 case 'ArrowDown':
                     e.preventDefault();
-                    this.handleDislike();
+                    if (!this.isLoading) this.handleDislike();
                     break;
                 case 'ArrowLeft':
                     e.preventDefault();
                     if (e.ctrlKey) {
-                        this.handleCancel();
+                        if (!this.isLoading) this.handleCancel();
                     } else {
                         this.previousMedia();
                     }
@@ -101,6 +113,10 @@ class MediaViewer {
                 case 'ArrowRight':
                     e.preventDefault();
                     this.nextMedia();
+                    break;
+                case 'F1':
+                    e.preventDefault();
+                    this.toggleHelp();
                     break;
             }
         });
@@ -125,7 +141,6 @@ class MediaViewer {
         this.header.addEventListener('mouseenter', showHeader);
         this.header.addEventListener('mouseleave', hideHeader);
         
-        // Show header on mouse move near top
         document.addEventListener('mousemove', (e) => {
             if (e.clientY < 50) {
                 showHeader();
@@ -150,10 +165,9 @@ class MediaViewer {
         this.fileInfo.addEventListener('mouseenter', showFileInfo);
         this.fileInfo.addEventListener('mouseleave', hideFileInfo);
         
-        // Show file info on mouse move near top-right (but below header)
         document.addEventListener('mousemove', (e) => {
             const windowWidth = window.innerWidth;
-            if (e.clientX > windowWidth - 250 && e.clientY > 60 && e.clientY < 300) {
+            if (e.clientX > windowWidth - 250 && e.clientY > 80 && e.clientY < 350) {
                 showFileInfo();
             }
         });
@@ -166,6 +180,8 @@ class MediaViewer {
         const showControls = () => {
             this.controls.classList.add('show');
             this.navInfo.classList.add('show');
+            this.navPrev.classList.add('show');
+            this.navNext.classList.add('show');
             if (this.videoControls.style.display === 'flex') {
                 this.videoControls.classList.add('show');
             }
@@ -177,6 +193,8 @@ class MediaViewer {
             controlsTimeout = setTimeout(() => {
                 this.controls.classList.remove('show');
                 this.navInfo.classList.remove('show');
+                this.navPrev.classList.remove('show');
+                this.navNext.classList.remove('show');
             }, 300);
             
             videoControlsTimeout = setTimeout(() => {
@@ -184,7 +202,6 @@ class MediaViewer {
             }, 300);
         };
 
-        // Show controls on mouse movement
         document.addEventListener('mousemove', () => {
             if (this.mediaFiles.length > 0) {
                 showControls();
@@ -194,32 +211,22 @@ class MediaViewer {
                 controlsTimeout = setTimeout(() => {
                     this.controls.classList.remove('show');
                     this.navInfo.classList.remove('show');
+                    this.navPrev.classList.remove('show');
+                    this.navNext.classList.remove('show');
                     this.videoControls.classList.remove('show');
                 }, 2000);
             }
         });
 
-        // Keep controls visible when hovering over them
-        this.controls.addEventListener('mouseenter', () => {
-            clearTimeout(controlsTimeout);
-            showControls();
+        [this.controls, this.videoControls, this.navInfo, this.navPrev, this.navNext].forEach(element => {
+            element.addEventListener('mouseenter', () => {
+                clearTimeout(controlsTimeout);
+                clearTimeout(videoControlsTimeout);
+                showControls();
+            });
+
+            element.addEventListener('mouseleave', hideControls);
         });
-
-        this.controls.addEventListener('mouseleave', hideControls);
-
-        this.videoControls.addEventListener('mouseenter', () => {
-            clearTimeout(videoControlsTimeout);
-            showControls();
-        });
-
-        this.videoControls.addEventListener('mouseleave', hideControls);
-
-        this.navInfo.addEventListener('mouseenter', () => {
-            clearTimeout(controlsTimeout);
-            showControls();
-        });
-
-        this.navInfo.addEventListener('mouseleave', hideControls);
     }
 
     async openFolderDialog() {
@@ -287,14 +294,13 @@ class MediaViewer {
             this.baseFolderPath = folderPath;
             this.currentFolderPath = window.electronAPI.path.basename(folderPath);
             
-            // Parse current folder number from folder name
             const match = this.currentFolderPath.match(/Liked_(\d+)/);
             this.currentFolder = match ? parseInt(match[1]) : 0;
             
             this.currentIndex = 0;
-            this.moveHistory = []; // Reset move history for new folder
+            this.moveHistory = [];
             this.hideDropZone();
-            this.showMedia();
+            await this.showMedia();
             this.updateFolderInfo();
             
             console.log(`Successfully loaded ${this.mediaFiles.length} media files`);
@@ -332,87 +338,124 @@ class MediaViewer {
             return;
         }
 
-        // Prevent navigation while loading
         if (this.isLoading) {
             return;
         }
 
         this.isLoading = true;
+        this.showLoadingSpinner();
 
-        // Remove existing media
         if (this.currentMedia) {
+            if (this.currentMedia.tagName === 'VIDEO') {
+                this.currentMedia.pause();
+                this.currentMedia.src = '';
+                this.currentMedia.load();
+            }
             this.currentMedia.remove();
         }
 
         const file = this.mediaFiles[this.currentIndex];
         console.log('Showing media:', file.name);
         
-        // Create file URL for Electron
         const fileUrl = `file://${file.path}`;
 
-        // Create media element
         if (file.type.startsWith('image/')) {
             this.currentMedia = document.createElement('img');
             this.currentMedia.src = fileUrl;
             this.videoControls.style.display = 'none';
+            this.setupImageHandlers(file);
         } else if (file.type.startsWith('video/')) {
             this.currentMedia = document.createElement('video');
             this.currentMedia.src = fileUrl;
             this.currentMedia.autoplay = true;
             this.currentMedia.loop = true;
-            this.currentMedia.muted = false; // Enable sound
+            this.currentMedia.muted = false;
             this.currentMedia.controls = false;
             this.currentMedia.volume = parseFloat(this.volumeSlider.value);
-            this.currentMedia.preload = 'metadata'; // Only load metadata initially
+            this.currentMedia.preload = 'metadata';
             this.videoControls.style.display = 'flex';
-            
-            // Update play/pause button based on video state
-            this.currentMedia.addEventListener('play', () => {
-                this.playPauseBtn.textContent = '⏸️';
-            });
-            
-            this.currentMedia.addEventListener('pause', () => {
-                this.playPauseBtn.textContent = '▶️';
-            });
+            this.setupVideoHandlers(file);
         }
 
         this.currentMedia.className = 'media-display';
         this.currentMedia.style.display = 'none';
+        this.mediaContainer.appendChild(this.currentMedia);
 
-        // Show loading state
-        this.showLoadingSpinner();
+        this.updateBasicFileInfo(file);
+        this.updateNavigationInfo();
+    }
 
+    setupImageHandlers(file) {
         const onLoad = () => {
             this.hideLoadingSpinner();
             this.fitMediaToScreen();
             this.currentMedia.style.display = 'block';
             this.isLoading = false;
-            
-            // Update file info after media is loaded to get proper dimensions
-            this.updateFileInfo(file);
+            this.updateFileInfoWithDimensions(file);
         };
 
-        const onError = (error) => {
+        const onError = () => {
             this.hideLoadingSpinner();
-            console.error('Media load error:', error);
-            this.showError(`Failed to load media: ${file.name}`);
+            this.showError(`Failed to load image: ${file.name}`);
             this.isLoading = false;
         };
 
-        // Different events for images and videos
-        if (file.type.startsWith('image/')) {
-            this.currentMedia.addEventListener('load', onLoad);
-        } else if (file.type.startsWith('video/')) {
-            this.currentMedia.addEventListener('loadedmetadata', onLoad);
-        }
-        
+        this.currentMedia.addEventListener('load', onLoad);
         this.currentMedia.addEventListener('error', onError);
+    }
 
-        this.mediaContainer.appendChild(this.currentMedia);
+    setupVideoHandlers(file) {
+        this.isVideoLoading = true;
 
-        // Update UI immediately with basic info
-        this.updateBasicFileInfo(file);
-        this.updateNavigationInfo();
+        const onLoadedMetadata = () => {
+            this.hideLoadingSpinner();
+            this.fitMediaToScreen();
+            this.currentMedia.style.display = 'block';
+            this.isLoading = false;
+            this.isVideoLoading = false;
+            this.updateFileInfoWithDimensions(file);
+            this.setupVideoProgressTracking();
+        };
+
+        const onError = () => {
+            this.hideLoadingSpinner();
+            this.showError(`Failed to load video: ${file.name}`);
+            this.isLoading = false;
+            this.isVideoLoading = false;
+        };
+
+        const onCanPlay = () => {
+            this.isVideoLoading = false;
+        };
+
+        this.currentMedia.addEventListener('loadedmetadata', onLoadedMetadata);
+        this.currentMedia.addEventListener('error', onError);
+        this.currentMedia.addEventListener('canplay', onCanPlay);
+        
+        this.currentMedia.addEventListener('play', () => {
+            this.playPauseBtn.textContent = '⏸️';
+        });
+        
+        this.currentMedia.addEventListener('pause', () => {
+            this.playPauseBtn.textContent = '▶️';
+        });
+    }
+
+    setupVideoProgressTracking() {
+        if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
+
+        const updateProgress = () => {
+            const video = this.currentMedia;
+            if (video.duration) {
+                const progress = (video.currentTime / video.duration) * 100;
+                this.progressSlider.value = progress;
+                this.currentTime.textContent = this.formatDuration(video.currentTime);
+                this.totalTime.textContent = this.formatDuration(video.duration);
+            }
+        };
+
+        this.currentMedia.addEventListener('timeupdate', updateProgress);
+        this.currentMedia.addEventListener('loadedmetadata', updateProgress);
     }
 
     fitMediaToScreen() {
@@ -428,7 +471,6 @@ class MediaViewer {
                 const naturalWidth = img.naturalWidth;
                 const naturalHeight = img.naturalHeight;
                 
-                // If image is larger than screen in either dimension, fit to screen
                 if (naturalWidth > windowWidth || naturalHeight > windowHeight) {
                     img.style.width = '100vw';
                     img.style.height = '100vh';
@@ -436,7 +478,6 @@ class MediaViewer {
                     img.style.maxWidth = 'none';
                     img.style.maxHeight = 'none';
                 } else {
-                    // If image is smaller than screen, display at natural size
                     img.style.width = naturalWidth + 'px';
                     img.style.height = naturalHeight + 'px';
                     img.style.objectFit = 'none';
@@ -458,7 +499,6 @@ class MediaViewer {
                 const videoWidth = video.videoWidth;
                 const videoHeight = video.videoHeight;
                 
-                // If video is larger than screen in either dimension, fit to screen
                 if (videoWidth > windowWidth || videoHeight > windowHeight) {
                     video.style.width = '100vw';
                     video.style.height = '100vh';
@@ -466,7 +506,6 @@ class MediaViewer {
                     video.style.maxWidth = 'none';
                     video.style.maxHeight = 'none';
                 } else {
-                    // If video is smaller than screen, display at natural size
                     video.style.width = videoWidth + 'px';
                     video.style.height = videoHeight + 'px';
                     video.style.objectFit = 'none';
@@ -484,7 +523,7 @@ class MediaViewer {
     }
 
     togglePlayPause() {
-        if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
+        if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO' || this.isVideoLoading) return;
         
         if (this.currentMedia.paused) {
             this.currentMedia.play();
@@ -499,30 +538,30 @@ class MediaViewer {
         this.currentMedia.volume = parseFloat(value);
     }
 
-    showLoadingSpinner() {
-        const existing = document.querySelector('.loading');
-        if (existing) existing.remove();
+    seekVideo(value) {
+        if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO' || this.isVideoLoading) return;
+        
+        const video = this.currentMedia;
+        if (video.duration) {
+            video.currentTime = (parseFloat(value) / 100) * video.duration;
+        }
+    }
 
-        const loading = document.createElement('div');
-        loading.className = 'loading';
-        loading.innerHTML = '<div class="spinner"></div>Loading...';
-        this.mediaContainer.appendChild(loading);
+    showLoadingSpinner() {
+        this.loadingContainer.classList.add('show');
     }
 
     hideLoadingSpinner() {
-        const loading = document.querySelector('.loading');
-        if (loading) loading.remove();
+        this.loadingContainer.classList.remove('show');
     }
 
-    // Basic file info without dimensions (immediate display)
     updateBasicFileInfo(file) {
-        // Truncate long filenames for display
-        const maxLength = 30;
+        const maxLength = 35;
         const displayName = file.name.length > maxLength ? 
             file.name.substring(0, maxLength) + '...' : file.name;
         
         this.fileName.textContent = displayName;
-        this.fileName.title = file.name; // Full name in tooltip
+        this.fileName.title = file.name;
         
         let detailsText = this.formatFileSize(file.size);
         detailsText += `\nType: ${file.type}`;
@@ -530,17 +569,14 @@ class MediaViewer {
         this.fileDetails.textContent = detailsText;
     }
 
-    // Full file info with dimensions (after media loads)
-    async updateFileInfo(file) {
-        // Truncate long filenames for display
-        const maxLength = 30;
+    updateFileInfoWithDimensions(file) {
+        const maxLength = 35;
         const displayName = file.name.length > maxLength ? 
             file.name.substring(0, maxLength) + '...' : file.name;
         
         this.fileName.textContent = displayName;
-        this.fileName.title = file.name; // Full name in tooltip
+        this.fileName.title = file.name;
         
-        // Get file dimensions and create detailed info
         let detailsText = this.formatFileSize(file.size);
         detailsText += `\nType: ${file.type}`;
         
@@ -549,16 +585,16 @@ class MediaViewer {
                 const img = this.currentMedia;
                 if (img.naturalWidth && img.naturalHeight) {
                     const aspectRatio = (img.naturalWidth / img.naturalHeight).toFixed(2);
-                    detailsText += `\n${img.naturalWidth} × ${img.naturalHeight}`;
+                    detailsText += `\nDimensions: ${img.naturalWidth} × ${img.naturalHeight}`;
                     detailsText += `\nAspect ratio: ${aspectRatio}:1`;
                 }
             } else if (this.currentMedia.tagName === 'VIDEO') {
                 const video = this.currentMedia;
                 if (video.videoWidth && video.videoHeight) {
                     const aspectRatio = (video.videoWidth / video.videoHeight).toFixed(2);
-                    detailsText += `\n${video.videoWidth} × ${video.videoHeight}`;
+                    detailsText += `\nDimensions: ${video.videoWidth} × ${video.videoHeight}`;
                     detailsText += `\nAspect ratio: ${aspectRatio}:1`;
-                    if (video.duration) {
+                    if (video.duration && !isNaN(video.duration)) {
                         detailsText += `\nDuration: ${this.formatDuration(video.duration)}`;
                     }
                 }
@@ -569,6 +605,7 @@ class MediaViewer {
     }
 
     formatDuration(seconds) {
+        if (!seconds || isNaN(seconds)) return '0:00';
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = Math.floor(seconds % 60);
         return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
@@ -579,8 +616,8 @@ class MediaViewer {
     }
 
     updateFolderInfo() {
-        const folderText = this.currentFolderPath.length > 20 ? 
-            this.currentFolderPath.substring(0, 20) + '...' : this.currentFolderPath;
+        const folderText = this.currentFolderPath.length > 25 ? 
+            this.currentFolderPath.substring(0, 25) + '...' : this.currentFolderPath;
         this.folderInfo.textContent = `Current: ${folderText} (${this.mediaFiles.length} files)`;
         this.folderInfo.title = `${this.currentFolderPath} (${this.mediaFiles.length} files)`;
     }
@@ -618,7 +655,6 @@ class MediaViewer {
         const lastMove = this.moveHistory.pop();
         
         try {
-            // Move the file back
             const moveResult = await window.electronAPI.moveFile({
                 sourcePath: lastMove.newPath,
                 targetFolder: this.baseFolderPath,
@@ -629,7 +665,6 @@ class MediaViewer {
                 throw new Error(moveResult.error);
             }
             
-            // Add the file back to the current folder's media files
             this.mediaFiles.push({
                 name: lastMove.fileName,
                 path: lastMove.originalPath,
@@ -641,12 +676,11 @@ class MediaViewer {
             this.updateFolderInfo();
             
             this.currentIndex = this.mediaFiles.length - 1;
-            this.showMedia();
+            await this.showMedia();
             
         } catch (error) {
             console.error('Error undoing move:', error);
             this.showError(`Failed to undo move: ${error.message}`);
-            // Put the move back in history if it failed
             this.moveHistory.push(lastMove);
         }
     }
@@ -655,21 +689,44 @@ class MediaViewer {
         return new Promise((resolve) => {
             const modal = document.createElement('div');
             modal.className = 'folder-creation-modal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0, 0, 0, 0.9);
+                backdrop-filter: blur(10px);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 2000;
+            `;
             
             modal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-title">📁 Create Folder</div>
-                    <p style="color: #a0a0a0; margin-bottom: 20px;">
+                <div style="
+                    background: linear-gradient(135deg, #2d2d30 0%, #1e1e1e 100%);
+                    border-radius: 15px;
+                    padding: 30px;
+                    max-width: 500px;
+                    width: 90%;
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: white;
+                ">
+                    <div style="font-size: 24px; color: #00d4aa; text-align: center; margin-bottom: 20px;">📁 Create Folder</div>
+                    <p style="color: #a0a0a0; margin-bottom: 20px; text-align: center;">
                         The target folder doesn't exist. Would you like to create it?
                     </p>
-                    <div class="modal-path">${folderPath}</div>
-                    <div class="modal-buttons">
-                        <button class="modal-btn modal-btn-create" id="createBtn">
-                            Create Folder
-                        </button>
-                        <button class="modal-btn modal-btn-cancel" id="cancelBtn">
-                            Cancel
-                        </button>
+                    <div style="background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 8px; font-family: monospace; word-break: break-all; margin-bottom: 20px;">${folderPath}</div>
+                    <div style="display: flex; gap: 15px; justify-content: center;">
+                        <button id="createBtn" style="
+                            background: linear-gradient(135deg, #00d4aa 0%, #00a085 100%);
+                            color: white; border: none; padding: 12px 24px;
+                            border-radius: 8px; cursor: pointer; font-weight: 600;
+                        ">Create Folder</button>
+                        <button id="cancelBtn" style="
+                            background: linear-gradient(135deg, #666 0%, #444 100%);
+                            color: white; border: none; padding: 12px 24px;
+                            border-radius: 8px; cursor: pointer; font-weight: 600;
+                        ">Cancel</button>
                     </div>
                 </div>
             `;
@@ -679,9 +736,7 @@ class MediaViewer {
             const createBtn = modal.querySelector('#createBtn');
             const cancelBtn = modal.querySelector('#cancelBtn');
             
-            const cleanup = () => {
-                modal.remove();
-            };
+            const cleanup = () => modal.remove();
             
             createBtn.addEventListener('click', () => {
                 cleanup();
@@ -693,7 +748,6 @@ class MediaViewer {
                 resolve(false);
             });
             
-            // Close on escape key
             const handleKeydown = (e) => {
                 if (e.key === 'Escape') {
                     cleanup();
@@ -724,12 +778,12 @@ class MediaViewer {
     }
 
     nextMedia() {
-        if (this.mediaFiles.length === 0 || this.isLoading) {
-            if (this.mediaFiles.length === 0) {
-                this.showDropZone();
-            }
+        if (this.mediaFiles.length === 0) {
+            this.showDropZone();
             return;
         }
+        
+        if (this.isLoading) return;
         
         this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
         this.showMedia();
@@ -740,6 +794,15 @@ class MediaViewer {
         
         this.currentIndex = (this.currentIndex - 1 + this.mediaFiles.length) % this.mediaFiles.length;
         this.showMedia();
+    }
+
+    toggleHelp() {
+        const helpOverlay = document.getElementById('helpOverlay');
+        if (helpOverlay.classList.contains('show')) {
+            helpOverlay.classList.remove('show');
+        } else {
+            helpOverlay.classList.add('show');
+        }
     }
 
     async moveCurrentFile(targetFolderNumber) {
@@ -753,7 +816,6 @@ class MediaViewer {
         );
         
         try {
-            // Check if target folder exists
             const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
             
             if (!folderExists) {
