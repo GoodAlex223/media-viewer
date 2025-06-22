@@ -1,3 +1,5 @@
+## 22.06.25 - 13:08 -- Fixing info bugs: media-viewer.js
+
 ## 22.06.25 - 12:50 -- Fixing info bugs: css
 
 1. File info overlapping with header - The file info panel and header are both positioned at the top and can overlap

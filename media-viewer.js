@@ -7,12 +7,13 @@ class MediaViewer {
         this.currentFolderPath = '';
         this.baseFolderPath = '';
         this.moveHistory = []; // Track moved files for undo functionality
+        this.isLoading = false; // Add loading state to prevent busy errors
         
         this.initializeElements();
         this.setupEventListeners();
         this.setupHeaderVisibility();
         this.setupFileInfoVisibility();
-        this.setupControlsVisibility(); // Add this line
+        this.setupControlsVisibility();
         
         // Check if Electron API is available
         if (!window.electronAPI) {
@@ -72,7 +73,7 @@ class MediaViewer {
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (this.mediaFiles.length === 0) return;
+            if (this.mediaFiles.length === 0 || this.isLoading) return;
             
             switch(e.key) {
                 case ' ':
@@ -149,10 +150,10 @@ class MediaViewer {
         this.fileInfo.addEventListener('mouseenter', showFileInfo);
         this.fileInfo.addEventListener('mouseleave', hideFileInfo);
         
-        // Show file info on mouse move near top-right
+        // Show file info on mouse move near top-right (but below header)
         document.addEventListener('mousemove', (e) => {
             const windowWidth = window.innerWidth;
-            if (e.clientX > windowWidth - 200 && e.clientY < 200) {
+            if (e.clientX > windowWidth - 250 && e.clientY > 60 && e.clientY < 300) {
                 showFileInfo();
             }
         });
@@ -331,6 +332,13 @@ class MediaViewer {
             return;
         }
 
+        // Prevent navigation while loading
+        if (this.isLoading) {
+            return;
+        }
+
+        this.isLoading = true;
+
         // Remove existing media
         if (this.currentMedia) {
             this.currentMedia.remove();
@@ -355,6 +363,7 @@ class MediaViewer {
             this.currentMedia.muted = false; // Enable sound
             this.currentMedia.controls = false;
             this.currentMedia.volume = parseFloat(this.volumeSlider.value);
+            this.currentMedia.preload = 'metadata'; // Only load metadata initially
             this.videoControls.style.display = 'flex';
             
             // Update play/pause button based on video state
@@ -377,22 +386,32 @@ class MediaViewer {
             this.hideLoadingSpinner();
             this.fitMediaToScreen();
             this.currentMedia.style.display = 'block';
+            this.isLoading = false;
+            
+            // Update file info after media is loaded to get proper dimensions
+            this.updateFileInfo(file);
         };
 
         const onError = (error) => {
             this.hideLoadingSpinner();
             console.error('Media load error:', error);
             this.showError(`Failed to load media: ${file.name}`);
+            this.isLoading = false;
         };
 
-        this.currentMedia.addEventListener('load', onLoad);
-        this.currentMedia.addEventListener('loadeddata', onLoad);
+        // Different events for images and videos
+        if (file.type.startsWith('image/')) {
+            this.currentMedia.addEventListener('load', onLoad);
+        } else if (file.type.startsWith('video/')) {
+            this.currentMedia.addEventListener('loadedmetadata', onLoad);
+        }
+        
         this.currentMedia.addEventListener('error', onError);
 
         this.mediaContainer.appendChild(this.currentMedia);
 
-        // Update UI
-        this.updateFileInfo(file);
+        // Update UI immediately with basic info
+        this.updateBasicFileInfo(file);
         this.updateNavigationInfo();
     }
 
@@ -405,7 +424,6 @@ class MediaViewer {
         if (this.currentMedia.tagName === 'IMG') {
             const img = this.currentMedia;
             
-            // Wait for image to load to get natural dimensions
             const handleImageLoad = () => {
                 const naturalWidth = img.naturalWidth;
                 const naturalHeight = img.naturalHeight;
@@ -496,33 +514,53 @@ class MediaViewer {
         if (loading) loading.remove();
     }
 
+    // Basic file info without dimensions (immediate display)
+    updateBasicFileInfo(file) {
+        // Truncate long filenames for display
+        const maxLength = 30;
+        const displayName = file.name.length > maxLength ? 
+            file.name.substring(0, maxLength) + '...' : file.name;
+        
+        this.fileName.textContent = displayName;
+        this.fileName.title = file.name; // Full name in tooltip
+        
+        let detailsText = this.formatFileSize(file.size);
+        detailsText += `\nType: ${file.type}`;
+        
+        this.fileDetails.textContent = detailsText;
+    }
+
+    // Full file info with dimensions (after media loads)
     async updateFileInfo(file) {
-        this.fileName.textContent = file.name;
+        // Truncate long filenames for display
+        const maxLength = 30;
+        const displayName = file.name.length > maxLength ? 
+            file.name.substring(0, maxLength) + '...' : file.name;
+        
+        this.fileName.textContent = displayName;
+        this.fileName.title = file.name; // Full name in tooltip
         
         // Get file dimensions and create detailed info
         let detailsText = this.formatFileSize(file.size);
+        detailsText += `\nType: ${file.type}`;
         
         if (this.currentMedia) {
             if (this.currentMedia.tagName === 'IMG') {
                 const img = this.currentMedia;
                 if (img.naturalWidth && img.naturalHeight) {
                     const aspectRatio = (img.naturalWidth / img.naturalHeight).toFixed(2);
-                    detailsText += `\n${img.naturalWidth} × ${img.naturalHeight}\nAspect ratio: ${aspectRatio}:1`;
+                    detailsText += `\n${img.naturalWidth} × ${img.naturalHeight}`;
+                    detailsText += `\nAspect ratio: ${aspectRatio}:1`;
                 }
             } else if (this.currentMedia.tagName === 'VIDEO') {
                 const video = this.currentMedia;
-                const checkVideoMetadata = () => {
-                    if (video.videoWidth && video.videoHeight) {
-                        const aspectRatio = (video.videoWidth / video.videoHeight).toFixed(2);
-                        detailsText += `\n${video.videoWidth} × ${video.videoHeight}\nAspect ratio: ${aspectRatio}:1`;
-                        this.fileDetails.textContent = detailsText;
-                    }
-                };
-                
                 if (video.videoWidth && video.videoHeight) {
-                    checkVideoMetadata();
-                } else {
-                    video.addEventListener('loadedmetadata', checkVideoMetadata);
+                    const aspectRatio = (video.videoWidth / video.videoHeight).toFixed(2);
+                    detailsText += `\n${video.videoWidth} × ${video.videoHeight}`;
+                    detailsText += `\nAspect ratio: ${aspectRatio}:1`;
+                    if (video.duration) {
+                        detailsText += `\nDuration: ${this.formatDuration(video.duration)}`;
+                    }
                 }
             }
         }
@@ -530,12 +568,21 @@ class MediaViewer {
         this.fileDetails.textContent = detailsText;
     }
 
+    formatDuration(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
     updateNavigationInfo() {
         this.mediaIndex.textContent = `${this.currentIndex + 1} of ${this.mediaFiles.length}`;
     }
 
     updateFolderInfo() {
-        this.folderInfo.textContent = `Current: ${this.currentFolderPath} (${this.mediaFiles.length} files)`;
+        const folderText = this.currentFolderPath.length > 20 ? 
+            this.currentFolderPath.substring(0, 20) + '...' : this.currentFolderPath;
+        this.folderInfo.textContent = `Current: ${folderText} (${this.mediaFiles.length} files)`;
+        this.folderInfo.title = `${this.currentFolderPath} (${this.mediaFiles.length} files)`;
     }
 
     formatFileSize(bytes) {
@@ -547,14 +594,14 @@ class MediaViewer {
     }
 
     async handleLike() {
-        if (this.mediaFiles.length === 0) return;
+        if (this.mediaFiles.length === 0 || this.isLoading) return;
         
         const newFolderNumber = this.currentFolder + 1;
         await this.moveCurrentFile(newFolderNumber);
     }
 
     async handleDislike() {
-        if (this.mediaFiles.length === 0) return;
+        if (this.mediaFiles.length === 0 || this.isLoading) return;
         
         const newFolderNumber = Math.max(this.currentFolder - 1, 0);
         await this.moveCurrentFile(newFolderNumber);
@@ -565,6 +612,8 @@ class MediaViewer {
             this.showNotification('No moves to undo', 'error');
             return;
         }
+        
+        if (this.isLoading) return;
         
         const lastMove = this.moveHistory.pop();
         
@@ -675,8 +724,10 @@ class MediaViewer {
     }
 
     nextMedia() {
-        if (this.mediaFiles.length === 0) {
-            this.showDropZone();
+        if (this.mediaFiles.length === 0 || this.isLoading) {
+            if (this.mediaFiles.length === 0) {
+                this.showDropZone();
+            }
             return;
         }
         
@@ -685,14 +736,14 @@ class MediaViewer {
     }
 
     previousMedia() {
-        if (this.mediaFiles.length === 0) return;
+        if (this.mediaFiles.length === 0 || this.isLoading) return;
         
         this.currentIndex = (this.currentIndex - 1 + this.mediaFiles.length) % this.mediaFiles.length;
         this.showMedia();
     }
 
     async moveCurrentFile(targetFolderNumber) {
-        if (this.mediaFiles.length === 0) return;
+        if (this.mediaFiles.length === 0 || this.isLoading) return;
         
         const currentFile = this.mediaFiles[this.currentIndex];
         const targetFolderName = `Liked_${targetFolderNumber}`;
@@ -738,8 +789,10 @@ class MediaViewer {
             });
             
             // Show success notification
+            const fileName = currentFile.name.length > 20 ? 
+                currentFile.name.substring(0, 20) + '...' : currentFile.name;
             this.showNotification(
-                `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved to ${targetFolderName}`,
+                `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
                 targetFolderNumber > this.currentFolder ? 'success' : 'dislike'
             );
             
