@@ -9,6 +9,8 @@ class MediaViewer {
         this.moveHistory = [];
         this.isLoading = false;
         this.isVideoLoading = false;
+        this.videoEventListeners = []; // Track video event listeners for proper cleanup
+        this.mediaNavigationInProgress = false; // Prevent overlapping navigation
         
         this.initializeElements();
         this.setupEventListeners();
@@ -47,6 +49,196 @@ class MediaViewer {
         this.loadingContainer = document.getElementById('loadingContainer');
         this.navPrev = document.getElementById('navPrev');
         this.navNext = document.getElementById('navNext');
+    }
+
+    showFolderCreationDialog(folderPath) {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'folder-creation-modal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0, 0, 0, 0.9);
+                backdrop-filter: blur(10px);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 2000;
+            `;
+            
+            modal.innerHTML = `
+                <div style="
+                    background: linear-gradient(135deg, #2d2d30 0%, #1e1e1e 100%);
+                    border-radius: 15px;
+                    padding: 30px;
+                    max-width: 500px;
+                    width: 90%;
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: white;
+                ">
+                    <div style="font-size: 24px; color: #00d4aa; text-align: center; margin-bottom: 20px;">📁 Create Folder</div>
+                    <p style="color: #a0a0a0; margin-bottom: 20px; text-align: center;">
+                        The target folder doesn't exist. Would you like to create it?
+                    </p>
+                    <div style="background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 8px; font-family: monospace; word-break: break-all; margin-bottom: 20px;">${folderPath}</div>
+                    <div style="display: flex; gap: 15px; justify-content: center;">
+                        <button id="createBtn" style="
+                            background: linear-gradient(135deg, #00d4aa 0%, #00a085 100%);
+                            color: white; border: none; padding: 12px 24px;
+                            border-radius: 8px; cursor: pointer; font-weight: 600;
+                        ">Create Folder</button>
+                        <button id="cancelBtn" style="
+                            background: linear-gradient(135deg, #666 0%, #444 100%);
+                            color: white; border: none; padding: 12px 24px;
+                            border-radius: 8px; cursor: pointer; font-weight: 600;
+                        ">Cancel</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            const createBtn = modal.querySelector('#createBtn');
+            const cancelBtn = modal.querySelector('#cancelBtn');
+            
+            const cleanup = () => modal.remove();
+            
+            createBtn.addEventListener('click', () => {
+                cleanup();
+                resolve(true);
+            });
+            
+            cancelBtn.addEventListener('click', () => {
+                cleanup();
+                resolve(false);
+            });
+            
+            const handleKeydown = (e) => {
+                if (e.key === 'Escape') {
+                    cleanup();
+                    resolve(false);
+                    document.removeEventListener('keydown', handleKeydown);
+                }
+            };
+            document.addEventListener('keydown', handleKeydown);
+        });
+    }
+
+    showNotification(message, type = 'success') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        
+        this.notificationContainer.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOutTop 0.3s ease-in forwards';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+
+    showError(message) {
+        console.error('Error:', message);
+        this.showNotification(`❌ ${message}`, 'error');
+    }
+
+    nextMedia() {
+        if (this.mediaFiles.length === 0) {
+            this.showDropZone();
+            return;
+        }
+        
+        if (this.isLoading) return;
+        
+        this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
+        this.showMedia();
+    }
+
+    previousMedia() {
+        if (this.mediaFiles.length === 0 || this.isLoading) return;
+        
+        this.currentIndex = (this.currentIndex - 1 + this.mediaFiles.length) % this.mediaFiles.length;
+        this.showMedia();
+    }
+
+    toggleHelp() {
+        const helpOverlay = document.getElementById('helpOverlay');
+        if (helpOverlay.classList.contains('show')) {
+            helpOverlay.classList.remove('show');
+        } else {
+            helpOverlay.classList.add('show');
+        }
+    }
+
+    async moveCurrentFile(targetFolderNumber) {
+        if (this.mediaFiles.length === 0 || this.isLoading) return;
+        
+        const currentFile = this.mediaFiles[this.currentIndex];
+        const targetFolderName = `Liked_${targetFolderNumber}`;
+        const targetFolderPath = window.electronAPI.path.join(
+            window.electronAPI.path.dirname(this.baseFolderPath), 
+            targetFolderName
+        );
+        
+        try {
+            const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
+            
+            if (!folderExists) {
+                const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
+                if (!shouldCreate) return;
+                
+                const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                if (!createResult.success) {
+                    throw new Error(createResult.error);
+                }
+            }
+            
+            // Move the file
+            const moveResult = await window.electronAPI.moveFile({
+                sourcePath: currentFile.path,
+                targetFolder: targetFolderPath,
+                fileName: currentFile.name
+            });
+            
+            if (!moveResult.success) {
+                throw new Error(moveResult.error);
+            }
+            
+            // Store move in history for undo functionality
+            this.moveHistory.push({
+                fileName: currentFile.name,
+                originalPath: currentFile.path,
+                newPath: moveResult.targetPath,
+                fileSize: currentFile.size,
+                fileType: currentFile.type,
+                fromFolder: this.currentFolder,
+                toFolder: targetFolderNumber
+            });
+            
+            // Show success notification
+            const fileName = currentFile.name.length > 20 ? 
+                currentFile.name.substring(0, 20) + '...' : currentFile.name;
+            this.showNotification(
+                `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
+                targetFolderNumber > this.currentFolder ? 'success' : 'dislike'
+            );
+            
+            // Remove current file from array
+            this.mediaFiles.splice(this.currentIndex, 1);
+            
+            // Adjust current index if necessary
+            if (this.currentIndex >= this.mediaFiles.length) {
+                this.currentIndex = 0;
+            }
+            
+            this.updateFolderInfo();
+            this.nextMedia();
+            
+        } catch (error) {
+            console.error('Error moving file:', error);
+            this.showError(`Failed to move file: ${error.message}`);
+        }
     }
 
     setupEventListeners() {
@@ -327,9 +519,44 @@ class MediaViewer {
         this.videoControls.style.display = 'none';
         
         if (this.currentMedia) {
-            this.currentMedia.remove();
-            this.currentMedia = null;
+            this.cleanupCurrentMedia();
         }
+    }
+
+    // New method to properly cleanup media elements
+    cleanupCurrentMedia() {
+        if (!this.currentMedia) return;
+
+        // Remove all video event listeners to prevent errors
+        this.videoEventListeners.forEach(({ event, handler }) => {
+            this.currentMedia.removeEventListener(event, handler);
+        });
+        this.videoEventListeners = [];
+
+        if (this.currentMedia.tagName === 'VIDEO') {
+            // Properly stop and cleanup video
+            this.currentMedia.pause();
+            this.currentMedia.currentTime = 0;
+            this.currentMedia.src = '';
+            this.currentMedia.load(); // This is important to release the file handle
+            
+            // // Wait a bit to ensure cleanup is complete
+            // setTimeout(() => {
+            //     if (this.currentMedia && this.currentMedia.parentNode) {
+            //         this.currentMedia.remove();
+            //     }
+            // }, 100);
+            if (this.currentMedia && this.currentMedia.parentNode) {
+                this.currentMedia.remove();
+            }
+        } else {
+            // For images, immediate removal is fine
+            this.currentMedia.remove();
+        }
+        
+        this.currentMedia = null;
+        this.isVideoLoading = false;
+        this.mediaNavigationInProgress = false;
     }
 
     async showMedia() {
@@ -338,20 +565,19 @@ class MediaViewer {
             return;
         }
 
-        if (this.isLoading) {
+        if (this.isLoading || this.mediaNavigationInProgress) {
             return;
         }
 
+        this.mediaNavigationInProgress = true;
         this.isLoading = true;
         this.showLoadingSpinner();
 
+        // Properly cleanup previous media
         if (this.currentMedia) {
-            if (this.currentMedia.tagName === 'VIDEO') {
-                this.currentMedia.pause();
-                this.currentMedia.src = '';
-                this.currentMedia.load();
-            }
-            this.currentMedia.remove();
+            this.cleanupCurrentMedia();
+            // Wait for cleanup to complete before proceeding
+            await new Promise(resolve => setTimeout(resolve, 150));
         }
 
         const file = this.mediaFiles[this.currentIndex];
@@ -387,18 +613,31 @@ class MediaViewer {
 
     setupImageHandlers(file) {
         const onLoad = () => {
-            this.hideLoadingSpinner();
-            this.fitMediaToScreen();
-            this.currentMedia.style.display = 'block';
-            this.isLoading = false;
-            this.updateFileInfoWithDimensions(file);
+            if (this.currentMedia && this.currentMedia.tagName === 'IMG') {
+                this.hideLoadingSpinner();
+                this.fitMediaToScreen();
+                this.currentMedia.style.display = 'block';
+                this.isLoading = false;
+                this.mediaNavigationInProgress = false;
+                this.updateFileInfoWithDimensions(file);
+            }
         };
 
-        const onError = () => {
-            this.hideLoadingSpinner();
-            this.showError(`Failed to load image: ${file.name}`);
-            this.isLoading = false;
+        const onError = (e) => {
+            if (this.currentMedia && this.currentMedia.tagName === 'IMG') {
+                console.error('Image load error:', e);
+                this.hideLoadingSpinner();
+                this.showError(`Failed to load image: ${file.name}`);
+                this.isLoading = false;
+                this.mediaNavigationInProgress = false;
+            }
         };
+
+        // Store event listeners for cleanup
+        this.videoEventListeners.push(
+            { event: 'load', handler: onLoad },
+            { event: 'error', handler: onError }
+        );
 
         this.currentMedia.addEventListener('load', onLoad);
         this.currentMedia.addEventListener('error', onError);
@@ -408,54 +647,89 @@ class MediaViewer {
         this.isVideoLoading = true;
 
         const onLoadedMetadata = () => {
-            this.hideLoadingSpinner();
-            this.fitMediaToScreen();
-            this.currentMedia.style.display = 'block';
-            this.isLoading = false;
-            this.isVideoLoading = false;
-            this.updateFileInfoWithDimensions(file);
-            this.setupVideoProgressTracking();
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                this.hideLoadingSpinner();
+                this.fitMediaToScreen();
+                this.currentMedia.style.display = 'block';
+                this.isLoading = false;
+                this.isVideoLoading = false;
+                this.mediaNavigationInProgress = false;
+                this.updateFileInfoWithDimensions(file);
+                this.setupVideoProgressTracking();
+            }
         };
 
-        const onError = () => {
-            this.hideLoadingSpinner();
-            this.showError(`Failed to load video: ${file.name}`);
-            this.isLoading = false;
-            this.isVideoLoading = false;
+        const onError = (e) => {
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                console.error('Video load error:', e);
+                this.hideLoadingSpinner();
+                this.showError(`Failed to load video: ${file.name}`);
+                this.isLoading = false;
+                this.isVideoLoading = false;
+                this.mediaNavigationInProgress = false;
+            }
         };
 
         const onCanPlay = () => {
-            this.isVideoLoading = false;
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                this.isVideoLoading = false;
+            }
         };
+
+        const onPlay = () => {
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                this.playPauseBtn.textContent = '⏸️';
+            }
+        };
+        
+        const onPause = () => {
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                this.playPauseBtn.textContent = '▶️';
+            }
+        };
+
+        // Store event listeners for cleanup
+        this.videoEventListeners.push(
+            { event: 'loadedmetadata', handler: onLoadedMetadata },
+            { event: 'error', handler: onError },
+            { event: 'canplay', handler: onCanPlay },
+            { event: 'play', handler: onPlay },
+            { event: 'pause', handler: onPause }
+        );
 
         this.currentMedia.addEventListener('loadedmetadata', onLoadedMetadata);
         this.currentMedia.addEventListener('error', onError);
         this.currentMedia.addEventListener('canplay', onCanPlay);
-        
-        this.currentMedia.addEventListener('play', () => {
-            this.playPauseBtn.textContent = '⏸️';
-        });
-        
-        this.currentMedia.addEventListener('pause', () => {
-            this.playPauseBtn.textContent = '▶️';
-        });
+        this.currentMedia.addEventListener('play', onPlay);
+        this.currentMedia.addEventListener('pause', onPause);
     }
 
     setupVideoProgressTracking() {
         if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
 
         const updateProgress = () => {
-            const video = this.currentMedia;
-            if (video.duration) {
-                const progress = (video.currentTime / video.duration) * 100;
-                this.progressSlider.value = progress;
-                this.currentTime.textContent = this.formatDuration(video.currentTime);
-                this.totalTime.textContent = this.formatDuration(video.duration);
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                const video = this.currentMedia;
+                if (video.duration) {
+                    const progress = (video.currentTime / video.duration) * 100;
+                    this.progressSlider.value = progress;
+                    this.currentTime.textContent = this.formatDuration(video.currentTime);
+                    this.totalTime.textContent = this.formatDuration(video.duration);
+                }
             }
         };
 
-        this.currentMedia.addEventListener('timeupdate', updateProgress);
-        this.currentMedia.addEventListener('loadedmetadata', updateProgress);
+        // Store event listeners for cleanup
+        const onTimeUpdate = updateProgress;
+        const onLoadedMetadata = updateProgress;
+
+        this.videoEventListeners.push(
+            { event: 'timeupdate', handler: onTimeUpdate },
+            { event: 'loadedmetadata', handler: onLoadedMetadata }
+        );
+
+        this.currentMedia.addEventListener('timeupdate', onTimeUpdate);
+        this.currentMedia.addEventListener('loadedmetadata', onLoadedMetadata);
     }
 
     fitMediaToScreen() {
@@ -682,196 +956,6 @@ class MediaViewer {
             console.error('Error undoing move:', error);
             this.showError(`Failed to undo move: ${error.message}`);
             this.moveHistory.push(lastMove);
-        }
-    }
-
-    showFolderCreationDialog(folderPath) {
-        return new Promise((resolve) => {
-            const modal = document.createElement('div');
-            modal.className = 'folder-creation-modal';
-            modal.style.cssText = `
-                position: fixed;
-                top: 0; left: 0; right: 0; bottom: 0;
-                background: rgba(0, 0, 0, 0.9);
-                backdrop-filter: blur(10px);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 2000;
-            `;
-            
-            modal.innerHTML = `
-                <div style="
-                    background: linear-gradient(135deg, #2d2d30 0%, #1e1e1e 100%);
-                    border-radius: 15px;
-                    padding: 30px;
-                    max-width: 500px;
-                    width: 90%;
-                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    color: white;
-                ">
-                    <div style="font-size: 24px; color: #00d4aa; text-align: center; margin-bottom: 20px;">📁 Create Folder</div>
-                    <p style="color: #a0a0a0; margin-bottom: 20px; text-align: center;">
-                        The target folder doesn't exist. Would you like to create it?
-                    </p>
-                    <div style="background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 8px; font-family: monospace; word-break: break-all; margin-bottom: 20px;">${folderPath}</div>
-                    <div style="display: flex; gap: 15px; justify-content: center;">
-                        <button id="createBtn" style="
-                            background: linear-gradient(135deg, #00d4aa 0%, #00a085 100%);
-                            color: white; border: none; padding: 12px 24px;
-                            border-radius: 8px; cursor: pointer; font-weight: 600;
-                        ">Create Folder</button>
-                        <button id="cancelBtn" style="
-                            background: linear-gradient(135deg, #666 0%, #444 100%);
-                            color: white; border: none; padding: 12px 24px;
-                            border-radius: 8px; cursor: pointer; font-weight: 600;
-                        ">Cancel</button>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            
-            const createBtn = modal.querySelector('#createBtn');
-            const cancelBtn = modal.querySelector('#cancelBtn');
-            
-            const cleanup = () => modal.remove();
-            
-            createBtn.addEventListener('click', () => {
-                cleanup();
-                resolve(true);
-            });
-            
-            cancelBtn.addEventListener('click', () => {
-                cleanup();
-                resolve(false);
-            });
-            
-            const handleKeydown = (e) => {
-                if (e.key === 'Escape') {
-                    cleanup();
-                    resolve(false);
-                    document.removeEventListener('keydown', handleKeydown);
-                }
-            };
-            document.addEventListener('keydown', handleKeydown);
-        });
-    }
-
-    showNotification(message, type = 'success') {
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-        
-        this.notificationContainer.appendChild(notification);
-        
-        setTimeout(() => {
-            notification.style.animation = 'slideOutTop 0.3s ease-in forwards';
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
-    }
-
-    showError(message) {
-        console.error('Error:', message);
-        this.showNotification(`❌ ${message}`, 'error');
-    }
-
-    nextMedia() {
-        if (this.mediaFiles.length === 0) {
-            this.showDropZone();
-            return;
-        }
-        
-        if (this.isLoading) return;
-        
-        this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
-        this.showMedia();
-    }
-
-    previousMedia() {
-        if (this.mediaFiles.length === 0 || this.isLoading) return;
-        
-        this.currentIndex = (this.currentIndex - 1 + this.mediaFiles.length) % this.mediaFiles.length;
-        this.showMedia();
-    }
-
-    toggleHelp() {
-        const helpOverlay = document.getElementById('helpOverlay');
-        if (helpOverlay.classList.contains('show')) {
-            helpOverlay.classList.remove('show');
-        } else {
-            helpOverlay.classList.add('show');
-        }
-    }
-
-    async moveCurrentFile(targetFolderNumber) {
-        if (this.mediaFiles.length === 0 || this.isLoading) return;
-        
-        const currentFile = this.mediaFiles[this.currentIndex];
-        const targetFolderName = `Liked_${targetFolderNumber}`;
-        const targetFolderPath = window.electronAPI.path.join(
-            window.electronAPI.path.dirname(this.baseFolderPath), 
-            targetFolderName
-        );
-        
-        try {
-            const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
-            
-            if (!folderExists) {
-                const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
-                if (!shouldCreate) return;
-                
-                const createResult = await window.electronAPI.createFolder(targetFolderPath);
-                if (!createResult.success) {
-                    throw new Error(createResult.error);
-                }
-            }
-            
-            // Move the file
-            const moveResult = await window.electronAPI.moveFile({
-                sourcePath: currentFile.path,
-                targetFolder: targetFolderPath,
-                fileName: currentFile.name
-            });
-            
-            if (!moveResult.success) {
-                throw new Error(moveResult.error);
-            }
-            
-            // Store move in history for undo functionality
-            this.moveHistory.push({
-                fileName: currentFile.name,
-                originalPath: currentFile.path,
-                newPath: moveResult.targetPath,
-                fileSize: currentFile.size,
-                fileType: currentFile.type,
-                fromFolder: this.currentFolder,
-                toFolder: targetFolderNumber
-            });
-            
-            // Show success notification
-            const fileName = currentFile.name.length > 20 ? 
-                currentFile.name.substring(0, 20) + '...' : currentFile.name;
-            this.showNotification(
-                `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
-                targetFolderNumber > this.currentFolder ? 'success' : 'dislike'
-            );
-            
-            // Remove current file from array
-            this.mediaFiles.splice(this.currentIndex, 1);
-            
-            // Adjust current index if necessary
-            if (this.currentIndex >= this.mediaFiles.length) {
-                this.currentIndex = 0;
-            }
-            
-            this.updateFolderInfo();
-            this.nextMedia();
-            
-        } catch (error) {
-            console.error('Error moving file:', error);
-            this.showError(`Failed to move file: ${error.message}`);
         }
     }
 }
