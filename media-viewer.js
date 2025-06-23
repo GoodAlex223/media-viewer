@@ -11,6 +11,7 @@ class MediaViewer {
         this.isVideoLoading = false;
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
+        this.isBeingCleaned = false; // Flag to prevent error notifications during cleanup
         
         this.initializeElements();
         this.setupEventListeners();
@@ -149,14 +150,14 @@ class MediaViewer {
             return;
         }
         
-        if (this.isLoading) return;
+        if (this.isLoading || this.mediaNavigationInProgress) return;
         
         this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
         this.showMedia();
     }
 
     previousMedia() {
-        if (this.mediaFiles.length === 0 || this.isLoading) return;
+        if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
         
         this.currentIndex = (this.currentIndex - 1 + this.mediaFiles.length) % this.mediaFiles.length;
         this.showMedia();
@@ -182,6 +183,13 @@ class MediaViewer {
         );
         
         try {
+            // For videos, ensure proper cleanup before moving
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                await this.forceVideoCleanup();
+                // Additional wait for file handles to be fully released
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
             const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
             
             if (!folderExists) {
@@ -238,6 +246,42 @@ class MediaViewer {
         } catch (error) {
             console.error('Error moving file:', error);
             this.showError(`Failed to move file: ${error.message}`);
+        }
+    }
+
+    // New method for thorough video cleanup before file operations
+    async forceVideoCleanup() {
+        if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
+        
+        this.isBeingCleaned = true;
+        
+        // Remove all event listeners first
+        this.videoEventListeners.forEach(({ event, handler }) => {
+            this.currentMedia.removeEventListener(event, handler);
+        });
+        this.videoEventListeners = [];
+        
+        // Aggressively clean up video
+        const video = this.currentMedia;
+        video.pause();
+        video.currentTime = 0;
+        video.removeAttribute('src');
+        video.load();
+        
+        // Wait for cleanup to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Remove from DOM
+        if (video.parentNode) {
+            video.remove();
+        }
+        
+        this.currentMedia = null;
+        this.isBeingCleaned = false;
+        
+        // Force garbage collection if available
+        if (window.gc) {
+            window.gc();
         }
     }
 
@@ -523,9 +567,11 @@ class MediaViewer {
         }
     }
 
-    // New method to properly cleanup media elements
+    // Improved cleanup method
     cleanupCurrentMedia() {
         if (!this.currentMedia) return;
+
+        this.isBeingCleaned = true;
 
         // Remove all video event listeners to prevent errors
         this.videoEventListeners.forEach(({ event, handler }) => {
@@ -537,16 +583,11 @@ class MediaViewer {
             // Properly stop and cleanup video
             this.currentMedia.pause();
             this.currentMedia.currentTime = 0;
-            this.currentMedia.src = '';
+            this.currentMedia.removeAttribute('src');
             this.currentMedia.load(); // This is important to release the file handle
             
-            // // Wait a bit to ensure cleanup is complete
-            // setTimeout(() => {
-            //     if (this.currentMedia && this.currentMedia.parentNode) {
-            //         this.currentMedia.remove();
-            //     }
-            // }, 100);
-            if (this.currentMedia && this.currentMedia.parentNode) {
+            // Remove from DOM
+            if (this.currentMedia.parentNode) {
                 this.currentMedia.remove();
             }
         } else {
@@ -557,6 +598,7 @@ class MediaViewer {
         this.currentMedia = null;
         this.isVideoLoading = false;
         this.mediaNavigationInProgress = false;
+        this.isBeingCleaned = false;
     }
 
     async showMedia() {
@@ -613,7 +655,7 @@ class MediaViewer {
 
     setupImageHandlers(file) {
         const onLoad = () => {
-            if (this.currentMedia && this.currentMedia.tagName === 'IMG') {
+            if (this.currentMedia && this.currentMedia.tagName === 'IMG' && !this.isBeingCleaned) {
                 this.hideLoadingSpinner();
                 this.fitMediaToScreen();
                 this.currentMedia.style.display = 'block';
@@ -624,7 +666,7 @@ class MediaViewer {
         };
 
         const onError = (e) => {
-            if (this.currentMedia && this.currentMedia.tagName === 'IMG') {
+            if (this.currentMedia && this.currentMedia.tagName === 'IMG' && !this.isBeingCleaned) {
                 console.error('Image load error:', e);
                 this.hideLoadingSpinner();
                 this.showError(`Failed to load image: ${file.name}`);
@@ -647,7 +689,7 @@ class MediaViewer {
         this.isVideoLoading = true;
 
         const onLoadedMetadata = () => {
-            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 this.hideLoadingSpinner();
                 this.fitMediaToScreen();
                 this.currentMedia.style.display = 'block';
@@ -660,7 +702,8 @@ class MediaViewer {
         };
 
         const onError = (e) => {
-            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+            // Only show error if we're not in the middle of cleanup
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 console.error('Video load error:', e);
                 this.hideLoadingSpinner();
                 this.showError(`Failed to load video: ${file.name}`);
@@ -671,19 +714,19 @@ class MediaViewer {
         };
 
         const onCanPlay = () => {
-            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 this.isVideoLoading = false;
             }
         };
 
         const onPlay = () => {
-            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 this.playPauseBtn.textContent = '⏸️';
             }
         };
         
         const onPause = () => {
-            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 this.playPauseBtn.textContent = '▶️';
             }
         };
@@ -708,7 +751,7 @@ class MediaViewer {
         if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
 
         const updateProgress = () => {
-            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 const video = this.currentMedia;
                 if (video.duration) {
                     const progress = (video.currentTime / video.duration) * 100;
