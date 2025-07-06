@@ -9,7 +9,13 @@
 <body>
     <div class="header" id="header">
         <div class="title">Media Viewer</div>
-        <div class="folder-info" id="folderInfo">Current: Liked_0</div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="folder-info" id="folderInfo">Current: Liked_0</div>
+            <button class="change-folder-btn" id="changeFolderBtn" title="Change source folder" style="display: none;">
+                <span class="btn-icon">📂</span>
+                <span class="btn-label">Change source folder</span>
+            </button>
+        </div>
     </div>
 
     <div class="media-container">
@@ -75,8 +81,8 @@
 
         <!-- Navigation arrows -->
         <div class="nav-arrows">
-            <button class="nav-arrow nav-prev" id="navPrev" title="Previous media (Left Arrow)">❮</button>
-            <button class="nav-arrow nav-next" id="navNext" title="Next media (Right Arrow)">❯</button>
+            <button class="nav-arrow nav-prev" id="navPrev" title="Previous media (Left Arrow)">◀</button>
+            <button class="nav-arrow nav-next" id="navNext" title="Next media (Right Arrow)">▶</button>
         </div>
     </div>
 

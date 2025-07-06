@@ -50,6 +50,7 @@ class MediaViewer {
         this.loadingContainer = document.getElementById('loadingContainer');
         this.navPrev = document.getElementById('navPrev');
         this.navNext = document.getElementById('navNext');
+        this.changeFolderBtn = document.getElementById('changeFolderBtn');
     }
 
     showFolderCreationDialog(folderPath) {
@@ -314,6 +315,28 @@ class MediaViewer {
 
         this.navPrev.addEventListener('click', () => this.previousMedia());
         this.navNext.addEventListener('click', () => this.nextMedia());
+        if (this.changeFolderBtn) {
+            this.changeFolderBtn.addEventListener('click', async () => {
+                const folderPath = await window.electronAPI.openFolderDialog();
+                if (folderPath && folderPath !== this.baseFolderPath) {
+                    await this.cleanupCurrentMedia();
+                    this.mediaFiles = [];
+                    this.currentIndex = 0;
+                    this.currentFolder = 0;
+                    this.currentMedia = null;
+                    this.currentFolderPath = '';
+                    this.baseFolderPath = '';
+                    this.moveHistory = [];
+                    this.isLoading = false;
+                    this.isVideoLoading = false;
+                    this.videoEventListeners = [];
+                    this.mediaNavigationInProgress = false;
+                    this.isBeingCleaned = false;
+                    this.hideDropZone();
+                    await this.loadFolder(folderPath);
+                }
+            });
+        }
 
         document.addEventListener('keydown', (e) => {
             if (this.mediaFiles.length === 0) return;
@@ -553,6 +576,10 @@ class MediaViewer {
         this.controls.style.display = 'flex';
         this.fileInfo.style.display = 'block';
         this.navInfo.style.display = 'block';
+        // Show change folder button when media is shown
+        if (this.changeFolderBtn) {
+            this.changeFolderBtn.style.display = 'inline-flex';
+        }
     }
 
     showDropZone() {
@@ -561,7 +588,10 @@ class MediaViewer {
         this.fileInfo.style.display = 'none';
         this.navInfo.style.display = 'none';
         this.videoControls.style.display = 'none';
-        
+        // Hide change folder button when drop zone is shown
+        if (this.changeFolderBtn) {
+            this.changeFolderBtn.style.display = 'none';
+        }
         if (this.currentMedia) {
             this.cleanupCurrentMedia();
         }
