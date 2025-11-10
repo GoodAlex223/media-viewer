@@ -11,6 +11,10 @@
         <div class="title">Media Viewer</div>
         <div style="display: flex; align-items: center; gap: 12px;">
             <div class="folder-info" id="folderInfo">Current: Liked_0</div>
+            <button class="view-mode-btn" id="viewModeBtn" title="Toggle view mode (Single/Compare)" style="display: none;">
+                <span class="btn-icon">👁️</span>
+                <span class="btn-label" id="viewModeLabel">Single</span>
+            </button>
             <button class="change-folder-btn" id="changeFolderBtn" title="Change source folder" style="display: none;">
                 <span class="btn-icon">📂</span>
                 <span class="btn-label">Change source folder</span>
@@ -63,7 +67,7 @@
             <button class="video-control-btn" id="skipBtn" title="Skip to next">⏭️</button>
         </div>
 
-        <!-- Main controls -->
+        <!-- Main controls for single view -->
         <div class="controls" id="controls">
             <button class="control-btn cancel-btn" id="cancelBtn" title="Undo last move (Ctrl+Left)">
                 <span class="btn-icon">↶</span>
@@ -77,6 +81,34 @@
                 <span class="btn-icon">👍</span>
                 <span class="btn-label">Like</span>
             </button>
+        </div>
+
+        <!-- Controls for compare view -->
+        <div class="compare-controls" id="compareControls">
+            <div class="left-media-controls">
+                <button class="control-btn cancel-btn" id="cancelBtnCompare" title="Undo last move (Ctrl+Left)">
+                    <span class="btn-icon">↶</span>
+                    <span class="btn-label">Undo</span>
+                </button>
+                <button class="control-btn dislike-btn" id="leftDislikeBtn" title="Left Dislike (W)">
+                    <span class="btn-icon">👎</span>
+                    <span class="btn-label">Left Dislike</span>
+                </button>
+                <button class="control-btn like-btn" id="leftLikeBtn" title="Left Like (Q)">
+                    <span class="btn-icon">👍</span>
+                    <span class="btn-label">Left Like</span>
+                </button>
+            </div>
+            <div class="right-media-controls">
+                <button class="control-btn dislike-btn" id="rightDislikeBtn" title="Right Dislike (R)">
+                    <span class="btn-icon">👎</span>
+                    <span class="btn-label">Right Dislike</span>
+                </button>
+                <button class="control-btn like-btn" id="rightLikeBtn" title="Right Like (E)">
+                    <span class="btn-icon">👍</span>
+                    <span class="btn-label">Right Like</span>
+                </button>
+            </div>
         </div>
 
         <!-- Navigation arrows -->
@@ -93,27 +125,61 @@
     <div class="help-overlay" id="helpOverlay">
         <div class="help-content">
             <h3>Keyboard Shortcuts</h3>
-            <div class="shortcut-grid">
-                <div class="shortcut-item">
-                    <kbd>↑</kbd> <span>Like (Move to higher folder)</span>
+            <div class="shortcut-section">
+                <h4>Single View Mode</h4>
+                <div class="shortcut-grid">
+                    <div class="shortcut-item">
+                        <kbd>↑</kbd> <span>Like (Move to higher folder)</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>↓</kbd> <span>Dislike (Move to lower folder)</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>←</kbd> <span>Previous media</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>→</kbd> <span>Next media</span>
+                    </div>
                 </div>
-                <div class="shortcut-item">
-                    <kbd>↓</kbd> <span>Dislike (Move to lower folder)</span>
+            </div>
+            <div class="shortcut-section">
+                <h4>Compare View Mode</h4>
+                <div class="shortcut-grid">
+                    <div class="shortcut-item">
+                        <kbd>Q</kbd> <span>Left media Like</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>W</kbd> <span>Left media Dislike</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>E</kbd> <span>Right media Like</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>R</kbd> <span>Right media Dislike</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Z</kbd> <span>Toggle left media fullscreen</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>X</kbd> <span>Toggle right media fullscreen</span>
+                    </div>
                 </div>
-                <div class="shortcut-item">
-                    <kbd>←</kbd> <span>Previous media</span>
-                </div>
-                <div class="shortcut-item">
-                    <kbd>→</kbd> <span>Next media</span>
-                </div>
-                <div class="shortcut-item">
-                    <kbd>Ctrl</kbd> + <kbd>←</kbd> <span>Undo last move</span>
-                </div>
-                <div class="shortcut-item">
-                    <kbd>Space</kbd> <span>Play/Pause video</span>
-                </div>
-                <div class="shortcut-item">
-                    <kbd>F1</kbd> <span>Show/Hide this help</span>
+            </div>
+            <div class="shortcut-section">
+                <h4>General</h4>
+                <div class="shortcut-grid">
+                    <div class="shortcut-item">
+                        <kbd>Ctrl</kbd> + <kbd>←</kbd> <span>Undo last move</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Space</kbd> <span>Play/Pause video</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Esc</kbd> <span>Exit fullscreen</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>F1</kbd> <span>Show/Hide this help</span>
+                    </div>
                 </div>
             </div>
         </div>

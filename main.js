@@ -27,92 +27,6 @@ function createWindow() {
     }
 }
 
-// Handle folder selection
-ipcMain.handle('open-folder-dialog', async () => {
-    try {
-        const result = await dialog.showOpenDialog(mainWindow, {
-            properties: ['openDirectory'],
-            title: 'Select Media Folder',
-            buttonLabel: 'Select Folder'
-        });
-        
-        return result.canceled ? null : result.filePaths[0];
-    } catch (error) {
-        console.error('Dialog error:', error);
-        return null;
-    }
-});
-
-// Load media files from folder
-ipcMain.handle('load-folder', async (event, folderPath) => {
-    try {
-        console.log('Loading folder:', folderPath);
-        const files = await fs.readdir(folderPath);
-        const mediaFiles = [];
-        
-        for (const file of files) {
-            const filePath = path.join(folderPath, file);
-            try {
-                const stats = await fs.stat(filePath);
-                
-                if (stats.isFile()) {
-                    const ext = path.extname(file).toLowerCase();
-                    if (isMediaFile(ext)) {
-                        mediaFiles.push({
-                            name: file,
-                            path: filePath,
-                            size: stats.size,
-                            type: getMimeType(ext)
-                        });
-                    }
-                }
-            } catch (fileError) {
-                console.warn(`Could not process file ${file}:`, fileError.message);
-                continue;
-            }
-        }
-        
-        console.log(`Found ${mediaFiles.length} media files`);
-        return { success: true, files: mediaFiles };
-    } catch (error) {
-        console.error('Load folder error:', error);
-        return { success: false, error: error.message };
-    }
-});
-
-// File operations
-ipcMain.handle('move-file', async (event, data) => {
-    try {
-        const { sourcePath, targetFolder, fileName } = data;
-        await fs.mkdir(targetFolder, { recursive: true });
-        const targetPath = path.join(targetFolder, fileName);
-        await fs.rename(sourcePath, targetPath);
-        return { success: true, targetPath };
-    } catch (error) {
-        console.error('File move error:', error);
-        return { success: false, error: error.message };
-    }
-});
-
-ipcMain.handle('check-folder-exists', async (event, folderPath) => {
-    try {
-        await fs.access(folderPath);
-        return true;
-    } catch {
-        return false;
-    }
-});
-
-ipcMain.handle('create-folder', async (event, folderPath) => {
-    try {
-        await fs.mkdir(folderPath, { recursive: true });
-        return { success: true };
-    } catch (error) {
-        console.error('Create folder error:', error);
-        return { success: false, error: error.message };
-    }
-});
-
 // Helper functions
 function isMediaFile(extension) {
     const mediaExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm', '.mov'];
@@ -136,7 +50,93 @@ function getMimeType(extension) {
 // App lifecycle
 app.whenReady().then(() => {
     createWindow();
-    
+
+    // Handle folder selection
+    ipcMain.handle('open-folder-dialog', async () => {
+        try {
+            const result = await dialog.showOpenDialog(mainWindow, {
+                properties: ['openDirectory'],
+                title: 'Select Media Folder',
+                buttonLabel: 'Select Folder'
+            });
+
+            return result.canceled ? null : result.filePaths[0];
+        } catch (error) {
+            console.error('Dialog error:', error);
+            return null;
+        }
+    });
+
+    // Load media files from folder
+    ipcMain.handle('load-folder', async (event, folderPath) => {
+        try {
+            console.log('Loading folder:', folderPath);
+            const files = await fs.readdir(folderPath);
+            const mediaFiles = [];
+
+            for (const file of files) {
+                const filePath = path.join(folderPath, file);
+                try {
+                    const stats = await fs.stat(filePath);
+
+                    if (stats.isFile()) {
+                        const ext = path.extname(file).toLowerCase();
+                        if (isMediaFile(ext)) {
+                            mediaFiles.push({
+                                name: file,
+                                path: filePath,
+                                size: stats.size,
+                                type: getMimeType(ext)
+                            });
+                        }
+                    }
+                } catch (fileError) {
+                    console.warn(`Could not process file ${file}:`, fileError.message);
+                    continue;
+                }
+            }
+
+            console.log(`Found ${mediaFiles.length} media files`);
+            return { success: true, files: mediaFiles };
+        } catch (error) {
+            console.error('Load folder error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // File operations
+    ipcMain.handle('move-file', async (event, data) => {
+        try {
+            const { sourcePath, targetFolder, fileName } = data;
+            await fs.mkdir(targetFolder, { recursive: true });
+            const targetPath = path.join(targetFolder, fileName);
+            await fs.rename(sourcePath, targetPath);
+            return { success: true, targetPath };
+        } catch (error) {
+            console.error('File move error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('check-folder-exists', async (event, folderPath) => {
+        try {
+            await fs.access(folderPath);
+            return true;
+        } catch {
+            return false;
+        }
+    });
+
+    ipcMain.handle('create-folder', async (event, folderPath) => {
+        try {
+            await fs.mkdir(folderPath, { recursive: true });
+            return { success: true };
+        } catch (error) {
+            console.error('Create folder error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();

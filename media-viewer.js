@@ -12,13 +12,23 @@ class MediaViewer {
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
         this.isBeingCleaned = false; // Flag to prevent error notifications during cleanup
-        
+
+        // Compare mode state
+        this.isCompareMode = false;
+        this.leftMedia = null;
+        this.rightMedia = null;
+        this.leftMediaWrapper = null;
+        this.rightMediaWrapper = null;
+        this.hiddenMediaIndices = []; // Indices of media that were not rated
+        this.videoEventListenersLeft = [];
+        this.videoEventListenersRight = [];
+
         this.initializeElements();
         this.setupEventListeners();
         this.setupHeaderVisibility();
         this.setupFileInfoVisibility();
         this.setupControlsVisibility();
-        
+
         if (!window.electronAPI) {
             console.error('Electron API not available');
             this.showError('Electron API not available. Please make sure you\'re running this in Electron.');
@@ -30,6 +40,7 @@ class MediaViewer {
         this.fileInfo = document.getElementById('fileInfoPanel');
         this.fileName = document.getElementById('fileName');
         this.fileDetails = document.getElementById('fileDetails');
+        this.fileInfoToggle = document.getElementById('fileInfoToggle');
         this.folderInfo = document.getElementById('folderInfo');
         this.controls = document.getElementById('controls');
         this.likeBtn = document.getElementById('likeBtn');
@@ -51,6 +62,16 @@ class MediaViewer {
         this.navPrev = document.getElementById('navPrev');
         this.navNext = document.getElementById('navNext');
         this.changeFolderBtn = document.getElementById('changeFolderBtn');
+
+        // Compare mode elements
+        this.viewModeBtn = document.getElementById('viewModeBtn');
+        this.viewModeLabel = document.getElementById('viewModeLabel');
+        this.compareControls = document.getElementById('compareControls');
+        this.leftLikeBtn = document.getElementById('leftLikeBtn');
+        this.leftDislikeBtn = document.getElementById('leftDislikeBtn');
+        this.rightLikeBtn = document.getElementById('rightLikeBtn');
+        this.rightDislikeBtn = document.getElementById('rightDislikeBtn');
+        this.cancelBtnCompare = document.getElementById('cancelBtnCompare');
     }
 
     showFolderCreationDialog(folderPath) {
@@ -131,9 +152,27 @@ class MediaViewer {
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
         notification.textContent = message;
-        
+        notification.style.cursor = 'pointer';
+        notification.title = 'Click to copy';
+
+        // Add click handler to copy message
+        notification.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(message);
+                const originalText = notification.textContent;
+                notification.textContent = '✓ Copied!';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.textContent = originalText;
+                    }
+                }, 1000);
+            } catch (error) {
+                console.error('Failed to copy:', error);
+            }
+        });
+
         this.notificationContainer.appendChild(notification);
-        
+
         setTimeout(() => {
             notification.style.animation = 'slideOutTop 0.3s ease-in forwards';
             setTimeout(() => notification.remove(), 300);
@@ -150,17 +189,33 @@ class MediaViewer {
             this.showDropZone();
             return;
         }
-        
+
         if (this.isLoading || this.mediaNavigationInProgress) return;
-        
-        this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
+
+        if (this.isCompareMode) {
+            // In compare mode, skip by 2
+            this.currentIndex = (this.currentIndex + 2) % this.mediaFiles.length;
+            if (this.currentIndex >= this.mediaFiles.length - 1) {
+                this.currentIndex = 0;
+            }
+        } else {
+            this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
+        }
         this.showMedia();
     }
 
     previousMedia() {
         if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
-        
-        this.currentIndex = (this.currentIndex - 1 + this.mediaFiles.length) % this.mediaFiles.length;
+
+        if (this.isCompareMode) {
+            // In compare mode, skip by 2
+            this.currentIndex = this.currentIndex - 2;
+            if (this.currentIndex < 0) {
+                this.currentIndex = Math.max(0, this.mediaFiles.length - 2);
+            }
+        } else {
+            this.currentIndex = (this.currentIndex - 1 + this.mediaFiles.length) % this.mediaFiles.length;
+        }
         this.showMedia();
     }
 
@@ -338,14 +393,106 @@ class MediaViewer {
             });
         }
 
+        // File info toggle click to copy filename
+        if (this.fileInfoToggle) {
+            this.fileInfoToggle.addEventListener('click', async () => {
+                if (this.mediaFiles.length > 0 && this.currentIndex < this.mediaFiles.length) {
+                    const currentFile = this.mediaFiles[this.currentIndex];
+                    try {
+                        await navigator.clipboard.writeText(currentFile.name);
+                        this.showNotification('📋 Filename copied!', 'success');
+                    } catch (error) {
+                        console.error('Failed to copy filename:', error);
+                        this.showNotification('Failed to copy filename', 'error');
+                    }
+                }
+            });
+        }
+
+        // Compare mode event listeners
+        if (this.viewModeBtn) {
+            this.viewModeBtn.addEventListener('click', () => this.toggleViewMode());
+        }
+        if (this.leftLikeBtn) {
+            this.leftLikeBtn.addEventListener('click', () => this.handleLeftLike());
+        }
+        if (this.leftDislikeBtn) {
+            this.leftDislikeBtn.addEventListener('click', () => this.handleLeftDislike());
+        }
+        if (this.rightLikeBtn) {
+            this.rightLikeBtn.addEventListener('click', () => this.handleRightLike());
+        }
+        if (this.rightDislikeBtn) {
+            this.rightDislikeBtn.addEventListener('click', () => this.handleRightDislike());
+        }
+        if (this.cancelBtnCompare) {
+            this.cancelBtnCompare.addEventListener('click', () => this.handleCancel());
+        }
+
         document.addEventListener('keydown', (e) => {
             if (this.mediaFiles.length === 0) return;
-            
+
             if (this.isLoading && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
                 e.preventDefault();
                 return;
             }
-            
+
+            // Exit fullscreen with Escape
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                if (this.leftMediaWrapper && this.leftMediaWrapper.classList.contains('fullscreen')) {
+                    this.exitFullscreen(this.leftMediaWrapper);
+                }
+                if (this.rightMediaWrapper && this.rightMediaWrapper.classList.contains('fullscreen')) {
+                    this.exitFullscreen(this.rightMediaWrapper);
+                }
+                return;
+            }
+
+            // Compare mode shortcuts
+            if (this.isCompareMode) {
+                switch(e.key.toUpperCase()) {
+                    case 'Q':
+                        e.preventDefault();
+                        if (!this.isLoading) this.handleLeftLike();
+                        break;
+                    case 'W':
+                        e.preventDefault();
+                        if (!this.isLoading) this.handleLeftDislike();
+                        break;
+                    case 'E':
+                        e.preventDefault();
+                        if (!this.isLoading) this.handleRightLike();
+                        break;
+                    case 'R':
+                        e.preventDefault();
+                        if (!this.isLoading) this.handleRightDislike();
+                        break;
+                    case 'Z':
+                        e.preventDefault();
+                        if (this.leftMediaWrapper) {
+                            this.toggleFullscreen(this.leftMediaWrapper);
+                        }
+                        break;
+                    case 'X':
+                        e.preventDefault();
+                        if (this.rightMediaWrapper) {
+                            this.toggleFullscreen(this.rightMediaWrapper);
+                        }
+                        break;
+                    case 'F1':
+                        e.preventDefault();
+                        this.toggleHelp();
+                        break;
+                }
+                if (e.ctrlKey && e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    if (!this.isLoading) this.handleCancel();
+                }
+                return;
+            }
+
+            // Single mode shortcuts
             switch(e.key) {
                 case ' ':
                     e.preventDefault();
@@ -379,6 +526,30 @@ class MediaViewer {
                     break;
             }
         });
+
+        // Mouse wheel navigation
+        document.addEventListener('wheel', (e) => {
+            if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
+
+            // Prevent default scrolling behavior
+            e.preventDefault();
+
+            // Debounce wheel events
+            if (this.wheelTimeout) return;
+
+            this.wheelTimeout = setTimeout(() => {
+                this.wheelTimeout = null;
+            }, 300);
+
+            // Navigate based on wheel direction
+            if (e.deltaY > 0) {
+                // Scrolling down - next media
+                this.nextMedia();
+            } else if (e.deltaY < 0) {
+                // Scrolling up - previous media
+                this.previousMedia();
+            }
+        }, { passive: false });
     }
 
     setupHeaderVisibility() {
@@ -435,7 +606,8 @@ class MediaViewer {
     setupControlsVisibility() {
         let controlsTimeout;
         let videoControlsTimeout;
-        
+        let isHoveringControl = false;
+
         const showControls = () => {
             this.controls.classList.add('show');
             this.navInfo.classList.add('show');
@@ -455,7 +627,7 @@ class MediaViewer {
                 this.navPrev.classList.remove('show');
                 this.navNext.classList.remove('show');
             }, 300);
-            
+
             videoControlsTimeout = setTimeout(() => {
                 this.videoControls.classList.remove('show');
             }, 300);
@@ -466,25 +638,32 @@ class MediaViewer {
                 showControls();
                 clearTimeout(controlsTimeout);
                 clearTimeout(videoControlsTimeout);
-                
-                controlsTimeout = setTimeout(() => {
-                    this.controls.classList.remove('show');
-                    this.navInfo.classList.remove('show');
-                    this.navPrev.classList.remove('show');
-                    this.navNext.classList.remove('show');
-                    this.videoControls.classList.remove('show');
-                }, 2000);
+
+                // Only set timeout to hide if mouse is not hovering over controls
+                if (!isHoveringControl) {
+                    controlsTimeout = setTimeout(() => {
+                        this.controls.classList.remove('show');
+                        this.navInfo.classList.remove('show');
+                        this.navPrev.classList.remove('show');
+                        this.navNext.classList.remove('show');
+                        this.videoControls.classList.remove('show');
+                    }, 2000);
+                }
             }
         });
 
         [this.controls, this.videoControls, this.navInfo, this.navPrev, this.navNext].forEach(element => {
             element.addEventListener('mouseenter', () => {
+                isHoveringControl = true;
                 clearTimeout(controlsTimeout);
                 clearTimeout(videoControlsTimeout);
                 showControls();
             });
 
-            element.addEventListener('mouseleave', hideControls);
+            element.addEventListener('mouseleave', () => {
+                isHoveringControl = false;
+                hideControls();
+            });
         });
     }
 
@@ -580,6 +759,10 @@ class MediaViewer {
         if (this.changeFolderBtn) {
             this.changeFolderBtn.style.display = 'inline-flex';
         }
+        // Show view mode button when media is shown
+        if (this.viewModeBtn) {
+            this.viewModeBtn.style.display = 'inline-flex';
+        }
     }
 
     showDropZone() {
@@ -641,6 +824,14 @@ class MediaViewer {
             return;
         }
 
+        if (this.isCompareMode) {
+            await this.showCompareMedia();
+        } else {
+            await this.showSingleMedia();
+        }
+    }
+
+    async showSingleMedia() {
         this.mediaNavigationInProgress = true;
         this.isLoading = true;
         this.showLoadingSpinner();
@@ -648,13 +839,12 @@ class MediaViewer {
         // Properly cleanup previous media
         if (this.currentMedia) {
             this.cleanupCurrentMedia();
-            // Wait for cleanup to complete before proceeding
             await new Promise(resolve => setTimeout(resolve, 150));
         }
 
         const file = this.mediaFiles[this.currentIndex];
         console.log('Showing media:', file.name);
-        
+
         const fileUrl = `file://${file.path}`;
 
         if (file.type.startsWith('image/')) {
@@ -681,6 +871,184 @@ class MediaViewer {
 
         this.updateBasicFileInfo(file);
         this.updateNavigationInfo();
+    }
+
+    async showCompareMedia() {
+        if (this.mediaFiles.length < 2) {
+            this.showNotification('Need at least 2 media files for compare mode', 'error');
+            this.isCompareMode = false;
+            this.toggleViewMode();
+            return;
+        }
+
+        this.mediaNavigationInProgress = true;
+        this.isLoading = true;
+        this.showLoadingSpinner();
+
+        // Cleanup previous media
+        if (this.leftMedia) {
+            await this.cleanupCompareMedia('left');
+        }
+        if (this.rightMedia) {
+            await this.cleanupCompareMedia('right');
+        }
+        if (this.leftMediaWrapper) {
+            this.leftMediaWrapper.remove();
+        }
+        if (this.rightMediaWrapper) {
+            this.rightMediaWrapper.remove();
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+        const leftFile = this.mediaFiles[this.currentIndex];
+        const rightFile = this.mediaFiles[this.currentIndex + 1];
+
+        console.log('Showing compare media:', leftFile.name, 'vs', rightFile.name);
+
+        // Create wrappers
+        this.leftMediaWrapper = document.createElement('div');
+        this.leftMediaWrapper.className = 'media-wrapper';
+        this.rightMediaWrapper = document.createElement('div');
+        this.rightMediaWrapper.className = 'media-wrapper';
+
+        // Create left media
+        const leftFileUrl = `file://${leftFile.path}`;
+        if (leftFile.type.startsWith('image/')) {
+            this.leftMedia = document.createElement('img');
+            this.leftMedia.src = leftFileUrl;
+            this.setupCompareImageHandlers(this.leftMedia, leftFile, 'left');
+        } else if (leftFile.type.startsWith('video/')) {
+            this.leftMedia = document.createElement('video');
+            this.leftMedia.src = leftFileUrl;
+            this.leftMedia.autoplay = true;
+            this.leftMedia.loop = true;
+            this.leftMedia.muted = false;
+            this.leftMedia.controls = false;
+            this.leftMedia.volume = parseFloat(this.volumeSlider.value);
+            this.leftMedia.preload = 'metadata';
+            this.setupCompareVideoHandlers(this.leftMedia, leftFile, 'left');
+        }
+
+        // Create right media
+        const rightFileUrl = `file://${rightFile.path}`;
+        if (rightFile.type.startsWith('image/')) {
+            this.rightMedia = document.createElement('img');
+            this.rightMedia.src = rightFileUrl;
+            this.setupCompareImageHandlers(this.rightMedia, rightFile, 'right');
+        } else if (rightFile.type.startsWith('video/')) {
+            this.rightMedia = document.createElement('video');
+            this.rightMedia.src = rightFileUrl;
+            this.rightMedia.autoplay = true;
+            this.rightMedia.loop = true;
+            this.rightMedia.muted = false;
+            this.rightMedia.controls = false;
+            this.rightMedia.volume = parseFloat(this.volumeSlider.value);
+            this.rightMedia.preload = 'metadata';
+            this.setupCompareVideoHandlers(this.rightMedia, rightFile, 'right');
+        }
+
+        this.leftMedia.className = 'media-display';
+        this.rightMedia.className = 'media-display';
+        this.leftMedia.style.display = 'none';
+        this.rightMedia.style.display = 'none';
+
+        // Add click handlers for fullscreen
+        this.leftMediaWrapper.addEventListener('click', (e) => {
+            if (!this.leftMediaWrapper.classList.contains('fullscreen')) {
+                e.stopPropagation();
+                this.toggleFullscreen(this.leftMediaWrapper);
+            }
+        });
+        this.rightMediaWrapper.addEventListener('click', (e) => {
+            if (!this.rightMediaWrapper.classList.contains('fullscreen')) {
+                e.stopPropagation();
+                this.toggleFullscreen(this.rightMediaWrapper);
+            }
+        });
+
+        this.leftMediaWrapper.appendChild(this.leftMedia);
+        this.rightMediaWrapper.appendChild(this.rightMedia);
+        this.mediaContainer.appendChild(this.leftMediaWrapper);
+        this.mediaContainer.appendChild(this.rightMediaWrapper);
+
+        this.updateNavigationInfo();
+    }
+
+    setupCompareImageHandlers(media, file, side) {
+        const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
+
+        const onLoad = () => {
+            if (media && media.tagName === 'IMG' && !this.isBeingCleaned) {
+                media.style.display = 'block';
+
+                // Check if both media are loaded
+                const bothLoaded = (!this.leftMedia || this.leftMedia.complete || this.leftMedia.tagName === 'VIDEO') &&
+                                   (!this.rightMedia || this.rightMedia.complete || this.rightMedia.tagName === 'VIDEO');
+
+                if (bothLoaded) {
+                    this.hideLoadingSpinner();
+                    this.isLoading = false;
+                    this.mediaNavigationInProgress = false;
+                }
+            }
+        };
+
+        const onError = (e) => {
+            if (media && media.tagName === 'IMG' && !this.isBeingCleaned) {
+                console.error('Image load error:', e);
+                this.hideLoadingSpinner();
+                this.showError(`Failed to load image: ${file.name}`);
+                this.isLoading = false;
+                this.mediaNavigationInProgress = false;
+            }
+        };
+
+        listeners.push(
+            { event: 'load', handler: onLoad },
+            { event: 'error', handler: onError }
+        );
+
+        media.addEventListener('load', onLoad);
+        media.addEventListener('error', onError);
+    }
+
+    setupCompareVideoHandlers(media, file, side) {
+        const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
+
+        const onLoadedMetadata = () => {
+            if (media && media.tagName === 'VIDEO' && !this.isBeingCleaned) {
+                media.style.display = 'block';
+
+                // Check if both media are loaded
+                const bothLoaded = (!this.leftMedia || (this.leftMedia.tagName !== 'VIDEO' || this.leftMedia.readyState >= 1)) &&
+                                   (!this.rightMedia || (this.rightMedia.tagName !== 'VIDEO' || this.rightMedia.readyState >= 1));
+
+                if (bothLoaded) {
+                    this.hideLoadingSpinner();
+                    this.isLoading = false;
+                    this.mediaNavigationInProgress = false;
+                }
+            }
+        };
+
+        const onError = (e) => {
+            if (media && media.tagName === 'VIDEO' && !this.isBeingCleaned) {
+                console.error('Video load error:', e);
+                this.hideLoadingSpinner();
+                this.showError(`Failed to load video: ${file.name}`);
+                this.isLoading = false;
+                this.mediaNavigationInProgress = false;
+            }
+        };
+
+        listeners.push(
+            { event: 'loadedmetadata', handler: onLoadedMetadata },
+            { event: 'error', handler: onError }
+        );
+
+        media.addEventListener('loadedmetadata', onLoadedMetadata);
+        media.addEventListener('error', onError);
     }
 
     setupImageHandlers(file) {
@@ -959,7 +1327,11 @@ class MediaViewer {
     }
 
     updateNavigationInfo() {
-        this.mediaIndex.textContent = `${this.currentIndex + 1} of ${this.mediaFiles.length}`;
+        if (this.isCompareMode && this.mediaFiles.length >= 2) {
+            this.mediaIndex.textContent = `${this.currentIndex + 1}-${this.currentIndex + 2} of ${this.mediaFiles.length}`;
+        } else {
+            this.mediaIndex.textContent = `${this.currentIndex + 1} of ${this.mediaFiles.length}`;
+        }
     }
 
     updateFolderInfo() {
@@ -1021,14 +1393,215 @@ class MediaViewer {
             
             this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
             this.updateFolderInfo();
-            
+
             this.currentIndex = this.mediaFiles.length - 1;
             await this.showMedia();
-            
+
         } catch (error) {
             console.error('Error undoing move:', error);
             this.showError(`Failed to undo move: ${error.message}`);
             this.moveHistory.push(lastMove);
+        }
+    }
+
+    // Compare mode methods
+    toggleViewMode() {
+        this.isCompareMode = !this.isCompareMode;
+
+        if (this.isCompareMode) {
+            this.viewModeLabel.textContent = 'Compare';
+            this.controls.style.display = 'none';
+            this.compareControls.style.display = 'flex';
+            this.mediaContainer.classList.add('compare-mode');
+        } else {
+            this.viewModeLabel.textContent = 'Single';
+            this.controls.style.display = 'flex';
+            this.compareControls.style.display = 'none';
+            this.mediaContainer.classList.remove('compare-mode');
+        }
+
+        // Reload media in new mode
+        if (this.mediaFiles.length > 0) {
+            this.currentIndex = 0;
+            this.showMedia();
+        }
+    }
+
+    async handleLeftLike() {
+        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        const newFolderNumber = this.currentFolder + 1;
+        await this.moveCompareFile('left', newFolderNumber);
+    }
+
+    async handleLeftDislike() {
+        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        const newFolderNumber = Math.max(this.currentFolder - 1, 0);
+        await this.moveCompareFile('left', newFolderNumber);
+    }
+
+    async handleRightLike() {
+        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        const newFolderNumber = this.currentFolder + 1;
+        await this.moveCompareFile('right', newFolderNumber);
+    }
+
+    async handleRightDislike() {
+        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        const newFolderNumber = Math.max(this.currentFolder - 1, 0);
+        await this.moveCompareFile('right', newFolderNumber);
+    }
+
+    async moveCompareFile(side, targetFolderNumber) {
+        if (this.isLoading) return;
+
+        const fileIndex = side === 'left' ? this.currentIndex : this.currentIndex + 1;
+        const currentFile = this.mediaFiles[fileIndex];
+        const otherFileIndex = side === 'left' ? this.currentIndex + 1 : this.currentIndex;
+
+        const targetFolderName = `Liked_${targetFolderNumber}`;
+        const targetFolderPath = window.electronAPI.path.join(
+            window.electronAPI.path.dirname(this.baseFolderPath),
+            targetFolderName
+        );
+
+        try {
+            // Cleanup media before moving
+            if (side === 'left' && this.leftMedia) {
+                await this.cleanupCompareMedia('left');
+            } else if (side === 'right' && this.rightMedia) {
+                await this.cleanupCompareMedia('right');
+            }
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
+
+            if (!folderExists) {
+                const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
+                if (!shouldCreate) return;
+
+                const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                if (!createResult.success) {
+                    throw new Error(createResult.error);
+                }
+            }
+
+            // Move the file
+            const moveResult = await window.electronAPI.moveFile({
+                sourcePath: currentFile.path,
+                targetFolder: targetFolderPath,
+                fileName: currentFile.name
+            });
+
+            if (!moveResult.success) {
+                throw new Error(moveResult.error);
+            }
+
+            // Store move in history
+            this.moveHistory.push({
+                fileName: currentFile.name,
+                originalPath: currentFile.path,
+                newPath: moveResult.targetPath,
+                fileSize: currentFile.size,
+                fileType: currentFile.type,
+                fromFolder: this.currentFolder,
+                toFolder: targetFolderNumber
+            });
+
+            // Show success notification
+            const fileName = currentFile.name.length > 20 ?
+                currentFile.name.substring(0, 20) + '...' : currentFile.name;
+            this.showNotification(
+                `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
+                targetFolderNumber > this.currentFolder ? 'success' : 'dislike'
+            );
+
+            // Hide the other media (the one that wasn't rated)
+            this.hiddenMediaIndices.push(otherFileIndex);
+
+            // Remove both files from current view
+            this.mediaFiles.splice(Math.max(fileIndex, otherFileIndex), 1);
+            this.mediaFiles.splice(Math.min(fileIndex, otherFileIndex), 1);
+
+            // Adjust current index
+            if (this.currentIndex >= this.mediaFiles.length) {
+                this.currentIndex = 0;
+            }
+
+            this.updateFolderInfo();
+            await this.showMedia();
+
+        } catch (error) {
+            console.error('Error moving file:', error);
+            this.showError(`Failed to move file: ${error.message}`);
+        }
+    }
+
+    async cleanupCompareMedia(side) {
+        const media = side === 'left' ? this.leftMedia : this.rightMedia;
+        const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
+
+        if (!media) return;
+
+        this.isBeingCleaned = true;
+
+        // Remove event listeners
+        listeners.forEach(({ event, handler }) => {
+            media.removeEventListener(event, handler);
+        });
+
+        if (side === 'left') {
+            this.videoEventListenersLeft = [];
+        } else {
+            this.videoEventListenersRight = [];
+        }
+
+        if (media.tagName === 'VIDEO') {
+            media.pause();
+            media.currentTime = 0;
+            media.removeAttribute('src');
+            media.load();
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        if (media.parentNode) {
+            media.remove();
+        }
+
+        if (side === 'left') {
+            this.leftMedia = null;
+        } else {
+            this.rightMedia = null;
+        }
+
+        this.isBeingCleaned = false;
+    }
+
+    toggleFullscreen(wrapper) {
+        if (wrapper.classList.contains('fullscreen')) {
+            this.exitFullscreen(wrapper);
+        } else {
+            wrapper.classList.add('fullscreen');
+
+            // Add indicator
+            const indicator = document.createElement('div');
+            indicator.className = 'fullscreen-indicator';
+            indicator.textContent = 'Press ESC or click to exit fullscreen';
+            wrapper.appendChild(indicator);
+
+            // Click to exit
+            const exitHandler = () => {
+                this.exitFullscreen(wrapper);
+                wrapper.removeEventListener('click', exitHandler);
+            };
+            wrapper.addEventListener('click', exitHandler);
+        }
+    }
+
+    exitFullscreen(wrapper) {
+        wrapper.classList.remove('fullscreen');
+        const indicator = wrapper.querySelector('.fullscreen-indicator');
+        if (indicator) {
+            indicator.remove();
         }
     }
 }
