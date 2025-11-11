@@ -62,6 +62,7 @@ class MediaViewer {
         this.navPrev = document.getElementById('navPrev');
         this.navNext = document.getElementById('navNext');
         this.changeFolderBtn = document.getElementById('changeFolderBtn');
+        this.helpBtn = document.getElementById('helpBtn');
 
         // Compare mode elements
         this.viewModeBtn = document.getElementById('viewModeBtn');
@@ -235,8 +236,12 @@ class MediaViewer {
         const helpOverlay = document.getElementById('helpOverlay');
         if (helpOverlay.classList.contains('show')) {
             helpOverlay.classList.remove('show');
+            // Re-enable body scrolling
+            document.body.style.overflow = '';
         } else {
             helpOverlay.classList.add('show');
+            // Prevent body scrolling when overlay is open
+            document.body.style.overflow = 'hidden';
         }
     }
 
@@ -417,6 +422,28 @@ class MediaViewer {
                         console.error('Failed to copy filename:', error);
                         this.showNotification('Failed to copy filename', 'error');
                     }
+                }
+            });
+        }
+
+        // Help button
+        if (this.helpBtn) {
+            this.helpBtn.addEventListener('click', () => this.toggleHelp());
+        }
+
+        // Help overlay close button
+        const helpCloseBtn = document.getElementById('helpCloseBtn');
+        if (helpCloseBtn) {
+            helpCloseBtn.addEventListener('click', () => this.toggleHelp());
+        }
+
+        // Close help overlay when clicking on background
+        const helpOverlay = document.getElementById('helpOverlay');
+        if (helpOverlay) {
+            helpOverlay.addEventListener('click', (e) => {
+                // Only close if clicking on the overlay itself, not the content
+                if (e.target === helpOverlay) {
+                    this.toggleHelp();
                 }
             });
         }
@@ -628,6 +655,9 @@ class MediaViewer {
             if (this.videoControls.style.display === 'flex') {
                 this.videoControls.classList.add('show');
             }
+            if (this.compareControls.style.display === 'flex') {
+                this.compareControls.classList.add('show');
+            }
             clearTimeout(controlsTimeout);
             clearTimeout(videoControlsTimeout);
         };
@@ -642,6 +672,7 @@ class MediaViewer {
 
             videoControlsTimeout = setTimeout(() => {
                 this.videoControls.classList.remove('show');
+                this.compareControls.classList.remove('show');
             }, 300);
         };
 
@@ -659,12 +690,13 @@ class MediaViewer {
                         this.navPrev.classList.remove('show');
                         this.navNext.classList.remove('show');
                         this.videoControls.classList.remove('show');
+                        this.compareControls.classList.remove('show');
                     }, 2000);
                 }
             }
         });
 
-        [this.controls, this.videoControls, this.navInfo, this.navPrev, this.navNext].forEach(element => {
+        [this.controls, this.videoControls, this.compareControls, this.navInfo, this.navPrev, this.navNext].forEach(element => {
             element.addEventListener('mouseenter', () => {
                 isHoveringControl = true;
                 clearTimeout(controlsTimeout);
@@ -774,6 +806,10 @@ class MediaViewer {
         // Show view mode button when media is shown
         if (this.viewModeBtn) {
             this.viewModeBtn.style.display = 'inline-flex';
+        }
+        // Show help button when media is shown
+        if (this.helpBtn) {
+            this.helpBtn.style.display = 'inline-flex';
         }
     }
 
@@ -936,7 +972,7 @@ class MediaViewer {
             this.leftMedia.autoplay = true;
             this.leftMedia.loop = true;
             this.leftMedia.muted = false;
-            this.leftMedia.controls = false;
+            this.leftMedia.controls = true; // Enable native browser controls in compare mode
             this.leftMedia.volume = parseFloat(this.volumeSlider.value);
             this.leftMedia.preload = 'metadata';
             this.setupCompareVideoHandlers(this.leftMedia, leftFile, 'left');
@@ -954,7 +990,7 @@ class MediaViewer {
             this.rightMedia.autoplay = true;
             this.rightMedia.loop = true;
             this.rightMedia.muted = false;
-            this.rightMedia.controls = false;
+            this.rightMedia.controls = true; // Enable native browser controls in compare mode
             this.rightMedia.volume = parseFloat(this.volumeSlider.value);
             this.rightMedia.preload = 'metadata';
             this.setupCompareVideoHandlers(this.rightMedia, rightFile, 'right');
@@ -984,6 +1020,8 @@ class MediaViewer {
         this.mediaContainer.appendChild(this.leftMediaWrapper);
         this.mediaContainer.appendChild(this.rightMediaWrapper);
 
+        // Update file info for both media
+        this.updateCompareFileInfo(leftFile, rightFile);
         this.updateNavigationInfo();
     }
 
@@ -1331,6 +1369,21 @@ class MediaViewer {
         this.fileDetails.textContent = detailsText;
     }
 
+    updateCompareFileInfo(leftFile, rightFile) {
+        const maxLength = 25;
+        const leftName = leftFile.name.length > maxLength ?
+            leftFile.name.substring(0, maxLength) + '...' : leftFile.name;
+        const rightName = rightFile.name.length > maxLength ?
+            rightFile.name.substring(0, maxLength) + '...' : rightFile.name;
+
+        this.fileName.textContent = `L: ${leftName} | R: ${rightName}`;
+        this.fileName.title = `Left: ${leftFile.name}\nRight: ${rightFile.name}`;
+
+        let detailsText = `Left: ${this.formatFileSize(leftFile.size)} | Right: ${this.formatFileSize(rightFile.size)}`;
+
+        this.fileDetails.textContent = detailsText;
+    }
+
     formatDuration(seconds) {
         if (!seconds || isNaN(seconds)) return '0:00';
         const minutes = Math.floor(seconds / 60);
@@ -1417,7 +1470,31 @@ class MediaViewer {
     }
 
     // Compare mode methods
-    toggleViewMode() {
+    async toggleViewMode() {
+        // Clean up media from previous mode before switching
+        if (this.isCompareMode) {
+            // Switching FROM compare TO single - clean up compare media
+            if (this.leftMedia) {
+                await this.cleanupCompareMedia('left');
+            }
+            if (this.rightMedia) {
+                await this.cleanupCompareMedia('right');
+            }
+            if (this.leftMediaWrapper) {
+                this.leftMediaWrapper.remove();
+                this.leftMediaWrapper = null;
+            }
+            if (this.rightMediaWrapper) {
+                this.rightMediaWrapper.remove();
+                this.rightMediaWrapper = null;
+            }
+        } else {
+            // Switching FROM single TO compare - clean up single media
+            if (this.currentMedia) {
+                this.cleanupCurrentMedia();
+            }
+        }
+
         this.isCompareMode = !this.isCompareMode;
 
         if (this.isCompareMode) {
@@ -1425,12 +1502,17 @@ class MediaViewer {
             this.controls.style.display = 'none';
             this.compareControls.style.display = 'flex';
             this.mediaContainer.classList.add('compare-mode');
+            // Hide custom video controls in compare mode (videos will have native browser controls)
+            this.videoControls.style.display = 'none';
         } else {
             this.viewModeLabel.textContent = 'Single';
             this.controls.style.display = 'flex';
             this.compareControls.style.display = 'none';
             this.mediaContainer.classList.remove('compare-mode');
         }
+
+        // Small delay to ensure cleanup is complete
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Reload media in new mode
         if (this.mediaFiles.length > 0) {
@@ -1592,6 +1674,21 @@ class MediaViewer {
         if (wrapper.classList.contains('fullscreen')) {
             this.exitFullscreen(wrapper);
         } else {
+            // Get the video element in this wrapper
+            const video = wrapper.querySelector('video');
+            const wasPlaying = video && !video.paused;
+
+            // Store playback state on wrapper
+            wrapper.dataset.wasPlaying = wasPlaying;
+
+            // Pause other videos in compare mode
+            if (this.leftMedia && this.leftMedia.tagName === 'VIDEO' && this.leftMediaWrapper !== wrapper) {
+                this.leftMedia.pause();
+            }
+            if (this.rightMedia && this.rightMedia.tagName === 'VIDEO' && this.rightMediaWrapper !== wrapper) {
+                this.rightMedia.pause();
+            }
+
             wrapper.classList.add('fullscreen');
 
             // Add indicator
@@ -1600,8 +1697,12 @@ class MediaViewer {
             indicator.textContent = 'Press ESC or click to exit fullscreen';
             wrapper.appendChild(indicator);
 
-            // Click to exit
-            const exitHandler = () => {
+            // Click to exit (but not on video controls)
+            const exitHandler = (e) => {
+                // Don't exit if clicking on video controls
+                if (video && e.target === video) {
+                    return;
+                }
                 this.exitFullscreen(wrapper);
                 wrapper.removeEventListener('click', exitHandler);
             };
@@ -1614,6 +1715,12 @@ class MediaViewer {
         const indicator = wrapper.querySelector('.fullscreen-indicator');
         if (indicator) {
             indicator.remove();
+        }
+
+        // Restore video playback state if it was playing before fullscreen
+        const video = wrapper.querySelector('video');
+        if (video && wrapper.dataset.wasPlaying === 'true') {
+            video.play().catch(err => console.log('Auto-play prevented:', err));
         }
     }
 }

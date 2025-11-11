@@ -419,6 +419,31 @@ body {
     transform: translateY(-2px) scale(1.04);
 }
 
+/* Help button */
+.help-btn {
+    background: linear-gradient(135deg, #48c9b0 0%, #16a085 100%);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(72, 201, 176, 0.15);
+    transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
+    outline: none;
+}
+
+.help-btn:hover {
+    background: linear-gradient(135deg, #76d7c4 0%, #1abc9c 100%);
+    box-shadow: 0 4px 16px rgba(72, 201, 176, 0.25);
+    transform: translateY(-2px) scale(1.08);
+}
+
 /* Navigation info */
 .navigation-info {
     position: fixed;
@@ -727,6 +752,31 @@ body {
     overflow-y: auto;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+}
+
+.help-close-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+    outline: none;
+}
+
+.help-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
 }
 
 .help-content h3 {
