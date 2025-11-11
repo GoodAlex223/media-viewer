@@ -148,6 +148,16 @@ class MediaViewer {
         });
     }
 
+    // Convert Windows path to properly encoded file:// URL
+    pathToFileURL(filePath) {
+        // Replace backslashes with forward slashes
+        let normalized = filePath.replace(/\\/g, '/');
+        // Encode special characters while preserving forward slashes and colon
+        let encoded = normalized.split('/').map(part => encodeURIComponent(part)).join('/');
+        // Add file:// protocol
+        return `file:///${encoded}`;
+    }
+
     showNotification(message, type = 'success') {
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
@@ -173,10 +183,12 @@ class MediaViewer {
 
         this.notificationContainer.appendChild(notification);
 
+        // Keep error notifications visible longer (10 seconds vs 3 seconds)
+        const displayTime = type === 'error' ? 10000 : 3000;
         setTimeout(() => {
             notification.style.animation = 'slideOutTop 0.3s ease-in forwards';
             setTimeout(() => notification.remove(), 300);
-        }, 3000);
+        }, displayTime);
     }
 
     showError(message) {
@@ -845,7 +857,7 @@ class MediaViewer {
         const file = this.mediaFiles[this.currentIndex];
         console.log('Showing media:', file.name);
 
-        const fileUrl = `file://${file.path}`;
+        const fileUrl = this.pathToFileURL(file.path);
 
         if (file.type.startsWith('image/')) {
             this.currentMedia = document.createElement('img');
@@ -913,7 +925,7 @@ class MediaViewer {
         this.rightMediaWrapper.className = 'media-wrapper';
 
         // Create left media
-        const leftFileUrl = `file://${leftFile.path}`;
+        const leftFileUrl = this.pathToFileURL(leftFile.path);
         if (leftFile.type.startsWith('image/')) {
             this.leftMedia = document.createElement('img');
             this.leftMedia.src = leftFileUrl;
@@ -931,7 +943,7 @@ class MediaViewer {
         }
 
         // Create right media
-        const rightFileUrl = `file://${rightFile.path}`;
+        const rightFileUrl = this.pathToFileURL(rightFile.path);
         if (rightFile.type.startsWith('image/')) {
             this.rightMedia = document.createElement('img');
             this.rightMedia.src = rightFileUrl;
