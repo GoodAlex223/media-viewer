@@ -722,16 +722,22 @@ body {
 
 /* Media overlay controls */
 .media-overlay-controls {
-    position: absolute;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
+    bottom: 100px;
     display: flex;
     gap: 15px;
     opacity: 0;
     transition: opacity 0.3s ease;
     pointer-events: none;
     z-index: 10;
+}
+
+.media-overlay-controls-left {
+    left: 20px;
+}
+
+.media-overlay-controls-right {
+    right: 20px;
 }
 
 .media-wrapper:hover .media-overlay-controls {

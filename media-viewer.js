@@ -1099,7 +1099,7 @@ class MediaViewer {
 
     addMediaOverlayControls(wrapper, side) {
         const controls = document.createElement('div');
-        controls.className = 'media-overlay-controls';
+        controls.className = `media-overlay-controls media-overlay-controls-${side}`;
 
         const likeBtn = document.createElement('button');
         likeBtn.className = 'overlay-btn overlay-like-btn';
@@ -1710,28 +1710,48 @@ class MediaViewer {
         }
     }
 
-    async handleLeftLike() {
+    async handleLeftLike(autoTriggered = false) {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
         const newFolderNumber = this.currentFolder + 1;
         await this.moveCompareFile('left', newFolderNumber);
+
+        // Automatically dislike the right media
+        if (!autoTriggered) {
+            await this.handleRightDislike(true);
+        }
     }
 
-    async handleLeftDislike() {
+    async handleLeftDislike(autoTriggered = false) {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
         const newFolderNumber = Math.max(this.currentFolder - 1, 0);
         await this.moveCompareFile('left', newFolderNumber);
+
+        // Automatically like the right media
+        if (!autoTriggered) {
+            await this.handleRightLike(true);
+        }
     }
 
-    async handleRightLike() {
+    async handleRightLike(autoTriggered = false) {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
         const newFolderNumber = this.currentFolder + 1;
         await this.moveCompareFile('right', newFolderNumber);
+
+        // Automatically dislike the left media
+        if (!autoTriggered) {
+            await this.handleLeftDislike(true);
+        }
     }
 
-    async handleRightDislike() {
+    async handleRightDislike(autoTriggered = false) {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
         const newFolderNumber = Math.max(this.currentFolder - 1, 0);
         await this.moveCompareFile('right', newFolderNumber);
+
+        // Automatically like the left media
+        if (!autoTriggered) {
+            await this.handleLeftLike(true);
+        }
     }
 
     async moveCompareFile(side, targetFolderNumber) {
