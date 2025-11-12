@@ -242,8 +242,9 @@ class MediaViewer {
         if (this.isLoading || this.mediaNavigationInProgress) return;
 
         if (this.isCompareMode) {
-            // In compare mode, skip by 2
-            this.currentIndex = (this.currentIndex + 2) % this.mediaFiles.length;
+            // In compare mode, skip by 2, ensuring we always have a pair
+            this.currentIndex = this.currentIndex + 2;
+            // Wrap around if we've gone past the point where we can show a pair
             if (this.currentIndex >= this.mediaFiles.length - 1) {
                 this.currentIndex = 0;
             }
@@ -257,9 +258,12 @@ class MediaViewer {
         if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
 
         if (this.isCompareMode) {
-            // In compare mode, skip by 2
+            // In compare mode, skip by 2, ensuring we always have a pair
             this.currentIndex = this.currentIndex - 2;
             if (this.currentIndex < 0) {
+                // Find the last valid index that allows showing a pair
+                // For even number of files: length - 2
+                // For odd number of files: length - 2
                 this.currentIndex = Math.max(0, this.mediaFiles.length - 2);
             }
         } else {
@@ -1016,8 +1020,22 @@ class MediaViewer {
 
         await new Promise(resolve => setTimeout(resolve, 150));
 
+        // Ensure currentIndex is valid and we have two different files
+        if (this.currentIndex >= this.mediaFiles.length - 1) {
+            this.currentIndex = 0;
+        }
+
         const leftFile = this.mediaFiles[this.currentIndex];
         const rightFile = this.mediaFiles[this.currentIndex + 1];
+
+        // Safety check: ensure left and right are different files
+        if (!leftFile || !rightFile || leftFile === rightFile) {
+            console.error('Invalid file selection in compare mode');
+            this.isLoading = false;
+            this.mediaNavigationInProgress = false;
+            this.hideLoadingSpinner();
+            return;
+        }
 
         console.log('Showing compare media:', leftFile.name, 'vs', rightFile.name);
 
@@ -1902,8 +1920,8 @@ class MediaViewer {
             this.mediaFiles.splice(rightFileIndex, 1);
             this.mediaFiles.splice(leftFileIndex, 1);
 
-            // Adjust current index
-            if (this.currentIndex >= this.mediaFiles.length) {
+            // Adjust current index to ensure we can show a pair
+            if (this.currentIndex >= this.mediaFiles.length - 1) {
                 this.currentIndex = 0;
             }
 
@@ -1987,8 +2005,8 @@ class MediaViewer {
             this.mediaFiles.splice(Math.max(fileIndex, otherFileIndex), 1);
             this.mediaFiles.splice(Math.min(fileIndex, otherFileIndex), 1);
 
-            // Adjust current index
-            if (this.currentIndex >= this.mediaFiles.length) {
+            // Adjust current index to ensure we can show a pair
+            if (this.currentIndex >= this.mediaFiles.length - 1) {
                 this.currentIndex = 0;
             }
 
