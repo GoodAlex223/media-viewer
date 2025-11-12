@@ -8,14 +8,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     moveFile: (data) => ipcRenderer.invoke('move-file', data),
     checkFolderExists: (folderPath) => ipcRenderer.invoke('check-folder-exists', folderPath),
     createFolder: (folderPath) => ipcRenderer.invoke('create-folder', folderPath),
-    
+    readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+    writeFile: (filePath, data) => ipcRenderer.invoke('write-file', filePath, data),
+
     // Folder operations
     openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'),
     loadFolder: (folderPath) => ipcRenderer.invoke('load-folder', folderPath),
-    
+
     // IPC invoke wrapper for other operations
     invoke: (channel, data) => ipcRenderer.invoke(channel, data),
-    
+
     // Path utilities
     path: {
         join: (...args) => path.join(...args),

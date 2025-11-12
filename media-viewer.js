@@ -23,6 +23,14 @@ class MediaViewer {
         this.videoEventListenersLeft = [];
         this.videoEventListenersRight = [];
 
+        // Visual similarity state
+        this.perceptualHashes = new Map(); // Map<filePath, hash>
+        this.isSortedBySimilarity = false;
+        this.originalMediaFiles = []; // Backup of original order
+        this.isComputingHashes = false;
+        this.sortAbortController = null;
+        this.progressNotification = null; // Reusable progress notification
+
         this.initializeElements();
         this.setupEventListeners();
         this.setupHeaderVisibility();
@@ -83,6 +91,9 @@ class MediaViewer {
         this.rightFileName = document.getElementById('rightFileName');
         this.rightFileDetails = document.getElementById('rightFileDetails');
         this.rightFileInfoToggle = document.getElementById('rightFileInfoToggle');
+
+        // Visual similarity button
+        this.sortSimilarityBtn = document.getElementById('sortSimilarityBtn');
     }
 
     showFolderCreationDialog(folderPath) {
@@ -170,6 +181,16 @@ class MediaViewer {
     }
 
     showNotification(message, type = 'success') {
+        // Limit info notifications to prevent UI freezing
+        if (type === 'info') {
+            // Remove old info notifications if more than 2 exist
+            const infoNotifications = Array.from(this.notificationContainer.querySelectorAll('.notification.info'));
+            if (infoNotifications.length >= 2) {
+                // Remove oldest info notifications
+                infoNotifications.slice(0, infoNotifications.length - 1).forEach(n => n.remove());
+            }
+        }
+
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
 
@@ -220,17 +241,50 @@ class MediaViewer {
 
         this.notificationContainer.appendChild(notification);
 
-        // Keep error notifications visible longer (10 seconds vs 3 seconds)
-        const displayTime = type === 'error' ? 10000 : 3000;
-        const autoCloseTimeout = setTimeout(closeNotification, displayTime);
-
-        // Clear timeout if manually closed
-        closeBtn.addEventListener('click', () => clearTimeout(autoCloseTimeout), { once: true });
+        // Auto-close: info/success - 2s, warning - 5s, error - keep visible
+        const displayTime = type === 'error' ? 0 : (type === 'warning' ? 5000 : 2000);
+        if (displayTime > 0) {
+            const autoCloseTimeout = setTimeout(closeNotification, displayTime);
+            closeBtn.addEventListener('click', () => clearTimeout(autoCloseTimeout), { once: true });
+        }
     }
 
     showError(message) {
         console.error('Error:', message);
         this.showNotification(`❌ ${message}`, 'error');
+    }
+
+    // Update or create a single progress notification instead of creating many
+    updateProgressNotification(message) {
+        if (!this.progressNotification || !this.progressNotification.parentNode) {
+            // Create new progress notification
+            this.progressNotification = document.createElement('div');
+            this.progressNotification.className = 'notification info';
+
+            const messageSpan = document.createElement('span');
+            messageSpan.className = 'progress-message';
+            messageSpan.textContent = message;
+
+            this.progressNotification.appendChild(messageSpan);
+            this.progressNotification.style.display = 'flex';
+            this.progressNotification.style.alignItems = 'center';
+
+            this.notificationContainer.appendChild(this.progressNotification);
+        } else {
+            // Update existing notification
+            const messageSpan = this.progressNotification.querySelector('.progress-message');
+            if (messageSpan) {
+                messageSpan.textContent = message;
+            }
+        }
+    }
+
+    // Clear progress notification
+    clearProgressNotification() {
+        if (this.progressNotification && this.progressNotification.parentNode) {
+            this.progressNotification.remove();
+            this.progressNotification = null;
+        }
     }
 
     nextMedia() {
@@ -444,6 +498,13 @@ class MediaViewer {
                     this.videoEventListeners = [];
                     this.mediaNavigationInProgress = false;
                     this.isBeingCleaned = false;
+                    // Reset sorting state
+                    this.isSortedBySimilarity = false;
+                    this.originalMediaFiles = [];
+                    this.perceptualHashes.clear();
+                    if (this.sortSimilarityBtn) {
+                        this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
+                    }
                     this.hideDropZone();
                     await this.loadFolder(folderPath);
                 }
@@ -501,6 +562,11 @@ class MediaViewer {
         // Help button
         if (this.helpBtn) {
             this.helpBtn.addEventListener('click', () => this.toggleHelp());
+        }
+
+        // Sort similarity button
+        if (this.sortSimilarityBtn) {
+            this.sortSimilarityBtn.addEventListener('click', () => this.handleSortBySimilarity());
         }
 
         // Help overlay close button
@@ -562,39 +628,41 @@ class MediaViewer {
 
             // Compare mode shortcuts
             if (this.isCompareMode) {
-                switch(e.key.toUpperCase()) {
-                    case 'Q':
+                // Use e.code for letter keys (keyboard layout independent)
+                switch(e.code) {
+                    case 'KeyQ':
                         e.preventDefault();
                         if (!this.isLoading) this.handleLeftLike();
                         break;
-                    case 'W':
+                    case 'KeyW':
                         e.preventDefault();
                         if (!this.isLoading) this.handleLeftDislike();
                         break;
-                    case 'E':
+                    case 'KeyE':
                         e.preventDefault();
                         if (!this.isLoading) this.handleRightLike();
                         break;
-                    case 'R':
+                    case 'KeyR':
                         e.preventDefault();
                         if (!this.isLoading) this.handleRightDislike();
                         break;
-                    case 'Z':
+                    case 'KeyZ':
                         e.preventDefault();
                         if (this.leftMediaWrapper) {
                             this.toggleFullscreen(this.leftMediaWrapper);
                         }
                         break;
-                    case 'X':
+                    case 'KeyX':
                         e.preventDefault();
                         if (this.rightMediaWrapper) {
                             this.toggleFullscreen(this.rightMediaWrapper);
                         }
                         break;
-                    case 'F1':
-                        e.preventDefault();
-                        this.toggleHelp();
-                        break;
+                }
+                // Use e.key for special keys (consistent across layouts)
+                if (e.key === 'F1') {
+                    e.preventDefault();
+                    this.toggleHelp();
                 }
                 if (e.ctrlKey && e.key === 'ArrowLeft') {
                     e.preventDefault();
@@ -852,6 +920,13 @@ class MediaViewer {
             
             this.currentIndex = 0;
             this.moveHistory = [];
+            // Reset sorting state when loading new folder
+            this.isSortedBySimilarity = false;
+            this.originalMediaFiles = [];
+            this.perceptualHashes.clear();
+            if (this.sortSimilarityBtn) {
+                this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
+            }
             this.hideDropZone();
             await this.showMedia();
             this.updateFolderInfo();
@@ -882,6 +957,10 @@ class MediaViewer {
         if (this.helpBtn) {
             this.helpBtn.style.display = 'inline-flex';
         }
+        // Show sort similarity button when media is shown
+        if (this.sortSimilarityBtn) {
+            this.sortSimilarityBtn.style.display = 'inline-flex';
+        }
     }
 
     showDropZone() {
@@ -893,6 +972,10 @@ class MediaViewer {
         // Hide change folder button when drop zone is shown
         if (this.changeFolderBtn) {
             this.changeFolderBtn.style.display = 'none';
+        }
+        // Hide sort similarity button when drop zone is shown
+        if (this.sortSimilarityBtn) {
+            this.sortSimilarityBtn.style.display = 'none';
         }
         if (this.currentMedia) {
             this.cleanupCurrentMedia();
@@ -2120,6 +2203,396 @@ class MediaViewer {
             video.play().catch(err => console.log('Auto-play prevented:', err));
         }
     }
+
+    // Visual Similarity Sorting Functions
+
+    async handleSortBySimilarity() {
+        // If currently computing, cancel the operation
+        if (this.isComputingHashes && this.sortAbortController) {
+            this.sortAbortController.abort();
+            this.showNotification('❌ Sorting cancelled', 'info');
+            return;
+        }
+
+        if (this.isComputingHashes) {
+            this.showNotification('⏳ Hash computation already in progress', 'info');
+            return;
+        }
+
+        if (this.mediaFiles.length < 2) {
+            this.showNotification('Need at least 2 media files to sort', 'error');
+            return;
+        }
+
+        // Warn about large datasets
+        if (this.mediaFiles.length > 1000 && !this.isSortedBySimilarity) {
+            const cacheFile = `${this.baseFolderPath}\\.hash_cache.json`;
+            const confirmed = confirm(
+                `Sorting ${this.mediaFiles.length} files may take a very long time and could freeze the application.\n\n` +
+                `Consider sorting smaller folders (recommended: < 1000 files).\n\n` +
+                `Hash data will be cached at:\n${cacheFile}\n\n` +
+                `Continue anyway?`
+            );
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        // Toggle sorting
+        if (this.isSortedBySimilarity) {
+            // Restore original order
+            this.mediaFiles = [...this.originalMediaFiles];
+            this.isSortedBySimilarity = false;
+            this.currentIndex = 0;
+            await this.showMedia();
+            this.showNotification('📋 Restored original order', 'success');
+            this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
+            return;
+        }
+
+        try {
+            this.isComputingHashes = true;
+            this.sortAbortController = new AbortController();
+            this.sortSimilarityBtn.disabled = true;
+            this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Cancel';
+            this.sortSimilarityBtn.disabled = false; // Re-enable for cancel
+
+            // Save original order
+            this.originalMediaFiles = [...this.mediaFiles];
+
+            // Load cached hashes
+            const cachedCount = await this.loadHashCache();
+
+            // Show cache location (one notification)
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.hash_cache.json');
+            this.showNotification(`💾 Cache: ${cacheFile} (${cachedCount} hashes loaded)`, 'info');
+
+            // Start progress notification
+            this.updateProgressNotification('🔄 Starting hash computation...');
+
+            let processed = 0;
+            let newHashes = 0;
+            let skipped = 0;
+            const total = this.mediaFiles.length;
+
+            for (const file of this.mediaFiles) {
+                // Check for abort
+                if (this.sortAbortController.signal.aborted) {
+                    throw new Error('Sorting cancelled by user');
+                }
+
+                processed++;
+
+                if (!this.perceptualHashes.has(file.path)) {
+                    try {
+                        const hash = await this.computePerceptualHash(file.path);
+                        this.perceptualHashes.set(file.path, hash);
+                        newHashes++;
+
+                        // Update progress every 5 files or at end
+                        if (processed % 5 === 0 || processed === total) {
+                            this.updateProgressNotification(`🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`);
+                        }
+                    } catch (error) {
+                        console.error(`Failed to compute hash for ${file.path}:`, error);
+                        skipped++;
+                        // Update progress notification instead of showing separate warning
+                        if (processed % 5 === 0 || processed === total) {
+                            this.updateProgressNotification(`🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`);
+                        }
+                    }
+                }
+            }
+
+            // Check if we have enough hashes to sort
+            const filesWithHashes = this.mediaFiles.filter(f => this.perceptualHashes.has(f.path));
+            if (filesWithHashes.length < 2) {
+                throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
+            }
+
+            // Save hash cache
+            await this.saveHashCache();
+
+            // Sort by similarity (with progress updates)
+            this.updateProgressNotification('🔄 Sorting files...');
+            await this.sortMediaBySimilarity(this.sortAbortController.signal);
+            this.isSortedBySimilarity = true;
+            this.currentIndex = 0;
+
+            await this.showMedia();
+            this.clearProgressNotification();
+            this.showNotification(`✅ Sorted ${filesWithHashes.length} files by similarity!`, 'success');
+            this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
+
+        } catch (error) {
+            console.error('Error sorting by similarity:', error);
+            this.clearProgressNotification();
+            this.showNotification(`❌ Error: ${error.message}`, 'error');
+
+            // Restore original order if sorting failed
+            if (this.originalMediaFiles.length > 0) {
+                this.mediaFiles = [...this.originalMediaFiles];
+                this.originalMediaFiles = [];
+            }
+        } finally {
+            this.isComputingHashes = false;
+            this.sortAbortController = null;
+            this.sortSimilarityBtn.disabled = false;
+            this.clearProgressNotification();
+            // Restore button label based on state
+            if (this.sortSimilarityBtn) {
+                this.sortSimilarityBtn.querySelector('.btn-label').textContent =
+                    this.isSortedBySimilarity ? 'Restore Order' : 'Sort by Similarity';
+            }
+        }
+    }
+
+    async computePerceptualHash(filePath) {
+        return new Promise((resolve, reject) => {
+            const isVideo = /\.(mp4|webm|mov)$/i.test(filePath);
+            const timeout = setTimeout(() => {
+                reject(new Error('Timeout: processing took too long'));
+            }, 30000); // 30 second timeout
+
+            const cleanup = () => {
+                clearTimeout(timeout);
+            };
+
+            if (isVideo) {
+                // Extract first frame from video
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                video.muted = true;
+
+                video.addEventListener('loadeddata', () => {
+                    try {
+                        video.currentTime = 0.1; // Seek to 0.1s to avoid black frames
+                    } catch (error) {
+                        cleanup();
+                        video.src = '';
+                        reject(error);
+                    }
+                });
+
+                video.addEventListener('seeked', () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 256;
+                        canvas.height = 256;
+                        const ctx = canvas.getContext('2d');
+
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                        const hash = this.blockhash(imageData, 16);
+                        cleanup();
+                        video.src = '';
+                        resolve(hash);
+                    } catch (error) {
+                        cleanup();
+                        video.src = '';
+                        reject(error);
+                    }
+                });
+
+                video.addEventListener('error', (error) => {
+                    cleanup();
+                    video.src = '';
+                    reject(new Error(`Video load error: ${error.message || 'Unknown error'}`));
+                });
+
+                video.src = filePath;
+            } else {
+                // Process image
+                const img = new Image();
+                img.addEventListener('load', () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 256;
+                        canvas.height = 256;
+                        const ctx = canvas.getContext('2d');
+
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                        const hash = this.blockhash(imageData, 16);
+                        cleanup();
+                        resolve(hash);
+                    } catch (error) {
+                        cleanup();
+                        reject(error);
+                    }
+                });
+
+                img.addEventListener('error', (error) => {
+                    cleanup();
+                    reject(new Error(`Image load error: ${error.message || 'Unknown error'}`));
+                });
+
+                img.src = filePath;
+            }
+        });
+    }
+
+    blockhash(imageData, bits) {
+        // Simple blockhash implementation
+        const blockWidth = Math.floor(imageData.width / bits);
+        const blockHeight = Math.floor(imageData.height / bits);
+        const result = [];
+
+        for (let y = 0; y < bits; y++) {
+            for (let x = 0; x < bits; x++) {
+                let total = 0;
+                let count = 0;
+
+                for (let by = 0; by < blockHeight; by++) {
+                    for (let bx = 0; bx < blockWidth; bx++) {
+                        const px = x * blockWidth + bx;
+                        const py = y * blockHeight + by;
+                        const idx = (py * imageData.width + px) * 4;
+
+                        // Convert to grayscale
+                        const gray = imageData.data[idx] * 0.299 +
+                                   imageData.data[idx + 1] * 0.587 +
+                                   imageData.data[idx + 2] * 0.114;
+                        total += gray;
+                        count++;
+                    }
+                }
+
+                result.push(total / count);
+            }
+        }
+
+        // Convert to binary hash based on median
+        const median = result.slice().sort((a, b) => a - b)[Math.floor(result.length / 2)];
+        return result.map(val => val > median ? '1' : '0').join('');
+    }
+
+    calculateHammingDistance(hash1, hash2) {
+        if (!hash1 || !hash2 || hash1.length !== hash2.length) {
+            return Infinity;
+        }
+
+        let distance = 0;
+        for (let i = 0; i < hash1.length; i++) {
+            if (hash1[i] !== hash2[i]) {
+                distance++;
+            }
+        }
+        return distance;
+    }
+
+    async sortMediaBySimilarity(signal) {
+        // Optimized greedy nearest-neighbor algorithm
+        // For large datasets, limit comparisons to improve performance
+        const MAX_COMPARISONS = 500; // Limit candidates to check per file
+
+        const sorted = [];
+        const remaining = [...this.mediaFiles];
+        const total = remaining.length;
+        let processed = 0;
+
+        // Start with first file that has a hash
+        let current = remaining.find(file => this.perceptualHashes.has(file.path));
+        if (!current) return; // No hashes available
+
+        sorted.push(current);
+        remaining.splice(remaining.indexOf(current), 1);
+        processed++;
+
+        while (remaining.length > 0) {
+            // Check for abort during sorting
+            if (signal && signal.aborted) {
+                throw new Error('Sorting cancelled by user');
+            }
+
+            const currentHash = this.perceptualHashes.get(current.path);
+            let minDistance = Infinity;
+            let nearestIndex = -1;
+
+            // Optimization: limit number of comparisons for large datasets
+            const numToCheck = Math.min(remaining.length, MAX_COMPARISONS);
+
+            for (let i = 0; i < numToCheck; i++) {
+                const file = remaining[i];
+                const hash = this.perceptualHashes.get(file.path);
+
+                if (hash) {
+                    const distance = this.calculateHammingDistance(currentHash, hash);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestIndex = i;
+                    }
+                }
+            }
+
+            if (nearestIndex >= 0) {
+                current = remaining[nearestIndex];
+                sorted.push(current);
+                remaining.splice(nearestIndex, 1);
+                processed++;
+
+                // Yield to UI every 50 items to prevent freezing
+                if (processed % 50 === 0) {
+                    this.updateProgressNotification(`🔄 Sorting: ${processed}/${total}`);
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            } else {
+                // No more files with hashes, add remaining
+                sorted.push(...remaining);
+                break;
+            }
+        }
+
+        this.mediaFiles = sorted;
+    }
+
+    async loadHashCache() {
+        if (!this.baseFolderPath) return 0;
+
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.hash_cache.json');
+            const cacheData = await window.electronAPI.readFile(cacheFile);
+
+            if (cacheData) {
+                const cache = JSON.parse(cacheData);
+                // Convert cache entries back to Map with full paths
+                this.perceptualHashes = new Map();
+                for (const [fileName, hash] of Object.entries(cache)) {
+                    // Reconstruct full path from base folder + filename
+                    const fullPath = await window.electronAPI.path.join(this.baseFolderPath, fileName);
+                    this.perceptualHashes.set(fullPath, hash);
+                }
+                console.log(`Loaded ${this.perceptualHashes.size} hashes from cache`);
+                return this.perceptualHashes.size;
+            }
+        } catch (error) {
+            // Cache file doesn't exist or is invalid, start fresh
+            console.log('No hash cache found, will compute fresh hashes');
+        }
+        return 0;
+    }
+
+    async saveHashCache() {
+        if (!this.baseFolderPath) return;
+
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.hash_cache.json');
+            // Store only filenames as keys, not full paths
+            const cache = {};
+            for (const [fullPath, hash] of this.perceptualHashes.entries()) {
+                // Extract filename from full path
+                const fileName = await window.electronAPI.path.basename(fullPath);
+                cache[fileName] = hash;
+            }
+            await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
+            console.log(`Hash cache saved to: ${cacheFile}`);
+        } catch (error) {
+            console.error('Failed to save hash cache:', error);
+            this.showNotification('⚠️ Failed to save hash cache', 'warning');
+        }
+    }
 }
 
 // Add CSS animations
@@ -2135,7 +2608,7 @@ style.textContent = `
             transform: translate(-50%, -50%) scale(1);
         }
     }
-    
+
     @keyframes slideOut {
         from {
             opacity: 1;
@@ -2144,6 +2617,17 @@ style.textContent = `
         to {
             opacity: 0;
             transform: translate(-50%, -50%) scale(0.8);
+        }
+    }
+
+    @keyframes slideOutTop {
+        from {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        to {
+            opacity: 0;
+            transform: translateY(-20px);
         }
     }
 `;

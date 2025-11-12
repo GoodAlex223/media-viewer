@@ -9,7 +9,10 @@
   },
   "author": "goodalex223",
   "license": "ISC",
+  "dependencies": {
+    "blockhash": "^0.2.0"
+  },
   "devDependencies": {
-    "electron": "^36.9.5"
+    "electron": "^39.1.2"
   }
 }

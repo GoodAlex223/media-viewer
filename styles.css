@@ -449,6 +449,37 @@ body {
     transform: translateY(-2px) scale(1.04);
 }
 
+/* Sort similarity button */
+.sort-similarity-btn {
+    background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(155, 89, 182, 0.15);
+    transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
+    outline: none;
+}
+
+.sort-similarity-btn:hover {
+    background: linear-gradient(135deg, #b370cf 0%, #9b59b6 100%);
+    box-shadow: 0 4px 16px rgba(155, 89, 182, 0.25);
+    transform: translateY(-2px) scale(1.04);
+}
+
+.sort-similarity-btn:disabled {
+    background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
+}
+
 /* Help button */
 .help-btn {
     background: linear-gradient(135deg, #48c9b0 0%, #16a085 100%);

@@ -137,6 +137,27 @@ app.whenReady().then(() => {
         }
     });
 
+    // File read/write operations for hash cache
+    ipcMain.handle('read-file', async (_event, filePath) => {
+        try {
+            const data = await fs.readFile(filePath, 'utf8');
+            return data;
+        } catch (error) {
+            // Return null if file doesn't exist or can't be read
+            return null;
+        }
+    });
+
+    ipcMain.handle('write-file', async (_event, filePath, data) => {
+        try {
+            await fs.writeFile(filePath, data, 'utf8');
+            return { success: true };
+        } catch (error) {
+            console.error('Write file error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
