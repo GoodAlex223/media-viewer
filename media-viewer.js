@@ -1597,54 +1597,103 @@ class MediaViewer {
             this.showNotification('No moves to undo', 'error');
             return;
         }
-        
+
         if (this.isLoading) return;
-        
-        const lastMove = this.moveHistory.pop();
-        
-        try {
-            const moveResult = await window.electronAPI.moveFile({
-                sourcePath: lastMove.newPath,
-                targetFolder: this.baseFolderPath,
-                fileName: lastMove.fileName
-            });
-            
-            if (!moveResult.success) {
-                throw new Error(moveResult.error);
-            }
-            
-            this.mediaFiles.push({
-                name: lastMove.fileName,
-                path: lastMove.originalPath,
-                size: lastMove.fileSize,
-                type: lastMove.fileType
-            });
 
-            this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
-            this.updateFolderInfo();
+        // In compare mode, restore both files (last two moves)
+        if (this.isCompareMode && this.moveHistory.length >= 2) {
+            const secondMove = this.moveHistory.pop();
+            const firstMove = this.moveHistory.pop();
 
-            // Set current index to the restored file
-            this.currentIndex = this.mediaFiles.length - 1;
+            try {
+                // Restore first file
+                const firstMoveResult = await window.electronAPI.moveFile({
+                    sourcePath: firstMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: firstMove.fileName
+                });
 
-            // In compare mode, ensure we have a next file for comparison
-            if (this.isCompareMode && this.currentIndex + 1 >= this.mediaFiles.length) {
-                // If restored file is the last one, move back one position if possible
-                if (this.mediaFiles.length >= 2) {
-                    this.currentIndex = this.mediaFiles.length - 2;
-                } else {
-                    // Only 1 file left, switch to single mode
-                    this.isCompareMode = false;
-                    await this.toggleViewMode();
-                    return;
+                if (!firstMoveResult.success) {
+                    throw new Error(firstMoveResult.error);
                 }
+
+                // Restore second file
+                const secondMoveResult = await window.electronAPI.moveFile({
+                    sourcePath: secondMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: secondMove.fileName
+                });
+
+                if (!secondMoveResult.success) {
+                    throw new Error(secondMoveResult.error);
+                }
+
+                // Add both files back to mediaFiles
+                this.mediaFiles.push({
+                    name: firstMove.fileName,
+                    path: firstMove.originalPath,
+                    size: firstMove.fileSize,
+                    type: firstMove.fileType
+                });
+
+                this.mediaFiles.push({
+                    name: secondMove.fileName,
+                    path: secondMove.originalPath,
+                    size: secondMove.fileSize,
+                    type: secondMove.fileType
+                });
+
+                this.showNotification(`✅ Restored ${firstMove.fileName}`, 'success');
+                this.showNotification(`✅ Restored ${secondMove.fileName}`, 'success');
+                this.updateFolderInfo();
+
+                // Set current index to show the restored pair
+                this.currentIndex = this.mediaFiles.length - 2;
+
+                await this.showMedia();
+
+            } catch (error) {
+                console.error('Error undoing move:', error);
+                this.showError(`Failed to undo move: ${error.message}`);
+                // Restore history on error
+                this.moveHistory.push(firstMove);
+                this.moveHistory.push(secondMove);
             }
+        } else {
+            // Single mode - restore one file
+            const lastMove = this.moveHistory.pop();
 
-            await this.showMedia();
+            try {
+                const moveResult = await window.electronAPI.moveFile({
+                    sourcePath: lastMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: lastMove.fileName
+                });
 
-        } catch (error) {
-            console.error('Error undoing move:', error);
-            this.showError(`Failed to undo move: ${error.message}`);
-            this.moveHistory.push(lastMove);
+                if (!moveResult.success) {
+                    throw new Error(moveResult.error);
+                }
+
+                this.mediaFiles.push({
+                    name: lastMove.fileName,
+                    path: lastMove.originalPath,
+                    size: lastMove.fileSize,
+                    type: lastMove.fileType
+                });
+
+                this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
+                this.updateFolderInfo();
+
+                // Set current index to the restored file
+                this.currentIndex = this.mediaFiles.length - 1;
+
+                await this.showMedia();
+
+            } catch (error) {
+                console.error('Error undoing move:', error);
+                this.showError(`Failed to undo move: ${error.message}`);
+                this.moveHistory.push(lastMove);
+            }
         }
     }
 
