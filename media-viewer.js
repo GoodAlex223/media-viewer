@@ -1710,47 +1710,160 @@ class MediaViewer {
         }
     }
 
-    async handleLeftLike(autoTriggered = false) {
+    async handleLeftLike() {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
-        const newFolderNumber = this.currentFolder + 1;
-        await this.moveCompareFile('left', newFolderNumber);
-
-        // Automatically dislike the right media
-        if (!autoTriggered) {
-            await this.handleRightDislike(true);
-        }
+        const leftFolderNumber = this.currentFolder + 1;
+        const rightFolderNumber = Math.max(this.currentFolder - 1, 0);
+        await this.moveComparePair('left', leftFolderNumber, rightFolderNumber);
     }
 
-    async handleLeftDislike(autoTriggered = false) {
+    async handleLeftDislike() {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
-        const newFolderNumber = Math.max(this.currentFolder - 1, 0);
-        await this.moveCompareFile('left', newFolderNumber);
-
-        // Automatically like the right media
-        if (!autoTriggered) {
-            await this.handleRightLike(true);
-        }
+        const leftFolderNumber = Math.max(this.currentFolder - 1, 0);
+        const rightFolderNumber = this.currentFolder + 1;
+        await this.moveComparePair('left', leftFolderNumber, rightFolderNumber);
     }
 
-    async handleRightLike(autoTriggered = false) {
+    async handleRightLike() {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
-        const newFolderNumber = this.currentFolder + 1;
-        await this.moveCompareFile('right', newFolderNumber);
-
-        // Automatically dislike the left media
-        if (!autoTriggered) {
-            await this.handleLeftDislike(true);
-        }
+        const rightFolderNumber = this.currentFolder + 1;
+        const leftFolderNumber = Math.max(this.currentFolder - 1, 0);
+        await this.moveComparePair('right', rightFolderNumber, leftFolderNumber);
     }
 
-    async handleRightDislike(autoTriggered = false) {
+    async handleRightDislike() {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
-        const newFolderNumber = Math.max(this.currentFolder - 1, 0);
-        await this.moveCompareFile('right', newFolderNumber);
+        const rightFolderNumber = Math.max(this.currentFolder - 1, 0);
+        const leftFolderNumber = this.currentFolder + 1;
+        await this.moveComparePair('right', rightFolderNumber, leftFolderNumber);
+    }
 
-        // Automatically like the left media
-        if (!autoTriggered) {
-            await this.handleLeftLike(true);
+    async moveComparePair(primarySide, primaryFolderNumber, secondaryFolderNumber) {
+        if (this.isLoading) return;
+
+        const leftFileIndex = this.currentIndex;
+        const rightFileIndex = this.currentIndex + 1;
+        const leftFile = this.mediaFiles[leftFileIndex];
+        const rightFile = this.mediaFiles[rightFileIndex];
+
+        if (!leftFile || !rightFile) return;
+
+        try {
+            // Cleanup both media before moving
+            if (this.leftMedia) {
+                await this.cleanupCompareMedia('left');
+            }
+            if (this.rightMedia) {
+                await this.cleanupCompareMedia('right');
+            }
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            // Move primary file
+            const primaryFile = primarySide === 'left' ? leftFile : rightFile;
+            const primaryFolderName = `Liked_${primaryFolderNumber}`;
+            const primaryFolderPath = window.electronAPI.path.join(
+                window.electronAPI.path.dirname(this.baseFolderPath),
+                primaryFolderName
+            );
+
+            let folderExists = await window.electronAPI.checkFolderExists(primaryFolderPath);
+            if (!folderExists) {
+                const shouldCreate = await this.showFolderCreationDialog(primaryFolderPath);
+                if (!shouldCreate) return;
+                const createResult = await window.electronAPI.createFolder(primaryFolderPath);
+                if (!createResult.success) {
+                    throw new Error(createResult.error);
+                }
+            }
+
+            const primaryMoveResult = await window.electronAPI.moveFile({
+                sourcePath: primaryFile.path,
+                targetFolder: primaryFolderPath,
+                fileName: primaryFile.name
+            });
+
+            if (!primaryMoveResult.success) {
+                throw new Error(primaryMoveResult.error);
+            }
+
+            // Store primary move in history
+            this.moveHistory.push({
+                fileName: primaryFile.name,
+                originalPath: primaryFile.path,
+                newPath: primaryMoveResult.targetPath,
+                fileSize: primaryFile.size,
+                fileType: primaryFile.type,
+                fromFolder: this.currentFolder,
+                toFolder: primaryFolderNumber
+            });
+
+            // Move secondary file
+            const secondaryFile = primarySide === 'left' ? rightFile : leftFile;
+            const secondaryFolderName = `Liked_${secondaryFolderNumber}`;
+            const secondaryFolderPath = window.electronAPI.path.join(
+                window.electronAPI.path.dirname(this.baseFolderPath),
+                secondaryFolderName
+            );
+
+            folderExists = await window.electronAPI.checkFolderExists(secondaryFolderPath);
+            if (!folderExists) {
+                const createResult = await window.electronAPI.createFolder(secondaryFolderPath);
+                if (!createResult.success) {
+                    throw new Error(createResult.error);
+                }
+            }
+
+            const secondaryMoveResult = await window.electronAPI.moveFile({
+                sourcePath: secondaryFile.path,
+                targetFolder: secondaryFolderPath,
+                fileName: secondaryFile.name
+            });
+
+            if (!secondaryMoveResult.success) {
+                throw new Error(secondaryMoveResult.error);
+            }
+
+            // Store secondary move in history
+            this.moveHistory.push({
+                fileName: secondaryFile.name,
+                originalPath: secondaryFile.path,
+                newPath: secondaryMoveResult.targetPath,
+                fileSize: secondaryFile.size,
+                fileType: secondaryFile.type,
+                fromFolder: this.currentFolder,
+                toFolder: secondaryFolderNumber
+            });
+
+            // Show notifications
+            const primaryFileName = primaryFile.name.length > 20 ?
+                primaryFile.name.substring(0, 20) + '...' : primaryFile.name;
+            const secondaryFileName = secondaryFile.name.length > 20 ?
+                secondaryFile.name.substring(0, 20) + '...' : secondaryFile.name;
+
+            this.showNotification(
+                `${primaryFolderNumber > this.currentFolder ? '👍' : '👎'} ${primaryFileName} → ${primaryFolderName}`,
+                primaryFolderNumber > this.currentFolder ? 'success' : 'dislike'
+            );
+            this.showNotification(
+                `${secondaryFolderNumber > this.currentFolder ? '👍' : '👎'} ${secondaryFileName} → ${secondaryFolderName}`,
+                secondaryFolderNumber > this.currentFolder ? 'success' : 'dislike'
+            );
+
+            // Remove both files from current view
+            this.mediaFiles.splice(rightFileIndex, 1);
+            this.mediaFiles.splice(leftFileIndex, 1);
+
+            // Adjust current index
+            if (this.currentIndex >= this.mediaFiles.length) {
+                this.currentIndex = 0;
+            }
+
+            this.updateFolderInfo();
+            await this.showMedia();
+
+        } catch (error) {
+            console.error('Error moving compare files:', error);
+            this.showError(`Failed to move files: ${error.message}`);
         }
     }
 

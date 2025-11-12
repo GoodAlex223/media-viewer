@@ -733,11 +733,11 @@ body {
 }
 
 .media-overlay-controls-left {
-    left: 20px;
+    left: 25%;
 }
 
 .media-overlay-controls-right {
-    right: 20px;
+    right: 25%;
 }
 
 .media-wrapper:hover .media-overlay-controls {
