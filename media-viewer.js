@@ -172,19 +172,35 @@ class MediaViewer {
     showNotification(message, type = 'success') {
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
-        notification.textContent = message;
-        notification.style.cursor = 'pointer';
-        notification.title = 'Click to copy';
+
+        // Create message text container
+        const messageSpan = document.createElement('span');
+        messageSpan.textContent = message;
+        messageSpan.style.cursor = 'pointer';
+        messageSpan.title = 'Click to copy';
+        messageSpan.style.flex = '1';
+
+        // Create close button
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '×';
+        closeBtn.className = 'notification-close';
+        closeBtn.title = 'Close';
+        closeBtn.style.cssText = 'background: none; border: none; color: inherit; font-size: 24px; cursor: pointer; padding: 0 5px; margin-left: 10px; line-height: 1;';
+
+        notification.appendChild(messageSpan);
+        notification.appendChild(closeBtn);
+        notification.style.display = 'flex';
+        notification.style.alignItems = 'center';
 
         // Add click handler to copy message
-        notification.addEventListener('click', async () => {
+        messageSpan.addEventListener('click', async () => {
             try {
                 await navigator.clipboard.writeText(message);
-                const originalText = notification.textContent;
-                notification.textContent = '✓ Copied!';
+                const originalText = messageSpan.textContent;
+                messageSpan.textContent = '✓ Copied!';
                 setTimeout(() => {
                     if (notification.parentNode) {
-                        notification.textContent = originalText;
+                        messageSpan.textContent = originalText;
                     }
                 }, 1000);
             } catch (error) {
@@ -192,14 +208,24 @@ class MediaViewer {
             }
         });
 
+        // Add close button handler
+        const closeNotification = () => {
+            notification.style.animation = 'slideOutTop 0.3s ease-in forwards';
+            setTimeout(() => notification.remove(), 300);
+        };
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeNotification();
+        });
+
         this.notificationContainer.appendChild(notification);
 
         // Keep error notifications visible longer (10 seconds vs 3 seconds)
         const displayTime = type === 'error' ? 10000 : 3000;
-        setTimeout(() => {
-            notification.style.animation = 'slideOutTop 0.3s ease-in forwards';
-            setTimeout(() => notification.remove(), 300);
-        }, displayTime);
+        const autoCloseTimeout = setTimeout(closeNotification, displayTime);
+
+        // Clear timeout if manually closed
+        closeBtn.addEventListener('click', () => clearTimeout(autoCloseTimeout), { once: true });
     }
 
     showError(message) {
@@ -610,6 +636,10 @@ class MediaViewer {
 
         // Mouse wheel navigation
         document.addEventListener('wheel', (e) => {
+            // Don't navigate if help overlay is open
+            const helpOverlay = document.getElementById('helpOverlay');
+            if (helpOverlay && helpOverlay.classList.contains('show')) return;
+
             if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
 
             // Prevent default scrolling behavior
@@ -1589,11 +1619,26 @@ class MediaViewer {
                 size: lastMove.fileSize,
                 type: lastMove.fileType
             });
-            
+
             this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
             this.updateFolderInfo();
 
+            // Set current index to the restored file
             this.currentIndex = this.mediaFiles.length - 1;
+
+            // In compare mode, ensure we have a next file for comparison
+            if (this.isCompareMode && this.currentIndex + 1 >= this.mediaFiles.length) {
+                // If restored file is the last one, move back one position if possible
+                if (this.mediaFiles.length >= 2) {
+                    this.currentIndex = this.mediaFiles.length - 2;
+                } else {
+                    // Only 1 file left, switch to single mode
+                    this.isCompareMode = false;
+                    await this.toggleViewMode();
+                    return;
+                }
+            }
+
             await this.showMedia();
 
         } catch (error) {
