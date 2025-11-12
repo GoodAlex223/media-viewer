@@ -194,6 +194,36 @@ body {
     font-weight: 500;
 }
 
+/* Compare mode file info panels */
+.compare-file-info {
+    position: fixed;
+    top: 80px;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(15px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    opacity: 0.0;
+    transition: all 0.3s ease;
+    pointer-events: auto;
+    z-index: 500;
+    max-width: 300px;
+    min-width: 200px;
+    padding: 15px;
+}
+
+.compare-file-info:hover,
+.compare-file-info.show {
+    opacity: 1;
+}
+
+.left-file-info {
+    left: 20px;
+}
+
+.right-file-info {
+    right: 20px;
+}
+
 /* Drop zone */
 .drop-zone {
     position: absolute;
@@ -688,6 +718,72 @@ body {
     width: auto;
     height: auto;
     object-fit: contain;
+}
+
+/* Media overlay controls */
+.media-overlay-controls {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.media-wrapper:hover .media-overlay-controls {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.media-wrapper.fullscreen .media-overlay-controls {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.overlay-btn {
+    background: linear-gradient(135deg, rgba(45, 45, 48, 0.95) 0%, rgba(30, 30, 30, 0.95) 100%);
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    border-radius: 12px;
+    padding: 15px 25px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.overlay-btn:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.overlay-like-btn {
+    border-color: rgba(0, 212, 170, 0.5);
+}
+
+.overlay-like-btn:hover {
+    background: linear-gradient(135deg, #00d4aa 0%, #00a881 100%);
+    border-color: #00d4aa;
+    box-shadow: 0 12px 30px rgba(0, 212, 170, 0.4);
+}
+
+.overlay-dislike-btn {
+    border-color: rgba(231, 76, 60, 0.5);
+}
+
+.overlay-dislike-btn:hover {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    border-color: #e74c3c;
+    box-shadow: 0 12px 30px rgba(231, 76, 60, 0.4);
 }
 
 /* Fullscreen mode */

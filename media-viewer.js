@@ -73,6 +73,16 @@ class MediaViewer {
         this.rightLikeBtn = document.getElementById('rightLikeBtn');
         this.rightDislikeBtn = document.getElementById('rightDislikeBtn');
         this.cancelBtnCompare = document.getElementById('cancelBtnCompare');
+
+        // Compare mode file info panels
+        this.leftFileInfo = document.getElementById('leftFileInfo');
+        this.leftFileName = document.getElementById('leftFileName');
+        this.leftFileDetails = document.getElementById('leftFileDetails');
+        this.leftFileInfoToggle = document.getElementById('leftFileInfoToggle');
+        this.rightFileInfo = document.getElementById('rightFileInfo');
+        this.rightFileName = document.getElementById('rightFileName');
+        this.rightFileDetails = document.getElementById('rightFileDetails');
+        this.rightFileInfoToggle = document.getElementById('rightFileInfoToggle');
     }
 
     showFolderCreationDialog(folderPath) {
@@ -426,6 +436,38 @@ class MediaViewer {
             });
         }
 
+        // Left file info toggle click to copy filename
+        if (this.leftFileInfoToggle) {
+            this.leftFileInfoToggle.addEventListener('click', async () => {
+                if (this.mediaFiles.length > 1 && this.currentIndex < this.mediaFiles.length) {
+                    const leftFile = this.mediaFiles[this.currentIndex];
+                    try {
+                        await navigator.clipboard.writeText(leftFile.name);
+                        this.showNotification('📋 Left filename copied!', 'success');
+                    } catch (error) {
+                        console.error('Failed to copy filename:', error);
+                        this.showNotification('Failed to copy filename', 'error');
+                    }
+                }
+            });
+        }
+
+        // Right file info toggle click to copy filename
+        if (this.rightFileInfoToggle) {
+            this.rightFileInfoToggle.addEventListener('click', async () => {
+                if (this.mediaFiles.length > 1 && this.currentIndex + 1 < this.mediaFiles.length) {
+                    const rightFile = this.mediaFiles[this.currentIndex + 1];
+                    try {
+                        await navigator.clipboard.writeText(rightFile.name);
+                        this.showNotification('📋 Right filename copied!', 'success');
+                    } catch (error) {
+                        console.error('Failed to copy filename:', error);
+                        this.showNotification('Failed to copy filename', 'error');
+                    }
+                }
+            });
+        }
+
         // Help button
         if (this.helpBtn) {
             this.helpBtn.addEventListener('click', () => this.toggleHelp());
@@ -655,9 +697,6 @@ class MediaViewer {
             if (this.videoControls.style.display === 'flex') {
                 this.videoControls.classList.add('show');
             }
-            if (this.compareControls.style.display === 'flex') {
-                this.compareControls.classList.add('show');
-            }
             clearTimeout(controlsTimeout);
             clearTimeout(videoControlsTimeout);
         };
@@ -672,7 +711,6 @@ class MediaViewer {
 
             videoControlsTimeout = setTimeout(() => {
                 this.videoControls.classList.remove('show');
-                this.compareControls.classList.remove('show');
             }, 300);
         };
 
@@ -690,13 +728,12 @@ class MediaViewer {
                         this.navPrev.classList.remove('show');
                         this.navNext.classList.remove('show');
                         this.videoControls.classList.remove('show');
-                        this.compareControls.classList.remove('show');
                     }, 2000);
                 }
             }
         });
 
-        [this.controls, this.videoControls, this.compareControls, this.navInfo, this.navPrev, this.navNext].forEach(element => {
+        [this.controls, this.videoControls, this.navInfo, this.navPrev, this.navNext].forEach(element => {
             element.addEventListener('mouseenter', () => {
                 isHoveringControl = true;
                 clearTimeout(controlsTimeout);
@@ -1017,6 +1054,11 @@ class MediaViewer {
 
         this.leftMediaWrapper.appendChild(this.leftMedia);
         this.rightMediaWrapper.appendChild(this.rightMedia);
+
+        // Add overlay controls to each media wrapper
+        this.addMediaOverlayControls(this.leftMediaWrapper, 'left');
+        this.addMediaOverlayControls(this.rightMediaWrapper, 'right');
+
         this.mediaContainer.appendChild(this.leftMediaWrapper);
         this.mediaContainer.appendChild(this.rightMediaWrapper);
 
@@ -1025,12 +1067,48 @@ class MediaViewer {
         this.updateNavigationInfo();
     }
 
+    addMediaOverlayControls(wrapper, side) {
+        const controls = document.createElement('div');
+        controls.className = 'media-overlay-controls';
+
+        const likeBtn = document.createElement('button');
+        likeBtn.className = 'overlay-btn overlay-like-btn';
+        likeBtn.innerHTML = '<span class="btn-icon">👍</span><span class="btn-label">Like</span>';
+        likeBtn.title = side === 'left' ? 'Like Left (Q)' : 'Like Right (E)';
+        likeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (side === 'left') this.handleLeftLike();
+            else this.handleRightLike();
+        });
+
+        const dislikeBtn = document.createElement('button');
+        dislikeBtn.className = 'overlay-btn overlay-dislike-btn';
+        dislikeBtn.innerHTML = '<span class="btn-icon">👎</span><span class="btn-label">Dislike</span>';
+        dislikeBtn.title = side === 'left' ? 'Dislike Left (W)' : 'Dislike Right (R)';
+        dislikeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (side === 'left') this.handleLeftDislike();
+            else this.handleRightDislike();
+        });
+
+        controls.appendChild(likeBtn);
+        controls.appendChild(dislikeBtn);
+        wrapper.appendChild(controls);
+    }
+
     setupCompareImageHandlers(media, file, side) {
         const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
 
         const onLoad = () => {
             if (media && media.tagName === 'IMG' && !this.isBeingCleaned) {
                 media.style.display = 'block';
+
+                // Update file info with dimensions now that image is loaded
+                if (this.mediaFiles.length >= 2 && this.currentIndex + 1 < this.mediaFiles.length) {
+                    const leftFile = this.mediaFiles[this.currentIndex];
+                    const rightFile = this.mediaFiles[this.currentIndex + 1];
+                    this.updateCompareFileInfo(leftFile, rightFile);
+                }
 
                 // Check if both media are loaded
                 const bothLoaded = (!this.leftMedia || this.leftMedia.complete || this.leftMedia.tagName === 'VIDEO') &&
@@ -1069,6 +1147,13 @@ class MediaViewer {
         const onLoadedMetadata = () => {
             if (media && media.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 media.style.display = 'block';
+
+                // Update file info with dimensions and duration now that metadata is loaded
+                if (this.mediaFiles.length >= 2 && this.currentIndex + 1 < this.mediaFiles.length) {
+                    const leftFile = this.mediaFiles[this.currentIndex];
+                    const rightFile = this.mediaFiles[this.currentIndex + 1];
+                    this.updateCompareFileInfo(leftFile, rightFile);
+                }
 
                 // Check if both media are loaded
                 const bothLoaded = (!this.leftMedia || (this.leftMedia.tagName !== 'VIDEO' || this.leftMedia.readyState >= 1)) &&
@@ -1370,18 +1455,67 @@ class MediaViewer {
     }
 
     updateCompareFileInfo(leftFile, rightFile) {
-        const maxLength = 25;
+        // Hide main file info panel in compare mode
+        this.fileInfo.classList.remove('show');
+
+        // Update left panel
+        const maxLength = 30;
         const leftName = leftFile.name.length > maxLength ?
             leftFile.name.substring(0, maxLength) + '...' : leftFile.name;
+        this.leftFileName.textContent = leftName;
+        this.leftFileName.title = leftFile.name;
+
+        let leftDetails = this.formatFileSize(leftFile.size);
+        leftDetails += `\nType: ${leftFile.type}`;
+
+        // Add dimensions for left media if available
+        if (this.leftMedia) {
+            if (this.leftMedia.tagName === 'IMG' && this.leftMedia.naturalWidth && this.leftMedia.naturalHeight) {
+                const aspectRatio = (this.leftMedia.naturalWidth / this.leftMedia.naturalHeight).toFixed(2);
+                leftDetails += `\nDimensions: ${this.leftMedia.naturalWidth} × ${this.leftMedia.naturalHeight}`;
+                leftDetails += `\nAspect ratio: ${aspectRatio}:1`;
+            } else if (this.leftMedia.tagName === 'VIDEO' && this.leftMedia.videoWidth && this.leftMedia.videoHeight) {
+                const aspectRatio = (this.leftMedia.videoWidth / this.leftMedia.videoHeight).toFixed(2);
+                leftDetails += `\nDimensions: ${this.leftMedia.videoWidth} × ${this.leftMedia.videoHeight}`;
+                leftDetails += `\nAspect ratio: ${aspectRatio}:1`;
+                if (this.leftMedia.duration && !isNaN(this.leftMedia.duration)) {
+                    leftDetails += `\nDuration: ${this.formatDuration(this.leftMedia.duration)}`;
+                }
+            }
+        }
+
+        this.leftFileDetails.textContent = leftDetails;
+
+        // Update right panel
         const rightName = rightFile.name.length > maxLength ?
             rightFile.name.substring(0, maxLength) + '...' : rightFile.name;
+        this.rightFileName.textContent = rightName;
+        this.rightFileName.title = rightFile.name;
 
-        this.fileName.textContent = `L: ${leftName} | R: ${rightName}`;
-        this.fileName.title = `Left: ${leftFile.name}\nRight: ${rightFile.name}`;
+        let rightDetails = this.formatFileSize(rightFile.size);
+        rightDetails += `\nType: ${rightFile.type}`;
 
-        let detailsText = `Left: ${this.formatFileSize(leftFile.size)} | Right: ${this.formatFileSize(rightFile.size)}`;
+        // Add dimensions for right media if available
+        if (this.rightMedia) {
+            if (this.rightMedia.tagName === 'IMG' && this.rightMedia.naturalWidth && this.rightMedia.naturalHeight) {
+                const aspectRatio = (this.rightMedia.naturalWidth / this.rightMedia.naturalHeight).toFixed(2);
+                rightDetails += `\nDimensions: ${this.rightMedia.naturalWidth} × ${this.rightMedia.naturalHeight}`;
+                rightDetails += `\nAspect ratio: ${aspectRatio}:1`;
+            } else if (this.rightMedia.tagName === 'VIDEO' && this.rightMedia.videoWidth && this.rightMedia.videoHeight) {
+                const aspectRatio = (this.rightMedia.videoWidth / this.rightMedia.videoHeight).toFixed(2);
+                rightDetails += `\nDimensions: ${this.rightMedia.videoWidth} × ${this.rightMedia.videoHeight}`;
+                rightDetails += `\nAspect ratio: ${aspectRatio}:1`;
+                if (this.rightMedia.duration && !isNaN(this.rightMedia.duration)) {
+                    rightDetails += `\nDuration: ${this.formatDuration(this.rightMedia.duration)}`;
+                }
+            }
+        }
 
-        this.fileDetails.textContent = detailsText;
+        this.rightFileDetails.textContent = rightDetails;
+
+        // Show compare panels (but not visible until hover)
+        this.leftFileInfo.style.display = 'block';
+        this.rightFileInfo.style.display = 'block';
     }
 
     formatDuration(seconds) {
@@ -1500,15 +1634,25 @@ class MediaViewer {
         if (this.isCompareMode) {
             this.viewModeLabel.textContent = 'Compare';
             this.controls.style.display = 'none';
-            this.compareControls.style.display = 'flex';
+            this.compareControls.style.display = 'none'; // Hide old bottom controls (now using overlay controls)
             this.mediaContainer.classList.add('compare-mode');
             // Hide custom video controls in compare mode (videos will have native browser controls)
             this.videoControls.style.display = 'none';
+            // Hide main file info panel in compare mode
+            this.fileInfo.classList.remove('show');
+            this.fileInfo.style.display = 'none';
         } else {
             this.viewModeLabel.textContent = 'Single';
             this.controls.style.display = 'flex';
             this.compareControls.style.display = 'none';
             this.mediaContainer.classList.remove('compare-mode');
+            // Hide compare file info panels in single mode
+            this.leftFileInfo.classList.remove('show');
+            this.rightFileInfo.classList.remove('show');
+            this.leftFileInfo.style.display = 'none';
+            this.rightFileInfo.style.display = 'none';
+            // Show main file info panel in single mode
+            this.fileInfo.style.display = 'block';
         }
 
         // Small delay to ensure cleanup is complete
@@ -1696,6 +1840,14 @@ class MediaViewer {
             indicator.className = 'fullscreen-indicator';
             indicator.textContent = 'Press ESC or click to exit fullscreen';
             wrapper.appendChild(indicator);
+
+            // Resume video playback if it was playing
+            if (video && wasPlaying) {
+                // Small delay to ensure fullscreen transition completes
+                setTimeout(() => {
+                    video.play().catch(err => console.log('Auto-play prevented:', err));
+                }, 100);
+            }
 
             // Click to exit (but not on video controls)
             const exitHandler = (e) => {
