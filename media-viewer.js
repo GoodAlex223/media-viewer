@@ -863,12 +863,13 @@ class MediaViewer {
         if (this.sortKValueInput) {
             this.sortKValueInput.addEventListener('change', (e) => {
                 const value = parseInt(e.target.value, 10);
-                if (value >= 10 && value <= 5000) {
+                if (value >= 10) {
                     localStorage.setItem('sortKValue', value.toString());
                     console.log(`K value changed to: ${value}`);
                 } else {
-                    // Reset to valid range
-                    e.target.value = Math.max(10, Math.min(5000, value));
+                    // Reset to minimum
+                    e.target.value = 10;
+                    localStorage.setItem('sortKValue', '10');
                 }
             });
         }
@@ -2635,6 +2636,16 @@ class MediaViewer {
                 'simple': 'Simple (limited)'
             };
             const algorithmName = algorithmNames[this.sortAlgorithm] || this.sortAlgorithm;
+
+            // For Simple algorithm, show K value as separate notification
+            if (this.sortAlgorithm === 'simple') {
+                const savedK = localStorage.getItem('sortKValue');
+                const kValue = savedK ? parseInt(savedK, 10) : 500;
+                const maxK = filesWithHashes.length - 1;
+                const actualK = Math.min(kValue, maxK);
+                this.showNotification(`🔢 Using K=${actualK} neighbors per file (max: ${maxK})`, 'info');
+            }
+
             this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
 
             // Call appropriate sorting method
@@ -2655,7 +2666,10 @@ class MediaViewer {
             this.isSortedBySimilarity = true;
             this.currentIndex = 0;
             this.clearProgressNotification();
+
+            // Show success notification
             this.showNotification(`✅ Sorted ${filesWithHashes.length} files with ${algorithmName}!`, 'success');
+
             this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
 
         } catch (error) {
