@@ -1,3 +1,258 @@
+// MinHeap (Priority Queue) for efficient MST construction
+class MinHeap {
+    constructor(compareFunc = (a, b) => a.distance - b.distance) {
+        this.heap = [];
+        this.compareFunc = compareFunc;
+    }
+
+    size() {
+        return this.heap.length;
+    }
+
+    isEmpty() {
+        return this.heap.length === 0;
+    }
+
+    push(item) {
+        this.heap.push(item);
+        this.bubbleUp(this.heap.length - 1);
+    }
+
+    pop() {
+        if (this.isEmpty()) return null;
+        if (this.heap.length === 1) return this.heap.pop();
+
+        const min = this.heap[0];
+        this.heap[0] = this.heap.pop();
+        this.bubbleDown(0);
+        return min;
+    }
+
+    bubbleUp(index) {
+        while (index > 0) {
+            const parentIndex = Math.floor((index - 1) / 2);
+            if (this.compareFunc(this.heap[index], this.heap[parentIndex]) >= 0) break;
+
+            [this.heap[index], this.heap[parentIndex]] = [this.heap[parentIndex], this.heap[index]];
+            index = parentIndex;
+        }
+    }
+
+    bubbleDown(index) {
+        while (true) {
+            let minIndex = index;
+            const leftChild = 2 * index + 1;
+            const rightChild = 2 * index + 2;
+
+            if (leftChild < this.heap.length &&
+                this.compareFunc(this.heap[leftChild], this.heap[minIndex]) < 0) {
+                minIndex = leftChild;
+            }
+
+            if (rightChild < this.heap.length &&
+                this.compareFunc(this.heap[rightChild], this.heap[minIndex]) < 0) {
+                minIndex = rightChild;
+            }
+
+            if (minIndex === index) break;
+
+            [this.heap[index], this.heap[minIndex]] = [this.heap[minIndex], this.heap[index]];
+            index = minIndex;
+        }
+    }
+}
+
+// VP-Tree (Vantage Point Tree) for fast nearest neighbor search
+class VPTree {
+    constructor(items, distanceFunc) {
+        this.distanceFunc = distanceFunc;
+        this.root = this.buildTree(items);
+    }
+
+    buildTree(items) {
+        if (!items || items.length === 0) return null;
+
+        // Select vantage point (first item for simplicity, could be random)
+        const vantagePoint = items[0];
+
+        if (items.length === 1) {
+            return { vantagePoint, left: null, right: null, radius: 0 };
+        }
+
+        // Calculate distances from vantage point to all other points
+        const distances = items.slice(1).map(item => ({
+            item,
+            distance: this.distanceFunc(vantagePoint, item)
+        }));
+
+        // Find median using QuickSelect - O(n) instead of O(n log n) sort
+        const medianIndex = Math.floor(distances.length / 2);
+        const median = this.quickSelect(distances, medianIndex);
+        const radius = median.distance;
+
+        // Split into inside (< radius) and outside (>= radius)
+        // QuickSelect already partitioned the array around median
+        const inside = [];
+        const outside = [];
+        for (const d of distances) {
+            if (d.distance < radius) {
+                inside.push(d.item);
+            } else if (d.distance > radius) {
+                outside.push(d.item);
+            } else {
+                // Items equal to radius - split evenly
+                if (inside.length <= outside.length) {
+                    inside.push(d.item);
+                } else {
+                    outside.push(d.item);
+                }
+            }
+        }
+
+        return {
+            vantagePoint,
+            radius,
+            left: this.buildTree(inside),
+            right: this.buildTree(outside)
+        };
+    }
+
+    // Partition for QuickSelect - O(n)
+    partition(arr, left, right, pivotIndex, compareFunc) {
+        const pivotValue = arr[pivotIndex];
+        // Move pivot to end
+        [arr[pivotIndex], arr[right]] = [arr[right], arr[pivotIndex]];
+        let storeIndex = left;
+
+        // Move all smaller elements to the left
+        for (let i = left; i < right; i++) {
+            if (compareFunc(arr[i], pivotValue) < 0) {
+                [arr[storeIndex], arr[i]] = [arr[i], arr[storeIndex]];
+                storeIndex++;
+            }
+        }
+
+        // Move pivot to its final position
+        [arr[right], arr[storeIndex]] = [arr[storeIndex], arr[right]];
+        return storeIndex;
+    }
+
+    // QuickSelect - find k-th element in O(n) average case
+    quickSelect(arr, k, compareFunc = (a, b) => a.distance - b.distance) {
+        if (arr.length === 0) return null;
+        if (arr.length === 1) return arr[0];
+
+        let left = 0;
+        let right = arr.length - 1;
+
+        while (left <= right) {
+            // Use middle as pivot for better average case
+            const pivotIndex = Math.floor((left + right) / 2);
+            const newPivot = this.partition(arr, left, right, pivotIndex, compareFunc);
+
+            if (newPivot === k) {
+                return arr[k];
+            } else if (k < newPivot) {
+                right = newPivot - 1;
+            } else {
+                left = newPivot + 1;
+            }
+        }
+
+        return arr[k];
+    }
+
+    findNearest(target, excludeSet = new Set()) {
+        if (!this.root) return null;
+
+        let best = { item: null, distance: Infinity };
+
+        const search = (node) => {
+            if (!node) return;
+
+            const vp = node.vantagePoint;
+
+            // Calculate distance once and reuse it
+            const targetDistance = this.distanceFunc(target, vp);
+
+            // Check if this is a better match (if not excluded)
+            if (!excludeSet.has(vp)) {
+                if (targetDistance < best.distance) {
+                    best = { item: vp, distance: targetDistance };
+                }
+            }
+
+            // Determine which side to search first using the same targetDistance
+            if (targetDistance < node.radius) {
+                // Target is inside radius, search left first
+                search(node.left);
+                // Only search right if there could be a closer point
+                if (targetDistance + best.distance >= node.radius) {
+                    search(node.right);
+                }
+            } else {
+                // Target is outside radius, search right first
+                search(node.right);
+                // Only search left if there could be a closer point
+                if (targetDistance - best.distance <= node.radius) {
+                    search(node.left);
+                }
+            }
+        };
+
+        search(this.root);
+        return best.item;
+    }
+
+    // Find K nearest neighbors (for MST graph construction)
+    // Optimized: no insertion sort on every node visit
+    findKNearest(target, k, excludeSet = new Set()) {
+        if (!this.root) return [];
+
+        const results = []; // Array of {item, distance}
+        let worstDistance = Infinity;
+
+        const search = (node) => {
+            if (!node) return;
+
+            const vp = node.vantagePoint;
+            const targetDistance = this.distanceFunc(target, vp);
+
+            // Add to results if not excluded
+            if (!excludeSet.has(vp)) {
+                // Just push, no sorting during traversal
+                results.push({ item: vp, distance: targetDistance });
+
+                // Update worst distance estimate for pruning
+                if (results.length >= k && targetDistance > worstDistance) {
+                    worstDistance = targetDistance;
+                }
+            }
+
+            // Search both sides if they could contain closer points
+            if (targetDistance < node.radius) {
+                search(node.left);
+                if (targetDistance + worstDistance >= node.radius) {
+                    search(node.right);
+                }
+            } else {
+                search(node.right);
+                if (targetDistance - worstDistance <= node.radius) {
+                    search(node.left);
+                }
+            }
+        };
+
+        search(this.root);
+
+        // Sort once at the end - O(m log m) where m is nodes visited
+        results.sort((a, b) => a.distance - b.distance);
+
+        // Return only k best
+        return results.slice(0, k);
+    }
+}
+
 class MediaViewer {
     constructor() {
         this.mediaFiles = [];
@@ -30,6 +285,7 @@ class MediaViewer {
         this.isComputingHashes = false;
         this.sortAbortController = null;
         this.progressNotification = null; // Reusable progress notification
+        this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
 
         this.initializeElements();
         this.setupEventListeners();
@@ -94,6 +350,32 @@ class MediaViewer {
 
         // Visual similarity button
         this.sortSimilarityBtn = document.getElementById('sortSimilarityBtn');
+        this.sortAlgorithmSelect = document.getElementById('sortAlgorithmSelect');
+        this.sortSettings = document.getElementById('sortSettings');
+        this.sortKValueInput = document.getElementById('sortKValue');
+
+        // Set initial values from localStorage
+        if (this.sortAlgorithmSelect) {
+            this.sortAlgorithmSelect.value = this.sortAlgorithm;
+        }
+        if (this.sortKValueInput) {
+            const savedK = localStorage.getItem('sortKValue');
+            this.sortKValueInput.value = savedK || '500';
+        }
+
+        // Show/hide K settings based on algorithm
+        this.updateSortSettingsVisibility();
+    }
+
+    updateSortSettingsVisibility() {
+        if (!this.sortSettings) return;
+
+        // Show K settings only for Simple algorithm
+        if (this.sortAlgorithm === 'simple') {
+            this.sortSettings.style.display = 'inline-flex';
+        } else {
+            this.sortSettings.style.display = 'none';
+        }
     }
 
     showFolderCreationDialog(folderPath) {
@@ -569,6 +851,28 @@ class MediaViewer {
             this.sortSimilarityBtn.addEventListener('click', () => this.handleSortBySimilarity());
         }
 
+        if (this.sortAlgorithmSelect) {
+            this.sortAlgorithmSelect.addEventListener('change', (e) => {
+                this.sortAlgorithm = e.target.value;
+                localStorage.setItem('sortAlgorithm', e.target.value);
+                this.updateSortSettingsVisibility(); // Show/hide K settings
+                console.log(`Sorting algorithm changed to: ${e.target.value}`);
+            });
+        }
+
+        if (this.sortKValueInput) {
+            this.sortKValueInput.addEventListener('change', (e) => {
+                const value = parseInt(e.target.value, 10);
+                if (value >= 10 && value <= 5000) {
+                    localStorage.setItem('sortKValue', value.toString());
+                    console.log(`K value changed to: ${value}`);
+                } else {
+                    // Reset to valid range
+                    e.target.value = Math.max(10, Math.min(5000, value));
+                }
+            });
+        }
+
         // Help overlay close button
         const helpCloseBtn = document.getElementById('helpCloseBtn');
         if (helpCloseBtn) {
@@ -961,6 +1265,11 @@ class MediaViewer {
         if (this.sortSimilarityBtn) {
             this.sortSimilarityBtn.style.display = 'inline-flex';
         }
+        if (this.sortAlgorithmSelect) {
+            this.sortAlgorithmSelect.style.display = 'inline-flex';
+        }
+        // Show/hide K settings based on current algorithm
+        this.updateSortSettingsVisibility();
     }
 
     showDropZone() {
@@ -976,6 +1285,12 @@ class MediaViewer {
         // Hide sort similarity button when drop zone is shown
         if (this.sortSimilarityBtn) {
             this.sortSimilarityBtn.style.display = 'none';
+        }
+        if (this.sortAlgorithmSelect) {
+            this.sortAlgorithmSelect.style.display = 'none';
+        }
+        if (this.sortSettings) {
+            this.sortSettings.style.display = 'none';
         }
         if (this.currentMedia) {
             this.cleanupCurrentMedia();
@@ -2313,15 +2628,34 @@ class MediaViewer {
             // Save hash cache
             await this.saveHashCache();
 
-            // Sort by similarity (with progress updates)
-            this.updateProgressNotification('🔄 Sorting files...');
-            await this.sortMediaBySimilarity(this.sortAbortController.signal);
+            // Sort by similarity using selected algorithm
+            const algorithmNames = {
+                'vptree': 'VP-Tree (fastest)',
+                'mst': 'MST (best quality)',
+                'simple': 'Simple (limited)'
+            };
+            const algorithmName = algorithmNames[this.sortAlgorithm] || this.sortAlgorithm;
+            this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
+
+            // Call appropriate sorting method
+            switch (this.sortAlgorithm) {
+                case 'vptree':
+                    await this.sortMediaBySimilarityVPTree(this.sortAbortController.signal);
+                    break;
+                case 'mst':
+                    await this.sortMediaBySimilarityMST(this.sortAbortController.signal);
+                    break;
+                case 'simple':
+                default:
+                    await this.sortMediaBySimilarity(this.sortAbortController.signal);
+                    break;
+            }
+
+            // Sorting completed successfully!
             this.isSortedBySimilarity = true;
             this.currentIndex = 0;
-
-            await this.showMedia();
             this.clearProgressNotification();
-            this.showNotification(`✅ Sorted ${filesWithHashes.length} files by similarity!`, 'success');
+            this.showNotification(`✅ Sorted ${filesWithHashes.length} files with ${algorithmName}!`, 'success');
             this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
 
         } catch (error) {
@@ -2338,11 +2672,21 @@ class MediaViewer {
             this.isComputingHashes = false;
             this.sortAbortController = null;
             this.sortSimilarityBtn.disabled = false;
-            this.clearProgressNotification();
             // Restore button label based on state
             if (this.sortSimilarityBtn) {
                 this.sortSimilarityBtn.querySelector('.btn-label').textContent =
                     this.isSortedBySimilarity ? 'Restore Order' : 'Sort by Similarity';
+            }
+        }
+
+        // Show first media after sorting (separate error handling)
+        if (this.isSortedBySimilarity) {
+            try {
+                await this.showMedia();
+            } catch (mediaError) {
+                console.error('Error showing media after sort:', mediaError);
+                // Don't undo the sort - media loading is separate concern
+                this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
             }
         }
     }
@@ -2486,7 +2830,9 @@ class MediaViewer {
     async sortMediaBySimilarity(signal) {
         // Optimized greedy nearest-neighbor algorithm
         // For large datasets, limit comparisons to improve performance
-        const MAX_COMPARISONS = 500; // Limit candidates to check per file
+        // Get K value from UI input or use default
+        const savedK = localStorage.getItem('sortKValue');
+        const MAX_COMPARISONS = savedK ? parseInt(savedK, 10) : 500;
 
         const sorted = [];
         const remaining = [...this.mediaFiles];
@@ -2544,6 +2890,203 @@ class MediaViewer {
                 break;
             }
         }
+
+        this.mediaFiles = sorted;
+    }
+
+    async sortMediaBySimilarityVPTree(signal) {
+        // VP-Tree optimized greedy nearest-neighbor algorithm
+        // Complexity: O(n log n) - dramatically faster than O(n²)
+
+        const total = this.mediaFiles.length;
+        let processed = 0;
+
+        this.updateProgressNotification('🔄 Building VP-Tree index...');
+
+        // Build VP-Tree with files that have hashes
+        const filesWithHashes = this.mediaFiles.filter(f => this.perceptualHashes.has(f.path));
+        if (filesWithHashes.length < 2) {
+            throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
+        }
+
+        // Distance function for VP-Tree
+        const distanceFunc = (file1, file2) => {
+            const hash1 = this.perceptualHashes.get(file1.path);
+            const hash2 = this.perceptualHashes.get(file2.path);
+            return this.calculateHammingDistance(hash1, hash2);
+        };
+
+        // Build VP-Tree
+        const vpTree = new VPTree(filesWithHashes, distanceFunc);
+
+        this.updateProgressNotification('🔄 Sorting with VP-Tree...');
+
+        // Greedy nearest-neighbor using VP-Tree for O(log n) queries
+        const sorted = [];
+        const excluded = new Set();
+
+        // Start with first file
+        let current = filesWithHashes[0];
+        sorted.push(current);
+        excluded.add(current);
+        processed++;
+
+        while (sorted.length < filesWithHashes.length) {
+            // Check for abort
+            if (signal && signal.aborted) {
+                throw new Error('Sorting cancelled by user');
+            }
+
+            // Find nearest neighbor using VP-Tree (O(log n))
+            const nearest = vpTree.findNearest(current, excluded);
+
+            if (nearest) {
+                sorted.push(nearest);
+                excluded.add(nearest);
+                current = nearest;
+                processed++;
+
+                // Yield to UI every 50 items
+                if (processed % 50 === 0) {
+                    this.updateProgressNotification(`🔄 Sorting: ${processed}/${total}`);
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            } else {
+                // Should not happen, but add safety
+                break;
+            }
+        }
+
+        // Add files without hashes at the end
+        const filesWithoutHashes = this.mediaFiles.filter(f => !this.perceptualHashes.has(f.path));
+        sorted.push(...filesWithoutHashes);
+
+        this.mediaFiles = sorted;
+    }
+
+    async sortMediaBySimilarityMST(signal) {
+        // Minimum Spanning Tree (MST) traversal algorithm
+        // Complexity: O(n log n) with optimized sparse graph construction
+        // Quality: Better than greedy NN, maintains global similarity structure
+
+        const total = this.mediaFiles.length;
+
+        this.updateProgressNotification('🔄 Building VP-Tree index...');
+
+        // Get files with hashes
+        const filesWithHashes = this.mediaFiles.filter(f => this.perceptualHashes.has(f.path));
+        if (filesWithHashes.length < 2) {
+            throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
+        }
+
+        // Build VP-Tree once for O(log n) queries
+        const distanceFunc = (file1, file2) => {
+            const hash1 = this.perceptualHashes.get(file1.path);
+            const hash2 = this.perceptualHashes.get(file2.path);
+            return this.calculateHammingDistance(hash1, hash2);
+        };
+        const vpTree = new VPTree(filesWithHashes, distanceFunc);
+
+        this.updateProgressNotification('🔄 Building similarity graph with VP-Tree...');
+
+        // Build sparse graph using VP-Tree (O(n log n) instead of O(n²))
+        const K_NEIGHBORS = 50; // Number of neighbors to consider per node
+        const graph = new Map(); // Map<file, Array<{neighbor, distance}>>
+
+        // For each file, find K nearest neighbors using VP-Tree
+        for (let i = 0; i < filesWithHashes.length; i++) {
+            if (signal && signal.aborted) {
+                throw new Error('Sorting cancelled by user');
+            }
+
+            const file = filesWithHashes[i];
+            // Use VP-Tree to find K nearest - O(log n) instead of O(n)
+            const neighbors = vpTree.findKNearest(file, K_NEIGHBORS + 1, new Set([file]));
+
+            // Convert to format expected by graph
+            graph.set(file, neighbors.map(({ item, distance }) => ({
+                neighbor: item,
+                distance
+            })));
+
+            if ((i + 1) % 100 === 0) {
+                this.updateProgressNotification(`🔄 Building graph: ${i + 1}/${filesWithHashes.length}`);
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+
+        this.updateProgressNotification('🔄 Computing MST...');
+
+        // Prim's algorithm for MST with MinHeap
+        const mst = new Map(); // Map<file, Array<neighbor>>
+        const visited = new Set();
+        const pq = new MinHeap(); // Use MinHeap instead of array.sort()
+
+        // Start with first file
+        const startFile = filesWithHashes[0];
+        visited.add(startFile);
+        mst.set(startFile, []);
+
+        // Add all edges from start file to priority queue
+        const startNeighbors = graph.get(startFile) || [];
+        for (const { neighbor, distance } of startNeighbors) {
+            pq.push({ from: startFile, to: neighbor, distance });
+        }
+
+        // Build MST
+        while (visited.size < filesWithHashes.length && !pq.isEmpty()) {
+            if (signal && signal.aborted) {
+                throw new Error('Sorting cancelled by user');
+            }
+
+            // Get edge with minimum distance - O(log n) instead of O(n log n)
+            const edge = pq.pop();
+
+            if (!edge || visited.has(edge.to)) continue;
+
+            // Add edge to MST
+            visited.add(edge.to);
+            if (!mst.has(edge.from)) mst.set(edge.from, []);
+            if (!mst.has(edge.to)) mst.set(edge.to, []);
+            mst.get(edge.from).push(edge.to);
+            mst.get(edge.to).push(edge.from);
+
+            // Add edges from newly visited node
+            const neighbors = graph.get(edge.to) || [];
+            for (const { neighbor, distance } of neighbors) {
+                if (!visited.has(neighbor)) {
+                    pq.push({ from: edge.to, to: neighbor, distance });
+                }
+            }
+
+            if (visited.size % 100 === 0) {
+                this.updateProgressNotification(`🔄 MST progress: ${visited.size}/${filesWithHashes.length}`);
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+
+        this.updateProgressNotification('🔄 Traversing MST...');
+
+        // DFS traversal of MST to get ordering
+        const sorted = [];
+        const traversed = new Set();
+
+        const dfs = (node) => {
+            if (traversed.has(node)) return;
+            traversed.add(node);
+            sorted.push(node);
+
+            const neighbors = mst.get(node) || [];
+            for (const neighbor of neighbors) {
+                dfs(neighbor);
+            }
+        };
+
+        dfs(startFile);
+
+        // Add files without hashes at the end
+        const filesWithoutHashes = this.mediaFiles.filter(f => !this.perceptualHashes.has(f.path));
+        sorted.push(...filesWithoutHashes);
 
         this.mediaFiles = sorted;
     }
