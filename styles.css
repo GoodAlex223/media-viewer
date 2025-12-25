@@ -24,7 +24,7 @@ body {
     background: rgba(32, 32, 32, 0.95);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 12px 20px;
+    padding: 10px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -32,7 +32,7 @@ body {
     opacity: 0;
     transition: opacity 0.3s ease;
     pointer-events: none;
-    height: 60px;
+    min-height: 50px;
 }
 
 .header:hover,
@@ -45,6 +45,17 @@ body {
     font-size: 16px;
     font-weight: 600;
     color: #ffffff;
+    flex-shrink: 0;
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-end;
+    flex-wrap: wrap;
 }
 
 .folder-info {
@@ -54,6 +65,7 @@ body {
     padding: 6px 12px;
     border-radius: 8px;
     max-width: 300px;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -794,6 +806,8 @@ body {
     animation: slideInLeft 0.3s ease-out;
     border: 1px solid rgba(255, 255, 255, 0.1);
     max-width: 350px;
+    max-height: 100px;
+    overflow-y: auto;
     word-wrap: break-word;
     line-height: 1.3;
     pointer-events: auto;
@@ -1107,8 +1121,12 @@ body {
 /* Responsive design */
 @media (max-width: 768px) {
     .header {
-        padding: 10px 15px;
-        height: 50px;
+        padding: 8px 15px;
+        min-height: 45px;
+    }
+
+    .header-controls {
+        gap: 6px;
     }
     
     .title {

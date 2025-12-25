@@ -12,7 +12,10 @@
   - Works in both single and compare modes (independent per image)
   - ESC resets zoom, zoom resets on file navigation
 
-- [ ] **Text overflow in boxes** — Filename or error text extends beyond its container boundaries
+- [x] **Text overflow in boxes** — Filename or error text extends beyond its container boundaries
+  - Added max-height + scroll for notifications
+  - Fixed folder-info with min-width: 0
+  - Created header-controls class with flex-wrap for button overflow
 
 - [ ] **Notifications and media info are intrusive** — They often cover half or all of the media when quickly rating and the window is half-screen size
 
