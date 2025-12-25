@@ -22,7 +22,9 @@
   - Added setting to disable rating confirmation notifications (F1 → Settings)
   - Changed media info from hover to click-to-show (ℹ button or I key)
 
-- [ ] **Unused skip button in media player** — The "skip to next" button in media player is redundant since there are already prev/next media navigation buttons
+- [x] **Unused skip button in media player** — The "skip to next" button in media player is redundant since there are already prev/next media navigation buttons
+  - Replaced single skip button with two buttons: ⏪ (10s backward) and ⏩ (10s forward)
+  - Added `skipVideo(seconds)` method for video time navigation
 
 ### File Management
 

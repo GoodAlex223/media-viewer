@@ -379,7 +379,8 @@ class MediaViewer {
         this.progressSlider = document.getElementById('progressSlider');
         this.currentTime = document.getElementById('currentTime');
         this.totalTime = document.getElementById('totalTime');
-        this.skipBtn = document.getElementById('skipBtn');
+        this.skipBackwardBtn = document.getElementById('skipBackwardBtn');
+        this.skipForwardBtn = document.getElementById('skipForwardBtn');
         this.header = document.getElementById('header');
         this.notificationContainer = document.getElementById('notificationContainer');
         this.mediaContainer = document.querySelector('.media-container');
@@ -822,7 +823,8 @@ class MediaViewer {
         this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
         this.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
         this.progressSlider.addEventListener('input', (e) => this.seekVideo(e.target.value));
-        this.skipBtn.addEventListener('click', () => this.nextMedia());
+        this.skipBackwardBtn.addEventListener('click', () => this.skipVideo(-10));
+        this.skipForwardBtn.addEventListener('click', () => this.skipVideo(10));
 
         this.navPrev.addEventListener('click', () => this.previousMedia());
         this.navNext.addEventListener('click', () => this.nextMedia());
@@ -1988,11 +1990,17 @@ class MediaViewer {
 
     seekVideo(value) {
         if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO' || this.isVideoLoading) return;
-        
+
         const video = this.currentMedia;
         if (video.duration) {
             video.currentTime = (parseFloat(value) / 100) * video.duration;
         }
+    }
+
+    skipVideo(seconds) {
+        if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
+        const video = this.currentMedia;
+        video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + seconds));
     }
 
     showLoadingSpinner() {
