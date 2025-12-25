@@ -17,7 +17,10 @@
   - Fixed folder-info with min-width: 0
   - Created header-controls class with flex-wrap for button overflow
 
-- [ ] **Notifications and media info are intrusive** — They often cover half or all of the media when quickly rating and the window is half-screen size
+- [x] **Notifications and media info are intrusive** — They often cover half or all of the media when quickly rating and the window is half-screen size
+  - Moved notifications to bottom-right corner (less intrusive)
+  - Added setting to disable rating confirmation notifications (F1 → Settings)
+  - Changed media info from hover to click-to-show (ℹ button or I key)
 
 - [ ] **Unused skip button in media player** — The "skip to next" button in media player is redundant since there are already prev/next media navigation buttons
 

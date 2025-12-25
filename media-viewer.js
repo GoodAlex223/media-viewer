@@ -330,6 +330,9 @@ class MediaViewer {
         this.progressNotification = null; // Reusable progress notification
         this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
 
+        // User settings
+        this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
+
         // Zoom state for each view
         this.zoomState = {
             single: { scale: 1, translateX: 0, translateY: 0 },
@@ -361,7 +364,8 @@ class MediaViewer {
         this.fileInfo = document.getElementById('fileInfoPanel');
         this.fileName = document.getElementById('fileName');
         this.fileDetails = document.getElementById('fileDetails');
-        this.fileInfoToggle = document.getElementById('fileInfoToggle');
+        this.infoToggleBtn = document.getElementById('infoToggleBtn');
+        this.fileInfoClose = document.getElementById('fileInfoClose');
         this.folderInfo = document.getElementById('folderInfo');
         this.controls = document.getElementById('controls');
         this.likeBtn = document.getElementById('likeBtn');
@@ -570,7 +574,7 @@ class MediaViewer {
 
         // Add close button handler
         const closeNotification = () => {
-            notification.style.animation = 'slideOutTop 0.3s ease-in forwards';
+            notification.style.animation = 'slideOutDown 0.3s ease-in forwards';
             setTimeout(() => notification.remove(), 300);
         };
         closeBtn.addEventListener('click', (e) => {
@@ -730,14 +734,16 @@ class MediaViewer {
                 toFolder: targetFolderNumber
             });
             
-            // Show success notification
-            const fileName = currentFile.name.length > 20 ? 
-                currentFile.name.substring(0, 20) + '...' : currentFile.name;
-            this.showNotification(
-                `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
-                targetFolderNumber > this.currentFolder ? 'success' : 'dislike'
-            );
-            
+            // Show success notification (if enabled)
+            if (this.showRatingConfirmations) {
+                const fileName = currentFile.name.length > 20 ?
+                    currentFile.name.substring(0, 20) + '...' : currentFile.name;
+                this.showNotification(
+                    `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
+                    targetFolderNumber > this.currentFolder ? 'success' : 'dislike'
+                );
+            }
+
             // Remove current file from array
             this.mediaFiles.splice(this.currentIndex, 1);
             
@@ -850,9 +856,20 @@ class MediaViewer {
             });
         }
 
-        // File info toggle click to copy filename
-        if (this.fileInfoToggle) {
-            this.fileInfoToggle.addEventListener('click', async () => {
+        // Info toggle button click to show/hide file info panel
+        if (this.infoToggleBtn) {
+            this.infoToggleBtn.addEventListener('click', () => this.toggleFileInfo());
+        }
+
+        // File info close button
+        if (this.fileInfoClose) {
+            this.fileInfoClose.addEventListener('click', () => this.hideFileInfo());
+        }
+
+        // Filename click to copy
+        if (this.fileName) {
+            this.fileName.style.cursor = 'pointer';
+            this.fileName.addEventListener('click', async () => {
                 if (this.mediaFiles.length > 0 && this.currentIndex < this.mediaFiles.length) {
                     const currentFile = this.mediaFiles[this.currentIndex];
                     try {
@@ -945,6 +962,16 @@ class MediaViewer {
                 if (e.target === helpOverlay) {
                     this.toggleHelp();
                 }
+            });
+        }
+
+        // Settings toggle for rating confirmations
+        const ratingConfirmToggle = document.getElementById('showRatingConfirmationsToggle');
+        if (ratingConfirmToggle) {
+            ratingConfirmToggle.checked = this.showRatingConfirmations;
+            ratingConfirmToggle.addEventListener('change', (e) => {
+                this.showRatingConfirmations = e.target.checked;
+                localStorage.setItem('showRatingConfirmations', e.target.checked.toString());
             });
         }
 
@@ -1071,6 +1098,13 @@ class MediaViewer {
                     e.preventDefault();
                     this.toggleHelp();
                     break;
+                case 'KeyI':
+                    // Toggle file info panel (only in single mode)
+                    if (!this.isCompareMode && this.mediaFiles.length > 0) {
+                        e.preventDefault();
+                        this.toggleFileInfo();
+                    }
+                    break;
             }
         });
 
@@ -1151,28 +1185,40 @@ class MediaViewer {
     }
 
     setupFileInfoVisibility() {
-        let fileInfoTimeout;
-        
-        const showFileInfo = () => {
+        // File info is now click-based, no hover logic needed
+        // Panel visibility is controlled by toggleFileInfo() and hideFileInfo()
+    }
+
+    toggleFileInfo() {
+        if (this.fileInfo.classList.contains('show')) {
+            this.hideFileInfo();
+        } else {
+            this.showFileInfo();
+        }
+    }
+
+    showFileInfo() {
+        this.fileInfo.style.display = 'block';
+        // Small delay to allow display:block to take effect before adding show class
+        requestAnimationFrame(() => {
             this.fileInfo.classList.add('show');
-            clearTimeout(fileInfoTimeout);
-        };
-
-        const hideFileInfo = () => {
-            fileInfoTimeout = setTimeout(() => {
-                this.fileInfo.classList.remove('show');
-            }, 300);
-        };
-
-        this.fileInfo.addEventListener('mouseenter', showFileInfo);
-        this.fileInfo.addEventListener('mouseleave', hideFileInfo);
-        
-        document.addEventListener('mousemove', (e) => {
-            const windowWidth = window.innerWidth;
-            if (e.clientX > windowWidth - 250 && e.clientY > 80 && e.clientY < 350) {
-                showFileInfo();
-            }
         });
+        if (this.infoToggleBtn) {
+            this.infoToggleBtn.classList.add('active');
+        }
+    }
+
+    hideFileInfo() {
+        this.fileInfo.classList.remove('show');
+        if (this.infoToggleBtn) {
+            this.infoToggleBtn.classList.remove('active');
+        }
+        // Hide after transition completes
+        setTimeout(() => {
+            if (!this.fileInfo.classList.contains('show')) {
+                this.fileInfo.style.display = 'none';
+            }
+        }, 300);
     }
 
     setupControlsVisibility() {
@@ -1345,6 +1391,10 @@ class MediaViewer {
         // Show help button when media is shown
         if (this.helpBtn) {
             this.helpBtn.style.display = 'inline-flex';
+        }
+        // Show info toggle button when media is shown (only in single mode)
+        if (this.infoToggleBtn && !this.isCompareMode) {
+            this.infoToggleBtn.style.display = 'flex';
         }
         // Show sort similarity button when media is shown
         if (this.sortSimilarityBtn) {
@@ -2250,12 +2300,18 @@ class MediaViewer {
             this.mediaContainer.classList.add('compare-mode');
             // Hide custom video controls in compare mode (videos will have native browser controls)
             this.videoControls.style.display = 'none';
-            // Hide main file info panel in compare mode
-            this.fileInfo.classList.remove('show');
-            this.fileInfo.style.display = 'none';
+            // Hide main file info panel and toggle button in compare mode
+            this.hideFileInfo();
+            if (this.infoToggleBtn) {
+                this.infoToggleBtn.style.display = 'none';
+            }
         } else {
             this.viewModeLabel.textContent = 'Single';
             this.controls.style.display = 'flex';
+            // Show info toggle button in single mode
+            if (this.infoToggleBtn) {
+                this.infoToggleBtn.style.display = 'flex';
+            }
             this.compareControls.style.display = 'none';
             this.mediaContainer.classList.remove('compare-mode');
             // Hide compare file info panels in single mode
@@ -2401,20 +2457,22 @@ class MediaViewer {
                 toFolder: secondaryFolderNumber
             });
 
-            // Show notifications
-            const primaryFileName = primaryFile.name.length > 20 ?
-                primaryFile.name.substring(0, 20) + '...' : primaryFile.name;
-            const secondaryFileName = secondaryFile.name.length > 20 ?
-                secondaryFile.name.substring(0, 20) + '...' : secondaryFile.name;
+            // Show notifications (if enabled)
+            if (this.showRatingConfirmations) {
+                const primaryFileName = primaryFile.name.length > 20 ?
+                    primaryFile.name.substring(0, 20) + '...' : primaryFile.name;
+                const secondaryFileName = secondaryFile.name.length > 20 ?
+                    secondaryFile.name.substring(0, 20) + '...' : secondaryFile.name;
 
-            this.showNotification(
-                `${primaryFolderNumber > this.currentFolder ? '👍' : '👎'} ${primaryFileName} → ${primaryFolderName}`,
-                primaryFolderNumber > this.currentFolder ? 'success' : 'dislike'
-            );
-            this.showNotification(
-                `${secondaryFolderNumber > this.currentFolder ? '👍' : '👎'} ${secondaryFileName} → ${secondaryFolderName}`,
-                secondaryFolderNumber > this.currentFolder ? 'success' : 'dislike'
-            );
+                this.showNotification(
+                    `${primaryFolderNumber > this.currentFolder ? '👍' : '👎'} ${primaryFileName} → ${primaryFolderName}`,
+                    primaryFolderNumber > this.currentFolder ? 'success' : 'dislike'
+                );
+                this.showNotification(
+                    `${secondaryFolderNumber > this.currentFolder ? '👍' : '👎'} ${secondaryFileName} → ${secondaryFolderName}`,
+                    secondaryFolderNumber > this.currentFolder ? 'success' : 'dislike'
+                );
+            }
 
             // Remove both files from current view
             this.mediaFiles.splice(rightFileIndex, 1);
@@ -2490,13 +2548,15 @@ class MediaViewer {
                 toFolder: targetFolderNumber
             });
 
-            // Show success notification
-            const fileName = currentFile.name.length > 20 ?
-                currentFile.name.substring(0, 20) + '...' : currentFile.name;
-            this.showNotification(
-                `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
-                targetFolderNumber > this.currentFolder ? 'success' : 'dislike'
-            );
+            // Show success notification (if enabled)
+            if (this.showRatingConfirmations) {
+                const fileName = currentFile.name.length > 20 ?
+                    currentFile.name.substring(0, 20) + '...' : currentFile.name;
+                this.showNotification(
+                    `${targetFolderNumber > this.currentFolder ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
+                    targetFolderNumber > this.currentFolder ? 'success' : 'dislike'
+                );
+            }
 
             // Hide the other media (the one that wasn't rated)
             this.hiddenMediaIndices.push(otherFileIndex);

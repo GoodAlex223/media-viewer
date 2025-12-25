@@ -53,11 +53,14 @@
             <div class="loading-text">Loading media...</div>
         </div>
 
+        <!-- Info button (persistent) -->
+        <button class="info-toggle-btn" id="infoToggleBtn" title="Toggle file info (I)">ℹ</button>
+
         <!-- File info panel - moved to avoid header overlap -->
         <div class="file-info-panel" id="fileInfoPanel">
             <div class="file-info-header">
                 <div class="file-name" id="fileName"></div>
-                <button class="file-info-toggle" id="fileInfoToggle" title="Toggle file info">ℹ️</button>
+                <button class="file-info-close" id="fileInfoClose" title="Close">×</button>
             </div>
             <div class="file-details" id="fileDetails"></div>
         </div>
@@ -233,6 +236,18 @@
                     <div class="shortcut-item">
                         <kbd>F1</kbd> <span>Show/Hide this help</span>
                     </div>
+                    <div class="shortcut-item">
+                        <kbd>I</kbd> <span>Toggle file info panel</span>
+                    </div>
+                </div>
+            </div>
+            <div class="shortcut-section settings-section">
+                <h4>Settings</h4>
+                <div class="settings-grid">
+                    <label class="setting-item">
+                        <input type="checkbox" id="showRatingConfirmationsToggle" checked>
+                        <span>Show rating confirmation notifications</span>
+                    </label>
                 </div>
             </div>
         </div>
