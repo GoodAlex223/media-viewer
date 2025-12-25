@@ -83,6 +83,9 @@
             <span id="mediaIndex"></span>
         </div>
 
+        <!-- Zoom indicator -->
+        <div class="zoom-indicator" id="zoomIndicator">100%</div>
+
         <!-- Video controls -->
         <div class="video-controls" id="videoControls">
             <button class="video-control-btn" id="playPauseBtn" title="Play/Pause">⏸️</button>
@@ -199,6 +202,23 @@
                 </div>
             </div>
             <div class="shortcut-section">
+                <h4>Zoom</h4>
+                <div class="shortcut-grid">
+                    <div class="shortcut-item">
+                        <kbd>Scroll</kbd> <span>Zoom in/out (on media)</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Double-click</kbd> <span>Cycle zoom (1x → 2x → 4x)</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Drag</kbd> <span>Pan when zoomed</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Esc</kbd> <span>Reset zoom</span>
+                    </div>
+                </div>
+            </div>
+            <div class="shortcut-section">
                 <h4>General</h4>
                 <div class="shortcut-grid">
                     <div class="shortcut-item">
@@ -208,7 +228,7 @@
                         <kbd>Space</kbd> <span>Play/Pause video</span>
                     </div>
                     <div class="shortcut-item">
-                        <kbd>Esc</kbd> <span>Exit fullscreen</span>
+                        <kbd>Esc</kbd> <span>Exit fullscreen / Reset zoom</span>
                     </div>
                     <div class="shortcut-item">
                         <kbd>F1</kbd> <span>Show/Hide this help</span>

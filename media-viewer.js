@@ -172,14 +172,39 @@ class VPTree {
 
             const vp = node.vantagePoint;
 
+            // Skip excluded nodes entirely - don't calculate distance
+            if (excludeSet.has(vp)) {
+                // Still need to search children, but use Infinity for pruning decisions
+                // This prevents excluded nodes from affecting pruning logic
+                if (best.distance === Infinity) {
+                    // Haven't found any valid candidate yet, must search both sides
+                    search(node.left);
+                    search(node.right);
+                } else {
+                    // We have a valid candidate, use normal pruning
+                    // But we need targetDistance for pruning - calculate it only for this
+                    const targetDistance = this.distanceFunc(target, vp);
+                    if (targetDistance < node.radius) {
+                        search(node.left);
+                        if (targetDistance + best.distance >= node.radius) {
+                            search(node.right);
+                        }
+                    } else {
+                        search(node.right);
+                        if (targetDistance - best.distance <= node.radius) {
+                            search(node.left);
+                        }
+                    }
+                }
+                return;
+            }
+
             // Calculate distance once and reuse it
             const targetDistance = this.distanceFunc(target, vp);
 
-            // Check if this is a better match (if not excluded)
-            if (!excludeSet.has(vp)) {
-                if (targetDistance < best.distance) {
-                    best = { item: vp, distance: targetDistance };
-                }
+            // Check if this is a better match
+            if (targetDistance < best.distance) {
+                best = { item: vp, distance: targetDistance };
             }
 
             // Determine which side to search first using the same targetDistance
@@ -205,39 +230,60 @@ class VPTree {
     }
 
     // Find K nearest neighbors (for MST graph construction)
-    // Optimized: no insertion sort on every node visit
+    // Uses bounded max-heap to limit memory and enable early termination
     findKNearest(target, k, excludeSet = new Set()) {
         if (!this.root) return [];
 
-        const results = []; // Array of {item, distance}
-        let worstDistance = Infinity;
+        // Bounded results array - maintain only k best candidates
+        const results = []; // Array of {item, distance}, kept sorted descending
+        let worstDistance = Infinity; // Max distance in current results
 
         const search = (node) => {
             if (!node) return;
 
             const vp = node.vantagePoint;
-            const targetDistance = this.distanceFunc(target, vp);
 
-            // Add to results if not excluded
-            if (!excludeSet.has(vp)) {
-                // Just push, no sorting during traversal
-                results.push({ item: vp, distance: targetDistance });
-
-                // Update worst distance estimate for pruning
-                if (results.length >= k && targetDistance > worstDistance) {
-                    worstDistance = targetDistance;
-                }
+            // Skip excluded nodes - don't calculate distance
+            if (excludeSet.has(vp)) {
+                // Still search children
+                search(node.left);
+                search(node.right);
+                return;
             }
 
-            // Search both sides if they could contain closer points
+            const targetDistance = this.distanceFunc(target, vp);
+
+            // Only consider this node if it's better than worst or we haven't found k yet
+            if (results.length < k || targetDistance < worstDistance) {
+                // Add to results
+                if (results.length < k) {
+                    results.push({ item: vp, distance: targetDistance });
+                    // Keep sorted descending (worst first)
+                    results.sort((a, b) => b.distance - a.distance);
+                } else {
+                    // Replace worst (first element) if this is better
+                    if (targetDistance < results[0].distance) {
+                        results[0] = { item: vp, distance: targetDistance };
+                        // Re-sort to maintain descending order
+                        results.sort((a, b) => b.distance - a.distance);
+                    }
+                }
+
+                // Update worst distance for pruning
+                worstDistance = results.length > 0 ? results[0].distance : Infinity;
+            }
+
+            // Search subtrees with pruning based on worstDistance
             if (targetDistance < node.radius) {
                 search(node.left);
-                if (targetDistance + worstDistance >= node.radius) {
+                // Only search right if there could be a closer point
+                if (results.length < k || targetDistance + worstDistance >= node.radius) {
                     search(node.right);
                 }
             } else {
                 search(node.right);
-                if (targetDistance - worstDistance <= node.radius) {
+                // Only search left if there could be a closer point
+                if (results.length < k || targetDistance - worstDistance <= node.radius) {
                     search(node.left);
                 }
             }
@@ -245,11 +291,8 @@ class VPTree {
 
         search(this.root);
 
-        // Sort once at the end - O(m log m) where m is nodes visited
-        results.sort((a, b) => a.distance - b.distance);
-
-        // Return only k best
-        return results.slice(0, k);
+        // Return sorted ascending by distance
+        return results.reverse();
     }
 }
 
@@ -286,6 +329,20 @@ class MediaViewer {
         this.sortAbortController = null;
         this.progressNotification = null; // Reusable progress notification
         this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
+
+        // Zoom state for each view
+        this.zoomState = {
+            single: { scale: 1, translateX: 0, translateY: 0 },
+            left: { scale: 1, translateX: 0, translateY: 0 },
+            right: { scale: 1, translateX: 0, translateY: 0 }
+        };
+        this.zoomSteps = [1, 2, 4]; // Click-to-zoom levels
+        this.minZoom = 1;
+        this.maxZoom = 8;
+        this.zoomFactor = 1.15; // Wheel zoom factor per tick
+        this.isPanning = false;
+        this.panStart = { x: 0, y: 0 };
+        this.panStartTranslate = { x: 0, y: 0 };
 
         this.initializeElements();
         this.setupEventListeners();
@@ -919,14 +976,20 @@ class MediaViewer {
                 return;
             }
 
-            // Exit fullscreen with Escape
+            // Exit fullscreen and reset zoom with Escape
             if (e.key === 'Escape') {
                 e.preventDefault();
+                // Exit fullscreen first
                 if (this.leftMediaWrapper && this.leftMediaWrapper.classList.contains('fullscreen')) {
                     this.exitFullscreen(this.leftMediaWrapper);
                 }
                 if (this.rightMediaWrapper && this.rightMediaWrapper.classList.contains('fullscreen')) {
                     this.exitFullscreen(this.rightMediaWrapper);
+                }
+                // Reset zoom
+                if (this.isZoomed()) {
+                    this.resetZoom('all');
+                    return;
                 }
                 return;
             }
@@ -1011,7 +1074,16 @@ class MediaViewer {
             }
         });
 
-        // Mouse wheel navigation
+        // Global pan event listeners for zoom
+        document.addEventListener('mousemove', (e) => {
+            this.handlePanMove(e);
+        });
+
+        document.addEventListener('mouseup', () => {
+            this.handlePanEnd();
+        });
+
+        // Mouse wheel navigation (or zoom when over media)
         document.addEventListener('wheel', (e) => {
             // Don't navigate if help overlay is open
             const helpOverlay = document.getElementById('helpOverlay');
@@ -1019,6 +1091,18 @@ class MediaViewer {
 
             if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
 
+            // Check if wheel event is over a media element - handle zoom instead of navigation
+            const target = e.target;
+            const isOverMedia = target.classList.contains('media-display') ||
+                               target.closest('.media-wrapper');
+
+            if (isOverMedia) {
+                // Zoom is handled by the element's own wheel listener
+                // Let it propagate to the element
+                return;
+            }
+
+            // Not over media - proceed with navigation
             // Prevent default scrolling behavior
             e.preventDefault();
 
@@ -1354,6 +1438,9 @@ class MediaViewer {
         this.isLoading = true;
         this.showLoadingSpinner();
 
+        // Reset zoom when changing files
+        this.resetZoom('single');
+
         // Properly cleanup previous media
         if (this.currentMedia) {
             this.cleanupCurrentMedia();
@@ -1402,6 +1489,10 @@ class MediaViewer {
         this.mediaNavigationInProgress = true;
         this.isLoading = true;
         this.showLoadingSpinner();
+
+        // Reset zoom when changing files
+        this.resetZoom('left');
+        this.resetZoom('right');
 
         // Cleanup previous media
         if (this.leftMedia) {
@@ -1557,6 +1648,9 @@ class MediaViewer {
                     this.updateCompareFileInfo(leftFile, rightFile);
                 }
 
+                // Setup zoom events for the loaded image
+                this.setupZoomEvents(media, side);
+
                 // Check if both media are loaded
                 const bothLoaded = (!this.leftMedia || this.leftMedia.complete || this.leftMedia.tagName === 'VIDEO') &&
                                    (!this.rightMedia || this.rightMedia.complete || this.rightMedia.tagName === 'VIDEO');
@@ -1602,6 +1696,9 @@ class MediaViewer {
                     this.updateCompareFileInfo(leftFile, rightFile);
                 }
 
+                // Setup zoom events for the loaded video
+                this.setupZoomEvents(media, side);
+
                 // Check if both media are loaded
                 const bothLoaded = (!this.leftMedia || (this.leftMedia.tagName !== 'VIDEO' || this.leftMedia.readyState >= 1)) &&
                                    (!this.rightMedia || (this.rightMedia.tagName !== 'VIDEO' || this.rightMedia.readyState >= 1));
@@ -1642,6 +1739,8 @@ class MediaViewer {
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
                 this.updateFileInfoWithDimensions(file);
+                // Setup zoom events for the loaded image
+                this.setupZoomEvents(this.currentMedia, 'single');
             }
         };
 
@@ -1678,6 +1777,8 @@ class MediaViewer {
                 this.mediaNavigationInProgress = false;
                 this.updateFileInfoWithDimensions(file);
                 this.setupVideoProgressTracking();
+                // Setup zoom events for the loaded video
+                this.setupZoomEvents(this.currentMedia, 'single');
             }
         };
 
@@ -2874,6 +2975,15 @@ class MediaViewer {
             // Optimization: limit number of comparisons for large datasets
             const numToCheck = Math.min(remaining.length, MAX_COMPARISONS);
 
+            // If checking subset, use random sampling to avoid locality bias
+            // Partial Fisher-Yates shuffle for first K elements - O(K) complexity
+            if (numToCheck < remaining.length) {
+                for (let i = 0; i < numToCheck; i++) {
+                    const j = i + Math.floor(Math.random() * (remaining.length - i));
+                    [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+                }
+            }
+
             for (let i = 0; i < numToCheck; i++) {
                 const file = remaining[i];
                 const hash = this.perceptualHashes.get(file.path);
@@ -3004,7 +3114,12 @@ class MediaViewer {
         this.updateProgressNotification('🔄 Building similarity graph with VP-Tree...');
 
         // Build sparse graph using VP-Tree (O(n log n) instead of O(n²))
-        const K_NEIGHBORS = 50; // Number of neighbors to consider per node
+        // Dynamic K based on dataset size for better quality
+        // Formula: K = min(N-1, max(20, sqrt(N) * 10))
+        const N = filesWithHashes.length;
+        const K_NEIGHBORS = Math.min(N - 1, Math.max(20, Math.floor(Math.sqrt(N) * 10)));
+        console.log(`MST: Using K=${K_NEIGHBORS} neighbors for N=${N} files`);
+
         const graph = new Map(); // Map<file, Array<{neighbor, distance}>>
 
         // For each file, find K nearest neighbors using VP-Tree
@@ -3081,22 +3196,61 @@ class MediaViewer {
 
         this.updateProgressNotification('🔄 Traversing MST...');
 
-        // DFS traversal of MST to get ordering
+        // Greedy traversal of MST: always choose nearest unvisited neighbor
+        // This produces better visual ordering than DFS
         const sorted = [];
         const traversed = new Set();
 
-        const dfs = (node) => {
-            if (traversed.has(node)) return;
-            traversed.add(node);
-            sorted.push(node);
+        let current = startFile;
+        traversed.add(current);
+        sorted.push(current);
 
-            const neighbors = mst.get(node) || [];
+        while (sorted.length < filesWithHashes.length) {
+            const neighbors = mst.get(current) || [];
+
+            // Find nearest unvisited neighbor
+            let nearestNeighbor = null;
+            let minDistance = Infinity;
+
             for (const neighbor of neighbors) {
-                dfs(neighbor);
+                if (!traversed.has(neighbor)) {
+                    const distance = distanceFunc(current, neighbor);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestNeighbor = neighbor;
+                    }
+                }
             }
-        };
 
-        dfs(startFile);
+            if (nearestNeighbor) {
+                // Move to nearest neighbor
+                traversed.add(nearestNeighbor);
+                sorted.push(nearestNeighbor);
+                current = nearestNeighbor;
+            } else {
+                // No unvisited neighbors - find nearest unvisited node in entire MST
+                let nearestNode = null;
+                let minDist = Infinity;
+
+                for (const file of filesWithHashes) {
+                    if (!traversed.has(file)) {
+                        const dist = distanceFunc(current, file);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            nearestNode = file;
+                        }
+                    }
+                }
+
+                if (nearestNode) {
+                    traversed.add(nearestNode);
+                    sorted.push(nearestNode);
+                    current = nearestNode;
+                } else {
+                    break; // Should not happen
+                }
+            }
+        }
 
         // Add files without hashes at the end
         const filesWithoutHashes = this.mediaFiles.filter(f => !this.perceptualHashes.has(f.path));
@@ -3149,6 +3303,246 @@ class MediaViewer {
             console.error('Failed to save hash cache:', error);
             this.showNotification('⚠️ Failed to save hash cache', 'warning');
         }
+    }
+
+    // ==================== ZOOM METHODS ====================
+
+    getZoomTarget(element) {
+        // Determine which zoom state to use based on the element
+        if (this.isCompareMode) {
+            if (element === this.leftMedia || element === this.leftMediaWrapper) {
+                return 'left';
+            } else if (element === this.rightMedia || element === this.rightMediaWrapper) {
+                return 'right';
+            }
+        }
+        return 'single';
+    }
+
+    getMediaElement(target) {
+        if (target === 'left') return this.leftMedia;
+        if (target === 'right') return this.rightMedia;
+        return this.currentMedia;
+    }
+
+    setZoom(target, scale, translateX, translateY) {
+        const state = this.zoomState[target];
+        if (!state) return;
+
+        state.scale = Math.max(this.minZoom, Math.min(this.maxZoom, scale));
+        state.translateX = translateX;
+        state.translateY = translateY;
+
+        const element = this.getMediaElement(target);
+        if (element) {
+            element.style.transform = `translate(${state.translateX}px, ${state.translateY}px) scale(${state.scale})`;
+            element.style.cursor = state.scale > 1 ? 'grab' : 'default';
+        }
+
+        this.updateZoomIndicator(target);
+    }
+
+    resetZoom(target) {
+        if (target === 'all') {
+            this.resetZoom('single');
+            this.resetZoom('left');
+            this.resetZoom('right');
+            return;
+        }
+
+        this.setZoom(target, 1, 0, 0);
+    }
+
+    zoomAtPoint(target, newScale, clientX, clientY) {
+        const element = this.getMediaElement(target);
+        if (!element) return;
+
+        const state = this.zoomState[target];
+        const rect = element.getBoundingClientRect();
+
+        // Calculate cursor position relative to element center
+        const elementCenterX = rect.left + rect.width / 2;
+        const elementCenterY = rect.top + rect.height / 2;
+
+        // Cursor offset from center in screen coordinates
+        const offsetX = clientX - elementCenterX;
+        const offsetY = clientY - elementCenterY;
+
+        // Calculate new translate to keep point under cursor
+        const scaleRatio = newScale / state.scale;
+
+        let newTranslateX = state.translateX - offsetX * (scaleRatio - 1);
+        let newTranslateY = state.translateY - offsetY * (scaleRatio - 1);
+
+        // Constrain pan to reasonable bounds when zoomed
+        if (newScale > 1) {
+            const maxTranslateX = rect.width * (newScale - 1) / 2;
+            const maxTranslateY = rect.height * (newScale - 1) / 2;
+            newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
+            newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
+        } else {
+            newTranslateX = 0;
+            newTranslateY = 0;
+        }
+
+        this.setZoom(target, newScale, newTranslateX, newTranslateY);
+    }
+
+    cycleZoomStep(target, clientX, clientY) {
+        const state = this.zoomState[target];
+        const currentScale = state.scale;
+
+        // Find next zoom step
+        let nextStep = this.zoomSteps[0];
+        for (let i = 0; i < this.zoomSteps.length; i++) {
+            if (currentScale < this.zoomSteps[i]) {
+                nextStep = this.zoomSteps[i];
+                break;
+            }
+            // If we're at or beyond the last step, reset to 1
+            if (i === this.zoomSteps.length - 1) {
+                nextStep = this.zoomSteps[0];
+            }
+        }
+
+        if (nextStep === 1) {
+            this.resetZoom(target);
+        } else {
+            this.zoomAtPoint(target, nextStep, clientX, clientY);
+        }
+    }
+
+    handleWheelZoom(e, target) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const state = this.zoomState[target];
+        const delta = e.deltaY > 0 ? -1 : 1;
+        const newScale = state.scale * Math.pow(this.zoomFactor, delta);
+
+        this.zoomAtPoint(target, newScale, e.clientX, e.clientY);
+    }
+
+    handlePanStart(e, target) {
+        const state = this.zoomState[target];
+        if (state.scale <= 1) return false;
+
+        this.isPanning = true;
+        this.currentPanTarget = target;
+        this.panStart = { x: e.clientX, y: e.clientY };
+        this.panStartTranslate = { x: state.translateX, y: state.translateY };
+
+        const element = this.getMediaElement(target);
+        if (element) {
+            element.style.cursor = 'grabbing';
+        }
+
+        return true;
+    }
+
+    handlePanMove(e) {
+        if (!this.isPanning) return;
+
+        const target = this.currentPanTarget;
+        const state = this.zoomState[target];
+        const element = this.getMediaElement(target);
+        if (!element) return;
+
+        const deltaX = e.clientX - this.panStart.x;
+        const deltaY = e.clientY - this.panStart.y;
+
+        let newTranslateX = this.panStartTranslate.x + deltaX;
+        let newTranslateY = this.panStartTranslate.y + deltaY;
+
+        // Constrain pan to image bounds
+        const rect = element.getBoundingClientRect();
+        const maxTranslateX = rect.width * (state.scale - 1) / 2;
+        const maxTranslateY = rect.height * (state.scale - 1) / 2;
+
+        newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
+        newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
+
+        this.setZoom(target, state.scale, newTranslateX, newTranslateY);
+    }
+
+    handlePanEnd() {
+        if (!this.isPanning) return;
+
+        const element = this.getMediaElement(this.currentPanTarget);
+        if (element) {
+            const state = this.zoomState[this.currentPanTarget];
+            element.style.cursor = state.scale > 1 ? 'grab' : 'default';
+        }
+
+        this.isPanning = false;
+        this.currentPanTarget = null;
+    }
+
+    updateZoomIndicator(target) {
+        const indicator = document.getElementById('zoomIndicator');
+        if (!indicator) return;
+
+        const state = this.zoomState[target];
+        const activeTarget = this.isCompareMode ? target : 'single';
+
+        // Show indicator only when zoomed
+        if (state.scale > 1) {
+            const percentage = Math.round(state.scale * 100);
+            indicator.textContent = `${percentage}%`;
+            indicator.classList.add('show');
+
+            // Update position for compare mode
+            if (this.isCompareMode) {
+                if (target === 'left') {
+                    indicator.style.left = '25%';
+                } else if (target === 'right') {
+                    indicator.style.left = '75%';
+                }
+            } else {
+                indicator.style.left = '50%';
+            }
+        } else {
+            // Only hide if no side is zoomed
+            const anyZoomed = this.isCompareMode
+                ? (this.zoomState.left.scale > 1 || this.zoomState.right.scale > 1)
+                : this.zoomState.single.scale > 1;
+
+            if (!anyZoomed) {
+                indicator.classList.remove('show');
+            }
+        }
+    }
+
+    isZoomed() {
+        if (this.isCompareMode) {
+            return this.zoomState.left.scale > 1 || this.zoomState.right.scale > 1;
+        }
+        return this.zoomState.single.scale > 1;
+    }
+
+    setupZoomEvents(element, target) {
+        if (!element) return;
+
+        // Double-click to cycle zoom
+        element.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.cycleZoomStep(target, e.clientX, e.clientY);
+        });
+
+        // Wheel zoom
+        element.addEventListener('wheel', (e) => {
+            this.handleWheelZoom(e, target);
+        }, { passive: false });
+
+        // Pan start
+        element.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Left click only
+                if (this.handlePanStart(e, target)) {
+                    e.preventDefault();
+                }
+            }
+        });
     }
 }
 
