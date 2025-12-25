@@ -250,6 +250,24 @@
                         <span>Show rating confirmation notifications</span>
                     </label>
                 </div>
+                <div class="folder-settings">
+                    <h5>Rating Folders</h5>
+                    <div class="folder-input-group">
+                        <label>Like folder:</label>
+                        <input type="text" id="likeFolderInput" readonly placeholder="Not configured">
+                        <button id="likeFolderBrowse" class="folder-btn" title="Browse for folder">Browse</button>
+                        <button id="likeFolderClear" class="folder-btn folder-btn-clear" title="Clear folder">Clear</button>
+                    </div>
+                    <div class="folder-input-group">
+                        <label>Dislike folder:</label>
+                        <input type="text" id="dislikeFolderInput" readonly placeholder="Not configured">
+                        <button id="dislikeFolderBrowse" class="folder-btn" title="Browse for folder">Browse</button>
+                        <button id="dislikeFolderClear" class="folder-btn folder-btn-clear" title="Clear folder">Clear</button>
+                    </div>
+                    <div id="folderConfigWarning" class="folder-warning">
+                        Configure both folders to enable rating buttons
+                    </div>
+                </div>
             </div>
         </div>
     </div>

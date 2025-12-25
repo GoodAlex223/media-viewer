@@ -1191,6 +1191,89 @@ body {
     font-size: 14px;
 }
 
+/* Folder Settings */
+.folder-settings {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.folder-settings h5 {
+    color: #00d4aa;
+    font-size: 13px;
+    margin: 0 0 12px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.folder-input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.folder-input-group label {
+    color: #a0a0a0;
+    font-size: 14px;
+    min-width: 100px;
+}
+
+.folder-input-group input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 13px;
+    font-family: monospace;
+}
+
+.folder-input-group input[type="text"]::placeholder {
+    color: #666;
+    font-style: italic;
+}
+
+.folder-btn {
+    padding: 8px 14px;
+    background: rgba(0, 212, 170, 0.15);
+    border: 1px solid rgba(0, 212, 170, 0.3);
+    border-radius: 6px;
+    color: #00d4aa;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.folder-btn:hover {
+    background: rgba(0, 212, 170, 0.25);
+    border-color: rgba(0, 212, 170, 0.5);
+}
+
+.folder-btn-clear {
+    background: rgba(255, 100, 100, 0.1);
+    border-color: rgba(255, 100, 100, 0.2);
+    color: #ff6464;
+}
+
+.folder-btn-clear:hover {
+    background: rgba(255, 100, 100, 0.2);
+    border-color: rgba(255, 100, 100, 0.4);
+}
+
+.folder-warning {
+    color: #ffa500;
+    font-size: 13px;
+    padding: 10px 12px;
+    background: rgba(255, 165, 0, 0.1);
+    border: 1px solid rgba(255, 165, 0, 0.2);
+    border-radius: 6px;
+    margin-top: 8px;
+}
+
 /* Animations */
 @keyframes spin {
     0% { transform: rotate(0deg); }

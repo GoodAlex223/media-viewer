@@ -28,9 +28,14 @@
 
 ### File Management
 
-- [ ] **Custom folders for likes/dislikes** — Allow user to specify custom folders for liked and disliked files
+- [x] **Custom folders for likes/dislikes** — Allow user to specify custom folders for liked and disliked files
+  - Added folder settings UI in Help overlay (F1 → Settings → Rating Folders)
+  - Browse buttons for selecting folders via system dialog
+  - Clear buttons to reset folder configuration
+  - Rating buttons disabled until both folders are configured
+  - Works in both single and compare modes
 
-- [ ] **Move file to special folder** — Add ability to move file to a special folder. Intended for deleting or highlighting files, but user can define their own purpose by setting a custom folder. No keyboard shortcut needed for these buttons
+- [ ] **Move file to special folder** — Add ability to move file to a special folder. Intended for deleting or highlighting files, but user can define their own purpose by setting a custom folder. No keyboard shortcut needed for this button
 
 - [ ] **Remove failed files from list** — If a file fails to load (shows error), offer user the option to remove it from the list to prevent repeated errors on subsequent views
 
