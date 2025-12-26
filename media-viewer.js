@@ -3341,8 +3341,15 @@ class MediaViewer {
         const total = remaining.length;
         let processed = 0;
 
-        // Start with first file that has a hash
-        let current = remaining.find(file => this.perceptualHashes.has(file.path));
+        // Start with currently viewed file if it has a hash, otherwise first file with hash
+        const currentFile = this.mediaFiles[this.currentIndex];
+        let current;
+        if (currentFile && this.perceptualHashes.has(currentFile.path)) {
+            current = remaining.find(file => file.path === currentFile.path);
+        }
+        if (!current) {
+            current = remaining.find(file => this.perceptualHashes.has(file.path));
+        }
         if (!current) return; // No hashes available
 
         sorted.push(current);
@@ -3436,8 +3443,13 @@ class MediaViewer {
         const sorted = [];
         const excluded = new Set();
 
-        // Start with first file
+        // Start with currently viewed file if it has a hash, otherwise first file
+        const currentFile = this.mediaFiles[this.currentIndex];
         let current = filesWithHashes[0];
+        if (currentFile && this.perceptualHashes.has(currentFile.path)) {
+            const found = filesWithHashes.find(f => f.path === currentFile.path);
+            if (found) current = found;
+        }
         sorted.push(current);
         excluded.add(current);
         processed++;
@@ -3538,8 +3550,13 @@ class MediaViewer {
         const visited = new Set();
         const pq = new MinHeap(); // Use MinHeap instead of array.sort()
 
-        // Start with first file
-        const startFile = filesWithHashes[0];
+        // Start with currently viewed file if it has a hash, otherwise first file
+        let startFile = filesWithHashes[0];
+        const currentFile = this.mediaFiles[this.currentIndex];
+        if (currentFile && this.perceptualHashes.has(currentFile.path)) {
+            const found = filesWithHashes.find(f => f.path === currentFile.path);
+            if (found) startFile = found;
+        }
         visited.add(startFile);
         mst.set(startFile, []);
 

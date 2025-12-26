@@ -69,7 +69,10 @@
 
 ### Bug Fixes
 
-- [ ] **Similarity sorting not working in single mode** — Investigate why similarity sorting doesn't work for single mode
+- [x] **Similarity sorting not working in single mode** — Investigate why similarity sorting doesn't work for single mode
+  - Issue: Sorting always started from first file, not currently viewed file
+  - Fixed all 3 algorithms (Simple, VP-Tree, MST) to start from current file
+  - Now sorting starts from whichever image you're viewing
 
 - [ ] **Sorting stops when window minimized** — Sorting process stops when application window is minimized
 
