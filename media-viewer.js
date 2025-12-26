@@ -705,7 +705,7 @@ class MediaViewer {
         return `file:///${encoded}`;
     }
 
-    showNotification(message, type = 'success') {
+    showNotification(message, type = 'success', options = {}) {
         // Limit info notifications to prevent UI freezing
         if (type === 'info') {
             // Remove old info notifications if more than 2 exist
@@ -726,6 +726,15 @@ class MediaViewer {
         messageSpan.title = 'Click to copy';
         messageSpan.style.flex = '1';
 
+        // Create action button if provided
+        let actionBtn = null;
+        if (options.actionButton && options.actionCallback) {
+            actionBtn = document.createElement('button');
+            actionBtn.textContent = options.actionButton;
+            actionBtn.className = 'notification-action';
+            actionBtn.title = options.actionButton;
+        }
+
         // Create close button
         const closeBtn = document.createElement('button');
         closeBtn.textContent = '×';
@@ -734,6 +743,9 @@ class MediaViewer {
         closeBtn.style.cssText = 'background: none; border: none; color: inherit; font-size: 24px; cursor: pointer; padding: 0 5px; margin-left: 10px; line-height: 1;';
 
         notification.appendChild(messageSpan);
+        if (actionBtn) {
+            notification.appendChild(actionBtn);
+        }
         notification.appendChild(closeBtn);
         notification.style.display = 'flex';
         notification.style.alignItems = 'center';
@@ -764,6 +776,15 @@ class MediaViewer {
             closeNotification();
         });
 
+        // Add action button handler
+        if (actionBtn) {
+            actionBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                options.actionCallback();
+                closeNotification();
+            });
+        }
+
         this.notificationContainer.appendChild(notification);
 
         // Auto-close: info/success - 2s, warning - 5s, error - keep visible
@@ -774,9 +795,48 @@ class MediaViewer {
         }
     }
 
-    showError(message) {
+    showError(message, options = {}) {
         console.error('Error:', message);
-        this.showNotification(`❌ ${message}`, 'error');
+        this.showNotification(`❌ ${message}`, 'error', options);
+    }
+
+    removeFailedFile(index, side = null) {
+        if (index < 0 || index >= this.mediaFiles.length) return;
+
+        // Remove the file from array
+        this.mediaFiles.splice(index, 1);
+
+        // Handle navigation after removal
+        if (this.mediaFiles.length === 0) {
+            // No files left
+            this.showDropZone();
+            return;
+        }
+
+        // Adjust current index if needed
+        if (this.currentIndex >= this.mediaFiles.length) {
+            this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
+        }
+
+        this.updateFolderInfo();
+
+        // Navigate based on mode
+        if (side === 'left' || side === 'right') {
+            // Compare mode
+            if (this.mediaFiles.length >= 2) {
+                this.showComparePair();
+            } else {
+                // Only one file left, switch to single mode
+                this.viewMode = 'single';
+                this.updateViewModeUI();
+                this.showMedia();
+            }
+        } else {
+            // Single mode
+            this.showMedia();
+        }
+
+        this.showNotification('File removed from list', 'info');
     }
 
     // Update or create a single progress notification instead of creating many
@@ -2034,7 +2094,11 @@ class MediaViewer {
             if (media && media.tagName === 'IMG' && !this.isBeingCleaned) {
                 console.error('Image load error:', e);
                 this.hideLoadingSpinner();
-                this.showError(`Failed to load image: ${file.name}`);
+                const failedIndex = side === 'left' ? this.currentIndex : this.currentIndex + 1;
+                this.showError(`Failed to load image: ${file.name}`, {
+                    actionButton: 'Remove',
+                    actionCallback: () => this.removeFailedFile(failedIndex, side)
+                });
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
             }
@@ -2082,7 +2146,11 @@ class MediaViewer {
             if (media && media.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 console.error('Video load error:', e);
                 this.hideLoadingSpinner();
-                this.showError(`Failed to load video: ${file.name}`);
+                const failedIndex = side === 'left' ? this.currentIndex : this.currentIndex + 1;
+                this.showError(`Failed to load video: ${file.name}`, {
+                    actionButton: 'Remove',
+                    actionCallback: () => this.removeFailedFile(failedIndex, side)
+                });
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
             }
@@ -2115,7 +2183,11 @@ class MediaViewer {
             if (this.currentMedia && this.currentMedia.tagName === 'IMG' && !this.isBeingCleaned) {
                 console.error('Image load error:', e);
                 this.hideLoadingSpinner();
-                this.showError(`Failed to load image: ${file.name}`);
+                const failedIndex = this.currentIndex;
+                this.showError(`Failed to load image: ${file.name}`, {
+                    actionButton: 'Remove',
+                    actionCallback: () => this.removeFailedFile(failedIndex)
+                });
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
             }
@@ -2154,7 +2226,11 @@ class MediaViewer {
             if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 console.error('Video load error:', e);
                 this.hideLoadingSpinner();
-                this.showError(`Failed to load video: ${file.name}`);
+                const failedIndex = this.currentIndex;
+                this.showError(`Failed to load video: ${file.name}`, {
+                    actionButton: 'Remove',
+                    actionCallback: () => this.removeFailedFile(failedIndex)
+                });
                 this.isLoading = false;
                 this.isVideoLoading = false;
                 this.mediaNavigationInProgress = false;

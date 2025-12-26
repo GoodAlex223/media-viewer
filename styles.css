@@ -894,6 +894,24 @@ body {
     background: linear-gradient(135deg, rgba(255, 165, 0, 0.9) 0%, rgba(255, 140, 0, 0.9) 100%);
 }
 
+.notification-action {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 4px;
+    color: white;
+    font-size: 12px;
+    padding: 4px 10px;
+    margin-left: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.notification-action:hover {
+    background: rgba(255, 255, 255, 0.35);
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
 /* Compare mode controls */
 .compare-controls {
     position: fixed;
