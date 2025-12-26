@@ -1453,6 +1453,14 @@ class MediaViewer {
                             this.toggleFullscreen(this.rightMediaWrapper);
                         }
                         break;
+                    case 'KeyA':
+                        e.preventDefault();
+                        if (!this.isLoading) this.previousMedia();
+                        break;
+                    case 'KeyD':
+                        e.preventDefault();
+                        if (!this.isLoading) this.nextMedia();
+                        break;
                 }
                 // Use e.key for special keys (consistent across layouts)
                 if (e.key === 'F1') {

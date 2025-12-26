@@ -59,7 +59,10 @@
 
 - [ ] **Alt+F4 not working** — Alt+F4 keyboard shortcut doesn't work for closing the application
 
-- [ ] **A/D keys for pair navigation** — A and D keys should show previous/next pairs without moving (hotkeys for preview)
+- [x] **A/D keys for pair navigation** — A and D keys should show previous/next pairs without moving (hotkeys for preview)
+  - Added A (previous) and D (next) keyboard shortcuts in compare mode
+  - Works same as arrow navigation buttons
+  - Documented in help overlay (F1)
 
 ### Bug Fixes
 
