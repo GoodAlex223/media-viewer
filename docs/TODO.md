@@ -48,10 +48,12 @@
 
 ### Settings & Configuration
 
-- [ ] **User input for K parameter** — Allow user to enter K value using number input
-
-- [ ] **Disable auto-close for error messages** — In app settings, allow user to disable auto-closing of error notifications. Default behavior should be auto-close
-  - [ ] Additionally: Define max number of simultaneous notifications and clear old ones when limit is exceeded
+- [x] **Disable auto-close for error messages** — In app settings, allow user to disable auto-closing of error notifications. Default behavior should be auto-close
+  - Added "Auto-close error notifications (8s)" checkbox in Settings (F1)
+  - Default: errors stay visible until dismissed
+  - When enabled: errors auto-close after 8 seconds
+  - [x] Additionally: Define max number of simultaneous notifications and clear old ones when limit is exceeded
+  - Limited to 5 simultaneous notifications, oldest removed when exceeded
 
 ### Navigation & Controls
 
@@ -69,4 +71,4 @@
 
 ---
 
-*Last Updated: 2025-12-25*
+*Last Updated: 2025-12-26*
