@@ -331,6 +331,7 @@ class MediaViewer {
 
         // User settings
         this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
+        this.autoCloseErrors = localStorage.getItem('autoCloseErrors') === 'true'; // default: false
         this.customLikeFolder = localStorage.getItem('customLikeFolder') || '';
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
@@ -706,6 +707,12 @@ class MediaViewer {
     }
 
     showNotification(message, type = 'success', options = {}) {
+        // Limit total notifications to 5, remove oldest when exceeded
+        const allNotifications = Array.from(this.notificationContainer.querySelectorAll('.notification'));
+        while (allNotifications.length >= 5) {
+            allNotifications.shift().remove();
+        }
+
         // Limit info notifications to prevent UI freezing
         if (type === 'info') {
             // Remove old info notifications if more than 2 exist
@@ -787,8 +794,10 @@ class MediaViewer {
 
         this.notificationContainer.appendChild(notification);
 
-        // Auto-close: info/success - 2s, warning - 5s, error - keep visible
-        const displayTime = type === 'error' ? 0 : (type === 'warning' ? 5000 : 2000);
+        // Auto-close: info/success - 2s, warning - 5s, error - 8s if enabled or keep visible
+        const displayTime = type === 'error'
+            ? (this.autoCloseErrors ? 8000 : 0)
+            : (type === 'warning' ? 5000 : 2000);
         if (displayTime > 0) {
             const autoCloseTimeout = setTimeout(closeNotification, displayTime);
             closeBtn.addEventListener('click', () => clearTimeout(autoCloseTimeout), { once: true });
@@ -1344,6 +1353,16 @@ class MediaViewer {
             ratingConfirmToggle.addEventListener('change', (e) => {
                 this.showRatingConfirmations = e.target.checked;
                 localStorage.setItem('showRatingConfirmations', e.target.checked.toString());
+            });
+        }
+
+        // Settings toggle for auto-close errors
+        const autoCloseErrorsToggle = document.getElementById('autoCloseErrorsToggle');
+        if (autoCloseErrorsToggle) {
+            autoCloseErrorsToggle.checked = this.autoCloseErrors;
+            autoCloseErrorsToggle.addEventListener('change', (e) => {
+                this.autoCloseErrors = e.target.checked;
+                localStorage.setItem('autoCloseErrors', e.target.checked.toString());
             });
         }
 
