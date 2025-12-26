@@ -41,7 +41,10 @@
   - Special folder configuration in Settings (F1 → Special Folder)
   - Button disabled until folder is configured
 
-- [ ] **Remove failed files from list** — If a file fails to load (shows error), offer user the option to remove it from the list to prevent repeated errors on subsequent views
+- [x] **Remove failed files from list** — If a file fails to load (shows error), offer user the option to remove it from the list to prevent repeated errors on subsequent views
+  - Added "Remove" button in error notifications
+  - Works in both single and compare modes
+  - Automatically navigates to next file after removal
 
 ### Settings & Configuration
 
