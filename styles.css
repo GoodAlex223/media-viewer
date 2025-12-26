@@ -470,6 +470,17 @@ body {
     background: linear-gradient(135deg, #ffb84d 0%, #ffa500 100%);
 }
 
+.special-btn {
+    background: linear-gradient(135deg, #6c5ce7 0%, #5b4cdb 100%);
+    color: white;
+}
+
+.special-btn:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 10px 30px rgba(108, 92, 231, 0.4);
+    background: linear-gradient(135deg, #7d6ff0 0%, #6c5ce7 100%);
+}
+
 /* View mode button */
 .view-mode-btn {
     background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
@@ -1272,6 +1283,13 @@ body {
     border: 1px solid rgba(255, 165, 0, 0.2);
     border-radius: 6px;
     margin-top: 8px;
+}
+
+.folder-info-text {
+    color: #888;
+    font-size: 12px;
+    font-style: italic;
+    margin-top: 4px;
 }
 
 /* Animations */

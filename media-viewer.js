@@ -333,6 +333,7 @@ class MediaViewer {
         this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
         this.customLikeFolder = localStorage.getItem('customLikeFolder') || '';
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
+        this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
 
         // Zoom state for each view
         this.zoomState = {
@@ -354,6 +355,7 @@ class MediaViewer {
         this.setupFileInfoVisibility();
         this.setupControlsVisibility();
         this.updateRatingButtonsState();
+        this.updateSpecialButtonsState();
 
         if (!window.electronAPI) {
             console.error('Electron API not available');
@@ -392,6 +394,9 @@ class MediaViewer {
         this.changeFolderBtn = document.getElementById('changeFolderBtn');
         this.helpBtn = document.getElementById('helpBtn');
 
+        // Special folder button (single mode)
+        this.specialBtn = document.getElementById('specialBtn');
+
         // Compare mode elements
         this.viewModeBtn = document.getElementById('viewModeBtn');
         this.viewModeLabel = document.getElementById('viewModeLabel');
@@ -400,6 +405,8 @@ class MediaViewer {
         this.leftDislikeBtn = document.getElementById('leftDislikeBtn');
         this.rightLikeBtn = document.getElementById('rightLikeBtn');
         this.rightDislikeBtn = document.getElementById('rightDislikeBtn');
+        this.leftSpecialBtn = document.getElementById('leftSpecialBtn');
+        this.rightSpecialBtn = document.getElementById('rightSpecialBtn');
         this.cancelBtnCompare = document.getElementById('cancelBtnCompare');
 
         // Compare mode file info panels
@@ -485,6 +492,27 @@ class MediaViewer {
         }
     }
 
+    updateSpecialButtonsState() {
+        const enabled = !!this.customSpecialFolder;
+        const tooltip = enabled ? 'Move to special folder' : 'Configure special folder in Settings (F1)';
+
+        // Single mode button
+        if (this.specialBtn) {
+            this.specialBtn.disabled = !enabled;
+            this.specialBtn.title = tooltip;
+        }
+
+        // Compare mode buttons
+        if (this.leftSpecialBtn) {
+            this.leftSpecialBtn.disabled = !enabled;
+            this.leftSpecialBtn.title = enabled ? 'Move left to special folder' : tooltip;
+        }
+        if (this.rightSpecialBtn) {
+            this.rightSpecialBtn.disabled = !enabled;
+            this.rightSpecialBtn.title = enabled ? 'Move right to special folder' : tooltip;
+        }
+    }
+
     setupFolderSettings() {
         const likeFolderInput = document.getElementById('likeFolderInput');
         const dislikeFolderInput = document.getElementById('dislikeFolderInput');
@@ -552,6 +580,43 @@ class MediaViewer {
                     dislikeFolderInput.value = '';
                 }
                 this.updateRatingButtonsState();
+            });
+        }
+
+        // Special folder settings
+        const specialFolderInput = document.getElementById('specialFolderInput');
+        const specialFolderBrowse = document.getElementById('specialFolderBrowse');
+        const specialFolderClear = document.getElementById('specialFolderClear');
+
+        // Set initial value
+        if (specialFolderInput) {
+            specialFolderInput.value = this.customSpecialFolder;
+        }
+
+        // Browse button for special folder
+        if (specialFolderBrowse) {
+            specialFolderBrowse.addEventListener('click', async () => {
+                const folder = await window.electronAPI.openFolderDialog();
+                if (folder) {
+                    this.customSpecialFolder = folder;
+                    localStorage.setItem('customSpecialFolder', folder);
+                    if (specialFolderInput) {
+                        specialFolderInput.value = folder;
+                    }
+                    this.updateSpecialButtonsState();
+                }
+            });
+        }
+
+        // Clear button for special folder
+        if (specialFolderClear) {
+            specialFolderClear.addEventListener('click', () => {
+                this.customSpecialFolder = '';
+                localStorage.removeItem('customSpecialFolder');
+                if (specialFolderInput) {
+                    specialFolderInput.value = '';
+                }
+                this.updateSpecialButtonsState();
             });
         }
     }
@@ -878,6 +943,133 @@ class MediaViewer {
         }
     }
 
+    async moveToSpecialFolder(side = null) {
+        // Check if special folder is configured
+        if (!this.customSpecialFolder) {
+            this.showNotification('Configure special folder in Settings (F1)', 'error');
+            return;
+        }
+
+        if (this.isLoading) return;
+
+        // Determine which file to move based on mode and side
+        let fileToMove;
+        let fileIndex;
+
+        if (side === 'left' || side === 'right') {
+            // Compare mode
+            if (this.mediaFiles.length < 2) return;
+            fileIndex = side === 'left' ? this.currentIndex : this.currentIndex + 1;
+            fileToMove = this.mediaFiles[fileIndex];
+
+            // Cleanup the specific media before moving
+            if (side === 'left' && this.leftMedia) {
+                await this.cleanupCompareMedia('left');
+            } else if (side === 'right' && this.rightMedia) {
+                await this.cleanupCompareMedia('right');
+            }
+            await new Promise(resolve => setTimeout(resolve, 300));
+        } else {
+            // Single mode
+            if (this.mediaFiles.length === 0) return;
+            fileIndex = this.currentIndex;
+            fileToMove = this.mediaFiles[fileIndex];
+
+            // For videos, ensure proper cleanup before moving
+            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                await this.forceVideoCleanup();
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+
+        if (!fileToMove) return;
+
+        const targetFolderPath = this.customSpecialFolder;
+        const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
+
+        try {
+            const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
+
+            if (!folderExists) {
+                const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
+                if (!shouldCreate) return;
+
+                const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                if (!createResult.success) {
+                    throw new Error(createResult.error);
+                }
+            }
+
+            // Move the file
+            const moveResult = await window.electronAPI.moveFile({
+                sourcePath: fileToMove.path,
+                targetFolder: targetFolderPath,
+                fileName: fileToMove.name
+            });
+
+            if (!moveResult.success) {
+                throw new Error(moveResult.error);
+            }
+
+            // Store move in history for undo functionality
+            this.moveHistory.push({
+                fileName: fileToMove.name,
+                originalPath: fileToMove.path,
+                newPath: moveResult.targetPath,
+                fileSize: fileToMove.size,
+                fileType: fileToMove.type,
+                actionType: 'special'
+            });
+
+            // Show success notification
+            if (this.showRatingConfirmations) {
+                const fileName = fileToMove.name.length > 20 ?
+                    fileToMove.name.substring(0, 20) + '...' : fileToMove.name;
+                this.showNotification(
+                    `📁 Moved ${fileName} to ${targetFolderName}`,
+                    'info'
+                );
+            }
+
+            // Remove file from array
+            this.mediaFiles.splice(fileIndex, 1);
+
+            // Adjust current index if necessary
+            if (this.currentIndex >= this.mediaFiles.length) {
+                this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
+            }
+
+            this.updateFolderInfo();
+
+            // Navigate based on mode
+            if (side === 'left' || side === 'right') {
+                // In compare mode, show next pair
+                if (this.mediaFiles.length >= 2) {
+                    this.showComparePair();
+                } else if (this.mediaFiles.length === 1) {
+                    // Only one file left, switch to single mode
+                    this.viewMode = 'single';
+                    this.updateViewModeUI();
+                    this.showMedia();
+                } else {
+                    // No files left
+                    this.showDropZone();
+                }
+            } else {
+                // Single mode - show next media
+                if (this.mediaFiles.length > 0) {
+                    this.showMedia();
+                } else {
+                    this.showDropZone();
+                }
+            }
+
+        } catch (error) {
+            console.error('Error moving file to special folder:', error);
+            this.showError(`Failed to move file: ${error.message}`);
+        }
+    }
+
     // New method for thorough video cleanup before file operations
     async forceVideoCleanup() {
         if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
@@ -935,6 +1127,9 @@ class MediaViewer {
         this.likeBtn.addEventListener('click', () => this.handleLike());
         this.dislikeBtn.addEventListener('click', () => this.handleDislike());
         this.cancelBtn.addEventListener('click', () => this.handleCancel());
+        if (this.specialBtn) {
+            this.specialBtn.addEventListener('click', () => this.moveToSpecialFolder());
+        }
 
         this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
         this.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
@@ -1113,6 +1308,12 @@ class MediaViewer {
         }
         if (this.cancelBtnCompare) {
             this.cancelBtnCompare.addEventListener('click', () => this.handleCancel());
+        }
+        if (this.leftSpecialBtn) {
+            this.leftSpecialBtn.addEventListener('click', () => this.moveToSpecialFolder('left'));
+        }
+        if (this.rightSpecialBtn) {
+            this.rightSpecialBtn.addEventListener('click', () => this.moveToSpecialFolder('right'));
         }
 
         document.addEventListener('keydown', (e) => {

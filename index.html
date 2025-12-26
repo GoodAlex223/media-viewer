@@ -108,6 +108,10 @@
 
         <!-- Main controls for single view -->
         <div class="controls" id="controls">
+            <button class="control-btn special-btn" id="specialBtn" title="Move to special folder">
+                <span class="btn-icon">📁</span>
+                <span class="btn-label">Special</span>
+            </button>
             <button class="control-btn cancel-btn" id="cancelBtn" title="Undo last move (Ctrl+Left)">
                 <span class="btn-icon">↶</span>
                 <span class="btn-label">Undo</span>
@@ -125,6 +129,10 @@
         <!-- Controls for compare view -->
         <div class="compare-controls" id="compareControls">
             <div class="left-media-controls">
+                <button class="control-btn special-btn" id="leftSpecialBtn" title="Move left to special folder">
+                    <span class="btn-icon">📁</span>
+                    <span class="btn-label">Left Special</span>
+                </button>
                 <button class="control-btn cancel-btn" id="cancelBtnCompare" title="Undo last move (Ctrl+Left)">
                     <span class="btn-icon">↶</span>
                     <span class="btn-label">Undo</span>
@@ -139,6 +147,10 @@
                 </button>
             </div>
             <div class="right-media-controls">
+                <button class="control-btn special-btn" id="rightSpecialBtn" title="Move right to special folder">
+                    <span class="btn-icon">📁</span>
+                    <span class="btn-label">Right Special</span>
+                </button>
                 <button class="control-btn dislike-btn" id="rightDislikeBtn" title="Right Dislike (R)">
                     <span class="btn-icon">👎</span>
                     <span class="btn-label">Right Dislike</span>
@@ -266,6 +278,16 @@
                     </div>
                     <div id="folderConfigWarning" class="folder-warning">
                         Configure both folders to enable rating buttons
+                    </div>
+                    <h5>Special Folder</h5>
+                    <div class="folder-input-group">
+                        <label>Special folder:</label>
+                        <input type="text" id="specialFolderInput" readonly placeholder="Not configured">
+                        <button id="specialFolderBrowse" class="folder-btn" title="Browse for folder">Browse</button>
+                        <button id="specialFolderClear" class="folder-btn folder-btn-clear" title="Clear folder">Clear</button>
+                    </div>
+                    <div id="specialFolderInfo" class="folder-info-text">
+                        Use for trash, favorites, or any custom purpose
                     </div>
                 </div>
             </div>
