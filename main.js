@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 
@@ -50,6 +50,14 @@ function getMimeType(extension) {
 // App lifecycle
 app.whenReady().then(() => {
     createWindow();
+
+    // Register Alt+F4 to close the focused window (Windows compatibility)
+    globalShortcut.register('Alt+F4', () => {
+        const focusedWindow = BrowserWindow.getFocusedWindow();
+        if (focusedWindow) {
+            focusedWindow.close();
+        }
+    });
 
     // Handle folder selection
     ipcMain.handle('open-folder-dialog', async () => {
@@ -169,4 +177,8 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
     }
+});
+
+app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
 });

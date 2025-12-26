@@ -57,7 +57,10 @@
 
 ### Navigation & Controls
 
-- [ ] **Alt+F4 not working** — Alt+F4 keyboard shortcut doesn't work for closing the application
+- [x] **Alt+F4 not working** — Alt+F4 keyboard shortcut doesn't work for closing the application
+  - Registered Alt+F4 as globalShortcut in main process
+  - Closes focused window when pressed
+  - Properly unregisters shortcuts on app quit
 
 - [x] **A/D keys for pair navigation** — A and D keys should show previous/next pairs without moving (hotkeys for preview)
   - Added A (previous) and D (next) keyboard shortcuts in compare mode
