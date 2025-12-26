@@ -35,7 +35,11 @@
   - Rating buttons disabled until both folders are configured
   - Works in both single and compare modes
 
-- [ ] **Move file to special folder** — Add ability to move file to a special folder. Intended for deleting or highlighting files, but user can define their own purpose by setting a custom folder. No keyboard shortcut needed for this button
+- [x] **Move file to special folder** — Add ability to move file to a special folder. Intended for deleting or highlighting files, but user can define their own purpose by setting a custom folder. No keyboard shortcut needed for this button
+  - Added 📁 Special button in single view (before Undo button)
+  - Added Left/Right Special buttons in compare view
+  - Special folder configuration in Settings (F1 → Special Folder)
+  - Button disabled until folder is configured
 
 - [ ] **Remove failed files from list** — If a file fails to load (shows error), offer user the option to remove it from the list to prevent repeated errors on subsequent views
 
