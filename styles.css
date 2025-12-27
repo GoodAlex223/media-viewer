@@ -967,7 +967,7 @@ body {
 /* Video controls - Glassmorphism */
 .video-controls {
     position: fixed;
-    bottom: 170px;
+    bottom: 120px;
     left: 50%;
     transform: translateX(-50%);
     background: var(--glass-bg);
