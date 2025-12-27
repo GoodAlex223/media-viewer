@@ -1727,11 +1727,13 @@ class MediaViewer {
             this.hideLoadingSpinner();
             
             if (!result.success) {
+                this.showDropZone();
                 this.showError(result.error || 'Failed to load folder');
                 return;
             }
-            
+
             if (result.files.length === 0) {
+                this.showDropZone();
                 this.showError('No media files found in the selected folder');
                 return;
             }
@@ -1756,6 +1758,7 @@ class MediaViewer {
             
         } catch (error) {
             this.hideLoadingSpinner();
+            this.showDropZone();
             console.error('Error loading folder:', error);
             this.showError(`Failed to load folder: ${error.message}`);
         }
@@ -2406,6 +2409,8 @@ class MediaViewer {
     }
 
     showLoadingSpinner() {
+        // Hide drop zone to prevent overlap with loading spinner
+        this.dropZone.style.display = 'none';
         this.loadingContainer.classList.add('show');
     }
 
