@@ -907,7 +907,7 @@ body {
 /* Navigation info */
 .navigation-info {
     position: fixed;
-    top: var(--space-5);
+    top: 60px;
     left: 50%;
     transform: translateX(-50%);
     background: var(--glass-bg);
