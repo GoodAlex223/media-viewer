@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Media Viewer - Windows 11</title>
+    <title>Media Viewer</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
 <body>
     <div class="header" id="header">
@@ -12,15 +13,15 @@
         <div class="header-controls">
             <div class="folder-info" id="folderInfo">Current: Liked_0</div>
             <button class="view-mode-btn" id="viewModeBtn" title="Toggle view mode (Single/Compare)" style="display: none;">
-                <span class="btn-icon">👁️</span>
+                <span class="btn-icon"><i data-lucide="eye"></i></span>
                 <span class="btn-label" id="viewModeLabel">Single</span>
             </button>
             <button class="change-folder-btn" id="changeFolderBtn" title="Change source folder" style="display: none;">
-                <span class="btn-icon">📂</span>
+                <span class="btn-icon"><i data-lucide="folder-open"></i></span>
                 <span class="btn-label">Change source folder</span>
             </button>
             <button class="sort-similarity-btn" id="sortSimilarityBtn" title="Sort by visual similarity" style="display: none;">
-                <span class="btn-icon">🔄</span>
+                <span class="btn-icon"><i data-lucide="shuffle"></i></span>
                 <span class="btn-label">Sort by Similarity</span>
             </button>
             <select class="sort-algorithm-select" id="sortAlgorithmSelect" title="Choose sorting algorithm" style="display: none;">
@@ -33,14 +34,14 @@
                 <input type="number" id="sortKValue" min="10" value="500" step="10" title="Number of neighbors to check">
             </div>
             <button class="help-btn" id="helpBtn" title="Show keyboard shortcuts (F1)" style="display: none;">
-                <span class="btn-icon">❓</span>
+                <i data-lucide="help-circle"></i>
             </button>
         </div>
     </div>
 
     <div class="media-container">
         <div class="drop-zone" id="dropZone">
-            <div class="drop-icon">📁</div>
+            <div class="drop-icon"><i data-lucide="folder"></i></div>
             <div class="drop-title">Select folder to view media files</div>
             <div class="drop-subtitle">
                 Supports: JPG, PNG, GIF, MP4, WebM, MOV
@@ -54,13 +55,17 @@
         </div>
 
         <!-- Info button (persistent) -->
-        <button class="info-toggle-btn" id="infoToggleBtn" title="Toggle file info (I)">ℹ</button>
+        <button class="info-toggle-btn" id="infoToggleBtn" title="Toggle file info (I)">
+            <i data-lucide="info"></i>
+        </button>
 
         <!-- File info panel - moved to avoid header overlap -->
         <div class="file-info-panel" id="fileInfoPanel">
             <div class="file-info-header">
                 <div class="file-name" id="fileName"></div>
-                <button class="file-info-close" id="fileInfoClose" title="Close">×</button>
+                <button class="file-info-close" id="fileInfoClose" title="Close">
+                    <i data-lucide="x"></i>
+                </button>
             </div>
             <div class="file-details" id="fileDetails"></div>
         </div>
@@ -69,14 +74,18 @@
         <div class="compare-file-info left-file-info" id="leftFileInfo" style="display: none;">
             <div class="file-info-header">
                 <div class="file-name" id="leftFileName"></div>
-                <button class="file-info-toggle" id="leftFileInfoToggle" title="Click to copy filename">ℹ️</button>
+                <button class="file-info-toggle" id="leftFileInfoToggle" title="Click to copy filename">
+                    <i data-lucide="info"></i>
+                </button>
             </div>
             <div class="file-details" id="leftFileDetails"></div>
         </div>
         <div class="compare-file-info right-file-info" id="rightFileInfo" style="display: none;">
             <div class="file-info-header">
                 <div class="file-name" id="rightFileName"></div>
-                <button class="file-info-toggle" id="rightFileInfoToggle" title="Click to copy filename">ℹ️</button>
+                <button class="file-info-toggle" id="rightFileInfoToggle" title="Click to copy filename">
+                    <i data-lucide="info"></i>
+                </button>
             </div>
             <div class="file-details" id="rightFileDetails"></div>
         </div>
@@ -91,7 +100,10 @@
 
         <!-- Video controls -->
         <div class="video-controls" id="videoControls">
-            <button class="video-control-btn" id="playPauseBtn" title="Play/Pause">⏸️</button>
+            <button class="video-control-btn" id="playPauseBtn" title="Play/Pause">
+                <i data-lucide="pause" id="pauseIcon"></i>
+                <i data-lucide="play" id="playIcon" style="display: none;"></i>
+            </button>
             <div class="video-progress-container">
                 <input type="range" class="progress-slider" id="progressSlider" min="0" max="100" value="0">
                 <div class="time-display">
@@ -99,29 +111,33 @@
                 </div>
             </div>
             <div class="volume-container">
+                <span class="volume-icon"><i data-lucide="volume-2"></i></span>
                 <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.1" value="1">
-                <span class="volume-icon">🔊</span>
             </div>
-            <button class="video-control-btn" id="skipBackwardBtn" title="Skip 10s backward">⏪</button>
-            <button class="video-control-btn" id="skipForwardBtn" title="Skip 10s forward">⏩</button>
+            <button class="video-control-btn" id="skipBackwardBtn" title="Skip 10s backward">
+                <i data-lucide="skip-back"></i>
+            </button>
+            <button class="video-control-btn" id="skipForwardBtn" title="Skip 10s forward">
+                <i data-lucide="skip-forward"></i>
+            </button>
         </div>
 
         <!-- Main controls for single view -->
         <div class="controls" id="controls">
             <button class="control-btn special-btn" id="specialBtn" title="Move to special folder">
-                <span class="btn-icon">📁</span>
+                <span class="btn-icon"><i data-lucide="folder-heart"></i></span>
                 <span class="btn-label">Special</span>
             </button>
             <button class="control-btn cancel-btn" id="cancelBtn" title="Undo last move (Ctrl+Left)">
-                <span class="btn-icon">↶</span>
+                <span class="btn-icon"><i data-lucide="undo-2"></i></span>
                 <span class="btn-label">Undo</span>
             </button>
             <button class="control-btn dislike-btn" id="dislikeBtn" title="Move to previous folder (Down Arrow)">
-                <span class="btn-icon">👎</span>
+                <span class="btn-icon"><i data-lucide="thumbs-down"></i></span>
                 <span class="btn-label">Dislike</span>
             </button>
             <button class="control-btn like-btn" id="likeBtn" title="Move to next folder (Up Arrow)">
-                <span class="btn-icon">👍</span>
+                <span class="btn-icon"><i data-lucide="thumbs-up"></i></span>
                 <span class="btn-label">Like</span>
             </button>
         </div>
@@ -130,33 +146,33 @@
         <div class="compare-controls" id="compareControls">
             <div class="left-media-controls">
                 <button class="control-btn special-btn" id="leftSpecialBtn" title="Move left to special folder">
-                    <span class="btn-icon">📁</span>
+                    <span class="btn-icon"><i data-lucide="folder-heart"></i></span>
                     <span class="btn-label">Left Special</span>
                 </button>
                 <button class="control-btn cancel-btn" id="cancelBtnCompare" title="Undo last move (Ctrl+Left)">
-                    <span class="btn-icon">↶</span>
+                    <span class="btn-icon"><i data-lucide="undo-2"></i></span>
                     <span class="btn-label">Undo</span>
                 </button>
                 <button class="control-btn dislike-btn" id="leftDislikeBtn" title="Left Dislike (W)">
-                    <span class="btn-icon">👎</span>
+                    <span class="btn-icon"><i data-lucide="thumbs-down"></i></span>
                     <span class="btn-label">Left Dislike</span>
                 </button>
                 <button class="control-btn like-btn" id="leftLikeBtn" title="Left Like (Q)">
-                    <span class="btn-icon">👍</span>
+                    <span class="btn-icon"><i data-lucide="thumbs-up"></i></span>
                     <span class="btn-label">Left Like</span>
                 </button>
             </div>
             <div class="right-media-controls">
                 <button class="control-btn special-btn" id="rightSpecialBtn" title="Move right to special folder">
-                    <span class="btn-icon">📁</span>
+                    <span class="btn-icon"><i data-lucide="folder-heart"></i></span>
                     <span class="btn-label">Right Special</span>
                 </button>
                 <button class="control-btn dislike-btn" id="rightDislikeBtn" title="Right Dislike (R)">
-                    <span class="btn-icon">👎</span>
+                    <span class="btn-icon"><i data-lucide="thumbs-down"></i></span>
                     <span class="btn-label">Right Dislike</span>
                 </button>
                 <button class="control-btn like-btn" id="rightLikeBtn" title="Right Like (E)">
-                    <span class="btn-icon">👍</span>
+                    <span class="btn-icon"><i data-lucide="thumbs-up"></i></span>
                     <span class="btn-label">Right Like</span>
                 </button>
             </div>
@@ -164,8 +180,12 @@
 
         <!-- Navigation arrows -->
         <div class="nav-arrows">
-            <button class="nav-arrow nav-prev" id="navPrev" title="Previous media (Left Arrow)">◀</button>
-            <button class="nav-arrow nav-next" id="navNext" title="Next media (Right Arrow)">▶</button>
+            <button class="nav-arrow nav-prev" id="navPrev" title="Previous media (Left Arrow)">
+                <i data-lucide="chevron-left"></i>
+            </button>
+            <button class="nav-arrow nav-next" id="navNext" title="Next media (Right Arrow)">
+                <i data-lucide="chevron-right"></i>
+            </button>
         </div>
     </div>
 
@@ -175,7 +195,9 @@
     <!-- Keyboard shortcuts help -->
     <div class="help-overlay" id="helpOverlay">
         <div class="help-content">
-            <button class="help-close-btn" id="helpCloseBtn" title="Close (Esc or F1)">✕</button>
+            <button class="help-close-btn" id="helpCloseBtn" title="Close (Esc or F1)">
+                <i data-lucide="x"></i>
+            </button>
             <h3>Keyboard Shortcuts</h3>
             <div class="shortcut-section">
                 <h4>Single View Mode</h4>
@@ -305,5 +327,13 @@
     </div>
 
     <script type="module" src="media-viewer.js"></script>
+    <script>
+        // Initialize Lucide icons after DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        });
+    </script>
 </body>
 </html>

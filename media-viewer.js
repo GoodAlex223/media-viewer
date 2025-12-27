@@ -381,6 +381,8 @@ class MediaViewer {
         this.mediaIndex = document.getElementById('mediaIndex');
         this.videoControls = document.getElementById('videoControls');
         this.playPauseBtn = document.getElementById('playPauseBtn');
+        this.playIcon = document.getElementById('playIcon');
+        this.pauseIcon = document.getElementById('pauseIcon');
         this.volumeSlider = document.getElementById('volumeSlider');
         this.progressSlider = document.getElementById('progressSlider');
         this.currentTime = document.getElementById('currentTime');
@@ -627,50 +629,32 @@ class MediaViewer {
         return new Promise((resolve) => {
             const modal = document.createElement('div');
             modal.className = 'folder-creation-modal';
-            modal.style.cssText = `
-                position: fixed;
-                top: 0; left: 0; right: 0; bottom: 0;
-                background: rgba(0, 0, 0, 0.9);
-                backdrop-filter: blur(10px);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 2000;
-            `;
-            
+
             modal.innerHTML = `
-                <div style="
-                    background: linear-gradient(135deg, #2d2d30 0%, #1e1e1e 100%);
-                    border-radius: 15px;
-                    padding: 30px;
-                    max-width: 500px;
-                    width: 90%;
-                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    color: white;
-                ">
-                    <div style="font-size: 24px; color: #00d4aa; text-align: center; margin-bottom: 20px;">📁 Create Folder</div>
-                    <p style="color: #a0a0a0; margin-bottom: 20px; text-align: center;">
+                <div class="folder-creation-content">
+                    <div class="folder-creation-title">
+                        <i data-lucide="folder-plus"></i>
+                        Create Folder
+                    </div>
+                    <p class="folder-creation-text">
                         The target folder doesn't exist. Would you like to create it?
                     </p>
-                    <div style="background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 8px; font-family: monospace; word-break: break-all; margin-bottom: 20px;">${folderPath}</div>
-                    <div style="display: flex; gap: 15px; justify-content: center;">
-                        <button id="createBtn" style="
-                            background: linear-gradient(135deg, #00d4aa 0%, #00a085 100%);
-                            color: white; border: none; padding: 12px 24px;
-                            border-radius: 8px; cursor: pointer; font-weight: 600;
-                        ">Create Folder</button>
-                        <button id="cancelBtn" style="
-                            background: linear-gradient(135deg, #666 0%, #444 100%);
-                            color: white; border: none; padding: 12px 24px;
-                            border-radius: 8px; cursor: pointer; font-weight: 600;
-                        ">Cancel</button>
+                    <div class="folder-creation-path">${folderPath}</div>
+                    <div class="folder-creation-actions">
+                        <button id="createBtn" class="folder-creation-btn folder-creation-btn-create">Create Folder</button>
+                        <button id="cancelBtn" class="folder-creation-btn folder-creation-btn-cancel">Cancel</button>
                     </div>
                 </div>
             `;
-            
-            document.body.appendChild(modal);
-            
+
+            // Initialize Lucide icons in the modal
+            if (typeof lucide !== 'undefined') {
+                document.body.appendChild(modal);
+                lucide.createIcons({ nodes: [modal] });
+            } else {
+                document.body.appendChild(modal);
+            }
+
             const createBtn = modal.querySelector('#createBtn');
             const cancelBtn = modal.querySelector('#cancelBtn');
             
@@ -748,15 +732,12 @@ class MediaViewer {
         closeBtn.textContent = '×';
         closeBtn.className = 'notification-close';
         closeBtn.title = 'Close';
-        closeBtn.style.cssText = 'background: none; border: none; color: inherit; font-size: 24px; cursor: pointer; padding: 0 5px; margin-left: 10px; line-height: 1;';
 
         notification.appendChild(messageSpan);
         if (actionBtn) {
             notification.appendChild(actionBtn);
         }
         notification.appendChild(closeBtn);
-        notification.style.display = 'flex';
-        notification.style.alignItems = 'center';
 
         // Add click handler to copy message
         messageSpan.addEventListener('click', async () => {
@@ -2273,13 +2254,15 @@ class MediaViewer {
 
         const onPlay = () => {
             if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
-                this.playPauseBtn.textContent = '⏸️';
+                this.playIcon.style.display = 'none';
+                this.pauseIcon.style.display = 'block';
             }
         };
-        
+
         const onPause = () => {
             if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
-                this.playPauseBtn.textContent = '▶️';
+                this.playIcon.style.display = 'block';
+                this.pauseIcon.style.display = 'none';
             }
         };
 
