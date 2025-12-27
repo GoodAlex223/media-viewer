@@ -74,9 +74,18 @@
   - Fixed all 3 algorithms (Simple, VP-Tree, MST) to start from current file
   - Now sorting starts from whichever image you're viewing
 
-- [ ] **Sorting stops when window minimized** — Sorting process stops when application window is minimized
+- [x] **Sorting stops when window minimized** — Sorting process stops when application window is minimized
+  - Root cause: Chromium throttles setTimeout to ~1s intervals when window is minimized
+  - Solution: Moved sorting algorithms to Web Worker (separate thread not affected by throttling)
+  - Created sorting-worker.js with MinHeap, VPTree, and all 3 sorting algorithms
+  - Worker receives hashes and returns sorted paths via postMessage
+  - Progress updates shown in real-time
+  - Abort/cancel still works via worker message
 
-- [ ] **Media skipping in single mode** — When rating a post (like/dislike) in single mode, media skips by 2 instead of 1. Example: after rating media 1, it shows media 3 instead of media 2 (which was second before rating). Should show sequentially without skipping
+- [x] **Media skipping in single mode** — When rating a post (like/dislike) in single mode, media skips by 2 instead of 1. Example: after rating media 1, it shows media 3 instead of media 2 (which was second before rating). Should show sequentially without skipping
+  - Root cause: `moveCurrentFile()` called `nextMedia()` after splice, but splice already shifts the array so `currentIndex` points to the next file
+  - Fixed by replacing `nextMedia()` with `showMedia()` in line 1008
+  - Also fixed undo: restored file was pushed to end of array, now inserted at `currentIndex` to maintain order
 
 ---
 

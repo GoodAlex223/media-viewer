@@ -328,6 +328,7 @@ class MediaViewer {
         this.sortAbortController = null;
         this.progressNotification = null; // Reusable progress notification
         this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
+        this.sortingWorker = null; // Web Worker for sorting to prevent UI freeze
 
         // User settings
         this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
@@ -1004,7 +1005,7 @@ class MediaViewer {
             }
 
             this.updateFolderInfo();
-            this.nextMedia();
+            this.showMedia();
 
         } catch (error) {
             console.error('Error moving file:', error);
@@ -2664,7 +2665,8 @@ class MediaViewer {
                     throw new Error(moveResult.error);
                 }
 
-                this.mediaFiles.push({
+                // Insert file back at current position to maintain order
+                this.mediaFiles.splice(this.currentIndex, 0, {
                     name: lastMove.fileName,
                     path: lastMove.originalPath,
                     size: lastMove.fileSize,
@@ -2674,9 +2676,7 @@ class MediaViewer {
                 this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
                 this.updateFolderInfo();
 
-                // Set current index to the restored file
-                this.currentIndex = this.mediaFiles.length - 1;
-
+                // currentIndex already points to the restored file's position
                 await this.showMedia();
 
             } catch (error) {
@@ -3136,19 +3136,22 @@ class MediaViewer {
 
             this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
 
-            // Call appropriate sorting method
-            switch (this.sortAlgorithm) {
-                case 'vptree':
-                    await this.sortMediaBySimilarityVPTree(this.sortAbortController.signal);
-                    break;
-                case 'mst':
-                    await this.sortMediaBySimilarityMST(this.sortAbortController.signal);
-                    break;
-                case 'simple':
-                default:
-                    await this.sortMediaBySimilarity(this.sortAbortController.signal);
-                    break;
-            }
+            // Get K value for simple algorithm
+            const savedK = localStorage.getItem('sortKValue');
+            const kValue = savedK ? parseInt(savedK, 10) : 500;
+
+            // Delegate sorting to Web Worker to prevent UI freeze when minimized
+            const sortedPaths = await this.runSortingWorker({
+                algorithm: this.sortAlgorithm,
+                mediaFiles: this.mediaFiles.map(f => ({ path: f.path })),
+                hashes: Object.fromEntries(this.perceptualHashes),
+                currentIndex: this.currentIndex,
+                maxComparisons: kValue
+            });
+
+            // Reorder mediaFiles based on sorted paths
+            const pathToFile = new Map(this.mediaFiles.map(f => [f.path, f]));
+            this.mediaFiles = sortedPaths.map(path => pathToFile.get(path)).filter(f => f);
 
             // Sorting completed successfully!
             this.isSortedBySimilarity = true;
@@ -3327,6 +3330,64 @@ class MediaViewer {
             }
         }
         return distance;
+    }
+
+    // Run sorting in Web Worker to prevent UI freeze when window is minimized
+    runSortingWorker(data) {
+        return new Promise((resolve, reject) => {
+            // Terminate previous worker if exists
+            if (this.sortingWorker) {
+                this.sortingWorker.terminate();
+            }
+
+            try {
+                this.sortingWorker = new Worker('sorting-worker.js');
+            } catch (err) {
+                console.error('Failed to create sorting worker:', err);
+                // Fall back to main thread sorting
+                reject(new Error('Web Worker not supported, please try again'));
+                return;
+            }
+
+            this.sortingWorker.onmessage = (e) => {
+                const { type, sortedPaths, message, current, total } = e.data;
+
+                switch (type) {
+                    case 'progress':
+                        this.updateProgressNotification(message);
+                        break;
+                    case 'complete':
+                        this.sortingWorker.terminate();
+                        this.sortingWorker = null;
+                        resolve(sortedPaths);
+                        break;
+                    case 'error':
+                        this.sortingWorker.terminate();
+                        this.sortingWorker = null;
+                        reject(new Error(message));
+                        break;
+                }
+            };
+
+            this.sortingWorker.onerror = (err) => {
+                console.error('Sorting worker error:', err);
+                this.sortingWorker.terminate();
+                this.sortingWorker = null;
+                reject(new Error('Sorting worker failed: ' + err.message));
+            };
+
+            // Set up abort handling
+            if (this.sortAbortController) {
+                this.sortAbortController.signal.addEventListener('abort', () => {
+                    if (this.sortingWorker) {
+                        this.sortingWorker.postMessage({ type: 'abort' });
+                    }
+                });
+            }
+
+            // Send sorting request to worker
+            this.sortingWorker.postMessage({ type: 'startSort', data });
+        });
     }
 
     async sortMediaBySimilarity(signal) {
