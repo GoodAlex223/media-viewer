@@ -17,11 +17,15 @@ Central index for all project documentation.
 
 ## Plans
 
-| Document                       | Purpose                                     |
-|--------------------------------|---------------------------------------------|
-| [Notifications & Media Info][] | Less intrusive notifications and media info |
+| Document                         | Purpose                                     |
+|----------------------------------|---------------------------------------------|
+| [Notifications & Media Info][]   | Less intrusive notifications and media info |
+| [Sorting Cache][]                | Cache sorting algorithm results             |
+| [Background Feature Extraction][]| Worker pool for parallel feature extraction |
 
 [Notifications & Media Info]: plans/2025-12-25_notifications-media-info-less-intrusive.md
+[Sorting Cache]: plans/2025-12-27_sorting-cache.md
+[Background Feature Extraction]: plans/2025-12-28_background-feature-extraction.md
 
 ## Archives
 
@@ -31,4 +35,4 @@ Central index for all project documentation.
 
 ---
 
-Last Updated: 2025-12-25
+Last Updated: 2025-12-28

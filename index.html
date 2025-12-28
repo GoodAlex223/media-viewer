@@ -33,6 +33,10 @@
                 <label for="sortKValue" title="Number of neighbors to check per file">K:</label>
                 <input type="number" id="sortKValue" min="10" value="500" step="10" title="Number of neighbors to check">
             </div>
+            <button class="sort-prediction-btn" id="sortPredictionBtn" title="Sort by predicted preference (learns from your ratings)" style="display: none;" disabled>
+                <span class="btn-icon"><i data-lucide="sparkles"></i></span>
+                <span class="btn-label">Sort by Predicted</span>
+            </button>
             <button class="help-btn" id="helpBtn" title="Show keyboard shortcuts (F1)" style="display: none;">
                 <i data-lucide="help-circle"></i>
             </button>
@@ -149,7 +153,7 @@
                     <span class="btn-icon"><i data-lucide="folder-heart"></i></span>
                     <span class="btn-label">Left Special</span>
                 </button>
-                <button class="control-btn cancel-btn" id="cancelBtnCompare" title="Undo last move (Ctrl+Left)">
+                <button class="control-btn cancel-btn" id="cancelBtnCompare" title="Undo last move (Ctrl+A / Ctrl+Left)">
                     <span class="btn-icon"><i data-lucide="undo-2"></i></span>
                     <span class="btn-label">Undo</span>
                 </button>
@@ -243,6 +247,9 @@
                     <div class="shortcut-item">
                         <kbd>D</kbd> <span>Next pair</span>
                     </div>
+                    <div class="shortcut-item">
+                        <kbd>Ctrl</kbd> + <kbd>A</kbd> <span>Undo last move</span>
+                    </div>
                 </div>
             </div>
             <div class="shortcut-section">
@@ -293,6 +300,14 @@
                         <input type="checkbox" id="autoCloseErrorsToggle">
                         <span>Auto-close error notifications (8s)</span>
                     </label>
+                    <label class="setting-item">
+                        <input type="checkbox" id="mlPredictionToggle" checked>
+                        <span>Enable preference prediction (learns from ratings)</span>
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" id="showPredictionBadgesToggle" checked>
+                        <span>Show prediction score badges</span>
+                    </label>
                 </div>
                 <div class="folder-settings">
                     <h5>Rating Folders</h5>
@@ -326,6 +341,7 @@
         </div>
     </div>
 
+    <script src="feature-extractor.js"></script>
     <script type="module" src="media-viewer.js"></script>
     <script>
         // Initialize Lucide icons after DOM is ready

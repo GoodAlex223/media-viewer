@@ -330,6 +330,30 @@ class MediaViewer {
         this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
         this.sortingWorker = null; // Web Worker for sorting to prevent UI freeze
 
+        // ML Prediction state
+        this.mlWorker = null;
+        this.featureCache = new Map();      // Map<filePath, Float32Array>
+        this.predictionScores = new Map();  // Map<filePath, number (0-1)>
+        this.mlModelState = null;           // Persisted model weights
+        this.isMlEnabled = localStorage.getItem('mlPredictionEnabled') !== 'false';
+        this.showPredictionBadges = localStorage.getItem('showPredictionBadges') !== 'false';
+        this.isSortedByPrediction = false;
+        this.mlStats = null;                // Current model statistics
+        this.compareLeftFile = null;        // Current left file in compare mode (highest score)
+        this.compareRightFile = null;       // Current right file in compare mode (lowest score)
+        this.mlComparePairIndex = 0;        // Index for ML pair selection (0 = highest vs lowest)
+
+        // Feature extraction worker pool state
+        this.featureWorkers = [];           // Array of Worker instances
+        this.featureWorkerCount = 4;        // Number of parallel workers
+        this.featureTaskQueue = [];         // Priority queue of pending tasks
+        this.featurePendingTasks = new Map(); // Map<taskId, {resolve, reject, filePath, retries}>
+        this.featureTaskIdCounter = 0;      // Incrementing task ID
+        this.isBackgroundExtracting = false;
+        this.backgroundExtractionAbort = null; // AbortController for cancellation
+        this.featureCacheDirty = false;     // Flag for auto-save
+        this.featureCacheAutoSaveInterval = null;
+
         // User settings
         this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
         this.autoCloseErrors = localStorage.getItem('autoCloseErrors') === 'true'; // default: false
@@ -358,6 +382,8 @@ class MediaViewer {
         this.setupControlsVisibility();
         this.updateRatingButtonsState();
         this.updateSpecialButtonsState();
+        this.initializeMlWorker();
+        this.initializeFeaturePool();
 
         if (!window.electronAPI) {
             console.error('Electron API not available');
@@ -440,6 +466,9 @@ class MediaViewer {
 
         // Show/hide K settings based on algorithm
         this.updateSortSettingsVisibility();
+
+        // ML Prediction button
+        this.sortPredictionBtn = document.getElementById('sortPredictionBtn');
     }
 
     updateSortSettingsVisibility() {
@@ -815,7 +844,7 @@ class MediaViewer {
         if (side === 'left' || side === 'right') {
             // Compare mode
             if (this.mediaFiles.length >= 2) {
-                this.showComparePair();
+                this.showMedia();
             } else {
                 // Only one file left, switch to single mode
                 this.viewMode = 'single';
@@ -872,11 +901,16 @@ class MediaViewer {
         if (this.isLoading || this.mediaNavigationInProgress) return;
 
         if (this.isCompareMode) {
-            // In compare mode, skip by 2, ensuring we always have a pair
-            this.currentIndex = this.currentIndex + 2;
-            // Wrap around if we've gone past the point where we can show a pair
-            if (this.currentIndex >= this.mediaFiles.length - 1) {
-                this.currentIndex = 0;
+            // In ML sorted mode, navigate through pairs by score
+            if (this.isSortedByPrediction) {
+                const maxPairIndex = Math.floor(this.mediaFiles.length / 2) - 1;
+                this.mlComparePairIndex = Math.min(this.mlComparePairIndex + 1, maxPairIndex);
+            } else {
+                // Regular mode: skip by 2
+                this.currentIndex = this.currentIndex + 2;
+                if (this.currentIndex >= this.mediaFiles.length - 1) {
+                    this.currentIndex = 0;
+                }
             }
         } else {
             this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
@@ -888,13 +922,15 @@ class MediaViewer {
         if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
 
         if (this.isCompareMode) {
-            // In compare mode, skip by 2, ensuring we always have a pair
-            this.currentIndex = this.currentIndex - 2;
-            if (this.currentIndex < 0) {
-                // Find the last valid index that allows showing a pair
-                // For even number of files: length - 2
-                // For odd number of files: length - 2
-                this.currentIndex = Math.max(0, this.mediaFiles.length - 2);
+            // In ML sorted mode, navigate through pairs by score
+            if (this.isSortedByPrediction) {
+                this.mlComparePairIndex = Math.max(this.mlComparePairIndex - 1, 0);
+            } else {
+                // Regular mode: skip by 2
+                this.currentIndex = this.currentIndex - 2;
+                if (this.currentIndex < 0) {
+                    this.currentIndex = Math.max(0, this.mediaFiles.length - 2);
+                }
             }
         } else {
             this.currentIndex = (this.currentIndex - 1 + this.mediaFiles.length) % this.mediaFiles.length;
@@ -925,6 +961,22 @@ class MediaViewer {
         const currentFile = this.mediaFiles[this.currentIndex];
         const targetFolderPath = actionType === 'like' ? this.customLikeFolder : this.customDislikeFolder;
         const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
+
+        // Extract ML features BEFORE moving file (while media is still accessible)
+        let mlFeatures = null;
+        if (this.isMlEnabled && this.mlWorker) {
+            mlFeatures = this.featureCache.get(currentFile.path);
+            if (!mlFeatures && this.currentMedia) {
+                try {
+                    mlFeatures = await this.extractFeaturesFromDisplayedMedia();
+                    if (mlFeatures) {
+                        this.featureCache.set(currentFile.path, mlFeatures);
+                    }
+                } catch (err) {
+                    console.warn('Could not extract ML features:', err);
+                }
+            }
+        }
 
         try {
             // For videos, ensure proper cleanup before moving
@@ -957,14 +1009,15 @@ class MediaViewer {
                 throw new Error(moveResult.error);
             }
 
-            // Store move in history for undo functionality
+            // Store move in history for undo functionality (include ML features for reversal)
             this.moveHistory.push({
                 fileName: currentFile.name,
                 originalPath: currentFile.path,
                 newPath: moveResult.targetPath,
                 fileSize: currentFile.size,
                 fileType: currentFile.type,
-                actionType: actionType
+                actionType: actionType,
+                mlFeatures: mlFeatures ? Array.from(mlFeatures) : null
             });
 
             // Show success notification (if enabled)
@@ -975,6 +1028,11 @@ class MediaViewer {
                     `${actionType === 'like' ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
                     actionType === 'like' ? 'success' : 'dislike'
                 );
+            }
+
+            // Update ML model with this rating (using pre-extracted features)
+            if (mlFeatures) {
+                this.updateMlModelWithFeatures(mlFeatures, actionType);
             }
 
             // Remove current file from array
@@ -1096,7 +1154,7 @@ class MediaViewer {
             if (side === 'left' || side === 'right') {
                 // In compare mode, show next pair
                 if (this.mediaFiles.length >= 2) {
-                    this.showComparePair();
+                    this.showMedia();
                 } else if (this.mediaFiles.length === 1) {
                     // Only one file left, switch to single mode
                     this.viewMode = 'single';
@@ -1288,6 +1346,11 @@ class MediaViewer {
             this.sortSimilarityBtn.addEventListener('click', () => this.handleSortBySimilarity());
         }
 
+        // Sort by prediction button
+        if (this.sortPredictionBtn) {
+            this.sortPredictionBtn.addEventListener('click', () => this.handleSortByPrediction());
+        }
+
         if (this.sortAlgorithmSelect) {
             this.sortAlgorithmSelect.addEventListener('change', (e) => {
                 this.sortAlgorithm = e.target.value;
@@ -1345,6 +1408,38 @@ class MediaViewer {
             autoCloseErrorsToggle.addEventListener('change', (e) => {
                 this.autoCloseErrors = e.target.checked;
                 localStorage.setItem('autoCloseErrors', e.target.checked.toString());
+            });
+        }
+
+        // Settings toggle for ML prediction
+        const mlPredictionToggle = document.getElementById('mlPredictionToggle');
+        if (mlPredictionToggle) {
+            mlPredictionToggle.checked = this.isMlEnabled;
+            mlPredictionToggle.addEventListener('change', (e) => {
+                this.isMlEnabled = e.target.checked;
+                localStorage.setItem('mlPredictionEnabled', e.target.checked.toString());
+                if (this.isMlEnabled && !this.mlWorker) {
+                    this.initializeMlWorker();
+                }
+                this.updateSortPredictionButton();
+                if (!this.isMlEnabled) {
+                    this.hidePredictionBadges();
+                }
+            });
+        }
+
+        // Settings toggle for prediction badges
+        const showPredictionBadgesToggle = document.getElementById('showPredictionBadgesToggle');
+        if (showPredictionBadgesToggle) {
+            showPredictionBadgesToggle.checked = this.showPredictionBadges;
+            showPredictionBadgesToggle.addEventListener('change', (e) => {
+                this.showPredictionBadges = e.target.checked;
+                localStorage.setItem('showPredictionBadges', e.target.checked.toString());
+                if (this.showPredictionBadges) {
+                    this.updatePredictionBadges();
+                } else {
+                    this.hidePredictionBadges();
+                }
             });
         }
 
@@ -1437,7 +1532,13 @@ class MediaViewer {
                         break;
                     case 'KeyA':
                         e.preventDefault();
-                        if (!this.isLoading) this.previousMedia();
+                        if (!this.isLoading) {
+                            if (e.ctrlKey) {
+                                this.handleCancel();
+                            } else {
+                                this.previousMedia();
+                            }
+                        }
                         break;
                     case 'KeyD':
                         e.preventDefault();
@@ -1745,17 +1846,30 @@ class MediaViewer {
             this.moveHistory = [];
             // Reset sorting state when loading new folder
             this.isSortedBySimilarity = false;
+            this.isSortedByPrediction = false;
             this.originalMediaFiles = [];
             this.perceptualHashes.clear();
+            this.featureCache.clear();
+            this.predictionScores.clear();
+            // Cancel any ongoing background extraction
+            this.cancelBackgroundExtraction();
             if (this.sortSimilarityBtn) {
                 this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
             }
             this.hideDropZone();
             await this.showMedia();
             this.updateFolderInfo();
-            
+
             console.log(`Successfully loaded ${this.mediaFiles.length} media files`);
-            
+
+            // Initialize ML prediction system (load cached data only, training happens on button click)
+            if (this.isMlEnabled) {
+                await this.loadMlModel();
+                await this.loadFeatureCache();
+                this.updateSortPredictionButton();
+                // Training and feature extraction starts when user clicks "Sort by Prediction"
+            }
+
         } catch (error) {
             this.hideLoadingSpinner();
             this.showDropZone();
@@ -1794,6 +1908,8 @@ class MediaViewer {
         }
         // Show/hide K settings based on current algorithm
         this.updateSortSettingsVisibility();
+        // Show/hide sort prediction button
+        this.updateSortPredictionButton();
     }
 
     showDropZone() {
@@ -1816,6 +1932,12 @@ class MediaViewer {
         if (this.sortSettings) {
             this.sortSettings.style.display = 'none';
         }
+        // Hide sort prediction button
+        if (this.sortPredictionBtn) {
+            this.sortPredictionBtn.style.display = 'none';
+        }
+        // Hide prediction badges
+        this.hidePredictionBadges();
         if (this.currentMedia) {
             this.cleanupCurrentMedia();
         }
@@ -1933,13 +2055,16 @@ class MediaViewer {
         this.resetZoom('left');
         this.resetZoom('right');
 
-        // Cleanup previous media
+        // Cleanup previous media in parallel
+        const cleanupPromises = [];
         if (this.leftMedia) {
-            await this.cleanupCompareMedia('left');
+            cleanupPromises.push(this.cleanupCompareMedia('left'));
         }
         if (this.rightMedia) {
-            await this.cleanupCompareMedia('right');
+            cleanupPromises.push(this.cleanupCompareMedia('right'));
         }
+        await Promise.all(cleanupPromises);
+
         if (this.leftMediaWrapper) {
             this.leftMediaWrapper.remove();
         }
@@ -1947,15 +2072,55 @@ class MediaViewer {
             this.rightMediaWrapper.remove();
         }
 
-        await new Promise(resolve => setTimeout(resolve, 150));
+        await new Promise(resolve => setTimeout(resolve, 50));
 
-        // Ensure currentIndex is valid and we have two different files
-        if (this.currentIndex >= this.mediaFiles.length - 1) {
-            this.currentIndex = 0;
+        // Select files for comparison
+        let leftFile, rightFile;
+
+        // Check if we have restored pair files to display (from undo operation)
+        if (this._restoredPairFiles) {
+            leftFile = this._restoredPairFiles.left;
+            rightFile = this._restoredPairFiles.right;
+            console.log('Showing restored pair:', leftFile.name, 'vs', rightFile.name);
+            // Clear the flag after use
+            this._restoredPairFiles = null;
+        }
+        // If sorted by prediction, select pairs based on mlComparePairIndex
+        else if (this.isSortedByPrediction && this.predictionScores.size >= 2) {
+            const filesWithScores = this.mediaFiles
+                .map(f => ({ file: f, score: this.predictionScores.get(f.path) ?? 0.5 }))
+                .sort((a, b) => b.score - a.score); // Sort descending by score
+
+            // Use mlComparePairIndex to select which pair to show
+            // Index 0 = highest vs lowest, index 1 = 2nd highest vs 2nd lowest, etc.
+            const pairIndex = Math.min(this.mlComparePairIndex, Math.floor(filesWithScores.length / 2) - 1);
+            const leftIndex = Math.max(0, pairIndex);
+            const rightIndex = Math.max(0, filesWithScores.length - 1 - pairIndex);
+
+            // Ensure we don't select the same file twice
+            if (leftIndex >= rightIndex) {
+                leftFile = filesWithScores[0].file;
+                rightFile = filesWithScores[filesWithScores.length - 1].file;
+            } else {
+                leftFile = filesWithScores[leftIndex].file;
+                rightFile = filesWithScores[rightIndex].file;
+            }
+
+            const leftScore = this.predictionScores.get(leftFile.path) ?? 0.5;
+            const rightScore = this.predictionScores.get(rightFile.path) ?? 0.5;
+            console.log(`ML Compare [${pairIndex}]: ${leftFile.name} (${(leftScore * 100).toFixed(1)}%) vs ${rightFile.name} (${(rightScore * 100).toFixed(1)}%)`);
+        } else {
+            // Regular mode: consecutive files based on currentIndex
+            if (this.currentIndex >= this.mediaFiles.length - 1) {
+                this.currentIndex = 0;
+            }
+            leftFile = this.mediaFiles[this.currentIndex];
+            rightFile = this.mediaFiles[this.currentIndex + 1];
         }
 
-        const leftFile = this.mediaFiles[this.currentIndex];
-        const rightFile = this.mediaFiles[this.currentIndex + 1];
+        // Store references for use in moveComparePair
+        this.compareLeftFile = leftFile;
+        this.compareRightFile = rightFile;
 
         // Safety check: ensure left and right are different files
         if (!leftFile || !rightFile || leftFile === rightFile) {
@@ -1968,11 +2133,11 @@ class MediaViewer {
 
         console.log('Showing compare media:', leftFile.name, 'vs', rightFile.name);
 
-        // Create wrappers
+        // Create wrappers with distinct classes for badge positioning
         this.leftMediaWrapper = document.createElement('div');
-        this.leftMediaWrapper.className = 'media-wrapper';
+        this.leftMediaWrapper.className = 'media-wrapper left-media-wrapper';
         this.rightMediaWrapper = document.createElement('div');
-        this.rightMediaWrapper.className = 'media-wrapper';
+        this.rightMediaWrapper.className = 'media-wrapper right-media-wrapper';
 
         // Create left media
         const leftFileUrl = this.pathToFileURL(leftFile.path);
@@ -2098,6 +2263,8 @@ class MediaViewer {
                     this.hideLoadingSpinner();
                     this.isLoading = false;
                     this.mediaNavigationInProgress = false;
+                    // Update prediction badges for both
+                    this.updatePredictionBadges();
                 }
             }
         };
@@ -2150,6 +2317,8 @@ class MediaViewer {
                     this.hideLoadingSpinner();
                     this.isLoading = false;
                     this.mediaNavigationInProgress = false;
+                    // Update prediction badges for both
+                    this.updatePredictionBadges();
                 }
             }
         };
@@ -2188,6 +2357,8 @@ class MediaViewer {
                 this.updateFileInfoWithDimensions(file);
                 // Setup zoom events for the loaded image
                 this.setupZoomEvents(this.currentMedia, 'single');
+                // Update prediction badges
+                this.updatePredictionBadges();
             }
         };
 
@@ -2230,6 +2401,8 @@ class MediaViewer {
                 this.setupVideoProgressTracking();
                 // Setup zoom events for the loaded video
                 this.setupZoomEvents(this.currentMedia, 'single');
+                // Update prediction badges
+                this.updatePredictionBadges();
             }
         };
 
@@ -2540,7 +2713,13 @@ class MediaViewer {
 
     updateNavigationInfo() {
         if (this.isCompareMode && this.mediaFiles.length >= 2) {
-            this.mediaIndex.textContent = `${this.currentIndex + 1}-${this.currentIndex + 2} of ${this.mediaFiles.length}`;
+            // In ML sorted mode, show pair index instead of file indices
+            if (this.isSortedByPrediction && this.predictionScores.size >= 2) {
+                const totalPairs = Math.floor(this.mediaFiles.length / 2);
+                this.mediaIndex.textContent = `Pair ${this.mlComparePairIndex + 1} of ${totalPairs}`;
+            } else {
+                this.mediaIndex.textContent = `${this.currentIndex + 1}-${this.currentIndex + 2} of ${this.mediaFiles.length}`;
+            }
         } else {
             this.mediaIndex.textContent = `${this.currentIndex + 1} of ${this.mediaFiles.length}`;
         }
@@ -2622,11 +2801,27 @@ class MediaViewer {
                     type: secondMove.fileType
                 });
 
+                // Reverse ML model updates for both files
+                if (firstMove.mlFeatures && firstMove.actionType !== 'special') {
+                    this.reverseMlModelUpdate(firstMove.mlFeatures, firstMove.actionType);
+                }
+                if (secondMove.mlFeatures && secondMove.actionType !== 'special') {
+                    this.reverseMlModelUpdate(secondMove.mlFeatures, secondMove.actionType);
+                }
+
                 this.showNotification(`✅ Restored ${firstMove.fileName}`, 'success');
                 this.showNotification(`✅ Restored ${secondMove.fileName}`, 'success');
                 this.updateFolderInfo();
 
-                // Set current index to show the restored pair
+                // Store restored files to display them directly (bypasses ML pair selection)
+                const restoredFirst = this.mediaFiles.find(f => f.path === firstMove.originalPath);
+                const restoredSecond = this.mediaFiles.find(f => f.path === secondMove.originalPath);
+
+                if (restoredFirst && restoredSecond) {
+                    // Set restored pair to be displayed directly
+                    this._restoredPairFiles = { left: restoredFirst, right: restoredSecond };
+                }
+
                 this.currentIndex = this.mediaFiles.length - 2;
 
                 await this.showMedia();
@@ -2661,6 +2856,11 @@ class MediaViewer {
                     type: lastMove.fileType
                 });
 
+                // Reverse ML model update
+                if (lastMove.mlFeatures && lastMove.actionType !== 'special') {
+                    this.reverseMlModelUpdate(lastMove.mlFeatures, lastMove.actionType);
+                }
+
                 this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
                 this.updateFolderInfo();
 
@@ -2677,6 +2877,9 @@ class MediaViewer {
 
     // Compare mode methods
     async toggleViewMode() {
+        // Hide prediction badges before switching modes
+        this.hidePredictionBadges();
+
         // Clean up media from previous mode before switching
         if (this.isCompareMode) {
             // Switching FROM compare TO single - clean up compare media
@@ -2774,22 +2977,40 @@ class MediaViewer {
             return;
         }
 
-        const leftFileIndex = this.currentIndex;
-        const rightFileIndex = this.currentIndex + 1;
-        const leftFile = this.mediaFiles[leftFileIndex];
-        const rightFile = this.mediaFiles[rightFileIndex];
+        // Use stored file references (set by showCompareMedia)
+        const leftFile = this.compareLeftFile;
+        const rightFile = this.compareRightFile;
 
         if (!leftFile || !rightFile) return;
 
+        // Find indices for removal
+        const leftFileIndex = this.mediaFiles.findIndex(f => f.path === leftFile.path);
+        const rightFileIndex = this.mediaFiles.findIndex(f => f.path === rightFile.path);
+
+        if (leftFileIndex === -1 || rightFileIndex === -1) {
+            console.error('Could not find files in mediaFiles array');
+            return;
+        }
+
+        // Get cached ML features (don't extract on main thread - too slow)
+        let leftFeatures = null;
+        let rightFeatures = null;
+        if (this.isMlEnabled && this.mlWorker) {
+            leftFeatures = this.featureCache.get(leftFile.path);
+            rightFeatures = this.featureCache.get(rightFile.path);
+        }
+
         try {
-            // Cleanup both media before moving
+            // Cleanup both media in parallel before moving
+            const cleanupPromises = [];
             if (this.leftMedia) {
-                await this.cleanupCompareMedia('left');
+                cleanupPromises.push(this.cleanupCompareMedia('left'));
             }
             if (this.rightMedia) {
-                await this.cleanupCompareMedia('right');
+                cleanupPromises.push(this.cleanupCompareMedia('right'));
             }
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await Promise.all(cleanupPromises);
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             // Move primary file (the one being rated)
             const primaryFile = primarySide === 'left' ? leftFile : rightFile;
@@ -2816,14 +3037,16 @@ class MediaViewer {
                 throw new Error(primaryMoveResult.error);
             }
 
-            // Store primary move in history
+            // Store primary move in history (include ML features for reversal)
+            const primaryFeatures = primarySide === 'left' ? leftFeatures : rightFeatures;
             this.moveHistory.push({
                 fileName: primaryFile.name,
                 originalPath: primaryFile.path,
                 newPath: primaryMoveResult.targetPath,
                 fileSize: primaryFile.size,
                 fileType: primaryFile.type,
-                actionType: primaryAction
+                actionType: primaryAction,
+                mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null
             });
 
             // Move secondary file (the other one)
@@ -2849,14 +3072,16 @@ class MediaViewer {
                 throw new Error(secondaryMoveResult.error);
             }
 
-            // Store secondary move in history
+            // Store secondary move in history (include ML features for reversal)
+            const secondaryFeatures = primarySide === 'left' ? rightFeatures : leftFeatures;
             this.moveHistory.push({
                 fileName: secondaryFile.name,
                 originalPath: secondaryFile.path,
                 newPath: secondaryMoveResult.targetPath,
                 fileSize: secondaryFile.size,
                 fileType: secondaryFile.type,
-                actionType: secondaryAction
+                actionType: secondaryAction,
+                mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null
             });
 
             // Show notifications (if enabled)
@@ -2876,9 +3101,26 @@ class MediaViewer {
                 );
             }
 
-            // Remove both files from current view
-            this.mediaFiles.splice(rightFileIndex, 1);
-            this.mediaFiles.splice(leftFileIndex, 1);
+            // Update ML model with both ratings (using pre-extracted features from earlier)
+            if (primaryFeatures) {
+                this.updateMlModelWithFeatures(primaryFeatures, primaryAction);
+            }
+            if (secondaryFeatures) {
+                this.updateMlModelWithFeatures(secondaryFeatures, secondaryAction);
+            }
+
+            // Remove both files from current view (remove higher index first to preserve lower index)
+            const higherIndex = Math.max(leftFileIndex, rightFileIndex);
+            const lowerIndex = Math.min(leftFileIndex, rightFileIndex);
+            this.mediaFiles.splice(higherIndex, 1);
+            this.mediaFiles.splice(lowerIndex, 1);
+
+            // Clear stored file references
+            this.compareLeftFile = null;
+            this.compareRightFile = null;
+
+            // Reset ML pair index to show new highest vs lowest
+            this.mlComparePairIndex = 0;
 
             // Adjust current index to ensure we can show a pair
             if (this.currentIndex >= this.mediaFiles.length - 1) {
@@ -3052,60 +3294,6 @@ class MediaViewer {
             // Save original order
             this.originalMediaFiles = [...this.mediaFiles];
 
-            // Load cached hashes
-            const cachedCount = await this.loadHashCache();
-
-            // Show cache location (one notification)
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.hash_cache.json');
-            this.showNotification(`💾 Cache: ${cacheFile} (${cachedCount} hashes loaded)`, 'info');
-
-            // Start progress notification
-            this.updateProgressNotification('🔄 Starting hash computation...');
-
-            let processed = 0;
-            let newHashes = 0;
-            let skipped = 0;
-            const total = this.mediaFiles.length;
-
-            for (const file of this.mediaFiles) {
-                // Check for abort
-                if (this.sortAbortController.signal.aborted) {
-                    throw new Error('Sorting cancelled by user');
-                }
-
-                processed++;
-
-                if (!this.perceptualHashes.has(file.path)) {
-                    try {
-                        const hash = await this.computePerceptualHash(file.path);
-                        this.perceptualHashes.set(file.path, hash);
-                        newHashes++;
-
-                        // Update progress every 5 files or at end
-                        if (processed % 5 === 0 || processed === total) {
-                            this.updateProgressNotification(`🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`);
-                        }
-                    } catch (error) {
-                        console.error(`Failed to compute hash for ${file.path}:`, error);
-                        skipped++;
-                        // Update progress notification instead of showing separate warning
-                        if (processed % 5 === 0 || processed === total) {
-                            this.updateProgressNotification(`🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`);
-                        }
-                    }
-                }
-            }
-
-            // Check if we have enough hashes to sort
-            const filesWithHashes = this.mediaFiles.filter(f => this.perceptualHashes.has(f.path));
-            if (filesWithHashes.length < 2) {
-                throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
-            }
-
-            // Save hash cache
-            await this.saveHashCache();
-
-            // Sort by similarity using selected algorithm
             const algorithmNames = {
                 'vptree': 'VP-Tree (fastest)',
                 'mst': 'MST (best quality)',
@@ -3113,43 +3301,145 @@ class MediaViewer {
             };
             const algorithmName = algorithmNames[this.sortAlgorithm] || this.sortAlgorithm;
 
-            // For Simple algorithm, show K value as separate notification
-            if (this.sortAlgorithm === 'simple') {
+            // Check for cached sort order first
+            const cachedSortData = await this.loadSortCache(this.sortAlgorithm);
+            if (cachedSortData && cachedSortData.sortedPaths.length > 0) {
+                this.updateProgressNotification('🔄 Loading cached sort order...');
+
+                // Load hash cache for inserting new files
+                await this.loadHashCache();
+
+                // Apply cached order
+                const stats = await this.applyCachedSortOrder(cachedSortData);
+
+                // Save updated hash cache if new files were processed
+                if (stats.added > 0) {
+                    await this.saveHashCache();
+                    // Update sort cache with new files included
+                    const currentFile = this.mediaFiles[0];
+                    await this.saveSortCache(
+                        this.sortAlgorithm,
+                        this.mediaFiles.map(f => f.path),
+                        currentFile ? currentFile.path : null
+                    );
+                }
+
+                // Sorting completed from cache!
+                this.isSortedBySimilarity = true;
+                this.currentIndex = 0;
+                this.clearProgressNotification();
+
+                // Show success notification with cache stats
+                let message = `✅ Restored cached ${algorithmName} order`;
+                const details = [];
+                if (stats.cached > 0) details.push(`${stats.cached} cached`);
+                if (stats.added > 0) details.push(`${stats.added} new`);
+                if (stats.removed > 0) details.push(`${stats.removed} removed`);
+                if (details.length > 0) message += ` (${details.join(', ')})`;
+                this.showNotification(message, 'success');
+
+                this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
+            } else {
+                // No cache - perform full sorting
+                // Load cached hashes
+                const cachedCount = await this.loadHashCache();
+
+                // Show cache location (one notification)
+                const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.hash_cache.json');
+                this.showNotification(`💾 Cache: ${cacheFile} (${cachedCount} hashes loaded)`, 'info');
+
+                // Start progress notification
+                this.updateProgressNotification('🔄 Starting hash computation...');
+
+                let processed = 0;
+                let newHashes = 0;
+                let skipped = 0;
+                const total = this.mediaFiles.length;
+
+                for (const file of this.mediaFiles) {
+                    // Check for abort
+                    if (this.sortAbortController.signal.aborted) {
+                        throw new Error('Sorting cancelled by user');
+                    }
+
+                    processed++;
+
+                    if (!this.perceptualHashes.has(file.path)) {
+                        try {
+                            const hash = await this.computePerceptualHash(file.path);
+                            this.perceptualHashes.set(file.path, hash);
+                            newHashes++;
+
+                            // Update progress every 5 files or at end
+                            if (processed % 5 === 0 || processed === total) {
+                                this.updateProgressNotification(`🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`);
+                            }
+                        } catch (error) {
+                            console.error(`Failed to compute hash for ${file.path}:`, error);
+                            skipped++;
+                            // Update progress notification instead of showing separate warning
+                            if (processed % 5 === 0 || processed === total) {
+                                this.updateProgressNotification(`🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`);
+                            }
+                        }
+                    }
+                }
+
+                // Check if we have enough hashes to sort
+                const filesWithHashes = this.mediaFiles.filter(f => this.perceptualHashes.has(f.path));
+                if (filesWithHashes.length < 2) {
+                    throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
+                }
+
+                // Save hash cache
+                await this.saveHashCache();
+
+                // For Simple algorithm, show K value as separate notification
+                if (this.sortAlgorithm === 'simple') {
+                    const savedK = localStorage.getItem('sortKValue');
+                    const kValue = savedK ? parseInt(savedK, 10) : 500;
+                    const maxK = filesWithHashes.length - 1;
+                    const actualK = Math.min(kValue, maxK);
+                    this.showNotification(`🔢 Using K=${actualK} neighbors per file (max: ${maxK})`, 'info');
+                }
+
+                this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
+
+                // Get K value for simple algorithm
                 const savedK = localStorage.getItem('sortKValue');
                 const kValue = savedK ? parseInt(savedK, 10) : 500;
-                const maxK = filesWithHashes.length - 1;
-                const actualK = Math.min(kValue, maxK);
-                this.showNotification(`🔢 Using K=${actualK} neighbors per file (max: ${maxK})`, 'info');
+
+                // Delegate sorting to Web Worker to prevent UI freeze when minimized
+                const sortedPaths = await this.runSortingWorker({
+                    algorithm: this.sortAlgorithm,
+                    mediaFiles: this.mediaFiles.map(f => ({ path: f.path })),
+                    hashes: Object.fromEntries(this.perceptualHashes),
+                    currentIndex: this.currentIndex,
+                    maxComparisons: kValue
+                });
+
+                // Reorder mediaFiles based on sorted paths
+                const pathToFile = new Map(this.mediaFiles.map(f => [f.path, f]));
+                this.mediaFiles = sortedPaths.map(path => pathToFile.get(path)).filter(f => f);
+
+                // Save sort cache for this algorithm
+                const currentFile = this.mediaFiles[this.currentIndex];
+                await this.saveSortCache(
+                    this.sortAlgorithm,
+                    this.mediaFiles.map(f => f.path),
+                    currentFile ? currentFile.path : null
+                );
+
+                // Sorting completed successfully!
+                this.isSortedBySimilarity = true;
+                this.currentIndex = 0;
+                this.clearProgressNotification();
+
+                // Show success notification
+                this.showNotification(`✅ Sorted ${filesWithHashes.length} files with ${algorithmName}!`, 'success');
+
+                this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
             }
-
-            this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
-
-            // Get K value for simple algorithm
-            const savedK = localStorage.getItem('sortKValue');
-            const kValue = savedK ? parseInt(savedK, 10) : 500;
-
-            // Delegate sorting to Web Worker to prevent UI freeze when minimized
-            const sortedPaths = await this.runSortingWorker({
-                algorithm: this.sortAlgorithm,
-                mediaFiles: this.mediaFiles.map(f => ({ path: f.path })),
-                hashes: Object.fromEntries(this.perceptualHashes),
-                currentIndex: this.currentIndex,
-                maxComparisons: kValue
-            });
-
-            // Reorder mediaFiles based on sorted paths
-            const pathToFile = new Map(this.mediaFiles.map(f => [f.path, f]));
-            this.mediaFiles = sortedPaths.map(path => pathToFile.get(path)).filter(f => f);
-
-            // Sorting completed successfully!
-            this.isSortedBySimilarity = true;
-            this.currentIndex = 0;
-            this.clearProgressNotification();
-
-            // Show success notification
-            this.showNotification(`✅ Sorted ${filesWithHashes.length} files with ${algorithmName}!`, 'success');
-
-            this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
 
         } catch (error) {
             console.error('Error sorting by similarity:', error);
@@ -3758,6 +4048,197 @@ class MediaViewer {
         }
     }
 
+    // ==================== SORT CACHE METHODS ====================
+
+    async loadSortCache(algorithm) {
+        if (!this.baseFolderPath) return null;
+
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.sort_cache.json');
+            const cacheData = await window.electronAPI.readFile(cacheFile);
+
+            if (cacheData) {
+                const cache = JSON.parse(cacheData);
+                if (cache[algorithm] && cache[algorithm].sortedPaths) {
+                    return cache[algorithm];
+                }
+            }
+        } catch (error) {
+            // Cache file doesn't exist or is invalid
+            console.log('No sort cache found for algorithm:', algorithm);
+        }
+        return null;
+    }
+
+    async saveSortCache(algorithm, sortedPaths, startFile) {
+        if (!this.baseFolderPath) return;
+
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.sort_cache.json');
+
+            // Load existing cache or create new
+            let cache = {};
+            try {
+                const existingData = await window.electronAPI.readFile(cacheFile);
+                if (existingData) {
+                    cache = JSON.parse(existingData);
+                }
+            } catch (e) {
+                // No existing cache, start fresh
+            }
+
+            // Store only filenames, not full paths
+            const fileNames = [];
+            for (const fullPath of sortedPaths) {
+                const fileName = await window.electronAPI.path.basename(fullPath);
+                fileNames.push(fileName);
+            }
+
+            // Get start file name
+            let startFileName = null;
+            if (startFile) {
+                startFileName = await window.electronAPI.path.basename(startFile);
+            }
+
+            cache[algorithm] = {
+                sortedPaths: fileNames,
+                timestamp: Date.now(),
+                startFile: startFileName,
+                totalFiles: fileNames.length
+            };
+
+            await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
+            console.log(`Sort cache saved for ${algorithm}: ${fileNames.length} files`);
+        } catch (error) {
+            console.error('Failed to save sort cache:', error);
+            this.showNotification('⚠️ Failed to save sort cache', 'warning');
+        }
+    }
+
+    async applyCachedSortOrder(cachedData) {
+        // Get current file names in folder
+        const currentFileNames = new Set();
+        const fileNameToFile = new Map();
+        for (const file of this.mediaFiles) {
+            const fileName = await window.electronAPI.path.basename(file.path);
+            currentFileNames.add(fileName);
+            fileNameToFile.set(fileName, file);
+        }
+
+        // Separate cached files that still exist vs new files
+        const cachedOrder = [];
+        const removedFiles = [];
+        for (const fileName of cachedData.sortedPaths) {
+            if (currentFileNames.has(fileName)) {
+                cachedOrder.push(fileNameToFile.get(fileName));
+                currentFileNames.delete(fileName); // Mark as processed
+            } else {
+                removedFiles.push(fileName);
+            }
+        }
+
+        // Remaining files in currentFileNames are new files
+        const newFiles = [];
+        for (const fileName of currentFileNames) {
+            newFiles.push(fileNameToFile.get(fileName));
+        }
+
+        // If we have new files, find best positions for them
+        if (newFiles.length > 0 && cachedOrder.length > 0) {
+            this.updateProgressNotification(`🔄 Inserting ${newFiles.length} new files...`);
+            await this.insertNewFilesInSortedOrder(cachedOrder, newFiles);
+        } else {
+            // Just use cached order (new files at end if any)
+            this.mediaFiles = [...cachedOrder, ...newFiles];
+        }
+
+        return {
+            cached: cachedOrder.length,
+            removed: removedFiles.length,
+            added: newFiles.length
+        };
+    }
+
+    async insertNewFilesInSortedOrder(sortedFiles, newFiles) {
+        // For each new file, compute hash and find best insertion point
+        const insertions = [];
+
+        for (let i = 0; i < newFiles.length; i++) {
+            const newFile = newFiles[i];
+
+            // Compute hash if not already computed
+            if (!this.perceptualHashes.has(newFile.path)) {
+                try {
+                    const hash = await this.computePerceptualHash(newFile.path);
+                    this.perceptualHashes.set(newFile.path, hash);
+                } catch (error) {
+                    console.warn(`Failed to compute hash for ${newFile.path}:`, error);
+                    // File without hash goes to end
+                    insertions.push({ file: newFile, index: sortedFiles.length, distance: Infinity });
+                    continue;
+                }
+            }
+
+            const newHash = this.perceptualHashes.get(newFile.path);
+            if (!newHash) {
+                insertions.push({ file: newFile, index: sortedFiles.length, distance: Infinity });
+                continue;
+            }
+
+            // Find the best position (minimum distance to neighbors)
+            let bestIndex = sortedFiles.length;
+            let bestScore = Infinity;
+
+            for (let j = 0; j <= sortedFiles.length; j++) {
+                let score = 0;
+                let count = 0;
+
+                // Distance to previous file
+                if (j > 0) {
+                    const prevHash = this.perceptualHashes.get(sortedFiles[j - 1].path);
+                    if (prevHash) {
+                        score += this.calculateHammingDistance(newHash, prevHash);
+                        count++;
+                    }
+                }
+
+                // Distance to next file
+                if (j < sortedFiles.length) {
+                    const nextHash = this.perceptualHashes.get(sortedFiles[j].path);
+                    if (nextHash) {
+                        score += this.calculateHammingDistance(newHash, nextHash);
+                        count++;
+                    }
+                }
+
+                if (count > 0) {
+                    score = score / count; // Average distance to neighbors
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestIndex = j;
+                    }
+                }
+            }
+
+            insertions.push({ file: newFile, index: bestIndex, distance: bestScore });
+
+            if ((i + 1) % 10 === 0 || i === newFiles.length - 1) {
+                this.updateProgressNotification(`🔄 Processing new files: ${i + 1}/${newFiles.length}`);
+            }
+        }
+
+        // Sort insertions by index descending so we can insert without affecting indices
+        insertions.sort((a, b) => b.index - a.index);
+
+        // Insert files at their best positions
+        const result = [...sortedFiles];
+        for (const { file, index } of insertions) {
+            result.splice(index, 0, file);
+        }
+
+        this.mediaFiles = result;
+    }
+
     // ==================== ZOOM METHODS ====================
 
     getZoomTarget(element) {
@@ -3996,6 +4477,1195 @@ class MediaViewer {
                 }
             }
         });
+    }
+
+    // ==================== ML PREDICTION METHODS ====================
+
+    initializeMlWorker() {
+        if (!this.isMlEnabled) return;
+
+        if (this.mlWorker) {
+            this.mlWorker.terminate();
+        }
+
+        try {
+            this.mlWorker = new Worker('ml-worker.js');
+
+            this.mlWorker.onmessage = (e) => {
+                this.handleMlWorkerMessage(e.data);
+            };
+
+            this.mlWorker.onerror = (err) => {
+                console.error('ML Worker error:', err);
+                this.isMlEnabled = false;
+            };
+
+            // Initialize worker (will load saved model if exists)
+            this.mlWorker.postMessage({ type: 'init', data: {} });
+        } catch (err) {
+            console.warn('ML Worker not available:', err);
+            this.isMlEnabled = false;
+        }
+    }
+
+    handleMlWorkerMessage(message) {
+        switch (message.type) {
+            case 'initComplete':
+                console.log('ML Model initialized:', message.stats);
+                this.mlStats = message.stats;
+                this.updateSortPredictionButton();
+                // If model was restored with samples, request scores
+                if (message.stats?.isReady && this.mediaFiles.length > 0) {
+                    this.requestPredictionScores();
+                }
+                break;
+
+            case 'trainComplete':
+                this.mlModelState = message.modelState;
+                this.mlStats = message.stats;
+                this.saveMlModel();
+                if (message.stats.totalSamples > 0) {
+                    this.showNotification(
+                        `ML trained: ${message.stats.positiveCount} likes, ${message.stats.negativeCount} dislikes`,
+                        'success'
+                    );
+                }
+                // Call training complete callback if waiting
+                if (this._trainingCompleteCallback) {
+                    this._trainingCompleteCallback();
+                    this._trainingCompleteCallback = null;
+                }
+                // Trigger re-scoring
+                this.requestPredictionScores();
+                break;
+
+            case 'updateComplete':
+                this.mlModelState = message.modelState;
+                this.mlStats = message.stats;
+                // Debounce model saving to avoid multiple writes
+                if (this._saveModelTimer) {
+                    clearTimeout(this._saveModelTimer);
+                }
+                this._saveModelTimer = setTimeout(() => {
+                    this.saveMlModel();
+                    this._saveModelTimer = null;
+                }, 500);
+                // Debounce re-scoring to avoid multiple calls in quick succession
+                if (this._scoreDebounceTimer) {
+                    clearTimeout(this._scoreDebounceTimer);
+                }
+                this._scoreDebounceTimer = setTimeout(() => {
+                    this.requestPredictionScores();
+                    this.updateSortPredictionButton();
+                    this._scoreDebounceTimer = null;
+                }, 100);
+                break;
+
+            case 'reverseUpdateComplete':
+                // Handle reversed ML update (undo functionality)
+                this.mlModelState = message.modelState;
+                this.mlStats = message.stats;
+                // Debounce model saving
+                if (this._saveModelTimer) {
+                    clearTimeout(this._saveModelTimer);
+                }
+                this._saveModelTimer = setTimeout(() => {
+                    this.saveMlModel();
+                    this._saveModelTimer = null;
+                }, 500);
+                // Re-score after reversal
+                if (this._scoreDebounceTimer) {
+                    clearTimeout(this._scoreDebounceTimer);
+                }
+                this._scoreDebounceTimer = setTimeout(() => {
+                    this.requestPredictionScores();
+                    this.updateSortPredictionButton();
+                    this._scoreDebounceTimer = null;
+                }, 100);
+                break;
+
+            case 'scoreComplete':
+                this.clearProgressNotification(); // Clear "Scoring" progress
+                if (message.scores) {
+                    // Build filename->path map once for O(1) lookups
+                    const filenameToPath = new Map(this.mediaFiles.map(f => [f.name, f.path]));
+                    for (const [filename, score] of Object.entries(message.scores)) {
+                        const path = filenameToPath.get(filename);
+                        if (path) {
+                            this.predictionScores.set(path, score);
+                        }
+                    }
+                    this.updatePredictionBadges();
+                }
+                break;
+
+            case 'sortComplete':
+                this.clearProgressNotification(); // Clear "Scoring" progress
+                if (message.sortedFilenames) {
+                    // Apply sort order
+                    const filenameToFile = new Map(this.mediaFiles.map(f => [f.name, f]));
+                    const sorted = message.sortedFilenames
+                        .map(name => filenameToFile.get(name))
+                        .filter(f => f);
+
+                    if (sorted.length > 0) {
+                        this.mediaFiles = sorted;
+                        this.currentIndex = 0;
+                        this.isSortedByPrediction = true;
+                        this.showMedia();
+                        this.updateSortPredictionButton();
+                        this.showNotification('Sorted by predicted preference', 'success');
+                    } else {
+                        this.showNotification('No files to sort', 'warning');
+                    }
+                } else {
+                    // Sorting failed - show reason
+                    this.showNotification(message.reason || 'Could not sort files', 'warning');
+                }
+                break;
+
+            case 'progress':
+                this.updateProgressNotification(message.message);
+                break;
+
+            case 'error':
+                console.error('ML Worker error:', message.message);
+                break;
+        }
+    }
+
+    async loadMlModel() {
+        if (!this.baseFolderPath || !this.isMlEnabled) return;
+
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
+            const data = await window.electronAPI.readFile(cacheFile);
+
+            if (data) {
+                const parsed = JSON.parse(data);
+                this.mlModelState = parsed.modelState;
+
+                if (this.mlWorker) {
+                    this.mlWorker.postMessage({
+                        type: 'init',
+                        data: { savedModel: this.mlModelState }
+                    });
+                }
+                console.log('ML model loaded from cache');
+            }
+        } catch (error) {
+            console.log('No ML model cache found');
+        }
+    }
+
+    async saveMlModel() {
+        if (!this.baseFolderPath || !this.mlModelState) return;
+
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
+            await window.electronAPI.writeFile(cacheFile, JSON.stringify({
+                version: 1,
+                modelState: this.mlModelState,
+                timestamp: Date.now()
+            }));
+        } catch (error) {
+            console.error('Failed to save ML model:', error);
+        }
+    }
+
+    async loadFeatureCache() {
+        if (!this.baseFolderPath) return 0;
+
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
+            const data = await window.electronAPI.readFile(cacheFile);
+
+            if (data) {
+                const parsed = JSON.parse(data);
+                this.featureCache = new Map();
+                for (const [filename, features] of Object.entries(parsed.features || {})) {
+                    const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
+                    this.featureCache.set(fullPath, new Float32Array(features));
+                }
+                return this.featureCache.size;
+            }
+        } catch (error) {
+            console.log('No feature cache found');
+        }
+        return 0;
+    }
+
+    async saveFeatureCache() {
+        if (!this.baseFolderPath || this.featureCache.size === 0) return;
+
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
+            const features = {};
+
+            for (const [fullPath, featureArray] of this.featureCache.entries()) {
+                const filename = await window.electronAPI.path.basename(fullPath);
+                features[filename] = Array.from(featureArray);
+            }
+
+            await window.electronAPI.writeFile(cacheFile, JSON.stringify({
+                version: 1,
+                features
+            }));
+        } catch (error) {
+            console.error('Failed to save feature cache:', error);
+        }
+    }
+
+    async computeFeatures(filePath) {
+        // Check cache first
+        if (this.featureCache.has(filePath)) {
+            return this.featureCache.get(filePath);
+        }
+
+        return new Promise((resolve, reject) => {
+            const isVideo = /\.(mp4|webm|mov)$/i.test(filePath);
+            const timeout = setTimeout(() => reject(new Error('Timeout')), 30000);
+
+            const cleanup = () => clearTimeout(timeout);
+
+            const processImageData = (imageData) => {
+                try {
+                    // Feature extraction using extractFeatures from feature-extractor.js
+                    const features = extractFeatures(imageData);
+                    this.featureCache.set(filePath, features);
+                    cleanup();
+                    resolve(features);
+                } catch (error) {
+                    cleanup();
+                    reject(error);
+                }
+            };
+
+            if (isVideo) {
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                video.muted = true;
+
+                video.addEventListener('loadeddata', () => {
+                    video.currentTime = 0.1;
+                });
+
+                video.addEventListener('seeked', () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 256;
+                    canvas.height = 256;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0, 256, 256);
+                    const imageData = ctx.getImageData(0, 0, 256, 256);
+                    video.src = '';
+                    processImageData(imageData);
+                });
+
+                video.addEventListener('error', () => {
+                    video.src = '';
+                    cleanup();
+                    reject(new Error('Video load error'));
+                });
+
+                video.src = filePath;
+            } else {
+                const img = new Image();
+
+                img.addEventListener('load', () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 256;
+                    canvas.height = 256;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, 256, 256);
+                    const imageData = ctx.getImageData(0, 0, 256, 256);
+                    processImageData(imageData);
+                });
+
+                img.addEventListener('error', () => {
+                    cleanup();
+                    reject(new Error('Image load error'));
+                });
+
+                img.src = filePath;
+            }
+        });
+    }
+
+    async trainFromHistoricalRatings() {
+        if (!this.isMlEnabled || !this.mlWorker) return;
+        if (!this.customLikeFolder || !this.customDislikeFolder) return;
+
+        try {
+            // Load files from like folder
+            const likedResult = await window.electronAPI.loadFolder(this.customLikeFolder);
+            const dislikedResult = await window.electronAPI.loadFolder(this.customDislikeFolder);
+
+            if (!likedResult.success && !dislikedResult.success) {
+                console.log('No historical ratings found');
+                return;
+            }
+
+            const likedFiles = likedResult.success ? likedResult.files : [];
+            const dislikedFiles = dislikedResult.success ? dislikedResult.files : [];
+
+            if (likedFiles.length === 0 && dislikedFiles.length === 0) {
+                console.log('No historical ratings to train from');
+                return;
+            }
+
+            this.updateProgressNotification('Loading historical ratings...');
+
+            const likedFeatures = [];
+            const dislikedFeatures = [];
+
+            // Extract features from liked files
+            for (let i = 0; i < likedFiles.length; i++) {
+                const file = likedFiles[i];
+                try {
+                    const features = await this.computeFeatures(file.path);
+                    likedFeatures.push(Array.from(features));
+
+                    if ((i + 1) % 10 === 0) {
+                        this.updateProgressNotification(`Processing likes: ${i + 1}/${likedFiles.length}`);
+                    }
+                } catch (err) {
+                    console.warn(`Skipping ${file.name}:`, err.message);
+                }
+            }
+
+            // Extract features from disliked files
+            for (let i = 0; i < dislikedFiles.length; i++) {
+                const file = dislikedFiles[i];
+                try {
+                    const features = await this.computeFeatures(file.path);
+                    dislikedFeatures.push(Array.from(features));
+
+                    if ((i + 1) % 10 === 0) {
+                        this.updateProgressNotification(`Processing dislikes: ${i + 1}/${dislikedFiles.length}`);
+                    }
+                } catch (err) {
+                    console.warn(`Skipping ${file.name}:`, err.message);
+                }
+            }
+
+            // Send to ML worker for training
+            if (likedFeatures.length > 0 || dislikedFeatures.length > 0) {
+                this.mlWorker.postMessage({
+                    type: 'trainHistorical',
+                    data: { likedFeatures, dislikedFeatures }
+                });
+            }
+
+            this.clearProgressNotification();
+        } catch (error) {
+            console.error('Error training from historical:', error);
+            this.clearProgressNotification();
+        }
+    }
+
+    /**
+     * Train from historical ratings and wait for completion
+     * Returns a promise that resolves when training is complete
+     */
+    async trainFromHistoricalRatingsAndWait() {
+        return new Promise(async (resolve) => {
+            // Store resolve callback to be called when trainReady is received
+            this._trainingCompleteCallback = resolve;
+
+            await this.trainFromHistoricalRatings();
+
+            // If no training happened (no files), resolve immediately
+            if (!this.customLikeFolder || !this.customDislikeFolder) {
+                this._trainingCompleteCallback = null;
+                resolve();
+            }
+
+            // Set a timeout in case training never responds
+            setTimeout(() => {
+                if (this._trainingCompleteCallback) {
+                    this._trainingCompleteCallback = null;
+                    resolve();
+                }
+            }, 30000); // 30 second timeout
+        });
+    }
+
+    async requestPredictionScores() {
+        if (!this.isMlEnabled || !this.mlWorker) return;
+
+        // Only use cached features - background extraction handles the actual extraction
+        // This prevents duplicate progress indicators and competing extraction processes
+        const allFeatures = {};
+
+        for (const file of this.mediaFiles) {
+            const features = this.featureCache.get(file.path);
+            if (features) {
+                allFeatures[file.name] = Array.from(features);
+            }
+        }
+
+        if (Object.keys(allFeatures).length > 0) {
+            this.mlWorker.postMessage({
+                type: 'scoreAll',
+                data: { allFeatures }
+            });
+        }
+    }
+
+    updatePredictionBadges() {
+        // Only show badges when ML sorting is applied
+        if (!this.showPredictionBadges || !this.isSortedByPrediction) {
+            this.hidePredictionBadges();
+            return;
+        }
+
+        // For single mode - update current media and hide compare badges
+        if (!this.isCompareMode) {
+            // Hide compare mode badges
+            const leftBadge = document.getElementById('prediction-badge-left');
+            const rightBadge = document.getElementById('prediction-badge-right');
+            if (leftBadge) leftBadge.style.display = 'none';
+            if (rightBadge) rightBadge.style.display = 'none';
+
+            const currentFile = this.mediaFiles[this.currentIndex];
+            if (currentFile) {
+                const score = this.predictionScores.get(currentFile.path);
+                this.displayPredictionBadge(score, 'single');
+            }
+        } else {
+            // Hide single mode badge
+            const singleBadge = document.getElementById('prediction-badge-single');
+            if (singleBadge) singleBadge.style.display = 'none';
+
+            // For compare mode - use stored references (may be ML-selected or currentIndex-based)
+            const leftFile = this.compareLeftFile;
+            const rightFile = this.compareRightFile;
+
+            if (leftFile) {
+                const leftScore = this.predictionScores.get(leftFile.path);
+                this.displayPredictionBadge(leftScore, 'left');
+            }
+            if (rightFile) {
+                const rightScore = this.predictionScores.get(rightFile.path);
+                this.displayPredictionBadge(rightScore, 'right');
+            }
+        }
+    }
+
+    displayPredictionBadge(score, position) {
+        const containerId = `prediction-badge-${position}`;
+        let badge = document.getElementById(containerId);
+
+        if (score === undefined || score === null || !this.mlStats?.isReady) {
+            if (badge) badge.style.display = 'none';
+            return;
+        }
+
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.id = containerId;
+            badge.className = 'prediction-badge';
+
+            // Add to appropriate container
+            let container;
+            if (position === 'single') {
+                container = this.mediaContainer;
+            } else if (position === 'left') {
+                container = document.querySelector('.left-media-wrapper');
+            } else if (position === 'right') {
+                container = document.querySelector('.right-media-wrapper');
+            }
+
+            if (container) {
+                container.appendChild(badge);
+            }
+        }
+
+        const percentage = Math.round(score * 100);
+        badge.textContent = `${percentage}%`;
+        badge.className = `prediction-badge ${score >= 0.6 ? 'high' : score >= 0.4 ? 'medium' : 'low'}`;
+        badge.style.display = 'block';
+    }
+
+    hidePredictionBadges() {
+        ['single', 'left', 'right'].forEach(pos => {
+            const badge = document.getElementById(`prediction-badge-${pos}`);
+            if (badge) badge.style.display = 'none';
+        });
+    }
+
+    updateSortPredictionButton() {
+        if (!this.sortPredictionBtn) return;
+
+        const hasScores = this.predictionScores.size > 0;
+        const isReady = this.mlStats?.isReady;
+        const likesCount = this.mlStats?.positiveCount || 0;
+        const dislikesCount = this.mlStats?.negativeCount || 0;
+
+        // Button is enabled if model is ready and has scores
+        this.sortPredictionBtn.disabled = !isReady;
+        this.sortPredictionBtn.style.display = this.isMlEnabled ? 'inline-flex' : 'none';
+
+        // Update label based on state
+        const labelEl = this.sortPredictionBtn.querySelector('.btn-label');
+        if (this.isSortedByPrediction) {
+            labelEl.textContent = 'Restore Order';
+            this.sortPredictionBtn.title = 'Click to restore original order';
+        } else if (!isReady) {
+            const needLikes = Math.max(0, 3 - likesCount);
+            const needDislikes = Math.max(0, 3 - dislikesCount);
+            labelEl.textContent = `Need ${needLikes}+ likes, ${needDislikes}+ dislikes`;
+            this.sortPredictionBtn.title = 'Rate more files to enable prediction sorting';
+        } else {
+            labelEl.textContent = 'Sort by Predicted';
+            this.sortPredictionBtn.title = 'Sort by predicted preference (learned from your ratings)';
+        }
+    }
+
+    async handleSortByPrediction() {
+        if (!this.isMlEnabled || !this.mlWorker) {
+            this.showNotification('ML prediction is disabled', 'warning');
+            return;
+        }
+
+        // Toggle sorting
+        if (this.isSortedByPrediction) {
+            // Restore original order, but only for files that still exist
+            if (this.originalMediaFiles.length > 0) {
+                // Filter to only files that are still in the current list (not moved/rated)
+                const currentPaths = new Set(this.mediaFiles.map(f => f.path));
+                this.mediaFiles = this.originalMediaFiles.filter(f => currentPaths.has(f.path));
+            }
+            this.isSortedByPrediction = false;
+            this.mlComparePairIndex = 0; // Reset ML pair index
+            this.currentIndex = 0;
+            await this.showMedia();
+            this.updateSortPredictionButton();
+            this.showNotification('Restored original order', 'info');
+            return;
+        }
+
+        // Train from historical ratings if not already trained
+        if (!this.mlStats?.isReady) {
+            this.showNotification('Training model from historical ratings...', 'info');
+            await this.trainFromHistoricalRatingsAndWait();
+            this.updateSortPredictionButton();
+        }
+
+        // Check if model is ready after training
+        if (!this.mlStats?.isReady) {
+            this.showNotification(
+                `Need more ratings (${this.mlStats?.positiveCount || 0} likes, ${this.mlStats?.negativeCount || 0} dislikes)`,
+                'warning'
+            );
+            return;
+        }
+
+        // Save original order
+        this.originalMediaFiles = [...this.mediaFiles];
+
+        // Check how many files need feature extraction
+        const uncachedFiles = this.mediaFiles.filter(f => !this.featureCache.has(f.path));
+
+        if (uncachedFiles.length > 0) {
+            // Start background extraction and wait for completion
+            this.showNotification(`Extracting features for ${uncachedFiles.length} files...`, 'info');
+            await this.startBackgroundFeatureExtraction();
+        }
+
+        // Collect all features from cache
+        const allFeatures = {};
+        for (const file of this.mediaFiles) {
+            const features = this.featureCache.get(file.path);
+            if (features) {
+                allFeatures[file.name] = Array.from(features);
+            }
+        }
+
+        if (Object.keys(allFeatures).length === 0) {
+            this.showNotification('Could not extract features from any files', 'error');
+            return;
+        }
+
+        console.log(`Sending ${Object.keys(allFeatures).length} files for ML sorting`);
+
+        this.mlWorker.postMessage({
+            type: 'getSortedOrder',
+            data: { allFeatures }
+        });
+    }
+
+    async updateMlModelAfterRating(filePath, actionType) {
+        if (!this.isMlEnabled || !this.mlWorker) return;
+
+        let features = this.featureCache.get(filePath);
+        if (!features) {
+            try {
+                features = await this.computeFeatures(filePath);
+            } catch (err) {
+                console.warn('Could not extract features for ML update:', err);
+                return;
+            }
+        }
+
+        this.mlWorker.postMessage({
+            type: 'update',
+            data: {
+                features: Array.from(features),
+                label: actionType === 'like' ? 1 : 0
+            }
+        });
+    }
+
+    /**
+     * Update ML model with pre-extracted features (used when file will be moved)
+     */
+    updateMlModelWithFeatures(features, actionType) {
+        if (!this.isMlEnabled || !this.mlWorker || !features) return;
+
+        this.mlWorker.postMessage({
+            type: 'update',
+            data: {
+                features: Array.from(features),
+                label: actionType === 'like' ? 1 : 0
+            }
+        });
+    }
+
+    /**
+     * Reverse a previous ML model update (for undo functionality)
+     * @param {Float32Array|number[]} features - Feature vector of the sample
+     * @param {string} actionType - Original action ('like' or 'dislike')
+     */
+    reverseMlModelUpdate(features, actionType) {
+        if (!this.isMlEnabled || !this.mlWorker || !features) return;
+
+        this.mlWorker.postMessage({
+            type: 'reverseUpdate',
+            data: {
+                features: Array.from(features),
+                label: actionType === 'like' ? 1 : 0
+            }
+        });
+    }
+
+    /**
+     * Extract features from currently displayed media element (single mode)
+     */
+    async extractFeaturesFromDisplayedMedia() {
+        return this.extractFeaturesFromMediaElement(this.currentMedia);
+    }
+
+    /**
+     * Extract features from a media element (image or video)
+     */
+    async extractFeaturesFromMediaElement(mediaElement) {
+        if (!mediaElement) return null;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+
+        if (mediaElement.tagName === 'VIDEO') {
+            // Draw current video frame
+            ctx.drawImage(mediaElement, 0, 0, 256, 256);
+        } else if (mediaElement.tagName === 'IMG') {
+            // Draw image
+            ctx.drawImage(mediaElement, 0, 0, 256, 256);
+        } else {
+            return null;
+        }
+
+        const imageData = ctx.getImageData(0, 0, 256, 256);
+        return extractFeatures(imageData);
+    }
+
+    // ==================== FEATURE EXTRACTION WORKER POOL ====================
+
+    /**
+     * Initialize the feature extraction worker pool
+     */
+    initializeFeaturePool() {
+        // Terminate any existing workers
+        this.shutdownFeaturePool();
+
+        try {
+            for (let i = 0; i < this.featureWorkerCount; i++) {
+                const worker = new Worker('feature-worker.js');
+                worker.busy = false;
+                worker.index = i;
+
+                worker.onmessage = (e) => this.handleFeatureWorkerMessage(i, e.data);
+                worker.onerror = (err) => this.handleFeatureWorkerError(i, err);
+
+                this.featureWorkers.push(worker);
+            }
+
+            console.log(`Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
+
+            // Start auto-save interval (every 30 seconds)
+            this.startFeatureCacheAutoSave();
+        } catch (err) {
+            console.warn('Failed to initialize feature workers:', err);
+        }
+    }
+
+    /**
+     * Shutdown the feature extraction worker pool
+     */
+    shutdownFeaturePool() {
+        this.stopFeatureCacheAutoSave();
+        this.cancelBackgroundExtraction();
+
+        for (const worker of this.featureWorkers) {
+            try {
+                worker.terminate();
+            } catch (e) {
+                // Ignore termination errors
+            }
+        }
+
+        this.featureWorkers = [];
+        this.featureTaskQueue = [];
+
+        // Reject all pending tasks
+        for (const [taskId, task] of this.featurePendingTasks) {
+            task.reject(new Error('Worker pool shutdown'));
+        }
+        this.featurePendingTasks.clear();
+    }
+
+    /**
+     * Handle message from a feature extraction worker
+     * @param {number} workerIndex - Index of the worker
+     * @param {Object} message - Message from worker
+     */
+    handleFeatureWorkerMessage(workerIndex, message) {
+        const worker = this.featureWorkers[workerIndex];
+        if (!worker) return;
+
+        switch (message.type) {
+            case 'result': {
+                const task = this.featurePendingTasks.get(message.id);
+                if (task) {
+                    // Store in cache
+                    const features = new Float32Array(message.features);
+                    this.featureCache.set(task.filePath, features);
+                    this.featureCacheDirty = true;
+
+                    task.resolve(features);
+                    this.featurePendingTasks.delete(message.id);
+                }
+
+                worker.busy = false;
+                this.dispatchNextFeatureTask();
+                break;
+            }
+
+            case 'error': {
+                const task = this.featurePendingTasks.get(message.id);
+                if (task) {
+                    if (task.retries < 2) {
+                        // Retry the task
+                        task.retries++;
+                        this.featureTaskQueue.unshift(task);
+                        console.warn(`Retrying feature extraction for ${task.filePath} (attempt ${task.retries + 1})`);
+                    } else {
+                        task.reject(new Error(message.message));
+                    }
+                    this.featurePendingTasks.delete(message.id);
+                }
+
+                worker.busy = false;
+                this.dispatchNextFeatureTask();
+                break;
+            }
+
+            case 'progress':
+                // Progress from batch operations (not used for single extractions)
+                break;
+        }
+    }
+
+    /**
+     * Handle error from a feature extraction worker
+     * @param {number} workerIndex - Index of the worker
+     * @param {Error} error - Error object
+     */
+    handleFeatureWorkerError(workerIndex, error) {
+        console.error(`Feature worker ${workerIndex} error:`, error);
+
+        // Respawn the crashed worker
+        try {
+            const oldWorker = this.featureWorkers[workerIndex];
+            if (oldWorker) {
+                oldWorker.terminate();
+            }
+
+            const newWorker = new Worker('feature-worker.js');
+            newWorker.busy = false;
+            newWorker.index = workerIndex;
+            newWorker.onmessage = (e) => this.handleFeatureWorkerMessage(workerIndex, e.data);
+            newWorker.onerror = (err) => this.handleFeatureWorkerError(workerIndex, err);
+
+            this.featureWorkers[workerIndex] = newWorker;
+            console.log(`Feature worker ${workerIndex} respawned`);
+
+            this.dispatchNextFeatureTask();
+        } catch (err) {
+            console.error(`Failed to respawn feature worker ${workerIndex}:`, err);
+        }
+    }
+
+    /**
+     * Calculate priority for a file based on distance from current index
+     * Lower value = higher priority
+     * @param {number} fileIndex - Index of the file in mediaFiles
+     * @returns {number} Priority value
+     */
+    calculateFeaturePriority(fileIndex) {
+        const distance = Math.abs(fileIndex - this.currentIndex);
+        // Slightly prefer forward direction
+        const direction = fileIndex >= this.currentIndex ? 0 : 1;
+        return distance * 2 + direction;
+    }
+
+    /**
+     * Enqueue a file for feature extraction
+     * @param {string} filePath - Path to the file
+     * @param {ImageData} imageData - Extracted image data
+     * @param {number} priority - Priority value (lower = higher priority)
+     * @returns {Promise<Float32Array>} Promise resolving to features
+     */
+    enqueueFeatureExtraction(filePath, imageData, priority) {
+        // Check cache first
+        if (this.featureCache.has(filePath)) {
+            return Promise.resolve(this.featureCache.get(filePath));
+        }
+
+        const taskId = ++this.featureTaskIdCounter;
+
+        return new Promise((resolve, reject) => {
+            const task = {
+                id: taskId,
+                filePath,
+                imageData,
+                priority,
+                retries: 0,
+                resolve,
+                reject
+            };
+
+            // Insert into priority queue (sorted by priority)
+            const insertIndex = this.featureTaskQueue.findIndex(t => t.priority > priority);
+            if (insertIndex === -1) {
+                this.featureTaskQueue.push(task);
+            } else {
+                this.featureTaskQueue.splice(insertIndex, 0, task);
+            }
+
+            this.dispatchNextFeatureTask();
+        });
+    }
+
+    /**
+     * Dispatch the next task to an available worker
+     */
+    dispatchNextFeatureTask() {
+        if (this.featureTaskQueue.length === 0) return;
+
+        // Find an available worker
+        const availableWorker = this.featureWorkers.find(w => !w.busy);
+        if (!availableWorker) return;
+
+        const task = this.featureTaskQueue.shift();
+        availableWorker.busy = true;
+
+        this.featurePendingTasks.set(task.id, task);
+
+        // Send to worker
+        availableWorker.postMessage({
+            type: 'extract',
+            data: {
+                id: task.id,
+                pixels: task.imageData.data,
+                width: task.imageData.width,
+                height: task.imageData.height
+            }
+        });
+    }
+
+    /**
+     * Cancel all pending feature extractions
+     */
+    cancelPendingFeatureExtractions() {
+        // Clear the queue
+        for (const task of this.featureTaskQueue) {
+            task.reject(new Error('Extraction cancelled'));
+        }
+        this.featureTaskQueue = [];
+
+        // Note: We don't cancel in-flight tasks, they will complete and be ignored
+    }
+
+    /**
+     * Load media file and extract ImageData for worker processing
+     * @param {string} filePath - Path to the media file
+     * @returns {Promise<ImageData>} Promise resolving to ImageData
+     */
+    loadMediaAsImageData(filePath) {
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Media load timeout'));
+            }, 15000);
+
+            const cleanup = () => clearTimeout(timeout);
+
+            const processMedia = (mediaElement) => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 256;
+                    canvas.height = 256;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(mediaElement, 0, 0, 256, 256);
+                    const imageData = ctx.getImageData(0, 0, 256, 256);
+                    cleanup();
+                    resolve(imageData);
+                } catch (err) {
+                    cleanup();
+                    reject(err);
+                }
+            };
+
+            const isVideo = /\.(mp4|webm|mov)$/i.test(filePath);
+
+            if (isVideo) {
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                video.muted = true;
+
+                video.addEventListener('loadeddata', () => {
+                    video.currentTime = 0.1;
+                });
+
+                video.addEventListener('seeked', () => {
+                    processMedia(video);
+                    video.src = '';
+                });
+
+                video.addEventListener('error', () => {
+                    cleanup();
+                    reject(new Error('Video load error'));
+                });
+
+                video.src = filePath;
+            } else {
+                const img = new Image();
+
+                img.addEventListener('load', () => {
+                    processMedia(img);
+                });
+
+                img.addEventListener('error', () => {
+                    cleanup();
+                    reject(new Error('Image load error'));
+                });
+
+                img.src = filePath;
+            }
+        });
+    }
+
+    /**
+     * Start background feature extraction for all uncached files
+     */
+    async startBackgroundFeatureExtraction() {
+        if (this.featureWorkers.length === 0 || this.mediaFiles.length === 0) {
+            return;
+        }
+
+        // Cancel any existing background extraction
+        this.cancelBackgroundExtraction();
+
+        this.isBackgroundExtracting = true;
+        this.backgroundExtractionAbort = new AbortController();
+
+        // Show subtle progress indicator
+        this.showBackgroundExtractionProgress(0, this.mediaFiles.length);
+
+        // Get files that need extraction (not in cache)
+        const filesToProcess = this.mediaFiles
+            .map((file, index) => ({ file, index }))
+            .filter(({ file }) => !this.featureCache.has(file.path));
+
+        if (filesToProcess.length === 0) {
+            this.isBackgroundExtracting = false;
+            this.hideBackgroundExtractionProgress();
+            return;
+        }
+
+        // Sort by priority (distance from current index)
+        filesToProcess.sort((a, b) =>
+            this.calculateFeaturePriority(a.index) - this.calculateFeaturePriority(b.index)
+        );
+
+        let completedCount = this.mediaFiles.length - filesToProcess.length;
+        const totalCount = this.mediaFiles.length;
+
+        // Process in batches to avoid memory pressure
+        const BATCH_SIZE = 10;
+        for (let i = 0; i < filesToProcess.length; i += BATCH_SIZE) {
+            if (this.backgroundExtractionAbort?.signal.aborted) {
+                break;
+            }
+
+            const batch = filesToProcess.slice(i, i + BATCH_SIZE);
+            const promises = [];
+
+            for (const { file, index } of batch) {
+                if (this.backgroundExtractionAbort?.signal.aborted) {
+                    break;
+                }
+
+                try {
+                    const imageData = await this.loadMediaAsImageData(file.path);
+                    const priority = this.calculateFeaturePriority(index);
+                    const promise = this.enqueueFeatureExtraction(file.path, imageData, priority)
+                        .then(() => {
+                            completedCount++;
+                            this.showBackgroundExtractionProgress(completedCount, totalCount);
+                        })
+                        .catch(err => {
+                            console.warn(`Feature extraction failed for ${file.name}:`, err.message);
+                            completedCount++;
+                            this.showBackgroundExtractionProgress(completedCount, totalCount);
+                        });
+                    promises.push(promise);
+                } catch (err) {
+                    console.warn(`Failed to load ${file.name}:`, err.message);
+                    completedCount++;
+                }
+            }
+
+            // Wait for batch to complete
+            await Promise.all(promises);
+        }
+
+        this.isBackgroundExtracting = false;
+        this.hideBackgroundExtractionProgress();
+
+        // Save cache after extraction
+        if (this.featureCacheDirty) {
+            await this.saveFeatureCache();
+            this.featureCacheDirty = false;
+        }
+
+        console.log('Background feature extraction complete');
+
+        // Trigger ML scoring if enabled and model is ready
+        if (this.isMlEnabled && this.mlStats?.isReady) {
+            this.requestPredictionScores();
+        }
+    }
+
+    /**
+     * Cancel background feature extraction
+     */
+    cancelBackgroundExtraction() {
+        if (this.backgroundExtractionAbort) {
+            this.backgroundExtractionAbort.abort();
+            this.backgroundExtractionAbort = null;
+        }
+
+        this.cancelPendingFeatureExtractions();
+        this.isBackgroundExtracting = false;
+        this.hideBackgroundExtractionProgress();
+    }
+
+    /**
+     * Show subtle background extraction progress indicator
+     * @param {number} current - Current count
+     * @param {number} total - Total count
+     */
+    showBackgroundExtractionProgress(current, total) {
+        let indicator = document.getElementById('featureExtractionProgress');
+
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'featureExtractionProgress';
+            indicator.style.cssText = `
+                position: fixed;
+                bottom: 10px;
+                left: 10px;
+                background: rgba(0, 0, 0, 0.7);
+                color: #fff;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 12px;
+                z-index: 1000;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                backdrop-filter: blur(4px);
+            `;
+            document.body.appendChild(indicator);
+        }
+
+        const percentage = Math.round((current / total) * 100);
+        indicator.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+                <path d="M12 2v4m0 12v4m-7-7H3m18 0h-2M5.6 5.6l1.4 1.4m9.9 9.9l1.4 1.4M5.6 18.4l1.4-1.4m9.9-9.9l1.4-1.4"/>
+            </svg>
+            <span>Extracting features: ${current}/${total} (${percentage}%)</span>
+        `;
+
+        // Add spin animation if not already present
+        if (!document.getElementById('featureExtractionSpinStyle')) {
+            const style = document.createElement('style');
+            style.id = 'featureExtractionSpinStyle';
+            style.textContent = `
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+
+    /**
+     * Hide background extraction progress indicator
+     */
+    hideBackgroundExtractionProgress() {
+        const indicator = document.getElementById('featureExtractionProgress');
+        if (indicator) {
+            indicator.remove();
+        }
+    }
+
+    /**
+     * Start auto-save interval for feature cache
+     */
+    startFeatureCacheAutoSave() {
+        this.stopFeatureCacheAutoSave();
+
+        this.featureCacheAutoSaveInterval = setInterval(async () => {
+            if (this.featureCacheDirty && this.baseFolderPath) {
+                await this.saveFeatureCache();
+                this.featureCacheDirty = false;
+            }
+        }, 30000); // Every 30 seconds
+    }
+
+    /**
+     * Stop auto-save interval
+     */
+    stopFeatureCacheAutoSave() {
+        if (this.featureCacheAutoSaveInterval) {
+            clearInterval(this.featureCacheAutoSaveInterval);
+            this.featureCacheAutoSaveInterval = null;
+        }
     }
 }
 
