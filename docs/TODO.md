@@ -22,6 +22,10 @@
   - Added setting to disable rating confirmation notifications (F1 → Settings)
   - Changed media info from hover to click-to-show (ℹ button or I key)
 
+- [ ] **Video fullscreen toggle on second click** — Clicking on a video a second time when it is open in fullscreen mode should close fullscreen, not zoom in
+
+- [ ] **Visual media scale controls** — Add a visual interface for manipulating media scale (zoom) in both fullscreen and normal modes. Should work in both single mode and compare mode
+
 - [x] **Unused skip button in media player** — The "skip to next" button in media player is redundant since there are already prev/next media navigation buttons
   - Replaced single skip button with two buttons: ⏪ (10s backward) and ⏩ (10s forward)
   - Added `skipVideo(seconds)` method for video time navigation

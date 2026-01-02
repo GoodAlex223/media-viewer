@@ -3211,10 +3211,10 @@ class MediaViewer {
                 }, 100);
             }
 
-            // Click to exit (but not on video controls)
+            // Click to exit (but not on overlay buttons)
             const exitHandler = (e) => {
-                // Don't exit if clicking on video controls
-                if (video && e.target === video) {
+                // Don't exit if clicking on overlay buttons (like/dislike/special)
+                if (e.target.closest('.overlay-btn') || e.target.closest('.media-overlay-controls')) {
                     return;
                 }
                 this.exitFullscreen(wrapper);
@@ -4457,20 +4457,26 @@ class MediaViewer {
     setupZoomEvents(element, target) {
         if (!element) return;
 
-        // Double-click to cycle zoom
+        // Helper to check if element is in fullscreen mode
+        const isInFullscreen = () => element.closest('.fullscreen') !== null;
+
+        // Double-click to cycle zoom (disabled in fullscreen - click exits instead)
         element.addEventListener('dblclick', (e) => {
+            if (isInFullscreen()) return;
             e.preventDefault();
             e.stopPropagation();
             this.cycleZoomStep(target, e.clientX, e.clientY);
         });
 
-        // Wheel zoom
+        // Wheel zoom (disabled in fullscreen)
         element.addEventListener('wheel', (e) => {
+            if (isInFullscreen()) return;
             this.handleWheelZoom(e, target);
         }, { passive: false });
 
-        // Pan start
+        // Pan start (disabled in fullscreen)
         element.addEventListener('mousedown', (e) => {
+            if (isInFullscreen()) return;
             if (e.button === 0) { // Left click only
                 if (this.handlePanStart(e, target)) {
                     e.preventDefault();
