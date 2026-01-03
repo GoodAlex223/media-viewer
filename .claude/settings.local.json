@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(python -m py_compile:*)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "(?i)(implement|create|add|build|refactor|fix|update|change|modify|write|develop|design)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Knowledge Sources] Before planning this task, consult: docs/README.md (index), docs/TODO.md (active tasks), docs/PROJECT_CONTEXT.md (patterns/decisions). See CLAUDE.md#knowledge-sources for full protocol.'",
+            "statusMessage": "Checking documentation requirements..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q 'docs/'; then echo '[Doc Maintenance] Documentation modified. Remember: update Last Updated date, index new docs in docs/README.md.'; fi"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Session Start] Documentation index: docs/README.md | Active tasks: docs/TODO.md | Project patterns: docs/PROJECT_CONTEXT.md'"
+          }
+        ]
+      }
+    ]
+  }
+}

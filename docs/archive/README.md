@@ -31,4 +31,23 @@ If you need information from an archived document:
 
 ---
 
-*Last Updated: 2025-12-29*
+## Plan Archive Process
+
+```text
+docs/plans/YYYY-MM-DD_task.md  →  docs/archive/plans/YYYY-MM-DD_task.md
+```
+
+Before archiving a plan, verify:
+
+- All steps marked complete
+- "Key Discoveries" section filled
+- "Future Improvements" has 2+ items
+- Improvements extracted to BACKLOG.md (categorized appropriately)
+- Summary added to docs/planning/DONE.md
+- .claude/plans/ copy deleted (if exists)
+
+**See [plans/README.md](plans/README.md) for complete step-by-step archive process.**
+
+---
+
+*Last Updated: 2026-01-03*

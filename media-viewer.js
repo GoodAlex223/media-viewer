@@ -1038,6 +1038,10 @@ class MediaViewer {
             // Remove current file from array
             this.mediaFiles.splice(this.currentIndex, 1);
 
+            // Clean up caches for removed file
+            this.predictionScores.delete(currentFile.path);
+            this.featureCache.delete(currentFile.path);
+
             // Adjust current index if necessary
             if (this.currentIndex >= this.mediaFiles.length) {
                 this.currentIndex = 0;
@@ -1142,6 +1146,10 @@ class MediaViewer {
 
             // Remove file from array
             this.mediaFiles.splice(fileIndex, 1);
+
+            // Clean up caches for removed file
+            this.predictionScores.delete(fileToMove.path);
+            this.featureCache.delete(fileToMove.path);
 
             // Adjust current index if necessary
             if (this.currentIndex >= this.mediaFiles.length) {
@@ -1307,8 +1315,9 @@ class MediaViewer {
         // Left file info toggle click to copy filename
         if (this.leftFileInfoToggle) {
             this.leftFileInfoToggle.addEventListener('click', async () => {
-                if (this.mediaFiles.length > 1 && this.currentIndex < this.mediaFiles.length) {
-                    const leftFile = this.mediaFiles[this.currentIndex];
+                // Use stored file reference (works for both AI-sorted and regular mode)
+                const leftFile = this.compareLeftFile;
+                if (leftFile) {
                     try {
                         await navigator.clipboard.writeText(leftFile.name);
                         this.showNotification('📋 Left filename copied!', 'success');
@@ -1323,8 +1332,9 @@ class MediaViewer {
         // Right file info toggle click to copy filename
         if (this.rightFileInfoToggle) {
             this.rightFileInfoToggle.addEventListener('click', async () => {
-                if (this.mediaFiles.length > 1 && this.currentIndex + 1 < this.mediaFiles.length) {
-                    const rightFile = this.mediaFiles[this.currentIndex + 1];
+                // Use stored file reference (works for both AI-sorted and regular mode)
+                const rightFile = this.compareRightFile;
+                if (rightFile) {
                     try {
                         await navigator.clipboard.writeText(rightFile.name);
                         this.showNotification('📋 Right filename copied!', 'success');
@@ -2246,10 +2256,9 @@ class MediaViewer {
                 media.style.display = 'block';
 
                 // Update file info with dimensions now that image is loaded
-                if (this.mediaFiles.length >= 2 && this.currentIndex + 1 < this.mediaFiles.length) {
-                    const leftFile = this.mediaFiles[this.currentIndex];
-                    const rightFile = this.mediaFiles[this.currentIndex + 1];
-                    this.updateCompareFileInfo(leftFile, rightFile);
+                // Use stored file references (works for both AI-sorted and regular mode)
+                if (this.compareLeftFile && this.compareRightFile) {
+                    this.updateCompareFileInfo(this.compareLeftFile, this.compareRightFile);
                 }
 
                 // Setup zoom events for the loaded image
@@ -2300,10 +2309,9 @@ class MediaViewer {
                 media.style.display = 'block';
 
                 // Update file info with dimensions and duration now that metadata is loaded
-                if (this.mediaFiles.length >= 2 && this.currentIndex + 1 < this.mediaFiles.length) {
-                    const leftFile = this.mediaFiles[this.currentIndex];
-                    const rightFile = this.mediaFiles[this.currentIndex + 1];
-                    this.updateCompareFileInfo(leftFile, rightFile);
+                // Use stored file references (works for both AI-sorted and regular mode)
+                if (this.compareLeftFile && this.compareRightFile) {
+                    this.updateCompareFileInfo(this.compareLeftFile, this.compareRightFile);
                 }
 
                 // Setup zoom events for the loaded video
@@ -3114,6 +3122,12 @@ class MediaViewer {
             const lowerIndex = Math.min(leftFileIndex, rightFileIndex);
             this.mediaFiles.splice(higherIndex, 1);
             this.mediaFiles.splice(lowerIndex, 1);
+
+            // Clean up caches for removed files
+            this.predictionScores.delete(leftFile.path);
+            this.predictionScores.delete(rightFile.path);
+            this.featureCache.delete(leftFile.path);
+            this.featureCache.delete(rightFile.path);
 
             // Clear stored file references
             this.compareLeftFile = null;

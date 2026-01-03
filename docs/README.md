@@ -19,11 +19,13 @@ Central index for all project documentation.
 | [Sorting Cache][]                | Cache sorting algorithm results             |
 | [Background Feature Extraction][]| Worker pool for parallel feature extraction |
 | [Video Fullscreen Toggle][]      | Exit fullscreen on second video click       |
+| [Compare Mode AI Sort Bug][]     | Fix file mismatch in AI sorting mode        |
 
 [Notifications & Media Info]: plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: plans/2025-12-27_sorting-cache.md
 [Background Feature Extraction]: plans/2025-12-28_background-feature-extraction.md
 [Video Fullscreen Toggle]: plans/2025-12-29_video-fullscreen-toggle.md
+[Compare Mode AI Sort Bug]: plans/2026-01-02_compare-mode-ai-sort-bug.md
 
 ## Archives
 
@@ -33,4 +35,4 @@ Central index for all project documentation.
 
 ---
 
-Last Updated: 2025-12-29
+Last Updated: 2026-01-02
