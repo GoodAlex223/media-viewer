@@ -1068,20 +1068,38 @@ class MediaViewer {
         // Determine which file to move based on mode and side
         let fileToMove;
         let fileIndex;
+        let remainingFile = null;
+        let remainingFileIndex = null;
 
         if (side === 'left' || side === 'right') {
-            // Compare mode
+            // Compare mode - use stored file references (set by showCompareMedia)
             if (this.mediaFiles.length < 2) return;
-            fileIndex = side === 'left' ? this.currentIndex : this.currentIndex + 1;
-            fileToMove = this.mediaFiles[fileIndex];
 
-            // Cleanup the specific media before moving
-            if (side === 'left' && this.leftMedia) {
-                await this.cleanupCompareMedia('left');
-            } else if (side === 'right' && this.rightMedia) {
-                await this.cleanupCompareMedia('right');
+            const leftFile = this.compareLeftFile;
+            const rightFile = this.compareRightFile;
+
+            if (!leftFile || !rightFile) return;
+
+            // Get the file to move and the remaining file
+            fileToMove = side === 'left' ? leftFile : rightFile;
+            remainingFile = side === 'left' ? rightFile : leftFile;
+
+            // Find actual indices in the array
+            fileIndex = this.mediaFiles.findIndex(f => f.path === fileToMove.path);
+            remainingFileIndex = this.mediaFiles.findIndex(f => f.path === remainingFile.path);
+
+            if (fileIndex === -1) return;
+
+            // Cleanup both media before moving
+            const cleanupPromises = [];
+            if (this.leftMedia) {
+                cleanupPromises.push(this.cleanupCompareMedia('left'));
             }
-            await new Promise(resolve => setTimeout(resolve, 300));
+            if (this.rightMedia) {
+                cleanupPromises.push(this.cleanupCompareMedia('right'));
+            }
+            await Promise.all(cleanupPromises);
+            await new Promise(resolve => setTimeout(resolve, 50));
         } else {
             // Single mode
             if (this.mediaFiles.length === 0) return;
@@ -1125,14 +1143,25 @@ class MediaViewer {
             }
 
             // Store move in history for undo functionality
-            this.moveHistory.push({
+            const historyEntry = {
                 fileName: fileToMove.name,
                 originalPath: fileToMove.path,
                 newPath: moveResult.targetPath,
                 fileSize: fileToMove.size,
                 fileType: fileToMove.type,
                 actionType: 'special'
-            });
+            };
+
+            // In compare mode, store remaining file info for proper undo
+            if (side === 'left' || side === 'right') {
+                historyEntry.compareMode = true;
+                historyEntry.remainingFile = remainingFile;
+                historyEntry.remainingFileOriginalIndex = remainingFileIndex > fileIndex
+                    ? remainingFileIndex - 1  // Adjust for the removed file
+                    : remainingFileIndex;
+            }
+
+            this.moveHistory.push(historyEntry);
 
             // Show success notification
             if (this.showRatingConfirmations) {
@@ -1151,9 +1180,24 @@ class MediaViewer {
             this.predictionScores.delete(fileToMove.path);
             this.featureCache.delete(fileToMove.path);
 
-            // Adjust current index if necessary
-            if (this.currentIndex >= this.mediaFiles.length) {
-                this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
+            // In compare mode, move the remaining file to the end of the list
+            if (side === 'left' || side === 'right') {
+                if (remainingFile && this.mediaFiles.length >= 1) {
+                    // Find the remaining file's new index (it may have shifted after splice)
+                    const newRemainingIndex = this.mediaFiles.findIndex(f => f.path === remainingFile.path);
+                    if (newRemainingIndex !== -1 && newRemainingIndex !== this.mediaFiles.length - 1) {
+                        // Remove from current position and add to end
+                        const [movedFile] = this.mediaFiles.splice(newRemainingIndex, 1);
+                        this.mediaFiles.push(movedFile);
+                    }
+                }
+                // Reset current index to start of list for next pair
+                this.currentIndex = 0;
+            } else {
+                // Single mode - adjust current index if necessary
+                if (this.currentIndex >= this.mediaFiles.length) {
+                    this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
+                }
             }
 
             this.updateFolderInfo();
@@ -2214,6 +2258,13 @@ class MediaViewer {
         this.mediaContainer.appendChild(this.leftMediaWrapper);
         this.mediaContainer.appendChild(this.rightMediaWrapper);
 
+        // Initialize Lucide icons for overlay controls (must be after DOM append)
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons({
+                nodes: [this.leftMediaWrapper, this.rightMediaWrapper]
+            });
+        }
+
         // Update file info for both media
         this.updateCompareFileInfo(leftFile, rightFile);
         this.updateNavigationInfo();
@@ -2225,7 +2276,7 @@ class MediaViewer {
 
         const likeBtn = document.createElement('button');
         likeBtn.className = 'overlay-btn overlay-like-btn';
-        likeBtn.innerHTML = '<span class="btn-icon">👍</span><span class="btn-label">Like</span>';
+        likeBtn.innerHTML = '<i data-lucide="thumbs-up"></i>';
         likeBtn.title = side === 'left' ? 'Like Left (Q)' : 'Like Right (E)';
         likeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -2235,7 +2286,7 @@ class MediaViewer {
 
         const dislikeBtn = document.createElement('button');
         dislikeBtn.className = 'overlay-btn overlay-dislike-btn';
-        dislikeBtn.innerHTML = '<span class="btn-icon">👎</span><span class="btn-label">Dislike</span>';
+        dislikeBtn.innerHTML = '<i data-lucide="thumbs-down"></i>';
         dislikeBtn.title = side === 'left' ? 'Dislike Left (W)' : 'Dislike Right (R)';
         dislikeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -2243,8 +2294,21 @@ class MediaViewer {
             else this.handleRightDislike();
         });
 
-        controls.appendChild(likeBtn);
+        const specialBtn = document.createElement('button');
+        specialBtn.className = 'overlay-btn overlay-special-btn';
+        specialBtn.innerHTML = '<i data-lucide="folder-heart"></i>';
+        specialBtn.title = this.customSpecialFolder
+            ? 'Move to special folder'
+            : 'Configure special folder in Settings (F1)';
+        specialBtn.disabled = !this.customSpecialFolder;
+        specialBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.moveToSpecialFolder(side);
+        });
+
+        controls.appendChild(specialBtn);
         controls.appendChild(dislikeBtn);
+        controls.appendChild(likeBtn);
         wrapper.appendChild(controls);
     }
 
@@ -2766,8 +2830,71 @@ class MediaViewer {
 
         if (this.isLoading) return;
 
-        // In compare mode, restore both files (last two moves)
-        if (this.isCompareMode && this.moveHistory.length >= 2) {
+        // Check if last move was a special move in compare mode
+        const lastMove = this.moveHistory[this.moveHistory.length - 1];
+        if (this.isCompareMode && lastMove.compareMode && lastMove.actionType === 'special') {
+            // Undo special folder move in compare mode
+            this.moveHistory.pop();
+
+            try {
+                // Restore the moved file from special folder
+                const moveResult = await window.electronAPI.moveFile({
+                    sourcePath: lastMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: lastMove.fileName
+                });
+
+                if (!moveResult.success) {
+                    throw new Error(moveResult.error);
+                }
+
+                // Find the remaining file (should be at the end of the list)
+                const remainingFileIndex = this.mediaFiles.findIndex(
+                    f => f.path === lastMove.remainingFile.path
+                );
+
+                // Remove remaining file from current position (end of list)
+                let remainingFile = null;
+                if (remainingFileIndex !== -1) {
+                    [remainingFile] = this.mediaFiles.splice(remainingFileIndex, 1);
+                }
+
+                // Calculate where to insert the restored file
+                const restoredFile = {
+                    name: lastMove.fileName,
+                    path: lastMove.originalPath,
+                    size: lastMove.fileSize,
+                    type: lastMove.fileType
+                };
+
+                // Insert remaining file back to its original position
+                if (remainingFile) {
+                    this.mediaFiles.splice(lastMove.remainingFileOriginalIndex, 0, remainingFile);
+                }
+
+                // Insert restored file at correct position relative to remaining file
+                // The moved file was either before or after the remaining file originally
+                const insertIndex = lastMove.remainingFileOriginalIndex;
+                this.mediaFiles.splice(insertIndex, 0, restoredFile);
+
+                this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
+                this.updateFolderInfo();
+
+                // Set restored pair to be displayed directly
+                if (remainingFile) {
+                    this._restoredPairFiles = { left: restoredFile, right: remainingFile };
+                }
+
+                this.currentIndex = insertIndex;
+                await this.showMedia();
+
+            } catch (error) {
+                console.error('Error undoing special move:', error);
+                this.showError(`Failed to undo move: ${error.message}`);
+                this.moveHistory.push(lastMove);
+            }
+        } else if (this.isCompareMode && this.moveHistory.length >= 2) {
+            // In compare mode, restore both files (last two moves from like/dislike)
             const secondMove = this.moveHistory.pop();
             const firstMove = this.moveHistory.pop();
 
