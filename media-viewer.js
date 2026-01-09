@@ -382,8 +382,7 @@ class MediaViewer {
         this.setupControlsVisibility();
         this.updateRatingButtonsState();
         this.updateSpecialButtonsState();
-        this.initializeMlWorker();
-        this.initializeFeaturePool();
+        // ML worker and feature pool are initialized lazily when user clicks "Sort by Prediction"
 
         if (!window.electronAPI) {
             console.error('Electron API not available');
@@ -818,6 +817,40 @@ class MediaViewer {
     showError(message, options = {}) {
         console.error('Error:', message);
         this.showNotification(`❌ ${message}`, 'error', options);
+    }
+
+    /**
+     * Show subtle ML learning indicator (bottom-left, auto-dismiss)
+     */
+    showMlLearningIndicator(stats) {
+        // Remove existing indicator
+        const existing = document.getElementById('ml-learning-indicator');
+        if (existing) existing.remove();
+
+        const indicator = document.createElement('div');
+        indicator.id = 'ml-learning-indicator';
+        indicator.style.cssText = `
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(76, 175, 80, 0.9);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10000;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        `;
+        indicator.textContent = `🧠 ML: ${stats.positiveCount}👍 ${stats.negativeCount}👎`;
+
+        document.body.appendChild(indicator);
+
+        // Auto-dismiss after 1.5s
+        setTimeout(() => {
+            indicator.style.opacity = '0';
+            setTimeout(() => indicator.remove(), 300);
+        }, 1500);
     }
 
     removeFailedFile(index, side = null) {
@@ -1916,13 +1949,8 @@ class MediaViewer {
 
             console.log(`Successfully loaded ${this.mediaFiles.length} media files`);
 
-            // Initialize ML prediction system (load cached data only, training happens on button click)
-            if (this.isMlEnabled) {
-                await this.loadMlModel();
-                await this.loadFeatureCache();
-                this.updateSortPredictionButton();
-                // Training and feature extraction starts when user clicks "Sort by Prediction"
-            }
+            // Update ML button state (actual initialization happens when user clicks the button)
+            this.updateSortPredictionButton();
 
         } catch (error) {
             this.hideLoadingSpinner();
@@ -2091,6 +2119,9 @@ class MediaViewer {
 
         this.updateBasicFileInfo(file);
         this.updateNavigationInfo();
+
+        // Prioritize feature extraction for displayed file (after small delay for media to load)
+        setTimeout(() => this.prioritizeDisplayedFilesExtraction(), 200);
     }
 
     async showCompareMedia() {
@@ -2268,6 +2299,9 @@ class MediaViewer {
         // Update file info for both media
         this.updateCompareFileInfo(leftFile, rightFile);
         this.updateNavigationInfo();
+
+        // Prioritize feature extraction for displayed files (after small delay for media to load)
+        setTimeout(() => this.prioritizeDisplayedFilesExtraction(), 200);
     }
 
     addMediaOverlayControls(wrapper, side) {
@@ -3127,12 +3161,44 @@ class MediaViewer {
             return;
         }
 
-        // Get cached ML features (don't extract on main thread - too slow)
+        // Get cached ML features, with fallback extraction from displayed media
         let leftFeatures = null;
         let rightFeatures = null;
         if (this.isMlEnabled && this.mlWorker) {
             leftFeatures = this.featureCache.get(leftFile.path);
             rightFeatures = this.featureCache.get(rightFile.path);
+
+            // Fallback: extract from displayed media if not cached (must happen before cleanup)
+            if (!leftFeatures && this.leftMedia) {
+                try {
+                    console.log('[ML Debug] Fallback extraction for left:', leftFile.name);
+                    leftFeatures = await this.extractFeaturesFromMediaElement(this.leftMedia);
+                    if (leftFeatures) {
+                        this.featureCache.set(leftFile.path, leftFeatures);
+                        this.featureCacheDirty = true;
+                        console.log('[ML Debug] Left features extracted successfully');
+                    }
+                } catch (err) {
+                    console.warn('[ML Debug] Could not extract left features:', err);
+                }
+            }
+            if (!rightFeatures && this.rightMedia) {
+                try {
+                    console.log('[ML Debug] Fallback extraction for right:', rightFile.name);
+                    rightFeatures = await this.extractFeaturesFromMediaElement(this.rightMedia);
+                    if (rightFeatures) {
+                        this.featureCache.set(rightFile.path, rightFeatures);
+                        this.featureCacheDirty = true;
+                        console.log('[ML Debug] Right features extracted successfully');
+                    }
+                } catch (err) {
+                    console.warn('[ML Debug] Could not extract right features:', err);
+                }
+            }
+
+            // Debug: log feature status
+            console.log('[ML Debug] Rating pair - Left features:', leftFeatures ? 'YES' : 'NO',
+                        '| Right features:', rightFeatures ? 'YES' : 'NO');
         }
 
         try {
@@ -4629,7 +4695,11 @@ class MediaViewer {
     // ==================== ML PREDICTION METHODS ====================
 
     initializeMlWorker() {
-        if (!this.isMlEnabled) return;
+        console.log('[ML Debug] initializeMlWorker called, isMlEnabled:', this.isMlEnabled);
+        if (!this.isMlEnabled) {
+            console.log('[ML Debug] ML is disabled, skipping worker init');
+            return;
+        }
 
         if (this.mlWorker) {
             this.mlWorker.terminate();
@@ -4637,20 +4707,21 @@ class MediaViewer {
 
         try {
             this.mlWorker = new Worker('ml-worker.js');
+            console.log('[ML Debug] ML Worker created');
 
             this.mlWorker.onmessage = (e) => {
                 this.handleMlWorkerMessage(e.data);
             };
 
             this.mlWorker.onerror = (err) => {
-                console.error('ML Worker error:', err);
+                console.error('[ML Debug] ML Worker error:', err);
                 this.isMlEnabled = false;
             };
 
             // Initialize worker (will load saved model if exists)
             this.mlWorker.postMessage({ type: 'init', data: {} });
         } catch (err) {
-            console.warn('ML Worker not available:', err);
+            console.warn('[ML Debug] ML Worker not available:', err);
             this.isMlEnabled = false;
         }
     }
@@ -4658,7 +4729,7 @@ class MediaViewer {
     handleMlWorkerMessage(message) {
         switch (message.type) {
             case 'initComplete':
-                console.log('ML Model initialized:', message.stats);
+                console.log('[ML Debug] ML Model initialized:', message.stats);
                 this.mlStats = message.stats;
                 this.updateSortPredictionButton();
                 // If model was restored with samples, request scores
@@ -4689,6 +4760,11 @@ class MediaViewer {
             case 'updateComplete':
                 this.mlModelState = message.modelState;
                 this.mlStats = message.stats;
+                console.log(`[ML Debug] Model updated! Total: ${message.stats.totalSamples} samples ` +
+                    `(${message.stats.positiveCount} likes, ${message.stats.negativeCount} dislikes) ` +
+                    `| Ready: ${message.stats.isReady}`);
+                // Show visual feedback that ML learned (subtle, bottom-left)
+                this.showMlLearningIndicator(message.stats);
                 // Debounce model saving to avoid multiple writes
                 if (this._saveModelTimer) {
                     clearTimeout(this._saveModelTimer);
@@ -5144,13 +5220,13 @@ class MediaViewer {
     updateSortPredictionButton() {
         if (!this.sortPredictionBtn) return;
 
-        const hasScores = this.predictionScores.size > 0;
+        const isInitialized = this.mlWorker !== null;
         const isReady = this.mlStats?.isReady;
         const likesCount = this.mlStats?.positiveCount || 0;
         const dislikesCount = this.mlStats?.negativeCount || 0;
 
-        // Button is enabled if model is ready and has scores
-        this.sortPredictionBtn.disabled = !isReady;
+        // Button is always enabled if ML is enabled (initialization happens on click)
+        this.sortPredictionBtn.disabled = false;
         this.sortPredictionBtn.style.display = this.isMlEnabled ? 'inline-flex' : 'none';
 
         // Update label based on state
@@ -5158,6 +5234,10 @@ class MediaViewer {
         if (this.isSortedByPrediction) {
             labelEl.textContent = 'Restore Order';
             this.sortPredictionBtn.title = 'Click to restore original order';
+        } else if (!isInitialized) {
+            // Not initialized yet - show generic label
+            labelEl.textContent = 'Sort by Predicted';
+            this.sortPredictionBtn.title = 'Click to initialize ML and sort by predicted preference';
         } else if (!isReady) {
             const needLikes = Math.max(0, 3 - likesCount);
             const needDislikes = Math.max(0, 3 - dislikesCount);
@@ -5170,12 +5250,12 @@ class MediaViewer {
     }
 
     async handleSortByPrediction() {
-        if (!this.isMlEnabled || !this.mlWorker) {
+        if (!this.isMlEnabled) {
             this.showNotification('ML prediction is disabled', 'warning');
             return;
         }
 
-        // Toggle sorting
+        // Toggle sorting - restore original order
         if (this.isSortedByPrediction) {
             // Restore original order, but only for files that still exist
             if (this.originalMediaFiles.length > 0) {
@@ -5190,6 +5270,23 @@ class MediaViewer {
             this.updateSortPredictionButton();
             this.showNotification('Restored original order', 'info');
             return;
+        }
+
+        // Lazy initialization: Initialize ML system on first use
+        if (!this.mlWorker || this.featureWorkers.length === 0) {
+            this.showNotification('Initializing ML system...', 'info');
+            console.log('[ML Debug] Lazy initialization of ML system');
+
+            // Initialize workers
+            this.initializeMlWorker();
+            this.initializeFeaturePool();
+
+            // Wait for ML worker to be ready
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Load cached model and features
+            await this.loadMlModel();
+            await this.loadFeatureCache();
         }
 
         // Train from historical ratings if not already trained
@@ -5268,13 +5365,23 @@ class MediaViewer {
      * Update ML model with pre-extracted features (used when file will be moved)
      */
     updateMlModelWithFeatures(features, actionType) {
-        if (!this.isMlEnabled || !this.mlWorker || !features) return;
+        if (!this.isMlEnabled || !this.mlWorker) {
+            console.log('[ML Debug] Update skipped: ML disabled or worker not ready');
+            return;
+        }
+        if (!features) {
+            console.warn('[ML Debug] Update skipped: No features provided!');
+            return;
+        }
+
+        const label = actionType === 'like' ? 1 : 0;
+        console.log(`[ML Debug] Sending model update: ${actionType} (label=${label}), features length=${features.length}`);
 
         this.mlWorker.postMessage({
             type: 'update',
             data: {
                 features: Array.from(features),
-                label: actionType === 'like' ? 1 : 0
+                label: label
             }
         });
     }
@@ -5328,12 +5435,71 @@ class MediaViewer {
         return extractFeatures(imageData);
     }
 
+    /**
+     * Prioritize feature extraction for currently displayed files
+     * Called after showing media to ensure features are ready for rating
+     */
+    async prioritizeDisplayedFilesExtraction() {
+        // Skip silently if ML not initialized yet (will be initialized when user clicks sort button)
+        if (!this.isMlEnabled || this.featureWorkers.length === 0) {
+            return;
+        }
+
+        const filesToExtract = [];
+
+        if (this.isCompareMode) {
+            // Compare mode: extract for both displayed files
+            if (this.compareLeftFile && !this.featureCache.has(this.compareLeftFile.path)) {
+                filesToExtract.push({ file: this.compareLeftFile, media: this.leftMedia, side: 'left' });
+            }
+            if (this.compareRightFile && !this.featureCache.has(this.compareRightFile.path)) {
+                filesToExtract.push({ file: this.compareRightFile, media: this.rightMedia, side: 'right' });
+            }
+        } else {
+            // Single mode: extract for current file
+            const currentFile = this.mediaFiles[this.currentIndex];
+            if (currentFile && !this.featureCache.has(currentFile.path)) {
+                filesToExtract.push({ file: currentFile, media: this.currentMedia, side: 'single' });
+            }
+        }
+
+        if (filesToExtract.length === 0) return;
+
+        console.log(`[ML Debug] Prioritizing extraction for ${filesToExtract.length} displayed file(s)`);
+
+        // Extract from displayed media elements directly (faster than loading from disk)
+        for (const { file, media, side } of filesToExtract) {
+            if (media && (media.complete || media.readyState >= 2)) {
+                try {
+                    const features = await this.extractFeaturesFromMediaElement(media);
+                    if (features) {
+                        this.featureCache.set(file.path, features);
+                        this.featureCacheDirty = true;
+                        console.log(`[ML Debug] Priority extraction complete for ${side}: ${file.name}`);
+                    }
+                } catch (err) {
+                    console.warn(`[ML Debug] Priority extraction failed for ${side}:`, err);
+                }
+            } else {
+                // Media not ready yet, queue for background extraction with high priority
+                try {
+                    const imageData = await this.loadMediaAsImageData(file.path);
+                    await this.enqueueFeatureExtraction(file.path, imageData, 0); // Priority 0 = highest
+                    console.log(`[ML Debug] Queued priority extraction for ${side}: ${file.name}`);
+                } catch (err) {
+                    console.warn(`[ML Debug] Could not queue extraction for ${side}:`, err);
+                }
+            }
+        }
+    }
+
     // ==================== FEATURE EXTRACTION WORKER POOL ====================
 
     /**
      * Initialize the feature extraction worker pool
      */
     initializeFeaturePool() {
+        console.log('[ML Debug] initializeFeaturePool called');
         // Terminate any existing workers
         this.shutdownFeaturePool();
 
@@ -5349,12 +5515,12 @@ class MediaViewer {
                 this.featureWorkers.push(worker);
             }
 
-            console.log(`Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
+            console.log(`[ML Debug] Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
 
             // Start auto-save interval (every 30 seconds)
             this.startFeatureCacheAutoSave();
         } catch (err) {
-            console.warn('Failed to initialize feature workers:', err);
+            console.warn('[ML Debug] Failed to initialize feature workers:', err);
         }
     }
 
@@ -5856,7 +6022,10 @@ document.head.appendChild(style);
 
 // Initialize the viewer when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('=== MediaViewer Starting ===');
     console.log('DOM loaded, initializing MediaViewer...');
     const viewer = new MediaViewer();
     window.mediaViewer = viewer; // For debugging
+    console.log('[ML Debug] MediaViewer initialized. ML setting:', viewer.isMlEnabled);
+    console.log('[ML Debug] ML will initialize when "Sort by Prediction" is clicked');
 });

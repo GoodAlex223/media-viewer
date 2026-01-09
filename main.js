@@ -21,10 +21,13 @@ function createWindow() {
 
     mainWindow.loadFile('index.html');
 
-    // Open dev tools in development
-    if (process.env.NODE_ENV === 'development') {
-        mainWindow.webContents.openDevTools();
-    }
+    // Enable DevTools toggle with F12 or Ctrl+Shift+I
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.key === 'F12' ||
+            (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+            mainWindow.webContents.toggleDevTools();
+        }
+    });
 }
 
 // Helper functions
