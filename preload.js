@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'),
     loadFolder: (folderPath) => ipcRenderer.invoke('load-folder', folderPath),
 
+    // Video metadata extraction
+    probeVideo: (videoPath) => ipcRenderer.invoke('probe-video', videoPath),
+
     // IPC invoke wrapper for other operations
     invoke: (channel, data) => ipcRenderer.invoke(channel, data),
 

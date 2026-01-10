@@ -4896,6 +4896,9 @@ class MediaViewer {
         }
     }
 
+    // Feature cache version - must match FEATURE_VERSION in feature-extractor.js
+    static FEATURE_CACHE_VERSION = 2;
+
     async loadFeatureCache() {
         if (!this.baseFolderPath) return 0;
 
@@ -4905,15 +4908,31 @@ class MediaViewer {
 
             if (data) {
                 const parsed = JSON.parse(data);
+
+                // Check version compatibility
+                if (parsed.version !== MediaViewer.FEATURE_CACHE_VERSION) {
+                    console.warn(`Feature cache version mismatch: found=${parsed.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`);
+                    this.featureCache = new Map();
+                    return 0;
+                }
+
+                // Check feature dimension compatibility (64 dimensions expected)
+                const expectedDim = 64;
                 this.featureCache = new Map();
+
                 for (const [filename, features] of Object.entries(parsed.features || {})) {
+                    // Skip entries with wrong dimension
+                    if (features.length !== expectedDim) {
+                        console.warn(`Skipping cached features for ${filename}: wrong dimension (${features.length} vs ${expectedDim})`);
+                        continue;
+                    }
                     const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
                     this.featureCache.set(fullPath, new Float32Array(features));
                 }
                 return this.featureCache.size;
             }
         } catch (error) {
-            console.log('No feature cache found');
+            console.log('No feature cache found or error loading:', error.message);
         }
         return 0;
     }
@@ -4931,7 +4950,8 @@ class MediaViewer {
             }
 
             await window.electronAPI.writeFile(cacheFile, JSON.stringify({
-                version: 1,
+                version: MediaViewer.FEATURE_CACHE_VERSION,
+                featureDim: 64,
                 features
             }));
         } catch (error) {
@@ -4939,22 +4959,95 @@ class MediaViewer {
         }
     }
 
-    async computeFeatures(filePath) {
+    /**
+     * Compute features for a file with full metadata support (v2)
+     * @param {string} filePath - Path to the file
+     * @param {Object} fileInfo - Optional file info from mediaFiles array
+     * @returns {Promise<Float32Array>} 64-dimensional feature vector
+     */
+    async computeFeatures(filePath, fileInfo = null) {
         // Check cache first
         if (this.featureCache.has(filePath)) {
             return this.featureCache.get(filePath);
         }
 
-        return new Promise((resolve, reject) => {
-            const isVideo = /\.(mp4|webm|mov)$/i.test(filePath);
-            const timeout = setTimeout(() => reject(new Error('Timeout')), 30000);
+        const isVideo = /\.(mp4|webm|mov)$/i.test(filePath);
+        const ext = filePath.split('.').pop().toLowerCase();
 
+        // Get file info from mediaFiles if not provided
+        if (!fileInfo) {
+            fileInfo = this.mediaFiles.find(f => f.path === filePath) || {};
+        }
+
+        // Build metadata object for v2 features
+        const metadata = {
+            fileSize: fileInfo.size || 0,
+            isVideo: isVideo,
+            format: ext,
+            // These will be filled below
+            width: 0,
+            height: 0,
+            videoInfo: null,
+            faceInfo: null
+        };
+
+        // Get video metadata via ffprobe if available
+        if (isVideo && window.electronAPI.probeVideo) {
+            try {
+                const probeResult = await window.electronAPI.probeVideo(filePath);
+                if (probeResult.success) {
+                    metadata.videoInfo = {
+                        duration: probeResult.info.duration,
+                        fps: probeResult.info.fps,
+                        hasAudio: probeResult.info.hasAudio,
+                        bitrate: probeResult.info.bitrate
+                    };
+                    metadata.width = probeResult.info.width;
+                    metadata.height = probeResult.info.height;
+                }
+            } catch (e) {
+                console.warn('Video probe failed:', e.message);
+            }
+        }
+
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Timeout')), 30000);
             const cleanup = () => clearTimeout(timeout);
 
-            const processImageData = (imageData) => {
+            const processImageData = async (imageData, mediaWidth, mediaHeight) => {
                 try {
-                    // Feature extraction using extractFeatures from feature-extractor.js
-                    const features = extractFeatures(imageData);
+                    // Update dimensions from actual media
+                    if (!metadata.width) metadata.width = mediaWidth;
+                    if (!metadata.height) metadata.height = mediaHeight;
+
+                    // Optional: Face detection (only if available and enabled)
+                    if (window.FaceDetector && this.enableFaceDetection !== false) {
+                        try {
+                            // Create canvas for face detection
+                            const canvas = document.createElement('canvas');
+                            canvas.width = imageData.width;
+                            canvas.height = imageData.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.putImageData(imageData, 0, 0);
+
+                            const faceResult = await window.FaceDetector.detect(canvas, {
+                                minConfidence: 0.5,
+                                inputSize: 224
+                            });
+
+                            metadata.faceInfo = {
+                                hasFace: faceResult.hasFace,
+                                count: faceResult.count,
+                                areaRatio: faceResult.areaRatio
+                            };
+                        } catch (faceError) {
+                            // Face detection failed, continue without it
+                            console.warn('Face detection failed:', faceError.message);
+                        }
+                    }
+
+                    // Feature extraction using extractFeatures from feature-extractor.js (v2 with metadata)
+                    const features = extractFeatures(imageData, metadata);
                     this.featureCache.set(filePath, features);
                     cleanup();
                     resolve(features);
@@ -4980,8 +5073,10 @@ class MediaViewer {
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(video, 0, 0, 256, 256);
                     const imageData = ctx.getImageData(0, 0, 256, 256);
+                    const videoWidth = video.videoWidth;
+                    const videoHeight = video.videoHeight;
                     video.src = '';
-                    processImageData(imageData);
+                    processImageData(imageData, videoWidth, videoHeight);
                 });
 
                 video.addEventListener('error', () => {
@@ -5001,7 +5096,7 @@ class MediaViewer {
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, 256, 256);
                     const imageData = ctx.getImageData(0, 0, 256, 256);
-                    processImageData(imageData);
+                    processImageData(imageData, img.naturalWidth, img.naturalHeight);
                 });
 
                 img.addEventListener('error', () => {

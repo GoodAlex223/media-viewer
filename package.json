@@ -10,7 +10,9 @@
   "author": "goodalex223",
   "license": "ISC",
   "dependencies": {
-    "blockhash": "^0.2.0"
+    "@vladmandic/face-api": "^1.7.15",
+    "blockhash": "^0.2.0",
+    "ffprobe-static": "^3.1.0"
   },
   "devDependencies": {
     "electron": "^39.1.2"

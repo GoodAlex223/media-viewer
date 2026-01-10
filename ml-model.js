@@ -1,5 +1,9 @@
 // ML Model - Online Logistic Regression with weighted loss for class imbalance
 // Used for preference prediction based on visual features
+// Version 2: 64-dimensional feature vector support
+
+const ML_MODEL_VERSION = 2;
+const DEFAULT_FEATURE_DIM = 64;
 
 /**
  * Online Logistic Regression classifier with SGD updates
@@ -7,9 +11,9 @@
  */
 class OnlineLogisticRegression {
     /**
-     * @param {number} featureDim - Number of features (default: 50)
+     * @param {number} featureDim - Number of features (default: 64)
      */
-    constructor(featureDim = 50) {
+    constructor(featureDim = DEFAULT_FEATURE_DIM) {
         this.featureDim = featureDim;
         this.weights = new Float32Array(featureDim + 1); // +1 for bias term
         this.learningRate = 0.1;          // Initial learning rate
@@ -234,7 +238,7 @@ class OnlineLogisticRegression {
      */
     toJSON() {
         return {
-            version: 1,
+            version: ML_MODEL_VERSION,
             featureDim: this.featureDim,
             weights: Array.from(this.weights),
             positiveCount: this.positiveCount,
@@ -247,10 +251,23 @@ class OnlineLogisticRegression {
 
     /**
      * Import model state from JSON
+     * Validates version and feature dimension compatibility
      * @param {Object} json - Serialized model state
-     * @returns {OnlineLogisticRegression} Restored model instance
+     * @returns {OnlineLogisticRegression|null} Restored model instance or null if incompatible
      */
     static fromJSON(json) {
+        // Check version compatibility
+        if (json.version !== ML_MODEL_VERSION) {
+            console.warn(`Model version mismatch: saved=${json.version}, current=${ML_MODEL_VERSION}`);
+            return null; // Incompatible version, requires retrain
+        }
+
+        // Check feature dimension compatibility
+        if (json.featureDim !== DEFAULT_FEATURE_DIM) {
+            console.warn(`Feature dimension mismatch: saved=${json.featureDim}, current=${DEFAULT_FEATURE_DIM}`);
+            return null; // Incompatible dimensions, requires retrain
+        }
+
         const model = new OnlineLogisticRegression(json.featureDim);
         model.weights = new Float32Array(json.weights);
         model.positiveCount = json.positiveCount;
@@ -260,9 +277,24 @@ class OnlineLogisticRegression {
         model.regularization = json.regularization || 0.001;
         return model;
     }
+
+    /**
+     * Check if a saved model JSON is compatible with current version
+     * @param {Object} json - Serialized model state
+     * @returns {boolean} True if compatible
+     */
+    static isCompatible(json) {
+        return json &&
+               json.version === ML_MODEL_VERSION &&
+               json.featureDim === DEFAULT_FEATURE_DIM;
+    }
 }
 
 // Export for use in both main thread and worker
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { OnlineLogisticRegression };
+    module.exports = {
+        OnlineLogisticRegression,
+        ML_MODEL_VERSION,
+        DEFAULT_FEATURE_DIM
+    };
 }

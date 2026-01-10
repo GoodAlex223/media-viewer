@@ -1,5 +1,6 @@
 // ML Worker - Web Worker for preference prediction computations
 // Runs ML operations in separate thread to prevent UI freeze
+// Version 2: 64-dimensional feature vector support
 
 // Import dependencies (will be inlined for worker)
 importScripts('ml-model.js');
@@ -9,6 +10,9 @@ let model = null;
 
 // Abort flag for cancellable operations
 let abortFlag = false;
+
+// Track if model was reset due to version mismatch
+let modelWasReset = false;
 
 /**
  * Send progress update to main thread
@@ -23,20 +27,34 @@ function updateProgress(message, current, total) {
 /**
  * Initialize or restore model
  * @param {Object|null} savedModel - Previously saved model state
+ * @returns {boolean} True if model was reset (version mismatch)
  */
 function initializeModel(savedModel) {
+    modelWasReset = false;
+
     if (savedModel && savedModel.weights) {
-        try {
-            model = OnlineLogisticRegression.fromJSON(savedModel);
-            console.log('ML Model restored:', model.getStats());
-        } catch (error) {
-            console.error('Failed to restore model, creating new:', error);
-            model = new OnlineLogisticRegression(50);
+        // Check compatibility before restoring
+        if (OnlineLogisticRegression.isCompatible(savedModel)) {
+            try {
+                model = OnlineLogisticRegression.fromJSON(savedModel);
+                if (model) {
+                    console.log('ML Model restored:', model.getStats());
+                    return false;
+                }
+            } catch (error) {
+                console.error('Failed to restore model:', error);
+            }
         }
-    } else {
-        model = new OnlineLogisticRegression(50);
-        console.log('ML Model initialized fresh');
+
+        // Version or dimension mismatch - need to reset
+        console.warn(`Model incompatible (version=${savedModel.version}, dim=${savedModel.featureDim}), creating new model with version=${ML_MODEL_VERSION}, dim=${DEFAULT_FEATURE_DIM}`);
+        modelWasReset = true;
     }
+
+    // Create fresh model with default (64) dimensions
+    model = new OnlineLogisticRegression(DEFAULT_FEATURE_DIM);
+    console.log('ML Model initialized fresh with', DEFAULT_FEATURE_DIM, 'dimensions');
+    return modelWasReset;
 }
 
 /**
@@ -240,11 +258,14 @@ self.onmessage = function(e) {
 
         case 'init':
             abortFlag = false;
-            initializeModel(data?.savedModel);
+            const wasReset = initializeModel(data?.savedModel);
             self.postMessage({
                 type: 'initComplete',
                 stats: model?.getStats(),
-                modelState: model?.toJSON()
+                modelState: model?.toJSON(),
+                modelWasReset: wasReset,
+                modelVersion: ML_MODEL_VERSION,
+                featureDim: DEFAULT_FEATURE_DIM
             });
             break;
 

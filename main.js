@@ -1,6 +1,20 @@
 const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+
+// ffprobe for video metadata extraction
+let ffprobePath;
+try {
+    ffprobePath = require('ffprobe-static').path;
+    console.log('ffprobe loaded from:', ffprobePath);
+} catch (e) {
+    console.warn('ffprobe-static not available:', e.message);
+    ffprobePath = null;
+}
+
+const execFileAsync = promisify(execFile);
 
 let mainWindow;
 
@@ -165,6 +179,66 @@ app.whenReady().then(() => {
             return { success: true };
         } catch (error) {
             console.error('Write file error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Video probing using ffprobe
+    ipcMain.handle('probe-video', async (_event, videoPath) => {
+        if (!ffprobePath) {
+            return { success: false, error: 'ffprobe not available' };
+        }
+
+        try {
+            const args = [
+                '-v', 'quiet',
+                '-print_format', 'json',
+                '-show_format',
+                '-show_streams',
+                videoPath
+            ];
+
+            const { stdout } = await execFileAsync(ffprobePath, args, {
+                timeout: 10000, // 10 second timeout
+                maxBuffer: 1024 * 1024 // 1MB buffer
+            });
+
+            const data = JSON.parse(stdout);
+
+            // Extract video stream info
+            const videoStream = data.streams?.find(s => s.codec_type === 'video');
+            const audioStream = data.streams?.find(s => s.codec_type === 'audio');
+            const format = data.format || {};
+
+            // Calculate FPS from frame rate string (e.g., "30/1" or "29.97")
+            let fps = 0;
+            if (videoStream?.r_frame_rate) {
+                const parts = videoStream.r_frame_rate.split('/');
+                if (parts.length === 2) {
+                    fps = parseFloat(parts[0]) / parseFloat(parts[1]);
+                } else {
+                    fps = parseFloat(videoStream.r_frame_rate);
+                }
+            }
+
+            // Get bitrate in kbps
+            const bitrate = format.bit_rate ? Math.round(parseInt(format.bit_rate) / 1000) : 0;
+
+            return {
+                success: true,
+                info: {
+                    duration: parseFloat(format.duration) || 0,
+                    fps: Math.round(fps * 100) / 100,
+                    hasAudio: !!audioStream,
+                    bitrate: bitrate,
+                    width: videoStream?.width || 0,
+                    height: videoStream?.height || 0,
+                    codec: videoStream?.codec_name || 'unknown',
+                    audioCodec: audioStream?.codec_name || null
+                }
+            };
+        } catch (error) {
+            console.error('Video probe error:', error);
             return { success: false, error: error.message };
         }
     });

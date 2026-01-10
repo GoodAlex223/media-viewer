@@ -1,6 +1,6 @@
 // Feature Extraction Worker
 // Runs CPU-intensive feature extraction in a separate thread
-// Receives pixel data from main thread, returns 50-dimensional feature vector
+// Receives pixel data from main thread, returns 64-dimensional feature vector (v2)
 
 importScripts('feature-extractor.js');
 
@@ -20,6 +20,14 @@ self.onmessage = function(e) {
             handleBatch(data);
             break;
 
+        case 'getVersion':
+            self.postMessage({
+                type: 'version',
+                version: typeof FEATURE_VERSION !== 'undefined' ? FEATURE_VERSION : 1,
+                dim: typeof FEATURE_DIM !== 'undefined' ? FEATURE_DIM : 50
+            });
+            break;
+
         default:
             self.postMessage({
                 type: 'error',
@@ -36,8 +44,9 @@ self.onmessage = function(e) {
  * @param {Uint8ClampedArray} data.pixels - RGBA pixel data (256x256)
  * @param {number} data.width - Image width (256)
  * @param {number} data.height - Image height (256)
+ * @param {Object} data.metadata - Optional file metadata for extended features
  */
-function handleExtract({ id, pixels, width, height }) {
+function handleExtract({ id, pixels, width, height, metadata }) {
     try {
         // Reconstruct ImageData-like object from raw pixels
         const imageData = {
@@ -46,7 +55,8 @@ function handleExtract({ id, pixels, width, height }) {
             height: height
         };
 
-        const features = extractFeatures(imageData);
+        // Pass metadata to extractFeatures for v2 features
+        const features = extractFeatures(imageData, metadata || {});
 
         // Transfer ownership of the buffer for efficiency
         self.postMessage({
@@ -67,7 +77,7 @@ function handleExtract({ id, pixels, width, height }) {
 /**
  * Handle batch feature extraction (multiple files)
  * @param {Object} data - Batch data
- * @param {Array} data.items - Array of {id, pixels, width, height}
+ * @param {Array} data.items - Array of {id, pixels, width, height, metadata}
  */
 function handleBatch({ items }) {
     const results = [];
@@ -82,7 +92,8 @@ function handleBatch({ items }) {
                 height: item.height
             };
 
-            const features = extractFeatures(imageData);
+            // Pass metadata to extractFeatures for v2 features
+            const features = extractFeatures(imageData, item.metadata || {});
 
             results.push({
                 id: item.id,
