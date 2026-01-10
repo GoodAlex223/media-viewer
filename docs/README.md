@@ -6,26 +6,33 @@ Central index for all project documentation.
 
 | Document                                 | Purpose                                      |
 |------------------------------------------|----------------------------------------------|
-| [TODO.md](TODO.md)                       | Active tasks and planned features            |
-| [DONE.md](DONE.md)                       | Completed tasks archive                      |
+| [TODO.md](planning/TODO.md)              | Active tasks and planned features            |
+| [DONE.md](planning/DONE.md)              | Completed tasks archive                      |
+| [BACKLOG.md](planning/BACKLOG.md)        | Unprioritized ideas and improvements         |
 | [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | Project decisions, patterns, history         |
 | [ARCHITECTURE.md](ARCHITECTURE.md)       | System architecture, component relationships |
 
-## Plans
+## Active Plans
 
-| Document                         | Purpose                                     |
-|----------------------------------|---------------------------------------------|
-| [Notifications & Media Info][]   | Less intrusive notifications and media info |
-| [Sorting Cache][]                | Cache sorting algorithm results             |
-| [Background Feature Extraction][]| Worker pool for parallel feature extraction |
-| [Video Fullscreen Toggle][]      | Exit fullscreen on second video click       |
-| [Compare Mode AI Sort Bug][]     | Fix file mismatch in AI sorting mode        |
+| Document                    | Purpose                               |
+|-----------------------------|---------------------------------------|
+| [Video Fullscreen Toggle][] | Exit fullscreen on second video click |
 
-[Notifications & Media Info]: plans/2025-12-25_notifications-media-info-less-intrusive.md
-[Sorting Cache]: plans/2025-12-27_sorting-cache.md
-[Background Feature Extraction]: plans/2025-12-28_background-feature-extraction.md
 [Video Fullscreen Toggle]: plans/2025-12-29_video-fullscreen-toggle.md
-[Compare Mode AI Sort Bug]: plans/2026-01-02_compare-mode-ai-sort-bug.md
+
+## Archived Plans
+
+| Document                          | Purpose                                     |
+|-----------------------------------|---------------------------------------------|
+| [Notifications & Media Info][]    | Less intrusive notifications and media info |
+| [Sorting Cache][]                 | Cache sorting algorithm results             |
+| [Background Feature Extraction][] | Worker pool for parallel feature extraction |
+| [Compare Mode AI Sort Bug][]      | Fix file mismatch in AI sorting mode        |
+
+[Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
+[Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
+[Background Feature Extraction]: archive/plans/2025-12-28_background-feature-extraction.md
+[Compare Mode AI Sort Bug]: archive/plans/2026-01-02_compare-mode-ai-sort-bug.md
 
 ## Archives
 
@@ -35,4 +42,4 @@ Central index for all project documentation.
 
 ---
 
-Last Updated: 2026-01-02
+Last Updated: 2026-01-10

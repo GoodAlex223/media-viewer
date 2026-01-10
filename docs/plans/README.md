@@ -8,11 +8,7 @@ Active implementation plans for ongoing work.
 
 | Plan | Task | Status |
 |------|------|--------|
-| [2025-12-25_notifications-media-info-less-intrusive.md](2025-12-25_notifications-media-info-less-intrusive.md) | Less intrusive notifications | Active |
-| [2025-12-27_sorting-cache.md](2025-12-27_sorting-cache.md) | Sorting cache implementation | Active |
-| [2025-12-28_background-feature-extraction.md](2025-12-28_background-feature-extraction.md) | Background feature extraction | Active |
-| [2025-12-29_video-fullscreen-toggle.md](2025-12-29_video-fullscreen-toggle.md) | Video fullscreen toggle | Active |
-| [2026-01-02_compare-mode-ai-sort-bug.md](2026-01-02_compare-mode-ai-sort-bug.md) | Compare mode AI sort bug | Active |
+| [2025-12-29_video-fullscreen-toggle.md](2025-12-29_video-fullscreen-toggle.md) | Video fullscreen toggle | Testing |
 
 ---
 
@@ -46,4 +42,4 @@ mv docs/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 ---
 
-*Last Updated: 2026-01-03*
+*Last Updated: 2026-01-10*

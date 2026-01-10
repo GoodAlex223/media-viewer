@@ -111,6 +111,22 @@ Completed tasks archive. Tasks are moved here from TODO.md upon completion.
   - Progress indicator during sorting
   - *Completed: 2025-12*
 
+- [x] **Sorting algorithm cache** — Cache sorting results to restore order without re-sorting
+  - Per-algorithm caching (VP-Tree, MST, Simple)
+  - New files inserted at optimal positions based on similarity
+  - Removed files automatically skipped
+  - Plan: [2025-12-27_sorting-cache.md](../archive/plans/2025-12-27_sorting-cache.md)
+  - *Completed: 2025-12*
+
+### Bug Fixes (continued)
+
+- [x] **Compare mode AI sort file mismatch** — Media info showed wrong files when sorted by AI
+  - Fixed onLoad handlers to use compareLeftFile/compareRightFile references
+  - Fixed copy filename to use correct file in AI-sorted mode
+  - Added cache cleanup when files are removed
+  - Plan: [2026-01-02_compare-mode-ai-sort-bug.md](../archive/plans/2026-01-02_compare-mode-ai-sort-bug.md)
+  - *Completed: 2026-01*
+
 ---
 
-*Last Updated: 2025-12-29*
+*Last Updated: 2026-01-10*

@@ -2,7 +2,7 @@
 
 **Task**: Notifications and media info often cover half or all of the media when quickly rating and the window is half-screen size
 
-**Status**: Planning
+**Status**: Complete
 **Created**: 2025-12-25
 
 ---

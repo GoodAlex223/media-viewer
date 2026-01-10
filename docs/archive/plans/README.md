@@ -19,7 +19,10 @@ Plans are archived when:
 
 | Plan | Task | Archived Date |
 |------|------|---------------|
-| *None yet* | — | — |
+| [2025-12-25_notifications-media-info-less-intrusive.md](2025-12-25_notifications-media-info-less-intrusive.md) | Less intrusive notifications | 2026-01-10 |
+| [2025-12-27_sorting-cache.md](2025-12-27_sorting-cache.md) | Sorting algorithm cache | 2026-01-10 |
+| [2025-12-28_background-feature-extraction.md](2025-12-28_background-feature-extraction.md) | Background feature extraction | 2026-01-10 |
+| [2026-01-02_compare-mode-ai-sort-bug.md](2026-01-02_compare-mode-ai-sort-bug.md) | Compare mode AI sort bug | 2026-01-10 |
 
 ---
 
@@ -105,4 +108,4 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 
 ---
 
-*Last Updated: 2026-01-03*
+*Last Updated: 2026-01-10*
