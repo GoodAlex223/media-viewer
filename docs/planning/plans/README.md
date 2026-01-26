@@ -14,7 +14,7 @@ Active implementation plans for ongoing work.
 
 ## Plan Lifecycle
 
-1. **Create** — New plan in `docs/plans/YYYY-MM-DD_task-name.md`
+1. **Create** — New plan in `docs/planning/plans/YYYY-MM-DD_task-name.md`
 2. **Execute** — Follow the plan, update execution log
 3. **Complete** — Verify all steps done, tests passing
 4. **Archive** — Move to `docs/archive/plans/`
@@ -30,16 +30,16 @@ Before archiving a plan, verify:
 - [ ] "Key Discoveries" filled in
 - [ ] "Future Improvements" has 2+ items
 - [ ] **Improvements extracted to BACKLOG.md** (categorized appropriately)
-- [ ] Summary added to `../planning/DONE.md`
+- [ ] Summary added to `DONE.md`
 
-**See [../archive/plans/README.md](../archive/plans/README.md) for complete step-by-step archive process.**
+**See [../../archive/plans/README.md](../../archive/plans/README.md) for complete step-by-step archive process.**
 
 Quick reference:
 
 ```bash
-mv docs/plans/YYYY-MM-DD_task.md docs/archive/plans/
+mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 ```
 
 ---
 
-*Last Updated: 2026-01-10*
+*Last Updated: 2026-01-26*

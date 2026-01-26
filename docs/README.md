@@ -9,8 +9,10 @@ Central index for all project documentation.
 | [TODO.md](planning/TODO.md)              | Active tasks and planned features            |
 | [DONE.md](planning/DONE.md)              | Completed tasks archive                      |
 | [BACKLOG.md](planning/BACKLOG.md)        | Unprioritized ideas and improvements         |
+| [ROADMAP.md](planning/ROADMAP.md)        | Long-term vision and milestones              |
 | [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | Project decisions, patterns, history         |
 | [ARCHITECTURE.md](ARCHITECTURE.md)       | System architecture, component relationships |
+| [MANUAL_TESTING.md](MANUAL_TESTING.md)   | Manual testing scenarios and checklists      |
 
 ## Active Plans
 
@@ -18,7 +20,7 @@ Central index for all project documentation.
 |-----------------------------|---------------------------------------|
 | [Video Fullscreen Toggle][] | Exit fullscreen on second video click |
 
-[Video Fullscreen Toggle]: plans/2025-12-29_video-fullscreen-toggle.md
+[Video Fullscreen Toggle]: planning/plans/2025-12-29_video-fullscreen-toggle.md
 
 ## Archived Plans
 
@@ -42,4 +44,4 @@ Central index for all project documentation.
 
 ---
 
-Last Updated: 2026-01-10
+*Last Updated: 2026-01-26*

@@ -118,4 +118,4 @@ Project decisions, patterns, and historical context for Media Viewer.
 
 ---
 
-*Last Updated: 2025-12-29*
+*Last Updated: 2026-01-26*

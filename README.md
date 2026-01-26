@@ -1,100 +1,101 @@
-## 22.06.25 - 13:57 -- Moving not fully loaded media: media-viewer.js
+# Media Viewer
 
-## 22.06.25 - 13:57 -- Moving not fully loaded media: html and css
+Electron desktop application for browsing, rating, and managing media files (images and videos) with visual similarity sorting and ML-based prediction features.
 
-## 22.06.25 - 13:08 -- Fixing info bugs: media-viewer.js
+## Features
 
-## 22.06.25 - 12:50 -- Fixing info bugs: css
+- **Media Browsing** — Navigate through image and video files with keyboard shortcuts
+- **Rating System** — Like/Dislike/Special with automatic file organization
+- **Compare Mode** — Side-by-side comparison for decision making
+- **Similarity Sorting** — Group visually similar images using perceptual hashing
+- **ML Prediction** — Learn user preferences for intelligent sorting
+- **Zoom & Pan** — Mouse wheel zoom, double-click cycle, drag to pan
+- **Face Detection** — Detect faces in images using face-api
 
-1. File info overlapping with header - The file info panel and header are both positioned at the top and can overlap
-2. File dimensions and aspect ratio not showing - The code attempts to show dimensions but there are timing issues
-3. Long media names not properly handled - Long filenames can cause layout issues
+## Installation
 
-## 22.06.25 - 01:17
+```bash
+# Clone the repository
+git clone https://github.com/goodalex223/media_viewer.git
+cd media_viewer
 
-1. Controls visibility on hover only:
+# Install dependencies
+npm install
 
-Added opacity: 0 and pointer-events: none to .controls, .navigation-info, and .video-controls by default
-Added .show class styles with opacity: 1 and pointer-events: auto
-The JavaScript already handles showing these on mouse movement and hiding after timeout
+# Run the application
+npm start
+```
 
-2. Notifications moved to left side:
+## Usage
 
-Changed .notification-container position from left: 50%; transform: translateX(-50%) to left: 20px
-Added display: flex; flex-direction: column; align-items: flex-start for proper stacking
-Updated animations from slideInTop/slideOutTop to slideInLeft/slideOutLeft
-Added the new slide animations for left-side movement
+### Basic Navigation
 
-3. File info only on hover:
+| Key | Action |
+|-----|--------|
+| `Left Arrow` / `A` | Previous media |
+| `Right Arrow` / `D` | Next media |
+| `Enter` / `F` | Like current media |
+| `Space` / `J` | Dislike current media |
+| `Backspace` / `Z` | Undo last action |
+| `F1` | Open help/settings |
+| `ESC` | Reset zoom / Exit fullscreen |
 
-Removed :hover selector from .file-info:hover condition
-Now only .file-info.show will make it visible
-The JavaScript already handles the hover detection for the top-right area
+### View Modes
 
-4. Updated notification animation:
+- **Single Mode** — View one media file at a time
+- **Compare Mode** — View two files side-by-side for comparison
 
-Changed the JavaScript showNotification method to use slideOutLeft instead of slideOutTop
+### Sorting Options
 
-The existing JavaScript already has the proper hover detection logic in place - it was just the CSS that needed to be updated to hide elements by default and only show them with the .show class. The hover areas are:
+- **Original** — File system order
+- **Random** — Shuffle files
+- **Similarity** — Group visually similar images together
+- **AI Sort** — ML-based sorting by predicted preference
 
-File info: Shows when mouse is in top-right 200px area or hovering over file info
-Controls: Show on any mouse movement, hide after 2 seconds of inactivity
-Video controls: Same behavior as regular controls, but only visible when video is playing
+## Requirements
 
-5. Updated shortcuts
+- Node.js 18+
+- npm 9+
+- Windows/macOS/Linux
 
-## 22.06.25 - 00:45
+## Tech Stack
 
-1. Show media at full width or height of screen if it has width or height larger then screen ones.
+| Component | Technology |
+|-----------|------------|
+| Framework | Electron 39.x |
+| Language | JavaScript (ES6+) |
+| UI | HTML/CSS (no framework) |
+| Image Hashing | blockhash-js |
+| Face Detection | @vladmandic/face-api |
+| Video Metadata | ffprobe-static |
 
+## Project Structure
 
-## 22.06.25 - 00:14
+```
+media_viewer/
+├── main.js              # Electron main process
+├── preload.js           # Security bridge (context isolation)
+├── media-viewer.js      # Renderer process (UI logic)
+├── sorting-worker.js    # Web Worker for sorting algorithms
+├── ml-worker.js         # Web Worker for ML predictions
+├── feature-extractor.js # Image feature extraction
+├── face-detector.js     # Face detection features
+├── index.html           # Main HTML entry point
+├── styles.css           # Application styles
+└── docs/                # Project documentation
+```
 
-1. medias with cancelled score are moved back to source folder and showed 
+## Documentation
 
-## 22.06.25
+- [Architecture](docs/ARCHITECTURE.md) — System design and data flows
+- [Project Context](docs/PROJECT_CONTEXT.md) — Decisions and patterns
+- [TODO](docs/planning/TODO.md) — Active tasks
+- [Done](docs/planning/DONE.md) — Completed tasks
 
-1. Move message of move error or success from center to the top of the window. 
-2. Now when video is showed and video height is larger then window height video shifts out from window and also like and dislike buttons shifts out from the window. 
-3. Video need to have sound and play/pause button. 
-4. Buttons move to the bottom of the window, make smaller and as squares. 
-5. Header with "Media Viewer" and current folder name with amount of files take up a lot of space on the screen. Make them transparent and at first plan and only show when mouse is over them . New free space is for media. 
-6. Add cancel button that return previous post to this folder and show them. 
-7. Near file name and size and file dimensions and aspect ratio. Make this info showed only on mouse over. 
-8. Separate css styles to separate file. 
+## License
 
-## 21.06.25
+MIT
 
-Main Issues I Found and Fixed:
-1. Sandbox Mode Issue
+---
 
-You had sandbox: true in the webPreferences, which severely restricts what the renderer process can do
-Changed to sandbox: false to allow proper IPC communication
-
-2. Console Logs in Main Process
-
-Removed the random console.log("1"), console.log("12") etc. that were cluttering the main process
-
-3. IPC Handler Issues
-
-Fixed the move-file handler to properly destructure the data parameter
-Added proper error handling in all IPC handlers
-
-4. Preload Script Issues
-
-Fixed the API exposure to include the invoke method for generic IPC calls
-Added proper error handling and logging
-
-5. Renderer Process Issues
-
-Fixed file URL creation for Electron (file:// protocol)
-Added proper error handling for when Electron API is not available
-Fixed the DOM initialization to wait for DOMContentLoaded
-Improved debugging with better console logging
-
-6. Missing Window Properties
-
-Added proper window sizing and minimum size constraints
-Enabled dev tools in development mode
-
-The main problem was likely the sandbox mode combined with improper IPC handling. These fixes should resolve the folder opening and drag-and-drop functionality.
+*For Claude Code configuration, see [CLAUDE.md](CLAUDE.md) and [PROJECT.md](PROJECT.md).*

@@ -1,7 +1,7 @@
 # Video Fullscreen Toggle on Second Click
 
 **Created**: 2025-12-29
-**Status**: Planning
+**Status**: Testing
 **Task**: Clicking on a video a second time when in fullscreen mode should close fullscreen, not zoom in
 
 ---
@@ -28,7 +28,7 @@
 
 ### Root Cause
 
-In `toggleFullscreen()` method ([media-viewer.js:3179](../media-viewer.js#L3179)):
+In `toggleFullscreen()` method ([media-viewer.js:3179](../../media-viewer.js#L3179)):
 
 ```javascript
 // Click to exit (but not on video controls)
@@ -44,7 +44,7 @@ const exitHandler = (e) => {
 
 The `exitHandler` intentionally ignores clicks on the video element to avoid interfering with native video controls. However, since we use custom controls (`video.controls = false`), this restriction is unnecessary.
 
-Additionally, `setupZoomEvents()` ([media-viewer.js:4457](../media-viewer.js#L4457)) adds a double-click handler that triggers zoom, which conflicts with the expected fullscreen exit behavior.
+Additionally, `setupZoomEvents()` ([media-viewer.js:4457](../../media-viewer.js#L4457)) adds a double-click handler that triggers zoom, which conflicts with the expected fullscreen exit behavior.
 
 ### Approaches Considered
 
@@ -140,10 +140,10 @@ Reasoning:
 
 ### [2025-12-29] — PHASE: Implementation
 
-- Modified `toggleFullscreen()` ([media-viewer.js:3214-3223](../media-viewer.js#L3214-L3223)):
+- Modified `toggleFullscreen()` ([media-viewer.js:3214-3223](../../media-viewer.js#L3214-L3223)):
   - Removed check that prevented video clicks from exiting fullscreen
   - Added check to preserve overlay button functionality (`.overlay-btn`, `.media-overlay-controls`)
-- Modified `setupZoomEvents()` ([media-viewer.js:4457-4486](../media-viewer.js#L4457-L4486)):
+- Modified `setupZoomEvents()` ([media-viewer.js:4457-4486](../../media-viewer.js#L4457-L4486)):
   - Added `isInFullscreen()` helper function
   - Disabled double-click zoom when in fullscreen mode
   - Disabled wheel zoom when in fullscreen mode

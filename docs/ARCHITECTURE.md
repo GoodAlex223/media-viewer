@@ -236,16 +236,23 @@ media_viewer/
 ├── preload.js           # Context bridge (security)
 ├── media-viewer.js      # Renderer process (UI logic)
 ├── sorting-worker.js    # Web Worker (sorting algorithms)
+├── ml-worker.js         # Web Worker (ML predictions)
+├── feature-extractor.js # Image feature extraction
+├── face-detector.js     # Face detection features
 ├── index.html           # Main HTML template
 ├── styles.css           # UI styles
 ├── package.json         # Dependencies and scripts
 ├── docs/                # Documentation
-│   ├── README.md        # Doc index
-│   ├── TODO.md          # Active tasks
-│   ├── DONE.md          # Completed tasks
-│   ├── PROJECT_CONTEXT.md
+│   ├── README.md        # Documentation index
 │   ├── ARCHITECTURE.md  # This file
-│   ├── plans/           # Implementation plans
+│   ├── PROJECT_CONTEXT.md # Decisions, patterns
+│   ├── MANUAL_TESTING.md  # Manual test scenarios
+│   ├── planning/        # Planning documents
+│   │   ├── TODO.md      # Active tasks
+│   │   ├── DONE.md      # Completed tasks
+│   │   ├── BACKLOG.md   # Unprioritized ideas
+│   │   ├── ROADMAP.md   # Long-term vision
+│   │   └── plans/       # Implementation plans
 │   └── archive/         # Archived documentation
 └── .claude/             # Claude Code configuration
 ```
@@ -293,4 +300,4 @@ media_viewer/
 
 ---
 
-*Last Updated: 2025-12-29*
+*Last Updated: 2026-01-26*
