@@ -99,8 +99,7 @@
             <span id="mediaIndex"></span>
         </div>
 
-        <!-- Zoom indicator -->
-        <div class="zoom-indicator" id="zoomIndicator">100%</div>
+        <!-- Zoom controls are created dynamically per media pane -->
 
         <!-- Video controls -->
         <div class="video-controls" id="videoControls">
@@ -128,6 +127,12 @@
 
         <!-- Main controls for single view -->
         <div class="controls" id="controls">
+            <div class="control-btn-wrapper" id="zoomBtnWrapper">
+                <button class="control-btn zoom-toggle-btn" id="zoomToggleBtn" title="Zoom controls">
+                    <span class="btn-icon"><i data-lucide="zoom-in"></i></span>
+                    <span class="btn-label">Zoom</span>
+                </button>
+            </div>
             <button class="control-btn special-btn" id="specialBtn" title="Move to special folder">
                 <span class="btn-icon"><i data-lucide="folder-heart"></i></span>
                 <span class="btn-label">Special</span>
