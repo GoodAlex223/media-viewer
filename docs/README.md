@@ -9,10 +9,19 @@ Central index for all project documentation.
 | [TODO.md](planning/TODO.md)              | Active tasks and planned features            |
 | [DONE.md](planning/DONE.md)              | Completed tasks archive                      |
 | [BACKLOG.md](planning/BACKLOG.md)        | Unprioritized ideas and improvements         |
-| [ROADMAP.md](planning/ROADMAP.md)        | Long-term vision and milestones              |
+| [ROADMAP.md](planning/ROADMAP.md)        | Long-term vision and releases                |
+| [GOALS.md](planning/GOALS.md)            | Objectives and success metrics               |
+| [MILESTONES.md](planning/MILESTONES.md)  | Key targets with dates                       |
 | [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | Project decisions, patterns, history         |
 | [ARCHITECTURE.md](ARCHITECTURE.md)       | System architecture, component relationships |
 | [MANUAL_TESTING.md](MANUAL_TESTING.md)   | Manual testing scenarios and checklists      |
+
+## Planning Index
+
+| Document                                           | Purpose                        |
+|----------------------------------------------------|--------------------------------|
+| [planning/README.md](planning/README.md)           | Planning workflow and overview  |
+| [planning/plans/README.md](planning/plans/README.md) | Active implementation plans |
 
 ## Active Plans
 
@@ -44,4 +53,4 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-01-26*
+*Last Updated: 2026-02-05*

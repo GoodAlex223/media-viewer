@@ -82,7 +82,7 @@ Review the plan's "Future Improvements" and "Key Discoveries" sections:
 
 ```bash
 # Move completed plan from active to archive
-mv docs/plans/YYYY-MM-DD_task-name.md docs/archive/plans/
+mv docs/planning/plans/YYYY-MM-DD_task-name.md docs/archive/plans/
 
 # Also delete .claude/plans/ copy if exists
 rm .claude/plans/YYYY-MM-DD_task-name.md
@@ -90,9 +90,8 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 
 ### Step 5: Update Documentation Index
 
-- Update `../plans/README.md` — remove from "Current Plans" table
-- Update `../README.md` — add to "Completed Plans" table
-- Update `../../README.md` — if plan was listed in "Implementation Plans"
+- Update `../../README.md` — move plan from "Active Plans" to "Archived Plans" table
+- Update `../README.md` — add to "Archived Documents" table (if non-plan doc)
 
 ---
 
@@ -103,9 +102,9 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 - [ ] Summary added to DONE.md (with lessons learned)
 - [ ] Plan moved to docs/archive/plans/
 - [ ] .claude/plans/ copy deleted (if exists)
-- [ ] docs/plans/README.md updated
+- [ ] docs/README.md updated (Active Plans → Archived Plans)
 - [ ] docs/archive/README.md updated
 
 ---
 
-*Last Updated: 2026-01-10*
+*Last Updated: 2026-02-05*

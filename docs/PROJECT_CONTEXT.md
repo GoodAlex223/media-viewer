@@ -81,7 +81,7 @@ Project decisions, patterns, and historical context for Media Viewer.
 
 | Item | Description | Priority |
 |------|-------------|----------|
-| Large renderer file | `media-viewer.js` contains all UI logic (~2000+ lines) | Low |
+| Large renderer file | `media-viewer.js` contains all UI logic (~6100+ lines) | Low |
 | No TypeScript | Plain JavaScript, no type checking | Low |
 | No automated tests | Manual testing only | Medium |
 
@@ -118,4 +118,4 @@ Project decisions, patterns, and historical context for Media Viewer.
 
 ---
 
-*Last Updated: 2026-01-26*
+*Last Updated: 2026-02-05*

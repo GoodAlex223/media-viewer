@@ -1,14 +1,14 @@
 {
   "name": "media_viewer",
   "version": "1.0.0",
-  "description": "When you're ready, start your application by running: `docker compose up --build`.",
+  "description": "Electron desktop application for browsing, rating, and managing media files with visual similarity sorting and ML-based prediction features.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "goodalex223",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@vladmandic/face-api": "^1.7.15",
     "blockhash": "^0.2.0",

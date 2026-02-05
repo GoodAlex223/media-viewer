@@ -7,22 +7,31 @@ System architecture and component relationships for Media Viewer.
 ## High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Electron App                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────────┐    IPC Bridge    ┌──────────────────────────┐ │
-│  │ Main Process │◄────────────────►│    Renderer Process      │ │
-│  │  (main.js)   │                  │   (media-viewer.js)      │ │
-│  └──────┬───────┘                  └────────────┬─────────────┘ │
-│         │                                       │               │
-│         ▼                                       ▼               │
-│  ┌──────────────┐                  ┌──────────────────────────┐ │
-│  │ File System  │                  │      Web Worker          │ │
-│  │ Operations   │                  │   (sorting-worker.js)    │ │
-│  └──────────────┘                  └──────────────────────────┘ │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                           Electron App                               │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌──────────────┐    IPC Bridge    ┌───────────────────────────────┐ │
+│  │ Main Process │◄────────────────►│       Renderer Process        │ │
+│  │  (main.js)   │                  │      (media-viewer.js)        │ │
+│  └──────┬───────┘                  └──────────────┬────────────────┘ │
+│         │                                         │                  │
+│         ▼                                         ▼                  │
+│  ┌──────────────┐                  ┌───────────────────────────────┐ │
+│  │ File System  │                  │         Web Workers           │ │
+│  │ Operations   │                  │  ┌─────────────────────────┐  │ │
+│  └──────────────┘                  │  │ sorting-worker.js       │  │ │
+│                                    │  │ (similarity sorting)    │  │ │
+│                                    │  ├─────────────────────────┤  │ │
+│                                    │  │ ml-worker.js            │  │ │
+│                                    │  │ (ML prediction)         │  │ │
+│                                    │  ├─────────────────────────┤  │ │
+│                                    │  │ feature-worker.js       │  │ │
+│                                    │  │ (feature extraction)    │  │ │
+│                                    │  └─────────────────────────┘  │ │
+│                                    └───────────────────────────────┘ │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -237,7 +246,9 @@ media_viewer/
 ├── media-viewer.js      # Renderer process (UI logic)
 ├── sorting-worker.js    # Web Worker (sorting algorithms)
 ├── ml-worker.js         # Web Worker (ML predictions)
+├── ml-model.js          # ML model definitions
 ├── feature-extractor.js # Image feature extraction
+├── feature-worker.js    # Web Worker (feature extraction)
 ├── face-detector.js     # Face detection features
 ├── index.html           # Main HTML template
 ├── styles.css           # UI styles
@@ -300,4 +311,4 @@ media_viewer/
 
 ---
 
-*Last Updated: 2026-01-26*
+*Last Updated: 2026-02-05*

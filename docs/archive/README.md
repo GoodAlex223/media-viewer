@@ -34,7 +34,7 @@ If you need information from an archived document:
 ## Plan Archive Process
 
 ```text
-docs/plans/YYYY-MM-DD_task.md  →  docs/archive/plans/YYYY-MM-DD_task.md
+docs/planning/plans/YYYY-MM-DD_task.md  →  docs/archive/plans/YYYY-MM-DD_task.md
 ```
 
 Before archiving a plan, verify:
@@ -50,4 +50,4 @@ Before archiving a plan, verify:
 
 ---
 
-*Last Updated: 2026-01-10*
+*Last Updated: 2026-02-05*

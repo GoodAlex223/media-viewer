@@ -1,15 +1,70 @@
 # TODO
 
-## Active Tasks
+Active tasks and backlog.
 
-### UI/UX Improvements
+**Last Updated**: 2026-02-05
 
-- [ ] **Video fullscreen toggle on second click** — Clicking on a video a second time when it is open in fullscreen mode should close fullscreen, not zoom in
-  - Plan: [2025-12-29_video-fullscreen-toggle.md](plans/2025-12-29_video-fullscreen-toggle.md)
-  - Status: Implementation complete, awaiting testing
-
-- [ ] **Visual media scale controls** — Add a visual interface for manipulating media scale (zoom) in both fullscreen and normal modes. Should work in both single mode and compare mode
+**Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
+**Completed tasks**: Move to [DONE.md](DONE.md)
+**Unprioritized ideas**: See [BACKLOG.md](BACKLOG.md)
+**Task format reference**: [todo-task.md](../../../.claude/TEMPLATES/todo-task.md)
 
 ---
 
-*Last Updated: 2026-01-26*
+## 🔄 In Progress
+
+<!-- Currently active tasks. Limit to 1-3 at a time. -->
+
+#### [TASK-001] Video fullscreen toggle on second click
+**Priority**: 🟡 Medium
+**Status**: 🔄 In Progress
+**Effort**: M
+**Started**: 2025-12-29
+**Plan**: [2025-12-29_video-fullscreen-toggle.md](plans/2025-12-29_video-fullscreen-toggle.md)
+
+**Description**: Clicking on a video a second time when it is open in fullscreen mode should close fullscreen, not zoom in.
+
+**Acceptance Criteria**:
+- [x] Implementation complete
+- [ ] Manual testing passed
+- [ ] Plan archived
+
+---
+
+## 📋 Planned
+
+<!-- Defined tasks ready to start. Ordered by priority: 🔴 → 🟠 → 🟡 → 🟢 -->
+
+#### [TASK-002] Visual media scale controls
+**Priority**: 🟡 Medium
+**Status**: 📋 Planned
+**Effort**: L
+
+**Description**: Add a visual interface for manipulating media scale (zoom) in both fullscreen and normal modes. Should work in both single mode and compare mode.
+
+**Acceptance Criteria**:
+- [ ] Visual zoom controls displayed in UI
+- [ ] Works in single mode
+- [ ] Works in compare mode
+- [ ] Works in fullscreen mode
+
+---
+
+## ⏸️ Blocked
+
+<!-- Tasks waiting on external dependencies or decisions -->
+
+---
+
+## 🔀 Spawned
+
+<!-- Tasks generated from completed work. Include origin for traceability. -->
+
+---
+
+## Notes
+
+- Tasks grouped by status, sorted by priority within each group
+- When a task reaches ✅ Done: remove from here, add to [DONE.md](DONE.md)
+- Significant tasks should have a plan in `docs/planning/plans/`
+- New ideas without clear priority go to [BACKLOG.md](BACKLOG.md)

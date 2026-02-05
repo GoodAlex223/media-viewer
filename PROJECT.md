@@ -2,7 +2,7 @@
 
 Project-specific configuration. Universal rules are in [CLAUDE.md](CLAUDE.md).
 
-**Last Updated**: 2026-01-26
+**Last Updated**: 2026-02-05
 
 ---
 
@@ -138,7 +138,7 @@ npm test
 
 ## Known Limitations
 
-1. **Large renderer file**: `media-viewer.js` contains all UI logic (~4000+ lines) - consider modularizing
+1. **Large renderer file**: `media-viewer.js` contains all UI logic (~6100+ lines) - consider modularizing
 2. **No TypeScript**: Plain JavaScript with no type checking
 3. **No automated tests**: Manual testing only
 4. **Sandbox disabled**: Required for file operations but reduces security
