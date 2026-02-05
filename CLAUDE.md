@@ -50,13 +50,17 @@ media_viewer/
 ├── feature-worker.js    # Web Worker for feature extraction
 ├── face-detector.js     # Face detection using @vladmandic/face-api
 └── docs/                # Project documentation
+    ├── planning/        # Task management (TODO, DONE, BACKLOG, GOALS, MILESTONES, ROADMAP)
+    ├── archive/         # Historical documentation
+    ├── ARCHITECTURE.md  # System design and data flows
+    └── PROJECT_CONTEXT.md # Decisions, patterns, lessons learned
 ```
 
 **Data Flow**:
 1. Main process handles file system operations (read, move, copy)
 2. Preload exposes secure IPC bridge to renderer
 3. Renderer (media-viewer.js) manages UI state and user interactions
-4. CPU-intensive tasks delegated to Web Workers
+4. CPU-intensive tasks delegated to Web Workers (sorting, ML, feature extraction)
 
 <!-- END AUTO-MANAGED -->
 
@@ -110,10 +114,11 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- Documentation standardization to template format (Feb 2026)
+- Planning workflow formalization (task IDs, priority badges, structured formats)
+- New planning docs: GOALS.md (OKR format), MILESTONES.md, planning/README.md
 - ML feature extraction with 64-dimension vectors
-- Online learning for ML predictions
 - Compare mode with special folder support
-- Documentation reorganization
 
 <!-- END AUTO-MANAGED -->
 
