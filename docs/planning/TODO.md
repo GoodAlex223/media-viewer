@@ -23,18 +23,7 @@ Active tasks and backlog.
 
 <!-- Defined tasks ready to start. Ordered by priority: 🔴 → 🟠 → 🟡 → 🟢 -->
 
-#### [TASK-002] Visual media scale controls
-**Priority**: 🟡 Medium
-**Status**: 📋 Planned
-**Effort**: L
-
-**Description**: Add a visual interface for manipulating media scale (zoom) in both fullscreen and normal modes. Should work in both single mode and compare mode.
-
-**Acceptance Criteria**:
-- [ ] Visual zoom controls displayed in UI
-- [ ] Works in single mode
-- [ ] Works in compare mode
-- [ ] Works in fullscreen mode
+<!-- TASK-002 completed 2026-02-05, moved to DONE.md -->
 
 ---
 
