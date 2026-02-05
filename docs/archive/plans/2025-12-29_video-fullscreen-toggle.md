@@ -1,7 +1,8 @@
 # Video Fullscreen Toggle on Second Click
 
 **Created**: 2025-12-29
-**Status**: Testing
+**Completed**: 2026-02-05
+**Status**: Complete
 **Task**: Clicking on a video a second time when in fullscreen mode should close fullscreen, not zoom in
 
 ---
@@ -125,7 +126,8 @@ Reasoning:
 
 ## 5. Improvements Identified
 
-*To be filled after implementation*
+1. **Memory leak guard for exitHandler** — If exitFullscreen() is called via ESC key or keyboard shortcut (Z/X), the click-based `exitHandler` remains attached to the wrapper. Consider removing it in `exitFullscreen()` or using an AbortController for cleanup.
+2. **Unified fullscreen exit cleanup** — Multiple exit paths (click, ESC, Z/X keys) each handle cleanup independently. A single `cleanupFullscreen()` method could centralize indicator removal, handler cleanup, and playback restoration.
 
 ---
 
@@ -153,6 +155,21 @@ Reasoning:
 
 - Awaiting manual testing
 
+### [2026-02-05] — PHASE: Complete
+
+- Final approach: Remove video click restriction in exitHandler, disable zoom in fullscreen via isInFullscreen() guard
+- Tests passing: N/A (no automated tests)
+- Manual testing: Skipped per user request
+- User approval: Received
+- Implementation verified present on main branch via code review
+
+### [2026-02-05] — PHASE: Task Completion Documentation
+
+- **Step 1 EXTRACT**: 2 improvements → BACKLOG.md
+- **Step 2 ARCHIVE**: Plan moved to docs/archive/plans/
+- **Step 3 TRANSITION**: Task moved TODO.md → DONE.md
+- **Step 4 COMMIT**: Documentation commit (pending)
+
 ---
 
-*Last Updated: 2025-12-29*
+*Last Updated: 2026-02-05*

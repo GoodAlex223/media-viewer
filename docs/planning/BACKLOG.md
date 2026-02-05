@@ -33,6 +33,8 @@ Improvements to existing functionality.
 | Pause extraction when user is navigating | ML/Perf | Medium | Medium | Plan: 2025-12-28_background-feature-extraction |
 | Validation in showCompareMedia() for file existence | Compare | Medium | Low | Plan: 2026-01-02_compare-mode-ai-sort-bug |
 | Anonymize author field in package.json if privacy desired | Config | Low | Low | Security audit: 2026-02-05 |
+| Memory leak guard for exitHandler | Fullscreen | Medium | Low | Plan: 2025-12-29_video-fullscreen-toggle |
+| Unified fullscreen exit cleanup method | Fullscreen | Medium | Low | Plan: 2025-12-29_video-fullscreen-toggle |
 
 ---
 
@@ -73,6 +75,12 @@ Areas requiring investigation before implementation.
 - [ ] Worker count setting — User-configurable extraction parallelism
 - [ ] Estimated time remaining — Show ETA during feature extraction
 - [ ] Pause extraction when navigating — Reduce CPU contention
+
+### 2025-12-29 From: video-fullscreen-toggle
+**Origin**: [2025-12-29_video-fullscreen-toggle.md](../archive/plans/2025-12-29_video-fullscreen-toggle.md)
+
+- [ ] Memory leak guard for exitHandler — Clean up click handler when fullscreen exited via ESC/keyboard
+- [ ] Unified fullscreen exit cleanup — Centralize indicator removal, handler cleanup, and playback restoration
 
 ### 2026-01-02 From: compare-mode-ai-sort-bug
 **Origin**: [2026-01-02_compare-mode-ai-sort-bug.md](../archive/plans/2026-01-02_compare-mode-ai-sort-bug.md)

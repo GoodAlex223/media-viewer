@@ -12,6 +12,20 @@ Completed tasks with implementation details and learnings.
 
 <!-- Organize by month, newest first. -->
 
+## 2026-02 (February)
+
+### [2026-02-05] Video fullscreen toggle on second click
+
+**Plan**: [2025-12-29_video-fullscreen-toggle.md](../archive/plans/2025-12-29_video-fullscreen-toggle.md)
+**Summary**: Clicking on a video in fullscreen now exits fullscreen instead of zooming. Zoom operations (double-click, wheel, pan) are disabled in fullscreen mode.
+**Key Changes**:
+- Removed video click restriction in `toggleFullscreen()` exitHandler
+- Added `isInFullscreen()` guard in `setupZoomEvents()` to disable zoom in fullscreen
+- Overlay button clicks (like/dislike/special) preserved via `.closest()` checks
+**Spawned Tasks**: 2 items added to BACKLOG.md (exitHandler cleanup, unified exit method)
+
+---
+
 ## 2026-01 (January)
 
 ### [2026-01-02] Compare mode AI sort file mismatch
