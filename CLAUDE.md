@@ -41,7 +41,7 @@ No automated tests, linting, or type checking configured.
 media_viewer/
 ├── main.js              # Electron main process, IPC handlers, file operations
 ├── preload.js           # Security bridge, context isolation
-├── media-viewer.js      # Renderer process, all UI logic (~6100+ lines)
+├── media-viewer.js      # Renderer process, all UI logic (~6300+ lines)
 ├── index.html           # Main HTML entry point
 ├── styles.css           # Application styling, design system
 ├── sorting-worker.js    # Web Worker for sorting algorithms (MST, similarity)
