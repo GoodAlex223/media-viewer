@@ -38,6 +38,8 @@ Improvements to existing functionality.
 | Click/active effect for control buttons | UI | Medium | Low | Plan: 2026-02-05_visual-scale-controls |
 | Keyboard shortcut for zoom toggle | UI | Low | Low | Plan: 2026-02-05_visual-scale-controls |
 | Zoom level persistence across navigation | UI | Low | Medium | Plan: 2026-02-05_visual-scale-controls |
+| Fix mouseup listener leak in createZoomPopover | Zoom | Medium | Low | Code review: PR #1 |
+| Document fullscreen zoom reversal from TASK-001 | Zoom/UX | Low | Low | Code review: PR #1 |
 
 ---
 
@@ -98,6 +100,12 @@ Areas requiring investigation before implementation.
 - [ ] Keyboard shortcut for zoom toggle — Add key binding (e.g., `Z` in single mode) to toggle zoom popover without clicking
 - [ ] Zoom level persistence — Remember zoom level when navigating between media of similar size
 - [ ] Slider width responsive to popover space — Wider slider on larger screens for finer control
+
+### 2026-02-05 From: code-review-pr-1
+**Origin**: Code review of PR #1
+
+- [ ] Fix mouseup listener leak in createZoomPopover — `document.addEventListener('mouseup', ...)` is never removed in `removeZoomPopover()`, causing listeners to accumulate in compare mode navigation. Use AbortController or stored handler reference for cleanup.
+- [ ] Document fullscreen zoom decision reversal — TASK-002 re-enabled wheel zoom and pan in fullscreen, reversing TASK-001's explicit decision (commit d3b08bb). Add rationale to PROJECT_CONTEXT.md.
 
 ---
 
