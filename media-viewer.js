@@ -468,6 +468,10 @@ class MediaViewer {
 
         // ML Prediction button
         this.sortPredictionBtn = document.getElementById('sortPredictionBtn');
+
+        // Zoom popover controls
+        this.zoomControlsMap = {};
+        this.setupZoomPopovers();
     }
 
     updateSortSettingsVisibility() {
@@ -1863,6 +1867,150 @@ class MediaViewer {
         });
     }
 
+    // Logarithmic mapping for zoom slider: 0-100 → scale 1-8
+    sliderToScale(value) {
+        const normalized = value / 100;
+        return Math.exp(Math.log(this.minZoom) + normalized * (Math.log(this.maxZoom) - Math.log(this.minZoom)));
+    }
+
+    scaleToSlider(scale) {
+        const clamped = Math.max(this.minZoom, Math.min(this.maxZoom, scale));
+        return ((Math.log(clamped) - Math.log(this.minZoom)) / (Math.log(this.maxZoom) - Math.log(this.minZoom))) * 100;
+    }
+
+    setupZoomPopovers() {
+        // Only set up the single-mode zoom (static HTML button)
+        // Compare-mode zoom buttons are added dynamically in addMediaOverlayControls
+        const wrapper = document.getElementById('zoomBtnWrapper');
+        const toggleBtn = document.getElementById('zoomToggleBtn');
+        if (wrapper && toggleBtn) {
+            this.createZoomPopover('single', wrapper, toggleBtn);
+        }
+
+        // Close popovers on outside click
+        document.addEventListener('click', () => this.closeAllZoomPopovers());
+    }
+
+    createZoomPopover(target, wrapper, toggleBtn) {
+        // Build popover DOM: [-] [slider] [+] [100%]
+        const popover = document.createElement('div');
+        popover.className = 'zoom-popover';
+
+        const zoomOutBtn = document.createElement('button');
+        zoomOutBtn.className = 'zoom-pop-btn';
+        zoomOutBtn.title = 'Zoom out';
+        zoomOutBtn.innerHTML = '<i data-lucide="minus"></i>';
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'zoom-slider';
+        slider.min = '0';
+        slider.max = '100';
+        slider.value = '0';
+        slider.step = '1';
+        slider.title = 'Zoom level';
+
+        const zoomInBtn = document.createElement('button');
+        zoomInBtn.className = 'zoom-pop-btn';
+        zoomInBtn.title = 'Zoom in';
+        zoomInBtn.innerHTML = '<i data-lucide="plus"></i>';
+
+        const valueDisplay = document.createElement('span');
+        valueDisplay.className = 'zoom-value';
+        valueDisplay.textContent = '100%';
+
+        popover.appendChild(zoomOutBtn);
+        popover.appendChild(slider);
+        popover.appendChild(zoomInBtn);
+        popover.appendChild(valueDisplay);
+
+        wrapper.appendChild(popover);
+
+        // Store references
+        this.zoomControlsMap[target] = {
+            container: popover, slider, zoomInBtn, zoomOutBtn, valueDisplay,
+            toggleBtn, isSliderDragging: false
+        };
+
+        // Toggle popover on button click
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = popover.classList.contains('show');
+            this.closeAllZoomPopovers();
+            if (!isOpen) popover.classList.add('show');
+        });
+
+        // Zoom center helper
+        const zoomCenter = () => {
+            const element = this.getMediaElement(target);
+            if (!element) return null;
+            const rect = element.getBoundingClientRect();
+            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        };
+
+        zoomInBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const state = this.zoomState[target];
+            const newScale = Math.min(this.maxZoom, state.scale * this.zoomFactor);
+            const center = zoomCenter();
+            if (center) this.zoomAtPoint(target, newScale, center.x, center.y);
+        });
+
+        zoomOutBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const state = this.zoomState[target];
+            const newScale = Math.max(this.minZoom, state.scale / this.zoomFactor);
+            if (newScale <= this.minZoom) {
+                this.resetZoom(target);
+            } else {
+                const center = zoomCenter();
+                if (center) this.zoomAtPoint(target, newScale, center.x, center.y);
+            }
+        });
+
+        slider.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            this.zoomControlsMap[target].isSliderDragging = true;
+        });
+        slider.addEventListener('input', (e) => {
+            const newScale = this.sliderToScale(parseFloat(e.target.value));
+            if (newScale <= this.minZoom + 0.01) {
+                this.resetZoom(target);
+            } else {
+                const center = zoomCenter();
+                if (center) this.zoomAtPoint(target, newScale, center.x, center.y);
+            }
+        });
+        document.addEventListener('mouseup', () => {
+            if (this.zoomControlsMap[target]) {
+                this.zoomControlsMap[target].isSliderDragging = false;
+            }
+        });
+
+        // Prevent popover clicks from closing via document handler
+        popover.addEventListener('mousedown', (e) => e.stopPropagation());
+        popover.addEventListener('click', (e) => e.stopPropagation());
+
+        // Initialize Lucide icons
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons({ nodes: [popover] });
+        }
+    }
+
+    removeZoomPopover(target) {
+        const entry = this.zoomControlsMap[target];
+        if (!entry) return;
+        if (entry.container.parentNode) entry.container.remove();
+        if (entry.toggleBtn && entry.toggleBtn.parentNode) entry.toggleBtn.parentNode.remove();
+        delete this.zoomControlsMap[target];
+    }
+
+    closeAllZoomPopovers() {
+        for (const entry of Object.values(this.zoomControlsMap)) {
+            entry.container.classList.remove('show');
+        }
+    }
+
     async openFolderDialog() {
         if (!window.electronAPI) {
             this.showError('Electron API not available');
@@ -2117,6 +2265,8 @@ class MediaViewer {
         this.currentMedia.style.display = 'none';
         this.mediaContainer.appendChild(this.currentMedia);
 
+        this.closeAllZoomPopovers();
+
         this.updateBasicFileInfo(file);
         this.updateNavigationInfo();
 
@@ -2289,6 +2439,8 @@ class MediaViewer {
         this.mediaContainer.appendChild(this.leftMediaWrapper);
         this.mediaContainer.appendChild(this.rightMediaWrapper);
 
+        this.closeAllZoomPopovers();
+
         // Initialize Lucide icons for overlay controls (must be after DOM append)
         if (typeof lucide !== 'undefined') {
             lucide.createIcons({
@@ -2340,10 +2492,24 @@ class MediaViewer {
             this.moveToSpecialFolder(side);
         });
 
+        // Zoom button with popover wrapper
+        const zoomWrapper = document.createElement('div');
+        zoomWrapper.className = 'control-btn-wrapper';
+        const zoomBtn = document.createElement('button');
+        zoomBtn.className = 'overlay-btn overlay-zoom-btn';
+        zoomBtn.innerHTML = '<i data-lucide="zoom-in"></i>';
+        zoomBtn.title = 'Zoom controls';
+        zoomWrapper.appendChild(zoomBtn);
+
+        controls.appendChild(zoomWrapper);
         controls.appendChild(specialBtn);
         controls.appendChild(dislikeBtn);
         controls.appendChild(likeBtn);
         wrapper.appendChild(controls);
+
+        // Clean up old zoom popover for this side and create new one
+        this.removeZoomPopover(side);
+        this.createZoomPopover(side, zoomWrapper, zoomBtn);
     }
 
     setupCompareImageHandlers(media, file, side) {
@@ -3049,6 +3215,8 @@ class MediaViewer {
         // Hide prediction badges before switching modes
         this.hidePredictionBadges();
 
+        this.closeAllZoomPopovers();
+
         // Clean up media from previous mode before switching
         if (this.isCompareMode) {
             // Switching FROM compare TO single - clean up compare media
@@ -3407,7 +3575,7 @@ class MediaViewer {
             // Add indicator
             const indicator = document.createElement('div');
             indicator.className = 'fullscreen-indicator';
-            indicator.textContent = 'Press ESC or click to exit fullscreen';
+            indicator.textContent = 'Press ESC to exit fullscreen';
             wrapper.appendChild(indicator);
 
             // Resume video playback if it was playing
@@ -3418,10 +3586,17 @@ class MediaViewer {
                 }, 100);
             }
 
-            // Click to exit (but not on overlay buttons)
+            // Click to exit (but not on overlay buttons or when zoomed)
             const exitHandler = (e) => {
                 // Don't exit if clicking on overlay buttons (like/dislike/special)
                 if (e.target.closest('.overlay-btn') || e.target.closest('.media-overlay-controls')) {
+                    return;
+                }
+                // Don't exit if media is zoomed (use ESC to exit when zoomed)
+                const zoomTarget = wrapper.classList.contains('left-media-wrapper') ? 'left'
+                    : wrapper.classList.contains('right-media-wrapper') ? 'right'
+                    : 'single';
+                if (this.zoomState[zoomTarget] && this.zoomState[zoomTarget].scale > 1) {
                     return;
                 }
                 this.exitFullscreen(wrapper);
@@ -4620,36 +4795,27 @@ class MediaViewer {
     }
 
     updateZoomIndicator(target) {
-        const indicator = document.getElementById('zoomIndicator');
-        if (!indicator) return;
+        const entry = this.zoomControlsMap && this.zoomControlsMap[target];
+        if (!entry) return;
 
         const state = this.zoomState[target];
-        const activeTarget = this.isCompareMode ? target : 'single';
 
-        // Show indicator only when zoomed
-        if (state.scale > 1) {
-            const percentage = Math.round(state.scale * 100);
-            indicator.textContent = `${percentage}%`;
-            indicator.classList.add('show');
+        // Sync slider and percentage display (skip during slider drag to avoid feedback loop)
+        if (!entry.isSliderDragging) {
+            entry.slider.value = this.scaleToSlider(state.scale);
+        }
+        entry.valueDisplay.textContent = `${Math.round(state.scale * 100)}%`;
 
-            // Update position for compare mode
-            if (this.isCompareMode) {
-                if (target === 'left') {
-                    indicator.style.left = '25%';
-                } else if (target === 'right') {
-                    indicator.style.left = '75%';
-                }
+        // Enable/disable buttons at boundaries
+        entry.zoomOutBtn.disabled = state.scale <= this.minZoom;
+        entry.zoomInBtn.disabled = state.scale >= this.maxZoom;
+
+        // Toggle button active state when zoomed
+        if (entry.toggleBtn) {
+            if (state.scale > 1) {
+                entry.toggleBtn.classList.add('active');
             } else {
-                indicator.style.left = '50%';
-            }
-        } else {
-            // Only hide if no side is zoomed
-            const anyZoomed = this.isCompareMode
-                ? (this.zoomState.left.scale > 1 || this.zoomState.right.scale > 1)
-                : this.zoomState.single.scale > 1;
-
-            if (!anyZoomed) {
-                indicator.classList.remove('show');
+                entry.toggleBtn.classList.remove('active');
             }
         }
     }
@@ -4667,7 +4833,7 @@ class MediaViewer {
         // Helper to check if element is in fullscreen mode
         const isInFullscreen = () => element.closest('.fullscreen') !== null;
 
-        // Double-click to cycle zoom (disabled in fullscreen - click exits instead)
+        // Double-click to cycle zoom (disabled in fullscreen - conflicts with click-to-exit)
         element.addEventListener('dblclick', (e) => {
             if (isInFullscreen()) return;
             e.preventDefault();
@@ -4675,15 +4841,13 @@ class MediaViewer {
             this.cycleZoomStep(target, e.clientX, e.clientY);
         });
 
-        // Wheel zoom (disabled in fullscreen)
+        // Wheel zoom (works in fullscreen)
         element.addEventListener('wheel', (e) => {
-            if (isInFullscreen()) return;
             this.handleWheelZoom(e, target);
         }, { passive: false });
 
-        // Pan start (disabled in fullscreen)
+        // Pan start (works in fullscreen when zoomed)
         element.addEventListener('mousedown', (e) => {
-            if (isInFullscreen()) return;
             if (e.button === 0) { // Left click only
                 if (this.handlePanStart(e, target)) {
                     e.preventDefault();

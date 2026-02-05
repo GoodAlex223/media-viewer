@@ -1021,29 +1021,161 @@ body {
     pointer-events: auto;
 }
 
-/* Zoom indicator */
-.zoom-indicator {
-    position: fixed;
-    bottom: 80px;
+/* Zoom button wrapper — positions popover relative to button */
+.control-btn-wrapper {
+    position: relative;
+}
+
+/* Zoom toggle button — blue/primary matching control-btn pattern */
+.zoom-toggle-btn {
+    background: rgba(0, 120, 212, 0.15);
+    border: 1px solid rgba(0, 120, 212, 0.3);
+}
+
+.zoom-toggle-btn:hover:not(:disabled) {
+    transform: translateY(-3px) scale(1.05);
+    background: var(--color-primary-500);
+    border-color: var(--color-primary-500);
+    box-shadow: var(--shadow-glow-primary);
+}
+
+.zoom-toggle-btn.active {
+    background: rgba(0, 120, 212, 0.3);
+    border-color: var(--color-primary-500);
+    color: var(--color-primary-400);
+}
+
+/* Overlay zoom button in compare mode */
+.overlay-zoom-btn {
+    background: rgba(0, 120, 212, 0.15);
+    border: 1px solid rgba(0, 120, 212, 0.3);
+}
+
+.overlay-zoom-btn:hover:not(:disabled) {
+    transform: translateY(-3px) scale(1.05);
+    background: var(--color-primary-500);
+    box-shadow: var(--shadow-glow-primary);
+}
+
+/* Zoom popover — horizontal bar above the button */
+.zoom-popover {
+    position: absolute;
+    bottom: calc(100% + var(--space-2));
     left: 50%;
     transform: translateX(-50%);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
     background: var(--glass-bg);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
-    padding: var(--space-2) var(--space-4);
-    border-radius: var(--radius-xl);
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-primary-400);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-md);
     opacity: 0;
-    transition: opacity var(--transition-normal);
+    visibility: hidden;
+    transition: opacity var(--transition-fast), visibility var(--transition-fast);
     pointer-events: none;
-    z-index: var(--z-modal);
+    z-index: 10;
+    white-space: nowrap;
 }
 
-.zoom-indicator.show {
+.zoom-popover.show {
     opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.zoom-pop-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+    padding: 0;
+}
+
+.zoom-pop-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--border-default);
+    color: var(--color-primary-400);
+}
+
+.zoom-pop-btn:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.zoom-pop-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.zoom-pop-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Horizontal slider */
+.zoom-slider {
+    width: 120px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+}
+
+.zoom-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+}
+
+.zoom-slider::-moz-range-track {
+    height: 4px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+}
+
+.zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--color-primary-500);
+    border: 2px solid var(--bg-primary);
+    border-radius: var(--radius-full);
+    cursor: grab;
+    margin-top: -5px;
+}
+
+.zoom-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--color-primary-500);
+    border: 2px solid var(--bg-primary);
+    border-radius: var(--radius-full);
+    cursor: grab;
+}
+
+.zoom-value {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-primary-400);
+    text-align: center;
+    user-select: none;
+    white-space: nowrap;
+    min-width: 36px;
 }
 
 /* Zoom cursor styles */

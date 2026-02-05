@@ -33,6 +33,11 @@ Improvements to existing functionality.
 | Pause extraction when user is navigating | ML/Perf | Medium | Medium | Plan: 2025-12-28_background-feature-extraction |
 | Validation in showCompareMedia() for file existence | Compare | Medium | Low | Plan: 2026-01-02_compare-mode-ai-sort-bug |
 | Anonymize author field in package.json if privacy desired | Config | Low | Low | Security audit: 2026-02-05 |
+| Memory leak guard for exitHandler | Fullscreen | Medium | Low | Plan: 2025-12-29_video-fullscreen-toggle |
+| Unified fullscreen exit cleanup method | Fullscreen | Medium | Low | Plan: 2025-12-29_video-fullscreen-toggle |
+| Click/active effect for control buttons | UI | Medium | Low | Plan: 2026-02-05_visual-scale-controls |
+| Keyboard shortcut for zoom toggle | UI | Low | Low | Plan: 2026-02-05_visual-scale-controls |
+| Zoom level persistence across navigation | UI | Low | Medium | Plan: 2026-02-05_visual-scale-controls |
 
 ---
 
@@ -74,11 +79,25 @@ Areas requiring investigation before implementation.
 - [ ] Estimated time remaining — Show ETA during feature extraction
 - [ ] Pause extraction when navigating — Reduce CPU contention
 
+### 2025-12-29 From: video-fullscreen-toggle
+**Origin**: [2025-12-29_video-fullscreen-toggle.md](../archive/plans/2025-12-29_video-fullscreen-toggle.md)
+
+- [ ] Memory leak guard for exitHandler — Clean up click handler when fullscreen exited via ESC/keyboard
+- [ ] Unified fullscreen exit cleanup — Centralize indicator removal, handler cleanup, and playback restoration
+
 ### 2026-01-02 From: compare-mode-ai-sort-bug
 **Origin**: [2026-01-02_compare-mode-ai-sort-bug.md](../archive/plans/2026-01-02_compare-mode-ai-sort-bug.md)
 
 - [ ] Centralized removeFile() method — Consolidate file removal logic
 - [ ] Validation in showCompareMedia() — Check file existence before display
+
+### 2026-02-05 From: visual-scale-controls
+**Origin**: [2026-02-05_visual-scale-controls.md](../archive/plans/2026-02-05_visual-scale-controls.md)
+
+- [ ] Click/active effect for control buttons — No visual feedback on click/press for any control button (like, dislike, special, zoom). Add `:active` state with press animation.
+- [ ] Keyboard shortcut for zoom toggle — Add key binding (e.g., `Z` in single mode) to toggle zoom popover without clicking
+- [ ] Zoom level persistence — Remember zoom level when navigating between media of similar size
+- [ ] Slider width responsive to popover space — Wider slider on larger screens for finer control
 
 ---
 

@@ -41,8 +41,9 @@ No automated tests, linting, or type checking configured.
 media_viewer/
 ├── main.js              # Electron main process, IPC handlers, file operations
 ├── preload.js           # Security bridge, context isolation
-├── media-viewer.js      # Renderer process, all UI logic (~6100+ lines)
+├── media-viewer.js      # Renderer process, all UI logic (~6300+ lines)
 ├── index.html           # Main HTML entry point
+├── styles.css           # Application styling, design system
 ├── sorting-worker.js    # Web Worker for sorting algorithms (MST, similarity)
 ├── ml-worker.js         # Web Worker for ML prediction tasks
 ├── ml-model.js          # ML model definitions
@@ -68,11 +69,11 @@ media_viewer/
 ## Code Conventions
 
 **Naming**:
-- Functions: camelCase, verb-first (`loadMedia`, `showNotification`)
+- Functions: camelCase, verb-first (`loadMedia`, `showNotification`, `createZoomPopover`)
 - Classes: PascalCase (`MinHeap`, `VPTree`, `MediaViewer`)
 - Constants: UPPER_SNAKE_CASE (`MAX_NOTIFICATIONS`)
-- DOM IDs: kebab-case (`media-container`, `folder-info`)
-- CSS Classes: kebab-case (`file-info-panel`, `zoom-indicator`)
+- DOM IDs: kebab-case (`media-container`, `folder-info`, `zoom-toggle-btn`)
+- CSS Classes: kebab-case (`file-info-panel`, `zoom-popover`, `overlay-zoom-btn`)
 
 **Patterns**:
 - Single-file renderer: All UI logic in `media-viewer.js` (class-based)
@@ -98,10 +99,19 @@ media_viewer/
 - MinHeap for priority queue operations
 - VPTree (Vantage Point Tree) for nearest neighbor search
 - Perceptual hashing for image similarity
+- zoomControlsMap: Keyed by target ('single', 'left', 'right'), stores popover and toggleBtn refs
 
 **State Management**:
 - Class-based state in MediaViewer
 - localStorage for user preferences (folders, settings)
+
+**UI Component Management**:
+- Dynamic zoom controls: Created per media pane via createZoomPopover(target, wrapper, toggleBtn)
+- Popover lifecycle: createZoomPopover() creates, removeZoomPopover(target) cleans up
+- Popover architecture: Zoom controls positioned above buttons via .control-btn-wrapper
+- Single mode: Static zoom button in HTML, initialized by setupZoomPopovers()
+- Compare mode: Zoom buttons added dynamically to overlay controls (addMediaOverlayControls)
+- User-controlled visibility: Popovers toggle on button click, close on outside click
 
 **Security**:
 - Context isolation enabled
@@ -114,11 +124,12 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- Zoom controls refactor: Per-pane dynamic generation with reusable methods (Feb 2026)
+- Visual media scale controls with logarithmic zoom mapping (TASK-002, Feb 2026)
+- Compare mode overlay controls with zoom integration
+- ML feature extraction with 64-dimension vectors and quality metrics
+- ML online learning with lazy initialization
 - Documentation standardization to template format (Feb 2026)
-- Planning workflow formalization (task IDs, priority badges, structured formats)
-- New planning docs: GOALS.md (OKR format), MILESTONES.md, planning/README.md
-- ML feature extraction with 64-dimension vectors
-- Compare mode with special folder support
 
 <!-- END AUTO-MANAGED -->
 

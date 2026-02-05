@@ -15,19 +15,7 @@ Active tasks and backlog.
 
 <!-- Currently active tasks. Limit to 1-3 at a time. -->
 
-#### [TASK-001] Video fullscreen toggle on second click
-**Priority**: 🟡 Medium
-**Status**: 🔄 In Progress
-**Effort**: M
-**Started**: 2025-12-29
-**Plan**: [2025-12-29_video-fullscreen-toggle.md](plans/2025-12-29_video-fullscreen-toggle.md)
-
-**Description**: Clicking on a video a second time when it is open in fullscreen mode should close fullscreen, not zoom in.
-
-**Acceptance Criteria**:
-- [x] Implementation complete
-- [ ] Manual testing passed
-- [ ] Plan archived
+<!-- TASK-001 completed 2026-02-05, moved to DONE.md -->
 
 ---
 
@@ -35,18 +23,7 @@ Active tasks and backlog.
 
 <!-- Defined tasks ready to start. Ordered by priority: 🔴 → 🟠 → 🟡 → 🟢 -->
 
-#### [TASK-002] Visual media scale controls
-**Priority**: 🟡 Medium
-**Status**: 📋 Planned
-**Effort**: L
-
-**Description**: Add a visual interface for manipulating media scale (zoom) in both fullscreen and normal modes. Should work in both single mode and compare mode.
-
-**Acceptance Criteria**:
-- [ ] Visual zoom controls displayed in UI
-- [ ] Works in single mode
-- [ ] Works in compare mode
-- [ ] Works in fullscreen mode
+<!-- TASK-002 completed 2026-02-05, moved to DONE.md -->
 
 ---
 

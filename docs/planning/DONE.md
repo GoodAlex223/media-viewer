@@ -12,6 +12,33 @@ Completed tasks with implementation details and learnings.
 
 <!-- Organize by month, newest first. -->
 
+## 2026-02 (February)
+
+### [2026-02-05] Visual media scale controls
+
+**Plan**: [2026-02-05_visual-scale-controls.md](../archive/plans/2026-02-05_visual-scale-controls.md)
+**Summary**: Added button-integrated zoom popovers with logarithmic slider for single and compare modes. Zoom button in control bar opens horizontal popover with `[-] slider [+] 100%` display.
+**Key Changes**:
+- Added zoom button wrapper to single-mode controls in HTML
+- Added `createZoomPopover()`, `removeZoomPopover()`, `setupZoomPopovers()`, `closeAllZoomPopovers()` methods
+- Integrated zoom into `addMediaOverlayControls()` for compare mode overlay buttons
+- Logarithmic slider mapping (`sliderToScale`/`scaleToSlider`) for smooth zoom UX
+- Glassmorphism popover styling matching existing design system
+- Enabled zoom in fullscreen (wheel + pan)
+**Spawned Tasks**: 4 items added to BACKLOG.md (click effect, keyboard shortcut, persistence, responsive slider)
+
+### [2026-02-05] Video fullscreen toggle on second click
+
+**Plan**: [2025-12-29_video-fullscreen-toggle.md](../archive/plans/2025-12-29_video-fullscreen-toggle.md)
+**Summary**: Clicking on a video in fullscreen now exits fullscreen instead of zooming. Zoom operations (double-click, wheel, pan) are disabled in fullscreen mode.
+**Key Changes**:
+- Removed video click restriction in `toggleFullscreen()` exitHandler
+- Added `isInFullscreen()` guard in `setupZoomEvents()` to disable zoom in fullscreen
+- Overlay button clicks (like/dislike/special) preserved via `.closest()` checks
+**Spawned Tasks**: 2 items added to BACKLOG.md (exitHandler cleanup, unified exit method)
+
+---
+
 ## 2026-01 (January)
 
 ### [2026-01-02] Compare mode AI sort file mismatch
