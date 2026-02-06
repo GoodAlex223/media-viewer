@@ -108,8 +108,8 @@ media_viewer/
 
 **Cache Management**:
 - Centralized cleanup via removeFileFromList(): Handles array splice, cache cleanup (predictionScores, featureCache, perceptualHashes), and currentIndex adjustment
-- Used by: removeFailedFile(), moveFileToFolder(), and other file removal operations
-- Ensures consistent state across all removal scenarios
+- Used by: removeFailedFile(), moveCurrentFile(), moveToSpecialFolder(), moveComparePair()
+- Ensures consistent state across all file removal scenarios
 
 **UI Component Management**:
 - Dynamic zoom controls: Created per media pane via createZoomPopover(target, wrapper, toggleBtn)
