@@ -106,6 +106,11 @@ media_viewer/
 - Class-based state in MediaViewer
 - localStorage for user preferences (folders, settings)
 
+**Index Management**:
+- Wrap-to-start: moveCurrentFile() cycles to index 0 when rating last file (continuous workflow)
+- Cap-to-end: removeFileFromList() caps to length-1 by default (safe fallback)
+- Reset to 0: Folder loads, sort operations, mode switches reset currentIndex
+
 **Cache Management**:
 - Centralized cleanup via removeFileFromList(): Handles array splice, cache cleanup (predictionScores, featureCache, perceptualHashes), and currentIndex adjustment
 - Used by: removeFailedFile(), moveCurrentFile(), moveToSpecialFolder(), moveComparePair()
@@ -130,6 +135,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- Index wrap behavior fix: Restore wrap-to-start in moveCurrentFile() for continuous rating (Feb 2026)
 - File removal refactor: Centralized cleanup method replacing duplicate logic (Feb 2026)
 - Zoom controls refactor: Per-pane dynamic generation with reusable methods (Feb 2026)
 - Visual media scale controls with logarithmic zoom mapping (TASK-002, Feb 2026)

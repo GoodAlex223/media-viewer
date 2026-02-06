@@ -114,6 +114,11 @@ Areas requiring investigation before implementation.
 - [ ] Centralized insertFileIntoList() counterpart — Standardize undo restoration across single/compare modes
 - [ ] Event-based cache invalidation — Emit 'file-removed' event so new caches auto-subscribe without modifying removeFileFromList
 
+### 2026-02-06 From: code-review-pr-2
+**Origin**: Code review of PR #2
+
+- [ ] Index strategy parameter for removeFileFromList() — Add optional `indexStrategy` param ('cap'|'wrap') instead of post-call override in moveCurrentFile(). Keeps all index logic in one place rather than split across caller and method.
+
 ---
 
 ## Rejected Ideas
