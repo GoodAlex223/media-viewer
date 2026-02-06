@@ -40,6 +40,7 @@ Improvements to existing functionality.
 | Zoom level persistence across navigation | UI | Low | Medium | Plan: 2026-02-05_visual-scale-controls |
 | Fix mouseup listener leak in createZoomPopover | Zoom | Medium | Low | Code review: PR #1 |
 | Document fullscreen zoom reversal from TASK-001 | Zoom/UX | Low | Low | Code review: PR #1 |
+| Remove spinner state churn in showCompareMedia() retry | Compare | Low | Low | Code review: PR #3 |
 
 ---
 
@@ -124,6 +125,11 @@ Areas requiring investigation before implementation.
 
 - [ ] Add same validation to showSingleMedia() — Same vulnerability exists in single view mode. Files deleted externally trigger browser error events instead of being proactively caught.
 - [ ] Batch file validation on folder refresh — Validate all files in mediaFiles[] at once, removing stale entries. Useful for long-running sessions where folder contents change.
+
+### 2026-02-06 From: code-review-pr-3
+**Origin**: Code review of PR #3
+
+- [ ] Remove unnecessary loading state resets before recursive retry in showCompareMedia() — The validation retry path resets isLoading/mediaNavigationInProgress and hides spinner before recursive call, but the recursive call immediately re-enables them. This causes state churn and potential spinner flicker. Keep flags set during retries, only reset on final exit.
 
 ---
 
