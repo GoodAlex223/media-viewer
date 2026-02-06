@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-02-06
+**Last Updated**: 2026-02-06 <!-- TASK-004 -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -26,21 +26,7 @@ Active tasks and backlog.
 
 <!-- TASK-002 completed 2026-02-05, moved to DONE.md -->
 <!-- TASK-003 completed 2026-02-06, moved to DONE.md -->
-
-### [TASK-004] Validation in showCompareMedia() for file existence
-**Priority**: 🟠 High
-**Status**: 📋 Planned
-**Effort**: S
-**Origin**: [docs/archive/plans/2026-01-02_compare-mode-ai-sort-bug.md](../archive/plans/2026-01-02_compare-mode-ai-sort-bug.md)
-
-**Description**: Add validation in `showCompareMedia()` to ensure selected files still exist before displaying. Prevents errors when files are moved/deleted externally.
-
-**Acceptance Criteria**:
-- [ ] Validate file existence before display attempt
-- [ ] Graceful handling when file doesn't exist (skip to next valid pair)
-- [ ] User notification if no valid files remain
-
----
+<!-- TASK-004 completed 2026-02-06, moved to DONE.md -->
 
 ### [TASK-005] Memory leak guard for fullscreen exitHandler
 **Priority**: 🟡 Medium
