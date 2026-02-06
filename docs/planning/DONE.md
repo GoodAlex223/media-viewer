@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-02-05
+**Last Updated**: 2026-02-06
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,18 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-02 (February)
+
+### [2026-02-06] Centralized removeFile() method
+
+**Plan**: [2026-02-06_centralized-remove-file.md](../archive/plans/2026-02-06_centralized-remove-file.md)
+**Summary**: Consolidated duplicated file removal logic from 4 locations into a single `removeFileFromList(filePath)` method. Fixed cache leak in `removeFailedFile()` and added missing `perceptualHashes` cleanup across all removal paths.
+**Key Changes**:
+- Added `removeFileFromList(filePath)` handling splice, cache cleanup, and index adjustment
+- Refactored `moveCurrentFile()`, `moveToSpecialFolder()`, `moveComparePair()`, `removeFailedFile()`
+- Fixed bug: `removeFailedFile()` never cleaned predictionScores/featureCache/perceptualHashes
+- Fixed bug: `perceptualHashes` never cleaned in any removal path
+- Standardized index adjustment strategy across all removal paths
+**Spawned Tasks**: 3 items added to BACKLOG.md (batch removal, insertFileIntoList, event-based cache)
 
 ### [2026-02-05] Visual media scale controls
 

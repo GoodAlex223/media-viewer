@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-02-05
+**Last Updated**: 2026-02-06
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -17,9 +17,9 @@ Ideas and tasks not yet prioritized for active development.
 
 | Idea | Description | Value | Effort | Source |
 |------|-------------|-------|--------|--------|
-| Force re-sort option | Allow user to discard cached sort and re-sort from scratch | Medium | Low | Plan: 2025-12-27_sorting-cache |
-| Worker count setting | Let user configure number of extraction workers | Low | Low | Plan: 2025-12-28_background-feature-extraction |
-| Estimated time remaining for extraction | Show ETA during feature extraction | Medium | Medium | Plan: 2025-12-28_background-feature-extraction |
+| ~~Force re-sort option~~ | ~~Allow user to discard cached sort and re-sort from scratch~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-007 |
+| ~~Worker count setting~~ | ~~Let user configure number of extraction workers~~ | ~~Low~~ | ~~Low~~ | Promoted to TODO: TASK-009 |
+| ~~Estimated time remaining for extraction~~ | ~~Show ETA during feature extraction~~ | ~~Medium~~ | ~~Medium~~ | Promoted to TODO: TASK-010 |
 
 ---
 
@@ -29,12 +29,12 @@ Improvements to existing functionality.
 
 | Enhancement | Area | Value | Effort | Notes |
 |-------------|------|-------|--------|-------|
-| Cache age display in sorting notification | Sorting | Low | Low | Plan: 2025-12-27_sorting-cache |
-| Pause extraction when user is navigating | ML/Perf | Medium | Medium | Plan: 2025-12-28_background-feature-extraction |
-| Validation in showCompareMedia() for file existence | Compare | Medium | Low | Plan: 2026-01-02_compare-mode-ai-sort-bug |
+| ~~Cache age display in sorting notification~~ | ~~Sorting~~ | ~~Low~~ | ~~Low~~ | Promoted to TODO: TASK-008 |
+| ~~Pause extraction when user is navigating~~ | ~~ML/Perf~~ | ~~Medium~~ | ~~Medium~~ | Promoted to TODO: TASK-011 |
+| ~~Validation in showCompareMedia() for file existence~~ | ~~Compare~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-004 |
 | Anonymize author field in package.json if privacy desired | Config | Low | Low | Security audit: 2026-02-05 |
-| Memory leak guard for exitHandler | Fullscreen | Medium | Low | Plan: 2025-12-29_video-fullscreen-toggle |
-| Unified fullscreen exit cleanup method | Fullscreen | Medium | Low | Plan: 2025-12-29_video-fullscreen-toggle |
+| ~~Memory leak guard for exitHandler~~ | ~~Fullscreen~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-005 |
+| ~~Unified fullscreen exit cleanup method~~ | ~~Fullscreen~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-006 |
 | Click/active effect for control buttons | UI | Medium | Low | Plan: 2026-02-05_visual-scale-controls |
 | Keyboard shortcut for zoom toggle | UI | Low | Low | Plan: 2026-02-05_visual-scale-controls |
 | Zoom level persistence across navigation | UI | Low | Medium | Plan: 2026-02-05_visual-scale-controls |
@@ -49,7 +49,7 @@ Known issues that should be addressed eventually.
 
 | Item | Impact | Effort | Added |
 |------|--------|--------|-------|
-| Centralized removeFile() method | Medium | Medium | 2026-01-02 |
+| ~~Centralized removeFile() method~~ | ~~Medium~~ | ~~Medium~~ | Promoted to TODO: TASK-003 |
 | Verify no secrets in git history (`git log -p --all -S`) | High | Low | 2026-02-05 |
 
 ---
@@ -71,27 +71,27 @@ Areas requiring investigation before implementation.
 ### 2025-12-27 From: sorting-cache
 **Origin**: [2025-12-27_sorting-cache.md](../archive/plans/2025-12-27_sorting-cache.md)
 
-- [ ] Force re-sort option — Allow discarding cached results
-- [ ] Cache age display — Show when cache was created in sorting notification
+- [x] Force re-sort option — Promoted to TODO: TASK-007
+- [x] Cache age display — Promoted to TODO: TASK-008
 
 ### 2025-12-28 From: background-feature-extraction
 **Origin**: [2025-12-28_background-feature-extraction.md](../archive/plans/2025-12-28_background-feature-extraction.md)
 
-- [ ] Worker count setting — User-configurable extraction parallelism
-- [ ] Estimated time remaining — Show ETA during feature extraction
-- [ ] Pause extraction when navigating — Reduce CPU contention
+- [x] Worker count setting — Promoted to TODO: TASK-009
+- [x] Estimated time remaining — Promoted to TODO: TASK-010
+- [x] Pause extraction when navigating — Promoted to TODO: TASK-011
 
 ### 2025-12-29 From: video-fullscreen-toggle
 **Origin**: [2025-12-29_video-fullscreen-toggle.md](../archive/plans/2025-12-29_video-fullscreen-toggle.md)
 
-- [ ] Memory leak guard for exitHandler — Clean up click handler when fullscreen exited via ESC/keyboard
-- [ ] Unified fullscreen exit cleanup — Centralize indicator removal, handler cleanup, and playback restoration
+- [x] Memory leak guard for exitHandler — Promoted to TODO: TASK-005
+- [x] Unified fullscreen exit cleanup — Promoted to TODO: TASK-006
 
 ### 2026-01-02 From: compare-mode-ai-sort-bug
 **Origin**: [2026-01-02_compare-mode-ai-sort-bug.md](../archive/plans/2026-01-02_compare-mode-ai-sort-bug.md)
 
-- [ ] Centralized removeFile() method — Consolidate file removal logic
-- [ ] Validation in showCompareMedia() — Check file existence before display
+- [x] Centralized removeFile() method — Promoted to TODO: TASK-003
+- [x] Validation in showCompareMedia() — Promoted to TODO: TASK-004
 
 ### 2026-02-05 From: visual-scale-controls
 **Origin**: [2026-02-05_visual-scale-controls.md](../archive/plans/2026-02-05_visual-scale-controls.md)
@@ -106,6 +106,13 @@ Areas requiring investigation before implementation.
 
 - [ ] Fix mouseup listener leak in createZoomPopover — `document.addEventListener('mouseup', ...)` is never removed in `removeZoomPopover()`, causing listeners to accumulate in compare mode navigation. Use AbortController or stored handler reference for cleanup.
 - [ ] Document fullscreen zoom decision reversal — TASK-002 re-enabled wheel zoom and pan in fullscreen, reversing TASK-001's explicit decision (commit d3b08bb). Add rationale to PROJECT_CONTEXT.md.
+
+### 2026-02-06 From: centralized-remove-file
+**Origin**: [2026-02-06_centralized-remove-file.md](../archive/plans/2026-02-06_centralized-remove-file.md)
+
+- [ ] Batch removal support — `removeFilesFromList(filePaths[])` for removing multiple files in one operation
+- [ ] Centralized insertFileIntoList() counterpart — Standardize undo restoration across single/compare modes
+- [ ] Event-based cache invalidation — Emit 'file-removed' event so new caches auto-subscribe without modifying removeFileFromList
 
 ---
 
