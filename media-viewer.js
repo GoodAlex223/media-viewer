@@ -2277,7 +2277,7 @@ class MediaViewer {
         setTimeout(() => this.prioritizeDisplayedFilesExtraction(), 200);
     }
 
-    async showCompareMedia() {
+    async showCompareMedia(retryCount = 0) {
         if (this.mediaFiles.length < 2) {
             this.showNotification('Need at least 2 media files for compare mode', 'error');
             this.isCompareMode = false;
@@ -2367,6 +2367,55 @@ class MediaViewer {
             this.mediaNavigationInProgress = false;
             this.hideLoadingSpinner();
             return;
+        }
+
+        // Validate files exist on disk before displaying
+        const [leftExists, rightExists] = await Promise.all([
+            window.electronAPI.checkFileExists(leftFile.path),
+            window.electronAPI.checkFileExists(rightFile.path)
+        ]);
+
+        let removedCount = 0;
+        if (!leftExists) {
+            console.warn('Compare file missing:', leftFile.path);
+            this.removeFileFromList(leftFile.path);
+            removedCount++;
+        }
+        if (!rightExists) {
+            console.warn('Compare file missing:', rightFile.path);
+            this.removeFileFromList(rightFile.path);
+            removedCount++;
+        }
+
+        if (removedCount > 0) {
+            this.showNotification(`Skipped ${removedCount} missing file${removedCount > 1 ? 's' : ''}`, 'warning');
+
+            if (this.mediaFiles.length < 2) {
+                this.isLoading = false;
+                this.mediaNavigationInProgress = false;
+                this.hideLoadingSpinner();
+                if (this.mediaFiles.length === 0) {
+                    this.showDropZone();
+                } else {
+                    this.showNotification('Not enough files for compare mode', 'error');
+                    this.isCompareMode = false;
+                    this.toggleViewMode();
+                }
+                return;
+            }
+
+            // Retry with remaining files (bounded to prevent deep recursion)
+            if (retryCount >= 10) {
+                this.isLoading = false;
+                this.mediaNavigationInProgress = false;
+                this.hideLoadingSpinner();
+                this.showNotification('Too many missing files, unable to find valid pair', 'error');
+                return;
+            }
+            this.isLoading = false;
+            this.mediaNavigationInProgress = false;
+            this.hideLoadingSpinner();
+            return this.showCompareMedia(retryCount + 1);
         }
 
         console.log('Showing compare media:', leftFile.name, 'vs', rightFile.name);
@@ -2549,7 +2598,7 @@ class MediaViewer {
             if (media && media.tagName === 'IMG' && !this.isBeingCleaned) {
                 console.error('Image load error:', e);
                 this.hideLoadingSpinner();
-                const failedIndex = side === 'left' ? this.currentIndex : this.currentIndex + 1;
+                const failedIndex = this.mediaFiles.findIndex(f => f.path === file.path);
                 this.showError(`Failed to load image: ${file.name}`, {
                     actionButton: 'Remove',
                     actionCallback: () => this.removeFailedFile(failedIndex, side)
@@ -2602,7 +2651,7 @@ class MediaViewer {
             if (media && media.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 console.error('Video load error:', e);
                 this.hideLoadingSpinner();
-                const failedIndex = side === 'left' ? this.currentIndex : this.currentIndex + 1;
+                const failedIndex = this.mediaFiles.findIndex(f => f.path === file.path);
                 this.showError(`Failed to load video: ${file.name}`, {
                     actionButton: 'Remove',
                     actionCallback: () => this.removeFailedFile(failedIndex, side)

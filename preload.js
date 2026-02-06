@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // File operations
     moveFile: (data) => ipcRenderer.invoke('move-file', data),
     checkFolderExists: (folderPath) => ipcRenderer.invoke('check-folder-exists', folderPath),
+    checkFileExists: (filePath) => ipcRenderer.invoke('check-file-exists', filePath),
     createFolder: (folderPath) => ipcRenderer.invoke('create-folder', folderPath),
     readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
     writeFile: (filePath, data) => ipcRenderer.invoke('write-file', filePath, data),
