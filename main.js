@@ -152,6 +152,15 @@ app.whenReady().then(() => {
         }
     });
 
+    ipcMain.handle('check-file-exists', async (event, filePath) => {
+        try {
+            await fs.access(filePath);
+            return true;
+        } catch {
+            return false;
+        }
+    });
+
     ipcMain.handle('create-folder', async (event, folderPath) => {
         try {
             await fs.mkdir(folderPath, { recursive: true });

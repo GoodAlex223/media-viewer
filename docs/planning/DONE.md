@@ -14,6 +14,17 @@ Completed tasks with implementation details and learnings.
 
 ## 2026-02 (February)
 
+### [2026-02-06] Validation in showCompareMedia() for file existence
+
+**Plan**: [2026-02-06_compare-file-validation.md](../archive/plans/2026-02-06_compare-file-validation.md)
+**Summary**: Added proactive file existence validation in `showCompareMedia()` to detect and remove externally deleted files before display. Also fixed a bug where compare-mode error handlers assumed sequential pairing (broken for ML-sorted pairs).
+**Key Changes**:
+- Added `check-file-exists` IPC handler and `checkFileExists` preload bridge
+- Parallel file existence validation with automatic retry (bounded, max 10)
+- Warning notification for skipped missing files, graceful fallback when <2 files remain
+- Fixed `failedIndex` calculation in `setupCompareImageHandlers` and `setupCompareVideoHandlers` to use path-based lookup
+**Spawned Tasks**: 2 items added to BACKLOG.md (single-mode validation, batch validation)
+
 ### [2026-02-06] Centralized removeFile() method
 
 **Plan**: [2026-02-06_centralized-remove-file.md](../archive/plans/2026-02-06_centralized-remove-file.md)
