@@ -857,22 +857,40 @@ class MediaViewer {
         }, 1500);
     }
 
+    /**
+     * Centralized file removal from the media list.
+     * Handles array splice, cache cleanup (predictionScores, featureCache, perceptualHashes),
+     * and currentIndex adjustment.
+     * @param {string} filePath - Absolute path of the file to remove
+     * @returns {number} The index the file was at before removal, or -1 if not found
+     */
+    removeFileFromList(filePath) {
+        const index = this.mediaFiles.findIndex(f => f.path === filePath);
+        if (index === -1) return -1;
+
+        this.mediaFiles.splice(index, 1);
+
+        this.predictionScores.delete(filePath);
+        this.featureCache.delete(filePath);
+        this.perceptualHashes.delete(filePath);
+
+        if (this.currentIndex >= this.mediaFiles.length) {
+            this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
+        }
+
+        return index;
+    }
+
     removeFailedFile(index, side = null) {
         if (index < 0 || index >= this.mediaFiles.length) return;
 
-        // Remove the file from array
-        this.mediaFiles.splice(index, 1);
+        const filePath = this.mediaFiles[index].path;
+        this.removeFileFromList(filePath);
 
         // Handle navigation after removal
         if (this.mediaFiles.length === 0) {
-            // No files left
             this.showDropZone();
             return;
-        }
-
-        // Adjust current index if needed
-        if (this.currentIndex >= this.mediaFiles.length) {
-            this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
         }
 
         this.updateFolderInfo();
@@ -1072,17 +1090,8 @@ class MediaViewer {
                 this.updateMlModelWithFeatures(mlFeatures, actionType);
             }
 
-            // Remove current file from array
-            this.mediaFiles.splice(this.currentIndex, 1);
-
-            // Clean up caches for removed file
-            this.predictionScores.delete(currentFile.path);
-            this.featureCache.delete(currentFile.path);
-
-            // Adjust current index if necessary
-            if (this.currentIndex >= this.mediaFiles.length) {
-                this.currentIndex = 0;
-            }
+            // Remove current file from array and clean up caches
+            this.removeFileFromList(currentFile.path);
 
             this.updateFolderInfo();
             this.showMedia();
@@ -1210,31 +1219,20 @@ class MediaViewer {
                 );
             }
 
-            // Remove file from array
-            this.mediaFiles.splice(fileIndex, 1);
-
-            // Clean up caches for removed file
-            this.predictionScores.delete(fileToMove.path);
-            this.featureCache.delete(fileToMove.path);
+            // Remove file from array and clean up caches
+            this.removeFileFromList(fileToMove.path);
 
             // In compare mode, move the remaining file to the end of the list
             if (side === 'left' || side === 'right') {
                 if (remainingFile && this.mediaFiles.length >= 1) {
-                    // Find the remaining file's new index (it may have shifted after splice)
                     const newRemainingIndex = this.mediaFiles.findIndex(f => f.path === remainingFile.path);
                     if (newRemainingIndex !== -1 && newRemainingIndex !== this.mediaFiles.length - 1) {
-                        // Remove from current position and add to end
                         const [movedFile] = this.mediaFiles.splice(newRemainingIndex, 1);
                         this.mediaFiles.push(movedFile);
                     }
                 }
                 // Reset current index to start of list for next pair
                 this.currentIndex = 0;
-            } else {
-                // Single mode - adjust current index if necessary
-                if (this.currentIndex >= this.mediaFiles.length) {
-                    this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
-                }
             }
 
             this.updateFolderInfo();
@@ -3478,17 +3476,9 @@ class MediaViewer {
                 this.updateMlModelWithFeatures(secondaryFeatures, secondaryAction);
             }
 
-            // Remove both files from current view (remove higher index first to preserve lower index)
-            const higherIndex = Math.max(leftFileIndex, rightFileIndex);
-            const lowerIndex = Math.min(leftFileIndex, rightFileIndex);
-            this.mediaFiles.splice(higherIndex, 1);
-            this.mediaFiles.splice(lowerIndex, 1);
-
-            // Clean up caches for removed files
-            this.predictionScores.delete(leftFile.path);
-            this.predictionScores.delete(rightFile.path);
-            this.featureCache.delete(leftFile.path);
-            this.featureCache.delete(rightFile.path);
+            // Remove both files from current view and clean up caches
+            this.removeFileFromList(leftFile.path);
+            this.removeFileFromList(rightFile.path);
 
             // Clear stored file references
             this.compareLeftFile = null;
@@ -3497,7 +3487,7 @@ class MediaViewer {
             // Reset ML pair index to show new highest vs lowest
             this.mlComparePairIndex = 0;
 
-            // Adjust current index to ensure we can show a pair
+            // Ensure current index can show a pair
             if (this.currentIndex >= this.mediaFiles.length - 1) {
                 this.currentIndex = 0;
             }

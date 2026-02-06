@@ -69,7 +69,7 @@ media_viewer/
 ## Code Conventions
 
 **Naming**:
-- Functions: camelCase, verb-first (`loadMedia`, `showNotification`, `createZoomPopover`)
+- Functions: camelCase, verb-first (`loadMedia`, `showNotification`, `createZoomPopover`, `removeFileFromList`)
 - Classes: PascalCase (`MinHeap`, `VPTree`, `MediaViewer`)
 - Constants: UPPER_SNAKE_CASE (`MAX_NOTIFICATIONS`)
 - DOM IDs: kebab-case (`media-container`, `folder-info`, `zoom-toggle-btn`)
@@ -80,6 +80,7 @@ media_viewer/
 - IPC Communication: Main process handles file ops, renderer handles UI
 - Event-driven: DOM events trigger state changes and UI updates
 - Web Workers: CPU-intensive operations (sorting, ML) in separate threads
+- Centralized cleanup: Reusable methods for common operations (file removal, cache cleanup)
 
 **Imports**:
 - CommonJS `require()` in main process and workers
@@ -105,6 +106,11 @@ media_viewer/
 - Class-based state in MediaViewer
 - localStorage for user preferences (folders, settings)
 
+**Cache Management**:
+- Centralized cleanup via removeFileFromList(): Handles array splice, cache cleanup (predictionScores, featureCache, perceptualHashes), and currentIndex adjustment
+- Used by: removeFailedFile(), moveFileToFolder(), and other file removal operations
+- Ensures consistent state across all removal scenarios
+
 **UI Component Management**:
 - Dynamic zoom controls: Created per media pane via createZoomPopover(target, wrapper, toggleBtn)
 - Popover lifecycle: createZoomPopover() creates, removeZoomPopover(target) cleans up
@@ -124,6 +130,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- File removal refactor: Centralized cleanup method replacing duplicate logic (Feb 2026)
 - Zoom controls refactor: Per-pane dynamic generation with reusable methods (Feb 2026)
 - Visual media scale controls with logarithmic zoom mapping (TASK-002, Feb 2026)
 - Compare mode overlay controls with zoom integration
