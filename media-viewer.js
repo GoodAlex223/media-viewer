@@ -1093,6 +1093,11 @@ class MediaViewer {
             // Remove current file from array and clean up caches
             this.removeFileFromList(currentFile.path);
 
+            // Wrap to start when rating the last file (intentional UX: cycle through all files)
+            if (this.mediaFiles.length > 0 && this.currentIndex >= this.mediaFiles.length) {
+                this.currentIndex = 0;
+            }
+
             this.updateFolderInfo();
             this.showMedia();
 
