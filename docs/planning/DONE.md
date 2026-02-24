@@ -14,6 +14,16 @@ Completed tasks with implementation details and learnings.
 
 ## 2026-02 (February)
 
+### [2026-02-24] Unified fullscreen exit cleanup method
+
+**Plan**: [2026-02-24_task-006-unified-fullscreen-cleanup.md](../archive/plans/2026-02-24_task-006-unified-fullscreen-cleanup.md)
+**Summary**: Renamed `exitFullscreen()` to `cleanupFullscreen()` and routed all 5 exit paths through it — including the two destructive paths (`toggleViewMode`, `showCompareMedia`) that previously called `abortFullscreenController()` directly. Single source of truth for all fullscreen cleanup.
+**Key Changes**:
+- Renamed `exitFullscreen` → `cleanupFullscreen` (definition + 7 call sites)
+- `toggleViewMode()` and `showCompareMedia()` now call `cleanupFullscreen()` before `wrapper.remove()`
+- Updated stale references in CLAUDE.md and BACKLOG.md
+**Spawned Tasks**: 1 item added to BACKLOG.md (extract setupFullscreen from toggleFullscreen enter branch)
+
 ### [2026-02-24] Memory leak guard for fullscreen exitHandler
 
 **Summary**: Fixed memory leak where the click-to-exit handler in `toggleFullscreen()` accumulated on wrapper elements when fullscreen was exited via ESC key or Z/X keyboard shortcuts. Used AbortController with a class-instance Map (`fullscreenAbortControllers`) to ensure `exitFullscreen()` removes the handler regardless of exit path.

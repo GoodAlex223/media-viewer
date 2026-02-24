@@ -133,6 +133,11 @@ Areas requiring investigation before implementation.
 - [x] Abort fullscreenAbortController before wrapper.remove() — Fixed in PR review: added `abortFullscreenController()` helper, called before `wrapper.remove()` in `showCompareMedia()` and `toggleViewMode()`
 - [ ] Add early return guard in cleanupFullscreen() for non-fullscreen wrappers — cleanupFullscreen() doesn't check if wrapper is actually in fullscreen, so double-calls (e.g., ESC after Z) trigger redundant video.play(). Add `if (!wrapper.classList.contains('fullscreen')) return;` at top.
 
+### 2026-02-24 From: task-006-unified-fullscreen-cleanup
+**Origin**: docs/archive/plans/2026-02-24_task-006-unified-fullscreen-cleanup.md
+
+- [ ] Extract setupFullscreen(wrapper) from toggleFullscreen() enter branch — The enter branch is 55 lines. Extracting to a symmetric `setupFullscreen(wrapper)` alongside `cleanupFullscreen(wrapper)` would improve readability and make the enter/exit symmetry explicit.
+
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
 

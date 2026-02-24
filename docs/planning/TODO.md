@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-02-24 <!-- TASK-005 -->
+**Last Updated**: 2026-02-24 <!-- TASK-012,013,014 -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -28,19 +28,7 @@ Active tasks and backlog.
 <!-- TASK-003 completed 2026-02-06, moved to DONE.md -->
 <!-- TASK-004 completed 2026-02-06, moved to DONE.md -->
 <!-- TASK-005 completed 2026-02-24, moved to DONE.md -->
-
-### [TASK-006] Unified fullscreen exit cleanup method
-**Priority**: 🟡 Medium
-**Status**: 📋 Planned
-**Effort**: S
-**Origin**: [docs/archive/plans/2025-12-29_video-fullscreen-toggle.md](../archive/plans/2025-12-29_video-fullscreen-toggle.md)
-
-**Description**: Multiple exit paths (click, ESC, Z/X keys) each handle cleanup independently. A single `cleanupFullscreen()` method could centralize indicator removal, handler cleanup, and playback restoration.
-
-**Acceptance Criteria**:
-- [ ] Single `cleanupFullscreen()` method for all exit paths
-- [ ] Indicator removal, handler cleanup, playback restoration centralized
-- [ ] All exit methods (click, ESC, Z/X) use the unified cleanup
+<!-- TASK-006 completed 2026-02-24, moved to DONE.md -->
 
 ---
 
@@ -116,6 +104,64 @@ Active tasks and backlog.
 - [ ] Pause extraction during navigation
 - [ ] Resume after ~2 second idle period
 - [ ] No visible lag during navigation
+
+---
+
+### [TASK-012] Pre-commit hooks with linting and formatting
+**Priority**: 🟡 Medium
+**Status**: 📋 Planned
+**Effort**: M
+
+**Description**: Set up pre-commit hooks using Husky + lint-staged. Add ESLint for code quality and Prettier for formatting. Currently no linting or formatting is configured — all code quality is manual.
+
+**Acceptance Criteria**:
+- [ ] Husky installed and configured with pre-commit hook
+- [ ] ESLint configured with rules appropriate for Electron/browser JS (no modules)
+- [ ] Prettier configured for consistent formatting
+- [ ] lint-staged runs ESLint + Prettier on staged files only
+- [ ] npm scripts: `lint`, `lint:fix`, `format`
+- [ ] Existing code passes lint (fix or suppress existing violations)
+- [ ] Pre-commit hook blocks commits with lint errors
+
+---
+
+### [TASK-013] Unit test infrastructure and initial tests
+**Priority**: 🟡 Medium
+**Status**: 📋 Planned
+**Effort**: L
+
+**Description**: Set up unit test framework and write initial tests for core logic. Currently no tests exist (`npm test` is a no-op). Target testable pure functions first: sorting algorithms (sorting-worker.js), ML model (ml-model.js), feature extraction logic, and utility methods in MediaViewer (e.g., removeFileFromList, index management).
+
+**Acceptance Criteria**:
+- [ ] Test framework installed and configured (Vitest or Jest)
+- [ ] npm `test` script runs test suite
+- [ ] Tests for sorting-worker.js (MST algorithm, similarity comparisons)
+- [ ] Tests for ml-model.js (prediction, training)
+- [ ] Tests for MediaViewer utility methods (removeFileFromList, index wrap/cap behavior)
+- [ ] Tests for file validation logic (showCompareMedia edge cases)
+- [ ] Minimum 20 test cases covering core logic
+- [ ] Pre-commit hook runs tests (depends on TASK-012)
+
+---
+
+### [TASK-014] Playwright E2E tests for Electron app
+**Priority**: 🟢 Low
+**Status**: 📋 Planned
+**Effort**: L
+
+**Description**: Set up Playwright with Electron support for end-to-end testing. Cover critical user workflows: folder loading, media navigation, rating/moving files, fullscreen toggle, compare mode, and zoom controls.
+
+**Acceptance Criteria**:
+- [ ] Playwright configured with Electron launcher
+- [ ] npm script: `test:e2e`
+- [ ] Test: App launches and shows drop zone / folder picker
+- [ ] Test: Load folder and navigate media (arrow keys, click)
+- [ ] Test: Rate file (like/dislike) and verify file moved
+- [ ] Test: Toggle fullscreen and exit via ESC
+- [ ] Test: Switch to compare mode and back
+- [ ] Test: Zoom controls open/close and slider adjusts scale
+- [ ] Tests use fixture folders with sample media files
+- [ ] CI-compatible (headless mode)
 
 ---
 
