@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-02-06
+**Last Updated**: 2026-02-24
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,16 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-02 (February)
+
+### [2026-02-24] Memory leak guard for fullscreen exitHandler
+
+**Summary**: Fixed memory leak where the click-to-exit handler in `toggleFullscreen()` accumulated on wrapper elements when fullscreen was exited via ESC key or Z/X keyboard shortcuts. Used AbortController with a class-instance Map (`fullscreenAbortControllers`) to ensure `exitFullscreen()` removes the handler regardless of exit path.
+**Key Changes**:
+- Added `this.fullscreenAbortControllers = new Map()` to constructor
+- `toggleFullscreen()`: Create AbortController, store in Map, pass signal to addEventListener
+- `exitFullscreen()`: Abort controller and delete from Map at method entry
+- Removed self-removal pattern from exitHandler closure
+**Spawned Tasks**: 2 items added to BACKLOG.md (abort before wrapper.remove, early return guard)
 
 ### [2026-02-06] Validation in showCompareMedia() for file existence
 

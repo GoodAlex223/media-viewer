@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-02-06 <!-- TASK-004 -->
+**Last Updated**: 2026-02-24 <!-- TASK-005 -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -27,21 +27,7 @@ Active tasks and backlog.
 <!-- TASK-002 completed 2026-02-05, moved to DONE.md -->
 <!-- TASK-003 completed 2026-02-06, moved to DONE.md -->
 <!-- TASK-004 completed 2026-02-06, moved to DONE.md -->
-
-### [TASK-005] Memory leak guard for fullscreen exitHandler
-**Priority**: 🟡 Medium
-**Status**: 📋 Planned
-**Effort**: S
-**Origin**: [docs/archive/plans/2025-12-29_video-fullscreen-toggle.md](../archive/plans/2025-12-29_video-fullscreen-toggle.md)
-
-**Description**: If `exitFullscreen()` is called via ESC key or keyboard shortcut (Z/X), the click-based `exitHandler` remains attached to the wrapper. Consider removing it in `exitFullscreen()` or using an AbortController for cleanup.
-
-**Acceptance Criteria**:
-- [ ] exitHandler removed when fullscreen exited via any method (click, ESC, Z/X)
-- [ ] No listener accumulation on repeated fullscreen toggle
-- [ ] Use AbortController or stored handler reference
-
----
+<!-- TASK-005 completed 2026-02-24, moved to DONE.md -->
 
 ### [TASK-006] Unified fullscreen exit cleanup method
 **Priority**: 🟡 Medium
