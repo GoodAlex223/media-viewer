@@ -129,6 +129,14 @@ media_viewer/
 - Prevents listener accumulation when multiple exit paths exist (click, ESC, Z/X keys)
 - Also used for sort cancellation (sortAbortController) and background extraction (backgroundExtractionAbort)
 
+**Compare Mode Validation**:
+- showCompareMedia() validates both files exist via IPC checkFileExists before rendering
+- Parallel validation: Promise.all([checkFileExists(left), checkFileExists(right)])
+- Missing files removed via removeFileFromList(), warning shown, retry attempted
+- Bounded retry: retryCount parameter prevents deep recursion (max 10 retries)
+- Graceful fallback: switches to single mode or shows drop zone when fewer than 2 files remain
+- failedIndex resolved via mediaFiles.findIndex(f => f.path === file.path) for accuracy in ML-sorted pairs
+
 **Security**:
 - Context isolation enabled
 - Sandbox disabled (required for file operations)
@@ -141,7 +149,7 @@ media_viewer/
 
 Recent development focus:
 - Fullscreen exit handler leak fix: AbortController-based listener cleanup in enterFullscreen/exitFullscreen (TASK-005)
-- File existence validation in showCompareMedia() before display
+- Compare file existence validation: showCompareMedia() validates files via IPC before display, bounded retry up to 10 (TASK-004)
 - Index wrap behavior fix: Restore wrap-to-start in moveCurrentFile() for continuous rating
 - File removal refactor: Centralized cleanup method replacing duplicate logic
 - Zoom controls refactor: Per-pane dynamic generation with reusable methods
