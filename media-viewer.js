@@ -2307,9 +2307,11 @@ class MediaViewer {
         await Promise.all(cleanupPromises);
 
         if (this.leftMediaWrapper) {
+            this.abortFullscreenController(this.leftMediaWrapper);
             this.leftMediaWrapper.remove();
         }
         if (this.rightMediaWrapper) {
+            this.abortFullscreenController(this.rightMediaWrapper);
             this.rightMediaWrapper.remove();
         }
 
@@ -3282,10 +3284,12 @@ class MediaViewer {
                 await this.cleanupCompareMedia('right');
             }
             if (this.leftMediaWrapper) {
+                this.abortFullscreenController(this.leftMediaWrapper);
                 this.leftMediaWrapper.remove();
                 this.leftMediaWrapper = null;
             }
             if (this.rightMediaWrapper) {
+                this.abortFullscreenController(this.rightMediaWrapper);
                 this.rightMediaWrapper.remove();
                 this.rightMediaWrapper = null;
             }
@@ -3636,6 +3640,8 @@ class MediaViewer {
             // Click to exit (but not on overlay buttons or when zoomed)
             // Use AbortController so exitFullscreen() can remove this listener
             // regardless of which exit path is taken (click, ESC, Z/X keys)
+            const existing = this.fullscreenAbortControllers.get(wrapper);
+            if (existing) existing.abort();
             const abortController = new AbortController();
             this.fullscreenAbortControllers.set(wrapper, abortController);
             const exitHandler = (e) => {
@@ -3658,11 +3664,7 @@ class MediaViewer {
 
     exitFullscreen(wrapper) {
         // Remove click-to-exit handler via AbortController (prevents listener accumulation)
-        const abortController = this.fullscreenAbortControllers.get(wrapper);
-        if (abortController) {
-            abortController.abort();
-            this.fullscreenAbortControllers.delete(wrapper);
-        }
+        this.abortFullscreenController(wrapper);
 
         wrapper.classList.remove('fullscreen');
         const indicator = wrapper.querySelector('.fullscreen-indicator');
@@ -3674,6 +3676,14 @@ class MediaViewer {
         const video = wrapper.querySelector('video');
         if (video && wrapper.dataset.wasPlaying === 'true') {
             video.play().catch(err => console.log('Auto-play prevented:', err));
+        }
+    }
+
+    abortFullscreenController(wrapper) {
+        const ctrl = this.fullscreenAbortControllers.get(wrapper);
+        if (ctrl) {
+            ctrl.abort();
+            this.fullscreenAbortControllers.delete(wrapper);
         }
     }
 

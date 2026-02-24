@@ -20,9 +20,11 @@ Completed tasks with implementation details and learnings.
 **Key Changes**:
 - Added `this.fullscreenAbortControllers = new Map()` to constructor
 - `toggleFullscreen()`: Create AbortController, store in Map, pass signal to addEventListener
-- `exitFullscreen()`: Abort controller and delete from Map at method entry
+- `exitFullscreen()`: Abort controller via helper at method entry
+- Added `abortFullscreenController(wrapper)` helper, used by `exitFullscreen()`, `showCompareMedia()`, and `toggleViewMode()`
+- Defensive guard: abort existing controller before creating new one in enter path
 - Removed self-removal pattern from exitHandler closure
-**Spawned Tasks**: 2 items added to BACKLOG.md (abort before wrapper.remove, early return guard)
+**Spawned Tasks**: 1 item added to BACKLOG.md (early return guard in exitFullscreen)
 
 ### [2026-02-06] Validation in showCompareMedia() for file existence
 
