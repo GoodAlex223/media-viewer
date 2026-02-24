@@ -150,7 +150,8 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
-- Fullscreen exit handler leak fix: Renamed exitFullscreen() to cleanupFullscreen() as unified exit point; added abortFullscreenController() helper; cleanupFullscreen() called before all wrapper.remove() sites (TASK-005)
+- Unified fullscreen cleanup: Renamed exitFullscreen() to cleanupFullscreen(); routed all 5 exit paths (click, ESC, Z/X keys, toggleViewMode, showCompareMedia) through it as single source of truth (TASK-006)
+- Fullscreen exit handler leak guard: AbortController-based listener cleanup via fullscreenAbortControllers Map; abortFullscreenController() helper called before all wrapper.remove() sites (TASK-005)
 - Compare file existence validation: showCompareMedia() validates files via IPC before display, bounded retry up to 10 (TASK-004)
 - Index wrap behavior fix: Restore wrap-to-start in moveCurrentFile() for continuous rating
 - File removal refactor: Centralized cleanup method replacing duplicate logic
