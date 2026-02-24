@@ -361,6 +361,9 @@ class MediaViewer {
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
 
+        // Fullscreen state
+        this.fullscreenAbortControllers = new Map(); // Map<wrapper, AbortController>
+
         // Zoom state for each view
         this.zoomState = {
             single: { scale: 1, translateX: 0, translateY: 0 },
@@ -3631,6 +3634,10 @@ class MediaViewer {
             }
 
             // Click to exit (but not on overlay buttons or when zoomed)
+            // Use AbortController so exitFullscreen() can remove this listener
+            // regardless of which exit path is taken (click, ESC, Z/X keys)
+            const abortController = new AbortController();
+            this.fullscreenAbortControllers.set(wrapper, abortController);
             const exitHandler = (e) => {
                 // Don't exit if clicking on overlay buttons (like/dislike/special)
                 if (e.target.closest('.overlay-btn') || e.target.closest('.media-overlay-controls')) {
@@ -3644,13 +3651,19 @@ class MediaViewer {
                     return;
                 }
                 this.exitFullscreen(wrapper);
-                wrapper.removeEventListener('click', exitHandler);
             };
-            wrapper.addEventListener('click', exitHandler);
+            wrapper.addEventListener('click', exitHandler, { signal: abortController.signal });
         }
     }
 
     exitFullscreen(wrapper) {
+        // Remove click-to-exit handler via AbortController (prevents listener accumulation)
+        const abortController = this.fullscreenAbortControllers.get(wrapper);
+        if (abortController) {
+            abortController.abort();
+            this.fullscreenAbortControllers.delete(wrapper);
+        }
+
         wrapper.classList.remove('fullscreen');
         const indicator = wrapper.querySelector('.fullscreen-indicator');
         if (indicator) {
