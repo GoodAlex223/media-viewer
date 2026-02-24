@@ -125,8 +125,10 @@ media_viewer/
 - User-controlled visibility: Popovers toggle on button click, close on outside click
 
 **Event Listener Lifecycle**:
-- AbortController for scoped cleanup: fullscreenAbortControllers Map (keyed by wrapper) stores controllers, exitFullscreen() calls abort() to remove all listeners at once
-- Prevents listener accumulation when multiple exit paths exist (click, ESC, Z/X keys)
+- AbortController for scoped cleanup: fullscreenAbortControllers Map<wrapper, AbortController> stores controllers per wrapper element
+- cleanupFullscreen(wrapper): unified exit point for ALL paths (click, ESC, Z/X keys, mode switch, pair navigation) — calls abortFullscreenController() first
+- abortFullscreenController(wrapper): helper that aborts and deletes the controller; called by cleanupFullscreen() and before wrapper.remove()
+- Prevents listener accumulation: exitHandler attached via { signal } so abort() removes it without stored reference
 - Also used for sort cancellation (sortAbortController) and background extraction (backgroundExtractionAbort)
 
 **Compare Mode Validation**:
@@ -148,7 +150,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
-- Fullscreen exit handler leak fix: AbortController-based listener cleanup in enterFullscreen/exitFullscreen (TASK-005)
+- Fullscreen exit handler leak fix: Renamed exitFullscreen() to cleanupFullscreen() as unified exit point; added abortFullscreenController() helper; cleanupFullscreen() called before all wrapper.remove() sites (TASK-005)
 - Compare file existence validation: showCompareMedia() validates files via IPC before display, bounded retry up to 10 (TASK-004)
 - Index wrap behavior fix: Restore wrap-to-start in moveCurrentFile() for continuous rating
 - File removal refactor: Centralized cleanup method replacing duplicate logic

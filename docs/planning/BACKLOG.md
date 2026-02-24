@@ -131,7 +131,7 @@ Areas requiring investigation before implementation.
 **Origin**: TASK-005 code review
 
 - [x] Abort fullscreenAbortController before wrapper.remove() — Fixed in PR review: added `abortFullscreenController()` helper, called before `wrapper.remove()` in `showCompareMedia()` and `toggleViewMode()`
-- [ ] Add early return guard in exitFullscreen() for non-fullscreen wrappers — exitFullscreen() doesn't check if wrapper is actually in fullscreen, so double-calls (e.g., ESC after Z) trigger redundant video.play(). Add `if (!wrapper.classList.contains('fullscreen')) return;` at top.
+- [ ] Add early return guard in cleanupFullscreen() for non-fullscreen wrappers — cleanupFullscreen() doesn't check if wrapper is actually in fullscreen, so double-calls (e.g., ESC after Z) trigger redundant video.play(). Add `if (!wrapper.classList.contains('fullscreen')) return;` at top.
 
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3

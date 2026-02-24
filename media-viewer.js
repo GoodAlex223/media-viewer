@@ -1582,10 +1582,10 @@ class MediaViewer {
                 e.preventDefault();
                 // Exit fullscreen first
                 if (this.leftMediaWrapper && this.leftMediaWrapper.classList.contains('fullscreen')) {
-                    this.exitFullscreen(this.leftMediaWrapper);
+                    this.cleanupFullscreen(this.leftMediaWrapper);
                 }
                 if (this.rightMediaWrapper && this.rightMediaWrapper.classList.contains('fullscreen')) {
-                    this.exitFullscreen(this.rightMediaWrapper);
+                    this.cleanupFullscreen(this.rightMediaWrapper);
                 }
                 // Reset zoom
                 if (this.isZoomed()) {
@@ -2307,11 +2307,11 @@ class MediaViewer {
         await Promise.all(cleanupPromises);
 
         if (this.leftMediaWrapper) {
-            this.abortFullscreenController(this.leftMediaWrapper);
+            this.cleanupFullscreen(this.leftMediaWrapper);
             this.leftMediaWrapper.remove();
         }
         if (this.rightMediaWrapper) {
-            this.abortFullscreenController(this.rightMediaWrapper);
+            this.cleanupFullscreen(this.rightMediaWrapper);
             this.rightMediaWrapper.remove();
         }
 
@@ -3284,12 +3284,12 @@ class MediaViewer {
                 await this.cleanupCompareMedia('right');
             }
             if (this.leftMediaWrapper) {
-                this.abortFullscreenController(this.leftMediaWrapper);
+                this.cleanupFullscreen(this.leftMediaWrapper);
                 this.leftMediaWrapper.remove();
                 this.leftMediaWrapper = null;
             }
             if (this.rightMediaWrapper) {
-                this.abortFullscreenController(this.rightMediaWrapper);
+                this.cleanupFullscreen(this.rightMediaWrapper);
                 this.rightMediaWrapper.remove();
                 this.rightMediaWrapper = null;
             }
@@ -3604,7 +3604,7 @@ class MediaViewer {
 
     toggleFullscreen(wrapper) {
         if (wrapper.classList.contains('fullscreen')) {
-            this.exitFullscreen(wrapper);
+            this.cleanupFullscreen(wrapper);
         } else {
             // Get the video element in this wrapper
             const video = wrapper.querySelector('video');
@@ -3638,7 +3638,7 @@ class MediaViewer {
             }
 
             // Click to exit (but not on overlay buttons or when zoomed)
-            // Use AbortController so exitFullscreen() can remove this listener
+            // Use AbortController so cleanupFullscreen() can remove this listener
             // regardless of which exit path is taken (click, ESC, Z/X keys)
             const existing = this.fullscreenAbortControllers.get(wrapper);
             if (existing) existing.abort();
@@ -3656,14 +3656,15 @@ class MediaViewer {
                 if (this.zoomState[zoomTarget] && this.zoomState[zoomTarget].scale > 1) {
                     return;
                 }
-                this.exitFullscreen(wrapper);
+                this.cleanupFullscreen(wrapper);
             };
             wrapper.addEventListener('click', exitHandler, { signal: abortController.signal });
         }
     }
 
-    exitFullscreen(wrapper) {
-        // Remove click-to-exit handler via AbortController (prevents listener accumulation)
+    cleanupFullscreen(wrapper) {
+        // Centralized fullscreen cleanup — ALL exit paths route through here:
+        // graceful (click, ESC, Z/X) and destructive (mode switch, pair navigation)
         this.abortFullscreenController(wrapper);
 
         wrapper.classList.remove('fullscreen');
