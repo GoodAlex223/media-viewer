@@ -41,6 +41,7 @@ Improvements to existing functionality.
 | Fix mouseup listener leak in createZoomPopover | Zoom | Medium | Low | Code review: PR #1 |
 | Document fullscreen zoom reversal from TASK-001 | Zoom/UX | Low | Low | Code review: PR #1 |
 | Remove spinner state churn in showCompareMedia() retry | Compare | Low | Low | Code review: PR #3 |
+| ~~Abort fullscreenAbortController before wrapper.remove()~~ | ~~Fullscreen~~ | ~~Low~~ | ~~Low~~ | Fixed in TASK-005 PR review |
 
 ---
 
@@ -125,6 +126,12 @@ Areas requiring investigation before implementation.
 
 - [ ] Add same validation to showSingleMedia() — Same vulnerability exists in single view mode. Files deleted externally trigger browser error events instead of being proactively caught.
 - [ ] Batch file validation on folder refresh — Validate all files in mediaFiles[] at once, removing stale entries. Useful for long-running sessions where folder contents change.
+
+### 2026-02-24 From: fullscreen-exithandler-leak-guard
+**Origin**: TASK-005 code review
+
+- [x] Abort fullscreenAbortController before wrapper.remove() — Fixed in PR review: added `abortFullscreenController()` helper, called before `wrapper.remove()` in `showCompareMedia()` and `toggleViewMode()`
+- [ ] Add early return guard in exitFullscreen() for non-fullscreen wrappers — exitFullscreen() doesn't check if wrapper is actually in fullscreen, so double-calls (e.g., ESC after Z) trigger redundant video.play(). Add `if (!wrapper.classList.contains('fullscreen')) return;` at top.
 
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3

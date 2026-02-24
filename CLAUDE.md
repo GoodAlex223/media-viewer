@@ -124,6 +124,11 @@ media_viewer/
 - Compare mode: Zoom buttons added dynamically to overlay controls (addMediaOverlayControls)
 - User-controlled visibility: Popovers toggle on button click, close on outside click
 
+**Event Listener Lifecycle**:
+- AbortController for scoped cleanup: fullscreenAbortControllers Map (keyed by wrapper) stores controllers, exitFullscreen() calls abort() to remove all listeners at once
+- Prevents listener accumulation when multiple exit paths exist (click, ESC, Z/X keys)
+- Also used for sort cancellation (sortAbortController) and background extraction (backgroundExtractionAbort)
+
 **Security**:
 - Context isolation enabled
 - Sandbox disabled (required for file operations)
@@ -135,14 +140,15 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
-- Index wrap behavior fix: Restore wrap-to-start in moveCurrentFile() for continuous rating (Feb 2026)
-- File removal refactor: Centralized cleanup method replacing duplicate logic (Feb 2026)
-- Zoom controls refactor: Per-pane dynamic generation with reusable methods (Feb 2026)
-- Visual media scale controls with logarithmic zoom mapping (TASK-002, Feb 2026)
+- Fullscreen exit handler leak fix: AbortController-based listener cleanup in enterFullscreen/exitFullscreen (TASK-005)
+- File existence validation in showCompareMedia() before display
+- Index wrap behavior fix: Restore wrap-to-start in moveCurrentFile() for continuous rating
+- File removal refactor: Centralized cleanup method replacing duplicate logic
+- Zoom controls refactor: Per-pane dynamic generation with reusable methods
+- Visual media scale controls with logarithmic zoom mapping (TASK-002)
 - Compare mode overlay controls with zoom integration
 - ML feature extraction with 64-dimension vectors and quality metrics
 - ML online learning with lazy initialization
-- Documentation standardization to template format (Feb 2026)
 
 <!-- END AUTO-MANAGED -->
 
