@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-02-24
+**Last Updated**: 2026-02-25
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,17 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-02 (February)
+
+### [2026-02-25] Force re-sort option for similarity sorting
+
+**Summary**: Added Shift+click on the sort button to bypass cached sort results and perform a fresh similarity sort. Works directly from both unsorted and already-sorted states.
+**Key Changes**:
+- `handleSortBySimilarity(forceResort)` accepts boolean parameter via `e.shiftKey`
+- New `deleteSortCache(algorithm)` removes current algorithm's cache entry only
+- `originalMediaFiles` snapshot preserved across force re-sorts (Restore Order returns to true disk order)
+- Catch block guarded with `wasAlreadySorted` to prevent file list wipe on failed force re-sort
+- Sort button tooltip updated with Shift+click hint
+**Spawned Tasks**: 2 items added to BACKLOG.md (help overlay hint, ML sort force re-sort)
 
 ### [2026-02-24] Unified fullscreen exit cleanup method
 
