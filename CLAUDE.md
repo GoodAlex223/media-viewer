@@ -116,6 +116,7 @@ media_viewer/
 - Used by: removeFailedFile(), moveCurrentFile(), moveToSpecialFolder(), moveComparePair()
 - Ensures consistent state across all file removal scenarios
 - Sort cache: deleteSortCache(algorithm) selectively removes one algorithm's entry from .sort_cache.json; called by force re-sort path (Shift+click on Sort by Similarity)
+- Sort cache entries include a `timestamp` field (ms epoch); formatTimeAgo(timestamp) converts it to human-readable age (seconds/minutes/hours/days/weeks) shown in the "loaded from cache" notification
 
 **UI Component Management**:
 - Dynamic zoom controls: Created per media pane via createZoomPopover(target, wrapper, toggleBtn)
@@ -151,7 +152,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
-- Force re-sort (Shift+click): handleSortBySimilarity(forceResort) accepts Shift+click flag; deleteSortCache() removes cached order; originalMediaFiles snapshot preserved across force re-sorts so "Restore Order" always returns to disk order (TASK-007)
+- Force re-sort (Shift+click): handleSortBySimilarity(forceResort) accepts Shift+click flag; deleteSortCache() removes cached order; originalMediaFiles snapshot preserved across force re-sorts so "Restore Order" always returns to disk order; formatTimeAgo() displays cache age in sort-loaded notifications (TASK-007)
 - Unified fullscreen cleanup: Renamed exitFullscreen() to cleanupFullscreen(); routed all 5 exit paths (click, ESC, Z/X keys, toggleViewMode, showCompareMedia) through it as single source of truth (TASK-006)
 - Fullscreen exit handler leak guard: AbortController-based listener cleanup via fullscreenAbortControllers Map; abortFullscreenController() helper called before all wrapper.remove() sites (TASK-005)
 - Compare file existence validation: showCompareMedia() validates files via IPC before display, bounded retry up to 10 (TASK-004)
