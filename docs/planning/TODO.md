@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-02-24 <!-- TASK-012,013,014 -->
+**Last Updated**: 2026-02-25 <!-- TASK-007 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -29,21 +29,7 @@ Active tasks and backlog.
 <!-- TASK-004 completed 2026-02-06, moved to DONE.md -->
 <!-- TASK-005 completed 2026-02-24, moved to DONE.md -->
 <!-- TASK-006 completed 2026-02-24, moved to DONE.md -->
-
----
-
-### [TASK-007] Force re-sort option for similarity sorting
-**Priority**: 🟡 Medium
-**Status**: 📋 Planned
-**Effort**: S
-**Origin**: [docs/archive/plans/2025-12-27_sorting-cache.md](../archive/plans/2025-12-27_sorting-cache.md)
-
-**Description**: Allow user to discard cached sort results and re-sort from scratch. Useful when user wants fresh sort after significant changes to folder.
-
-**Acceptance Criteria**:
-- [ ] UI option (button or modifier key) to force re-sort
-- [ ] Bypasses cache and performs full sort algorithm
-- [ ] Clear notification that fresh sort is being performed
+<!-- TASK-007 completed 2026-02-25, moved to DONE.md -->
 
 ---
 

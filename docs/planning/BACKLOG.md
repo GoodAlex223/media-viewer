@@ -138,6 +138,12 @@ Areas requiring investigation before implementation.
 
 - [ ] Extract setupFullscreen(wrapper) from toggleFullscreen() enter branch — The enter branch is 55 lines. Extracting to a symmetric `setupFullscreen(wrapper)` alongside `cleanupFullscreen(wrapper)` would improve readability and make the enter/exit symmetry explicit.
 
+### 2026-02-25 From: task-007-force-resort-option
+**Origin**: TASK-007 implementation
+
+- [ ] Add Shift+click hint to help overlay keyboard shortcuts — The force re-sort feature is only discoverable via button tooltip. Adding it to the help overlay (F1) keyboard shortcuts section would improve discoverability.
+- [ ] Force re-sort for ML prediction sort — Apply the same Shift+click force re-sort pattern to `handleSortByPrediction()` for consistency across both sort modes.
+
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
 

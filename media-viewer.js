@@ -1440,7 +1440,7 @@ class MediaViewer {
 
         // Sort similarity button
         if (this.sortSimilarityBtn) {
-            this.sortSimilarityBtn.addEventListener('click', () => this.handleSortBySimilarity());
+            this.sortSimilarityBtn.addEventListener('click', (e) => this.handleSortBySimilarity(e.shiftKey));
         }
 
         // Sort by prediction button
@@ -3690,7 +3690,7 @@ class MediaViewer {
 
     // Visual Similarity Sorting Functions
 
-    async handleSortBySimilarity() {
+    async handleSortBySimilarity(forceResort = false) {
         // If currently computing, cancel the operation
         if (this.isComputingHashes && this.sortAbortController) {
             this.sortAbortController.abort();
@@ -3708,7 +3708,7 @@ class MediaViewer {
             return;
         }
 
-        // Warn about large datasets
+        // Warn about large datasets (skipped when already sorted, including force re-sort)
         if (this.mediaFiles.length > 1000 && !this.isSortedBySimilarity) {
             const cacheFile = `${this.baseFolderPath}\\.hash_cache.json`;
             const confirmed = confirm(
@@ -3722,8 +3722,8 @@ class MediaViewer {
             }
         }
 
-        // Toggle sorting
-        if (this.isSortedBySimilarity) {
+        // Toggle sorting (skip restore when force re-sorting)
+        if (this.isSortedBySimilarity && !forceResort) {
             // Restore original order
             this.mediaFiles = [...this.originalMediaFiles];
             this.isSortedBySimilarity = false;
@@ -3734,6 +3734,8 @@ class MediaViewer {
             return;
         }
 
+        const wasAlreadySorted = this.isSortedBySimilarity;
+
         try {
             this.isComputingHashes = true;
             this.sortAbortController = new AbortController();
@@ -3741,8 +3743,11 @@ class MediaViewer {
             this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Cancel';
             this.sortSimilarityBtn.disabled = false; // Re-enable for cancel
 
-            // Save original order
-            this.originalMediaFiles = [...this.mediaFiles];
+            // Save original order (preserve existing snapshot when force re-sorting,
+            // so "Restore Order" always returns to the true disk order)
+            if (!wasAlreadySorted) {
+                this.originalMediaFiles = [...this.mediaFiles];
+            }
 
             const algorithmNames = {
                 'vptree': 'VP-Tree (fastest)',
@@ -3751,8 +3756,14 @@ class MediaViewer {
             };
             const algorithmName = algorithmNames[this.sortAlgorithm] || this.sortAlgorithm;
 
-            // Check for cached sort order first
-            const cachedSortData = await this.loadSortCache(this.sortAlgorithm);
+            // Force re-sort: delete cached order and skip cache lookup
+            if (forceResort) {
+                this.showNotification('🔄 Force re-sorting, ignoring cache...', 'info');
+                await this.deleteSortCache(this.sortAlgorithm);
+            }
+
+            // Check for cached sort order first (bypassed when force re-sorting)
+            const cachedSortData = forceResort ? null : await this.loadSortCache(this.sortAlgorithm);
             if (cachedSortData && cachedSortData.sortedPaths.length > 0) {
                 this.updateProgressNotification('🔄 Loading cached sort order...');
 
@@ -3896,8 +3907,9 @@ class MediaViewer {
             this.clearProgressNotification();
             this.showNotification(`❌ Error: ${error.message}`, 'error');
 
-            // Restore original order if sorting failed
-            if (this.originalMediaFiles.length > 0) {
+            // Restore original order if sorting failed (but preserve snapshot
+            // when force re-sort fails from sorted state, so "Restore Order" still works)
+            if (!wasAlreadySorted && this.originalMediaFiles.length > 0) {
                 this.mediaFiles = [...this.originalMediaFiles];
                 this.originalMediaFiles = [];
             }
@@ -4562,6 +4574,41 @@ class MediaViewer {
         } catch (error) {
             console.error('Failed to save sort cache:', error);
             this.showNotification('⚠️ Failed to save sort cache', 'warning');
+        }
+    }
+
+    async deleteSortCache(algorithm) {
+        if (!this.baseFolderPath) return;
+
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.sort_cache.json');
+
+            let existingData;
+            try {
+                existingData = await window.electronAPI.readFile(cacheFile);
+            } catch (e) {
+                // Cache file does not exist — nothing to delete
+                return;
+            }
+
+            let cache = {};
+            if (existingData) {
+                try {
+                    cache = JSON.parse(existingData);
+                } catch (e) {
+                    // Malformed cache — overwrite with empty object
+                    cache = {};
+                }
+            }
+
+            if (!cache[algorithm]) return;
+
+            delete cache[algorithm];
+            await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
+            console.log(`Sort cache deleted for algorithm: ${algorithm}`);
+        } catch (error) {
+            console.error('Failed to delete sort cache entry:', error);
+            this.showNotification('⚠️ Failed to delete sort cache', 'warning');
         }
     }
 
