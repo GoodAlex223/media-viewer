@@ -144,6 +144,12 @@ Areas requiring investigation before implementation.
 - [ ] Add Shift+click hint to help overlay keyboard shortcuts — The force re-sort feature is only discoverable via button tooltip. Adding it to the help overlay (F1) keyboard shortcuts section would improve discoverability.
 - [ ] Force re-sort for ML prediction sort — Apply the same Shift+click force re-sort pattern to `handleSortByPrediction()` for consistency across both sort modes.
 
+### 2026-03-05 From: task-008-cache-age-display
+**Origin**: docs/archive/plans/2026-03-05_task-008-cache-age-display.md
+
+- [ ] Reuse formatTimeAgo() for other timestamps — Could display ML model age, hash cache age, or other cached data freshness
+- [ ] Add month-level granularity to formatTimeAgo() — Currently stops at weeks; very old caches show "52 weeks ago" instead of "12 months ago"
+
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
 

@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-02-25 <!-- TASK-007 completed -->
+**Last Updated**: 2026-03-05 <!-- TASK-008 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -30,20 +30,7 @@ Active tasks and backlog.
 <!-- TASK-005 completed 2026-02-24, moved to DONE.md -->
 <!-- TASK-006 completed 2026-02-24, moved to DONE.md -->
 <!-- TASK-007 completed 2026-02-25, moved to DONE.md -->
-
----
-
-### [TASK-008] Cache age display in sorting notification
-**Priority**: 🟢 Low
-**Status**: 📋 Planned
-**Effort**: S
-**Origin**: [docs/archive/plans/2025-12-27_sorting-cache.md](../archive/plans/2025-12-27_sorting-cache.md)
-
-**Description**: Show when sort cache was created in the sorting notification. Helps user decide if cache is fresh enough or needs re-sort.
-
-**Acceptance Criteria**:
-- [ ] Notification shows cache age (e.g., "Using cached order from 2 hours ago")
-- [ ] Human-readable time format (minutes/hours/days ago)
+<!-- TASK-008 completed 2026-03-05, moved to DONE.md -->
 
 ---
 

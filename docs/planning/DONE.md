@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-03-05
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -11,6 +11,20 @@ Completed tasks with implementation details and learnings.
 ---
 
 <!-- Organize by month, newest first. -->
+
+## 2026-03 (March)
+
+### [2026-03-05] Cache age display in sorting notification
+
+**Plan**: [2026-03-05_task-008-cache-age-display.md](../archive/plans/2026-03-05_task-008-cache-age-display.md)
+**Summary**: Added human-readable cache age to the sort cache restore notification. New `formatTimeAgo()` utility converts stored timestamp to relative time (e.g., "cached 2 hours ago").
+**Key Changes**:
+- `formatTimeAgo(timestamp)` method with singular/plural handling (just now → minutes → hours → days → weeks)
+- Cache restore notification appends `— cached {timeAgo}` after stats
+- `typeof === 'number'` guard for backwards compatibility with old caches
+**Spawned Tasks**: 2 items added to BACKLOG.md (reuse formatTimeAgo, month granularity)
+
+---
 
 ## 2026-02 (February)
 
