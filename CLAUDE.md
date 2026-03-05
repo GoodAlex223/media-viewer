@@ -135,6 +135,12 @@ media_viewer/
 - Prevents listener accumulation: exitHandler attached via { signal } so abort() removes it without stored reference
 - Also used for sort cancellation (sortAbortController) and background extraction (backgroundExtractionAbort)
 
+**Extraction Pause/Resume**:
+- signalUserActivity(): called on nextMedia(), previousMedia(), handleLike(), handleDislike(), handleSpecial(), handleUndoMove(); sets extractionPaused=true immediately and shows "Paused" progress state; resets/restarts a 2-second idle timer
+- resumeExtraction(): called by the idle timer after 2s of no activity; clears extractionPaused, resolves the awaitExtractionGate() promise, resets progress indicator to "Extracting"
+- awaitExtractionGate(signal): async gate at the top of each extraction loop iteration; resolves immediately when not paused; blocks via new Promise (stored in extractionResumeResolve) until resumeExtraction() is called
+- showBackgroundExtractionProgress(current, total, etaText, paused): paused=true renders "Paused — N/T (X%)"; _extractionLastCurrent/_extractionLastTotal cache last known counts for redisplay when current/total are null
+
 **Async Run Isolation (Generation Counter)**:
 - extractionRunId integer in constructor state; incremented at the start of each background extraction run via `const runId = ++this.extractionRunId`
 - All async callbacks (then/catch) check `this.extractionRunId !== runId` and return early if stale — prevents cancelled run callbacks from mutating ETA window or firing completion notification of a new run
@@ -160,6 +166,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- Extraction pause/resume on user activity: signalUserActivity() called from all navigation and rating actions; sets extractionPaused=true and shows "Paused" state immediately; 2-second idle timer calls resumeExtraction() which resolves awaitExtractionGate() promise in the extraction loop; _extractionLastCurrent/_extractionLastTotal cache last counts for paused redisplay
 - Feature extraction ETA and elapsed time: recordExtractionCompletion() tracks rolling window (last 20) of per-file completion timestamps; computes live ETA when 5+ samples available (files/sec rate); formatElapsed()/formatEta() format seconds to "Xm Ys"/"~Xm Ys"; showBackgroundExtractionProgress() appends ETA suffix; completion notification shows "Feature extraction complete — N files in Xm Ys"
 - Extraction run isolation: extractionRunId generation counter prevents stale async callbacks (from cancelled runs) from corrupting ETA window or firing wrong completion notification; load-failure catch skips recordExtractionCompletion() to avoid ETA skew; formatElapsed() guards against NaN/Infinity
 - Configurable feature extraction worker count: featureWorkerCount settable 1-8 in Settings panel (F1), persisted to localStorage('featureWorkerCount'), constructor reads and clamps saved value, defaults to 4
