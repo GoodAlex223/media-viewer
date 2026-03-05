@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-05
+**Last Updated**: 2026-03-05 <!-- TASK-009 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,18 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-05] Worker count setting for feature extraction
+
+**Plan**: N/A (small effort, no separate plan)
+**Summary**: Added configurable worker count (1-8) for feature extraction in Settings panel. Reads from localStorage with default of 4, takes effect on next pool initialization.
+**Key Changes**:
+- Constructor reads `featureWorkerCount` from localStorage with validation/clamping
+- Number input in Settings panel (Help Overlay) with change handler
+- CSS styling for number input inside `.setting-item`
+**Spawned Tasks**: 2 items added to BACKLOG.md (auto-detect CPU cores, show worker count in progress)
+
+---
 
 ### [2026-03-05] Cache age display in sorting notification
 
