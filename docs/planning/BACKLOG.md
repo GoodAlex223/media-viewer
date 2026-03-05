@@ -149,6 +149,7 @@ Areas requiring investigation before implementation.
 
 - [ ] Auto-detect optimal worker count via `navigator.hardwareConcurrency` — Use CPU core count as suggested default instead of hardcoded 4. Show detected cores in UI label (e.g., "Feature extraction workers (8 cores detected)").
 - [ ] Show active worker count in background extraction progress — Display "Extracting features (4 workers)..." in the progress indicator so users understand the current parallelism level.
+- [ ] Reinitialize worker pool on setting change or show restart hint — Changing worker count at runtime doesn't affect an already-running pool (guarded by `featureWorkers.length === 0`). Either call `shutdownFeaturePool()` + `initializeFeaturePool()` on change, or add "(takes effect on restart)" label next to the input.
 
 ### 2026-03-05 From: task-008-cache-age-display
 **Origin**: docs/archive/plans/2026-03-05_task-008-cache-age-display.md
