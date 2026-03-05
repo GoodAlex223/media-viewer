@@ -345,7 +345,9 @@ class MediaViewer {
 
         // Feature extraction worker pool state
         this.featureWorkers = [];           // Array of Worker instances
-        this.featureWorkerCount = 4;        // Number of parallel workers
+        const savedWorkerCount = parseInt(localStorage.getItem('featureWorkerCount'), 10);
+        this.featureWorkerCount = (savedWorkerCount >= 1 && savedWorkerCount <= 8) ? savedWorkerCount : 4;
+
         this.featureTaskQueue = [];         // Priority queue of pending tasks
         this.featurePendingTasks = new Map(); // Map<taskId, {resolve, reject, filePath, retries}>
         this.featureTaskIdCounter = 0;      // Incrementing task ID
@@ -1550,6 +1552,20 @@ class MediaViewer {
                 } else {
                     this.hidePredictionBadges();
                 }
+            });
+        }
+
+        // Feature extraction worker count setting
+        const workerCountInput = document.getElementById('featureWorkerCountInput');
+        if (workerCountInput) {
+            workerCountInput.value = this.featureWorkerCount;
+            workerCountInput.addEventListener('change', (e) => {
+                let value = parseInt(e.target.value, 10);
+                if (isNaN(value) || value < 1) value = 1;
+                if (value > 8) value = 8;
+                e.target.value = value;
+                this.featureWorkerCount = value;
+                localStorage.setItem('featureWorkerCount', value.toString());
             });
         }
 

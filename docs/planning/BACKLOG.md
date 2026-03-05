@@ -144,6 +144,12 @@ Areas requiring investigation before implementation.
 - [ ] Add Shift+click hint to help overlay keyboard shortcuts — The force re-sort feature is only discoverable via button tooltip. Adding it to the help overlay (F1) keyboard shortcuts section would improve discoverability.
 - [ ] Force re-sort for ML prediction sort — Apply the same Shift+click force re-sort pattern to `handleSortByPrediction()` for consistency across both sort modes.
 
+### 2026-03-05 From: task-009-worker-count-setting
+**Origin**: TASK-009 implementation
+
+- [ ] Auto-detect optimal worker count via `navigator.hardwareConcurrency` — Use CPU core count as suggested default instead of hardcoded 4. Show detected cores in UI label (e.g., "Feature extraction workers (8 cores detected)").
+- [ ] Show active worker count in background extraction progress — Display "Extracting features (4 workers)..." in the progress indicator so users understand the current parallelism level.
+
 ### 2026-03-05 From: task-008-cache-age-display
 **Origin**: docs/archive/plans/2026-03-05_task-008-cache-age-display.md
 

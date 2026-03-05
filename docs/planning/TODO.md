@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-05 <!-- TASK-008 completed -->
+**Last Updated**: 2026-03-05 <!-- TASK-009 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -31,21 +31,7 @@ Active tasks and backlog.
 <!-- TASK-006 completed 2026-02-24, moved to DONE.md -->
 <!-- TASK-007 completed 2026-02-25, moved to DONE.md -->
 <!-- TASK-008 completed 2026-03-05, moved to DONE.md -->
-
----
-
-### [TASK-009] Worker count setting for feature extraction
-**Priority**: 🟢 Low
-**Status**: 📋 Planned
-**Effort**: S
-**Origin**: [docs/archive/plans/2025-12-28_background-feature-extraction.md](../archive/plans/2025-12-28_background-feature-extraction.md)
-
-**Description**: Let user configure number of feature extraction workers. Currently hardcoded to 4 workers.
-
-**Acceptance Criteria**:
-- [ ] Setting in UI to configure worker count (1-8)
-- [ ] Setting persisted in localStorage
-- [ ] Worker pool respects user setting on initialization
+<!-- TASK-009 completed 2026-03-05, moved to DONE.md -->
 
 ---
 
