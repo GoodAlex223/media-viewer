@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-05 <!-- TASK-009 completed -->
+**Last Updated**: 2026-03-05 <!-- TASK-010 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -32,21 +32,7 @@ Active tasks and backlog.
 <!-- TASK-007 completed 2026-02-25, moved to DONE.md -->
 <!-- TASK-008 completed 2026-03-05, moved to DONE.md -->
 <!-- TASK-009 completed 2026-03-05, moved to DONE.md -->
-
----
-
-### [TASK-010] Estimated time remaining for feature extraction
-**Priority**: 🟢 Low
-**Status**: 📋 Planned
-**Effort**: M
-**Origin**: [docs/archive/plans/2025-12-28_background-feature-extraction.md](../archive/plans/2025-12-28_background-feature-extraction.md)
-
-**Description**: Show ETA during background feature extraction. Improves user experience for large folders.
-
-**Acceptance Criteria**:
-- [ ] Calculate extraction rate (files per second)
-- [ ] Display estimated time remaining in progress indicator
-- [ ] Update estimate as extraction progresses
+<!-- TASK-010 completed 2026-03-05, moved to DONE.md -->
 
 ---
 

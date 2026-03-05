@@ -106,6 +106,7 @@ media_viewer/
 - Class-based state in MediaViewer
 - localStorage for user preferences (folders, settings, worker counts)
 - Settings panel (F1/Help Overlay) uses number inputs and checkboxes wired to localStorage; constructor reads saved values with validation/clamping on load
+- Extraction timing state: extractionStartTime (Date.now() at start) and extractionCompletionTimes (rolling window, max 20 entries) track per-file completion for ETA computation; both cleared on cancel and after completion notification
 
 **Index Management**:
 - Wrap-to-start: moveCurrentFile() cycles to index 0 when rating last file (continuous workflow)
@@ -153,6 +154,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- Feature extraction ETA and elapsed time: recordExtractionCompletion() tracks rolling window (last 20) of per-file completion timestamps; computes live ETA when 5+ samples available (files/sec rate); formatElapsed()/formatEta() format seconds to "Xm Ys"/"~Xm Ys"; showBackgroundExtractionProgress() appends ETA suffix; completion notification shows "Feature extraction complete — N files in Xm Ys"
 - Configurable feature extraction worker count: featureWorkerCount settable 1-8 in Settings panel (F1), persisted to localStorage('featureWorkerCount'), constructor reads and clamps saved value, defaults to 4
 - Cache age display in sort notification: formatTimeAgo(timestamp) utility added to MediaViewer; appends "— cached X hours ago" to cache-restore notifications; typeof guard for backwards compatibility with old caches (TASK-008)
 - Force re-sort (Shift+click): handleSortBySimilarity(forceResort) accepts Shift+click flag; deleteSortCache() removes cached order; originalMediaFiles snapshot preserved across force re-sorts so "Restore Order" always returns to disk order (TASK-007)

@@ -355,6 +355,9 @@ class MediaViewer {
         this.backgroundExtractionAbort = null; // AbortController for cancellation
         this.featureCacheDirty = false;     // Flag for auto-save
         this.featureCacheAutoSaveInterval = null;
+        this.extractionStartTime = null;       // Date.now() when extraction starts
+        this.extractionCompletionTimes = [];   // Rolling window of completion timestamps
+        this.extractionRunId = 0;              // Generation counter for cancel-then-restart safety
 
         // User settings
         this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
@@ -739,6 +742,22 @@ class MediaViewer {
         if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
         const weeks = Math.floor(days / 7);
         return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+    }
+
+    formatElapsed(totalSeconds) {
+        totalSeconds = Math.round(totalSeconds);
+        if (!isFinite(totalSeconds) || totalSeconds < 0) return '?';
+        if (totalSeconds < 60) return `${totalSeconds}s`;
+        const m = Math.floor(totalSeconds / 60);
+        const s = totalSeconds % 60;
+        if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+        const h = Math.floor(m / 60);
+        const rm = m % 60;
+        return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
+    }
+
+    formatEta(totalSeconds) {
+        return `~${this.formatElapsed(totalSeconds)}`;
     }
 
     showNotification(message, type = 'success', options = {}) {
@@ -6209,6 +6228,9 @@ class MediaViewer {
 
         this.isBackgroundExtracting = true;
         this.backgroundExtractionAbort = new AbortController();
+        this.extractionStartTime = Date.now();
+        this.extractionCompletionTimes = [];
+        const runId = ++this.extractionRunId;
 
         // Show subtle progress indicator
         this.showBackgroundExtractionProgress(0, this.mediaFiles.length);
@@ -6252,18 +6274,21 @@ class MediaViewer {
                     const priority = this.calculateFeaturePriority(index);
                     const promise = this.enqueueFeatureExtraction(file.path, imageData, priority)
                         .then(() => {
+                            if (this.extractionRunId !== runId) return;
                             completedCount++;
-                            this.showBackgroundExtractionProgress(completedCount, totalCount);
+                            this.recordExtractionCompletion(completedCount, totalCount);
                         })
                         .catch(err => {
+                            if (this.extractionRunId !== runId) return;
                             console.warn(`Feature extraction failed for ${file.name}:`, err.message);
                             completedCount++;
-                            this.showBackgroundExtractionProgress(completedCount, totalCount);
+                            this.recordExtractionCompletion(completedCount, totalCount);
                         });
                     promises.push(promise);
                 } catch (err) {
                     console.warn(`Failed to load ${file.name}:`, err.message);
                     completedCount++;
+                    this.showBackgroundExtractionProgress(completedCount, totalCount);
                 }
             }
 
@@ -6274,13 +6299,19 @@ class MediaViewer {
         this.isBackgroundExtracting = false;
         this.hideBackgroundExtractionProgress();
 
+        // Show completion notification with total time (skip if a new run started)
+        if (this.extractionRunId === runId && this.extractionStartTime) {
+            const totalSecs = Math.round((Date.now() - this.extractionStartTime) / 1000);
+            const timeStr = this.formatElapsed(totalSecs);
+            this.showNotification(`Feature extraction complete \u2014 ${totalCount} files in ${timeStr}`, 'success');
+            this.extractionStartTime = null;
+        }
+
         // Save cache after extraction
         if (this.featureCacheDirty) {
             await this.saveFeatureCache();
             this.featureCacheDirty = false;
         }
-
-        console.log('Background feature extraction complete');
 
         // Trigger ML scoring if enabled and model is ready
         if (this.isMlEnabled && this.mlStats?.isReady) {
@@ -6299,15 +6330,47 @@ class MediaViewer {
 
         this.cancelPendingFeatureExtractions();
         this.isBackgroundExtracting = false;
+        this.extractionStartTime = null;
+        this.extractionCompletionTimes = [];
         this.hideBackgroundExtractionProgress();
+    }
+
+    /**
+     * Record a file completion and update extraction progress with ETA
+     * @param {number} completedCount - Files completed so far
+     * @param {number} totalCount - Total files to process
+     */
+    recordExtractionCompletion(completedCount, totalCount) {
+        if (!this.isBackgroundExtracting) return;
+
+        const now = Date.now();
+        this.extractionCompletionTimes.push(now);
+        if (this.extractionCompletionTimes.length > 20) {
+            this.extractionCompletionTimes.shift();
+        }
+
+        let etaText = null;
+        const times = this.extractionCompletionTimes;
+        const remaining = totalCount - completedCount;
+        if (remaining > 0 && times.length >= 5) {
+            const elapsed = times[times.length - 1] - times[0];
+            if (elapsed > 0) {
+                const rate = (times.length - 1) / (elapsed / 1000); // files per second
+                const etaSeconds = remaining / rate;
+                etaText = this.formatEta(etaSeconds);
+            }
+        }
+
+        this.showBackgroundExtractionProgress(completedCount, totalCount, etaText);
     }
 
     /**
      * Show subtle background extraction progress indicator
      * @param {number} current - Current count
      * @param {number} total - Total count
+     * @param {string|null} etaText - Formatted ETA string (e.g. "~3m 12s")
      */
-    showBackgroundExtractionProgress(current, total) {
+    showBackgroundExtractionProgress(current, total, etaText = null) {
         let indicator = document.getElementById('featureExtractionProgress');
 
         if (!indicator) {
@@ -6332,11 +6395,12 @@ class MediaViewer {
         }
 
         const percentage = Math.round((current / total) * 100);
+        const etaSuffix = etaText ? ` \u2014 ${etaText}` : '';
         indicator.innerHTML = `
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
                 <path d="M12 2v4m0 12v4m-7-7H3m18 0h-2M5.6 5.6l1.4 1.4m9.9 9.9l1.4 1.4M5.6 18.4l1.4-1.4m9.9-9.9l1.4-1.4"/>
             </svg>
-            <span>Extracting features: ${current}/${total} (${percentage}%)</span>
+            <span>Extracting features: ${current}/${total} (${percentage}%)${etaSuffix}</span>
         `;
 
         // Add spin animation if not already present

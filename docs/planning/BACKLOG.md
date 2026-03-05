@@ -158,6 +158,12 @@ Areas requiring investigation before implementation.
 - [ ] Add month-level granularity to formatTimeAgo() — Currently stops at weeks; very old caches show "52 weeks ago" instead of "12 months ago"
 - [ ] Fix stale timestamp display when new files merged into cache — When `stats.added > 0`, `saveSortCache()` overwrites disk with `Date.now()` but notification still reads old `cachedSortData.timestamp`. Should update timestamp after re-save or show "just now" for merged caches.
 
+### 2026-03-05 From: task-010-extraction-eta
+**Origin**: docs/archive/plans/2026-03-05_task-010-extraction-eta.md
+
+- [ ] Show extraction rate in progress pill — Display files/sec alongside ETA (e.g., "45/200 (22%) — ~3m 12s (2.3 files/s)") for throughput visibility
+- [ ] Reuse formatElapsed() for other timed operations — Sort-by-similarity, ML training, and other long operations could show elapsed time on completion
+
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
 
