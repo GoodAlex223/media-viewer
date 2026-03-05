@@ -104,7 +104,8 @@ media_viewer/
 
 **State Management**:
 - Class-based state in MediaViewer
-- localStorage for user preferences (folders, settings)
+- localStorage for user preferences (folders, settings, featureWorkerCount)
+- featureWorkerCount: user-configurable 1-8 via Settings panel (F1), persisted to localStorage('featureWorkerCount'), defaults to 4; read in constructor, clamped on change
 
 **Index Management**:
 - Wrap-to-start: moveCurrentFile() cycles to index 0 when rating last file (continuous workflow)
@@ -152,6 +153,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- Configurable feature extraction worker count: featureWorkerCount settable 1-8 in Settings panel (F1), persisted to localStorage('featureWorkerCount'), constructor reads and clamps saved value, defaults to 4
 - Cache age display in sort notification: formatTimeAgo(timestamp) utility added to MediaViewer; appends "— cached X hours ago" to cache-restore notifications; typeof guard for backwards compatibility with old caches (TASK-008)
 - Force re-sort (Shift+click): handleSortBySimilarity(forceResort) accepts Shift+click flag; deleteSortCache() removes cached order; originalMediaFiles snapshot preserved across force re-sorts so "Restore Order" always returns to disk order (TASK-007)
 - Unified fullscreen cleanup: Renamed exitFullscreen() to cleanupFullscreen(); routed all 5 exit paths (click, ESC, Z/X keys, toggleViewMode, showCompareMedia) through it as single source of truth (TASK-006)
