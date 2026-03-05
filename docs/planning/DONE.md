@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-05 <!-- TASK-009 -->
+**Last Updated**: 2026-03-05 <!-- TASK-010 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,20 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-05] Estimated time remaining for feature extraction
+
+**Plan**: [2026-03-05_task-010-extraction-eta.md](../archive/plans/2026-03-05_task-010-extraction-eta.md)
+**Summary**: Added ETA display to the background feature extraction progress pill using rolling average rate calculation. Shows estimated time remaining after 5+ files completed, and a completion notification with total elapsed time.
+**Key Changes**:
+- `formatElapsed()`/`formatEta()` time formatting utilities (seconds to human-readable)
+- `recordExtractionCompletion()` — rolling window (last 20) rate calculation with ETA computation
+- Progress pill extended: `"Extracting features: 45/200 (22%) — ~3m 12s"`
+- Completion notification: `"Feature extraction complete — 200 files in 2m 34s"`
+- Ghost pill prevention via `isBackgroundExtracting` guard after cancel
+**Spawned Tasks**: 2 items added to BACKLOG.md (show rate in pill, reuse formatElapsed)
+
+---
 
 ### [2026-03-05] Worker count setting for feature extraction
 
