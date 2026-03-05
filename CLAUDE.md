@@ -104,8 +104,8 @@ media_viewer/
 
 **State Management**:
 - Class-based state in MediaViewer
-- localStorage for user preferences (folders, settings, featureWorkerCount)
-- featureWorkerCount: user-configurable 1-8 via Settings panel (F1), persisted to localStorage('featureWorkerCount'), defaults to 4; read in constructor, clamped on change
+- localStorage for user preferences (folders, settings, worker counts)
+- Settings panel (F1/Help Overlay) uses number inputs and checkboxes wired to localStorage; constructor reads saved values with validation/clamping on load
 
 **Index Management**:
 - Wrap-to-start: moveCurrentFile() cycles to index 0 when rating last file (continuous workflow)
