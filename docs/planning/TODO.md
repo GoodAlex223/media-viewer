@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-05 <!-- TASK-010 completed -->
+**Last Updated**: 2026-03-05 <!-- TASK-011 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -33,22 +33,7 @@ Active tasks and backlog.
 <!-- TASK-008 completed 2026-03-05, moved to DONE.md -->
 <!-- TASK-009 completed 2026-03-05, moved to DONE.md -->
 <!-- TASK-010 completed 2026-03-05, moved to DONE.md -->
-
----
-
-### [TASK-011] Pause extraction when user is navigating
-**Priority**: 🟢 Low
-**Status**: 📋 Planned
-**Effort**: M
-**Origin**: [docs/archive/plans/2025-12-28_background-feature-extraction.md](../archive/plans/2025-12-28_background-feature-extraction.md)
-
-**Description**: Reduce CPU contention by pausing feature extraction when user is actively navigating media. Resume after navigation idle period.
-
-**Acceptance Criteria**:
-- [ ] Detect active navigation (keyboard/mouse input)
-- [ ] Pause extraction during navigation
-- [ ] Resume after ~2 second idle period
-- [ ] No visible lag during navigation
+<!-- TASK-011 completed 2026-03-05, moved to DONE.md -->
 
 ---
 
