@@ -135,6 +135,12 @@ media_viewer/
 - Prevents listener accumulation: exitHandler attached via { signal } so abort() removes it without stored reference
 - Also used for sort cancellation (sortAbortController) and background extraction (backgroundExtractionAbort)
 
+**Async Run Isolation (Generation Counter)**:
+- extractionRunId integer in constructor state; incremented at the start of each background extraction run via `const runId = ++this.extractionRunId`
+- All async callbacks (then/catch) check `this.extractionRunId !== runId` and return early if stale — prevents cancelled run callbacks from mutating ETA window or firing completion notification of a new run
+- Load-failure catch calls showBackgroundExtractionProgress() (not recordExtractionCompletion()) so near-instant failures don't skew the rolling ETA average
+- formatElapsed(totalSeconds): isFinite + negative guard returns '?' for defensive safety against NaN/Infinity inputs
+
 **Compare Mode Validation**:
 - showCompareMedia() validates both files exist via IPC checkFileExists before rendering
 - Parallel validation: Promise.all([checkFileExists(left), checkFileExists(right)])
@@ -155,6 +161,7 @@ media_viewer/
 
 Recent development focus:
 - Feature extraction ETA and elapsed time: recordExtractionCompletion() tracks rolling window (last 20) of per-file completion timestamps; computes live ETA when 5+ samples available (files/sec rate); formatElapsed()/formatEta() format seconds to "Xm Ys"/"~Xm Ys"; showBackgroundExtractionProgress() appends ETA suffix; completion notification shows "Feature extraction complete — N files in Xm Ys"
+- Extraction run isolation: extractionRunId generation counter prevents stale async callbacks (from cancelled runs) from corrupting ETA window or firing wrong completion notification; load-failure catch skips recordExtractionCompletion() to avoid ETA skew; formatElapsed() guards against NaN/Infinity
 - Configurable feature extraction worker count: featureWorkerCount settable 1-8 in Settings panel (F1), persisted to localStorage('featureWorkerCount'), constructor reads and clamps saved value, defaults to 4
 - Cache age display in sort notification: formatTimeAgo(timestamp) utility added to MediaViewer; appends "— cached X hours ago" to cache-restore notifications; typeof guard for backwards compatibility with old caches (TASK-008)
 - Force re-sort (Shift+click): handleSortBySimilarity(forceResort) accepts Shift+click flag; deleteSortCache() removes cached order; originalMediaFiles snapshot preserved across force re-sorts so "Restore Order" always returns to disk order (TASK-007)

@@ -163,6 +163,7 @@ Areas requiring investigation before implementation.
 
 - [ ] Show extraction rate in progress pill — Display files/sec alongside ETA (e.g., "45/200 (22%) — ~3m 12s (2.3 files/s)") for throughput visibility
 - [ ] Reuse formatElapsed() for other timed operations — Sort-by-similarity, ML training, and other long operations could show elapsed time on completion
+- [ ] Apply generation counter pattern to sort cancellation — sortAbortController has the same cancel-then-restart race potential as extraction; extractionRunId pattern could prevent stale sort callbacks from corrupting state
 
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
