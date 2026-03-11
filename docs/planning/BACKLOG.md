@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-02-06
+**Last Updated**: 2026-03-11
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -163,6 +163,13 @@ Areas requiring investigation before implementation.
 
 - [ ] Move loadMediaAsImageData off main thread — Use OffscreenCanvas in workers to avoid main-thread image decoding jank entirely. Would eliminate the root cause of UI contention during extraction, making the pause feature a nice-to-have rather than essential.
 - [ ] Per-file extraction gate instead of per-batch — Currently awaitExtractionGate() is checked once per batch (10 files). Moving the gate inside the inner loop (before each loadMediaAsImageData call) would provide more granular pausing with faster response to user activity.
+
+### 2026-03-11 From: code-review-pr-10
+**Origin**: Code review of PR #10 (TASK-011 pause extraction)
+
+- [ ] Add signalUserActivity() to compare-mode rating handlers — `handleLeftLike`, `handleLeftDislike`, `handleRightLike`, `handleRightDislike` don't call `signalUserActivity()`, so extraction is not paused during compare-mode rating. Scored 75/100 confidence.
+- [ ] Clean up pause state on natural extraction end — When the extraction loop finishes normally (not via cancel), `extractionPaused`, `extractionIdleTimer`, and `extractionResumeResolve` are not reset. A late `signalUserActivity()` call could show stale progress. Scored 75/100 confidence.
+- [ ] Remove dangling abort listener in awaitExtractionGate — `signal.addEventListener('abort', resolve, {once:true})` is not removed on normal resume path. Each pause/resume cycle accumulates one listener until the AbortController is GC'd at run end. Scored 72/100 confidence.
 
 ### 2026-03-05 From: task-010-extraction-eta
 **Origin**: docs/archive/plans/2026-03-05_task-010-extraction-eta.md
