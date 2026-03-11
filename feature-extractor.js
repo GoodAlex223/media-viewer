@@ -54,8 +54,10 @@ function extractFeatures(imageData, metadata = {}) {
 
     // 1. Hue histogram (12 bins, 30 degrees each) - slots 0-11
     const hueHist = computeHistogram(
-        hslPixels.map(p => p.h),
-        12, 0, 360
+        hslPixels.map((p) => p.h),
+        12,
+        0,
+        360
     );
     for (let i = 0; i < 12; i++) {
         features[featureIdx++] = hueHist[i];
@@ -63,8 +65,10 @@ function extractFeatures(imageData, metadata = {}) {
 
     // 2. Saturation histogram (6 bins) - slots 12-17
     const satHist = computeHistogram(
-        hslPixels.map(p => p.s),
-        6, 0, 1
+        hslPixels.map((p) => p.s),
+        6,
+        0,
+        1
     );
     for (let i = 0; i < 6; i++) {
         features[featureIdx++] = satHist[i];
@@ -72,8 +76,10 @@ function extractFeatures(imageData, metadata = {}) {
 
     // 3. Lightness histogram (6 bins) - slots 18-23
     const lightHist = computeHistogram(
-        hslPixels.map(p => p.l),
-        6, 0, 1
+        hslPixels.map((p) => p.l),
+        6,
+        0,
+        1
     );
     for (let i = 0; i < 6; i++) {
         features[featureIdx++] = lightHist[i];
@@ -88,21 +94,21 @@ function extractFeatures(imageData, metadata = {}) {
     }
 
     // 5. Global statistics - slots 33-37
-    const saturations = hslPixels.map(p => p.s);
-    const lightnesses = hslPixels.map(p => p.l);
+    const saturations = hslPixels.map((p) => p.s);
+    const lightnesses = hslPixels.map((p) => p.l);
 
-    features[featureIdx++] = mean(saturations);                    // 33: avgSaturation
-    features[featureIdx++] = mean(lightnesses);                    // 34: avgBrightness
+    features[featureIdx++] = mean(saturations); // 33: avgSaturation
+    features[featureIdx++] = mean(lightnesses); // 34: avgBrightness
     features[featureIdx++] = Math.min(1, stdDev(lightnesses) * 2); // 35: contrast (scaled)
-    features[featureIdx++] = computeColorfulness(data);            // 36: colorfulness
-    features[featureIdx++] = (computeWarmth(data) + 1) / 2;        // 37: warmth (normalized -1,1 to 0,1)
+    features[featureIdx++] = computeColorfulness(data); // 36: colorfulness
+    features[featureIdx++] = (computeWarmth(data) + 1) / 2; // 37: warmth (normalized -1,1 to 0,1)
 
     // 6. Edge/texture features - slots 38-41
     const edgeData = computeEdges(imageData);
-    features[featureIdx++] = edgeData.density;                     // 38: edge density
-    features[featureIdx++] = edgeData.horizontalRatio;             // 39: horizontal ratio
-    features[featureIdx++] = edgeData.verticalRatio;               // 40: vertical ratio
-    features[featureIdx++] = computeComplexity(data, pixelCount);  // 41: complexity
+    features[featureIdx++] = edgeData.density; // 38: edge density
+    features[featureIdx++] = edgeData.horizontalRatio; // 39: horizontal ratio
+    features[featureIdx++] = edgeData.verticalRatio; // 40: vertical ratio
+    features[featureIdx++] = computeComplexity(data, pixelCount); // 41: complexity
 
     // ========================================================================
     // FILE METADATA FEATURES (42-47)
@@ -117,11 +123,11 @@ function extractFeatures(imageData, metadata = {}) {
     // 43: Resolution bucket (0: <720p, 0.5: HD, 1: FHD+)
     const maxDim = Math.max(origWidth, origHeight);
     if (maxDim >= 1920) {
-        features[featureIdx++] = 1.0;       // FHD+
+        features[featureIdx++] = 1.0; // FHD+
     } else if (maxDim >= 1280) {
-        features[featureIdx++] = 0.5;       // HD
+        features[featureIdx++] = 0.5; // HD
     } else {
-        features[featureIdx++] = 0.0;       // <720p
+        features[featureIdx++] = 0.0; // <720p
     }
 
     // 44: File size (log normalized)
@@ -136,7 +142,7 @@ function extractFeatures(imageData, metadata = {}) {
     features[featureIdx++] = format === 'png' ? 1 : 0;
 
     // 47: Is animated (GIF or video)
-    features[featureIdx++] = (metadata.isVideo || format === 'gif') ? 1 : 0;
+    features[featureIdx++] = metadata.isVideo || format === 'gif' ? 1 : 0;
 
     // ========================================================================
     // PERCEPTUAL QUALITY FEATURES (48-53)
@@ -165,9 +171,9 @@ function extractFeatures(imageData, metadata = {}) {
     // ========================================================================
 
     const faceInfo = metadata.faceInfo || {};
-    features[featureIdx++] = faceInfo.hasFace ? 1 : 0;                           // 54: has face
-    features[featureIdx++] = Math.min(1, (faceInfo.count || 0) / 5);             // 55: face count (normalized)
-    features[featureIdx++] = faceInfo.areaRatio || 0;                            // 56: face area ratio
+    features[featureIdx++] = faceInfo.hasFace ? 1 : 0; // 54: has face
+    features[featureIdx++] = Math.min(1, (faceInfo.count || 0) / 5); // 55: face count (normalized)
+    features[featureIdx++] = faceInfo.areaRatio || 0; // 56: face area ratio
 
     // ========================================================================
     // VIDEO FEATURES (57-63) - filled by caller, 0 for images
@@ -177,19 +183,16 @@ function extractFeatures(imageData, metadata = {}) {
     const isVideo = metadata.isVideo;
 
     // 57: Duration (log normalized) - log10(seconds+1)/3
-    features[featureIdx++] = isVideo && videoInfo.duration ?
-        Math.min(1, Math.log10(videoInfo.duration + 1) / 3) : 0;
+    features[featureIdx++] = isVideo && videoInfo.duration ? Math.min(1, Math.log10(videoInfo.duration + 1) / 3) : 0;
 
     // 58: Frame rate (normalized) - fps/60
-    features[featureIdx++] = isVideo && videoInfo.fps ?
-        Math.min(1, videoInfo.fps / 60) : 0;
+    features[featureIdx++] = isVideo && videoInfo.fps ? Math.min(1, videoInfo.fps / 60) : 0;
 
     // 59: Has audio
     features[featureIdx++] = isVideo && videoInfo.hasAudio ? 1 : 0;
 
     // 60: Bitrate (log normalized) - log10(kbps)/5
-    features[featureIdx++] = isVideo && videoInfo.bitrate ?
-        Math.min(1, Math.log10(videoInfo.bitrate) / 5) : 0;
+    features[featureIdx++] = isVideo && videoInfo.bitrate ? Math.min(1, Math.log10(videoInfo.bitrate) / 5) : 0;
 
     // 61: Motion amount (0 for now, requires multi-frame analysis)
     features[featureIdx++] = videoInfo.motionAmount || 0;
@@ -245,13 +248,13 @@ function computeHistogram(values, bins, min, max) {
     const range = max - min;
 
     for (const val of values) {
-        const bin = Math.min(bins - 1, Math.floor((val - min) / range * bins));
+        const bin = Math.min(bins - 1, Math.floor(((val - min) / range) * bins));
         hist[bin]++;
     }
 
     // Normalize
     const total = values.length;
-    return hist.map(v => v / total);
+    return hist.map((v) => v / total);
 }
 
 /**
@@ -271,7 +274,7 @@ function extractDominantColors(hslPixels, k) {
     }
 
     // Initialize centroids with evenly spaced samples
-    let centroids = [];
+    const centroids = [];
     for (let i = 0; i < k; i++) {
         const idx = Math.floor((i / k) * sampled.length);
         centroids.push({ ...sampled[idx] });
@@ -300,10 +303,10 @@ function extractDominantColors(hslPixels, k) {
         for (let i = 0; i < k; i++) {
             if (clusters[i].length > 0) {
                 centroids[i] = {
-                    h: mean(clusters[i].map(p => p.h)),
-                    s: mean(clusters[i].map(p => p.s)),
-                    l: mean(clusters[i].map(p => p.l)),
-                    count: clusters[i].length
+                    h: mean(clusters[i].map((p) => p.h)),
+                    s: mean(clusters[i].map((p) => p.s)),
+                    l: mean(clusters[i].map((p) => p.l)),
+                    count: clusters[i].length,
                 };
             }
         }
@@ -335,11 +338,7 @@ function hslDistance(c1, c2) {
     const avgSat = (c1.s + c2.s) / 2;
     const hueWeight = avgSat;
 
-    return Math.sqrt(
-        hueWeight * hueDiff * hueDiff +
-        satDiff * satDiff +
-        lightDiff * lightDiff
-    );
+    return Math.sqrt(hueWeight * hueDiff * hueDiff + satDiff * satDiff + lightDiff * lightDiff);
 }
 
 /**
@@ -369,13 +368,22 @@ function computeEdges(imageData) {
             const idx = y * width + x;
 
             // Horizontal gradient (Gx) - detects vertical edges
-            const gx = -gray[idx - width - 1] + gray[idx - width + 1]
-                     - 2 * gray[idx - 1] + 2 * gray[idx + 1]
-                     - gray[idx + width - 1] + gray[idx + width + 1];
+            const gx =
+                -gray[idx - width - 1] +
+                gray[idx - width + 1] -
+                2 * gray[idx - 1] +
+                2 * gray[idx + 1] -
+                gray[idx + width - 1] +
+                gray[idx + width + 1];
 
             // Vertical gradient (Gy) - detects horizontal edges
-            const gy = -gray[idx - width - 1] - 2 * gray[idx - width] - gray[idx - width + 1]
-                     + gray[idx + width - 1] + 2 * gray[idx + width] + gray[idx + width + 1];
+            const gy =
+                -gray[idx - width - 1] -
+                2 * gray[idx - width] -
+                gray[idx - width + 1] +
+                gray[idx + width - 1] +
+                2 * gray[idx + width] +
+                gray[idx + width + 1];
 
             const magnitude = Math.sqrt(gx * gx + gy * gy);
             totalEdge += magnitude;
@@ -390,7 +398,7 @@ function computeEdges(imageData) {
     return {
         density: Math.min(1, totalEdge / maxEdge),
         horizontalRatio: totalEdge > 0 ? horizEdge / (horizEdge + vertEdge) : 0.5,
-        verticalRatio: totalEdge > 0 ? vertEdge / (horizEdge + vertEdge) : 0.5
+        verticalRatio: totalEdge > 0 ? vertEdge / (horizEdge + vertEdge) : 0.5,
     };
 }
 
@@ -417,8 +425,7 @@ function computeColorfulness(data) {
     const muRg = mean(rg);
     const muYb = mean(yb);
 
-    const colorfulness = Math.sqrt(sigmaRg * sigmaRg + sigmaYb * sigmaYb) +
-                        0.3 * Math.sqrt(muRg * muRg + muYb * muYb);
+    const colorfulness = Math.sqrt(sigmaRg * sigmaRg + sigmaYb * sigmaYb) + 0.3 * Math.sqrt(muRg * muRg + muYb * muYb);
 
     // Normalize to 0-1 (200 is approximate max for very colorful images)
     return Math.min(1, colorfulness / 200);
@@ -436,7 +443,7 @@ function computeWarmth(data) {
 
     for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
-        const g = data[i + 1];
+        const _g = data[i + 1];
         const b = data[i + 2];
 
         // Warm colors have high R, low B
@@ -454,12 +461,12 @@ function computeWarmth(data) {
  * @param {number} pixelCount - Total pixel count
  * @returns {number} Complexity score (0-1)
  */
-function computeComplexity(data, pixelCount) {
+function computeComplexity(data, _pixelCount) {
     // Quantize colors to reduce noise (5-bit per channel)
     const uniqueColors = new Set();
 
     for (let i = 0; i < data.length; i += 4) {
-        const r = data[i] >> 3;      // 5-bit
+        const r = data[i] >> 3; // 5-bit
         const g = data[i + 1] >> 3;
         const b = data[i + 2] >> 3;
 
@@ -513,11 +520,7 @@ function computeSharpness(gray, width, height) {
     for (let y = 1; y < height - 1; y++) {
         for (let x = 1; x < width - 1; x++) {
             const idx = y * width + x;
-            const lap = -4 * gray[idx] +
-                        gray[idx - width] +
-                        gray[idx + width] +
-                        gray[idx - 1] +
-                        gray[idx + 1];
+            const lap = -4 * gray[idx] + gray[idx - width] + gray[idx + width] + gray[idx - 1] + gray[idx + 1];
             laplacian.push(lap);
         }
     }
@@ -587,15 +590,15 @@ function computeRuleOfThirds(gray, width, height) {
 
     // Define thirds intersection points (4 points)
     const thirdX1 = Math.floor(width / 3);
-    const thirdX2 = Math.floor(2 * width / 3);
+    const thirdX2 = Math.floor((2 * width) / 3);
     const thirdY1 = Math.floor(height / 3);
-    const thirdY2 = Math.floor(2 * height / 3);
+    const thirdY2 = Math.floor((2 * height) / 3);
 
     const intersections = [
         { x: thirdX1, y: thirdY1 },
         { x: thirdX2, y: thirdY1 },
         { x: thirdX1, y: thirdY2 },
-        { x: thirdX2, y: thirdY2 }
+        { x: thirdX2, y: thirdY2 },
     ];
 
     // Sample area around each intersection (radius = width/12)
@@ -666,9 +669,7 @@ function computeVisualBalance(imageData) {
     const centroidY = weightedY / totalWeight / height;
 
     // Distance from center (0.5, 0.5)
-    const distFromCenter = Math.sqrt(
-        (centroidX - 0.5) ** 2 + (centroidY - 0.5) ** 2
-    );
+    const distFromCenter = Math.sqrt((centroidX - 0.5) ** 2 + (centroidY - 0.5) ** 2);
 
     // Max distance is ~0.707 (corner to center)
     // Invert: close to center = high balance
@@ -688,7 +689,8 @@ function computeColorHarmony(hslPixels) {
     let saturatedCount = 0;
 
     for (const pixel of hslPixels) {
-        if (pixel.s > 0.2) { // Only consider saturated pixels
+        if (pixel.s > 0.2) {
+            // Only consider saturated pixels
             const bin = Math.floor(pixel.h / 10) % hueBins;
             hueHist[bin]++;
             saturatedCount++;
@@ -810,6 +812,6 @@ if (typeof module !== 'undefined' && module.exports) {
         computeColorHarmony,
         computeNoiseLevel,
         FEATURE_VERSION,
-        FEATURE_DIM
+        FEATURE_DIM,
     };
 }

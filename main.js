@@ -30,15 +30,14 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             sandbox: false, // Changed from true to false
         },
-        title: 'Media Viewer'
+        title: 'Media Viewer',
     });
 
     mainWindow.loadFile('index.html');
 
     // Enable DevTools toggle with F12 or Ctrl+Shift+I
     mainWindow.webContents.on('before-input-event', (event, input) => {
-        if (input.key === 'F12' ||
-            (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+        if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
             mainWindow.webContents.toggleDevTools();
         }
     });
@@ -59,7 +58,7 @@ function getMimeType(extension) {
         '.webp': 'image/webp',
         '.mp4': 'video/mp4',
         '.webm': 'video/webm',
-        '.mov': 'video/quicktime'
+        '.mov': 'video/quicktime',
     };
     return mimeTypes[extension] || 'application/octet-stream';
 }
@@ -82,7 +81,7 @@ app.whenReady().then(() => {
             const result = await dialog.showOpenDialog(mainWindow, {
                 properties: ['openDirectory'],
                 title: 'Select Media Folder',
-                buttonLabel: 'Select Folder'
+                buttonLabel: 'Select Folder',
             });
 
             return result.canceled ? null : result.filePaths[0];
@@ -111,7 +110,7 @@ app.whenReady().then(() => {
                                 name: file,
                                 path: filePath,
                                 size: stats.size,
-                                type: getMimeType(ext)
+                                type: getMimeType(ext),
                             });
                         }
                     }
@@ -176,7 +175,7 @@ app.whenReady().then(() => {
         try {
             const data = await fs.readFile(filePath, 'utf8');
             return data;
-        } catch (error) {
+        } catch (_error) {
             // Return null if file doesn't exist or can't be read
             return null;
         }
@@ -199,24 +198,18 @@ app.whenReady().then(() => {
         }
 
         try {
-            const args = [
-                '-v', 'quiet',
-                '-print_format', 'json',
-                '-show_format',
-                '-show_streams',
-                videoPath
-            ];
+            const args = ['-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', videoPath];
 
             const { stdout } = await execFileAsync(ffprobePath, args, {
                 timeout: 10000, // 10 second timeout
-                maxBuffer: 1024 * 1024 // 1MB buffer
+                maxBuffer: 1024 * 1024, // 1MB buffer
             });
 
             const data = JSON.parse(stdout);
 
             // Extract video stream info
-            const videoStream = data.streams?.find(s => s.codec_type === 'video');
-            const audioStream = data.streams?.find(s => s.codec_type === 'audio');
+            const videoStream = data.streams?.find((s) => s.codec_type === 'video');
+            const audioStream = data.streams?.find((s) => s.codec_type === 'audio');
             const format = data.format || {};
 
             // Calculate FPS from frame rate string (e.g., "30/1" or "29.97")
@@ -243,8 +236,8 @@ app.whenReady().then(() => {
                     width: videoStream?.width || 0,
                     height: videoStream?.height || 0,
                     codec: videoStream?.codec_name || 'unknown',
-                    audioCodec: audioStream?.codec_name || null
-                }
+                    audioCodec: audioStream?.codec_name || null,
+                },
             };
         } catch (error) {
             console.error('Video probe error:', error);

@@ -1,0 +1,5 @@
+node_modules/
+docs/
+*.md
+package-lock.json
+.trunk/
