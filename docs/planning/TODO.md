@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-05 <!-- TASK-011 completed -->
+**Last Updated**: 2026-03-11 <!-- TASK-012 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -34,24 +34,7 @@ Active tasks and backlog.
 <!-- TASK-009 completed 2026-03-05, moved to DONE.md -->
 <!-- TASK-010 completed 2026-03-05, moved to DONE.md -->
 <!-- TASK-011 completed 2026-03-05, moved to DONE.md -->
-
----
-
-### [TASK-012] Pre-commit hooks with linting and formatting
-**Priority**: 🟡 Medium
-**Status**: 📋 Planned
-**Effort**: M
-
-**Description**: Set up pre-commit hooks using Husky + lint-staged. Add ESLint for code quality and Prettier for formatting. Currently no linting or formatting is configured — all code quality is manual.
-
-**Acceptance Criteria**:
-- [ ] Husky installed and configured with pre-commit hook
-- [ ] ESLint configured with rules appropriate for Electron/browser JS (no modules)
-- [ ] Prettier configured for consistent formatting
-- [ ] lint-staged runs ESLint + Prettier on staged files only
-- [ ] npm scripts: `lint`, `lint:fix`, `format`
-- [ ] Existing code passes lint (fix or suppress existing violations)
-- [ ] Pre-commit hook blocks commits with lint errors
+<!-- TASK-012 completed 2026-03-11, moved to DONE.md -->
 
 ---
 

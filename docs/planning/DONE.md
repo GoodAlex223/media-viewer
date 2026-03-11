@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-05 <!-- TASK-011 -->
+**Last Updated**: 2026-03-11 <!-- TASK-012 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,20 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-11] Pre-commit hooks with linting and formatting (TASK-012)
+
+**Plan**: N/A (implemented directly via feature-dev skill)
+**Summary**: Added ESLint (flat config), Prettier, and Husky pre-commit hooks. ESLint covers 4 JS environments (Node/main, preload hybrid, renderer ES module, Web Workers). Existing codebase fixed to 0 errors/0 warnings. Prettier formatting applied as a separate baseline commit.
+**Key Changes**:
+- `eslint.config.mjs` — flat config with per-environment globals
+- `.prettierrc.json` — tabWidth=4, singleQuote, printWidth=120
+- `.husky/pre-commit` — lint-staged on every commit
+- `package.json` — lint/format scripts, lint-staged config, prepare hook
+- ESLint fixes: unused catch params prefixed `_`, shadow var renames
+**Spawned Tasks**: 2 items added to BACKLOG.md
+
+---
 
 ### [2026-03-05] Pause extraction when user is navigating
 
