@@ -47,13 +47,11 @@ class MinHeap {
             const leftChild = 2 * index + 1;
             const rightChild = 2 * index + 2;
 
-            if (leftChild < this.heap.length &&
-                this.compareFunc(this.heap[leftChild], this.heap[minIndex]) < 0) {
+            if (leftChild < this.heap.length && this.compareFunc(this.heap[leftChild], this.heap[minIndex]) < 0) {
                 minIndex = leftChild;
             }
 
-            if (rightChild < this.heap.length &&
-                this.compareFunc(this.heap[rightChild], this.heap[minIndex]) < 0) {
+            if (rightChild < this.heap.length && this.compareFunc(this.heap[rightChild], this.heap[minIndex]) < 0) {
                 minIndex = rightChild;
             }
 
@@ -81,9 +79,9 @@ class VPTree {
             return { vantagePoint, left: null, right: null, radius: 0 };
         }
 
-        const distances = items.slice(1).map(item => ({
+        const distances = items.slice(1).map((item) => ({
             item,
-            distance: this.distanceFunc(vantagePoint, item)
+            distance: this.distanceFunc(vantagePoint, item),
         }));
 
         const medianIndex = Math.floor(distances.length / 2);
@@ -110,7 +108,7 @@ class VPTree {
             vantagePoint,
             radius,
             left: this.buildTree(inside),
-            right: this.buildTree(outside)
+            right: this.buildTree(outside),
         };
     }
 
@@ -292,10 +290,10 @@ function sortMediaBySimilarity(mediaFiles, hashes, currentIndex, maxComparisons)
     const currentFile = mediaFiles[currentIndex];
     let current;
     if (currentFile && hashes[currentFile.path]) {
-        current = remaining.find(file => file.path === currentFile.path);
+        current = remaining.find((file) => file.path === currentFile.path);
     }
     if (!current) {
-        current = remaining.find(file => hashes[file.path]);
+        current = remaining.find((file) => hashes[file.path]);
     }
     if (!current) {
         throw new Error('No files with valid hashes');
@@ -352,7 +350,7 @@ function sortMediaBySimilarity(mediaFiles, hashes, currentIndex, maxComparisons)
         }
     }
 
-    return sorted.map(f => f.path);
+    return sorted.map((f) => f.path);
 }
 
 // VP-Tree optimized greedy nearest-neighbor
@@ -362,7 +360,7 @@ function sortMediaBySimilarityVPTree(mediaFiles, hashes, currentIndex) {
 
     updateProgress('🔄 Building VP-Tree index...', 0, total);
 
-    const filesWithHashes = mediaFiles.filter(f => hashes[f.path]);
+    const filesWithHashes = mediaFiles.filter((f) => hashes[f.path]);
     if (filesWithHashes.length < 2) {
         throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
     }
@@ -382,7 +380,7 @@ function sortMediaBySimilarityVPTree(mediaFiles, hashes, currentIndex) {
     const currentFile = mediaFiles[currentIndex];
     let current = filesWithHashes[0];
     if (currentFile && hashes[currentFile.path]) {
-        const found = filesWithHashes.find(f => f.path === currentFile.path);
+        const found = filesWithHashes.find((f) => f.path === currentFile.path);
         if (found) current = found;
     }
     sorted.push(current);
@@ -411,10 +409,10 @@ function sortMediaBySimilarityVPTree(mediaFiles, hashes, currentIndex) {
     }
 
     // Add files without hashes at the end
-    const filesWithoutHashes = mediaFiles.filter(f => !hashes[f.path]);
+    const filesWithoutHashes = mediaFiles.filter((f) => !hashes[f.path]);
     sorted.push(...filesWithoutHashes);
 
-    return sorted.map(f => f.path);
+    return sorted.map((f) => f.path);
 }
 
 // MST-based sorting algorithm
@@ -423,7 +421,7 @@ function sortMediaBySimilarityMST(mediaFiles, hashes, currentIndex) {
 
     updateProgress('🔄 Building VP-Tree index...', 0, total);
 
-    const filesWithHashes = mediaFiles.filter(f => hashes[f.path]);
+    const filesWithHashes = mediaFiles.filter((f) => hashes[f.path]);
     if (filesWithHashes.length < 2) {
         throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
     }
@@ -450,10 +448,13 @@ function sortMediaBySimilarityMST(mediaFiles, hashes, currentIndex) {
         const file = filesWithHashes[i];
         const neighbors = vpTree.findKNearest(file, K_NEIGHBORS + 1, new Set([file]));
 
-        graph.set(file, neighbors.map(({ item, distance }) => ({
-            neighbor: item,
-            distance
-        })));
+        graph.set(
+            file,
+            neighbors.map(({ item, distance }) => ({
+                neighbor: item,
+                distance,
+            }))
+        );
 
         if ((i + 1) % 100 === 0) {
             updateProgress(`🔄 Building graph: ${i + 1}/${filesWithHashes.length}`, i + 1, filesWithHashes.length);
@@ -471,7 +472,7 @@ function sortMediaBySimilarityMST(mediaFiles, hashes, currentIndex) {
     let startFile = filesWithHashes[0];
     const currentFile = mediaFiles[currentIndex];
     if (currentFile && hashes[currentFile.path]) {
-        const found = filesWithHashes.find(f => f.path === currentFile.path);
+        const found = filesWithHashes.find((f) => f.path === currentFile.path);
         if (found) startFile = found;
     }
     visited.add(startFile);
@@ -505,7 +506,11 @@ function sortMediaBySimilarityMST(mediaFiles, hashes, currentIndex) {
         }
 
         if (visited.size % 100 === 0) {
-            updateProgress(`🔄 MST progress: ${visited.size}/${filesWithHashes.length}`, visited.size, filesWithHashes.length);
+            updateProgress(
+                `🔄 MST progress: ${visited.size}/${filesWithHashes.length}`,
+                visited.size,
+                filesWithHashes.length
+            );
         }
     }
 
@@ -564,14 +569,14 @@ function sortMediaBySimilarityMST(mediaFiles, hashes, currentIndex) {
     }
 
     // Add files without hashes at the end
-    const filesWithoutHashes = mediaFiles.filter(f => !hashes[f.path]);
+    const filesWithoutHashes = mediaFiles.filter((f) => !hashes[f.path]);
     sorted.push(...filesWithoutHashes);
 
-    return sorted.map(f => f.path);
+    return sorted.map((f) => f.path);
 }
 
 // Message handler
-self.onmessage = function(e) {
+self.onmessage = function (e) {
     const { type, data } = e.data;
 
     if (type === 'abort') {
