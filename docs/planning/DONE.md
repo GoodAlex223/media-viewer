@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-05 <!-- TASK-010 -->
+**Last Updated**: 2026-03-05 <!-- TASK-011 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,21 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-05] Pause extraction when user is navigating
+
+**Plan**: N/A (implemented directly via feature-dev skill)
+**Summary**: Added pause/resume mechanism for background feature extraction. When the user navigates or rates files, extraction pauses automatically and resumes after 2 seconds of inactivity. Uses a Promise-based async gate pattern in the extraction loop.
+**Key Changes**:
+- `signalUserActivity()` — called from 6 input handlers (nextMedia, previousMedia, handleLike, handleDislike, handleCancel, moveToSpecialFolder)
+- `awaitExtractionGate(signal)` — Promise-based async gate that blocks extraction loop while paused
+- `resumeExtraction()` — unblocks gate after 2s idle timer, resets progress indicator
+- Progress indicator shows pause icon with "Paused" text during pause
+- `cancelBackgroundExtraction()` clears pause state and resolves gate on abort
+- `showBackgroundExtractionProgress()` extended with `paused` parameter and last-count caching
+**Spawned Tasks**: 2 items added to BACKLOG.md (OffscreenCanvas for main-thread relief, per-file gate granularity)
+
+---
 
 ### [2026-03-05] Estimated time remaining for feature extraction
 

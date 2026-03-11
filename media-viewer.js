@@ -358,6 +358,11 @@ class MediaViewer {
         this.extractionStartTime = null;       // Date.now() when extraction starts
         this.extractionCompletionTimes = [];   // Rolling window of completion timestamps
         this.extractionRunId = 0;              // Generation counter for cancel-then-restart safety
+        this.extractionPaused = false;         // True while user is navigating/rating
+        this.extractionResumeResolve = null;   // Resolves awaitExtractionGate() when paused
+        this.extractionResumeTimer = null;     // setTimeout handle for 2s idle resume
+        this._extractionLastCurrent = 0;       // Last known current count for paused redisplay
+        this._extractionLastTotal = 0;         // Last known total count for paused redisplay
 
         // User settings
         this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
@@ -992,6 +997,8 @@ class MediaViewer {
 
         if (this.isLoading || this.mediaNavigationInProgress) return;
 
+        this.signalUserActivity();
+
         if (this.isCompareMode) {
             // In ML sorted mode, navigate through pairs by score
             if (this.isSortedByPrediction) {
@@ -1012,6 +1019,8 @@ class MediaViewer {
 
     previousMedia() {
         if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
+
+        this.signalUserActivity();
 
         if (this.isCompareMode) {
             // In ML sorted mode, navigate through pairs by score
@@ -1152,6 +1161,7 @@ class MediaViewer {
         }
 
         if (this.isLoading) return;
+        this.signalUserActivity();
 
         // Determine which file to move based on mode and side
         let fileToMove;
@@ -3119,11 +3129,13 @@ class MediaViewer {
 
     async handleLike() {
         if (this.mediaFiles.length === 0 || this.isLoading) return;
+        this.signalUserActivity();
         await this.moveCurrentFile('like');
     }
 
     async handleDislike() {
         if (this.mediaFiles.length === 0 || this.isLoading) return;
+        this.signalUserActivity();
         await this.moveCurrentFile('dislike');
     }
 
@@ -3134,6 +3146,7 @@ class MediaViewer {
         }
 
         if (this.isLoading) return;
+        this.signalUserActivity();
 
         // Check if last move was a special move in compare mode
         const lastMove = this.moveHistory[this.moveHistory.length - 1];
@@ -6261,6 +6274,10 @@ class MediaViewer {
                 break;
             }
 
+            // Yield while user is navigating/rating
+            await this.awaitExtractionGate(this.backgroundExtractionAbort.signal);
+            if (this.backgroundExtractionAbort?.signal.aborted) break;
+
             const batch = filesToProcess.slice(i, i + BATCH_SIZE);
             const promises = [];
 
@@ -6328,11 +6345,79 @@ class MediaViewer {
             this.backgroundExtractionAbort = null;
         }
 
+        // Clear pause state
+        if (this.extractionResumeTimer !== null) {
+            clearTimeout(this.extractionResumeTimer);
+            this.extractionResumeTimer = null;
+        }
+        this.extractionPaused = false;
+        if (this.extractionResumeResolve !== null) {
+            this.extractionResumeResolve();
+            this.extractionResumeResolve = null;
+        }
+
         this.cancelPendingFeatureExtractions();
         this.isBackgroundExtracting = false;
         this.extractionStartTime = null;
         this.extractionCompletionTimes = [];
         this.hideBackgroundExtractionProgress();
+    }
+
+    /**
+     * Signal that the user performed a navigation or rating action.
+     * Pauses background extraction and schedules resume after 2s idle.
+     */
+    signalUserActivity() {
+        if (!this.isBackgroundExtracting) return;
+
+        // Reset the idle timer on every activity signal (debounce)
+        if (this.extractionResumeTimer !== null) {
+            clearTimeout(this.extractionResumeTimer);
+        }
+
+        if (!this.extractionPaused) {
+            this.extractionPaused = true;
+            // Show paused state in progress indicator
+            this.showBackgroundExtractionProgress(null, null, null, true);
+        }
+
+        this.extractionResumeTimer = setTimeout(() => {
+            this.resumeExtraction();
+        }, 2000);
+    }
+
+    /**
+     * Resume extraction after idle period. Called by the resume timer.
+     */
+    resumeExtraction() {
+        this.extractionResumeTimer = null;
+        if (!this.extractionPaused) return;
+        this.extractionPaused = false;
+
+        // Reset indicator from "Paused" to "Extracting" immediately
+        this.showBackgroundExtractionProgress(null, null, null, false);
+
+        // Unblock the awaiting gate
+        if (this.extractionResumeResolve !== null) {
+            this.extractionResumeResolve();
+            this.extractionResumeResolve = null;
+        }
+    }
+
+    /**
+     * Async gate for the extraction loop. Resolves immediately when not paused;
+     * blocks until resumeExtraction() is called when paused.
+     * @param {AbortSignal} signal - Abort signal to unblock on cancellation
+     * @returns {Promise<void>}
+     */
+    awaitExtractionGate(signal) {
+        if (!this.extractionPaused || signal.aborted) {
+            return Promise.resolve();
+        }
+        return new Promise(resolve => {
+            this.extractionResumeResolve = resolve;
+            signal.addEventListener('abort', resolve, { once: true });
+        });
     }
 
     /**
@@ -6369,8 +6454,15 @@ class MediaViewer {
      * @param {number} current - Current count
      * @param {number} total - Total count
      * @param {string|null} etaText - Formatted ETA string (e.g. "~3m 12s")
+     * @param {boolean} [paused=false] - When true, renders paused state instead of extracting
      */
-    showBackgroundExtractionProgress(current, total, etaText = null) {
+    showBackgroundExtractionProgress(current, total, etaText = null, paused = false) {
+        // Store last known counts for paused state redisplay
+        if (current !== null) this._extractionLastCurrent = current;
+        if (total !== null) this._extractionLastTotal = total;
+        const displayCurrent = current ?? this._extractionLastCurrent ?? 0;
+        const displayTotal = total ?? this._extractionLastTotal ?? 0;
+
         let indicator = document.getElementById('featureExtractionProgress');
 
         if (!indicator) {
@@ -6394,14 +6486,24 @@ class MediaViewer {
             document.body.appendChild(indicator);
         }
 
-        const percentage = Math.round((current / total) * 100);
-        const etaSuffix = etaText ? ` \u2014 ${etaText}` : '';
-        indicator.innerHTML = `
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
-                <path d="M12 2v4m0 12v4m-7-7H3m18 0h-2M5.6 5.6l1.4 1.4m9.9 9.9l1.4 1.4M5.6 18.4l1.4-1.4m9.9-9.9l1.4-1.4"/>
-            </svg>
-            <span>Extracting features: ${current}/${total} (${percentage}%)${etaSuffix}</span>
-        `;
+        const percentage = displayTotal > 0 ? Math.round((displayCurrent / displayTotal) * 100) : 0;
+
+        if (paused) {
+            indicator.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                </svg>
+                <span>Paused \u2014 ${displayCurrent}/${displayTotal} (${percentage}%)</span>
+            `;
+        } else {
+            const etaSuffix = etaText ? ` \u2014 ${etaText}` : '';
+            indicator.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+                    <path d="M12 2v4m0 12v4m-7-7H3m18 0h-2M5.6 5.6l1.4 1.4m9.9 9.9l1.4 1.4M5.6 18.4l1.4-1.4m9.9-9.9l1.4-1.4"/>
+                </svg>
+                <span>Extracting features: ${displayCurrent}/${displayTotal} (${percentage}%)${etaSuffix}</span>
+            `;
+        }
 
         // Add spin animation if not already present
         if (!document.getElementById('featureExtractionSpinStyle')) {

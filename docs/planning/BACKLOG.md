@@ -158,6 +158,12 @@ Areas requiring investigation before implementation.
 - [ ] Add month-level granularity to formatTimeAgo() — Currently stops at weeks; very old caches show "52 weeks ago" instead of "12 months ago"
 - [ ] Fix stale timestamp display when new files merged into cache — When `stats.added > 0`, `saveSortCache()` overwrites disk with `Date.now()` but notification still reads old `cachedSortData.timestamp`. Should update timestamp after re-save or show "just now" for merged caches.
 
+### 2026-03-05 From: task-011-pause-extraction
+**Origin**: TASK-011 implementation
+
+- [ ] Move loadMediaAsImageData off main thread — Use OffscreenCanvas in workers to avoid main-thread image decoding jank entirely. Would eliminate the root cause of UI contention during extraction, making the pause feature a nice-to-have rather than essential.
+- [ ] Per-file extraction gate instead of per-batch — Currently awaitExtractionGate() is checked once per batch (10 files). Moving the gate inside the inner loop (before each loadMediaAsImageData call) would provide more granular pausing with faster response to user activity.
+
 ### 2026-03-05 From: task-010-extraction-eta
 **Origin**: docs/archive/plans/2026-03-05_task-010-extraction-eta.md
 
