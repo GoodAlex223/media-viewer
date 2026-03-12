@@ -146,9 +146,10 @@ export default [
         },
     },
 
-    // 4. Test files (Vitest)
+    // 4. Unit test files (Vitest)
     {
         files: ['tests/**/*.js', 'vitest.config.js'],
+        ignores: ['tests/e2e/**'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'module',
@@ -160,6 +161,40 @@ export default [
             ...sharedRules,
             'no-undef': 'error',
             'no-new-func': 'off', // Used to extract methods from source for testing
+        },
+    },
+
+    // 5a. E2E helper scripts (CJS — run inside Electron/Node, not as test modules)
+    {
+        files: ['tests/e2e/**/*.cjs'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'commonjs',
+            globals: {
+                ...globals.node,
+            },
+        },
+        rules: {
+            ...sharedRules,
+            'no-undef': 'error',
+        },
+    },
+
+    // 5b. E2E test files (Playwright + Electron)
+    // Browser globals needed for page.evaluate() callbacks that run in renderer context
+    {
+        files: ['tests/e2e/**/*.js', 'playwright.config.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: {
+                ...globals.node,
+                ...globals.browser,
+            },
+        },
+        rules: {
+            ...sharedRules,
+            'no-undef': 'error',
         },
     },
 
