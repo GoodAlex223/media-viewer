@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-12 <!-- TASK-013 -->
+**Last Updated**: 2026-03-13 <!-- TASK-014 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,29 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-13] Playwright E2E test suite for Electron app (TASK-014)
+
+**Plan**: N/A (implemented via feature-dev skill)
+**Summary**: Added Playwright E2E test suite with 28 tests across 6 files covering all critical user workflows. Includes Electron 30+ workaround via wrapper pattern (strips `--remote-debugging-port=0` CLI flag, sets it via `app.commandLine.appendSwitch`). Handles `ELECTRON_RUN_AS_NODE` env contamination from VS Code/Claude Code terminals.
+**Key Changes**:
+- `playwright.config.js` — Playwright config (workers=1, fullyParallel=false)
+- `tests/e2e/helpers/electron-wrapper.cjs` + `.cmd` — Electron 30+ CLI flag workaround
+- `tests/e2e/helpers/rdp-preload.cjs` — Sets remote-debugging-port via app API
+- `tests/e2e/helpers/electron-app.js` — Shared helpers (launchApp, seedLocalStorage, mockFolderDialog, etc.)
+- `tests/e2e/app-launch.test.js` — 5 tests (drop zone, title, electronAPI, folder load, dialog mock)
+- `tests/e2e/navigation.test.js` — 7 tests (file count, index, arrow keys, buttons, wrap-around)
+- `tests/e2e/rating.test.js` — 6 tests (like/dislike/undo via keyboard+button, Settings panel config)
+- `tests/e2e/compare-mode.test.js` — 4 tests (toggle, dual panes, D key nav, Q key rating)
+- `tests/e2e/fullscreen.test.js` — 3 tests (Z key, Escape exit, X key)
+- `tests/e2e/zoom.test.js` — 3 tests (popover toggle, slider, Escape reset)
+- `tests/e2e/fixtures/` — Minimal PNG/MP4 binary fixtures + generator script
+- `eslint.config.mjs` — 2 new blocks (5a: CJS helpers, 5b: E2E JS tests)
+- `vitest.config.js` — Exclude `tests/e2e/**` from unit test discovery
+- `package.json` — `@playwright/test ^1.58.2`, `test:e2e` script
+**Spawned Tasks**: 3 items added to BACKLOG.md
+
+---
 
 ### [2026-03-12] Unit test infrastructure and initial tests (TASK-013)
 
