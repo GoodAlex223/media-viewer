@@ -84,9 +84,10 @@ media_viewer/
 │       ├── zoom.test.js            # Popover open/close, slider, Escape reset
 │       ├── fixtures/               # Test images/video (red/green/blue 1x1 PNGs, tiny.mp4)
 │       └── helpers/
-│           ├── electron-app.js     # launchApp, closeApp, seedLocalStorage, mockFolderDialog, etc.
+│           ├── electron-app.js      # launchApp, closeApp, seedLocalStorage, mockFolderDialog, etc.
 │           ├── electron-wrapper.cjs # Strips --remote-debugging-port=0 (Electron 30+ workaround)
-│           └── rdp-preload.cjs     # Sets RDP via app.commandLine.appendSwitch
+│           ├── electron-wrapper.cmd # Windows CMD shim — executablePath on win32
+│           └── rdp-preload.cjs      # Sets RDP via app.commandLine.appendSwitch
 └── docs/                # Project documentation
     ├── planning/        # Task management (TODO, DONE, BACKLOG, GOALS, MILESTONES, ROADMAP)
     ├── archive/         # Historical documentation
