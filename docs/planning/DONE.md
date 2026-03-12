@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-11 <!-- TASK-012 -->
+**Last Updated**: 2026-03-12 <!-- TASK-013 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,24 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-12] Unit test infrastructure and initial tests (TASK-013)
+
+**Plan**: N/A (implemented via feature-dev skill)
+**Summary**: Set up Vitest test framework with 103 tests across 4 suites covering core algorithmic logic. Zero tests to full coverage of pure functions and data structures.
+**Key Changes**:
+- `vitest.config.js` — Vitest configuration (tests/**/*.test.js)
+- `tests/ml-model.test.js` — 36 tests for OnlineLogisticRegression
+- `tests/sorting-worker.test.js` — 21 tests for MinHeap, VPTree, calculateHammingDistance
+- `tests/feature-extractor.test.js` — 18 tests for rgbToHsl, computeHistogram, sharpness, symmetry, balance
+- `tests/media-viewer-utils.test.js` — 28 tests for formatElapsed, formatTimeAgo, removeFileFromList, areFoldersConfigured
+- `sorting-worker.js` — conditional CJS exports added for testability
+- `eslint.config.mjs` — test file ESLint block added (block 7)
+- `.husky/pre-commit` — tests run after lint-staged
+- `package.json` — `"test": "vitest run"`, vitest devDependency
+**Spawned Tasks**: 2 items added to BACKLOG.md
+
+---
 
 ### [2026-03-11] Pre-commit hooks with linting and formatting (TASK-012)
 

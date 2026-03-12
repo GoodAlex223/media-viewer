@@ -13,6 +13,11 @@ Ideas and tasks not yet prioritized for active development.
 
 ## From Completed Tasks
 
+### [2026-03-12] From: TASK-013 (Unit test infrastructure)
+
+- [ ] **Deduplicate MinHeap/VPTree across sorting-worker.js and media-viewer.js** — Both files contain identical implementations. Extract to a shared `data-structures.js` with the conditional CJS export pattern, then importScripts() in worker and import in renderer.
+- [ ] **Add tests for showCompareMedia pair selection logic** — The acceptance criteria mentioned testing showCompareMedia edge cases. The pair selection logic (regular mode index math, ML-sorted pair selection) could be extracted into a pure function and tested without DOM mocking.
+
 ### [2026-03-11] From: TASK-012 (Pre-commit hooks)
 
 - [ ] **Promote `no-shadow` from warn → error** — After the codebase has been cleaned up, harden the rule to block commits with shadowed variables rather than just warning. Two known shadow sites remain in `handleCancel()` and the wheel handler.

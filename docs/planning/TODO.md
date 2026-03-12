@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-11 <!-- TASK-012 completed -->
+**Last Updated**: 2026-03-12 <!-- TASK-013 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -35,25 +35,7 @@ Active tasks and backlog.
 <!-- TASK-010 completed 2026-03-05, moved to DONE.md -->
 <!-- TASK-011 completed 2026-03-05, moved to DONE.md -->
 <!-- TASK-012 completed 2026-03-11, moved to DONE.md -->
-
----
-
-### [TASK-013] Unit test infrastructure and initial tests
-**Priority**: 🟡 Medium
-**Status**: 📋 Planned
-**Effort**: L
-
-**Description**: Set up unit test framework and write initial tests for core logic. Currently no tests exist (`npm test` is a no-op). Target testable pure functions first: sorting algorithms (sorting-worker.js), ML model (ml-model.js), feature extraction logic, and utility methods in MediaViewer (e.g., removeFileFromList, index management).
-
-**Acceptance Criteria**:
-- [ ] Test framework installed and configured (Vitest or Jest)
-- [ ] npm `test` script runs test suite
-- [ ] Tests for sorting-worker.js (MST algorithm, similarity comparisons)
-- [ ] Tests for ml-model.js (prediction, training)
-- [ ] Tests for MediaViewer utility methods (removeFileFromList, index wrap/cap behavior)
-- [ ] Tests for file validation logic (showCompareMedia edge cases)
-- [ ] Minimum 20 test cases covering core logic
-- [ ] Pre-commit hook runs tests (depends on TASK-012)
+<!-- TASK-013 completed 2026-03-12, moved to DONE.md -->
 
 ---
 
