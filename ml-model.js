@@ -16,8 +16,8 @@ class OnlineLogisticRegression {
     constructor(featureDim = DEFAULT_FEATURE_DIM) {
         this.featureDim = featureDim;
         this.weights = new Float32Array(featureDim + 1); // +1 for bias term
-        this.learningRate = 0.1;          // Initial learning rate
-        this.regularization = 0.001;       // L2 regularization strength
+        this.learningRate = 0.1; // Initial learning rate
+        this.regularization = 0.001; // L2 regularization strength
 
         // Class counts for imbalance handling
         this.positiveCount = 0;
@@ -61,7 +61,7 @@ class OnlineLogisticRegression {
      * @returns {number[]} Array of probabilities
      */
     predictBatch(featuresBatch) {
-        return featuresBatch.map(f => this.predict(f));
+        return featuresBatch.map((f) => this.predict(f));
     }
 
     /**
@@ -206,7 +206,7 @@ class OnlineLogisticRegression {
             negativeCount: this.negativeCount,
             classBalance: this.positiveCount / (this.positiveCount + this.negativeCount || 1),
             isReady: this.hasEnoughSamples(),
-            featureDim: this.featureDim
+            featureDim: this.featureDim,
         };
     }
 
@@ -245,7 +245,7 @@ class OnlineLogisticRegression {
             negativeCount: this.negativeCount,
             totalSamples: this.totalSamples,
             learningRate: this.learningRate,
-            regularization: this.regularization
+            regularization: this.regularization,
         };
     }
 
@@ -284,9 +284,7 @@ class OnlineLogisticRegression {
      * @returns {boolean} True if compatible
      */
     static isCompatible(json) {
-        return json &&
-               json.version === ML_MODEL_VERSION &&
-               json.featureDim === DEFAULT_FEATURE_DIM;
+        return json && json.version === ML_MODEL_VERSION && json.featureDim === DEFAULT_FEATURE_DIM;
     }
 }
 
@@ -295,6 +293,6 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         OnlineLogisticRegression,
         ML_MODEL_VERSION,
-        DEFAULT_FEATURE_DIM
+        DEFAULT_FEATURE_DIM,
     };
 }

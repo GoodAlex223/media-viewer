@@ -83,7 +83,7 @@ async function initFaceDetection() {
 async function detectFaces(input, options = {}) {
     const {
         minConfidence = 0.5,
-        inputSize = 224  // Smaller = faster, larger = more accurate
+        inputSize = 224, // Smaller = faster, larger = more accurate
     } = options;
 
     // Initialize if needed
@@ -94,7 +94,7 @@ async function detectFaces(input, options = {}) {
             count: 0,
             areaRatio: 0,
             detections: [],
-            error: 'Face detection not available'
+            error: 'Face detection not available',
         };
     }
 
@@ -102,7 +102,7 @@ async function detectFaces(input, options = {}) {
         // Configure detector options
         const detectorOptions = new faceapi.TinyFaceDetectorOptions({
             inputSize: inputSize,
-            scoreThreshold: minConfidence
+            scoreThreshold: minConfidence,
         });
 
         // Detect all faces
@@ -114,7 +114,7 @@ async function detectFaces(input, options = {}) {
         const inputHeight = input.height || input.videoHeight || input.naturalHeight;
         const totalArea = inputWidth * inputHeight;
 
-        const faceData = detections.map(det => {
+        const faceData = detections.map((det) => {
             const box = det.box;
             const area = box.width * box.height;
             totalFaceArea += area;
@@ -125,7 +125,7 @@ async function detectFaces(input, options = {}) {
                 width: box.width,
                 height: box.height,
                 score: det.score,
-                areaRatio: area / totalArea
+                areaRatio: area / totalArea,
             };
         });
 
@@ -133,9 +133,8 @@ async function detectFaces(input, options = {}) {
             hasFace: detections.length > 0,
             count: detections.length,
             areaRatio: totalArea > 0 ? Math.min(1, totalFaceArea / totalArea) : 0,
-            detections: faceData
+            detections: faceData,
         };
-
     } catch (error) {
         console.error('Face detection error:', error);
         return {
@@ -143,7 +142,7 @@ async function detectFaces(input, options = {}) {
             count: 0,
             areaRatio: 0,
             detections: [],
-            error: error.message
+            error: error.message,
         };
     }
 }
@@ -188,6 +187,6 @@ if (typeof window !== 'undefined') {
         detect: detectFaces,
         detectFromImageData: detectFacesFromImageData,
         isAvailable: isFaceDetectionAvailable,
-        isLoading: isFaceDetectionLoading
+        isLoading: isFaceDetectionLoading,
     };
 }

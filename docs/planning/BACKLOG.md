@@ -11,6 +11,15 @@ Ideas and tasks not yet prioritized for active development.
 
 ---
 
+## From Completed Tasks
+
+### [2026-03-11] From: TASK-012 (Pre-commit hooks)
+
+- [ ] **Promote `no-shadow` from warn → error** — After the codebase has been cleaned up, harden the rule to block commits with shadowed variables rather than just warning. Two known shadow sites remain in `handleCancel()` and the wheel handler.
+- [ ] **Add ESLint rule for no-console in production builds** — Currently `no-console` is off (console.log is intentional for Electron logging). Consider adding a build-time strip or lint warning in a future CI step.
+
+---
+
 ## Feature Ideas
 
 ### Sorting & ML

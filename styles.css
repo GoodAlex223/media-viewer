@@ -850,7 +850,7 @@ body {
     margin: 0;
 }
 
-.sort-settings input[type="number"] {
+.sort-settings input[type='number'] {
     width: 70px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-default);
@@ -860,21 +860,23 @@ body {
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
     outline: none;
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast);
 }
 
-.sort-settings input[type="number"]:focus {
+.sort-settings input[type='number']:focus {
     border-color: var(--color-primary-500);
     box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
 }
 
-.sort-settings input[type="number"]:hover {
+.sort-settings input[type='number']:hover {
     border-color: var(--border-strong);
 }
 
 /* Hide spin buttons in number input for cleaner look */
-.sort-settings input[type="number"]::-webkit-inner-spin-button,
-.sort-settings input[type="number"]::-webkit-outer-spin-button {
+.sort-settings input[type='number']::-webkit-inner-spin-button,
+.sort-settings input[type='number']::-webkit-outer-spin-button {
     opacity: 0.5;
 }
 
@@ -1076,7 +1078,9 @@ body {
     box-shadow: var(--shadow-md);
     opacity: 0;
     visibility: hidden;
-    transition: opacity var(--transition-fast), visibility var(--transition-fast);
+    transition:
+        opacity var(--transition-fast),
+        visibility var(--transition-fast);
     pointer-events: none;
     z-index: 10;
     white-space: nowrap;
@@ -1839,7 +1843,7 @@ body {
     background: rgba(255, 255, 255, 0.05);
 }
 
-.setting-item input[type="checkbox"] {
+.setting-item input[type='checkbox'] {
     width: 18px;
     height: 18px;
     accent-color: var(--color-primary-500);
@@ -1851,7 +1855,7 @@ body {
     font-size: var(--font-size-sm);
 }
 
-.setting-item input[type="number"] {
+.setting-item input[type='number'] {
     width: 60px;
     padding: var(--space-1) var(--space-2);
     background: rgba(0, 0, 0, 0.3);
@@ -1891,7 +1895,7 @@ body {
     min-width: 100px;
 }
 
-.folder-input-group input[type="text"] {
+.folder-input-group input[type='text'] {
     flex: 1;
     min-width: 200px;
     padding: var(--space-2) var(--space-3);
@@ -1903,7 +1907,7 @@ body {
     font-family: monospace;
 }
 
-.folder-input-group input[type="text"]::placeholder {
+.folder-input-group input[type='text']::placeholder {
     color: var(--text-muted);
     font-style: italic;
 }
@@ -1955,13 +1959,23 @@ body {
 
 /* Animations */
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 @keyframes slideInLeft {
@@ -2007,16 +2021,16 @@ body {
     .header-controls {
         gap: 6px;
     }
-    
+
     .title {
         font-size: 14px;
     }
-    
+
     .folder-info {
         font-size: 11px;
         max-width: 200px;
     }
-    
+
     .info-toggle-btn {
         top: 70px;
         right: 15px;
@@ -2031,49 +2045,49 @@ body {
         max-width: 260px;
         min-width: 180px;
     }
-    
+
     .controls {
         gap: 10px;
         bottom: 20px;
     }
-    
+
     .control-btn {
         padding: 8px 12px;
         min-width: 70px;
     }
-    
+
     .btn-icon {
         font-size: 18px;
     }
-    
+
     .btn-label {
         font-size: 10px;
     }
-    
+
     .video-controls {
         bottom: 120px;
         padding: 10px 15px;
         max-width: 320px;
     }
-    
+
     .navigation-info {
         top: 15px;
     }
-    
+
     .nav-arrow {
         width: 40px;
         height: 40px;
         font-size: 16px;
     }
-    
+
     .nav-prev {
         left: 15px;
     }
-    
+
     .nav-next {
         right: 15px;
     }
-    
+
     .notification-container {
         right: 15px;
         bottom: 15px;
@@ -2084,7 +2098,7 @@ body {
         font-size: 11px;
         padding: 8px 12px;
     }
-    
+
     .help-content {
         padding: 20px;
         margin: 20px;

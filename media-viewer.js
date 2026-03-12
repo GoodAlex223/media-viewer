@@ -44,13 +44,11 @@ class MinHeap {
             const leftChild = 2 * index + 1;
             const rightChild = 2 * index + 2;
 
-            if (leftChild < this.heap.length &&
-                this.compareFunc(this.heap[leftChild], this.heap[minIndex]) < 0) {
+            if (leftChild < this.heap.length && this.compareFunc(this.heap[leftChild], this.heap[minIndex]) < 0) {
                 minIndex = leftChild;
             }
 
-            if (rightChild < this.heap.length &&
-                this.compareFunc(this.heap[rightChild], this.heap[minIndex]) < 0) {
+            if (rightChild < this.heap.length && this.compareFunc(this.heap[rightChild], this.heap[minIndex]) < 0) {
                 minIndex = rightChild;
             }
 
@@ -80,9 +78,9 @@ class VPTree {
         }
 
         // Calculate distances from vantage point to all other points
-        const distances = items.slice(1).map(item => ({
+        const distances = items.slice(1).map((item) => ({
             item,
-            distance: this.distanceFunc(vantagePoint, item)
+            distance: this.distanceFunc(vantagePoint, item),
         }));
 
         // Find median using QuickSelect - O(n) instead of O(n log n) sort
@@ -113,7 +111,7 @@ class VPTree {
             vantagePoint,
             radius,
             left: this.buildTree(inside),
-            right: this.buildTree(outside)
+            right: this.buildTree(outside),
         };
     }
 
@@ -332,37 +330,37 @@ class MediaViewer {
 
         // ML Prediction state
         this.mlWorker = null;
-        this.featureCache = new Map();      // Map<filePath, Float32Array>
-        this.predictionScores = new Map();  // Map<filePath, number (0-1)>
-        this.mlModelState = null;           // Persisted model weights
+        this.featureCache = new Map(); // Map<filePath, Float32Array>
+        this.predictionScores = new Map(); // Map<filePath, number (0-1)>
+        this.mlModelState = null; // Persisted model weights
         this.isMlEnabled = localStorage.getItem('mlPredictionEnabled') !== 'false';
         this.showPredictionBadges = localStorage.getItem('showPredictionBadges') !== 'false';
         this.isSortedByPrediction = false;
-        this.mlStats = null;                // Current model statistics
-        this.compareLeftFile = null;        // Current left file in compare mode (highest score)
-        this.compareRightFile = null;       // Current right file in compare mode (lowest score)
-        this.mlComparePairIndex = 0;        // Index for ML pair selection (0 = highest vs lowest)
+        this.mlStats = null; // Current model statistics
+        this.compareLeftFile = null; // Current left file in compare mode (highest score)
+        this.compareRightFile = null; // Current right file in compare mode (lowest score)
+        this.mlComparePairIndex = 0; // Index for ML pair selection (0 = highest vs lowest)
 
         // Feature extraction worker pool state
-        this.featureWorkers = [];           // Array of Worker instances
+        this.featureWorkers = []; // Array of Worker instances
         const savedWorkerCount = parseInt(localStorage.getItem('featureWorkerCount'), 10);
-        this.featureWorkerCount = (savedWorkerCount >= 1 && savedWorkerCount <= 8) ? savedWorkerCount : 4;
+        this.featureWorkerCount = savedWorkerCount >= 1 && savedWorkerCount <= 8 ? savedWorkerCount : 4;
 
-        this.featureTaskQueue = [];         // Priority queue of pending tasks
+        this.featureTaskQueue = []; // Priority queue of pending tasks
         this.featurePendingTasks = new Map(); // Map<taskId, {resolve, reject, filePath, retries}>
-        this.featureTaskIdCounter = 0;      // Incrementing task ID
+        this.featureTaskIdCounter = 0; // Incrementing task ID
         this.isBackgroundExtracting = false;
         this.backgroundExtractionAbort = null; // AbortController for cancellation
-        this.featureCacheDirty = false;     // Flag for auto-save
+        this.featureCacheDirty = false; // Flag for auto-save
         this.featureCacheAutoSaveInterval = null;
-        this.extractionStartTime = null;       // Date.now() when extraction starts
-        this.extractionCompletionTimes = [];   // Rolling window of completion timestamps
-        this.extractionRunId = 0;              // Generation counter for cancel-then-restart safety
-        this.extractionPaused = false;         // True while user is navigating/rating
-        this.extractionResumeResolve = null;   // Resolves awaitExtractionGate() when paused
-        this.extractionResumeTimer = null;     // setTimeout handle for 2s idle resume
-        this._extractionLastCurrent = 0;       // Last known current count for paused redisplay
-        this._extractionLastTotal = 0;         // Last known total count for paused redisplay
+        this.extractionStartTime = null; // Date.now() when extraction starts
+        this.extractionCompletionTimes = []; // Rolling window of completion timestamps
+        this.extractionRunId = 0; // Generation counter for cancel-then-restart safety
+        this.extractionPaused = false; // True while user is navigating/rating
+        this.extractionResumeResolve = null; // Resolves awaitExtractionGate() when paused
+        this.extractionResumeTimer = null; // setTimeout handle for 2s idle resume
+        this._extractionLastCurrent = 0; // Last known current count for paused redisplay
+        this._extractionLastTotal = 0; // Last known total count for paused redisplay
 
         // User settings
         this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
@@ -378,7 +376,7 @@ class MediaViewer {
         this.zoomState = {
             single: { scale: 1, translateX: 0, translateY: 0 },
             left: { scale: 1, translateX: 0, translateY: 0 },
-            right: { scale: 1, translateX: 0, translateY: 0 }
+            right: { scale: 1, translateX: 0, translateY: 0 },
         };
         this.zoomSteps = [1, 2, 4]; // Click-to-zoom levels
         this.minZoom = 1;
@@ -399,7 +397,7 @@ class MediaViewer {
 
         if (!window.electronAPI) {
             console.error('Electron API not available');
-            this.showError('Electron API not available. Please make sure you\'re running this in Electron.');
+            this.showError("Electron API not available. Please make sure you're running this in Electron.");
         }
     }
 
@@ -702,19 +700,19 @@ class MediaViewer {
 
             const createBtn = modal.querySelector('#createBtn');
             const cancelBtn = modal.querySelector('#cancelBtn');
-            
+
             const cleanup = () => modal.remove();
-            
+
             createBtn.addEventListener('click', () => {
                 cleanup();
                 resolve(true);
             });
-            
+
             cancelBtn.addEventListener('click', () => {
                 cleanup();
                 resolve(false);
             });
-            
+
             const handleKeydown = (e) => {
                 if (e.key === 'Escape') {
                     cleanup();
@@ -729,9 +727,12 @@ class MediaViewer {
     // Convert Windows path to properly encoded file:// URL
     pathToFileURL(filePath) {
         // Replace backslashes with forward slashes
-        let normalized = filePath.replace(/\\/g, '/');
+        const normalized = filePath.replace(/\\/g, '/');
         // Encode special characters while preserving forward slashes and colon
-        let encoded = normalized.split('/').map(part => encodeURIComponent(part)).join('/');
+        const encoded = normalized
+            .split('/')
+            .map((part) => encodeURIComponent(part))
+            .join('/');
         // Add file:// protocol
         return `file:///${encoded}`;
     }
@@ -778,7 +779,7 @@ class MediaViewer {
             const infoNotifications = Array.from(this.notificationContainer.querySelectorAll('.notification.info'));
             if (infoNotifications.length >= 2) {
                 // Remove oldest info notifications
-                infoNotifications.slice(0, infoNotifications.length - 1).forEach(n => n.remove());
+                infoNotifications.slice(0, infoNotifications.length - 1).forEach((n) => n.remove());
             }
         }
 
@@ -851,9 +852,7 @@ class MediaViewer {
         this.notificationContainer.appendChild(notification);
 
         // Auto-close: info/success - 2s, warning - 5s, error - 8s if enabled or keep visible
-        const displayTime = type === 'error'
-            ? (this.autoCloseErrors ? 8000 : 0)
-            : (type === 'warning' ? 5000 : 2000);
+        const displayTime = type === 'error' ? (this.autoCloseErrors ? 8000 : 0) : type === 'warning' ? 5000 : 2000;
         if (displayTime > 0) {
             const autoCloseTimeout = setTimeout(closeNotification, displayTime);
             closeBtn.addEventListener('click', () => clearTimeout(autoCloseTimeout), { once: true });
@@ -907,7 +906,7 @@ class MediaViewer {
      * @returns {number} The index the file was at before removal, or -1 if not found
      */
     removeFileFromList(filePath) {
-        const index = this.mediaFiles.findIndex(f => f.path === filePath);
+        const index = this.mediaFiles.findIndex((f) => f.path === filePath);
         if (index === -1) return -1;
 
         this.mediaFiles.splice(index, 1);
@@ -1084,7 +1083,7 @@ class MediaViewer {
             if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
                 await this.forceVideoCleanup();
                 // Additional wait for file handles to be fully released
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise((resolve) => setTimeout(resolve, 500));
             }
 
             const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
@@ -1103,7 +1102,7 @@ class MediaViewer {
             const moveResult = await window.electronAPI.moveFile({
                 sourcePath: currentFile.path,
                 targetFolder: targetFolderPath,
-                fileName: currentFile.name
+                fileName: currentFile.name,
             });
 
             if (!moveResult.success) {
@@ -1118,13 +1117,13 @@ class MediaViewer {
                 fileSize: currentFile.size,
                 fileType: currentFile.type,
                 actionType: actionType,
-                mlFeatures: mlFeatures ? Array.from(mlFeatures) : null
+                mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
             });
 
             // Show success notification (if enabled)
             if (this.showRatingConfirmations) {
-                const fileName = currentFile.name.length > 20 ?
-                    currentFile.name.substring(0, 20) + '...' : currentFile.name;
+                const fileName =
+                    currentFile.name.length > 20 ? currentFile.name.substring(0, 20) + '...' : currentFile.name;
                 this.showNotification(
                     `${actionType === 'like' ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
                     actionType === 'like' ? 'success' : 'dislike'
@@ -1146,7 +1145,6 @@ class MediaViewer {
 
             this.updateFolderInfo();
             this.showMedia();
-
         } catch (error) {
             console.error('Error moving file:', error);
             this.showError(`Failed to move file: ${error.message}`);
@@ -1183,8 +1181,8 @@ class MediaViewer {
             remainingFile = side === 'left' ? rightFile : leftFile;
 
             // Find actual indices in the array
-            fileIndex = this.mediaFiles.findIndex(f => f.path === fileToMove.path);
-            remainingFileIndex = this.mediaFiles.findIndex(f => f.path === remainingFile.path);
+            fileIndex = this.mediaFiles.findIndex((f) => f.path === fileToMove.path);
+            remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === remainingFile.path);
 
             if (fileIndex === -1) return;
 
@@ -1197,7 +1195,7 @@ class MediaViewer {
                 cleanupPromises.push(this.cleanupCompareMedia('right'));
             }
             await Promise.all(cleanupPromises);
-            await new Promise(resolve => setTimeout(resolve, 50));
+            await new Promise((resolve) => setTimeout(resolve, 50));
         } else {
             // Single mode
             if (this.mediaFiles.length === 0) return;
@@ -1207,7 +1205,7 @@ class MediaViewer {
             // For videos, ensure proper cleanup before moving
             if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
                 await this.forceVideoCleanup();
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise((resolve) => setTimeout(resolve, 500));
             }
         }
 
@@ -1233,7 +1231,7 @@ class MediaViewer {
             const moveResult = await window.electronAPI.moveFile({
                 sourcePath: fileToMove.path,
                 targetFolder: targetFolderPath,
-                fileName: fileToMove.name
+                fileName: fileToMove.name,
             });
 
             if (!moveResult.success) {
@@ -1247,28 +1245,26 @@ class MediaViewer {
                 newPath: moveResult.targetPath,
                 fileSize: fileToMove.size,
                 fileType: fileToMove.type,
-                actionType: 'special'
+                actionType: 'special',
             };
 
             // In compare mode, store remaining file info for proper undo
             if (side === 'left' || side === 'right') {
                 historyEntry.compareMode = true;
                 historyEntry.remainingFile = remainingFile;
-                historyEntry.remainingFileOriginalIndex = remainingFileIndex > fileIndex
-                    ? remainingFileIndex - 1  // Adjust for the removed file
-                    : remainingFileIndex;
+                historyEntry.remainingFileOriginalIndex =
+                    remainingFileIndex > fileIndex
+                        ? remainingFileIndex - 1 // Adjust for the removed file
+                        : remainingFileIndex;
             }
 
             this.moveHistory.push(historyEntry);
 
             // Show success notification
             if (this.showRatingConfirmations) {
-                const fileName = fileToMove.name.length > 20 ?
-                    fileToMove.name.substring(0, 20) + '...' : fileToMove.name;
-                this.showNotification(
-                    `📁 Moved ${fileName} to ${targetFolderName}`,
-                    'info'
-                );
+                const fileName =
+                    fileToMove.name.length > 20 ? fileToMove.name.substring(0, 20) + '...' : fileToMove.name;
+                this.showNotification(`📁 Moved ${fileName} to ${targetFolderName}`, 'info');
             }
 
             // Remove file from array and clean up caches
@@ -1277,7 +1273,7 @@ class MediaViewer {
             // In compare mode, move the remaining file to the end of the list
             if (side === 'left' || side === 'right') {
                 if (remainingFile && this.mediaFiles.length >= 1) {
-                    const newRemainingIndex = this.mediaFiles.findIndex(f => f.path === remainingFile.path);
+                    const newRemainingIndex = this.mediaFiles.findIndex((f) => f.path === remainingFile.path);
                     if (newRemainingIndex !== -1 && newRemainingIndex !== this.mediaFiles.length - 1) {
                         const [movedFile] = this.mediaFiles.splice(newRemainingIndex, 1);
                         this.mediaFiles.push(movedFile);
@@ -1311,7 +1307,6 @@ class MediaViewer {
                     this.showDropZone();
                 }
             }
-
         } catch (error) {
             console.error('Error moving file to special folder:', error);
             this.showError(`Failed to move file: ${error.message}`);
@@ -1321,33 +1316,33 @@ class MediaViewer {
     // New method for thorough video cleanup before file operations
     async forceVideoCleanup() {
         if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
-        
+
         this.isBeingCleaned = true;
-        
+
         // Remove all event listeners first
         this.videoEventListeners.forEach(({ event, handler }) => {
             this.currentMedia.removeEventListener(event, handler);
         });
         this.videoEventListeners = [];
-        
+
         // Aggressively clean up video
         const video = this.currentMedia;
         video.pause();
         video.currentTime = 0;
         video.removeAttribute('src');
         video.load();
-        
+
         // Wait for cleanup to complete
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
         // Remove from DOM
         if (video.parentNode) {
             video.remove();
         }
-        
+
         this.currentMedia = null;
         this.isBeingCleaned = false;
-        
+
         // Force garbage collection if available
         if (window.gc) {
             window.gc();
@@ -1356,16 +1351,16 @@ class MediaViewer {
 
     setupEventListeners() {
         this.dropZone.addEventListener('click', () => this.openFolderDialog());
-        
+
         this.dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             this.dropZone.classList.add('dragover');
         });
-        
+
         this.dropZone.addEventListener('dragleave', () => {
             this.dropZone.classList.remove('dragover');
         });
-        
+
         this.dropZone.addEventListener('drop', (e) => {
             e.preventDefault();
             this.dropZone.classList.remove('dragover');
@@ -1656,7 +1651,7 @@ class MediaViewer {
             // Compare mode shortcuts
             if (this.isCompareMode) {
                 // Use e.code for letter keys (keyboard layout independent)
-                switch(e.code) {
+                switch (e.code) {
                     case 'KeyQ':
                         e.preventDefault();
                         if (!this.isLoading) this.handleLeftLike();
@@ -1713,7 +1708,7 @@ class MediaViewer {
             }
 
             // Single mode shortcuts
-            switch(e.key) {
+            switch (e.key) {
                 case ' ':
                     e.preventDefault();
                     if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
@@ -1764,49 +1759,52 @@ class MediaViewer {
         });
 
         // Mouse wheel navigation (or zoom when over media)
-        document.addEventListener('wheel', (e) => {
-            // Don't navigate if help overlay is open
-            const helpOverlay = document.getElementById('helpOverlay');
-            if (helpOverlay && helpOverlay.classList.contains('show')) return;
+        document.addEventListener(
+            'wheel',
+            (e) => {
+                // Don't navigate if help overlay is open
+                const helpOverlayEl = document.getElementById('helpOverlay');
+                if (helpOverlayEl && helpOverlayEl.classList.contains('show')) return;
 
-            if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
+                if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
 
-            // Check if wheel event is over a media element - handle zoom instead of navigation
-            const target = e.target;
-            const isOverMedia = target.classList.contains('media-display') ||
-                               target.closest('.media-wrapper');
+                // Check if wheel event is over a media element - handle zoom instead of navigation
+                const target = e.target;
+                const isOverMedia = target.classList.contains('media-display') || target.closest('.media-wrapper');
 
-            if (isOverMedia) {
-                // Zoom is handled by the element's own wheel listener
-                // Let it propagate to the element
-                return;
-            }
+                if (isOverMedia) {
+                    // Zoom is handled by the element's own wheel listener
+                    // Let it propagate to the element
+                    return;
+                }
 
-            // Not over media - proceed with navigation
-            // Prevent default scrolling behavior
-            e.preventDefault();
+                // Not over media - proceed with navigation
+                // Prevent default scrolling behavior
+                e.preventDefault();
 
-            // Debounce wheel events
-            if (this.wheelTimeout) return;
+                // Debounce wheel events
+                if (this.wheelTimeout) return;
 
-            this.wheelTimeout = setTimeout(() => {
-                this.wheelTimeout = null;
-            }, 300);
+                this.wheelTimeout = setTimeout(() => {
+                    this.wheelTimeout = null;
+                }, 300);
 
-            // Navigate based on wheel direction
-            if (e.deltaY > 0) {
-                // Scrolling down - next media
-                this.nextMedia();
-            } else if (e.deltaY < 0) {
-                // Scrolling up - previous media
-                this.previousMedia();
-            }
-        }, { passive: false });
+                // Navigate based on wheel direction
+                if (e.deltaY > 0) {
+                    // Scrolling down - next media
+                    this.nextMedia();
+                } else if (e.deltaY < 0) {
+                    // Scrolling up - previous media
+                    this.previousMedia();
+                }
+            },
+            { passive: false }
+        );
     }
 
     setupHeaderVisibility() {
         let headerTimeout;
-        
+
         const showHeader = () => {
             this.header.classList.add('show');
             clearTimeout(headerTimeout);
@@ -1822,7 +1820,7 @@ class MediaViewer {
 
         this.header.addEventListener('mouseenter', showHeader);
         this.header.addEventListener('mouseleave', hideHeader);
-        
+
         document.addEventListener('mousemove', (e) => {
             if (e.clientY < 50) {
                 showHeader();
@@ -1916,7 +1914,7 @@ class MediaViewer {
             }
         });
 
-        [this.controls, this.videoControls, this.navInfo, this.navPrev, this.navNext].forEach(element => {
+        [this.controls, this.videoControls, this.navInfo, this.navPrev, this.navNext].forEach((element) => {
             element.addEventListener('mouseenter', () => {
                 isHoveringControl = true;
                 clearTimeout(controlsTimeout);
@@ -1992,8 +1990,13 @@ class MediaViewer {
 
         // Store references
         this.zoomControlsMap[target] = {
-            container: popover, slider, zoomInBtn, zoomOutBtn, valueDisplay,
-            toggleBtn, isSliderDragging: false
+            container: popover,
+            slider,
+            zoomInBtn,
+            zoomOutBtn,
+            valueDisplay,
+            toggleBtn,
+            isSliderDragging: false,
         };
 
         // Toggle popover on button click
@@ -2080,12 +2083,12 @@ class MediaViewer {
             this.showError('Electron API not available');
             return;
         }
-        
+
         try {
             console.log('Opening folder dialog...');
             const folderPath = await window.electronAPI.openFolderDialog();
             console.log('Selected folder:', folderPath);
-            
+
             if (folderPath) {
                 await this.loadFolder(folderPath);
             }
@@ -2098,10 +2101,10 @@ class MediaViewer {
     async handleFolderDrop(event) {
         event.preventDefault();
         this.dropZone.classList.remove('dragover');
-        
+
         const items = Array.from(event.dataTransfer.files);
         console.log('Dropped items:', items);
-        
+
         if (items.length > 0 && items[0].path) {
             const folderPath = items[0].path;
             console.log('Dropped folder path:', folderPath);
@@ -2116,16 +2119,16 @@ class MediaViewer {
             this.showError('Electron API not available');
             return;
         }
-        
+
         try {
             console.log('Loading folder:', folderPath);
             this.showLoadingSpinner();
-            
+
             const result = await window.electronAPI.loadFolder(folderPath);
             console.log('Load result:', result);
-            
+
             this.hideLoadingSpinner();
-            
+
             if (!result.success) {
                 this.showDropZone();
                 this.showError(result.error || 'Failed to load folder');
@@ -2137,7 +2140,7 @@ class MediaViewer {
                 this.showError('No media files found in the selected folder');
                 return;
             }
-            
+
             this.mediaFiles = result.files;
             this.baseFolderPath = folderPath;
             this.currentFolderPath = window.electronAPI.path.basename(folderPath);
@@ -2163,7 +2166,6 @@ class MediaViewer {
 
             // Update ML button state (actual initialization happens when user clicks the button)
             this.updateSortPredictionButton();
-
         } catch (error) {
             this.hideLoadingSpinner();
             this.showDropZone();
@@ -2255,7 +2257,7 @@ class MediaViewer {
             this.currentMedia.currentTime = 0;
             this.currentMedia.removeAttribute('src');
             this.currentMedia.load(); // This is important to release the file handle
-            
+
             // Remove from DOM
             if (this.currentMedia.parentNode) {
                 this.currentMedia.remove();
@@ -2264,7 +2266,7 @@ class MediaViewer {
             // For images, immediate removal is fine
             this.currentMedia.remove();
         }
-        
+
         this.currentMedia = null;
         this.isVideoLoading = false;
         this.mediaNavigationInProgress = false;
@@ -2299,7 +2301,7 @@ class MediaViewer {
         // Properly cleanup previous media
         if (this.currentMedia) {
             this.cleanupCurrentMedia();
-            await new Promise(resolve => setTimeout(resolve, 150));
+            await new Promise((resolve) => setTimeout(resolve, 150));
         }
 
         const file = this.mediaFiles[this.currentIndex];
@@ -2373,7 +2375,7 @@ class MediaViewer {
             this.rightMediaWrapper.remove();
         }
 
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         // Select files for comparison
         let leftFile, rightFile;
@@ -2389,7 +2391,7 @@ class MediaViewer {
         // If sorted by prediction, select pairs based on mlComparePairIndex
         else if (this.isSortedByPrediction && this.predictionScores.size >= 2) {
             const filesWithScores = this.mediaFiles
-                .map(f => ({ file: f, score: this.predictionScores.get(f.path) ?? 0.5 }))
+                .map((f) => ({ file: f, score: this.predictionScores.get(f.path) ?? 0.5 }))
                 .sort((a, b) => b.score - a.score); // Sort descending by score
 
             // Use mlComparePairIndex to select which pair to show
@@ -2409,7 +2411,9 @@ class MediaViewer {
 
             const leftScore = this.predictionScores.get(leftFile.path) ?? 0.5;
             const rightScore = this.predictionScores.get(rightFile.path) ?? 0.5;
-            console.log(`ML Compare [${pairIndex}]: ${leftFile.name} (${(leftScore * 100).toFixed(1)}%) vs ${rightFile.name} (${(rightScore * 100).toFixed(1)}%)`);
+            console.log(
+                `ML Compare [${pairIndex}]: ${leftFile.name} (${(leftScore * 100).toFixed(1)}%) vs ${rightFile.name} (${(rightScore * 100).toFixed(1)}%)`
+            );
         } else {
             // Regular mode: consecutive files based on currentIndex
             if (this.currentIndex >= this.mediaFiles.length - 1) {
@@ -2435,7 +2439,7 @@ class MediaViewer {
         // Validate files exist on disk before displaying
         const [leftExists, rightExists] = await Promise.all([
             window.electronAPI.checkFileExists(leftFile.path),
-            window.electronAPI.checkFileExists(rightFile.path)
+            window.electronAPI.checkFileExists(rightFile.path),
         ]);
 
         let removedCount = 0;
@@ -2559,7 +2563,7 @@ class MediaViewer {
         // Initialize Lucide icons for overlay controls (must be after DOM append)
         if (typeof lucide !== 'undefined') {
             lucide.createIcons({
-                nodes: [this.leftMediaWrapper, this.rightMediaWrapper]
+                nodes: [this.leftMediaWrapper, this.rightMediaWrapper],
             });
         }
 
@@ -2644,8 +2648,9 @@ class MediaViewer {
                 this.setupZoomEvents(media, side);
 
                 // Check if both media are loaded
-                const bothLoaded = (!this.leftMedia || this.leftMedia.complete || this.leftMedia.tagName === 'VIDEO') &&
-                                   (!this.rightMedia || this.rightMedia.complete || this.rightMedia.tagName === 'VIDEO');
+                const bothLoaded =
+                    (!this.leftMedia || this.leftMedia.complete || this.leftMedia.tagName === 'VIDEO') &&
+                    (!this.rightMedia || this.rightMedia.complete || this.rightMedia.tagName === 'VIDEO');
 
                 if (bothLoaded) {
                     this.hideLoadingSpinner();
@@ -2661,20 +2666,17 @@ class MediaViewer {
             if (media && media.tagName === 'IMG' && !this.isBeingCleaned) {
                 console.error('Image load error:', e);
                 this.hideLoadingSpinner();
-                const failedIndex = this.mediaFiles.findIndex(f => f.path === file.path);
+                const failedIndex = this.mediaFiles.findIndex((f) => f.path === file.path);
                 this.showError(`Failed to load image: ${file.name}`, {
                     actionButton: 'Remove',
-                    actionCallback: () => this.removeFailedFile(failedIndex, side)
+                    actionCallback: () => this.removeFailedFile(failedIndex, side),
                 });
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
             }
         };
 
-        listeners.push(
-            { event: 'load', handler: onLoad },
-            { event: 'error', handler: onError }
-        );
+        listeners.push({ event: 'load', handler: onLoad }, { event: 'error', handler: onError });
 
         media.addEventListener('load', onLoad);
         media.addEventListener('error', onError);
@@ -2697,8 +2699,9 @@ class MediaViewer {
                 this.setupZoomEvents(media, side);
 
                 // Check if both media are loaded
-                const bothLoaded = (!this.leftMedia || (this.leftMedia.tagName !== 'VIDEO' || this.leftMedia.readyState >= 1)) &&
-                                   (!this.rightMedia || (this.rightMedia.tagName !== 'VIDEO' || this.rightMedia.readyState >= 1));
+                const bothLoaded =
+                    (!this.leftMedia || this.leftMedia.tagName !== 'VIDEO' || this.leftMedia.readyState >= 1) &&
+                    (!this.rightMedia || this.rightMedia.tagName !== 'VIDEO' || this.rightMedia.readyState >= 1);
 
                 if (bothLoaded) {
                     this.hideLoadingSpinner();
@@ -2714,20 +2717,17 @@ class MediaViewer {
             if (media && media.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 console.error('Video load error:', e);
                 this.hideLoadingSpinner();
-                const failedIndex = this.mediaFiles.findIndex(f => f.path === file.path);
+                const failedIndex = this.mediaFiles.findIndex((f) => f.path === file.path);
                 this.showError(`Failed to load video: ${file.name}`, {
                     actionButton: 'Remove',
-                    actionCallback: () => this.removeFailedFile(failedIndex, side)
+                    actionCallback: () => this.removeFailedFile(failedIndex, side),
                 });
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
             }
         };
 
-        listeners.push(
-            { event: 'loadedmetadata', handler: onLoadedMetadata },
-            { event: 'error', handler: onError }
-        );
+        listeners.push({ event: 'loadedmetadata', handler: onLoadedMetadata }, { event: 'error', handler: onError });
 
         media.addEventListener('loadedmetadata', onLoadedMetadata);
         media.addEventListener('error', onError);
@@ -2756,7 +2756,7 @@ class MediaViewer {
                 const failedIndex = this.currentIndex;
                 this.showError(`Failed to load image: ${file.name}`, {
                     actionButton: 'Remove',
-                    actionCallback: () => this.removeFailedFile(failedIndex)
+                    actionCallback: () => this.removeFailedFile(failedIndex),
                 });
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
@@ -2764,10 +2764,7 @@ class MediaViewer {
         };
 
         // Store event listeners for cleanup
-        this.videoEventListeners.push(
-            { event: 'load', handler: onLoad },
-            { event: 'error', handler: onError }
-        );
+        this.videoEventListeners.push({ event: 'load', handler: onLoad }, { event: 'error', handler: onError });
 
         this.currentMedia.addEventListener('load', onLoad);
         this.currentMedia.addEventListener('error', onError);
@@ -2801,7 +2798,7 @@ class MediaViewer {
                 const failedIndex = this.currentIndex;
                 this.showError(`Failed to load video: ${file.name}`, {
                     actionButton: 'Remove',
-                    actionCallback: () => this.removeFailedFile(failedIndex)
+                    actionCallback: () => this.removeFailedFile(failedIndex),
                 });
                 this.isLoading = false;
                 this.isVideoLoading = false;
@@ -2881,11 +2878,11 @@ class MediaViewer {
 
         if (this.currentMedia.tagName === 'IMG') {
             const img = this.currentMedia;
-            
+
             const handleImageLoad = () => {
                 const naturalWidth = img.naturalWidth;
                 const naturalHeight = img.naturalHeight;
-                
+
                 if (naturalWidth > windowWidth || naturalHeight > windowHeight) {
                     img.style.width = '100vw';
                     img.style.height = '100vh';
@@ -2900,20 +2897,19 @@ class MediaViewer {
                     img.style.maxHeight = 'none';
                 }
             };
-            
+
             if (img.complete && img.naturalWidth > 0) {
                 handleImageLoad();
             } else {
                 img.addEventListener('load', handleImageLoad);
             }
-            
         } else if (this.currentMedia.tagName === 'VIDEO') {
             const video = this.currentMedia;
-            
+
             const handleVideoMetadata = () => {
                 const videoWidth = video.videoWidth;
                 const videoHeight = video.videoHeight;
-                
+
                 if (videoWidth > windowWidth || videoHeight > windowHeight) {
                     video.style.width = '100vw';
                     video.style.height = '100vh';
@@ -2928,7 +2924,7 @@ class MediaViewer {
                     video.style.maxHeight = 'none';
                 }
             };
-            
+
             if (video.videoWidth && video.videoHeight) {
                 handleVideoMetadata();
             } else {
@@ -2939,7 +2935,7 @@ class MediaViewer {
 
     togglePlayPause() {
         if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO' || this.isVideoLoading) return;
-        
+
         if (this.currentMedia.paused) {
             this.currentMedia.play();
         } else {
@@ -2949,7 +2945,7 @@ class MediaViewer {
 
     setVolume(value) {
         if (!this.currentMedia || this.currentMedia.tagName !== 'VIDEO') return;
-        
+
         this.currentMedia.volume = parseFloat(value);
     }
 
@@ -2980,29 +2976,27 @@ class MediaViewer {
 
     updateBasicFileInfo(file) {
         const maxLength = 35;
-        const displayName = file.name.length > maxLength ? 
-            file.name.substring(0, maxLength) + '...' : file.name;
-        
+        const displayName = file.name.length > maxLength ? file.name.substring(0, maxLength) + '...' : file.name;
+
         this.fileName.textContent = displayName;
         this.fileName.title = file.name;
-        
+
         let detailsText = this.formatFileSize(file.size);
         detailsText += `\nType: ${file.type}`;
-        
+
         this.fileDetails.textContent = detailsText;
     }
 
     updateFileInfoWithDimensions(file) {
         const maxLength = 35;
-        const displayName = file.name.length > maxLength ? 
-            file.name.substring(0, maxLength) + '...' : file.name;
-        
+        const displayName = file.name.length > maxLength ? file.name.substring(0, maxLength) + '...' : file.name;
+
         this.fileName.textContent = displayName;
         this.fileName.title = file.name;
-        
+
         let detailsText = this.formatFileSize(file.size);
         detailsText += `\nType: ${file.type}`;
-        
+
         if (this.currentMedia) {
             if (this.currentMedia.tagName === 'IMG') {
                 const img = this.currentMedia;
@@ -3023,7 +3017,7 @@ class MediaViewer {
                 }
             }
         }
-        
+
         this.fileDetails.textContent = detailsText;
     }
 
@@ -3033,8 +3027,8 @@ class MediaViewer {
 
         // Update left panel
         const maxLength = 30;
-        const leftName = leftFile.name.length > maxLength ?
-            leftFile.name.substring(0, maxLength) + '...' : leftFile.name;
+        const leftName =
+            leftFile.name.length > maxLength ? leftFile.name.substring(0, maxLength) + '...' : leftFile.name;
         this.leftFileName.textContent = leftName;
         this.leftFileName.title = leftFile.name;
 
@@ -3060,8 +3054,8 @@ class MediaViewer {
         this.leftFileDetails.textContent = leftDetails;
 
         // Update right panel
-        const rightName = rightFile.name.length > maxLength ?
-            rightFile.name.substring(0, maxLength) + '...' : rightFile.name;
+        const rightName =
+            rightFile.name.length > maxLength ? rightFile.name.substring(0, maxLength) + '...' : rightFile.name;
         this.rightFileName.textContent = rightName;
         this.rightFileName.title = rightFile.name;
 
@@ -3074,7 +3068,11 @@ class MediaViewer {
                 const aspectRatio = (this.rightMedia.naturalWidth / this.rightMedia.naturalHeight).toFixed(2);
                 rightDetails += `\nDimensions: ${this.rightMedia.naturalWidth} × ${this.rightMedia.naturalHeight}`;
                 rightDetails += `\nAspect ratio: ${aspectRatio}:1`;
-            } else if (this.rightMedia.tagName === 'VIDEO' && this.rightMedia.videoWidth && this.rightMedia.videoHeight) {
+            } else if (
+                this.rightMedia.tagName === 'VIDEO' &&
+                this.rightMedia.videoWidth &&
+                this.rightMedia.videoHeight
+            ) {
                 const aspectRatio = (this.rightMedia.videoWidth / this.rightMedia.videoHeight).toFixed(2);
                 rightDetails += `\nDimensions: ${this.rightMedia.videoWidth} × ${this.rightMedia.videoHeight}`;
                 rightDetails += `\nAspect ratio: ${aspectRatio}:1`;
@@ -3113,8 +3111,10 @@ class MediaViewer {
     }
 
     updateFolderInfo() {
-        const folderText = this.currentFolderPath.length > 25 ? 
-            this.currentFolderPath.substring(0, 25) + '...' : this.currentFolderPath;
+        const folderText =
+            this.currentFolderPath.length > 25
+                ? this.currentFolderPath.substring(0, 25) + '...'
+                : this.currentFolderPath;
         this.folderInfo.textContent = `Current: ${folderText} (${this.mediaFiles.length} files)`;
         this.folderInfo.title = `${this.currentFolderPath} (${this.mediaFiles.length} files)`;
     }
@@ -3159,7 +3159,7 @@ class MediaViewer {
                 const moveResult = await window.electronAPI.moveFile({
                     sourcePath: lastMove.newPath,
                     targetFolder: this.baseFolderPath,
-                    fileName: lastMove.fileName
+                    fileName: lastMove.fileName,
                 });
 
                 if (!moveResult.success) {
@@ -3167,9 +3167,7 @@ class MediaViewer {
                 }
 
                 // Find the remaining file (should be at the end of the list)
-                const remainingFileIndex = this.mediaFiles.findIndex(
-                    f => f.path === lastMove.remainingFile.path
-                );
+                const remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === lastMove.remainingFile.path);
 
                 // Remove remaining file from current position (end of list)
                 let remainingFile = null;
@@ -3182,7 +3180,7 @@ class MediaViewer {
                     name: lastMove.fileName,
                     path: lastMove.originalPath,
                     size: lastMove.fileSize,
-                    type: lastMove.fileType
+                    type: lastMove.fileType,
                 };
 
                 // Insert remaining file back to its original position
@@ -3205,7 +3203,6 @@ class MediaViewer {
 
                 this.currentIndex = insertIndex;
                 await this.showMedia();
-
             } catch (error) {
                 console.error('Error undoing special move:', error);
                 this.showError(`Failed to undo move: ${error.message}`);
@@ -3221,7 +3218,7 @@ class MediaViewer {
                 const firstMoveResult = await window.electronAPI.moveFile({
                     sourcePath: firstMove.newPath,
                     targetFolder: this.baseFolderPath,
-                    fileName: firstMove.fileName
+                    fileName: firstMove.fileName,
                 });
 
                 if (!firstMoveResult.success) {
@@ -3232,7 +3229,7 @@ class MediaViewer {
                 const secondMoveResult = await window.electronAPI.moveFile({
                     sourcePath: secondMove.newPath,
                     targetFolder: this.baseFolderPath,
-                    fileName: secondMove.fileName
+                    fileName: secondMove.fileName,
                 });
 
                 if (!secondMoveResult.success) {
@@ -3244,14 +3241,14 @@ class MediaViewer {
                     name: firstMove.fileName,
                     path: firstMove.originalPath,
                     size: firstMove.fileSize,
-                    type: firstMove.fileType
+                    type: firstMove.fileType,
                 });
 
                 this.mediaFiles.push({
                     name: secondMove.fileName,
                     path: secondMove.originalPath,
                     size: secondMove.fileSize,
-                    type: secondMove.fileType
+                    type: secondMove.fileType,
                 });
 
                 // Reverse ML model updates for both files
@@ -3267,8 +3264,8 @@ class MediaViewer {
                 this.updateFolderInfo();
 
                 // Store restored files to display them directly (bypasses ML pair selection)
-                const restoredFirst = this.mediaFiles.find(f => f.path === firstMove.originalPath);
-                const restoredSecond = this.mediaFiles.find(f => f.path === secondMove.originalPath);
+                const restoredFirst = this.mediaFiles.find((f) => f.path === firstMove.originalPath);
+                const restoredSecond = this.mediaFiles.find((f) => f.path === secondMove.originalPath);
 
                 if (restoredFirst && restoredSecond) {
                     // Set restored pair to be displayed directly
@@ -3278,7 +3275,6 @@ class MediaViewer {
                 this.currentIndex = this.mediaFiles.length - 2;
 
                 await this.showMedia();
-
             } catch (error) {
                 console.error('Error undoing move:', error);
                 this.showError(`Failed to undo move: ${error.message}`);
@@ -3288,13 +3284,13 @@ class MediaViewer {
             }
         } else {
             // Single mode - restore one file
-            const lastMove = this.moveHistory.pop();
+            const undoMove = this.moveHistory.pop();
 
             try {
                 const moveResult = await window.electronAPI.moveFile({
-                    sourcePath: lastMove.newPath,
+                    sourcePath: undoMove.newPath,
                     targetFolder: this.baseFolderPath,
-                    fileName: lastMove.fileName
+                    fileName: undoMove.fileName,
                 });
 
                 if (!moveResult.success) {
@@ -3303,27 +3299,26 @@ class MediaViewer {
 
                 // Insert file back at current position to maintain order
                 this.mediaFiles.splice(this.currentIndex, 0, {
-                    name: lastMove.fileName,
-                    path: lastMove.originalPath,
-                    size: lastMove.fileSize,
-                    type: lastMove.fileType
+                    name: undoMove.fileName,
+                    path: undoMove.originalPath,
+                    size: undoMove.fileSize,
+                    type: undoMove.fileType,
                 });
 
                 // Reverse ML model update
-                if (lastMove.mlFeatures && lastMove.actionType !== 'special') {
-                    this.reverseMlModelUpdate(lastMove.mlFeatures, lastMove.actionType);
+                if (undoMove.mlFeatures && undoMove.actionType !== 'special') {
+                    this.reverseMlModelUpdate(undoMove.mlFeatures, undoMove.actionType);
                 }
 
-                this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
+                this.showNotification(`✅ Restored ${undoMove.fileName}`, 'success');
                 this.updateFolderInfo();
 
                 // currentIndex already points to the restored file's position
                 await this.showMedia();
-
             } catch (error) {
                 console.error('Error undoing move:', error);
                 this.showError(`Failed to undo move: ${error.message}`);
-                this.moveHistory.push(lastMove);
+                this.moveHistory.push(undoMove);
             }
         }
     }
@@ -3394,7 +3389,7 @@ class MediaViewer {
         }
 
         // Small delay to ensure cleanup is complete
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         // Reload media in new mode
         if (this.mediaFiles.length > 0) {
@@ -3441,8 +3436,8 @@ class MediaViewer {
         if (!leftFile || !rightFile) return;
 
         // Find indices for removal
-        const leftFileIndex = this.mediaFiles.findIndex(f => f.path === leftFile.path);
-        const rightFileIndex = this.mediaFiles.findIndex(f => f.path === rightFile.path);
+        const leftFileIndex = this.mediaFiles.findIndex((f) => f.path === leftFile.path);
+        const rightFileIndex = this.mediaFiles.findIndex((f) => f.path === rightFile.path);
 
         if (leftFileIndex === -1 || rightFileIndex === -1) {
             console.error('Could not find files in mediaFiles array');
@@ -3485,8 +3480,12 @@ class MediaViewer {
             }
 
             // Debug: log feature status
-            console.log('[ML Debug] Rating pair - Left features:', leftFeatures ? 'YES' : 'NO',
-                        '| Right features:', rightFeatures ? 'YES' : 'NO');
+            console.log(
+                '[ML Debug] Rating pair - Left features:',
+                leftFeatures ? 'YES' : 'NO',
+                '| Right features:',
+                rightFeatures ? 'YES' : 'NO'
+            );
         }
 
         try {
@@ -3499,7 +3498,7 @@ class MediaViewer {
                 cleanupPromises.push(this.cleanupCompareMedia('right'));
             }
             await Promise.all(cleanupPromises);
-            await new Promise(resolve => setTimeout(resolve, 50));
+            await new Promise((resolve) => setTimeout(resolve, 50));
 
             // Move primary file (the one being rated)
             const primaryFile = primarySide === 'left' ? leftFile : rightFile;
@@ -3519,7 +3518,7 @@ class MediaViewer {
             const primaryMoveResult = await window.electronAPI.moveFile({
                 sourcePath: primaryFile.path,
                 targetFolder: primaryFolderPath,
-                fileName: primaryFile.name
+                fileName: primaryFile.name,
             });
 
             if (!primaryMoveResult.success) {
@@ -3535,7 +3534,7 @@ class MediaViewer {
                 fileSize: primaryFile.size,
                 fileType: primaryFile.type,
                 actionType: primaryAction,
-                mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null
+                mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
             });
 
             // Move secondary file (the other one)
@@ -3554,7 +3553,7 @@ class MediaViewer {
             const secondaryMoveResult = await window.electronAPI.moveFile({
                 sourcePath: secondaryFile.path,
                 targetFolder: secondaryFolderPath,
-                fileName: secondaryFile.name
+                fileName: secondaryFile.name,
             });
 
             if (!secondaryMoveResult.success) {
@@ -3570,15 +3569,15 @@ class MediaViewer {
                 fileSize: secondaryFile.size,
                 fileType: secondaryFile.type,
                 actionType: secondaryAction,
-                mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null
+                mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
             });
 
             // Show notifications (if enabled)
             if (this.showRatingConfirmations) {
-                const primaryFileName = primaryFile.name.length > 20 ?
-                    primaryFile.name.substring(0, 20) + '...' : primaryFile.name;
-                const secondaryFileName = secondaryFile.name.length > 20 ?
-                    secondaryFile.name.substring(0, 20) + '...' : secondaryFile.name;
+                const primaryFileName =
+                    primaryFile.name.length > 20 ? primaryFile.name.substring(0, 20) + '...' : primaryFile.name;
+                const secondaryFileName =
+                    secondaryFile.name.length > 20 ? secondaryFile.name.substring(0, 20) + '...' : secondaryFile.name;
 
                 this.showNotification(
                     `${primaryAction === 'like' ? '👍' : '👎'} ${primaryFileName} → ${primaryFolderName}`,
@@ -3616,7 +3615,6 @@ class MediaViewer {
 
             this.updateFolderInfo();
             await this.showMedia();
-
         } catch (error) {
             console.error('Error moving compare files:', error);
             this.showError(`Failed to move files: ${error.message}`);
@@ -3647,7 +3645,7 @@ class MediaViewer {
             media.currentTime = 0;
             media.removeAttribute('src');
             media.load();
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
         }
 
         if (media.parentNode) {
@@ -3694,7 +3692,7 @@ class MediaViewer {
             if (video && wasPlaying) {
                 // Small delay to ensure fullscreen transition completes
                 setTimeout(() => {
-                    video.play().catch(err => console.log('Auto-play prevented:', err));
+                    video.play().catch((err) => console.log('Auto-play prevented:', err));
                 }, 100);
             }
 
@@ -3711,9 +3709,11 @@ class MediaViewer {
                     return;
                 }
                 // Don't exit if media is zoomed (use ESC to exit when zoomed)
-                const zoomTarget = wrapper.classList.contains('left-media-wrapper') ? 'left'
-                    : wrapper.classList.contains('right-media-wrapper') ? 'right'
-                    : 'single';
+                const zoomTarget = wrapper.classList.contains('left-media-wrapper')
+                    ? 'left'
+                    : wrapper.classList.contains('right-media-wrapper')
+                      ? 'right'
+                      : 'single';
                 if (this.zoomState[zoomTarget] && this.zoomState[zoomTarget].scale > 1) {
                     return;
                 }
@@ -3737,7 +3737,7 @@ class MediaViewer {
         // Restore video playback state if it was playing before fullscreen
         const video = wrapper.querySelector('video');
         if (video && wrapper.dataset.wasPlaying === 'true') {
-            video.play().catch(err => console.log('Auto-play prevented:', err));
+            video.play().catch((err) => console.log('Auto-play prevented:', err));
         }
     }
 
@@ -3774,9 +3774,9 @@ class MediaViewer {
             const cacheFile = `${this.baseFolderPath}\\.hash_cache.json`;
             const confirmed = confirm(
                 `Sorting ${this.mediaFiles.length} files may take a very long time and could freeze the application.\n\n` +
-                `Consider sorting smaller folders (recommended: < 1000 files).\n\n` +
-                `Hash data will be cached at:\n${cacheFile}\n\n` +
-                `Continue anyway?`
+                    `Consider sorting smaller folders (recommended: < 1000 files).\n\n` +
+                    `Hash data will be cached at:\n${cacheFile}\n\n` +
+                    `Continue anyway?`
             );
             if (!confirmed) {
                 return;
@@ -3811,9 +3811,9 @@ class MediaViewer {
             }
 
             const algorithmNames = {
-                'vptree': 'VP-Tree (fastest)',
-                'mst': 'MST (best quality)',
-                'simple': 'Simple (limited)'
+                vptree: 'VP-Tree (fastest)',
+                mst: 'MST (best quality)',
+                simple: 'Simple (limited)',
             };
             const algorithmName = algorithmNames[this.sortAlgorithm] || this.sortAlgorithm;
 
@@ -3841,7 +3841,7 @@ class MediaViewer {
                     const currentFile = this.mediaFiles[0];
                     await this.saveSortCache(
                         this.sortAlgorithm,
-                        this.mediaFiles.map(f => f.path),
+                        this.mediaFiles.map((f) => f.path),
                         currentFile ? currentFile.path : null
                     );
                 }
@@ -3897,21 +3897,25 @@ class MediaViewer {
 
                             // Update progress every 5 files or at end
                             if (processed % 5 === 0 || processed === total) {
-                                this.updateProgressNotification(`🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`);
+                                this.updateProgressNotification(
+                                    `🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`
+                                );
                             }
                         } catch (error) {
                             console.error(`Failed to compute hash for ${file.path}:`, error);
                             skipped++;
                             // Update progress notification instead of showing separate warning
                             if (processed % 5 === 0 || processed === total) {
-                                this.updateProgressNotification(`🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`);
+                                this.updateProgressNotification(
+                                    `🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`
+                                );
                             }
                         }
                     }
                 }
 
                 // Check if we have enough hashes to sort
-                const filesWithHashes = this.mediaFiles.filter(f => this.perceptualHashes.has(f.path));
+                const filesWithHashes = this.mediaFiles.filter((f) => this.perceptualHashes.has(f.path));
                 if (filesWithHashes.length < 2) {
                     throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
                 }
@@ -3937,21 +3941,21 @@ class MediaViewer {
                 // Delegate sorting to Web Worker to prevent UI freeze when minimized
                 const sortedPaths = await this.runSortingWorker({
                     algorithm: this.sortAlgorithm,
-                    mediaFiles: this.mediaFiles.map(f => ({ path: f.path })),
+                    mediaFiles: this.mediaFiles.map((f) => ({ path: f.path })),
                     hashes: Object.fromEntries(this.perceptualHashes),
                     currentIndex: this.currentIndex,
-                    maxComparisons: kValue
+                    maxComparisons: kValue,
                 });
 
                 // Reorder mediaFiles based on sorted paths
-                const pathToFile = new Map(this.mediaFiles.map(f => [f.path, f]));
-                this.mediaFiles = sortedPaths.map(path => pathToFile.get(path)).filter(f => f);
+                const pathToFile = new Map(this.mediaFiles.map((f) => [f.path, f]));
+                this.mediaFiles = sortedPaths.map((path) => pathToFile.get(path)).filter((f) => f);
 
                 // Save sort cache for this algorithm
                 const currentFile = this.mediaFiles[this.currentIndex];
                 await this.saveSortCache(
                     this.sortAlgorithm,
-                    this.mediaFiles.map(f => f.path),
+                    this.mediaFiles.map((f) => f.path),
                     currentFile ? currentFile.path : null
                 );
 
@@ -3965,7 +3969,6 @@ class MediaViewer {
 
                 this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
             }
-
         } catch (error) {
             console.error('Error sorting by similarity:', error);
             this.clearProgressNotification();
@@ -3983,8 +3986,9 @@ class MediaViewer {
             this.sortSimilarityBtn.disabled = false;
             // Restore button label based on state
             if (this.sortSimilarityBtn) {
-                this.sortSimilarityBtn.querySelector('.btn-label').textContent =
-                    this.isSortedBySimilarity ? 'Restore Order' : 'Sort by Similarity';
+                this.sortSimilarityBtn.querySelector('.btn-label').textContent = this.isSortedBySimilarity
+                    ? 'Restore Order'
+                    : 'Sort by Similarity';
             }
         }
 
@@ -4105,9 +4109,10 @@ class MediaViewer {
                         const idx = (py * imageData.width + px) * 4;
 
                         // Convert to grayscale
-                        const gray = imageData.data[idx] * 0.299 +
-                                   imageData.data[idx + 1] * 0.587 +
-                                   imageData.data[idx + 2] * 0.114;
+                        const gray =
+                            imageData.data[idx] * 0.299 +
+                            imageData.data[idx + 1] * 0.587 +
+                            imageData.data[idx + 2] * 0.114;
                         total += gray;
                         count++;
                     }
@@ -4119,7 +4124,7 @@ class MediaViewer {
 
         // Convert to binary hash based on median
         const median = result.slice().sort((a, b) => a - b)[Math.floor(result.length / 2)];
-        return result.map(val => val > median ? '1' : '0').join('');
+        return result.map((val) => (val > median ? '1' : '0')).join('');
     }
 
     calculateHammingDistance(hash1, hash2) {
@@ -4154,7 +4159,7 @@ class MediaViewer {
             }
 
             this.sortingWorker.onmessage = (e) => {
-                const { type, sortedPaths, message, current, total } = e.data;
+                const { type, sortedPaths, message } = e.data;
 
                 switch (type) {
                     case 'progress':
@@ -4210,10 +4215,10 @@ class MediaViewer {
         const currentFile = this.mediaFiles[this.currentIndex];
         let current;
         if (currentFile && this.perceptualHashes.has(currentFile.path)) {
-            current = remaining.find(file => file.path === currentFile.path);
+            current = remaining.find((file) => file.path === currentFile.path);
         }
         if (!current) {
-            current = remaining.find(file => this.perceptualHashes.has(file.path));
+            current = remaining.find((file) => this.perceptualHashes.has(file.path));
         }
         if (!current) return; // No hashes available
 
@@ -4265,7 +4270,7 @@ class MediaViewer {
                 // Yield to UI every 50 items to prevent freezing
                 if (processed % 50 === 0) {
                     this.updateProgressNotification(`🔄 Sorting: ${processed}/${total}`);
-                    await new Promise(resolve => setTimeout(resolve, 0));
+                    await new Promise((resolve) => setTimeout(resolve, 0));
                 }
             } else {
                 // No more files with hashes, add remaining
@@ -4287,7 +4292,7 @@ class MediaViewer {
         this.updateProgressNotification('🔄 Building VP-Tree index...');
 
         // Build VP-Tree with files that have hashes
-        const filesWithHashes = this.mediaFiles.filter(f => this.perceptualHashes.has(f.path));
+        const filesWithHashes = this.mediaFiles.filter((f) => this.perceptualHashes.has(f.path));
         if (filesWithHashes.length < 2) {
             throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
         }
@@ -4312,7 +4317,7 @@ class MediaViewer {
         const currentFile = this.mediaFiles[this.currentIndex];
         let current = filesWithHashes[0];
         if (currentFile && this.perceptualHashes.has(currentFile.path)) {
-            const found = filesWithHashes.find(f => f.path === currentFile.path);
+            const found = filesWithHashes.find((f) => f.path === currentFile.path);
             if (found) current = found;
         }
         sorted.push(current);
@@ -4337,7 +4342,7 @@ class MediaViewer {
                 // Yield to UI every 50 items
                 if (processed % 50 === 0) {
                     this.updateProgressNotification(`🔄 Sorting: ${processed}/${total}`);
-                    await new Promise(resolve => setTimeout(resolve, 0));
+                    await new Promise((resolve) => setTimeout(resolve, 0));
                 }
             } else {
                 // Should not happen, but add safety
@@ -4346,7 +4351,7 @@ class MediaViewer {
         }
 
         // Add files without hashes at the end
-        const filesWithoutHashes = this.mediaFiles.filter(f => !this.perceptualHashes.has(f.path));
+        const filesWithoutHashes = this.mediaFiles.filter((f) => !this.perceptualHashes.has(f.path));
         sorted.push(...filesWithoutHashes);
 
         this.mediaFiles = sorted;
@@ -4357,12 +4362,10 @@ class MediaViewer {
         // Complexity: O(n log n) with optimized sparse graph construction
         // Quality: Better than greedy NN, maintains global similarity structure
 
-        const total = this.mediaFiles.length;
-
         this.updateProgressNotification('🔄 Building VP-Tree index...');
 
         // Get files with hashes
-        const filesWithHashes = this.mediaFiles.filter(f => this.perceptualHashes.has(f.path));
+        const filesWithHashes = this.mediaFiles.filter((f) => this.perceptualHashes.has(f.path));
         if (filesWithHashes.length < 2) {
             throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
         }
@@ -4397,14 +4400,17 @@ class MediaViewer {
             const neighbors = vpTree.findKNearest(file, K_NEIGHBORS + 1, new Set([file]));
 
             // Convert to format expected by graph
-            graph.set(file, neighbors.map(({ item, distance }) => ({
-                neighbor: item,
-                distance
-            })));
+            graph.set(
+                file,
+                neighbors.map(({ item, distance }) => ({
+                    neighbor: item,
+                    distance,
+                }))
+            );
 
             if ((i + 1) % 100 === 0) {
                 this.updateProgressNotification(`🔄 Building graph: ${i + 1}/${filesWithHashes.length}`);
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
             }
         }
 
@@ -4419,7 +4425,7 @@ class MediaViewer {
         let startFile = filesWithHashes[0];
         const currentFile = this.mediaFiles[this.currentIndex];
         if (currentFile && this.perceptualHashes.has(currentFile.path)) {
-            const found = filesWithHashes.find(f => f.path === currentFile.path);
+            const found = filesWithHashes.find((f) => f.path === currentFile.path);
             if (found) startFile = found;
         }
         visited.add(startFile);
@@ -4459,7 +4465,7 @@ class MediaViewer {
 
             if (visited.size % 100 === 0) {
                 this.updateProgressNotification(`🔄 MST progress: ${visited.size}/${filesWithHashes.length}`);
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
             }
         }
 
@@ -4522,7 +4528,7 @@ class MediaViewer {
         }
 
         // Add files without hashes at the end
-        const filesWithoutHashes = this.mediaFiles.filter(f => !this.perceptualHashes.has(f.path));
+        const filesWithoutHashes = this.mediaFiles.filter((f) => !this.perceptualHashes.has(f.path));
         sorted.push(...filesWithoutHashes);
 
         this.mediaFiles = sorted;
@@ -4547,7 +4553,7 @@ class MediaViewer {
                 console.log(`Loaded ${this.perceptualHashes.size} hashes from cache`);
                 return this.perceptualHashes.size;
             }
-        } catch (error) {
+        } catch (_error) {
             // Cache file doesn't exist or is invalid, start fresh
             console.log('No hash cache found, will compute fresh hashes');
         }
@@ -4589,7 +4595,7 @@ class MediaViewer {
                     return cache[algorithm];
                 }
             }
-        } catch (error) {
+        } catch (_error) {
             // Cache file doesn't exist or is invalid
             console.log('No sort cache found for algorithm:', algorithm);
         }
@@ -4609,7 +4615,7 @@ class MediaViewer {
                 if (existingData) {
                     cache = JSON.parse(existingData);
                 }
-            } catch (e) {
+            } catch (_e) {
                 // No existing cache, start fresh
             }
 
@@ -4630,7 +4636,7 @@ class MediaViewer {
                 sortedPaths: fileNames,
                 timestamp: Date.now(),
                 startFile: startFileName,
-                totalFiles: fileNames.length
+                totalFiles: fileNames.length,
             };
 
             await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
@@ -4650,7 +4656,7 @@ class MediaViewer {
             let existingData;
             try {
                 existingData = await window.electronAPI.readFile(cacheFile);
-            } catch (e) {
+            } catch (_e) {
                 // Cache file does not exist — nothing to delete
                 return;
             }
@@ -4659,7 +4665,7 @@ class MediaViewer {
             if (existingData) {
                 try {
                     cache = JSON.parse(existingData);
-                } catch (e) {
+                } catch (_e) {
                     // Malformed cache — overwrite with empty object
                     cache = {};
                 }
@@ -4716,7 +4722,7 @@ class MediaViewer {
         return {
             cached: cachedOrder.length,
             removed: removedFiles.length,
-            added: newFiles.length
+            added: newFiles.length,
         };
     }
 
@@ -4871,8 +4877,8 @@ class MediaViewer {
 
         // Constrain pan to reasonable bounds when zoomed
         if (newScale > 1) {
-            const maxTranslateX = rect.width * (newScale - 1) / 2;
-            const maxTranslateY = rect.height * (newScale - 1) / 2;
+            const maxTranslateX = (rect.width * (newScale - 1)) / 2;
+            const maxTranslateY = (rect.height * (newScale - 1)) / 2;
             newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
             newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
         } else {
@@ -4951,8 +4957,8 @@ class MediaViewer {
 
         // Constrain pan to image bounds
         const rect = element.getBoundingClientRect();
-        const maxTranslateX = rect.width * (state.scale - 1) / 2;
-        const maxTranslateY = rect.height * (state.scale - 1) / 2;
+        const maxTranslateX = (rect.width * (state.scale - 1)) / 2;
+        const maxTranslateY = (rect.height * (state.scale - 1)) / 2;
 
         newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
         newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
@@ -5021,13 +5027,18 @@ class MediaViewer {
         });
 
         // Wheel zoom (works in fullscreen)
-        element.addEventListener('wheel', (e) => {
-            this.handleWheelZoom(e, target);
-        }, { passive: false });
+        element.addEventListener(
+            'wheel',
+            (e) => {
+                this.handleWheelZoom(e, target);
+            },
+            { passive: false }
+        );
 
         // Pan start (works in fullscreen when zoomed)
         element.addEventListener('mousedown', (e) => {
-            if (e.button === 0) { // Left click only
+            if (e.button === 0) {
+                // Left click only
                 if (this.handlePanStart(e, target)) {
                     e.preventDefault();
                 }
@@ -5103,9 +5114,11 @@ class MediaViewer {
             case 'updateComplete':
                 this.mlModelState = message.modelState;
                 this.mlStats = message.stats;
-                console.log(`[ML Debug] Model updated! Total: ${message.stats.totalSamples} samples ` +
-                    `(${message.stats.positiveCount} likes, ${message.stats.negativeCount} dislikes) ` +
-                    `| Ready: ${message.stats.isReady}`);
+                console.log(
+                    `[ML Debug] Model updated! Total: ${message.stats.totalSamples} samples ` +
+                        `(${message.stats.positiveCount} likes, ${message.stats.negativeCount} dislikes) ` +
+                        `| Ready: ${message.stats.isReady}`
+                );
                 // Show visual feedback that ML learned (subtle, bottom-left)
                 this.showMlLearningIndicator(message.stats);
                 // Debounce model saving to avoid multiple writes
@@ -5154,7 +5167,7 @@ class MediaViewer {
                 this.clearProgressNotification(); // Clear "Scoring" progress
                 if (message.scores) {
                     // Build filename->path map once for O(1) lookups
-                    const filenameToPath = new Map(this.mediaFiles.map(f => [f.name, f.path]));
+                    const filenameToPath = new Map(this.mediaFiles.map((f) => [f.name, f.path]));
                     for (const [filename, score] of Object.entries(message.scores)) {
                         const path = filenameToPath.get(filename);
                         if (path) {
@@ -5169,10 +5182,8 @@ class MediaViewer {
                 this.clearProgressNotification(); // Clear "Scoring" progress
                 if (message.sortedFilenames) {
                     // Apply sort order
-                    const filenameToFile = new Map(this.mediaFiles.map(f => [f.name, f]));
-                    const sorted = message.sortedFilenames
-                        .map(name => filenameToFile.get(name))
-                        .filter(f => f);
+                    const filenameToFile = new Map(this.mediaFiles.map((f) => [f.name, f]));
+                    const sorted = message.sortedFilenames.map((name) => filenameToFile.get(name)).filter((f) => f);
 
                     if (sorted.length > 0) {
                         this.mediaFiles = sorted;
@@ -5214,12 +5225,12 @@ class MediaViewer {
                 if (this.mlWorker) {
                     this.mlWorker.postMessage({
                         type: 'init',
-                        data: { savedModel: this.mlModelState }
+                        data: { savedModel: this.mlModelState },
                     });
                 }
                 console.log('ML model loaded from cache');
             }
-        } catch (error) {
+        } catch (_error) {
             console.log('No ML model cache found');
         }
     }
@@ -5229,11 +5240,14 @@ class MediaViewer {
 
         try {
             const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
-            await window.electronAPI.writeFile(cacheFile, JSON.stringify({
-                version: 1,
-                modelState: this.mlModelState,
-                timestamp: Date.now()
-            }));
+            await window.electronAPI.writeFile(
+                cacheFile,
+                JSON.stringify({
+                    version: 1,
+                    modelState: this.mlModelState,
+                    timestamp: Date.now(),
+                })
+            );
         } catch (error) {
             console.error('Failed to save ML model:', error);
         }
@@ -5254,7 +5268,9 @@ class MediaViewer {
 
                 // Check version compatibility
                 if (parsed.version !== MediaViewer.FEATURE_CACHE_VERSION) {
-                    console.warn(`Feature cache version mismatch: found=${parsed.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`);
+                    console.warn(
+                        `Feature cache version mismatch: found=${parsed.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
+                    );
                     this.featureCache = new Map();
                     return 0;
                 }
@@ -5266,7 +5282,9 @@ class MediaViewer {
                 for (const [filename, features] of Object.entries(parsed.features || {})) {
                     // Skip entries with wrong dimension
                     if (features.length !== expectedDim) {
-                        console.warn(`Skipping cached features for ${filename}: wrong dimension (${features.length} vs ${expectedDim})`);
+                        console.warn(
+                            `Skipping cached features for ${filename}: wrong dimension (${features.length} vs ${expectedDim})`
+                        );
                         continue;
                     }
                     const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
@@ -5292,11 +5310,14 @@ class MediaViewer {
                 features[filename] = Array.from(featureArray);
             }
 
-            await window.electronAPI.writeFile(cacheFile, JSON.stringify({
-                version: MediaViewer.FEATURE_CACHE_VERSION,
-                featureDim: 64,
-                features
-            }));
+            await window.electronAPI.writeFile(
+                cacheFile,
+                JSON.stringify({
+                    version: MediaViewer.FEATURE_CACHE_VERSION,
+                    featureDim: 64,
+                    features,
+                })
+            );
         } catch (error) {
             console.error('Failed to save feature cache:', error);
         }
@@ -5319,7 +5340,7 @@ class MediaViewer {
 
         // Get file info from mediaFiles if not provided
         if (!fileInfo) {
-            fileInfo = this.mediaFiles.find(f => f.path === filePath) || {};
+            fileInfo = this.mediaFiles.find((f) => f.path === filePath) || {};
         }
 
         // Build metadata object for v2 features
@@ -5331,7 +5352,7 @@ class MediaViewer {
             width: 0,
             height: 0,
             videoInfo: null,
-            faceInfo: null
+            faceInfo: null,
         };
 
         // Get video metadata via ffprobe if available
@@ -5343,7 +5364,7 @@ class MediaViewer {
                         duration: probeResult.info.duration,
                         fps: probeResult.info.fps,
                         hasAudio: probeResult.info.hasAudio,
-                        bitrate: probeResult.info.bitrate
+                        bitrate: probeResult.info.bitrate,
                     };
                     metadata.width = probeResult.info.width;
                     metadata.height = probeResult.info.height;
@@ -5375,13 +5396,13 @@ class MediaViewer {
 
                             const faceResult = await window.FaceDetector.detect(canvas, {
                                 minConfidence: 0.5,
-                                inputSize: 224
+                                inputSize: 224,
                             });
 
                             metadata.faceInfo = {
                                 hasFace: faceResult.hasFace,
                                 count: faceResult.count,
-                                areaRatio: faceResult.areaRatio
+                                areaRatio: faceResult.areaRatio,
                             };
                         } catch (faceError) {
                             // Face detection failed, continue without it
@@ -5513,7 +5534,7 @@ class MediaViewer {
             if (likedFeatures.length > 0 || dislikedFeatures.length > 0) {
                 this.mlWorker.postMessage({
                     type: 'trainHistorical',
-                    data: { likedFeatures, dislikedFeatures }
+                    data: { likedFeatures, dislikedFeatures },
                 });
             }
 
@@ -5568,7 +5589,7 @@ class MediaViewer {
         if (Object.keys(allFeatures).length > 0) {
             this.mlWorker.postMessage({
                 type: 'scoreAll',
-                data: { allFeatures }
+                data: { allFeatures },
             });
         }
     }
@@ -5649,7 +5670,7 @@ class MediaViewer {
     }
 
     hidePredictionBadges() {
-        ['single', 'left', 'right'].forEach(pos => {
+        ['single', 'left', 'right'].forEach((pos) => {
             const badge = document.getElementById(`prediction-badge-${pos}`);
             if (badge) badge.style.display = 'none';
         });
@@ -5698,8 +5719,8 @@ class MediaViewer {
             // Restore original order, but only for files that still exist
             if (this.originalMediaFiles.length > 0) {
                 // Filter to only files that are still in the current list (not moved/rated)
-                const currentPaths = new Set(this.mediaFiles.map(f => f.path));
-                this.mediaFiles = this.originalMediaFiles.filter(f => currentPaths.has(f.path));
+                const currentPaths = new Set(this.mediaFiles.map((f) => f.path));
+                this.mediaFiles = this.originalMediaFiles.filter((f) => currentPaths.has(f.path));
             }
             this.isSortedByPrediction = false;
             this.mlComparePairIndex = 0; // Reset ML pair index
@@ -5720,7 +5741,7 @@ class MediaViewer {
             this.initializeFeaturePool();
 
             // Wait for ML worker to be ready
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
 
             // Load cached model and features
             await this.loadMlModel();
@@ -5747,7 +5768,7 @@ class MediaViewer {
         this.originalMediaFiles = [...this.mediaFiles];
 
         // Check how many files need feature extraction
-        const uncachedFiles = this.mediaFiles.filter(f => !this.featureCache.has(f.path));
+        const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
 
         if (uncachedFiles.length > 0) {
             // Start background extraction and wait for completion
@@ -5773,7 +5794,7 @@ class MediaViewer {
 
         this.mlWorker.postMessage({
             type: 'getSortedOrder',
-            data: { allFeatures }
+            data: { allFeatures },
         });
     }
 
@@ -5794,8 +5815,8 @@ class MediaViewer {
             type: 'update',
             data: {
                 features: Array.from(features),
-                label: actionType === 'like' ? 1 : 0
-            }
+                label: actionType === 'like' ? 1 : 0,
+            },
         });
     }
 
@@ -5813,14 +5834,16 @@ class MediaViewer {
         }
 
         const label = actionType === 'like' ? 1 : 0;
-        console.log(`[ML Debug] Sending model update: ${actionType} (label=${label}), features length=${features.length}`);
+        console.log(
+            `[ML Debug] Sending model update: ${actionType} (label=${label}), features length=${features.length}`
+        );
 
         this.mlWorker.postMessage({
             type: 'update',
             data: {
                 features: Array.from(features),
-                label: label
-            }
+                label: label,
+            },
         });
     }
 
@@ -5836,8 +5859,8 @@ class MediaViewer {
             type: 'reverseUpdate',
             data: {
                 features: Array.from(features),
-                label: actionType === 'like' ? 1 : 0
-            }
+                label: actionType === 'like' ? 1 : 0,
+            },
         });
     }
 
@@ -5972,7 +5995,7 @@ class MediaViewer {
         for (const worker of this.featureWorkers) {
             try {
                 worker.terminate();
-            } catch (e) {
+            } catch (_e) {
                 // Ignore termination errors
             }
         }
@@ -5981,7 +6004,7 @@ class MediaViewer {
         this.featureTaskQueue = [];
 
         // Reject all pending tasks
-        for (const [taskId, task] of this.featurePendingTasks) {
+        for (const [_taskId, task] of this.featurePendingTasks) {
             task.reject(new Error('Worker pool shutdown'));
         }
         this.featurePendingTasks.clear();
@@ -6105,11 +6128,11 @@ class MediaViewer {
                 priority,
                 retries: 0,
                 resolve,
-                reject
+                reject,
             };
 
             // Insert into priority queue (sorted by priority)
-            const insertIndex = this.featureTaskQueue.findIndex(t => t.priority > priority);
+            const insertIndex = this.featureTaskQueue.findIndex((t) => t.priority > priority);
             if (insertIndex === -1) {
                 this.featureTaskQueue.push(task);
             } else {
@@ -6127,7 +6150,7 @@ class MediaViewer {
         if (this.featureTaskQueue.length === 0) return;
 
         // Find an available worker
-        const availableWorker = this.featureWorkers.find(w => !w.busy);
+        const availableWorker = this.featureWorkers.find((w) => !w.busy);
         if (!availableWorker) return;
 
         const task = this.featureTaskQueue.shift();
@@ -6142,8 +6165,8 @@ class MediaViewer {
                 id: task.id,
                 pixels: task.imageData.data,
                 width: task.imageData.width,
-                height: task.imageData.height
-            }
+                height: task.imageData.height,
+            },
         });
     }
 
@@ -6260,9 +6283,7 @@ class MediaViewer {
         }
 
         // Sort by priority (distance from current index)
-        filesToProcess.sort((a, b) =>
-            this.calculateFeaturePriority(a.index) - this.calculateFeaturePriority(b.index)
-        );
+        filesToProcess.sort((a, b) => this.calculateFeaturePriority(a.index) - this.calculateFeaturePriority(b.index));
 
         let completedCount = this.mediaFiles.length - filesToProcess.length;
         const totalCount = this.mediaFiles.length;
@@ -6295,7 +6316,7 @@ class MediaViewer {
                             completedCount++;
                             this.recordExtractionCompletion(completedCount, totalCount);
                         })
-                        .catch(err => {
+                        .catch((err) => {
                             if (this.extractionRunId !== runId) return;
                             console.warn(`Feature extraction failed for ${file.name}:`, err.message);
                             completedCount++;
@@ -6414,7 +6435,7 @@ class MediaViewer {
         if (!this.extractionPaused || signal.aborted) {
             return Promise.resolve();
         }
-        return new Promise(resolve => {
+        return new Promise((resolve) => {
             this.extractionResumeResolve = resolve;
             signal.addEventListener('abort', resolve, { once: true });
         });

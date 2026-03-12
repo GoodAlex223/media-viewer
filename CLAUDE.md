@@ -28,9 +28,21 @@ npm start
 
 # Run with Electron directly
 npx electron .
+
+# Lint all JS files
+npm run lint
+
+# Lint and auto-fix
+npm run lint:fix
+
+# Format all files with Prettier
+npm run format
+
+# Check formatting without writing
+npm run format:check
 ```
 
-No automated tests, linting, or type checking configured.
+Pre-commit hook (Husky + lint-staged) runs automatically on `git commit`: ESLint --fix + Prettier on staged `*.js`; Prettier on staged `*.json`, `*.css`, `*.html`.
 
 <!-- END AUTO-MANAGED -->
 
@@ -85,6 +97,12 @@ media_viewer/
 **Imports**:
 - CommonJS `require()` in main process and workers
 - Browser globals in renderer (no module bundler)
+
+**Formatting & Linting**:
+- Prettier: tabWidth=4, singleQuote, semi, trailingComma=es5, printWidth=120
+- ESLint flat config (`eslint.config.mjs`): 4 environments — Node/main, preload (Node+browser), renderer ES module, Web Workers; shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow
+- `eslint-config-prettier` applied last to suppress rule conflicts with Prettier
+- Prettier ignores `docs/`, `*.md`, `package-lock.json`
 
 <!-- END AUTO-MANAGED -->
 
@@ -166,6 +184,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- Pre-commit hooks (TASK-012): Husky v9 + lint-staged added; ESLint flat config (`eslint.config.mjs`) covers 4 JS environments with per-file globals; Prettier enforces consistent style on commit; `prepare` script installs hooks on `npm install`
 - Extraction pause/resume on user activity: signalUserActivity() called from all navigation and rating actions; sets extractionPaused=true and shows "Paused" state immediately; 2-second idle timer calls resumeExtraction() which resolves awaitExtractionGate() promise in the extraction loop; _extractionLastCurrent/_extractionLastTotal cache last counts for paused redisplay
 - Feature extraction ETA and elapsed time: recordExtractionCompletion() tracks rolling window (last 20) of per-file completion timestamps; computes live ETA when 5+ samples available (files/sec rate); formatElapsed()/formatEta() format seconds to "Xm Ys"/"~Xm Ys"; showBackgroundExtractionProgress() appends ETA suffix; completion notification shows "Feature extraction complete — N files in Xm Ys"
 - Extraction run isolation: extractionRunId generation counter prevents stale async callbacks (from cancelled runs) from corrupting ETA window or firing wrong completion notification; load-failure catch skips recordExtractionCompletion() to avoid ETA skew; formatElapsed() guards against NaN/Infinity

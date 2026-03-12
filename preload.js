@@ -27,8 +27,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         join: (...args) => path.join(...args),
         dirname: (p) => path.dirname(p),
         basename: (p) => path.basename(p),
-        extname: (p) => path.extname(p)
-    }
+        extname: (p) => path.extname(p),
+    },
 });
 
 window.addEventListener('DOMContentLoaded', () => {

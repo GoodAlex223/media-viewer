@@ -8,7 +8,7 @@ importScripts('feature-extractor.js');
  * Message handler for worker
  * @param {MessageEvent} e - Message event with type and data
  */
-self.onmessage = function(e) {
+self.onmessage = function (e) {
     const { type, data } = e.data;
 
     switch (type) {
@@ -24,7 +24,7 @@ self.onmessage = function(e) {
             self.postMessage({
                 type: 'version',
                 version: typeof FEATURE_VERSION !== 'undefined' ? FEATURE_VERSION : 1,
-                dim: typeof FEATURE_DIM !== 'undefined' ? FEATURE_DIM : 50
+                dim: typeof FEATURE_DIM !== 'undefined' ? FEATURE_DIM : 50,
             });
             break;
 
@@ -32,7 +32,7 @@ self.onmessage = function(e) {
             self.postMessage({
                 type: 'error',
                 id: data?.id,
-                message: 'Unknown message type: ' + type
+                message: 'Unknown message type: ' + type,
             });
     }
 };
@@ -52,24 +52,26 @@ function handleExtract({ id, pixels, width, height, metadata }) {
         const imageData = {
             data: new Uint8ClampedArray(pixels),
             width: width,
-            height: height
+            height: height,
         };
 
         // Pass metadata to extractFeatures for v2 features
         const features = extractFeatures(imageData, metadata || {});
 
         // Transfer ownership of the buffer for efficiency
-        self.postMessage({
-            type: 'result',
-            id: id,
-            features: features
-        }, [features.buffer]);
-
+        self.postMessage(
+            {
+                type: 'result',
+                id: id,
+                features: features,
+            },
+            [features.buffer]
+        );
     } catch (error) {
         self.postMessage({
             type: 'error',
             id: id,
-            message: error.message || 'Feature extraction failed'
+            message: error.message || 'Feature extraction failed',
         });
     }
 }
@@ -89,7 +91,7 @@ function handleBatch({ items }) {
             const imageData = {
                 data: new Uint8ClampedArray(item.pixels),
                 width: item.width,
-                height: item.height
+                height: item.height,
             };
 
             // Pass metadata to extractFeatures for v2 features
@@ -98,14 +100,13 @@ function handleBatch({ items }) {
             results.push({
                 id: item.id,
                 features: Array.from(features),
-                success: true
+                success: true,
             });
-
         } catch (error) {
             results.push({
                 id: item.id,
                 success: false,
-                error: error.message || 'Feature extraction failed'
+                error: error.message || 'Feature extraction failed',
             });
         }
 
@@ -114,24 +115,24 @@ function handleBatch({ items }) {
             self.postMessage({
                 type: 'progress',
                 current: i + 1,
-                total: items.length
+                total: items.length,
             });
         }
     }
 
     self.postMessage({
         type: 'batchComplete',
-        results: results
+        results: results,
     });
 }
 
 /**
  * Error handler for uncaught errors
  */
-self.onerror = function(error) {
+self.onerror = function (error) {
     self.postMessage({
         type: 'error',
         id: null,
-        message: 'Worker error: ' + (error.message || error)
+        message: 'Worker error: ' + (error.message || error),
     });
 };

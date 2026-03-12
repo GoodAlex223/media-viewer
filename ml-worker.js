@@ -47,7 +47,9 @@ function initializeModel(savedModel) {
         }
 
         // Version or dimension mismatch - need to reset
-        console.warn(`Model incompatible (version=${savedModel.version}, dim=${savedModel.featureDim}), creating new model with version=${ML_MODEL_VERSION}, dim=${DEFAULT_FEATURE_DIM}`);
+        console.warn(
+            `Model incompatible (version=${savedModel.version}, dim=${savedModel.featureDim}), creating new model with version=${ML_MODEL_VERSION}, dim=${DEFAULT_FEATURE_DIM}`
+        );
         modelWasReset = true;
     }
 
@@ -74,7 +76,7 @@ function trainFromHistorical(likedFeatures, dislikedFeatures) {
         return {
             type: 'trainComplete',
             stats: model.getStats(),
-            modelState: model.toJSON()
+            modelState: model.toJSON(),
         };
     }
 
@@ -82,10 +84,7 @@ function trainFromHistorical(likedFeatures, dislikedFeatures) {
 
     // Combine features and labels
     const features = [...likedFeatures, ...dislikedFeatures];
-    const labels = [
-        ...new Array(likedFeatures.length).fill(1),
-        ...new Array(dislikedFeatures.length).fill(0)
-    ];
+    const labels = [...new Array(likedFeatures.length).fill(1), ...new Array(dislikedFeatures.length).fill(0)];
 
     // Batch train with multiple epochs
     const epochs = Math.min(10, Math.max(3, Math.floor(50 / totalSamples)));
@@ -96,7 +95,7 @@ function trainFromHistorical(likedFeatures, dislikedFeatures) {
     return {
         type: 'trainComplete',
         stats: model.getStats(),
-        modelState: model.toJSON()
+        modelState: model.toJSON(),
     };
 }
 
@@ -117,7 +116,7 @@ function updateModel(features, label) {
         type: 'updateComplete',
         prediction,
         stats: model.getStats(),
-        modelState: model.toJSON()
+        modelState: model.toJSON(),
     };
 }
 
@@ -137,7 +136,7 @@ function reverseUpdateModel(features, label) {
     return {
         type: 'reverseUpdateComplete',
         stats: model.getStats(),
-        modelState: model.toJSON()
+        modelState: model.toJSON(),
     };
 }
 
@@ -151,7 +150,7 @@ function scoreFiles(allFeatures) {
         return {
             type: 'scoreComplete',
             scores: null,
-            reason: 'Model not initialized'
+            reason: 'Model not initialized',
         };
     }
 
@@ -159,7 +158,7 @@ function scoreFiles(allFeatures) {
         return {
             type: 'scoreComplete',
             scores: null,
-            reason: `Need more samples (${model.positiveCount} likes, ${model.negativeCount} dislikes)`
+            reason: `Need more samples (${model.positiveCount} likes, ${model.negativeCount} dislikes)`,
         };
     }
 
@@ -173,7 +172,7 @@ function scoreFiles(allFeatures) {
             return {
                 type: 'scoreComplete',
                 scores: null,
-                reason: 'Scoring cancelled'
+                reason: 'Scoring cancelled',
             };
         }
 
@@ -194,7 +193,7 @@ function scoreFiles(allFeatures) {
     return {
         type: 'scoreComplete',
         scores,
-        stats: model.getStats()
+        stats: model.getStats(),
     };
 }
 
@@ -210,7 +209,7 @@ function getSortedOrder(allFeatures) {
         return {
             type: 'sortComplete',
             sortedFilenames: null,
-            reason: scoreResult.reason
+            reason: scoreResult.reason,
         };
     }
 
@@ -223,7 +222,7 @@ function getSortedOrder(allFeatures) {
         type: 'sortComplete',
         sortedFilenames,
         scores: scoreResult.scores,
-        stats: model.getStats()
+        stats: model.getStats(),
     };
 }
 
@@ -241,14 +240,14 @@ function resetModel() {
     return {
         type: 'resetComplete',
         stats: model.getStats(),
-        modelState: model.toJSON()
+        modelState: model.toJSON(),
     };
 }
 
 /**
  * Message handler for worker
  */
-self.onmessage = function(e) {
+self.onmessage = function (e) {
     const { type, data } = e.data;
 
     switch (type) {
@@ -265,22 +264,19 @@ self.onmessage = function(e) {
                 modelState: model?.toJSON(),
                 modelWasReset: wasReset,
                 modelVersion: ML_MODEL_VERSION,
-                featureDim: DEFAULT_FEATURE_DIM
+                featureDim: DEFAULT_FEATURE_DIM,
             });
             break;
 
         case 'trainHistorical':
             abortFlag = false;
             try {
-                const trainResult = trainFromHistorical(
-                    data.likedFeatures || [],
-                    data.dislikedFeatures || []
-                );
+                const trainResult = trainFromHistorical(data.likedFeatures || [], data.dislikedFeatures || []);
                 self.postMessage(trainResult);
             } catch (error) {
                 self.postMessage({
                     type: 'error',
-                    message: 'Training failed: ' + error.message
+                    message: 'Training failed: ' + error.message,
                 });
             }
             break;
@@ -292,7 +288,7 @@ self.onmessage = function(e) {
             } catch (error) {
                 self.postMessage({
                     type: 'error',
-                    message: 'Update failed: ' + error.message
+                    message: 'Update failed: ' + error.message,
                 });
             }
             break;
@@ -304,7 +300,7 @@ self.onmessage = function(e) {
             } catch (error) {
                 self.postMessage({
                     type: 'error',
-                    message: 'Reverse update failed: ' + error.message
+                    message: 'Reverse update failed: ' + error.message,
                 });
             }
             break;
@@ -317,7 +313,7 @@ self.onmessage = function(e) {
             } catch (error) {
                 self.postMessage({
                     type: 'error',
-                    message: 'Scoring failed: ' + error.message
+                    message: 'Scoring failed: ' + error.message,
                 });
             }
             break;
@@ -330,7 +326,7 @@ self.onmessage = function(e) {
             } catch (error) {
                 self.postMessage({
                     type: 'error',
-                    message: 'Sorting failed: ' + error.message
+                    message: 'Sorting failed: ' + error.message,
                 });
             }
             break;
@@ -339,7 +335,7 @@ self.onmessage = function(e) {
             self.postMessage({
                 type: 'modelState',
                 modelState: model?.toJSON(),
-                stats: model?.getStats()
+                stats: model?.getStats(),
             });
             break;
 
@@ -350,7 +346,7 @@ self.onmessage = function(e) {
             } catch (error) {
                 self.postMessage({
                     type: 'error',
-                    message: 'Reset failed: ' + error.message
+                    message: 'Reset failed: ' + error.message,
                 });
             }
             break;
@@ -358,7 +354,7 @@ self.onmessage = function(e) {
         default:
             self.postMessage({
                 type: 'error',
-                message: 'Unknown message type: ' + type
+                message: 'Unknown message type: ' + type,
             });
     }
 };
