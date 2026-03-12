@@ -26,7 +26,7 @@ Ideas and tasks not yet prioritized for active development.
 ### [2026-03-12] From: code-review-pr-11
 
 - [ ] **Document `_`-prefix convention for unused variables in CLAUDE.md** — ESLint config introduces `varsIgnorePattern: '^_'` and `caughtErrorsIgnorePattern: '^_'` but the naming conventions in CLAUDE.md don't mention this pattern. Add to Code Conventions section for consistency.
-- [ ] **Fix eslint.config.mjs header comment environment count** — Header says "Four JS environments" but the config actually defines 6 distinct file-group blocks (1, 1b, 2a, 2b, 3a, 3b). Update comment and corresponding CLAUDE.md section to reflect accurate count.
+- [ ] **Fix eslint.config.mjs header comment environment count** — Header says "Four JS environments" but the config actually defines 7 distinct file-group blocks (1, 1b, 2a, 2b, 3a, 3b, 4-tests). Update comment and corresponding CLAUDE.md section to reflect accurate count.
 - [ ] **Correct "worker-loaded" classification for feature-extractor.js** — eslint.config.mjs comment classifies feature-extractor.js as "Shared libs (worker-loaded)" but it is also loaded as a browser `<script>` tag in index.html. Update comment to reflect dual-loading context.
 
 ---
@@ -197,6 +197,13 @@ Areas requiring investigation before implementation.
 - [ ] Show extraction rate in progress pill — Display files/sec alongside ETA (e.g., "45/200 (22%) — ~3m 12s (2.3 files/s)") for throughput visibility
 - [ ] Reuse formatElapsed() for other timed operations — Sort-by-similarity, ML training, and other long operations could show elapsed time on completion
 - [ ] Apply generation counter pattern to sort cancellation — sortAbortController has the same cancel-then-restart race potential as extraction; extractionRunId pattern could prevent stale sort callbacks from corrupting state
+
+### 2026-03-12 From: code-review-pr-12
+**Origin**: Code review of PR #12 (TASK-013 unit test infrastructure)
+
+- [ ] **Move sorting-worker.js to ESLint block 3b or create separate block** — sorting-worker.js now has the conditional CJS export pattern (`typeof module !== 'undefined' && module.exports`) but remains in block 3a. Adding `module: 'readonly'` to 3a also applies it to ml-worker.js and feature-worker.js which don't use `module`, silently permitting accidental CJS code in those pure workers. Scored 75/100 confidence.
+- [ ] **Update BACKLOG item for ESLint header comment count** — BACKLOG line 29 says "6 distinct file-group blocks" but after TASK-013 the config has 7 blocks (test files block added). The tracking item itself is stale. Scored 50/100 confidence.
+- [ ] **Add globalThis.self teardown in sorting-worker.test.js** — `globalThis.self` is set at module top-level without afterAll cleanup. While Vitest isolates each file in its own worker, adding teardown is defensive best practice. Scored 25/100 confidence.
 
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
