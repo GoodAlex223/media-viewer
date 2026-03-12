@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-11
+**Last Updated**: 2026-03-12
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -17,6 +17,12 @@ Ideas and tasks not yet prioritized for active development.
 
 - [ ] **Promote `no-shadow` from warn → error** — After the codebase has been cleaned up, harden the rule to block commits with shadowed variables rather than just warning. Two known shadow sites remain in `handleCancel()` and the wheel handler.
 - [ ] **Add ESLint rule for no-console in production builds** — Currently `no-console` is off (console.log is intentional for Electron logging). Consider adding a build-time strip or lint warning in a future CI step.
+
+### [2026-03-12] From: code-review-pr-11
+
+- [ ] **Document `_`-prefix convention for unused variables in CLAUDE.md** — ESLint config introduces `varsIgnorePattern: '^_'` and `caughtErrorsIgnorePattern: '^_'` but the naming conventions in CLAUDE.md don't mention this pattern. Add to Code Conventions section for consistency.
+- [ ] **Fix eslint.config.mjs header comment environment count** — Header says "Four JS environments" but the config actually defines 6 distinct file-group blocks (1, 1b, 2a, 2b, 3a, 3b). Update comment and corresponding CLAUDE.md section to reflect accurate count.
+- [ ] **Correct "worker-loaded" classification for feature-extractor.js** — eslint.config.mjs comment classifies feature-extractor.js as "Shared libs (worker-loaded)" but it is also loaded as a browser `<script>` tag in index.html. Update comment to reflect dual-loading context.
 
 ---
 
