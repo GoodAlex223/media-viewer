@@ -29,6 +29,9 @@ npm start
 # Run with Electron directly
 npx electron .
 
+# Run all tests
+npm test
+
 # Lint all JS files
 npm run lint
 
@@ -42,7 +45,7 @@ npm run format
 npm run format:check
 ```
 
-Pre-commit hook (Husky + lint-staged) runs automatically on `git commit`: ESLint --fix + Prettier on staged `*.js`; Prettier on staged `*.json`, `*.css`, `*.html`.
+Pre-commit hook (Husky + lint-staged + vitest) runs automatically on `git commit`: ESLint --fix + Prettier on staged `*.js`; Prettier on staged `*.json`, `*.css`, `*.html`; then `npx vitest run` (full test suite must pass).
 
 <!-- END AUTO-MANAGED -->
 
@@ -62,6 +65,12 @@ media_viewer/
 ├── feature-extractor.js # Image feature extraction
 ├── feature-worker.js    # Web Worker for feature extraction
 ├── face-detector.js     # Face detection using @vladmandic/face-api
+├── vitest.config.js     # Vitest config (include: tests/**/*.test.js)
+├── tests/               # Automated tests (Vitest)
+│   ├── sorting-worker.test.js      # MinHeap, VPTree, calculateHammingDistance
+│   ├── ml-model.test.js            # OnlineLogisticRegression
+│   ├── feature-extractor.test.js   # rgbToHsl, computeHistogram, etc.
+│   └── media-viewer-utils.test.js  # formatElapsed, formatTimeAgo, removeFileFromList, etc.
 └── docs/                # Project documentation
     ├── planning/        # Task management (TODO, DONE, BACKLOG, GOALS, MILESTONES, ROADMAP)
     ├── archive/         # Historical documentation
@@ -98,11 +107,22 @@ media_viewer/
 - CommonJS `require()` in main process and workers
 - Browser globals in renderer (no module bundler)
 
+**Unused variables**:
+- Prefix with `_` (e.g., `_unused`, `_err`) to satisfy ESLint `no-unused-vars` rule (`varsIgnorePattern: '^_'`, `argsIgnorePattern: '^_'`, `caughtErrorsIgnorePattern: '^_'`)
+
 **Formatting & Linting**:
 - Prettier: tabWidth=4, singleQuote, semi, trailingComma=es5, printWidth=120
-- ESLint flat config (`eslint.config.mjs`): 4 environments — Node/main, preload (Node+browser), renderer ES module, Web Workers; shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow
+- ESLint flat config (`eslint.config.mjs`): 7 file-group blocks (Node/main, preload Node+browser, renderer module, renderer plain script, Web Workers, shared libs, tests/vitest); header comment says "Four JS environments" — known discrepancy; shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn with `_`-prefix escape); test block adds `no-new-func: off` to allow extractMethod() pattern
 - `eslint-config-prettier` applied last to suppress rule conflicts with Prettier
 - Prettier ignores `docs/`, `*.md`, `package-lock.json`
+
+**Testing**:
+- Framework: Vitest (`npm test` / `npx vitest run`); config in `vitest.config.js`
+- Test files: `tests/**/*.test.js` (ESM, sourceType: module, Node globals)
+- CJS modules in ESM tests: use `createRequire(import.meta.url)` then `require('../module')`
+- Web Worker modules: stub `globalThis.self = { onmessage: null, postMessage: () => {} }` before `require()` to satisfy top-level `self` reference
+- MediaViewer method testing without DOM: `extractMethod(name)` reads source via `fs.readFileSync`, extracts method body with brace-counting, returns `new Function(params, body)`; call via `.call(mockCtx, ...args)`
+- Time-dependent tests: `vi.useFakeTimers()` + `vi.setSystemTime()`; restore with `vi.useRealTimers()` in `afterEach`
 
 <!-- END AUTO-MANAGED -->
 
@@ -184,7 +204,8 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
-- Pre-commit hooks (TASK-012): Husky v9 + lint-staged added; ESLint flat config (`eslint.config.mjs`) covers 4 JS environments with per-file globals; Prettier enforces consistent style on commit; `prepare` script uses "husky || true" to skip gracefully when .git is absent (Docker/CI/tarball)
+- Automated tests added (TASK-012 follow-up): Vitest ^4.0.18 added; `npm test` = `vitest run`; pre-commit hook now runs lint-staged then full test suite; 4 test files cover sorting-worker (MinHeap/VPTree/Hamming), ml-model (OnlineLogisticRegression), feature-extractor (computeHistogram/sharpness/etc.), media-viewer utils (formatElapsed/formatTimeAgo/removeFileFromList); ESLint block 7 added for `tests/**/*.js`
+- Pre-commit hooks (TASK-012): Husky v9 + lint-staged added; ESLint flat config (`eslint.config.mjs`) covers 7 file-group blocks (header comment says "Four JS environments" — known discrepancy tracked in BACKLOG); `_`-prefix convention for unused vars (varsIgnorePattern/argsIgnorePattern/caughtErrorsIgnorePattern); Prettier enforces consistent style on commit; `prepare` script uses "husky || true" to skip gracefully when .git is absent (Docker/CI/tarball)
 - Extraction pause/resume on user activity: signalUserActivity() called from all navigation and rating actions; sets extractionPaused=true and shows "Paused" state immediately; 2-second idle timer calls resumeExtraction() which resolves awaitExtractionGate() promise in the extraction loop; _extractionLastCurrent/_extractionLastTotal cache last counts for paused redisplay
 - Feature extraction ETA and elapsed time: recordExtractionCompletion() tracks rolling window (last 20) of per-file completion timestamps; computes live ETA when 5+ samples available (files/sec rate); formatElapsed()/formatEta() format seconds to "Xm Ys"/"~Xm Ys"; showBackgroundExtractionProgress() appends ETA suffix; completion notification shows "Feature extraction complete — N files in Xm Ys"
 - Extraction run isolation: extractionRunId generation counter prevents stale async callbacks (from cancelled runs) from corrupting ETA window or firing wrong completion notification; load-failure catch skips recordExtractionCompletion() to avoid ETA skew; formatElapsed() guards against NaN/Infinity
@@ -212,6 +233,7 @@ When modifying this codebase:
 - Changes to preload.js require security review
 - Worker changes may impact performance significantly
 - The renderer file is large - consider searching before adding duplicates
+- Run `npm test` before committing (pre-commit hook enforces this); worker exports require the conditional CJS pattern so tests can import them
 
 <!-- END AUTO-MANAGED -->
 

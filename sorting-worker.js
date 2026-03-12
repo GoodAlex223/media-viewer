@@ -575,6 +575,11 @@ function sortMediaBySimilarityMST(mediaFiles, hashes, currentIndex) {
     return sorted.map((f) => f.path);
 }
 
+// Export for unit testing (conditional CJS, same pattern as ml-model.js)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { MinHeap, VPTree, calculateHammingDistance };
+}
+
 // Message handler
 self.onmessage = function (e) {
     const { type, data } = e.data;

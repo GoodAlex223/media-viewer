@@ -102,7 +102,7 @@ export default [
         },
     },
 
-    // 3a. Web Workers (pure workers — no conditional CJS exports)
+    // 3a. Web Workers (pure workers — conditional CJS exports for testing)
     {
         files: ['sorting-worker.js', 'ml-worker.js', 'feature-worker.js'],
         languageOptions: {
@@ -118,6 +118,8 @@ export default [
                 extractFeatures: 'readonly',
                 FEATURE_VERSION: 'readonly',
                 FEATURE_DIM: 'readonly',
+                // Conditional CJS export: typeof module !== 'undefined' && module.exports
+                module: 'readonly',
             },
         },
         rules: {
@@ -141,6 +143,23 @@ export default [
         rules: {
             ...sharedRules,
             'no-undef': 'error',
+        },
+    },
+
+    // 4. Test files (Vitest)
+    {
+        files: ['tests/**/*.js', 'vitest.config.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: {
+                ...globals.node,
+            },
+        },
+        rules: {
+            ...sharedRules,
+            'no-undef': 'error',
+            'no-new-func': 'off', // Used to extract methods from source for testing
         },
     },
 
