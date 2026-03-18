@@ -29,8 +29,11 @@ npm start
 # Run with Electron directly
 npx electron .
 
-# Run all tests
+# Run unit tests (Vitest)
 npm test
+
+# Run E2E tests (Playwright + Electron)
+npm run test:e2e
 
 # Lint all JS files
 npm run lint
@@ -45,7 +48,7 @@ npm run format
 npm run format:check
 ```
 
-Pre-commit hook (Husky + lint-staged + vitest) runs automatically on `git commit`: ESLint --fix + Prettier on staged `*.js`; Prettier on staged `*.json`, `*.css`, `*.html`; then `npx vitest run` (full test suite must pass).
+Pre-commit hook (Husky + lint-staged + vitest) runs automatically on `git commit`: ESLint --fix + Prettier on staged `*.{js,cjs}`; Prettier on staged `*.{json,css,html}`; then `npx vitest run` (unit tests must pass). E2E tests (`npm run test:e2e`) are NOT run by the pre-commit hook.
 
 <!-- END AUTO-MANAGED -->
 
@@ -65,12 +68,26 @@ media_viewer/
 ├── feature-extractor.js # Image feature extraction
 ├── feature-worker.js    # Web Worker for feature extraction
 ├── face-detector.js     # Face detection using @vladmandic/face-api
-├── vitest.config.js     # Vitest config (include: tests/**/*.test.js)
-├── tests/               # Automated tests (Vitest)
-│   ├── sorting-worker.test.js      # MinHeap, VPTree, calculateHammingDistance
-│   ├── ml-model.test.js            # OnlineLogisticRegression
-│   ├── feature-extractor.test.js   # rgbToHsl, computeHistogram, etc.
-│   └── media-viewer-utils.test.js  # formatElapsed, formatTimeAgo, removeFileFromList, etc.
+├── vitest.config.js     # Vitest config (include: tests/**/*.test.js, exclude: tests/e2e/**)
+├── playwright.config.js # Playwright E2E config (testDir: tests/e2e, workers: 1)
+├── tests/               # Automated tests
+│   ├── sorting-worker.test.js      # MinHeap, VPTree, calculateHammingDistance  [Vitest]
+│   ├── ml-model.test.js            # OnlineLogisticRegression  [Vitest]
+│   ├── feature-extractor.test.js   # rgbToHsl, computeHistogram, etc.  [Vitest]
+│   ├── media-viewer-utils.test.js  # formatElapsed, formatTimeAgo, removeFileFromList, etc.  [Vitest]
+│   └── e2e/                        # Playwright E2E tests (Electron)
+│       ├── app-launch.test.js      # Initial launch, drop zone, dialog mocking
+│       ├── navigation.test.js      # Arrow keys, nav buttons, wrap-around
+│       ├── rating.test.js          # Like/dislike/undo, Settings panel config
+│       ├── compare-mode.test.js    # Toggle, dual panes, pair navigation, Q key
+│       ├── fullscreen.test.js      # Z/X keys, Escape exit
+│       ├── zoom.test.js            # Popover open/close, slider, Escape reset
+│       ├── fixtures/               # Test images/video (red/green/blue 1x1 PNGs, tiny.mp4)
+│       └── helpers/
+│           ├── electron-app.js      # launchApp, closeApp, seedLocalStorage, mockFolderDialog, etc.
+│           ├── electron-wrapper.cjs # Strips --remote-debugging-port=0 (Electron 30+ workaround)
+│           ├── electron-wrapper.cmd # Windows CMD shim — executablePath on win32
+│           └── rdp-preload.cjs      # Sets RDP via app.commandLine.appendSwitch
 └── docs/                # Project documentation
     ├── planning/        # Task management (TODO, DONE, BACKLOG, GOALS, MILESTONES, ROADMAP)
     ├── archive/         # Historical documentation
@@ -112,17 +129,30 @@ media_viewer/
 
 **Formatting & Linting**:
 - Prettier: tabWidth=4, singleQuote, semi, trailingComma=es5, printWidth=120
-- ESLint flat config (`eslint.config.mjs`): 7 file-group blocks (Node/main, preload Node+browser, renderer module, renderer plain script, Web Workers, shared libs, tests/vitest); header comment says "Four JS environments" — known discrepancy; shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn with `_`-prefix escape); test block adds `no-new-func: off` to allow extractMethod() pattern
+- ESLint flat config (`eslint.config.mjs`): 9 file-group blocks (Node/main, preload Node+browser, renderer module, renderer plain script, Web Workers, shared libs, unit tests/vitest, e2e CJS helpers, e2e JS tests + playwright.config.js); header comment says "Four JS environments" — known discrepancy (now 9 blocks); shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn with `_`-prefix escape); unit test block adds `no-new-func: off`; unit test block explicitly ignores `tests/e2e/**`; e2e JS block adds browser globals for `page.evaluate()` callbacks
 - `eslint-config-prettier` applied last to suppress rule conflicts with Prettier
 - Prettier ignores `docs/`, `*.md`, `package-lock.json`
 
-**Testing**:
+**Testing (Unit — Vitest)**:
 - Framework: Vitest (`npm test` / `npx vitest run`); config in `vitest.config.js`
-- Test files: `tests/**/*.test.js` (ESM, sourceType: module, Node globals)
+- Test files: `tests/**/*.test.js` excluding `tests/e2e/**` (ESM, sourceType: module, Node globals)
 - CJS modules in ESM tests: use `createRequire(import.meta.url)` then `require('../module')`
 - Web Worker modules: stub `globalThis.self = { onmessage: null, postMessage: () => {} }` before `require()` to satisfy top-level `self` reference
 - MediaViewer method testing without DOM: `extractMethod(name)` reads source via `fs.readFileSync`, extracts method body with brace-counting, returns `new Function(params, body)`; call via `.call(mockCtx, ...args)`
 - Time-dependent tests: `vi.useFakeTimers()` + `vi.setSystemTime()`; restore with `vi.useRealTimers()` in `afterEach`
+
+**Testing (E2E — Playwright)**:
+- Framework: Playwright (`npm run test:e2e`); config in `playwright.config.js`; test files: `tests/e2e/**/*.test.js`
+- workers: 1, fullyParallel: false — Electron tests cannot run in parallel
+- Electron 30+ workaround: `--remote-debugging-port=0` rejected as CLI arg; `electron-wrapper.cjs` strips it and adds `-r rdp-preload.cjs`; `rdp-preload.cjs` sets it via `app.commandLine.appendSwitch` (see github.com/microsoft/playwright/issues/39008)
+- ELECTRON_RUN_AS_NODE: Must be unset before spawning Electron (may be inherited from Claude Code/VS Code terminals); handled in `electron-wrapper.cjs`
+- Overlay interception: `.media-container` overlay blocks pointer events on nav/rating buttons — use `{ force: true }` on clicks or call methods via `page.evaluate()`
+- `seedLocalStorage(page, kvMap)`: Syncs both localStorage AND live MediaViewer instance properties (customLikeFolder, customDislikeFolder, customSpecialFolder); call after `launchApp()` but before `loadFolder()`
+- `mockFolderDialog(electronApp, path)`: Replaces `ipcMain` handler to return preset path without showing native dialog
+- `closeApp()`: Races `electronApp.close()` against 5s timeout then SIGKILL (Windows hang workaround)
+- Lucide CDN stub: `page.route('**/unpkg.com/**')` returns empty module to avoid network dependency
+- Fixtures: 1x1 PNG files (red, green, blue) + tiny.mp4 in `tests/e2e/fixtures/`; `createTempFixtureDir()` copies to temp dir with liked/disliked/special subdirs
+- `rdp-preload.cjs` loads playwright-core internal `loader.js` by path — update path if it breaks after playwright-core upgrade
 
 <!-- END AUTO-MANAGED -->
 
@@ -204,7 +234,9 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
-- Automated tests added (TASK-012 follow-up): Vitest ^4.0.18 added; `npm test` = `vitest run`; pre-commit hook now runs lint-staged then full test suite; 4 test files cover sorting-worker (MinHeap/VPTree/Hamming), ml-model (OnlineLogisticRegression), feature-extractor (computeHistogram/sharpness/etc.), media-viewer utils (formatElapsed/formatTimeAgo/removeFileFromList); ESLint block 7 added for `tests/**/*.js`
+- E2E test suite added (TASK-014): Playwright + @playwright/test ^1.58.2; `npm run test:e2e`; 6 test files (app-launch, navigation, rating, compare-mode, fullscreen, zoom); electron-wrapper.cjs + rdp-preload.cjs work around Electron 30+ --remote-debugging-port CLI rejection; ESLint expanded to 9 blocks (5a: e2e CJS helpers, 5b: e2e JS tests + playwright.config.js); unit test block (4) now explicitly ignores tests/e2e/**; lint-staged updated to include *.cjs
+- Unit test infrastructure code review (TASK-013): sorting-worker.js has conditional CJS export pattern but sits in ESLint block 3a alongside pure workers (ml-worker.js, feature-worker.js) — `module: 'readonly'` leaks to those files (open BACKLOG item); ESLint header comment still says "Four JS environments" despite 7 blocks — known discrepancy tracked in BACKLOG; globalThis.self stub in sorting-worker.test.js lacks afterAll teardown (low-priority BACKLOG item)
+- Automated tests added (TASK-013): Vitest ^4.0.18 added; `npm test` = `vitest run`; pre-commit hook now runs lint-staged then full test suite; 4 test files cover sorting-worker (MinHeap/VPTree/Hamming), ml-model (OnlineLogisticRegression), feature-extractor (computeHistogram/sharpness/etc.), media-viewer utils (formatElapsed/formatTimeAgo/removeFileFromList); ESLint block 7 added for `tests/**/*.js`
 - Pre-commit hooks (TASK-012): Husky v9 + lint-staged added; ESLint flat config (`eslint.config.mjs`) covers 7 file-group blocks (header comment says "Four JS environments" — known discrepancy tracked in BACKLOG); `_`-prefix convention for unused vars (varsIgnorePattern/argsIgnorePattern/caughtErrorsIgnorePattern); Prettier enforces consistent style on commit; `prepare` script uses "husky || true" to skip gracefully when .git is absent (Docker/CI/tarball)
 - Extraction pause/resume on user activity: signalUserActivity() called from all navigation and rating actions; sets extractionPaused=true and shows "Paused" state immediately; 2-second idle timer calls resumeExtraction() which resolves awaitExtractionGate() promise in the extraction loop; _extractionLastCurrent/_extractionLastTotal cache last counts for paused redisplay
 - Feature extraction ETA and elapsed time: recordExtractionCompletion() tracks rolling window (last 20) of per-file completion timestamps; computes live ETA when 5+ samples available (files/sec rate); formatElapsed()/formatEta() format seconds to "Xm Ys"/"~Xm Ys"; showBackgroundExtractionProgress() appends ETA suffix; completion notification shows "Feature extraction complete — N files in Xm Ys"

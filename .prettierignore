@@ -3,3 +3,4 @@ docs/
 *.md
 package-lock.json
 .trunk/
+tests/e2e/fixtures/

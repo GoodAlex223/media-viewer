@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-12 <!-- TASK-013 completed -->
+**Last Updated**: 2026-03-13 <!-- TASK-014 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -36,27 +36,7 @@ Active tasks and backlog.
 <!-- TASK-011 completed 2026-03-05, moved to DONE.md -->
 <!-- TASK-012 completed 2026-03-11, moved to DONE.md -->
 <!-- TASK-013 completed 2026-03-12, moved to DONE.md -->
-
----
-
-### [TASK-014] Playwright E2E tests for Electron app
-**Priority**: 🟢 Low
-**Status**: 📋 Planned
-**Effort**: L
-
-**Description**: Set up Playwright with Electron support for end-to-end testing. Cover critical user workflows: folder loading, media navigation, rating/moving files, fullscreen toggle, compare mode, and zoom controls.
-
-**Acceptance Criteria**:
-- [ ] Playwright configured with Electron launcher
-- [ ] npm script: `test:e2e`
-- [ ] Test: App launches and shows drop zone / folder picker
-- [ ] Test: Load folder and navigate media (arrow keys, click)
-- [ ] Test: Rate file (like/dislike) and verify file moved
-- [ ] Test: Toggle fullscreen and exit via ESC
-- [ ] Test: Switch to compare mode and back
-- [ ] Test: Zoom controls open/close and slider adjusts scale
-- [ ] Tests use fixture folders with sample media files
-- [ ] CI-compatible (headless mode)
+<!-- TASK-014 completed 2026-03-13, moved to DONE.md -->
 
 ---
 

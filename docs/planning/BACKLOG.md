@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-12
+**Last Updated**: 2026-03-13
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -204,6 +204,12 @@ Areas requiring investigation before implementation.
 - [ ] **Move sorting-worker.js to ESLint block 3b or create separate block** — sorting-worker.js now has the conditional CJS export pattern (`typeof module !== 'undefined' && module.exports`) but remains in block 3a. Adding `module: 'readonly'` to 3a also applies it to ml-worker.js and feature-worker.js which don't use `module`, silently permitting accidental CJS code in those pure workers. Scored 75/100 confidence.
 - [ ] **Update BACKLOG item for ESLint header comment count** — BACKLOG line 29 says "6 distinct file-group blocks" but after TASK-013 the config has 7 blocks (test files block added). The tracking item itself is stale. Scored 50/100 confidence.
 - [ ] **Add globalThis.self teardown in sorting-worker.test.js** — `globalThis.self` is set at module top-level without afterAll cleanup. While Vitest isolates each file in its own worker, adding teardown is defensive best practice. Scored 25/100 confidence.
+
+### [2026-03-13] From: TASK-014 (Playwright E2E tests)
+
+- [ ] **Test E2E suite on Unix/macOS** — `getElectronWrapperPath()` and `getLaunchArgs()` have Unix branches (using node + CJS wrapper) but were only tested on Windows. Needs CI matrix or manual Mac/Linux validation.
+- [ ] **Auto-detect playwright-core loader.js path in rdp-preload.cjs** — Currently hardcoded to `node_modules/playwright-core/lib/server/electron/loader.js`. A playwright-core upgrade that moves this file will break silently. Could use `require.resolve()` or glob.
+- [ ] **Update ESLint header comment to reflect 9 file-group blocks** — Header says "Four JS environments" but the config now has 9 blocks after TASK-012, TASK-013, and TASK-014 additions. Also update corresponding CLAUDE.md section.
 
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
