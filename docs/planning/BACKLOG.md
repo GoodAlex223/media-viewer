@@ -211,6 +211,14 @@ Areas requiring investigation before implementation.
 - [ ] **Auto-detect playwright-core loader.js path in rdp-preload.cjs** — Currently hardcoded to `node_modules/playwright-core/lib/server/electron/loader.js`. A playwright-core upgrade that moves this file will break silently. Could use `require.resolve()` or glob.
 - [ ] **Update ESLint header comment to reflect 9 file-group blocks** — Header says "Four JS environments" but the config now has 9 blocks after TASK-012, TASK-013, and TASK-014 additions. Also update corresponding CLAUDE.md section.
 
+### [2026-03-18] From: code-review-pr-13
+**Origin**: Code review of PR #13 (TASK-014 Playwright E2E tests)
+
+- [ ] **Clear setTimeout in closeApp() on successful close** — `Promise.race` between `electronApp.close()` and a 5s timeout never clears the timer when close wins. Leaves Node event loop alive for 5 extra seconds per test teardown. Store timer ID and call `clearTimeout()` on success. Scored 75/100 confidence.
+- [ ] **Register page.route() CDN stub before firstWindow() loads** — `page.route('**/unpkg.com/**', ...)` is registered after `firstWindow()` returns, but the synchronous `<script src>` in `<head>` has already dispatched the fetch. The stub is dead code. Move route registration earlier or use `electronApp.on('window', ...)` to intercept before load. Scored 75/100 confidence.
+- [ ] **Remove or use waitForNotification() export** — `waitForNotification()` in `electron-app.js` is exported but never imported by any test file. Either remove it or add tests that use it. Scored 75/100 confidence.
+- [ ] **Fix stale filename in electron-wrapper.cjs JSDoc** — Line 4 comment says `rdp-preload.js` but the actual file is `rdp-preload.cjs`. Scored 50/100 confidence.
+
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
 

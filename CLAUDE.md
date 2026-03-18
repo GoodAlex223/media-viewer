@@ -140,6 +140,10 @@ media_viewer/
 - Web Worker modules: stub `globalThis.self = { onmessage: null, postMessage: () => {} }` before `require()` to satisfy top-level `self` reference
 - MediaViewer method testing without DOM: `extractMethod(name)` reads source via `fs.readFileSync`, extracts method body with brace-counting, returns `new Function(params, body)`; call via `.call(mockCtx, ...args)`
 - Time-dependent tests: `vi.useFakeTimers()` + `vi.setSystemTime()`; restore with `vi.useRealTimers()` in `afterEach`
+- E2E framework: Playwright (`@playwright/test`) with `_electron` launcher; test files in `tests/e2e/*.spec.js`
+- E2E launch helpers: `tests/e2e/helpers/electron-app.js` — `launchApp()`, `closeApp()`, `seedLocalStorage()`; waits for `window.mediaViewer` to be defined before tests run
+- E2E electron-wrapper pattern: wrapper script (`electron-wrapper.cjs`/`.cmd`) strips `--remote-debugging-port=0` (Playwright injects it; Electron 30+ rejects it as CLI flag) and re-applies via `app.commandLine.appendSwitch` — workaround for playwright#39008
+- E2E Windows process cleanup: `closeApp()` uses `taskkill /F /T /PID` on win32 instead of `proc.kill('SIGKILL')`; wrapper spawns a child electron.exe, so SIGKILL on the wrapper orphans it — `/T` kills the entire process tree
 
 **Testing (E2E — Playwright)**:
 - Framework: Playwright (`npm run test:e2e`); config in `playwright.config.js`; test files: `tests/e2e/**/*.test.js`
