@@ -67,6 +67,10 @@ export async function launchApp() {
 /**
  * Close the Electron app with a timeout fallback.
  * electronApp.close() can hang on Windows; kill the process if it takes too long.
+ *
+ * The wrapper pattern (electron-wrapper.cjs → electron.exe) means SIGKILL on the
+ * wrapper orphans the real Electron child on Windows. Use taskkill /F /T /PID to
+ * kill the entire process tree.
  */
 export async function closeApp(electronApp) {
     const CLOSE_TIMEOUT = 5_000;
@@ -76,10 +80,16 @@ export async function closeApp(electronApp) {
             new Promise((_resolve, reject) => setTimeout(() => reject(new Error('close timeout')), CLOSE_TIMEOUT)),
         ]);
     } catch {
-        // Force-kill the Electron process tree
+        // Force-kill the entire process tree (wrapper + electron.exe children)
         try {
             const proc = electronApp.process();
-            proc.kill('SIGKILL');
+            if (process.platform === 'win32') {
+                // taskkill /T kills the process tree; /F forces termination
+                const { execSync } = await import('child_process');
+                execSync(`taskkill /F /T /PID ${proc.pid}`, { stdio: 'ignore' });
+            } else {
+                proc.kill('SIGKILL');
+            }
         } catch {
             // Process already exited
         }
