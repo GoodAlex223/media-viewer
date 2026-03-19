@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-13
+**Last Updated**: 2026-03-19
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -16,7 +16,7 @@ Ideas and tasks not yet prioritized for active development.
 ### [2026-03-12] From: TASK-013 (Unit test infrastructure)
 
 - [ ] **Deduplicate MinHeap/VPTree across sorting-worker.js and media-viewer.js** — Both files contain identical implementations. Extract to a shared `data-structures.js` with the conditional CJS export pattern, then importScripts() in worker and import in renderer.
-- [ ] **Add tests for showCompareMedia pair selection logic** — The acceptance criteria mentioned testing showCompareMedia edge cases. The pair selection logic (regular mode index math, ML-sorted pair selection) could be extracted into a pure function and tested without DOM mocking.
+- [x] **Add tests for showCompareMedia pair selection logic** — Promoted to TODO: TASK-020 (merged into ML investigation)
 
 ### [2026-03-11] From: TASK-012 (Pre-commit hooks)
 
@@ -25,9 +25,9 @@ Ideas and tasks not yet prioritized for active development.
 
 ### [2026-03-12] From: code-review-pr-11
 
-- [ ] **Document `_`-prefix convention for unused variables in CLAUDE.md** — ESLint config introduces `varsIgnorePattern: '^_'` and `caughtErrorsIgnorePattern: '^_'` but the naming conventions in CLAUDE.md don't mention this pattern. Add to Code Conventions section for consistency.
-- [ ] **Fix eslint.config.mjs header comment environment count** — Header says "Four JS environments" but the config actually defines 7 distinct file-group blocks (1, 1b, 2a, 2b, 3a, 3b, 4-tests). Update comment and corresponding CLAUDE.md section to reflect accurate count.
-- [ ] **Correct "worker-loaded" classification for feature-extractor.js** — eslint.config.mjs comment classifies feature-extractor.js as "Shared libs (worker-loaded)" but it is also loaded as a browser `<script>` tag in index.html. Update comment to reflect dual-loading context.
+- [x] **Document `_`-prefix convention for unused variables in CLAUDE.md** — Promoted to TODO: TASK-017
+- [x] **Fix eslint.config.mjs header comment environment count** — Promoted to TODO: TASK-017
+- [x] **Correct "worker-loaded" classification for feature-extractor.js** — Promoted to TODO: TASK-017
 
 ---
 
@@ -55,12 +55,12 @@ Improvements to existing functionality.
 | Anonymize author field in package.json if privacy desired | Config | Low | Low | Security audit: 2026-02-05 |
 | ~~Memory leak guard for exitHandler~~ | ~~Fullscreen~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-005 |
 | ~~Unified fullscreen exit cleanup method~~ | ~~Fullscreen~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-006 |
-| Click/active effect for control buttons | UI | Medium | Low | Plan: 2026-02-05_visual-scale-controls |
-| Keyboard shortcut for zoom toggle | UI | Low | Low | Plan: 2026-02-05_visual-scale-controls |
+| ~~Click/active effect for control buttons~~ | ~~UI~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-018 |
+| ~~Keyboard shortcut for zoom toggle~~ | ~~UI~~ | ~~Low~~ | ~~Low~~ | Promoted to TODO: TASK-026 (merged into keyboard customization) |
 | Zoom level persistence across navigation | UI | Low | Medium | Plan: 2026-02-05_visual-scale-controls |
-| Fix mouseup listener leak in createZoomPopover | Zoom | Medium | Low | Code review: PR #1 |
+| ~~Fix mouseup listener leak in createZoomPopover~~ | ~~Zoom~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-015 |
 | Document fullscreen zoom reversal from TASK-001 | Zoom/UX | Low | Low | Code review: PR #1 |
-| Remove spinner state churn in showCompareMedia() retry | Compare | Low | Low | Code review: PR #3 |
+| ~~Remove spinner state churn in showCompareMedia() retry~~ | ~~Compare~~ | ~~Low~~ | ~~Low~~ | Promoted to TODO: TASK-022 (merged into last-pair error fix) |
 | ~~Abort fullscreenAbortController before wrapper.remove()~~ | ~~Fullscreen~~ | ~~Low~~ | ~~Low~~ | Fixed in TASK-005 PR review |
 
 ---
@@ -82,7 +82,7 @@ Areas requiring investigation before implementation.
 
 | Topic | Question | Why Important | Added |
 |-------|----------|---------------|-------|
-| *None yet* | | | |
+| ~~Media content understanding~~ | ~~Open source tools for identifying what's depicted in media?~~ | ~~Could improve ML prediction quality~~ | Promoted to TODO: TASK-028 |
 
 ---
 
@@ -118,22 +118,22 @@ Areas requiring investigation before implementation.
 ### 2026-02-05 From: visual-scale-controls
 **Origin**: [2026-02-05_visual-scale-controls.md](../archive/plans/2026-02-05_visual-scale-controls.md)
 
-- [ ] Click/active effect for control buttons — No visual feedback on click/press for any control button (like, dislike, special, zoom). Add `:active` state with press animation.
-- [ ] Keyboard shortcut for zoom toggle — Add key binding (e.g., `Z` in single mode) to toggle zoom popover without clicking
+- [x] Click/active effect for control buttons — Promoted to TODO: TASK-018
+- [x] Keyboard shortcut for zoom toggle — Promoted to TODO: TASK-026 (merged into keyboard customization)
 - [ ] Zoom level persistence — Remember zoom level when navigating between media of similar size
 - [ ] Slider width responsive to popover space — Wider slider on larger screens for finer control
 
 ### 2026-02-05 From: code-review-pr-1
 **Origin**: Code review of PR #1
 
-- [ ] Fix mouseup listener leak in createZoomPopover — `document.addEventListener('mouseup', ...)` is never removed in `removeZoomPopover()`, causing listeners to accumulate in compare mode navigation. Use AbortController or stored handler reference for cleanup.
+- [x] Fix mouseup listener leak in createZoomPopover — Promoted to TODO: TASK-015
 - [ ] Document fullscreen zoom decision reversal — TASK-002 re-enabled wheel zoom and pan in fullscreen, reversing TASK-001's explicit decision (commit d3b08bb). Add rationale to PROJECT_CONTEXT.md.
 
 ### 2026-02-06 From: centralized-remove-file
 **Origin**: [2026-02-06_centralized-remove-file.md](../archive/plans/2026-02-06_centralized-remove-file.md)
 
 - [ ] Batch removal support — `removeFilesFromList(filePaths[])` for removing multiple files in one operation
-- [ ] Centralized insertFileIntoList() counterpart — Standardize undo restoration across single/compare modes
+- [x] Centralized insertFileIntoList() counterpart — Promoted to TODO: TASK-027 (merged into undo fix)
 - [ ] Event-based cache invalidation — Emit 'file-removed' event so new caches auto-subscribe without modifying removeFileFromList
 
 ### 2026-02-06 From: code-review-pr-2
@@ -151,7 +151,7 @@ Areas requiring investigation before implementation.
 **Origin**: TASK-005 code review
 
 - [x] Abort fullscreenAbortController before wrapper.remove() — Fixed in PR review: added `abortFullscreenController()` helper, called before `wrapper.remove()` in `showCompareMedia()` and `toggleViewMode()`
-- [ ] Add early return guard in cleanupFullscreen() for non-fullscreen wrappers — cleanupFullscreen() doesn't check if wrapper is actually in fullscreen, so double-calls (e.g., ESC after Z) trigger redundant video.play(). Add `if (!wrapper.classList.contains('fullscreen')) return;` at top.
+- [x] Add early return guard in cleanupFullscreen() for non-fullscreen wrappers — Promoted to TODO: TASK-018
 
 ### 2026-02-24 From: task-006-unified-fullscreen-cleanup
 **Origin**: docs/archive/plans/2026-02-24_task-006-unified-fullscreen-cleanup.md
@@ -161,7 +161,7 @@ Areas requiring investigation before implementation.
 ### 2026-02-25 From: task-007-force-resort-option
 **Origin**: TASK-007 implementation
 
-- [ ] Add Shift+click hint to help overlay keyboard shortcuts — The force re-sort feature is only discoverable via button tooltip. Adding it to the help overlay (F1) keyboard shortcuts section would improve discoverability.
+- [x] Add Shift+click hint to help overlay keyboard shortcuts — Promoted to TODO: TASK-026 (merged into keyboard customization)
 - [ ] Force re-sort for ML prediction sort — Apply the same Shift+click force re-sort pattern to `handleSortByPrediction()` for consistency across both sort modes.
 
 ### 2026-03-05 From: task-009-worker-count-setting
@@ -187,8 +187,8 @@ Areas requiring investigation before implementation.
 ### 2026-03-11 From: code-review-pr-10
 **Origin**: Code review of PR #10 (TASK-011 pause extraction)
 
-- [ ] Add signalUserActivity() to compare-mode rating handlers — `handleLeftLike`, `handleLeftDislike`, `handleRightLike`, `handleRightDislike` don't call `signalUserActivity()`, so extraction is not paused during compare-mode rating. Scored 75/100 confidence.
-- [ ] Clean up pause state on natural extraction end — When the extraction loop finishes normally (not via cancel), `extractionPaused`, `extractionIdleTimer`, and `extractionResumeResolve` are not reset. A late `signalUserActivity()` call could show stale progress. Scored 75/100 confidence.
+- [x] Add signalUserActivity() to compare-mode rating handlers — Promoted to TODO: TASK-015
+- [x] Clean up pause state on natural extraction end — Promoted to TODO: TASK-015
 - [ ] Remove dangling abort listener in awaitExtractionGate — `signal.addEventListener('abort', resolve, {once:true})` is not removed on normal resume path. Each pause/resume cycle accumulates one listener until the AbortController is GC'd at run end. Scored 72/100 confidence.
 
 ### 2026-03-05 From: task-010-extraction-eta
@@ -209,20 +209,33 @@ Areas requiring investigation before implementation.
 
 - [ ] **Test E2E suite on Unix/macOS** — `getElectronWrapperPath()` and `getLaunchArgs()` have Unix branches (using node + CJS wrapper) but were only tested on Windows. Needs CI matrix or manual Mac/Linux validation.
 - [ ] **Auto-detect playwright-core loader.js path in rdp-preload.cjs** — Currently hardcoded to `node_modules/playwright-core/lib/server/electron/loader.js`. A playwright-core upgrade that moves this file will break silently. Could use `require.resolve()` or glob.
-- [ ] **Update ESLint header comment to reflect 9 file-group blocks** — Header says "Four JS environments" but the config now has 9 blocks after TASK-012, TASK-013, and TASK-014 additions. Also update corresponding CLAUDE.md section.
+- [x] **Update ESLint header comment to reflect 9 file-group blocks** — Promoted to TODO: TASK-017
 
 ### [2026-03-18] From: code-review-pr-13
 **Origin**: Code review of PR #13 (TASK-014 Playwright E2E tests)
 
-- [ ] **Clear setTimeout in closeApp() on successful close** — `Promise.race` between `electronApp.close()` and a 5s timeout never clears the timer when close wins. Leaves Node event loop alive for 5 extra seconds per test teardown. Store timer ID and call `clearTimeout()` on success. Scored 75/100 confidence.
-- [ ] **Register page.route() CDN stub before firstWindow() loads** — `page.route('**/unpkg.com/**', ...)` is registered after `firstWindow()` returns, but the synchronous `<script src>` in `<head>` has already dispatched the fetch. The stub is dead code. Move route registration earlier or use `electronApp.on('window', ...)` to intercept before load. Scored 75/100 confidence.
-- [ ] **Remove or use waitForNotification() export** — `waitForNotification()` in `electron-app.js` is exported but never imported by any test file. Either remove it or add tests that use it. Scored 75/100 confidence.
-- [ ] **Fix stale filename in electron-wrapper.cjs JSDoc** — Line 4 comment says `rdp-preload.js` but the actual file is `rdp-preload.cjs`. Scored 50/100 confidence.
+- [x] **Clear setTimeout in closeApp() on successful close** — Promoted to TODO: TASK-016
+- [x] **Register page.route() CDN stub before firstWindow() loads** — Promoted to TODO: TASK-016
+- [x] **Remove or use waitForNotification() export** — Promoted to TODO: TASK-016
+- [x] **Fix stale filename in electron-wrapper.cjs JSDoc** — Promoted to TODO: TASK-017
+
+### [2026-03-19] From: Manual testing session
+**Origin**: User manual testing — 11 issues reported, 9 promoted to TODO
+
+- [x] ML sorting pair ordering investigation — Promoted to TODO: TASK-020
+- [x] Compare mode overlay controls UX — Promoted to TODO: TASK-021
+- [x] Compare mode last-pair error cascade — Promoted to TODO: TASK-022
+- [x] Video pause/play icon sync — Promoted to TODO: TASK-023
+- [x] Per-folder feature extraction caching — Promoted to TODO: TASK-024
+- [x] Application logging to file — Promoted to TODO: TASK-025
+- [x] Keyboard shortcut customization — Promoted to TODO: TASK-026
+- [x] Undo when no media remains — Promoted to TODO: TASK-027
+- [x] Research: media content understanding tools — Promoted to TODO: TASK-028
 
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
 
-- [ ] Remove unnecessary loading state resets before recursive retry in showCompareMedia() — The validation retry path resets isLoading/mediaNavigationInProgress and hides spinner before recursive call, but the recursive call immediately re-enables them. This causes state churn and potential spinner flicker. Keep flags set during retries, only reset on final exit.
+- [x] Remove unnecessary loading state resets before recursive retry in showCompareMedia() — Promoted to TODO: TASK-022 (merged into last-pair error fix)
 
 ---
 
