@@ -1989,6 +1989,7 @@ class MediaViewer {
         wrapper.appendChild(popover);
 
         // Store references
+        const zoomAbort = new AbortController();
         this.zoomControlsMap[target] = {
             container: popover,
             slider,
@@ -1997,6 +1998,7 @@ class MediaViewer {
             valueDisplay,
             toggleBtn,
             isSliderDragging: false,
+            abortController: zoomAbort,
         };
 
         // Toggle popover on button click
@@ -2048,11 +2050,15 @@ class MediaViewer {
                 if (center) this.zoomAtPoint(target, newScale, center.x, center.y);
             }
         });
-        document.addEventListener('mouseup', () => {
-            if (this.zoomControlsMap[target]) {
-                this.zoomControlsMap[target].isSliderDragging = false;
-            }
-        });
+        document.addEventListener(
+            'mouseup',
+            () => {
+                if (this.zoomControlsMap[target]) {
+                    this.zoomControlsMap[target].isSliderDragging = false;
+                }
+            },
+            { signal: zoomAbort.signal }
+        );
 
         // Prevent popover clicks from closing via document handler
         popover.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -2067,6 +2073,7 @@ class MediaViewer {
     removeZoomPopover(target) {
         const entry = this.zoomControlsMap[target];
         if (!entry) return;
+        if (entry.abortController) entry.abortController.abort();
         if (entry.container.parentNode) entry.container.remove();
         if (entry.toggleBtn && entry.toggleBtn.parentNode) entry.toggleBtn.parentNode.remove();
         delete this.zoomControlsMap[target];
@@ -3400,24 +3407,28 @@ class MediaViewer {
 
     async handleLeftLike() {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
+        this.signalUserActivity();
         // Left is liked, right is disliked
         await this.moveComparePair('left', 'like', 'dislike');
     }
 
     async handleLeftDislike() {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
+        this.signalUserActivity();
         // Left is disliked, right is liked
         await this.moveComparePair('left', 'dislike', 'like');
     }
 
     async handleRightLike() {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
+        this.signalUserActivity();
         // Right is liked, left is disliked
         await this.moveComparePair('right', 'like', 'dislike');
     }
 
     async handleRightDislike() {
         if (this.mediaFiles.length < 2 || this.isLoading) return;
+        this.signalUserActivity();
         // Right is disliked, left is liked
         await this.moveComparePair('right', 'dislike', 'like');
     }
@@ -3626,6 +3637,9 @@ class MediaViewer {
         const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
 
         if (!media) return;
+
+        // Clean up zoom popover and its document-level listeners (AbortController)
+        this.removeZoomPopover(side);
 
         this.isBeingCleaned = true;
 
@@ -6335,6 +6349,18 @@ class MediaViewer {
         }
 
         this.isBackgroundExtracting = false;
+
+        // Clean up pause state (may still be set if user acted just before completion)
+        if (this.extractionResumeTimer !== null) {
+            clearTimeout(this.extractionResumeTimer);
+            this.extractionResumeTimer = null;
+        }
+        this.extractionPaused = false;
+        if (this.extractionResumeResolve !== null) {
+            this.extractionResumeResolve();
+            this.extractionResumeResolve = null;
+        }
+
         this.hideBackgroundExtractionProgress();
 
         // Show completion notification with total time (skip if a new run started)
