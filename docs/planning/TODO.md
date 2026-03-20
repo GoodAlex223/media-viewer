@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-20 <!-- TASK-016 completed -->
+**Last Updated**: 2026-03-20 <!-- TASK-017 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -39,27 +39,7 @@ Active tasks and backlog.
 <!-- TASK-014 completed 2026-03-13, moved to DONE.md -->
 <!-- TASK-015 completed 2026-03-20, moved to DONE.md -->
 <!-- TASK-016 completed 2026-03-20, moved to DONE.md -->
-
-### TASK-017 — ESLint config and documentation alignment 🟡
-**Scheduled**: Wednesday 2026-03-25
-**Priority**: 🟡 Normal — Documentation accuracy and code hygiene
-**Effort**: Low (documentation + small config fixes)
-**Origin**: BACKLOG.md (code-review-pr-12, code-review-pr-13, TASK-013)
-
-**Description**: Align ESLint configuration comments and CLAUDE.md documentation with actual codebase state:
-1. **Update ESLint header comment to reflect 9 file-group blocks** — Header says "Four JS environments" but config has 9 blocks after TASK-012/013/014. Update comment and CLAUDE.md.
-2. **Document `_`-prefix convention for unused variables in CLAUDE.md** — ESLint config uses `varsIgnorePattern: '^_'` and `caughtErrorsIgnorePattern: '^_'` but Code Conventions section doesn't mention this.
-3. **Fix stale filename in electron-wrapper.cjs JSDoc** — Line 4 comment says `rdp-preload.js` but actual file is `rdp-preload.cjs`.
-4. **Correct "worker-loaded" classification for feature-extractor.js** — eslint.config.mjs comment says "Shared libs (worker-loaded)" but it's also loaded as a browser `<script>` tag.
-
-**Acceptance Criteria**:
-- [ ] ESLint header comment accurately reflects 9 blocks
-- [ ] CLAUDE.md Code Conventions includes `_`-prefix convention
-- [ ] electron-wrapper.cjs JSDoc references correct filename
-- [ ] feature-extractor.js classification comment updated
-- [ ] Lint passes (`npm run lint`)
-
----
+<!-- TASK-017 completed 2026-03-20, moved to DONE.md -->
 
 ### TASK-018 — UI polish: button press effects and fullscreen guard 🟡
 **Scheduled**: Thursday 2026-03-26

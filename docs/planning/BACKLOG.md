@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-20 <!-- code-review-pr-15 -->
+**Last Updated**: 2026-03-20 <!-- TASK-017 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -12,6 +12,12 @@ Ideas and tasks not yet prioritized for active development.
 ---
 
 ## From Completed Tasks
+
+### [2026-03-20] From: TASK-017 (ESLint config and documentation alignment)
+**Origin**: TASK-017 implementation
+
+- [ ] **Add `globals.browser` to ESLint block 3b for feature-extractor.js** — Block 3b only declares `globals.worker` but `feature-extractor.js` is also loaded as a browser `<script>` tag (index.html:354). Currently no browser-only globals are used so no lint errors, but the config doesn't reflect the dual-environment nature. Adding `globals.browser` would future-proof against browser API usage.
+- [ ] **Audit remaining CLAUDE.md Git Insights for stale references** — TASK-017 fixed 3 stale "known discrepancy" references. Other Git Insights entries may similarly reference outdated state (e.g., block counts, old patterns). A sweep would catch remaining drift.
 
 ### [2026-03-20] From: code-review-pr-15
 **Origin**: Code review of PR #15 (TASK-016 E2E test reliability improvements)
@@ -225,7 +231,7 @@ Areas requiring investigation before implementation.
 **Origin**: Code review of PR #12 (TASK-013 unit test infrastructure)
 
 - [ ] **Move sorting-worker.js to ESLint block 3b or create separate block** — sorting-worker.js now has the conditional CJS export pattern (`typeof module !== 'undefined' && module.exports`) but remains in block 3a. Adding `module: 'readonly'` to 3a also applies it to ml-worker.js and feature-worker.js which don't use `module`, silently permitting accidental CJS code in those pure workers. Scored 75/100 confidence.
-- [ ] **Update BACKLOG item for ESLint header comment count** — BACKLOG line 29 says "6 distinct file-group blocks" but after TASK-013 the config has 7 blocks (test files block added). The tracking item itself is stale. Scored 50/100 confidence.
+- [x] **Update BACKLOG item for ESLint header comment count** — Resolved by TASK-017 (header updated to "Nine file-group blocks")
 - [ ] **Add globalThis.self teardown in sorting-worker.test.js** — `globalThis.self` is set at module top-level without afterAll cleanup. While Vitest isolates each file in its own worker, adding teardown is defensive best practice. Scored 25/100 confidence.
 
 ### [2026-03-13] From: TASK-014 (Playwright E2E tests)
