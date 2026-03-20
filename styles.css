@@ -1059,6 +1059,12 @@ body {
     box-shadow: var(--shadow-glow-primary);
 }
 
+.control-btn:active:not(:disabled) {
+    transform: scale(0.93);
+    opacity: 0.85;
+    transition-duration: 50ms;
+}
+
 /* Zoom popover — horizontal bar above the button */
 .zoom-popover {
     position: absolute;
