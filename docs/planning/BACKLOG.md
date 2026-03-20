@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-19
+**Last Updated**: 2026-03-20
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -17,6 +17,13 @@ Ideas and tasks not yet prioritized for active development.
 
 - [ ] **Rename closeAllZoomPopovers() or add destroyAllZoomPopovers()** — `closeAllZoomPopovers()` only hides popovers visually (removes `.show` class) but does not call `removeZoomPopover()`. Future code paths relying on it for full cleanup would leak listeners. Consider renaming to `hideAllZoomPopovers()` for clarity, or adding a `destroyAllZoomPopovers()` that iterates and calls `removeZoomPopover()`.
 - [ ] **Add unit test for zoom popover AbortController cleanup** — The listener leak was caught by code review, not automated tests. A test verifying `AbortController.abort()` is called during `cleanupCompareMedia()` would prevent regressions.
+
+### [2026-03-20] From: code-review-pr-14
+**Origin**: Code review of PR #14 (TASK-015 fix zoom and extraction bugs)
+
+- [ ] **Align extraction completion cleanup ordering with cancelBackgroundExtraction()** — Natural completion path sets `isBackgroundExtracting = false` before clearing pause state (`extractionResumeTimer`, `extractionPaused`, `extractionResumeResolve`), while `cancelBackgroundExtraction()` does the opposite. No functional bug (loop has exited), but inconsistent ordering between the two exit paths. Scored 25/100 confidence.
+- [ ] **Update CLAUDE.md signalUserActivity() caller list** — Detected Patterns section lists only single-mode callers; four compare-mode handlers (`handleLeftLike`, `handleLeftDislike`, `handleRightLike`, `handleRightDislike`) now also call it but aren't documented. Scored 25/100 confidence.
+- [ ] **Add removeZoomPopover('single') to cleanupCurrentMedia() or mode switch** — Compare-mode popovers are now properly aborted via AbortController in `cleanupCompareMedia()`, but single-mode popover AbortController is never aborted during mode transitions. No actual leak (singleton, created once), but asymmetric pattern. Scored 25/100 confidence.
 
 ### [2026-03-12] From: TASK-013 (Unit test infrastructure)
 
