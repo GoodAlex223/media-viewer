@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-20 <!-- TASK-017 -->
+**Last Updated**: 2026-03-20 <!-- code-review-pr-16 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -18,6 +18,12 @@ Ideas and tasks not yet prioritized for active development.
 
 - [ ] **Add `:hover` state to nav buttons (prev/next)** — TASK-018 revealed that all `.control-btn` elements have per-button `:hover` rules, but navigation arrows are not `.control-btn` and have no hover feedback at all. Consider adding hover effects for consistency.
 - [ ] **Consolidate per-button `:hover` rules into shared base** — Six separate `:hover:not(:disabled)` rules (like, dislike, cancel, special, zoom-toggle, overlay-zoom) all share `transform: translateY(-3px) scale(1.05)`. The transform could be moved to a shared `.control-btn:hover:not(:disabled)` rule, with per-button rules only setting `background`, `border-color`, and `box-shadow`. Reduces duplication.
+
+### [2026-03-20] From: code-review-pr-16
+**Origin**: Code review of PR #16 (TASK-018 UI polish: button press effects and fullscreen guard)
+
+- [ ] **Update CLAUDE.md "Detected Patterns > Event Listener Lifecycle" for cleanupFullscreen() guard** — The description says `cleanupFullscreen(wrapper): unified exit point for ALL paths ... — calls abortFullscreenController() first`, but the new early-return guard means `abortFullscreenController()` is skipped when wrapper is not in fullscreen. Should update to reflect the guard behavior. Scored 75/100 confidence.
+- [ ] **Update inline comment on cleanupFullscreen() to reflect early-return behavior** — Comment says "ALL exit paths route through here" but destructive callers now silently return when wrapper is not in fullscreen. Functionally safe (abortFullscreenController is idempotent), but comment is technically inaccurate. Scored 50/100 confidence.
 
 ### [2026-03-20] From: TASK-017 (ESLint config and documentation alignment)
 **Origin**: TASK-017 implementation
