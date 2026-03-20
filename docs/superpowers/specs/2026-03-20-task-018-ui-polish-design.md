@@ -24,10 +24,11 @@ All `.control-btn` elements already have per-button `:hover` states (`.like-btn:
 - `.cancel-btn:hover:not(:disabled)` — amber glow (line 668)
 - `.special-btn:hover:not(:disabled)` — purple glow (line 681)
 - `.zoom-toggle-btn:hover:not(:disabled)` — blue glow (line 1037)
+- `.overlay-zoom-btn:hover:not(:disabled)` — blue glow, compare mode (line 1056)
 
 ### Solution
 
-Add one CSS rule to `styles.css`, after the last per-button hover rule (`.zoom-toggle-btn:hover:not(:disabled)` at ~line 1041):
+Add one CSS rule to `styles.css`, after the last per-button hover rule (`.overlay-zoom-btn:hover:not(:disabled)` at ~line 1060):
 
 ```css
 .control-btn:active:not(:disabled) {
@@ -48,7 +49,7 @@ Add one CSS rule to `styles.css`, after the last per-button hover rule (`.zoom-t
 
 ### Files Changed
 
-- `styles.css` — add `:active:not(:disabled)` rule after `.zoom-toggle-btn:hover:not(:disabled)` (~line 1042)
+- `styles.css` — add `:active:not(:disabled)` rule after `.overlay-zoom-btn:hover:not(:disabled)` (~line 1060)
 
 ## Part 2: Fullscreen Early-Return Guard
 
