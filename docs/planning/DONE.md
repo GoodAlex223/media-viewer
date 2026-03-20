@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-20 <!-- TASK-016 -->
+**Last Updated**: 2026-03-20 <!-- TASK-017 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,18 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-20] ESLint config and documentation alignment (TASK-017)
+
+**Plan**: N/A (low-effort documentation task)
+**Summary**: Aligned ESLint config comments and CLAUDE.md with actual codebase state. Updated header from "Four JS environments" to "Nine file-group blocks", fixed stale JSDoc filename in electron-wrapper.cjs, corrected feature-extractor.js classification from "worker-loaded" to "worker+browser".
+**Key Changes**:
+- `eslint.config.mjs` — Header lists all 9 blocks; block 3b comment reflects browser+worker dual loading
+- `tests/e2e/helpers/electron-wrapper.cjs` — JSDoc: `rdp-preload.js` → `rdp-preload.cjs`
+- `CLAUDE.md` — Removed 3 stale "known discrepancy" references, updated block count
+**Spawned Tasks**: 2 items added to BACKLOG.md (add `globals.browser` to block 3b, audit Git Insights for stale refs)
+
+---
 
 ### [2026-03-20] E2E test reliability improvements (TASK-016)
 

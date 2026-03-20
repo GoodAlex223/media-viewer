@@ -1,7 +1,7 @@
 /**
  * Wrapper script that launches Electron with corrected arguments.
  * Strips --remote-debugging-port=0 from CLI (rejected by Electron 30+)
- * and adds -r rdp-preload.js which sets it via app.commandLine.appendSwitch.
+ * and adds -r rdp-preload.cjs which sets it via app.commandLine.appendSwitch.
  *
  * See: https://github.com/microsoft/playwright/issues/39008
  */
