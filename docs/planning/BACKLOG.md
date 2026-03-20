@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-20
+**Last Updated**: 2026-03-20 <!-- TASK-016 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -12,6 +12,11 @@ Ideas and tasks not yet prioritized for active development.
 ---
 
 ## From Completed Tasks
+
+### [2026-03-20] From: TASK-016 (E2E test reliability improvements)
+
+- [ ] **Investigate transient Vitest "No test suite found" failures** — During TASK-016, `npm test` returned "No test suite found in file" for all 4 test files, but the same tests passed moments later via the pre-commit hook. May indicate Vitest version instability or file-system timing issue on Windows. Monitor for recurrence.
+- [ ] **Use waitForNotification() in future E2E tests** — Helper exists in electron-app.js but is unused. Natural candidates: TASK-022 (error cascade notification test), rating notification verification, extraction completion notification test.
 
 ### [2026-03-20] From: TASK-015 (Fix zoom and extraction bugs)
 
