@@ -208,7 +208,7 @@ media_viewer/
 - Also used for sort cancellation (sortAbortController) and background extraction (backgroundExtractionAbort)
 
 **Extraction Pause/Resume**:
-- signalUserActivity(): called on nextMedia(), previousMedia(), handleLike(), handleDislike(), handleSpecial(), handleUndoMove(); sets extractionPaused=true immediately and shows "Paused" progress state; resets/restarts a 2-second idle timer
+- signalUserActivity(): called on nextMedia(), previousMedia(), handleLike(), handleDislike(), handleSpecial(), handleUndoMove() (single mode) and handleLeftLike(), handleLeftDislike(), handleRightLike(), handleRightDislike() (compare mode); sets extractionPaused=true immediately and shows "Paused" progress state; resets/restarts a 2-second idle timer
 - resumeExtraction(): called by the idle timer after 2s of no activity; clears extractionPaused, resolves the awaitExtractionGate() promise, resets progress indicator to "Extracting"
 - awaitExtractionGate(signal): async gate at the top of each extraction loop iteration; resolves immediately when not paused; blocks via new Promise (stored in extractionResumeResolve) until resumeExtraction() is called
 - showBackgroundExtractionProgress(current, total, etaText, paused): paused=true renders "Paused — N/T (X%)"; _extractionLastCurrent/_extractionLastTotal cache last known counts for redisplay when current/total are null
@@ -239,7 +239,7 @@ media_viewer/
 
 Recent development focus:
 - Planned tasks TASK-015 through TASK-028 added (commit 514f455): 14 active tasks covering bugs, E2E reliability, ESLint/docs alignment, UI polish, and v2.0 modularization
-- TASK-015 🔴: Fix three bugs — mouseup listener leak in createZoomPopover (AbortController cleanup), signalUserActivity() missing from compare-mode rating handlers, extraction pause state not reset on natural completion
+- TASK-015 completed (PR #14): Fixed three bugs — mouseup listener leak in createZoomPopover (AbortController cleanup), signalUserActivity() missing from compare-mode rating handlers (handleLeftLike/handleLeftDislike/handleRightLike/handleRightDislike), extraction pause state not reset on natural completion; code review added 3 low-confidence (25/100) BACKLOG items (commit 682f81b)
 - TASK-018 🟡: UI polish — add `:active` press animation to all `.control-btn` elements; add early-return guard in cleanupFullscreen() when wrapper is not in fullscreen
 - TASK-019 🟠: Weekly challenge — extract fullscreen module from media-viewer.js (first v2.0 modularization step; establishes import strategy pattern for remaining extractions)
 - Manual testing session spawned TASK-020 through TASK-028: ML sorting pair ordering investigation, compare mode overlay UX, compare mode last-pair error cascade, video pause/play icon sync, per-folder feature extraction caching, application logging to file, keyboard shortcut customization, undo when no media remains, research on media content understanding tools
