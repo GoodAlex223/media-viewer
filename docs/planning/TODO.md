@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-20 <!-- TASK-017 completed -->
+**Last Updated**: 2026-03-20 <!-- TASK-018 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -40,25 +40,7 @@ Active tasks and backlog.
 <!-- TASK-015 completed 2026-03-20, moved to DONE.md -->
 <!-- TASK-016 completed 2026-03-20, moved to DONE.md -->
 <!-- TASK-017 completed 2026-03-20, moved to DONE.md -->
-
-### TASK-018 — UI polish: button press effects and fullscreen guard 🟡
-**Scheduled**: Thursday 2026-03-26
-**Priority**: 🟡 Normal — v1.1 UX refinement
-**Effort**: Low-Medium
-**Origin**: BACKLOG.md (visual-scale-controls, fullscreen-exithandler-leak-guard)
-
-**Description**: Two UI improvements to finalize v1.1 polish:
-1. **Click/active effect for control buttons** — No visual feedback on click/press for any control button (like, dislike, special, zoom, nav). Add `:active` state with press animation (scale down + opacity shift) to all `.control-btn` elements.
-2. **Early return guard in cleanupFullscreen()** — `cleanupFullscreen()` doesn't check if wrapper is actually in fullscreen, so double-calls (e.g., ESC after Z) trigger redundant `video.play()`. Add `if (!wrapper.classList.contains('fullscreen')) return;` at top.
-
-**Acceptance Criteria**:
-- [ ] All control buttons show visual press feedback on click
-- [ ] Active state uses subtle scale + opacity animation
-- [ ] cleanupFullscreen() exits early when wrapper is not in fullscreen
-- [ ] No visual regressions in single or compare mode
-- [ ] All E2E tests pass (`npm run test:e2e`)
-
----
+<!-- TASK-018 completed 2026-03-20, moved to DONE.md -->
 
 ### TASK-019 — 🏆 Weekly Challenge: Extract fullscreen module from media-viewer.js 🟠
 **Scheduled**: Friday 2026-03-27

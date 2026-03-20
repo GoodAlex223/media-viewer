@@ -13,6 +13,12 @@ Ideas and tasks not yet prioritized for active development.
 
 ## From Completed Tasks
 
+### [2026-03-20] From: TASK-018 (UI polish: button press effects and fullscreen guard)
+**Origin**: TASK-018 spec review and implementation
+
+- [ ] **Add `:hover` state to nav buttons (prev/next)** — TASK-018 revealed that all `.control-btn` elements have per-button `:hover` rules, but navigation arrows are not `.control-btn` and have no hover feedback at all. Consider adding hover effects for consistency.
+- [ ] **Consolidate per-button `:hover` rules into shared base** — Six separate `:hover:not(:disabled)` rules (like, dislike, cancel, special, zoom-toggle, overlay-zoom) all share `transform: translateY(-3px) scale(1.05)`. The transform could be moved to a shared `.control-btn:hover:not(:disabled)` rule, with per-button rules only setting `background`, `border-color`, and `box-shadow`. Reduces duplication.
+
 ### [2026-03-20] From: TASK-017 (ESLint config and documentation alignment)
 **Origin**: TASK-017 implementation
 
