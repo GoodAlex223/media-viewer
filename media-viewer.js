@@ -3738,6 +3738,7 @@ class MediaViewer {
     }
 
     cleanupFullscreen(wrapper) {
+        if (!wrapper.classList.contains('fullscreen')) return;
         // Centralized fullscreen cleanup — ALL exit paths route through here:
         // graceful (click, ESC, Z/X) and destructive (mode switch, pair navigation)
         this.abortFullscreenController(wrapper);
