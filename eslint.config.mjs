@@ -1,12 +1,15 @@
 // ESLint flat configuration for Electron media_viewer project.
 //
-// Four JS environments:
-//   1. Node/Electron main process  — main.js
-//   1b. Electron preload           — preload.js (Node + browser hybrid)
-//   2a. Browser renderer (module)  — media-viewer.js (loaded as type="module")
-//   2b. Browser renderer (script)  — face-detector.js (loaded as plain <script>)
-//   3a. Web Workers                — sorting-worker.js, ml-worker.js, feature-worker.js
-//   3b. Shared libs (worker-loaded) — feature-extractor.js, ml-model.js
+// Nine file-group blocks:
+//   1.  Node/Electron main           — main.js
+//   1b. Electron preload             — preload.js (Node + browser hybrid)
+//   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
+//   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
+//   3a. Web Workers                  — sorting-worker.js, ml-worker.js, feature-worker.js
+//   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js
+//   4.  Unit tests (Vitest)          — tests/**/*.js (excl. e2e)
+//   5a. E2E helpers (CJS)            — tests/e2e/**/*.cjs
+//   5b. E2E tests (Playwright)       — tests/e2e/**/*.js, playwright.config.js
 //
 // eslint-config-prettier applied last to suppress formatting rule conflicts.
 
@@ -128,7 +131,7 @@ export default [
         },
     },
 
-    // 3b. Shared libraries loaded via importScripts (have conditional CJS export pattern)
+    // 3b. Shared libraries loaded via importScripts and browser <script> (have conditional CJS export pattern)
     {
         files: ['feature-extractor.js', 'ml-model.js'],
         languageOptions: {
