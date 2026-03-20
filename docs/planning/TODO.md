@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-20 <!-- Week of 2026-03-23 planned -->
+**Last Updated**: 2026-03-20 <!-- TASK-016 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -38,26 +38,7 @@ Active tasks and backlog.
 <!-- TASK-013 completed 2026-03-12, moved to DONE.md -->
 <!-- TASK-014 completed 2026-03-13, moved to DONE.md -->
 <!-- TASK-015 completed 2026-03-20, moved to DONE.md -->
-
-
-### TASK-016 — E2E test reliability improvements 🟠
-**Scheduled**: Tuesday 2026-03-24
-**Priority**: 🟠 Medium — Test infrastructure correctness
-**Effort**: Low (3 small fixes)
-**Origin**: BACKLOG.md (code-review-pr-13)
-
-**Description**: Fix three issues found in code review of the E2E test suite:
-1. **Clear setTimeout in closeApp() on successful close** — `Promise.race` between `electronApp.close()` and a 5s timeout never clears the timer when close wins. Leaves Node event loop alive for 5 extra seconds per test teardown. Store timer ID and call `clearTimeout()` on success.
-2. **Register page.route() CDN stub before firstWindow() loads** — `page.route('**/unpkg.com/**', ...)` is registered after `firstWindow()` returns, but the synchronous `<script src>` in `<head>` has already dispatched the fetch. Move route registration earlier or use `electronApp.on('window', ...)`.
-3. **Remove or use waitForNotification() export** — `waitForNotification()` in `electron-app.js` is exported but never imported by any test file. Either remove it or add tests that use it.
-
-**Acceptance Criteria**:
-- [ ] closeApp() clears timeout on successful close
-- [ ] CDN stub registered before page loads
-- [ ] waitForNotification() removed or actively used in tests
-- [ ] All E2E tests pass (`npm run test:e2e`)
-
----
+<!-- TASK-016 completed 2026-03-20, moved to DONE.md -->
 
 ### TASK-017 — ESLint config and documentation alignment 🟡
 **Scheduled**: Wednesday 2026-03-25
