@@ -128,7 +128,8 @@ media_viewer/
 - Prefix with `_` (e.g., `_unused`, `_err`) to satisfy ESLint `no-unused-vars` rule (`varsIgnorePattern: '^_'`, `argsIgnorePattern: '^_'`, `caughtErrorsIgnorePattern: '^_'`)
 
 **Formatting & Linting**:
-- Prettier: tabWidth=4, singleQuote, semi, trailingComma=es5, printWidth=120
+- Prettier: tabWidth=4, useTabs=false, singleQuote, semi, trailingComma=es5, printWidth=120, bracketSpacing=true, arrowParens=always, endOfLine="lf"
+- `.gitattributes`: `* text=auto eol=lf` — enforces LF line endings for all files across platforms
 - ESLint flat config (`eslint.config.mjs`): 9 file-group blocks (Node/main, preload Node+browser, renderer module, renderer plain script, Web Workers, shared libs, unit tests/vitest, e2e CJS helpers, e2e JS tests + playwright.config.js); header comment says "Four JS environments" — known discrepancy (now 9 blocks); shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn with `_`-prefix escape); unit test block adds `no-new-func: off`; unit test block explicitly ignores `tests/e2e/**`; e2e JS block adds browser globals for `page.evaluate()` callbacks
 - `eslint-config-prettier` applied last to suppress rule conflicts with Prettier
 - Prettier ignores `docs/`, `*.md`, `package-lock.json`
@@ -238,6 +239,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- Line ending normalization (commit 5306bfd): `.gitattributes` added with `* text=auto eol=lf`; `.prettierrc.json` updated with `endOfLine: "lf"` — ensures consistent LF across all platforms and editors
 - Planned tasks TASK-015 through TASK-028 added (commit 514f455): 14 active tasks covering bugs, E2E reliability, ESLint/docs alignment, UI polish, and v2.0 modularization
 - TASK-015 completed (PR #14): Fixed three bugs — mouseup listener leak in createZoomPopover (AbortController cleanup), signalUserActivity() missing from compare-mode rating handlers (handleLeftLike/handleLeftDislike/handleRightLike/handleRightDislike), extraction pause state not reset on natural completion; code review added 3 low-confidence (25/100) BACKLOG items (commit 682f81b)
 - TASK-018 🟡: UI polish — add `:active` press animation to all `.control-btn` elements; add early-return guard in cleanupFullscreen() when wrapper is not in fullscreen
