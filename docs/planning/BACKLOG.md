@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-20 <!-- TASK-016 -->
+**Last Updated**: 2026-03-20 <!-- code-review-pr-15 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -12,6 +12,12 @@ Ideas and tasks not yet prioritized for active development.
 ---
 
 ## From Completed Tasks
+
+### [2026-03-20] From: code-review-pr-15
+**Origin**: Code review of PR #15 (TASK-016 E2E test reliability improvements)
+
+- [ ] **Use `electronApp.once('window')` instead of `.on('window')` in launchApp()** — CDN stub registration uses `electronApp.on('window', ...)` which fires for every new BrowserWindow. Since launchApp() expects exactly one window, `.once()` would prevent duplicate route registration if a second window ever opens (e.g., dialog, devtools). Matches the project's listener leak prevention patterns (TASK-005, TASK-015). Scored 75/100 confidence.
+- [ ] **Document waitForNotification() retention decision** — TASK-016 acceptance criterion #3 ("remove or use waitForNotification()") was deferred rather than completed. The reasoning (keep for TASK-022 and future notification tests) exists only in the PR body, not in committed documentation. Scored 75/100 confidence.
 
 ### [2026-03-20] From: TASK-016 (E2E test reliability improvements)
 
