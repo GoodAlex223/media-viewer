@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-20 <!-- TASK-017 -->
+**Last Updated**: 2026-03-20 <!-- TASK-018 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,17 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-20] UI polish: button press effects and fullscreen guard (TASK-018)
+
+**Plan**: [docs/archive/plans/2026-03-20-task-018-ui-polish.md](../../archive/plans/2026-03-20-task-018-ui-polish.md)
+**Summary**: Added `:active` press animation to all `.control-btn` elements (scale-down 0.93 + opacity 0.85 with 50ms transition) and added early-return guard in `cleanupFullscreen()` to prevent redundant operations on double-calls.
+**Key Changes**:
+- `styles.css` — Added `.control-btn:active:not(:disabled)` rule after all per-button `:hover` rules for correct source-order specificity
+- `media-viewer.js` — Added `if (!wrapper.classList.contains('fullscreen')) return;` guard at top of `cleanupFullscreen()`
+**Spawned Tasks**: 2 items added to BACKLOG.md (nav button hover states, consolidate per-button hover rules)
+
+---
 
 ### [2026-03-20] ESLint config and documentation alignment (TASK-017)
 
