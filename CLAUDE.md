@@ -203,7 +203,7 @@ media_viewer/
 
 **Event Listener Lifecycle**:
 - AbortController for scoped cleanup: fullscreenAbortControllers Map<wrapper, AbortController> stores controllers per wrapper element
-- cleanupFullscreen(wrapper): unified exit point for ALL paths (click, ESC, Z/X keys, mode switch, pair navigation) — calls abortFullscreenController() first
+- cleanupFullscreen(wrapper): unified exit point for ALL paths (click, ESC, Z/X keys, mode switch, pair navigation) — early-return guard skips cleanup when wrapper lacks `fullscreen` class; calls abortFullscreenController() first
 - abortFullscreenController(wrapper): helper that aborts and deletes the controller; called by cleanupFullscreen() and before wrapper.remove()
 - Prevents listener accumulation: exitHandler attached via { signal } so abort() removes it without stored reference
 - Also used for sort cancellation (sortAbortController) and background extraction (backgroundExtractionAbort)
