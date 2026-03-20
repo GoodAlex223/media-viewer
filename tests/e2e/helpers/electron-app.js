@@ -47,16 +47,19 @@ export async function launchApp() {
         cwd: PROJECT_ROOT,
     });
 
-    const page = await electronApp.firstWindow();
+    // Stub lucide CDN before firstWindow() — the synchronous <script src> in <head>
+    // fires during page load, so the route must be registered before the page exists.
+    electronApp.on('window', async (page) => {
+        await page.route('**/unpkg.com/**', (route) =>
+            route.fulfill({
+                status: 200,
+                contentType: 'application/javascript',
+                body: 'window.lucide = { createIcons: function() {} };',
+            })
+        );
+    });
 
-    // Stub lucide CDN to avoid network dependency — the app guards with typeof check
-    await page.route('**/unpkg.com/**', (route) =>
-        route.fulfill({
-            status: 200,
-            contentType: 'application/javascript',
-            body: 'window.lucide = { createIcons: function() {} };',
-        })
-    );
+    const page = await electronApp.firstWindow();
 
     // Wait for the renderer to be fully initialized
     await page.waitForFunction(() => typeof window.mediaViewer !== 'undefined', null, { timeout: 10_000 });
@@ -74,10 +77,16 @@ export async function launchApp() {
  */
 export async function closeApp(electronApp) {
     const CLOSE_TIMEOUT = 5_000;
+    let timer;
     try {
         await Promise.race([
-            electronApp.close(),
-            new Promise((_resolve, reject) => setTimeout(() => reject(new Error('close timeout')), CLOSE_TIMEOUT)),
+            electronApp.close().then((v) => {
+                clearTimeout(timer);
+                return v;
+            }),
+            new Promise((_resolve, reject) => {
+                timer = setTimeout(() => reject(new Error('close timeout')), CLOSE_TIMEOUT);
+            }),
         ]);
     } catch {
         // Force-kill the entire process tree (wrapper + electron.exe children)
