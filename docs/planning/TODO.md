@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-19 <!-- Week of 2026-03-23 planned -->
+**Last Updated**: 2026-03-20 <!-- Week of 2026-03-23 planned -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -37,26 +37,8 @@ Active tasks and backlog.
 <!-- TASK-012 completed 2026-03-11, moved to DONE.md -->
 <!-- TASK-013 completed 2026-03-12, moved to DONE.md -->
 <!-- TASK-014 completed 2026-03-13, moved to DONE.md -->
+<!-- TASK-015 completed 2026-03-20, moved to DONE.md -->
 
-### TASK-015 — Fix zoom and extraction bugs 🔴
-**Scheduled**: Monday 2026-03-23
-**Priority**: 🔴 High — Real bugs affecting user experience
-**Effort**: Medium (3 bug fixes)
-**Origin**: BACKLOG.md (code-review-pr-1, code-review-pr-10)
-
-**Description**: Fix three known bugs discovered during code reviews:
-1. **mouseup listener leak in createZoomPopover** — `document.addEventListener('mouseup', ...)` is never removed in `removeZoomPopover()`, causing listeners to accumulate in compare mode navigation. Use AbortController or stored handler reference for cleanup.
-2. **Add signalUserActivity() to compare-mode rating handlers** — `handleLeftLike`, `handleLeftDislike`, `handleRightLike`, `handleRightDislike` don't call `signalUserActivity()`, so extraction is not paused during compare-mode rating.
-3. **Clean up pause state on natural extraction end** — When the extraction loop finishes normally (not via cancel), `extractionPaused`, `extractionIdleTimer`, and `extractionResumeResolve` are not reset. A late `signalUserActivity()` call could show stale progress.
-
-**Acceptance Criteria**:
-- [ ] Zoom popover mouseup listener properly cleaned up via AbortController
-- [ ] Compare-mode rating handlers call signalUserActivity()
-- [ ] Extraction pause state fully reset on natural completion
-- [ ] All existing unit tests pass (`npm test`)
-- [ ] All E2E tests pass (`npm run test:e2e`)
-
----
 
 ### TASK-016 — E2E test reliability improvements 🟠
 **Scheduled**: Tuesday 2026-03-24

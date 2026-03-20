@@ -13,6 +13,11 @@ Ideas and tasks not yet prioritized for active development.
 
 ## From Completed Tasks
 
+### [2026-03-20] From: TASK-015 (Fix zoom and extraction bugs)
+
+- [ ] **Rename closeAllZoomPopovers() or add destroyAllZoomPopovers()** — `closeAllZoomPopovers()` only hides popovers visually (removes `.show` class) but does not call `removeZoomPopover()`. Future code paths relying on it for full cleanup would leak listeners. Consider renaming to `hideAllZoomPopovers()` for clarity, or adding a `destroyAllZoomPopovers()` that iterates and calls `removeZoomPopover()`.
+- [ ] **Add unit test for zoom popover AbortController cleanup** — The listener leak was caught by code review, not automated tests. A test verifying `AbortController.abort()` is called during `cleanupCompareMedia()` would prevent regressions.
+
 ### [2026-03-12] From: TASK-013 (Unit test infrastructure)
 
 - [ ] **Deduplicate MinHeap/VPTree across sorting-worker.js and media-viewer.js** — Both files contain identical implementations. Extract to a shared `data-structures.js` with the conditional CJS export pattern, then importScripts() in worker and import in renderer.
