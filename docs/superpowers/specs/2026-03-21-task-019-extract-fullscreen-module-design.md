@@ -14,7 +14,7 @@
 
 ### Module: `fullscreen.js`
 
-New file at project root. ES module (`export class`), imported by `media-viewer.js` via native `import` (already loaded as `<script type="module">`).
+New file at project root. ES module (`export class`), imported by `media-viewer.js` via native `import` (already loaded as `<script type="module">`). Browser-only module — depends on DOM APIs (`document.createElement`, `classList`, `dataset`).
 
 #### Class: `FullscreenManager`
 
@@ -41,7 +41,9 @@ export class FullscreenManager {
 }
 ```
 
-**State owned**: `abortControllers` Map (moved from `MediaViewer.fullscreenAbortControllers`).
+**State owned**:
+- `abortControllers` Map (moved from `MediaViewer.fullscreenAbortControllers`)
+- `wasPlaying` playback state stored on wrapper elements via `wrapper.dataset.wasPlaying` (DOM-resident, not in manager properties)
 
 **Constructor callbacks**:
 - `isZoomed(wrapper)` — checks zoom state to prevent click-to-exit while zoomed
@@ -52,7 +54,7 @@ export class FullscreenManager {
 Logic moved from `MediaViewer.toggleFullscreen()` (~60 lines, L3678-L3737):
 
 - If wrapper has `.fullscreen` class: delegate to `this.cleanup(wrapper)`
-- Else: save video playback state, call `this.pauseOtherVideos(wrapper)`, add `.fullscreen` class, create indicator element, resume video if was playing, set up click-to-exit handler with AbortController (using `this.isZoomed(wrapper)` guard)
+- Else: save video playback state, call `this.pauseOtherVideos(wrapper)`, add `.fullscreen` class, create indicator element, resume video if was playing, set up click-to-exit handler with AbortController (excludes clicks on `.overlay-btn` and `.media-overlay-controls`; uses `this.isZoomed(wrapper)` guard to prevent exit while zoomed)
 
 ### Method: `cleanup(wrapper)`
 
@@ -88,10 +90,10 @@ this.fullscreen = new FullscreenManager({
         return this.zoomState[target] && this.zoomState[target].scale > 1;
     },
     pauseOtherVideos: (wrapper) => {
-        if (this.leftMedia?.tagName === 'VIDEO' && this.leftMediaWrapper !== wrapper) {
+        if (this.leftMedia && this.leftMedia.tagName === 'VIDEO' && this.leftMediaWrapper !== wrapper) {
             this.leftMedia.pause();
         }
-        if (this.rightMedia?.tagName === 'VIDEO' && this.rightMediaWrapper !== wrapper) {
+        if (this.rightMedia && this.rightMedia.tagName === 'VIDEO' && this.rightMediaWrapper !== wrapper) {
             this.rightMedia.pause();
         }
     },
@@ -108,7 +110,7 @@ Mechanical renames, no logic changes:
 | `this.cleanupFullscreen(wrapper)` | `this.fullscreen.cleanup(wrapper)` |
 | `this.abortFullscreenController(wrapper)` | `this.fullscreen.abortController(wrapper)` |
 
-Call sites (~13 references across keyboard handler, `showCompareMedia`, `toggleViewMode`, click handlers).
+10 external call sites to rename (5 `toggleFullscreen` → `fullscreen.toggle`, 5 `cleanupFullscreen` → `fullscreen.cleanup`), plus 1 constructor property removal. `abortFullscreenController` has no external callers — only called internally within `cleanupFullscreen`, so it moves wholesale into the manager.
 
 ### Removed from MediaViewer
 
@@ -124,10 +126,10 @@ Call sites (~13 references across keyboard handler, `showCompareMedia`, `toggleV
 
 ## ESLint Configuration
 
-New block `2b` in `eslint.config.mjs`, inserted after block `2a` (media-viewer.js):
+New block `2c` in `eslint.config.mjs`, inserted after existing block `2b` (face-detector.js):
 
 ```js
-// 2b. Browser renderer modules (ES module -- imported by media-viewer.js)
+// 2c. Browser renderer modules (ES module -- imported by media-viewer.js)
 {
     files: ['fullscreen.js'],
     languageOptions: {
