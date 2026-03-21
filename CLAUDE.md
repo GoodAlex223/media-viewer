@@ -67,6 +67,7 @@ media_viewer/
 ├── ml-model.js          # ML model definitions
 ├── feature-extractor.js # Image feature extraction
 ├── feature-worker.js    # Web Worker for feature extraction
+├── fullscreen.js        # [TASK-019 planned] FullscreenManager ES module — toggle/cleanup/abortController; imported by media-viewer.js
 ├── face-detector.js     # Face detection using @vladmandic/face-api
 ├── vitest.config.js     # Vitest config (include: tests/**/*.test.js, exclude: tests/e2e/**)
 ├── playwright.config.js # Playwright E2E config (testDir: tests/e2e, workers: 1)
@@ -130,7 +131,7 @@ media_viewer/
 **Formatting & Linting**:
 - Prettier: tabWidth=4, useTabs=false, singleQuote, semi, trailingComma=es5, printWidth=120, bracketSpacing=true, arrowParens=always, endOfLine="lf"
 - `.gitattributes`: `* text=auto eol=lf` — enforces LF line endings for all files across platforms
-- ESLint flat config (`eslint.config.mjs`): 9 file-group blocks (Node/main, preload Node+browser, renderer module, renderer plain script, Web Workers, shared libs, unit tests/vitest, e2e CJS helpers, e2e JS tests + playwright.config.js); header comment says "Nine file-group blocks"; shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn with `_`-prefix escape); unit test block adds `no-new-func: off`; unit test block explicitly ignores `tests/e2e/**`; e2e JS block adds browser globals for `page.evaluate()` callbacks
+- ESLint flat config (`eslint.config.mjs`): 9 file-group blocks currently (Node/main, preload Node+browser, renderer module, renderer plain script, Web Workers, shared libs, unit tests/vitest, e2e CJS helpers, e2e JS tests + playwright.config.js); header comment says "Nine file-group blocks"; TASK-019 adds block `2c` for `fullscreen.js` (browser module, sourceType: module) → Ten file-group blocks; shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn with `_`-prefix escape); unit test block adds `no-new-func: off`; unit test block explicitly ignores `tests/e2e/**`; e2e JS block adds browser globals for `page.evaluate()` callbacks
 - `eslint-config-prettier` applied last to suppress rule conflicts with Prettier
 - Prettier ignores `docs/`, `*.md`, `package-lock.json`
 
@@ -202,9 +203,9 @@ media_viewer/
 - User-controlled visibility: Popovers toggle on button click, close on outside click
 
 **Event Listener Lifecycle**:
-- AbortController for scoped cleanup: fullscreenAbortControllers Map<wrapper, AbortController> stores controllers per wrapper element
-- cleanupFullscreen(wrapper): unified exit point for ALL paths (click, ESC, Z/X keys, mode switch, pair navigation) — early-return guard skips cleanup when wrapper lacks `fullscreen` class; calls abortFullscreenController() first
-- abortFullscreenController(wrapper): helper that aborts and deletes the controller; called by cleanupFullscreen() and before wrapper.remove()
+- AbortController for scoped cleanup: fullscreenAbortControllers Map<wrapper, AbortController> stores controllers per wrapper element (moves to FullscreenManager.abortControllers in TASK-019)
+- cleanupFullscreen(wrapper): unified exit point for ALL paths (click, ESC, Z/X keys, mode switch, pair navigation) — early-return guard skips cleanup when wrapper lacks `fullscreen` class; calls abortFullscreenController() first (TASK-019: becomes `this.fullscreen.cleanup(wrapper)`)
+- abortFullscreenController(wrapper): helper that aborts and deletes the controller; called by cleanupFullscreen() and before wrapper.remove() (TASK-019: becomes internal to FullscreenManager)
 - Prevents listener accumulation: exitHandler attached via { signal } so abort() removes it without stored reference
 - Also used for sort cancellation (sortAbortController) and background extraction (backgroundExtractionAbort)
 
@@ -242,8 +243,8 @@ Recent development focus:
 - Line ending normalization (commit 5306bfd): `.gitattributes` added with `* text=auto eol=lf`; `.prettierrc.json` updated with `endOfLine: "lf"` — ensures consistent LF across all platforms and editors
 - Planned tasks TASK-015 through TASK-028 added (commit 514f455): 14 active tasks covering bugs, E2E reliability, ESLint/docs alignment, UI polish, and v2.0 modularization
 - TASK-015 completed (PR #14): Fixed three bugs — mouseup listener leak in createZoomPopover (AbortController cleanup), signalUserActivity() missing from compare-mode rating handlers (handleLeftLike/handleLeftDislike/handleRightLike/handleRightDislike), extraction pause state not reset on natural completion; code review added 3 low-confidence (25/100) BACKLOG items (commit 682f81b)
-- TASK-018 completed: UI polish — added `:active` press animation to all `.control-btn` elements (scale-down + opacity with 50ms transition); added early-return guard in `cleanupFullscreen()` when wrapper is not in fullscreen
-- TASK-019 🟠: Weekly challenge — extract fullscreen module from media-viewer.js (first v2.0 modularization step; establishes import strategy pattern for remaining extractions)
+- TASK-018 completed: UI polish — added `:active` press animation to all `.control-btn` elements (scale-down + opacity with 50ms transition); added early-return guard in `cleanupFullscreen()` when wrapper is not in fullscreen; PR #16 code review items fully resolved (commit fd036ca) — CLAUDE.md "Event Listener Lifecycle" and cleanupFullscreen() inline comment updated to document early-return guard
+- TASK-019 🟠: Extract fullscreen module — design approved (commit cfbd97f); new file `fullscreen.js` exports `FullscreenManager` class (stateful manager, Option B); constructor callbacks `isZoomed(wrapper)` + `pauseOtherVideos(wrapper)`; methods `toggle(wrapper)`, `cleanup(wrapper)`, `abortController(wrapper)` extracted from MediaViewer; 10 call site renames (`this.toggleFullscreen` → `this.fullscreen.toggle`, `this.cleanupFullscreen` → `this.fullscreen.cleanup`); `fullscreenAbortControllers` Map moved into manager; ESLint gains block `2c` (Ten total blocks); establishes v2.0 extraction pattern (stateful manager + constructor-injected callbacks + delegation) for ZoomManager, CompareManager, SortingManager, MLManager
 - Manual testing session spawned TASK-020 through TASK-028: ML sorting pair ordering investigation, compare mode overlay UX, compare mode last-pair error cascade, video pause/play icon sync, per-folder feature extraction caching, application logging to file, keyboard shortcut customization, undo when no media remains, research on media content understanding tools
 - TASK-017 completed (commit d82c53f): Aligned ESLint config comments and CLAUDE.md with actual codebase state — updated eslint.config.mjs header from "Four JS environments" to "Nine file-group blocks" listing all 9 blocks (1, 1b, 2a, 2b, 3a, 3b, 4, 5a, 5b); corrected block 3b description to "shared libs (worker+browser)" reflecting dual load context; fixed stale JSDoc in electron-wrapper.cjs (rdp-preload.js → rdp-preload.cjs)
 - E2E code review cleanup (TASK-016 PR #15, TASK-017 both completed 2026-03-20): TASK-016 — closeApp() clears setTimeout on success (timer leak fix), launchApp() registers CDN stub via `.once('window')` before firstWindow() so synchronous script tags are intercepted; TASK-017 — fixed stale JSDoc in electron-wrapper.cjs (rdp-preload.js → rdp-preload.cjs), updated eslint.config.mjs header to "Nine file-group blocks" listing all 9 blocks, corrected block 3b to reflect dual worker+browser loading of feature-extractor.js
