@@ -342,6 +342,10 @@ class MediaViewer {
         this.compareLeftFile = null; // Current left file in compare mode (highest score)
         this.compareRightFile = null; // Current right file in compare mode (lowest score)
         this.mlComparePairIndex = 0; // Index for ML pair selection (0 = highest vs lowest)
+        this.pendingCompareRefresh = false; // Awaiting ML re-score before showing next compare pair
+        this.pendingCompareUpdates = 0; // Counter for expected updateComplete messages (2 for rating, 1 for undo)
+        this.pendingCompareTimeout = null; // Fallback timeout ID
+        this.previousScores = null; // Snapshot of predictionScores for delta notification
 
         // Feature extraction worker pool state
         this.featureWorkers = []; // Array of Worker instances
@@ -3425,28 +3429,28 @@ class MediaViewer {
     }
 
     async handleLeftLike() {
-        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
         // Left is liked, right is disliked
         await this.moveComparePair('left', 'like', 'dislike');
     }
 
     async handleLeftDislike() {
-        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
         // Left is disliked, right is liked
         await this.moveComparePair('left', 'dislike', 'like');
     }
 
     async handleRightLike() {
-        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
         // Right is liked, left is disliked
         await this.moveComparePair('right', 'like', 'dislike');
     }
 
     async handleRightDislike() {
-        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
         // Right is disliked, left is liked
         await this.moveComparePair('right', 'dislike', 'like');
@@ -3620,6 +3624,8 @@ class MediaViewer {
             }
 
             // Update ML model with both ratings (using pre-extracted features from earlier)
+            const mlSortedCompare = this.isSortedByPrediction && this.isCompareMode;
+
             if (primaryFeatures) {
                 this.updateMlModelWithFeatures(primaryFeatures, primaryAction);
             }
@@ -3644,7 +3650,37 @@ class MediaViewer {
             }
 
             this.updateFolderInfo();
-            await this.showMedia();
+
+            // If ML-sorted compare mode, defer showMedia() until re-score completes
+            if (mlSortedCompare && primaryFeatures && secondaryFeatures) {
+                // Clear any existing pending state from a prior rating
+                if (this.pendingCompareTimeout) {
+                    clearTimeout(this.pendingCompareTimeout);
+                    this.pendingCompareTimeout = null;
+                }
+                // Snapshot scores BEFORE re-score for delta notification
+                if (this.predictionScores.size > 0) {
+                    this.previousScores = new Map(this.predictionScores);
+                }
+                this.pendingCompareRefresh = true;
+                this.pendingCompareUpdates = 2;
+                // Keep mediaNavigationInProgress true to block spurious showMedia() calls
+                this.mediaNavigationInProgress = true;
+                // Fallback timeout: show with stale scores after 3s rather than blocking forever
+                this.pendingCompareTimeout = setTimeout(() => {
+                    if (this.pendingCompareRefresh) {
+                        console.warn('[ML Debug] Re-score timeout — showing pair with stale scores');
+                        this.pendingCompareRefresh = false;
+                        this.pendingCompareUpdates = 0;
+                        this.pendingCompareTimeout = null;
+                        this.previousScores = null;
+                        this.mediaNavigationInProgress = false;
+                        this.showMedia();
+                    }
+                }, 3000);
+            } else {
+                await this.showMedia();
+            }
         } catch (error) {
             console.error('Error moving compare files:', error);
             this.showError(`Failed to move files: ${error.message}`);
@@ -5074,19 +5110,32 @@ class MediaViewer {
                     this.saveMlModel();
                     this._saveModelTimer = null;
                 }, 500);
-                // Debounce re-scoring to avoid multiple calls in quick succession
-                if (this._scoreDebounceTimer) {
-                    clearTimeout(this._scoreDebounceTimer);
+
+                // If awaiting compare refresh, bypass debounce
+                if (this.pendingCompareRefresh) {
+                    this.pendingCompareUpdates--;
+                    if (this.pendingCompareUpdates <= 0) {
+                        // Both updates received — immediately request re-score
+                        this.requestPredictionScores();
+                        this.updateSortPredictionButton();
+                    }
+                    // Don't debounce — we'll handle showMedia() in scoreComplete
+                } else {
+                    // Normal path: debounce re-scoring
+                    if (this._scoreDebounceTimer) {
+                        clearTimeout(this._scoreDebounceTimer);
+                    }
+                    this._scoreDebounceTimer = setTimeout(() => {
+                        this.requestPredictionScores();
+                        this.updateSortPredictionButton();
+                        this._scoreDebounceTimer = null;
+                    }, 100);
                 }
-                this._scoreDebounceTimer = setTimeout(() => {
-                    this.requestPredictionScores();
-                    this.updateSortPredictionButton();
-                    this._scoreDebounceTimer = null;
-                }, 100);
                 break;
 
+            // Handle reversed ML update (undo functionality)
             case 'reverseUpdateComplete':
-                // Handle reversed ML update (undo functionality)
+                console.log('[ML Debug] Model reverse update complete');
                 this.mlModelState = message.modelState;
                 this.mlStats = message.stats;
                 // Debounce model saving
@@ -5097,15 +5146,25 @@ class MediaViewer {
                     this.saveMlModel();
                     this._saveModelTimer = null;
                 }, 500);
-                // Re-score after reversal
-                if (this._scoreDebounceTimer) {
-                    clearTimeout(this._scoreDebounceTimer);
+
+                // If awaiting compare refresh, bypass debounce
+                if (this.pendingCompareRefresh) {
+                    this.pendingCompareUpdates--;
+                    if (this.pendingCompareUpdates <= 0) {
+                        this.requestPredictionScores();
+                        this.updateSortPredictionButton();
+                    }
+                } else {
+                    // Normal path: debounce re-scoring
+                    if (this._scoreDebounceTimer) {
+                        clearTimeout(this._scoreDebounceTimer);
+                    }
+                    this._scoreDebounceTimer = setTimeout(() => {
+                        this.requestPredictionScores();
+                        this.updateSortPredictionButton();
+                        this._scoreDebounceTimer = null;
+                    }, 100);
                 }
-                this._scoreDebounceTimer = setTimeout(() => {
-                    this.requestPredictionScores();
-                    this.updateSortPredictionButton();
-                    this._scoreDebounceTimer = null;
-                }, 100);
                 break;
 
             case 'scoreComplete':
@@ -5120,6 +5179,44 @@ class MediaViewer {
                         }
                     }
                     this.updatePredictionBadges();
+
+                    // Score delta notification (only after rating-triggered re-scores)
+                    if (this.previousScores) {
+                        let upCount = 0;
+                        let downCount = 0;
+                        for (const [filePath, newScore] of this.predictionScores) {
+                            const oldScore = this.previousScores.get(filePath);
+                            if (oldScore !== undefined) {
+                                const delta = newScore - oldScore;
+                                if (delta > 0.05) {
+                                    upCount++;
+                                } else if (delta < -0.05) {
+                                    downCount++;
+                                }
+                            }
+                        }
+                        const total = upCount + downCount;
+                        if (total > 0) {
+                            this.showNotification(
+                                `ML updated: ${total} files rescored (${upCount}↑ ${downCount}↓)`,
+                                'info',
+                                2000
+                            );
+                        } else {
+                            this.showNotification('ML updated: scores stable', 'info', 2000);
+                        }
+                        this.previousScores = null;
+                    }
+
+                    // If deferred compare pair rendering, show next pair now
+                    if (this.pendingCompareRefresh) {
+                        clearTimeout(this.pendingCompareTimeout);
+                        this.pendingCompareRefresh = false;
+                        this.pendingCompareUpdates = 0;
+                        this.pendingCompareTimeout = null;
+                        this.mediaNavigationInProgress = false;
+                        this.showMedia();
+                    }
                 }
                 break;
 
