@@ -1,3 +1,5 @@
+import { FullscreenManager } from './fullscreen.js';
+
 // MinHeap (Priority Queue) for efficient MST construction
 class MinHeap {
     constructor(compareFunc = (a, b) => a.distance - b.distance) {
@@ -369,8 +371,25 @@ class MediaViewer {
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
 
-        // Fullscreen state
-        this.fullscreenAbortControllers = new Map(); // Map<wrapper, AbortController>
+        // Fullscreen manager (v2.0 module pattern — stateful manager with callbacks)
+        this.fullscreen = new FullscreenManager({
+            isZoomed: (wrapper) => {
+                const target = wrapper.classList.contains('left-media-wrapper')
+                    ? 'left'
+                    : wrapper.classList.contains('right-media-wrapper')
+                      ? 'right'
+                      : 'single';
+                return this.zoomState[target] && this.zoomState[target].scale > 1;
+            },
+            pauseOtherVideos: (wrapper) => {
+                if (this.leftMedia && this.leftMedia.tagName === 'VIDEO' && this.leftMediaWrapper !== wrapper) {
+                    this.leftMedia.pause();
+                }
+                if (this.rightMedia && this.rightMedia.tagName === 'VIDEO' && this.rightMediaWrapper !== wrapper) {
+                    this.rightMedia.pause();
+                }
+            },
+        });
 
         // Zoom state for each view
         this.zoomState = {
@@ -1635,10 +1654,10 @@ class MediaViewer {
                 e.preventDefault();
                 // Exit fullscreen first
                 if (this.leftMediaWrapper && this.leftMediaWrapper.classList.contains('fullscreen')) {
-                    this.cleanupFullscreen(this.leftMediaWrapper);
+                    this.fullscreen.cleanup(this.leftMediaWrapper);
                 }
                 if (this.rightMediaWrapper && this.rightMediaWrapper.classList.contains('fullscreen')) {
-                    this.cleanupFullscreen(this.rightMediaWrapper);
+                    this.fullscreen.cleanup(this.rightMediaWrapper);
                 }
                 // Reset zoom
                 if (this.isZoomed()) {
@@ -1671,13 +1690,13 @@ class MediaViewer {
                     case 'KeyZ':
                         e.preventDefault();
                         if (this.leftMediaWrapper) {
-                            this.toggleFullscreen(this.leftMediaWrapper);
+                            this.fullscreen.toggle(this.leftMediaWrapper);
                         }
                         break;
                     case 'KeyX':
                         e.preventDefault();
                         if (this.rightMediaWrapper) {
-                            this.toggleFullscreen(this.rightMediaWrapper);
+                            this.fullscreen.toggle(this.rightMediaWrapper);
                         }
                         break;
                     case 'KeyA':
@@ -2374,11 +2393,11 @@ class MediaViewer {
         await Promise.all(cleanupPromises);
 
         if (this.leftMediaWrapper) {
-            this.cleanupFullscreen(this.leftMediaWrapper);
+            this.fullscreen.cleanup(this.leftMediaWrapper);
             this.leftMediaWrapper.remove();
         }
         if (this.rightMediaWrapper) {
-            this.cleanupFullscreen(this.rightMediaWrapper);
+            this.fullscreen.cleanup(this.rightMediaWrapper);
             this.rightMediaWrapper.remove();
         }
 
@@ -2545,13 +2564,13 @@ class MediaViewer {
         this.leftMediaWrapper.addEventListener('click', (e) => {
             if (!this.leftMediaWrapper.classList.contains('fullscreen')) {
                 e.stopPropagation();
-                this.toggleFullscreen(this.leftMediaWrapper);
+                this.fullscreen.toggle(this.leftMediaWrapper);
             }
         });
         this.rightMediaWrapper.addEventListener('click', (e) => {
             if (!this.rightMediaWrapper.classList.contains('fullscreen')) {
                 e.stopPropagation();
-                this.toggleFullscreen(this.rightMediaWrapper);
+                this.fullscreen.toggle(this.rightMediaWrapper);
             }
         });
 
@@ -3347,12 +3366,12 @@ class MediaViewer {
                 await this.cleanupCompareMedia('right');
             }
             if (this.leftMediaWrapper) {
-                this.cleanupFullscreen(this.leftMediaWrapper);
+                this.fullscreen.cleanup(this.leftMediaWrapper);
                 this.leftMediaWrapper.remove();
                 this.leftMediaWrapper = null;
             }
             if (this.rightMediaWrapper) {
-                this.cleanupFullscreen(this.rightMediaWrapper);
+                this.fullscreen.cleanup(this.rightMediaWrapper);
                 this.rightMediaWrapper.remove();
                 this.rightMediaWrapper = null;
             }
@@ -3673,95 +3692,6 @@ class MediaViewer {
         }
 
         this.isBeingCleaned = false;
-    }
-
-    toggleFullscreen(wrapper) {
-        if (wrapper.classList.contains('fullscreen')) {
-            this.cleanupFullscreen(wrapper);
-        } else {
-            // Get the video element in this wrapper
-            const video = wrapper.querySelector('video');
-            const wasPlaying = video && !video.paused;
-
-            // Store playback state on wrapper
-            wrapper.dataset.wasPlaying = wasPlaying;
-
-            // Pause other videos in compare mode
-            if (this.leftMedia && this.leftMedia.tagName === 'VIDEO' && this.leftMediaWrapper !== wrapper) {
-                this.leftMedia.pause();
-            }
-            if (this.rightMedia && this.rightMedia.tagName === 'VIDEO' && this.rightMediaWrapper !== wrapper) {
-                this.rightMedia.pause();
-            }
-
-            wrapper.classList.add('fullscreen');
-
-            // Add indicator
-            const indicator = document.createElement('div');
-            indicator.className = 'fullscreen-indicator';
-            indicator.textContent = 'Press ESC to exit fullscreen';
-            wrapper.appendChild(indicator);
-
-            // Resume video playback if it was playing
-            if (video && wasPlaying) {
-                // Small delay to ensure fullscreen transition completes
-                setTimeout(() => {
-                    video.play().catch((err) => console.log('Auto-play prevented:', err));
-                }, 100);
-            }
-
-            // Click to exit (but not on overlay buttons or when zoomed)
-            // Use AbortController so cleanupFullscreen() can remove this listener
-            // regardless of which exit path is taken (click, ESC, Z/X keys)
-            const existing = this.fullscreenAbortControllers.get(wrapper);
-            if (existing) existing.abort();
-            const abortController = new AbortController();
-            this.fullscreenAbortControllers.set(wrapper, abortController);
-            const exitHandler = (e) => {
-                // Don't exit if clicking on overlay buttons (like/dislike/special)
-                if (e.target.closest('.overlay-btn') || e.target.closest('.media-overlay-controls')) {
-                    return;
-                }
-                // Don't exit if media is zoomed (use ESC to exit when zoomed)
-                const zoomTarget = wrapper.classList.contains('left-media-wrapper')
-                    ? 'left'
-                    : wrapper.classList.contains('right-media-wrapper')
-                      ? 'right'
-                      : 'single';
-                if (this.zoomState[zoomTarget] && this.zoomState[zoomTarget].scale > 1) {
-                    return;
-                }
-                this.cleanupFullscreen(wrapper);
-            };
-            wrapper.addEventListener('click', exitHandler, { signal: abortController.signal });
-        }
-    }
-
-    cleanupFullscreen(wrapper) {
-        if (!wrapper.classList.contains('fullscreen')) return;
-        // Centralized fullscreen cleanup — ALL exit paths route through here
-        // (no-op if wrapper is not in fullscreen; guards against double-calls)
-        this.abortFullscreenController(wrapper);
-
-        wrapper.classList.remove('fullscreen');
-        const indicator = wrapper.querySelector('.fullscreen-indicator');
-        if (indicator) {
-            indicator.remove();
-        }
-
-        // Restore video playback state if it was playing before fullscreen
-        const video = wrapper.querySelector('video');
-        if (video && wrapper.dataset.wasPlaying === 'true') {
-            video.play().catch((err) => console.log('Auto-play prevented:', err));
-        }
-    }
-
-    abortFullscreenController(wrapper) {
-        const ctrl = this.fullscreenAbortControllers.get(wrapper);
-        if (ctrl) {
-            ctrl.abort();
-            this.fullscreenAbortControllers.delete(wrapper);
-        }
     }
 
     // Visual Similarity Sorting Functions
