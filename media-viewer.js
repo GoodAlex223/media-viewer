@@ -5105,15 +5105,27 @@ class MediaViewer {
                     this.saveMlModel();
                     this._saveModelTimer = null;
                 }, 500);
-                // Debounce re-scoring to avoid multiple calls in quick succession
-                if (this._scoreDebounceTimer) {
-                    clearTimeout(this._scoreDebounceTimer);
+
+                // If awaiting compare refresh, bypass debounce
+                if (this.pendingCompareRefresh) {
+                    this.pendingCompareUpdates--;
+                    if (this.pendingCompareUpdates <= 0) {
+                        // Both updates received — immediately request re-score
+                        this.requestPredictionScores();
+                        this.updateSortPredictionButton();
+                    }
+                    // Don't debounce — we'll handle showMedia() in scoreComplete
+                } else {
+                    // Normal path: debounce re-scoring
+                    if (this._scoreDebounceTimer) {
+                        clearTimeout(this._scoreDebounceTimer);
+                    }
+                    this._scoreDebounceTimer = setTimeout(() => {
+                        this.requestPredictionScores();
+                        this.updateSortPredictionButton();
+                        this._scoreDebounceTimer = null;
+                    }, 100);
                 }
-                this._scoreDebounceTimer = setTimeout(() => {
-                    this.requestPredictionScores();
-                    this.updateSortPredictionButton();
-                    this._scoreDebounceTimer = null;
-                }, 100);
                 break;
 
             case 'reverseUpdateComplete':
