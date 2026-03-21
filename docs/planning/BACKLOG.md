@@ -22,8 +22,8 @@ Ideas and tasks not yet prioritized for active development.
 ### [2026-03-20] From: code-review-pr-16
 **Origin**: Code review of PR #16 (TASK-018 UI polish: button press effects and fullscreen guard)
 
-- [ ] **Update CLAUDE.md "Detected Patterns > Event Listener Lifecycle" for cleanupFullscreen() guard** — The description says `cleanupFullscreen(wrapper): unified exit point for ALL paths ... — calls abortFullscreenController() first`, but the new early-return guard means `abortFullscreenController()` is skipped when wrapper is not in fullscreen. Should update to reflect the guard behavior. Scored 75/100 confidence.
-- [ ] **Update inline comment on cleanupFullscreen() to reflect early-return behavior** — Comment says "ALL exit paths route through here" but destructive callers now silently return when wrapper is not in fullscreen. Functionally safe (abortFullscreenController is idempotent), but comment is technically inaccurate. Scored 50/100 confidence.
+- [x] **Update CLAUDE.md "Detected Patterns > Event Listener Lifecycle" for cleanupFullscreen() guard** — Fixed in commit c0cfdde
+- [x] **Update inline comment on cleanupFullscreen() to reflect early-return behavior** — Fixed in commit c0cfdde
 
 ### [2026-03-20] From: TASK-017 (ESLint config and documentation alignment)
 **Origin**: TASK-017 implementation
