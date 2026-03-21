@@ -2607,7 +2607,7 @@ class MediaViewer {
 
     addMediaOverlayControls(wrapper, side) {
         const controls = document.createElement('div');
-        controls.className = `media-overlay-controls media-overlay-controls-${side}`;
+        controls.className = 'media-overlay-controls';
 
         const likeBtn = document.createElement('button');
         likeBtn.className = 'overlay-btn overlay-like-btn';
