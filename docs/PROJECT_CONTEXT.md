@@ -27,6 +27,7 @@ Project decisions, patterns, and historical context for Media Viewer.
 | Context Isolation | Enabled | Security best practice for Electron apps | Initial |
 | Sandbox | Disabled | Required for file system operations | Initial |
 | Sorting Worker | Web Worker | Prevents UI blocking, avoids Chromium throttling when minimized | 2025-12 |
+| Module extraction pattern | Stateful manager + constructor-injected callbacks | Clean boundaries, testable in isolation, no `this` coupling to host; first extraction: FullscreenManager | 2026-03 |
 
 ### Algorithm Decisions
 
@@ -118,4 +119,4 @@ Project decisions, patterns, and historical context for Media Viewer.
 
 ---
 
-*Last Updated: 2026-02-05*
+*Last Updated: 2026-03-21*
