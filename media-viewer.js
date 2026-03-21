@@ -5174,6 +5174,44 @@ class MediaViewer {
                         }
                     }
                     this.updatePredictionBadges();
+
+                    // Score delta notification (only after rating-triggered re-scores)
+                    if (this.previousScores) {
+                        let upCount = 0;
+                        let downCount = 0;
+                        for (const [filePath, newScore] of this.predictionScores) {
+                            const oldScore = this.previousScores.get(filePath);
+                            if (oldScore !== undefined) {
+                                const delta = newScore - oldScore;
+                                if (delta > 0.05) {
+                                    upCount++;
+                                } else if (delta < -0.05) {
+                                    downCount++;
+                                }
+                            }
+                        }
+                        const total = upCount + downCount;
+                        if (total > 0) {
+                            this.showNotification(
+                                `ML updated: ${total} files rescored (${upCount}↑ ${downCount}↓)`,
+                                'info',
+                                2000
+                            );
+                        } else {
+                            this.showNotification('ML updated: scores stable', 'info', 2000);
+                        }
+                        this.previousScores = null;
+                    }
+
+                    // If deferred compare pair rendering, show next pair now
+                    if (this.pendingCompareRefresh) {
+                        clearTimeout(this.pendingCompareTimeout);
+                        this.pendingCompareRefresh = false;
+                        this.pendingCompareUpdates = 0;
+                        this.pendingCompareTimeout = null;
+                        this.mediaNavigationInProgress = false;
+                        this.showMedia();
+                    }
                 }
                 break;
 
