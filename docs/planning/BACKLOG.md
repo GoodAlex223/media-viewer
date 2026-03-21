@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-21 <!-- TASK-019 -->
+**Last Updated**: 2026-03-21 <!-- TASK-019 code-review-pr-17 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -21,6 +21,13 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Add unit tests for FullscreenManager** — Class is independently testable (DOM APIs can be mocked). E2E tests cover behavior end-to-end, but focused unit tests would catch regressions faster and serve as documentation for the manager's contract.
 - [ ] **Clear `wrapper.dataset.wasPlaying` after restore in `cleanup()`** — Pre-existing bug carried over from original code. After restoring video playback state, `wasPlaying` remains on the element. If the same wrapper is reused for different media, stale attribute could cause unintended `video.play()` on next `cleanup()`.
 - [ ] **Fix ESLint header label style inconsistency for block 2c** — Header listing uses em-dash suffix format; block comment uses parenthetical format. Inconsistent with blocks 2a/2b which use parenthetical in the label. Cosmetic only.
+
+### [2026-03-21] From: code-review-pr-17 (Post-merge review findings)
+**Origin**: PR #17 code review — 5 parallel agents, confidence scoring
+
+- [ ] **Update "Single-file renderer" pattern in CLAUDE.md** — Patterns section still says "Single-file renderer: All UI logic in `media-viewer.js` (class-based)" but `fullscreen.js` now contains extracted UI logic. Should be updated to reflect the v2.0 modularization pattern already documented in the same section. (confidence 65/100)
+- [ ] **Update `.claude/agents/regression-checker.md` for FullscreenManager** — References `fullscreenAbortControllers`, `cleanupFullscreen()`, and `abortFullscreenController()` which were extracted to `FullscreenManager` in `fullscreen.js`. Agent will give stale guidance on future reviews.
+- [ ] **Update stale CLAUDE.md Git Insights entries for TASK-005/TASK-006** — Historical entries reference old method names (`cleanupFullscreen()`, `fullscreenAbortControllers`, `abortFullscreenController()`) as current patterns. Could confuse future readers/agents.
 
 ### [2026-03-20] From: TASK-018 (UI polish: button press effects and fullscreen guard)
 **Origin**: TASK-018 spec review and implementation
@@ -206,7 +213,7 @@ Areas requiring investigation before implementation.
 ### 2026-02-24 From: task-006-unified-fullscreen-cleanup
 **Origin**: docs/archive/plans/2026-02-24_task-006-unified-fullscreen-cleanup.md
 
-- [ ] Extract setupFullscreen(wrapper) from toggleFullscreen() enter branch — The enter branch is 55 lines. Extracting to a symmetric `setupFullscreen(wrapper)` alongside `cleanupFullscreen(wrapper)` would improve readability and make the enter/exit symmetry explicit.
+- [x] ~~Extract setupFullscreen(wrapper) from toggleFullscreen() enter branch~~ — Superseded by TASK-019: fullscreen logic extracted to `FullscreenManager` class in `fullscreen.js`. The enter branch is now `FullscreenManager.toggle()`. A symmetric `setup()`/`cleanup()` split within the manager is still possible but lower priority.
 
 ### 2026-02-25 From: task-007-force-resort-option
 **Origin**: TASK-007 implementation
