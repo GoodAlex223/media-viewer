@@ -41,43 +41,53 @@ Six user-reported issues investigated against the ML sorting pipeline.
 
 ### Problem
 
-In compare mode with ML sorting active, after rating a pair:
-1. `moveComparePair()` removes rated files → calls `showCompareMedia()`
-2. `updateMlModelWithFeatures()` sends `update` to ML worker
-3. Worker returns `updateComplete` → 100ms debounce → `requestPredictionScores()` → `scoreAll`
-4. `scoreComplete` updates `predictionScores` map
+In compare mode with ML sorting active, after rating a pair, the actual code flow in `moveComparePair()` is:
+1. `updateMlModelWithFeatures()` called for primary file (label from action)
+2. `updateMlModelWithFeatures()` called for secondary file (opposite label)
+3. `removeFileFromList()` for both files
+4. `this.showMedia()` called (dispatches to `showCompareMedia()` when `isCompareMode` is true)
 
-Step 1 fires BEFORE step 4 completes. The next pair renders with stale scores.
+Each `updateMlModelWithFeatures()` sends a separate `update` message to the ML worker. The worker returns `updateComplete` for each → 100ms debounce → `requestPredictionScores()` → `scoreAll` → `scoreComplete` updates `predictionScores` map.
+
+Step 4 (`showMedia()`) fires BEFORE either `scoreComplete` arrives. The next pair renders with stale scores.
 
 ### Solution
 
-In compare mode with ML sort active, chain the flow: update → score → then show next pair.
+In compare mode with ML sort active, chain the flow: wait for both updates → score → then show next pair.
 
 ```
 Rating in compare mode (ML sort active):
-  1. moveComparePair() removes files, does NOT call showCompareMedia()
-  2. updateMlModelWithFeatures() sends 'update' to worker
-  3. On 'updateComplete': skip 100ms debounce, immediately send 'scoreAll'
-  4. On 'scoreComplete': update predictionScores, THEN call showCompareMedia()
+  1. moveComparePair() calls updateMlModelWithFeatures() twice, removes files
+  2. moveComparePair() does NOT call this.showMedia(); sets pendingCompareRefresh = true
+  3. pendingCompareUpdates counter set to 2 (expecting 2 updateComplete messages)
+  4. On each 'updateComplete': decrement counter; when counter reaches 0, skip debounce,
+     immediately send 'scoreAll'
+  5. On 'scoreComplete': update predictionScores, THEN call this.showMedia()
 ```
 
 ### Design Decisions
 
 - **100ms debounce preserved for single mode** — single mode only updates badges, no ordering impact
 - **Compare mode + ML sort active bypasses debounce** — chains update → score → show next pair
+- **Two-update batching** — `pendingCompareUpdates` counter tracks both `updateComplete` messages; `scoreAll` fires only after both arrive, ensuring the model reflects both ratings
 - **Loading indicator** — brief loading state while waiting for re-score (reuse existing indicator)
-- **Fallback timeout (3 seconds)** — if re-score hasn't returned, show next pair with stale scores rather than blocking forever
+- **Fallback timeout (3 seconds)** — if re-score hasn't returned, show next pair with stale scores; timeout clears `pendingCompareRefresh` flag and `pendingCompareUpdates` counter to prevent stale `scoreComplete` from triggering an unintended `showMedia()` later
+- **Guard interaction** — during the pending refresh window, `mediaNavigationInProgress` stays `true` (set by `moveComparePair()`) to block spurious `showMedia()` calls from key events or resize; it is cleared after the deferred `showMedia()` completes or on fallback timeout
+- **Undo in compare mode** — `reverseUpdateComplete` handler has the same 100ms debounce pattern; if `pendingCompareRefresh` is active during an undo, the same bypass logic applies. However, undo in compare mode is rare and only sends one `reverseUpdate`, so the counter is set to 1 in that path.
 
 ### State Changes
 
 - `pendingCompareRefresh: boolean` — new state flag, `true` when awaiting re-score before showing next compare pair
-- `moveComparePair()` — add conditional: if ML-sorted, set `pendingCompareRefresh = true` and skip `showCompareMedia()` call
-- `updateComplete` handler — detect `pendingCompareRefresh`, skip debounce, send immediate `scoreAll`
-- `scoreComplete` handler — if `pendingCompareRefresh`, call `showCompareMedia()` after updating scores, reset flag
+- `pendingCompareUpdates: number` — counter for expected `updateComplete` messages (2 for rating, 1 for undo)
+- `moveComparePair()` — add conditional: if ML-sorted and `isSortedByPrediction`, set `pendingCompareRefresh = true`, `pendingCompareUpdates = 2`, skip `this.showMedia()` call
+- `updateComplete` handler — if `pendingCompareRefresh`, decrement `pendingCompareUpdates`; when 0, skip debounce, send immediate `scoreAll`
+- `reverseUpdateComplete` handler — same bypass logic as `updateComplete` when `pendingCompareRefresh` is active
+- `scoreComplete` handler — if `pendingCompareRefresh`, call `this.showMedia()` after updating scores, reset `pendingCompareRefresh` and clear fallback timeout
+- Fallback timeout — on fire: clear `pendingCompareRefresh`, `pendingCompareUpdates`, `mediaNavigationInProgress`, then call `this.showMedia()` with stale scores
 
 ### Files Modified
 
-- `media-viewer.js`: `moveComparePair()`, `updateComplete` handler, `scoreComplete` handler, constructor (new state)
+- `media-viewer.js`: `moveComparePair()`, `updateComplete` handler, `reverseUpdateComplete` handler, `scoreComplete` handler, constructor (new state)
 
 ---
 
@@ -101,14 +111,15 @@ Example notifications:
 
 ### Implementation
 
-1. Before sending `scoreAll` after a rating, snapshot current `predictionScores` into `previousScores` (temporary Map)
-2. On `scoreComplete`, diff old vs new scores, count files with |delta| > 0.05
-3. Show notification via existing `showNotification()` (short duration, ~2s)
-4. Use a `scoreTriggeredByRating: boolean` flag to distinguish rating-triggered re-scores from other triggers
+1. Snapshot `predictionScores` into `previousScores` (temporary Map) at the point where `pendingCompareRefresh` is set — this captures pre-rating scores before either model update
+2. The snapshot is taken once per rating action (before either `updateMlModelWithFeatures()` call), not per `scoreAll` request, ensuring the diff reflects the combined impact of both updates
+3. On `scoreComplete`, diff old vs new scores, count files with |delta| > 0.05
+4. Show notification via existing `showNotification()` (short duration, ~2s)
+5. Use the `pendingCompareRefresh` flag (or a separate `scoreTriggeredByRating: boolean`) to distinguish rating-triggered re-scores from other triggers
 
 ### Files Modified
 
-- `media-viewer.js`: `requestPredictionScores()` (snapshot), `scoreComplete` handler (diff + notification), constructor (new state)
+- `media-viewer.js`: `moveComparePair()` (snapshot), `scoreComplete` handler (diff + notification), constructor (new state)
 
 ---
 
@@ -116,7 +127,7 @@ Example notifications:
 
 ### Approach
 
-Extract the pair selection algorithm from `showCompareMedia()` and test with mock data using the existing `extractMethod()` pattern.
+Extract the pair selection algorithm from `showCompareMedia()` and test with mock data using the existing `extractMethod()` pattern. The mock context must provide a `predictionScores` Map (not a plain object) since the code accesses scores via `.get(f.path) ?? 0.5`.
 
 ### Test File
 
