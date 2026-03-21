@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-20 <!-- TASK-018 -->
+**Last Updated**: 2026-03-21 <!-- TASK-019 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,20 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-21] Extract fullscreen module from media-viewer.js (TASK-019)
+
+**Plan**: [docs/archive/plans/2026-03-21-extract-fullscreen-module.md](../../archive/plans/2026-03-21-extract-fullscreen-module.md)
+**Spec**: [docs/superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md](../../superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md)
+**Summary**: Extracted fullscreen logic from media-viewer.js into a standalone `FullscreenManager` class in `fullscreen.js`, establishing the v2.0 modularization pattern (stateful manager + constructor-injected callbacks).
+**Key Changes**:
+- `fullscreen.js` — New ES module with `FullscreenManager` class (toggle, cleanup, abortController methods)
+- `media-viewer.js` — Import + instantiate FullscreenManager, rename 10 call sites, delete 3 old methods (~70 lines net reduction)
+- `eslint.config.mjs` — Added block 2c for browser renderer modules (Ten file-group blocks)
+- `docs/PROJECT_CONTEXT.md` — Architecture decision: stateful manager + callbacks pattern
+**Spawned Tasks**: 5 items added to BACKLOG.md (method rename, isZoomed helper, unit tests, wasPlaying cleanup, ESLint label style)
+
+---
 
 ### [2026-03-20] UI polish: button press effects and fullscreen guard (TASK-018)
 

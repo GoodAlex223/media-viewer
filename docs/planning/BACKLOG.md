@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-20 <!-- code-review-pr-16 -->
+**Last Updated**: 2026-03-21 <!-- TASK-019 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -12,6 +12,15 @@ Ideas and tasks not yet prioritized for active development.
 ---
 
 ## From Completed Tasks
+
+### [2026-03-21] From: TASK-019 (Extract fullscreen module from media-viewer.js)
+**Origin**: TASK-019 code reviews (Task 1, Task 2, and final review)
+
+- [ ] **Rename `abortController()` method in FullscreenManager** — Method name reads as a noun (property access) rather than a verb (action). Confusing because `AbortController` is a well-known browser API class. Consider `releaseController(wrapper)` or `removeController(wrapper)`. No external callers (only used internally by `cleanup()`), so rename is trivial.
+- [ ] **Add wrapper-aware `isZoomed(wrapper)` helper to MediaViewer** — The `isZoomed` callback injected into FullscreenManager duplicates the wrapper-to-target mapping logic (`left-media-wrapper` → `'left'`, etc.). Consider adding a `isWrapperZoomed(wrapper)` method on MediaViewer so the callback can delegate instead of reimplementing. Prevents divergence if zoom state shape changes.
+- [ ] **Add unit tests for FullscreenManager** — Class is independently testable (DOM APIs can be mocked). E2E tests cover behavior end-to-end, but focused unit tests would catch regressions faster and serve as documentation for the manager's contract.
+- [ ] **Clear `wrapper.dataset.wasPlaying` after restore in `cleanup()`** — Pre-existing bug carried over from original code. After restoring video playback state, `wasPlaying` remains on the element. If the same wrapper is reused for different media, stale attribute could cause unintended `video.play()` on next `cleanup()`.
+- [ ] **Fix ESLint header label style inconsistency for block 2c** — Header listing uses em-dash suffix format; block comment uses parenthetical format. Inconsistent with blocks 2a/2b which use parenthetical in the label. Cosmetic only.
 
 ### [2026-03-20] From: TASK-018 (UI polish: button press effects and fullscreen guard)
 **Origin**: TASK-018 spec review and implementation
