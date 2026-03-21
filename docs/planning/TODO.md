@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-20 <!-- TASK-018 completed -->
+**Last Updated**: 2026-03-21 <!-- TASK-019 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -41,33 +41,8 @@ Active tasks and backlog.
 <!-- TASK-016 completed 2026-03-20, moved to DONE.md -->
 <!-- TASK-017 completed 2026-03-20, moved to DONE.md -->
 <!-- TASK-018 completed 2026-03-20, moved to DONE.md -->
+<!-- TASK-019 completed 2026-03-21, moved to DONE.md -->
 
-### TASK-019 — 🏆 Weekly Challenge: Extract fullscreen module from media-viewer.js 🟠
-**Scheduled**: Friday 2026-03-27
-**Priority**: 🟠 Medium — v2.0 Architecture kickoff
-**Effort**: High (first modularization — sets the pattern for v2.0)
-
-**Description**: Begin the v2.0 modularization effort by extracting fullscreen logic from media-viewer.js into a separate module. This is the **weekly challenge** — it's architecturally significant because it establishes the extraction pattern and import strategy that all future modularization will follow.
-
-Scope:
-- Extract `toggleFullscreen()`, `cleanupFullscreen()`, `setupFullscreen()` (if created in TASK-018), `abortFullscreenController()`, `isInFullscreen()`, and `fullscreenAbortControllers` Map into a new `fullscreen.js` module
-- Define the module boundary: what the fullscreen module imports from MediaViewer (state refs, DOM helpers) vs. what it exports
-- Choose import strategy compatible with the existing no-bundler, browser-global architecture (likely `<script>` tag + class mixin or utility object)
-- Update ESLint config for the new module file
-- All existing tests must continue passing
-
-**Why this is a challenge**: media-viewer.js methods reach into class state (`this.mediaFiles`, `this.currentIndex`, DOM elements, etc.). Extracting a module requires designing how extracted code accesses shared state — the solution becomes the template for the entire v2.0 effort.
-
-**Acceptance Criteria**:
-- [ ] Fullscreen logic extracted to separate file
-- [ ] MediaViewer delegates to the new module
-- [ ] Import strategy documented in PROJECT_CONTEXT.md
-- [ ] ESLint config updated for new file
-- [ ] All unit tests pass (`npm test`)
-- [ ] All E2E tests pass (`npm run test:e2e`)
-- [ ] Pattern documented for future module extractions
-
----
 
 ### TASK-020 — 🔍 Investigate ML sorting pair ordering and online adaptation 🔴
 **Priority**: 🔴 High — Research task, schedule ASAP
