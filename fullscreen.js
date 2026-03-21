@@ -85,8 +85,6 @@ export class FullscreenManager {
      */
     cleanup(wrapper) {
         if (!wrapper.classList.contains('fullscreen')) return;
-        // Centralized fullscreen cleanup — ALL exit paths route through here
-        // (no-op if wrapper is not in fullscreen; guards against double-calls)
         this.abortController(wrapper);
 
         wrapper.classList.remove('fullscreen');
