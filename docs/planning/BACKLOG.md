@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-21 <!-- TASK-019 code-review-pr-17 -->
+**Last Updated**: 2026-03-21 <!-- TASK-020 code-review-pr-18 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -31,12 +31,23 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] Wider score gaps via margin-based pairing — Require minimum score gap (e.g., 0.2) for pairs; skip pairs with tiny gaps (99% vs 97%) that feel like coin flips to the user.
 - [ ] Score confidence indicator — Distinguish high-confidence predictions (many similar training samples) from low-confidence ones (novel features).
 
+### [2026-03-21] From: code-review-pr-18 (Post-merge review findings)
+**Origin**: PR #18 code review — 5 parallel agents, confidence scoring (7 issues at 75/100, none above 80 threshold)
+
+- [ ] **Remove dead `_extractMethod` function from ml-pair-selection.test.js** — Defined but never called; duplicates `extractMethod` from media-viewer-utils.test.js. `_` prefix used to suppress lint warning on dead code rather than genuinely unused param. Either delete or extract to shared test helper. (confidence 75/100)
+- [ ] **Clear `pendingCompareRefresh` in `scoreComplete` even when `message.scores` is falsy** — Cleanup of `pendingCompareRefresh`, `pendingCompareTimeout`, and `mediaNavigationInProgress` is nested inside `if (message.scores)`. If ML worker sends `scoreComplete` without scores (error path), flags remain stuck until 3s fallback. Move cleanup outside the scores guard. (confidence 75/100)
+- [ ] **Remove or document dead `pendingCompareRefresh` bypass in `reverseUpdateComplete` handler** — Undo path never sets `pendingCompareRefresh=true`, so the bypass branch is unreachable. Spec says "pendingCompareUpdates=1 for undo path" but this was not implemented. Dead code could mislead future developers. (confidence 75/100)
+- [ ] **Move `signalUserActivity()` before `mediaNavigationInProgress` guard in compare rating handlers** — Guard causes early return before `signalUserActivity()` fires, partially reverting TASK-015 fix. During 3s pending window, repeated key presses won't pause background extraction. (confidence 75/100)
+- [ ] **Add user-visible feedback during ML re-score pending window** — `mediaNavigationInProgress` held `true` for up to 3 seconds blocks all navigation with no visible UI feedback (only console.warn). Consider showing a brief "Updating scores..." indicator. (confidence 75/100)
+- [ ] **Mark code-review-pr-17 BACKLOG items as done when fixing them** — PR #18 fixed two items (Single-file renderer pattern, stale Git Insights) but didn't mark them `[x]`. Fixed in post-merge cleanup. (confidence 75/100)
+- [ ] **Set `previousScores` even when `predictionScores.size === 0`** — First-pair rating skips delta notification because the size guard prevents snapshot. Minor edge case but inconsistent with documented "always show notification" behavior. (confidence 75/100)
+
 ### [2026-03-21] From: code-review-pr-17 (Post-merge review findings)
 **Origin**: PR #17 code review — 5 parallel agents, confidence scoring
 
-- [ ] **Update "Single-file renderer" pattern in CLAUDE.md** — Patterns section still says "Single-file renderer: All UI logic in `media-viewer.js` (class-based)" but `fullscreen.js` now contains extracted UI logic. Should be updated to reflect the v2.0 modularization pattern already documented in the same section. (confidence 65/100)
+- [x] **Update "Single-file renderer" pattern in CLAUDE.md** — Fixed in PR #18 (TASK-020): updated to "Renderer entry: Core UI logic in `media-viewer.js`; v2.0 modularization..."
 - [ ] **Update `.claude/agents/regression-checker.md` for FullscreenManager** — References `fullscreenAbortControllers`, `cleanupFullscreen()`, and `abortFullscreenController()` which were extracted to `FullscreenManager` in `fullscreen.js`. Agent will give stale guidance on future reviews.
-- [ ] **Update stale CLAUDE.md Git Insights entries for TASK-005/TASK-006** — Historical entries reference old method names (`cleanupFullscreen()`, `fullscreenAbortControllers`, `abortFullscreenController()`) as current patterns. Could confuse future readers/agents.
+- [x] **Update stale CLAUDE.md Git Insights entries for TASK-005/TASK-006** — Fixed in PR #18 (TASK-020): added "(pre-extraction)" and "later extracted into FullscreenManager" annotations
 
 ### [2026-03-20] From: TASK-018 (UI polish: button press effects and fullscreen guard)
 **Origin**: TASK-018 spec review and implementation
