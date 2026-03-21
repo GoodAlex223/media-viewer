@@ -7,7 +7,7 @@ const path = require('path');
 const source = fs.readFileSync(path.join(__dirname, '..', 'media-viewer.js'), 'utf-8');
 
 // Extract method bodies using regex and create callable functions
-function extractMethod(methodName) {
+function _extractMethod(methodName) {
     const regex = new RegExp(`^\\s{4}${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
     const match = source.match(regex);
     if (!match) {

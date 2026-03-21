@@ -16,6 +16,10 @@ Active tasks and backlog.
 
 <!-- Currently active tasks. Limit to 1-3 at a time. -->
 
+### TASK-020 — 🔍 Investigate ML sorting pair ordering and online adaptation 🔴
+**Status**: Implementation complete, pending manual testing and approval
+**Branch**: `feature/task-020-ml-sorting-investigation`
+
 <!-- TASK-001 completed 2026-02-05, moved to DONE.md -->
 
 ---
@@ -44,39 +48,7 @@ Active tasks and backlog.
 <!-- TASK-019 completed 2026-03-21, moved to DONE.md -->
 
 
-### TASK-020 — 🔍 Investigate ML sorting pair ordering and online adaptation 🔴
-**Priority**: 🔴 High — Research task, schedule ASAP
-**Effort**: High (deep investigation of ML pipeline)
-**Origin**: Manual testing 2026-03-19
-
-**Description**: Multiple user-observed issues suggest ML sorting in compare mode may not be working as designed. Requires code investigation before any fixes.
-
-**Reported Issues** (original Russian preserved for accuracy):
-1. > Результаты работы сортировки нейронкой кажутся не точными. Часто возникает ситуация, когда показывается 2 медиа, которым хочется поставить лайк
-2. > Нужно перепроверить, реально при МЛ сортировке, в пейринг моде, показываются слева наивысший процент, а справа - наинизший? Потому что я несколько раз наблюдал 99% слева и 97% справа, а также с продвижением вероятность не росла, а падала
-3. > Есть ощущение, что ИИ сортировка пар(со сравнением лучших с худшими по мнению сортировки) не работает и лучшие показываются сначала(и слева, и справа). Это подкрепляет то, что — в сингл моде совсем другой порядок, хотя по логике, левые посты должны быть первыми в сингл моде
-4. > Но, справедливости ради, сразу после и немного после нажатия на сортировку очень много левых постов появляется в начале сингл мода
-5. > Есть ощущение, что адаптация сортировки к новым оценкам, которые были получены во время этой сессии, не работает
-6. > Если пропускать оценки пар и оценивать другие, то порядок не меняется
-
-**Investigation Areas**:
-1. **Pair selection logic** (`showCompareMedia`, ~line 2391): Verify left=highest, right=lowest scoring files. Check if 99% vs 97% gap is expected (model not discriminating) or a bug.
-2. **Online learning pipeline**: `updateMlModelWithFeatures()` sends updates to ml-worker, but does it trigger re-prediction of all files? Or are `predictionScores` stale after rating?
-3. **Score re-computation**: After `mlWorker.postMessage({type:'update'})`, does anything re-run `predict` on remaining files? If not, this is the root cause of issues 5 and 6.
-4. **Single vs compare mode ordering**: Single mode uses linear `currentIndex` through `mediaFiles[]`. Compare ML mode uses score-ranked `filesWithScores`. Verify that single mode after ML sort respects score order.
-5. **Pair navigation progression**: `mlComparePairIndex` resets to 0 after each rating (~line 3608). As files are removed, do remaining pairs degrade (smaller score gaps)?
-
-**Merges with BACKLOG**: "Add tests for showCompareMedia pair selection logic" (from TASK-013)
-
-**Acceptance Criteria**:
-- [ ] Root cause identified for each of the 6 reported issues
-- [ ] Document whether online adaptation (re-prediction after rating) is implemented
-- [ ] Document expected vs actual pair ordering behavior
-- [ ] Document why single mode order differs from compare mode left-file order
-- [ ] Create follow-up fix tasks if bugs confirmed
-- [ ] Add unit tests for pair selection logic (promoted from BACKLOG)
-
----
+<!-- TASK-020 moved to In Progress -->
 
 ### TASK-021 — Fix compare mode overlay controls UX 🔴
 **Priority**: 🔴 High — Usability blocker, users cannot click buttons

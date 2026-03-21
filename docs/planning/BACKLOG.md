@@ -22,6 +22,15 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Clear `wrapper.dataset.wasPlaying` after restore in `cleanup()`** — Pre-existing bug carried over from original code. After restoring video playback state, `wasPlaying` remains on the element. If the same wrapper is reused for different media, stale attribute could cause unintended `video.play()` on next `cleanup()`.
 - [ ] **Fix ESLint header label style inconsistency for block 2c** — Header listing uses em-dash suffix format; block comment uses parenthetical format. Inconsistent with blocks 2a/2b which use parenthetical in the label. Cosmetic only.
 
+### [2026-03-21] From: TASK-020 — ML sorting pair ordering investigation
+**Origin**: docs/superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
+
+- [ ] Content-understanding features — Current 64-dim vector captures color/texture only; integrating CLIP embeddings or similar would improve score discrimination. Ties into TASK-028 research.
+- [ ] Auto re-sort after N ratings — Currently user must manually click "Sort by Prediction" to reorder files; consider auto-re-sorting after every N ratings (configurable, e.g., every 5 or 10) to keep ordering fresh.
+- [ ] Model diagnostics panel — Show weight distribution, feature importance, training sample counts, and prediction confidence histogram in Settings panel; helps users understand model behavior.
+- [ ] Wider score gaps via margin-based pairing — Require minimum score gap (e.g., 0.2) for pairs; skip pairs with tiny gaps (99% vs 97%) that feel like coin flips to the user.
+- [ ] Score confidence indicator — Distinguish high-confidence predictions (many similar training samples) from low-confidence ones (novel features).
+
 ### [2026-03-21] From: code-review-pr-17 (Post-merge review findings)
 **Origin**: PR #17 code review — 5 parallel agents, confidence scoring
 
