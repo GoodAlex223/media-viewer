@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-21 <!-- TASK-019 completed -->
+**Last Updated**: 2026-03-21 <!-- TASK-020 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -16,10 +16,7 @@ Active tasks and backlog.
 
 <!-- Currently active tasks. Limit to 1-3 at a time. -->
 
-### TASK-020 — 🔍 Investigate ML sorting pair ordering and online adaptation 🔴
-**Status**: Implementation complete, pending manual testing and approval
-**Branch**: `feature/task-020-ml-sorting-investigation`
-
+<!-- TASK-020 completed 2026-03-21, moved to DONE.md -->
 <!-- TASK-001 completed 2026-02-05, moved to DONE.md -->
 
 ---
