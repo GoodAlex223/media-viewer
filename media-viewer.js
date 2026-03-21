@@ -3624,6 +3624,8 @@ class MediaViewer {
             }
 
             // Update ML model with both ratings (using pre-extracted features from earlier)
+            const mlSortedCompare = this.isSortedByPrediction && this.isCompareMode;
+
             if (primaryFeatures) {
                 this.updateMlModelWithFeatures(primaryFeatures, primaryAction);
             }
@@ -3648,7 +3650,32 @@ class MediaViewer {
             }
 
             this.updateFolderInfo();
-            await this.showMedia();
+
+            // If ML-sorted compare mode, defer showMedia() until re-score completes
+            if (mlSortedCompare && primaryFeatures && secondaryFeatures) {
+                // Snapshot scores BEFORE re-score for delta notification
+                if (this.predictionScores.size > 0) {
+                    this.previousScores = new Map(this.predictionScores);
+                }
+                this.pendingCompareRefresh = true;
+                this.pendingCompareUpdates = 2;
+                // Keep mediaNavigationInProgress true to block spurious showMedia() calls
+                this.mediaNavigationInProgress = true;
+                // Fallback timeout: show with stale scores after 3s rather than blocking forever
+                this.pendingCompareTimeout = setTimeout(() => {
+                    if (this.pendingCompareRefresh) {
+                        console.warn('[ML Debug] Re-score timeout — showing pair with stale scores');
+                        this.pendingCompareRefresh = false;
+                        this.pendingCompareUpdates = 0;
+                        this.pendingCompareTimeout = null;
+                        this.previousScores = null;
+                        this.mediaNavigationInProgress = false;
+                        this.showMedia();
+                    }
+                }, 3000);
+            } else {
+                await this.showMedia();
+            }
         } catch (error) {
             console.error('Error moving compare files:', error);
             this.showError(`Failed to move files: ${error.message}`);
