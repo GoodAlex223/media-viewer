@@ -3429,28 +3429,28 @@ class MediaViewer {
     }
 
     async handleLeftLike() {
-        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
         // Left is liked, right is disliked
         await this.moveComparePair('left', 'like', 'dislike');
     }
 
     async handleLeftDislike() {
-        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
         // Left is disliked, right is liked
         await this.moveComparePair('left', 'dislike', 'like');
     }
 
     async handleRightLike() {
-        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
         // Right is liked, left is disliked
         await this.moveComparePair('right', 'like', 'dislike');
     }
 
     async handleRightDislike() {
-        if (this.mediaFiles.length < 2 || this.isLoading) return;
+        if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
         // Right is disliked, left is liked
         await this.moveComparePair('right', 'dislike', 'like');
@@ -3653,6 +3653,11 @@ class MediaViewer {
 
             // If ML-sorted compare mode, defer showMedia() until re-score completes
             if (mlSortedCompare && primaryFeatures && secondaryFeatures) {
+                // Clear any existing pending state from a prior rating
+                if (this.pendingCompareTimeout) {
+                    clearTimeout(this.pendingCompareTimeout);
+                    this.pendingCompareTimeout = null;
+                }
                 // Snapshot scores BEFORE re-score for delta notification
                 if (this.predictionScores.size > 0) {
                     this.previousScores = new Map(this.predictionScores);
