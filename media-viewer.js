@@ -5128,8 +5128,9 @@ class MediaViewer {
                 }
                 break;
 
+            // Handle reversed ML update (undo functionality)
             case 'reverseUpdateComplete':
-                // Handle reversed ML update (undo functionality)
+                console.log('[ML Debug] Model reverse update complete');
                 this.mlModelState = message.modelState;
                 this.mlStats = message.stats;
                 // Debounce model saving
@@ -5140,15 +5141,25 @@ class MediaViewer {
                     this.saveMlModel();
                     this._saveModelTimer = null;
                 }, 500);
-                // Re-score after reversal
-                if (this._scoreDebounceTimer) {
-                    clearTimeout(this._scoreDebounceTimer);
+
+                // If awaiting compare refresh, bypass debounce
+                if (this.pendingCompareRefresh) {
+                    this.pendingCompareUpdates--;
+                    if (this.pendingCompareUpdates <= 0) {
+                        this.requestPredictionScores();
+                        this.updateSortPredictionButton();
+                    }
+                } else {
+                    // Normal path: debounce re-scoring
+                    if (this._scoreDebounceTimer) {
+                        clearTimeout(this._scoreDebounceTimer);
+                    }
+                    this._scoreDebounceTimer = setTimeout(() => {
+                        this.requestPredictionScores();
+                        this.updateSortPredictionButton();
+                        this._scoreDebounceTimer = null;
+                    }, 100);
                 }
-                this._scoreDebounceTimer = setTimeout(() => {
-                    this.requestPredictionScores();
-                    this.updateSortPredictionButton();
-                    this._scoreDebounceTimer = null;
-                }, 100);
                 break;
 
             case 'scoreComplete':
