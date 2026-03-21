@@ -342,6 +342,10 @@ class MediaViewer {
         this.compareLeftFile = null; // Current left file in compare mode (highest score)
         this.compareRightFile = null; // Current right file in compare mode (lowest score)
         this.mlComparePairIndex = 0; // Index for ML pair selection (0 = highest vs lowest)
+        this.pendingCompareRefresh = false; // Awaiting ML re-score before showing next compare pair
+        this.pendingCompareUpdates = 0; // Counter for expected updateComplete messages (2 for rating, 1 for undo)
+        this.pendingCompareTimeout = null; // Fallback timeout ID
+        this.previousScores = null; // Snapshot of predictionScores for delta notification
 
         // Feature extraction worker pool state
         this.featureWorkers = []; // Array of Worker instances
