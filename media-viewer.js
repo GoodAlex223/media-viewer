@@ -3353,6 +3353,25 @@ class MediaViewer {
         }
     }
 
+    switchToSingleModeUI() {
+        this.isCompareMode = false;
+        this.viewModeLabel.textContent = 'Single';
+        this.controls.style.display = 'flex';
+        this.compareControls.style.display = 'none';
+        this.mediaContainer.classList.remove('compare-mode');
+        this.videoControls.style.display = 'none';
+        this.leftFileInfo.classList.remove('show');
+        this.leftFileInfo.style.display = 'none';
+        this.rightFileInfo.classList.remove('show');
+        this.rightFileInfo.style.display = 'none';
+        this.fileInfo.style.display = 'block';
+        if (this.infoToggleBtn) {
+            this.infoToggleBtn.style.display = 'flex';
+        }
+        this.hidePredictionBadges();
+        this.closeAllZoomPopovers();
+    }
+
     // Compare mode methods
     async toggleViewMode() {
         // Hide prediction badges before switching modes
