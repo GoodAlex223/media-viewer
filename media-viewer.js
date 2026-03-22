@@ -2314,7 +2314,11 @@ class MediaViewer {
 
     async showMedia() {
         if (this.mediaFiles.length === 0) {
-            this.showDropZone();
+            if (this.moveHistory.length > 0) {
+                this.showEmptyStateWithUndo();
+            } else {
+                this.showDropZone();
+            }
             return;
         }
 
@@ -2381,9 +2385,36 @@ class MediaViewer {
 
     async showCompareMedia(retryCount = 0) {
         if (this.mediaFiles.length < 2) {
-            this.showNotification('Need at least 2 media files for compare mode', 'error');
-            this.isCompareMode = false;
-            this.toggleViewMode();
+            // Clean up any stale compare media from a prior render
+            if (this.leftMedia) {
+                await this.cleanupCompareMedia('left');
+            }
+            if (this.rightMedia) {
+                await this.cleanupCompareMedia('right');
+            }
+            if (this.leftMediaWrapper) {
+                this.fullscreen.cleanup(this.leftMediaWrapper);
+                this.leftMediaWrapper.remove();
+                this.leftMediaWrapper = null;
+            }
+            if (this.rightMediaWrapper) {
+                this.fullscreen.cleanup(this.rightMediaWrapper);
+                this.rightMediaWrapper.remove();
+                this.rightMediaWrapper = null;
+            }
+
+            this.switchToSingleModeUI();
+
+            if (this.mediaFiles.length === 1) {
+                this.showNotification('Not enough files for compare mode', 'info');
+                this.currentIndex = 0;
+                await this.showMedia();
+            } else if (this.moveHistory.length > 0) {
+                this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                this.showEmptyStateWithUndo();
+            } else {
+                this.showDropZone();
+            }
             return;
         }
 
@@ -2500,12 +2531,18 @@ class MediaViewer {
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
                 this.hideLoadingSpinner();
-                if (this.mediaFiles.length === 0) {
-                    this.showDropZone();
+
+                this.switchToSingleModeUI();
+
+                if (this.mediaFiles.length === 1) {
+                    this.showNotification('Not enough files for compare mode', 'info');
+                    this.currentIndex = 0;
+                    await this.showMedia();
+                } else if (this.moveHistory.length > 0) {
+                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                    this.showEmptyStateWithUndo();
                 } else {
-                    this.showNotification('Not enough files for compare mode', 'error');
-                    this.isCompareMode = false;
-                    this.toggleViewMode();
+                    this.showDropZone();
                 }
                 return;
             }
@@ -3321,6 +3358,67 @@ class MediaViewer {
                 this.moveHistory.push(firstMove);
                 this.moveHistory.push(secondMove);
             }
+        } else if (
+            !this.isCompareMode &&
+            this.moveHistory.length >= 2 &&
+            this.moveHistory[this.moveHistory.length - 1].compareMode &&
+            this.moveHistory[this.moveHistory.length - 2].compareMode
+        ) {
+            // Single mode — undo last compare pair (both files in one action)
+            const secondMove = this.moveHistory.pop();
+            const firstMove = this.moveHistory.pop();
+
+            try {
+                const firstMoveResult = await window.electronAPI.moveFile({
+                    sourcePath: firstMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: firstMove.fileName,
+                });
+                if (!firstMoveResult.success) {
+                    throw new Error(firstMoveResult.error);
+                }
+
+                const secondMoveResult = await window.electronAPI.moveFile({
+                    sourcePath: secondMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: secondMove.fileName,
+                });
+                if (!secondMoveResult.success) {
+                    throw new Error(secondMoveResult.error);
+                }
+
+                this.mediaFiles.push({
+                    name: firstMove.fileName,
+                    path: firstMove.originalPath,
+                    size: firstMove.fileSize,
+                    type: firstMove.fileType,
+                });
+                this.mediaFiles.push({
+                    name: secondMove.fileName,
+                    path: secondMove.originalPath,
+                    size: secondMove.fileSize,
+                    type: secondMove.fileType,
+                });
+
+                if (firstMove.mlFeatures && firstMove.actionType !== 'special') {
+                    this.reverseMlModelUpdate(firstMove.mlFeatures, firstMove.actionType);
+                }
+                if (secondMove.mlFeatures && secondMove.actionType !== 'special') {
+                    this.reverseMlModelUpdate(secondMove.mlFeatures, secondMove.actionType);
+                }
+
+                this.showNotification(`Restored ${firstMove.fileName}`, 'success');
+                this.showNotification(`Restored ${secondMove.fileName}`, 'success');
+                this.updateFolderInfo();
+
+                this.currentIndex = this.mediaFiles.length - 2;
+                await this.showMedia();
+            } catch (error) {
+                console.error('Error undoing compare pair move:', error);
+                this.showError(`Failed to undo move: ${error.message}`);
+                this.moveHistory.push(firstMove);
+                this.moveHistory.push(secondMove);
+            }
         } else {
             // Single mode - restore one file
             const undoMove = this.moveHistory.pop();
@@ -3597,6 +3695,7 @@ class MediaViewer {
                 fileType: primaryFile.type,
                 actionType: primaryAction,
                 mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
+                compareMode: true,
             });
 
             // Move secondary file (the other one)
@@ -3632,6 +3731,7 @@ class MediaViewer {
                 fileType: secondaryFile.type,
                 actionType: secondaryAction,
                 mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
+                compareMode: true,
             });
 
             // Show notifications (if enabled)
