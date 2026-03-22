@@ -1605,6 +1605,7 @@ body {
 .media-wrapper.fullscreen .media-overlay-controls {
     opacity: 0;
     pointer-events: none;
+    transition-delay: 0s;
 }
 
 .overlay-btn {
