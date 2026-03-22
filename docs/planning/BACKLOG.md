@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-21 <!-- TASK-021 -->
+**Last Updated**: 2026-03-22 <!-- code-review-pr-19 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -46,6 +46,15 @@ Ideas and tasks not yet prioritized for active development.
 **Origin**: TASK-021 manual testing feedback
 
 - [ ] **Smart overlay positioning: place buttons below media when space available** — When media has small height, overlay buttons at `bottom: 56px` overlap the media content. Ideal behavior: detect rendered media height (via `object-fit: contain` actual bounds), position buttons just below the media edge when space exists, fall back to current `bottom: 56px` (inside media, above video controls) when media fills the full wrapper height. Requires JS measurement on load/resize. Low priority — affects only small-height media which is rare.
+
+### [2026-03-22] From: code-review-pr-19 (TASK-021 overlay controls UX)
+**Origin**: PR #19 code review — 5 parallel agents, confidence scoring (9 issues found, 2 above 80 threshold fixed in 74cf251)
+
+- [ ] **Add `transition-delay: 0s` to fullscreen overlay rule** — Fixed in 74cf251 (scored 85/100). Keeping for reference: when adding `transition-delay` to base rules, always check fullscreen/hidden state overrides.
+- [ ] **Add `:active` press animation to `.overlay-btn`** — `.control-btn` has `:active` state (TASK-018) but `.overlay-btn` does not. Now that overlay buttons are reliably clickable, the missing press feedback is a UX inconsistency. Pre-existing; not introduced by this PR. (scored 25/100)
+- [ ] **Fix "applies to both compare and single mode" documentation claim** — CLAUDE.md Git Insights and DONE.md say the overlay fix applies to single mode, but `.media-overlay-controls` is only created in compare mode via `addMediaOverlayControls()`. Single mode uses static HTML buttons. Misleading to future developers. (scored 75/100)
+- [ ] **Verify zoom popover not clipped by `overflow: hidden` on `.media-wrapper`** — With `position: absolute` on `.media-overlay-controls`, the upward-expanding `.zoom-popover` is now inside the `overflow: hidden` boundary of `.media-wrapper`. May clip the popover in compare mode. Needs manual verification. (scored 75/100)
+- [ ] **Check archived plan checkboxes before archival** — Plan file archived with 24 unchecked `- [ ]` items and no explicit "Status: Complete" field, violating global CLAUDE.md Step 2 archive requirements. Procedural issue — actual work was completed. (scored 75/100)
 
 ### [2026-03-21] From: code-review-pr-17 (Post-merge review findings)
 **Origin**: PR #17 code review — 5 parallel agents, confidence scoring
