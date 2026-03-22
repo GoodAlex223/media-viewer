@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-21 <!-- TASK-020 code-review-pr-18 -->
+**Last Updated**: 2026-03-21 <!-- TASK-021 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -41,6 +41,11 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Add user-visible feedback during ML re-score pending window** — `mediaNavigationInProgress` held `true` for up to 3 seconds blocks all navigation with no visible UI feedback (only console.warn). Consider showing a brief "Updating scores..." indicator. (confidence 75/100)
 - [ ] **Mark code-review-pr-17 BACKLOG items as done when fixing them** — PR #18 fixed two items (Single-file renderer pattern, stale Git Insights) but didn't mark them `[x]`. Fixed in post-merge cleanup. (confidence 75/100)
 - [ ] **Set `previousScores` even when `predictionScores.size === 0`** — First-pair rating skips delta notification because the size guard prevents snapshot. Minor edge case but inconsistent with documented "always show notification" behavior. (confidence 75/100)
+
+### [2026-03-21] From: TASK-021 (Fix compare mode overlay controls UX)
+**Origin**: TASK-021 manual testing feedback
+
+- [ ] **Smart overlay positioning: place buttons below media when space available** — When media has small height, overlay buttons at `bottom: 56px` overlap the media content. Ideal behavior: detect rendered media height (via `object-fit: contain` actual bounds), position buttons just below the media edge when space exists, fall back to current `bottom: 56px` (inside media, above video controls) when media fills the full wrapper height. Requires JS measurement on load/resize. Low priority — affects only small-height media which is rare.
 
 ### [2026-03-21] From: code-review-pr-17 (Post-merge review findings)
 **Origin**: PR #17 code review — 5 parallel agents, confidence scoring

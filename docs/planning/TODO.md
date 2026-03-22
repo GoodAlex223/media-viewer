@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-21 <!-- TASK-020 completed -->
+**Last Updated**: 2026-03-22 <!-- TASK-021 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -46,37 +46,7 @@ Active tasks and backlog.
 
 
 <!-- TASK-020 moved to In Progress -->
-
-### TASK-021 — Fix compare mode overlay controls UX 🔴
-**Priority**: 🔴 High — Usability blocker, users cannot click buttons
-**Effort**: Medium
-**Origin**: Manual testing 2026-03-19
-
-**Description**: Overlay controls in compare mode are nearly impossible to interact with. Two related issues:
-
-**Reported Issues** (original Russian preserved):
-1. > Показывается видео в компаре моде. Пользователь захотел отправить его в спец папку. Он наводится на видео, чтобы появились кнопки, пытается нажать на спец кнопку, а она сразу пропадает. Пользователь не успевает нажать на спец кнопку, как бы он не старался. Тоже самое происходит и с другим медиа.
-2. > Также есть момент: кнопки, где лайк и дизлайк, могут перекрывать плеер, что делает невозможным управление видео
-
-**Root Cause Analysis**:
-- Overlay controls use `position: fixed` with `bottom: 100px` but visibility depends on `.media-wrapper:hover` (styles.css:1598)
-- When user moves cursor from media to button area, cursor may leave `.media-wrapper` bounds → hover drops → `opacity: 0; pointer-events: none` → buttons vanish
-- The `position: fixed` positioning can cause buttons to overlap native video player controls
-
-**Possible Fixes**:
-- Change `position: fixed` to `position: absolute` within wrapper so buttons are part of the hover area
-- Add a hover delay (CSS `transition-delay` on hide, not on show) to give user time to reach buttons
-- Ensure buttons are positioned above video controls area
-- Consider click-to-toggle instead of hover-to-show for persistent access
-
-**Acceptance Criteria**:
-- [ ] Overlay buttons remain visible long enough for user to click them
-- [ ] Overlay buttons do not overlap native video player controls
-- [ ] Both single media types (image, video) work correctly
-- [ ] Both left and right panes work correctly
-- [ ] All E2E compare-mode tests pass (`npm run test:e2e`)
-
----
+<!-- TASK-021 completed 2026-03-22, moved to DONE.md -->
 
 ### TASK-022 — Fix compare mode last-pair error cascade 🔴
 **Priority**: 🔴 High — Error spam blocks user interaction
