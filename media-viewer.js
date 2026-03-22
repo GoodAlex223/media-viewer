@@ -2269,6 +2269,15 @@ class MediaViewer {
         }
     }
 
+    showEmptyStateWithUndo() {
+        if (this.currentMedia) {
+            this.cleanupCurrentMedia();
+        }
+        this.hideLoadingSpinner();
+        this.updateFolderInfo();
+        this.updateNavigationInfo();
+    }
+
     // Improved cleanup method
     cleanupCurrentMedia() {
         if (!this.currentMedia) return;
