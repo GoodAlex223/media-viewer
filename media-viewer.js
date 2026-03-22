@@ -1315,17 +1315,27 @@ class MediaViewer {
                     this.showMedia();
                 } else if (this.mediaFiles.length === 1) {
                     // Only one file left, switch to single mode
-                    this.viewMode = 'single';
-                    this.updateViewModeUI();
-                    this.showMedia();
+                    this.switchToSingleModeUI();
+                    this.showNotification('Last file in compare mode — switched to single view', 'info');
+                    this.currentIndex = 0;
+                    await this.showMedia();
                 } else {
-                    // No files left
-                    this.showDropZone();
+                    // No files left — preserve undo
+                    if (this.moveHistory.length > 0) {
+                        this.switchToSingleModeUI();
+                        this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                        this.showEmptyStateWithUndo();
+                    } else {
+                        this.showDropZone();
+                    }
                 }
             } else {
                 // Single mode - show next media
                 if (this.mediaFiles.length > 0) {
                     this.showMedia();
+                } else if (this.moveHistory.length > 0) {
+                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                    this.showEmptyStateWithUndo();
                 } else {
                     this.showDropZone();
                 }

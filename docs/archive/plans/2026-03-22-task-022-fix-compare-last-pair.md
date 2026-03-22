@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete
+
 **Goal:** Fix the infinite error notification loop when the last compare pair is rated, and preserve undo capability instead of showing a drop zone.
 
 **Architecture:** Add `switchToSingleModeUI()` helper for non-toggling mode switch, `showEmptyStateWithUndo()` for empty state with undo. Fix `moveComparePair()` to detect <2 files and switch cleanly. Fix `showCompareMedia()` defense guards. Tag compare-mode history entries for single-mode undo.
@@ -19,7 +21,7 @@
 
 This is the foundation that all other tasks depend on.
 
-- [ ] **Step 1: Add `switchToSingleModeUI()` method**
+- [x] **Step 1: Add `switchToSingleModeUI()` method**
 
 Insert before `toggleViewMode()` (~line 3357):
 
@@ -44,12 +46,12 @@ Insert before `toggleViewMode()` (~line 3357):
     }
 ```
 
-- [ ] **Step 2: Verify lint passes**
+- [x] **Step 2: Verify lint passes**
 
 Run: `npx eslint media-viewer.js`
 Expected: No new errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add media-viewer.js
@@ -63,7 +65,7 @@ git commit -m "feat: add switchToSingleModeUI() helper for non-toggling mode swi
 **Files:**
 - Modify: `media-viewer.js` (insert near `showDropZone()` at ~line 2241)
 
-- [ ] **Step 1: Add `showEmptyStateWithUndo()` method**
+- [x] **Step 1: Add `showEmptyStateWithUndo()` method**
 
 Insert after `showDropZone()` method (~after line 2270):
 
@@ -78,12 +80,12 @@ Insert after `showDropZone()` method (~after line 2270):
     }
 ```
 
-- [ ] **Step 2: Verify lint passes**
+- [x] **Step 2: Verify lint passes**
 
 Run: `npx eslint media-viewer.js`
 Expected: No new errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add media-viewer.js
@@ -99,7 +101,7 @@ git commit -m "feat: add showEmptyStateWithUndo() for empty state preserving und
 
 This is the primary fix. After both files are removed (lines 3637-3638), insert a <2 files check before the ML-deferred path and normal `showMedia()` call.
 
-- [ ] **Step 1: Add early exit after file removal**
+- [x] **Step 1: Add early exit after file removal**
 
 After line 3645 (`this.mlComparePairIndex = 0;`) and before the `if (this.currentIndex >= this.mediaFiles.length - 1)` block at line 3648, insert:
 
@@ -147,17 +149,17 @@ After line 3645 (`this.mlComparePairIndex = 0;`) and before the `if (this.curren
             }
 ```
 
-- [ ] **Step 2: Verify lint passes**
+- [x] **Step 2: Verify lint passes**
 
 Run: `npx eslint media-viewer.js`
 Expected: No new errors
 
-- [ ] **Step 3: Run unit tests**
+- [x] **Step 3: Run unit tests**
 
 Run: `npm test`
 Expected: All tests pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add media-viewer.js
@@ -174,7 +176,7 @@ git commit -m "fix: early mode switch in moveComparePair when <2 files remain (T
 
 Fix both instances of the `isCompareMode = false` + `toggleViewMode()` pattern.
 
-- [ ] **Step 1: Fix top guard (lines 2374-2378)**
+- [x] **Step 1: Fix top guard (lines 2374-2378)**
 
 Replace:
 ```javascript
@@ -223,7 +225,7 @@ With:
         }
 ```
 
-- [ ] **Step 2: Fix missing-file retry path guard (lines 2490-2500)**
+- [x] **Step 2: Fix missing-file retry path guard (lines 2490-2500)**
 
 Replace the block:
 ```javascript
@@ -265,17 +267,17 @@ With:
             }
 ```
 
-- [ ] **Step 3: Verify lint passes**
+- [x] **Step 3: Verify lint passes**
 
 Run: `npx eslint media-viewer.js`
 Expected: No new errors
 
-- [ ] **Step 4: Run unit tests**
+- [x] **Step 4: Run unit tests**
 
 Run: `npm test`
 Expected: All tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js
@@ -289,7 +291,7 @@ git commit -m "fix: replace toggleViewMode with switchToSingleModeUI in showComp
 **Files:**
 - Modify: `media-viewer.js:2307-2309`
 
-- [ ] **Step 1: Update the empty guard**
+- [x] **Step 1: Update the empty guard**
 
 Replace:
 ```javascript
@@ -311,12 +313,12 @@ With:
         }
 ```
 
-- [ ] **Step 2: Verify lint passes**
+- [x] **Step 2: Verify lint passes**
 
 Run: `npx eslint media-viewer.js`
 Expected: No new errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add media-viewer.js
@@ -332,7 +334,7 @@ git commit -m "fix: show empty state with undo instead of drop zone when history
 - Modify: `media-viewer.js:3599` (secondary move history push)
 - Modify: `media-viewer.js:3315` (handleCancel single-mode branch)
 
-- [ ] **Step 1: Add `compareMode: true` to both history push calls in `moveComparePair()`**
+- [x] **Step 1: Add `compareMode: true` to both history push calls in `moveComparePair()`**
 
 At line ~3564, the primary move history push — add `compareMode: true`:
 ```javascript
@@ -362,7 +364,7 @@ At line ~3599, the secondary move history push — add `compareMode: true`:
             });
 ```
 
-- [ ] **Step 2: Add compare-pair detection to `handleCancel()` single-mode branch**
+- [x] **Step 2: Add compare-pair detection to `handleCancel()` single-mode branch**
 
 In `handleCancel()`, the single-mode branch starts at line ~3315 with `} else {`. Before this branch, insert a new branch that detects compare-pair history entries:
 
@@ -441,17 +443,17 @@ With:
             const undoMove = this.moveHistory.pop();
 ```
 
-- [ ] **Step 3: Verify lint passes**
+- [x] **Step 3: Verify lint passes**
 
 Run: `npx eslint media-viewer.js`
 Expected: No new errors
 
-- [ ] **Step 4: Run unit tests**
+- [x] **Step 4: Run unit tests**
 
 Run: `npm test`
 Expected: All tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js
@@ -465,7 +467,7 @@ git commit -m "feat: tag compare history entries and support compare-pair undo f
 **Files:**
 - Modify: `tests/e2e/compare-mode.test.js`
 
-- [ ] **Step 1: Write E2E test for last-pair clean switch**
+- [x] **Step 1: Write E2E test for last-pair clean switch**
 
 Add to the `Compare Mode` test.describe block:
 
@@ -521,12 +523,12 @@ Add to the `Compare Mode` test.describe block:
     });
 ```
 
-- [ ] **Step 2: Run the E2E test**
+- [x] **Step 2: Run the E2E test**
 
 Run: `npx playwright test tests/e2e/compare-mode.test.js --timeout 30000`
 Expected: All tests pass including the new one
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/compare-mode.test.js
@@ -539,22 +541,22 @@ git commit -m "test: add E2E test for last-pair clean switch to single mode (TAS
 
 **Files:** None (verification only)
 
-- [ ] **Step 1: Run unit tests**
+- [x] **Step 1: Run unit tests**
 
 Run: `npm test`
 Expected: All tests pass
 
-- [ ] **Step 2: Run E2E tests**
+- [x] **Step 2: Run E2E tests**
 
 Run: `npm run test:e2e`
 Expected: All tests pass
 
-- [ ] **Step 3: Run lint**
+- [x] **Step 3: Run lint**
 
 Run: `npm run lint`
 Expected: No errors
 
-- [ ] **Step 4: Final commit if any formatting changes needed**
+- [x] **Step 4: Final commit if any formatting changes needed**
 
 ```bash
 npm run format
