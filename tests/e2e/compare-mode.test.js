@@ -111,4 +111,54 @@ test.describe('Compare Mode', () => {
         // Verify file moved to like folder
         await expect(access(join(tmpFixtures.likeDir, leftFileName))).resolves.toBeUndefined();
     });
+
+    test('switches to single mode when last pair is rated', async () => {
+        // Load with only 2 files (minimum for compare mode)
+        const twoFileTmp = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png']);
+        // Launch fresh app with 2 files
+        await closeApp(electronApp);
+        ({ electronApp, page } = await launchApp());
+        await seedLocalStorage(page, {
+            customLikeFolder: twoFileTmp.likeDir,
+            customDislikeFolder: twoFileTmp.dislikeDir,
+        });
+        await loadFolder(page, twoFileTmp.dir);
+        await waitForMedia(page);
+
+        // Enter compare mode
+        await page.evaluate(() => window.mediaViewer.toggleViewMode());
+        await page.waitForTimeout(500);
+
+        // Verify in compare mode
+        const isCompare = await page.evaluate(() => window.mediaViewer.isCompareMode);
+        expect(isCompare).toBe(true);
+
+        // Rate the pair (left like, right dislike)
+        await page.evaluate(() => window.mediaViewer.handleLeftLike());
+        await page.waitForTimeout(1000);
+
+        // Should have switched to single mode (0 files remain)
+        const isCompareAfter = await page.evaluate(() => window.mediaViewer.isCompareMode);
+        expect(isCompareAfter).toBe(false);
+
+        // Should NOT show drop zone
+        const dropZoneVisible = await page.evaluate(
+            () => document.querySelector('.drop-zone').style.display !== 'none'
+        );
+        expect(dropZoneVisible).toBe(false);
+
+        // moveHistory should still have entries (undo available)
+        const historyLength = await page.evaluate(() => window.mediaViewer.moveHistory.length);
+        expect(historyLength).toBe(2);
+
+        // Undo should restore both files
+        await page.evaluate(() => window.mediaViewer.handleCancel());
+        await page.waitForTimeout(1000);
+
+        const filesAfterUndo = await page.evaluate(() => window.mediaViewer.mediaFiles.length);
+        expect(filesAfterUndo).toBe(2);
+
+        // Clean up temp dir
+        await twoFileTmp.cleanup();
+    });
 });

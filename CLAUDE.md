@@ -81,7 +81,7 @@ media_viewer/
 │       ├── app-launch.test.js      # Initial launch, drop zone, dialog mocking
 │       ├── navigation.test.js      # Arrow keys, nav buttons, wrap-around
 │       ├── rating.test.js          # Like/dislike/undo, Settings panel config
-│       ├── compare-mode.test.js    # Toggle, dual panes, pair navigation, Q key
+│       ├── compare-mode.test.js    # Toggle, dual panes, pair navigation, Q key, last-pair single-mode fallback + undo
 │       ├── fullscreen.test.js      # Z/X keys, Escape exit
 │       ├── zoom.test.js            # Popover open/close, slider, Escape reset
 │       ├── fixtures/               # Test images/video (red/green/blue 1x1 PNGs, tiny.mp4)
