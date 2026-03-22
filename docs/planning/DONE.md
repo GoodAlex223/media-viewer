@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-22 <!-- TASK-021 -->
+**Last Updated**: 2026-03-22 <!-- TASK-022 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,18 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-22] Fix compare mode last-pair error cascade (TASK-022)
+
+**Plan**: [docs/archive/plans/2026-03-22-task-022-fix-compare-last-pair.md](../../archive/plans/2026-03-22-task-022-fix-compare-last-pair.md)
+**Spec**: [docs/superpowers/specs/2026-03-22-task-022-fix-compare-last-pair-design.md](../../superpowers/specs/2026-03-22-task-022-fix-compare-last-pair-design.md)
+**Summary**: Fixed infinite error notification loop when last compare pair is rated. Added clean mode switch, empty state with undo, and compare-pair undo from single mode.
+**Key Changes**:
+- `media-viewer.js` — Added `switchToSingleModeUI()` helper (non-toggling mode switch), `showEmptyStateWithUndo()` (empty state preserving undo history), early exit in `moveComparePair()` when <2 files remain, defense-in-depth fixes in `showCompareMedia()` guards, conditional drop zone in `showMedia()`, compare-pair undo in `handleCancel()` via `compareMode: true` history tag
+- `tests/e2e/compare-mode.test.js` — Added E2E test for last-pair clean switch and undo
+**Spawned Tasks**: 2 items added to BACKLOG.md (DRY toggleViewMode, partial undo failure)
+
+---
 
 ### [2026-03-22] Fix compare mode overlay controls UX (TASK-021)
 

@@ -1315,17 +1315,27 @@ class MediaViewer {
                     this.showMedia();
                 } else if (this.mediaFiles.length === 1) {
                     // Only one file left, switch to single mode
-                    this.viewMode = 'single';
-                    this.updateViewModeUI();
-                    this.showMedia();
+                    this.switchToSingleModeUI();
+                    this.showNotification('Last file in compare mode — switched to single view', 'info');
+                    this.currentIndex = 0;
+                    await this.showMedia();
                 } else {
-                    // No files left
-                    this.showDropZone();
+                    // No files left — preserve undo
+                    if (this.moveHistory.length > 0) {
+                        this.switchToSingleModeUI();
+                        this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                        this.showEmptyStateWithUndo();
+                    } else {
+                        this.showDropZone();
+                    }
                 }
             } else {
                 // Single mode - show next media
                 if (this.mediaFiles.length > 0) {
                     this.showMedia();
+                } else if (this.moveHistory.length > 0) {
+                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                    this.showEmptyStateWithUndo();
                 } else {
                     this.showDropZone();
                 }
@@ -2269,6 +2279,15 @@ class MediaViewer {
         }
     }
 
+    showEmptyStateWithUndo() {
+        if (this.currentMedia) {
+            this.cleanupCurrentMedia();
+        }
+        this.hideLoadingSpinner();
+        this.updateFolderInfo();
+        this.updateNavigationInfo();
+    }
+
     // Improved cleanup method
     cleanupCurrentMedia() {
         if (!this.currentMedia) return;
@@ -2305,7 +2324,11 @@ class MediaViewer {
 
     async showMedia() {
         if (this.mediaFiles.length === 0) {
-            this.showDropZone();
+            if (this.moveHistory.length > 0) {
+                this.showEmptyStateWithUndo();
+            } else {
+                this.showDropZone();
+            }
             return;
         }
 
@@ -2372,9 +2395,36 @@ class MediaViewer {
 
     async showCompareMedia(retryCount = 0) {
         if (this.mediaFiles.length < 2) {
-            this.showNotification('Need at least 2 media files for compare mode', 'error');
-            this.isCompareMode = false;
-            this.toggleViewMode();
+            // Clean up any stale compare media from a prior render
+            if (this.leftMedia) {
+                await this.cleanupCompareMedia('left');
+            }
+            if (this.rightMedia) {
+                await this.cleanupCompareMedia('right');
+            }
+            if (this.leftMediaWrapper) {
+                this.fullscreen.cleanup(this.leftMediaWrapper);
+                this.leftMediaWrapper.remove();
+                this.leftMediaWrapper = null;
+            }
+            if (this.rightMediaWrapper) {
+                this.fullscreen.cleanup(this.rightMediaWrapper);
+                this.rightMediaWrapper.remove();
+                this.rightMediaWrapper = null;
+            }
+
+            this.switchToSingleModeUI();
+
+            if (this.mediaFiles.length === 1) {
+                this.showNotification('Not enough files for compare mode', 'info');
+                this.currentIndex = 0;
+                await this.showMedia();
+            } else if (this.moveHistory.length > 0) {
+                this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                this.showEmptyStateWithUndo();
+            } else {
+                this.showDropZone();
+            }
             return;
         }
 
@@ -2491,12 +2541,18 @@ class MediaViewer {
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
                 this.hideLoadingSpinner();
-                if (this.mediaFiles.length === 0) {
-                    this.showDropZone();
+
+                this.switchToSingleModeUI();
+
+                if (this.mediaFiles.length === 1) {
+                    this.showNotification('Not enough files for compare mode', 'info');
+                    this.currentIndex = 0;
+                    await this.showMedia();
+                } else if (this.moveHistory.length > 0) {
+                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                    this.showEmptyStateWithUndo();
                 } else {
-                    this.showNotification('Not enough files for compare mode', 'error');
-                    this.isCompareMode = false;
-                    this.toggleViewMode();
+                    this.showDropZone();
                 }
                 return;
             }
@@ -3312,6 +3368,67 @@ class MediaViewer {
                 this.moveHistory.push(firstMove);
                 this.moveHistory.push(secondMove);
             }
+        } else if (
+            !this.isCompareMode &&
+            this.moveHistory.length >= 2 &&
+            this.moveHistory[this.moveHistory.length - 1].compareMode &&
+            this.moveHistory[this.moveHistory.length - 2].compareMode
+        ) {
+            // Single mode — undo last compare pair (both files in one action)
+            const secondMove = this.moveHistory.pop();
+            const firstMove = this.moveHistory.pop();
+
+            try {
+                const firstMoveResult = await window.electronAPI.moveFile({
+                    sourcePath: firstMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: firstMove.fileName,
+                });
+                if (!firstMoveResult.success) {
+                    throw new Error(firstMoveResult.error);
+                }
+
+                const secondMoveResult = await window.electronAPI.moveFile({
+                    sourcePath: secondMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: secondMove.fileName,
+                });
+                if (!secondMoveResult.success) {
+                    throw new Error(secondMoveResult.error);
+                }
+
+                this.mediaFiles.push({
+                    name: firstMove.fileName,
+                    path: firstMove.originalPath,
+                    size: firstMove.fileSize,
+                    type: firstMove.fileType,
+                });
+                this.mediaFiles.push({
+                    name: secondMove.fileName,
+                    path: secondMove.originalPath,
+                    size: secondMove.fileSize,
+                    type: secondMove.fileType,
+                });
+
+                if (firstMove.mlFeatures && firstMove.actionType !== 'special') {
+                    this.reverseMlModelUpdate(firstMove.mlFeatures, firstMove.actionType);
+                }
+                if (secondMove.mlFeatures && secondMove.actionType !== 'special') {
+                    this.reverseMlModelUpdate(secondMove.mlFeatures, secondMove.actionType);
+                }
+
+                this.showNotification(`Restored ${firstMove.fileName}`, 'success');
+                this.showNotification(`Restored ${secondMove.fileName}`, 'success');
+                this.updateFolderInfo();
+
+                this.currentIndex = this.mediaFiles.length - 2;
+                await this.showMedia();
+            } catch (error) {
+                console.error('Error undoing compare pair move:', error);
+                this.showError(`Failed to undo move: ${error.message}`);
+                this.moveHistory.push(firstMove);
+                this.moveHistory.push(secondMove);
+            }
         } else {
             // Single mode - restore one file
             const undoMove = this.moveHistory.pop();
@@ -3351,6 +3468,25 @@ class MediaViewer {
                 this.moveHistory.push(undoMove);
             }
         }
+    }
+
+    switchToSingleModeUI() {
+        this.isCompareMode = false;
+        this.viewModeLabel.textContent = 'Single';
+        this.controls.style.display = 'flex';
+        this.compareControls.style.display = 'none';
+        this.mediaContainer.classList.remove('compare-mode');
+        this.videoControls.style.display = 'none';
+        this.leftFileInfo.classList.remove('show');
+        this.leftFileInfo.style.display = 'none';
+        this.rightFileInfo.classList.remove('show');
+        this.rightFileInfo.style.display = 'none';
+        this.fileInfo.style.display = 'block';
+        if (this.infoToggleBtn) {
+            this.infoToggleBtn.style.display = 'flex';
+        }
+        this.hidePredictionBadges();
+        this.closeAllZoomPopovers();
     }
 
     // Compare mode methods
@@ -3569,6 +3705,7 @@ class MediaViewer {
                 fileType: primaryFile.type,
                 actionType: primaryAction,
                 mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
+                compareMode: true,
             });
 
             // Move secondary file (the other one)
@@ -3604,6 +3741,7 @@ class MediaViewer {
                 fileType: secondaryFile.type,
                 actionType: secondaryAction,
                 mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
+                compareMode: true,
             });
 
             // Show notifications (if enabled)
@@ -3643,6 +3781,48 @@ class MediaViewer {
 
             // Reset ML pair index to show new highest vs lowest
             this.mlComparePairIndex = 0;
+
+            // TASK-022: Clean switch to single mode when <2 files remain
+            if (this.mediaFiles.length < 2) {
+                // Reset state flags
+                this.isLoading = false;
+                this.mediaNavigationInProgress = false;
+                this.hideLoadingSpinner();
+
+                // Clear pending ML state
+                if (this.pendingCompareTimeout) {
+                    clearTimeout(this.pendingCompareTimeout);
+                    this.pendingCompareTimeout = null;
+                }
+                this.pendingCompareRefresh = false;
+                this.pendingCompareUpdates = 0;
+                this.previousScores = null;
+
+                // Clean up stale compare-mode wrapper DOM elements
+                if (this.leftMediaWrapper) {
+                    this.fullscreen.cleanup(this.leftMediaWrapper);
+                    this.leftMediaWrapper.remove();
+                    this.leftMediaWrapper = null;
+                }
+                if (this.rightMediaWrapper) {
+                    this.fullscreen.cleanup(this.rightMediaWrapper);
+                    this.rightMediaWrapper.remove();
+                    this.rightMediaWrapper = null;
+                }
+
+                this.switchToSingleModeUI();
+                this.updateFolderInfo();
+
+                if (this.mediaFiles.length === 1) {
+                    this.showNotification('Last pair rated — switched to single view', 'info');
+                    this.currentIndex = 0;
+                    await this.showMedia();
+                } else {
+                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                    this.showEmptyStateWithUndo();
+                }
+                return;
+            }
 
             // Ensure current index can show a pair
             if (this.currentIndex >= this.mediaFiles.length - 1) {

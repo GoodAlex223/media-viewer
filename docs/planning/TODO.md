@@ -48,25 +48,7 @@ Active tasks and backlog.
 <!-- TASK-020 moved to In Progress -->
 <!-- TASK-021 completed 2026-03-22, moved to DONE.md -->
 
-### TASK-022 — Fix compare mode last-pair error cascade 🔴
-**Priority**: 🔴 High — Error spam blocks user interaction
-**Effort**: Low-Medium
-**Origin**: Manual testing 2026-03-19
-
-**Description**: When the last pair is rated in compare mode and only 1 media file remains, continuous error notifications appear until the user manually switches to single mode.
-
-**Reported Issue** (original Russian preserved):
-> В компаре моде, когда была оценена последняя пара и остался 1 медиа, то множество ошибок начинает постоянно показываться (пока не перейду в сингл мод)
-
-**Code Context**: `showCompareMedia()` (~line 2460) checks `mediaFiles.length < 2` and calls `toggleViewMode()`, but also shows error notification "Not enough files for compare mode". The error cascade suggests `showCompareMedia()` is being called repeatedly before the mode switch completes.
-
-**Merges with BACKLOG**: "Remove unnecessary loading state resets before recursive retry in showCompareMedia()" (from code-review-pr-3)
-
-**Acceptance Criteria**:
-- [ ] Switching to single mode happens cleanly when <2 files remain
-- [ ] No error spam — at most one notification
-- [ ] State flags (isLoading, mediaNavigationInProgress) properly reset
-- [ ] All E2E tests pass (`npm run test:e2e`)
+<!-- TASK-022 completed 2026-03-22, moved to DONE.md -->
 
 ---
 
