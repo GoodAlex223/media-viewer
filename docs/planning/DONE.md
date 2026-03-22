@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-21 <!-- TASK-020 -->
+**Last Updated**: 2026-03-22 <!-- TASK-021 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,18 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-22] Fix compare mode overlay controls UX (TASK-021)
+
+**Plan**: [docs/archive/plans/2026-03-21-task-021-fix-compare-overlay-ux.md](../../archive/plans/2026-03-21-task-021-fix-compare-overlay-ux.md)
+**Spec**: [docs/superpowers/specs/2026-03-21-task-021-fix-compare-overlay-ux-design.md](../../superpowers/specs/2026-03-21-task-021-fix-compare-overlay-ux-design.md)
+**Summary**: Fixed overlay controls positioning and hover behavior in both compare and single mode. Buttons were unreachable due to `position: fixed` breaking hover area containment, and overlapped native video player controls.
+**Key Changes**:
+- `styles.css` — Changed `position: fixed` to `absolute`; `bottom: 100px` to `56px` (clears video controls); added `left: 50%; transform: translateX(-50%)` centering; added `transition-delay: 500ms` on hide / `0s` on show; removed `.media-overlay-controls-left`/`-right` rules
+- `media-viewer.js` — Removed side-specific CSS class assignment in `addMediaOverlayControls()`
+**Spawned Tasks**: 1 item added to BACKLOG.md (smart overlay positioning for small-height media)
+
+---
 
 ### [2026-03-21] Investigate ML sorting pair ordering and online adaptation (TASK-020)
 

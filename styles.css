@@ -1583,32 +1583,29 @@ body {
 
 /* Media overlay controls */
 .media-overlay-controls {
-    position: fixed;
-    bottom: 100px;
+    position: absolute;
+    bottom: 56px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     gap: 15px;
     opacity: 0;
     transition: opacity 0.3s ease;
+    transition-delay: 500ms;
     pointer-events: none;
     z-index: 10;
-}
-
-.media-overlay-controls-left {
-    left: 25%;
-}
-
-.media-overlay-controls-right {
-    right: 25%;
 }
 
 .media-wrapper:hover .media-overlay-controls {
     opacity: 1;
     pointer-events: auto;
+    transition-delay: 0s;
 }
 
 .media-wrapper.fullscreen .media-overlay-controls {
     opacity: 0;
     pointer-events: none;
+    transition-delay: 0s;
 }
 
 .overlay-btn {

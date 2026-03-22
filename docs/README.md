@@ -45,6 +45,18 @@ Central index for all project documentation.
 [Background Feature Extraction]: archive/plans/2025-12-28_background-feature-extraction.md
 [Compare Mode AI Sort Bug]: archive/plans/2026-01-02_compare-mode-ai-sort-bug.md
 
+## Design Specs
+
+| Document | Purpose |
+|----------|---------|
+| [TASK-019 Extract Fullscreen Module][] | Fullscreen module extraction design |
+| [TASK-020 ML Sorting Investigation][] | ML sorting race condition fix design |
+| [TASK-021 Overlay Controls UX][] | Overlay controls positioning fix design |
+
+[TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
+[TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
+[TASK-021 Overlay Controls UX]: superpowers/specs/2026-03-21-task-021-fix-compare-overlay-ux-design.md
+
 ## Archives
 
 | Document                               | Purpose                      |
