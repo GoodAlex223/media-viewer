@@ -3672,6 +3672,48 @@ class MediaViewer {
             // Reset ML pair index to show new highest vs lowest
             this.mlComparePairIndex = 0;
 
+            // TASK-022: Clean switch to single mode when <2 files remain
+            if (this.mediaFiles.length < 2) {
+                // Reset state flags
+                this.isLoading = false;
+                this.mediaNavigationInProgress = false;
+                this.hideLoadingSpinner();
+
+                // Clear pending ML state
+                if (this.pendingCompareTimeout) {
+                    clearTimeout(this.pendingCompareTimeout);
+                    this.pendingCompareTimeout = null;
+                }
+                this.pendingCompareRefresh = false;
+                this.pendingCompareUpdates = 0;
+                this.previousScores = null;
+
+                // Clean up stale compare-mode wrapper DOM elements
+                if (this.leftMediaWrapper) {
+                    this.fullscreen.cleanup(this.leftMediaWrapper);
+                    this.leftMediaWrapper.remove();
+                    this.leftMediaWrapper = null;
+                }
+                if (this.rightMediaWrapper) {
+                    this.fullscreen.cleanup(this.rightMediaWrapper);
+                    this.rightMediaWrapper.remove();
+                    this.rightMediaWrapper = null;
+                }
+
+                this.switchToSingleModeUI();
+                this.updateFolderInfo();
+
+                if (this.mediaFiles.length === 1) {
+                    this.showNotification('Last pair rated — switched to single view', 'info');
+                    this.currentIndex = 0;
+                    await this.showMedia();
+                } else {
+                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                    this.showEmptyStateWithUndo();
+                }
+                return;
+            }
+
             // Ensure current index can show a pair
             if (this.currentIndex >= this.mediaFiles.length - 1) {
                 this.currentIndex = 0;
