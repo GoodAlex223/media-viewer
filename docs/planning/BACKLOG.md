@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-22 <!-- code-review-pr-19 -->
+**Last Updated**: 2026-03-22 <!-- TASK-022 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -12,6 +12,12 @@ Ideas and tasks not yet prioritized for active development.
 ---
 
 ## From Completed Tasks
+
+### [2026-03-22] From: TASK-022 (Fix compare mode last-pair error cascade)
+**Origin**: TASK-022 implementation
+
+- [ ] **DRY `toggleViewMode()` single-mode branch with `switchToSingleModeUI()`** — The single-mode UI setup in `toggleViewMode()` (lines ~3430-3445) duplicates `switchToSingleModeUI()`. The else branch could call `switchToSingleModeUI()` instead, keeping all single-mode UI logic in one place. Trivial refactor.
+- [ ] **Handle partial failure in compare-pair undo** — If first file restores but second fails, first file is moved back on disk but both entries are pushed back to history. Pre-existing pattern from compare-mode undo (line ~3311), now also in single-mode compare-pair undo. Low priority — requires transactional file move or rollback logic.
 
 ### [2026-03-21] From: TASK-019 (Extract fullscreen module from media-viewer.js)
 **Origin**: TASK-019 code reviews (Task 1, Task 2, and final review)
