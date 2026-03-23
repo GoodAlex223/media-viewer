@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-23 <!-- TASK-023 -->
+**Last Updated**: 2026-03-24 <!-- TASK-023 code review -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -10,6 +10,16 @@ Ideas and tasks not yet prioritized for active development.
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
 
 ---
+
+## From Code Reviews
+
+### [2026-03-24] From: PR #21 code review (TASK-023)
+**Origin**: 5 parallel agents + confidence scoring; all items below 80/100 threshold
+
+- [ ] **Consolidate duplicate Git Insights entries** (75/100) — TASK-023 has two separate bullets in CLAUDE.md Git Insights instead of one consolidated entry like TASK-021/TASK-022. Second entry is also out of chronological order.
+- [ ] **Add explanatory comment to all 3 `lucide.createIcons({ root })` call sites** (60/100) — PR added `// Use root param to scope icon creation` comment only at the compare-pane site (line ~2650), not at modal (line ~719) or zoom popover (line ~2102).
+- [ ] **Add `Plan:` field to TASK-023 DONE.md entry** (50/100) — All prior entries (TASK-020/021/022) include a `**Plan**:` link; TASK-023 omits it. Process consistency issue.
+- [ ] **Clarify DONE.md "3 calls" wording** (50/100) — Third call site was split from 1 call into 2 separate calls (4 total); DONE.md says "Changed 3 calls" without noting the split.
 
 ## From Completed Tasks
 
