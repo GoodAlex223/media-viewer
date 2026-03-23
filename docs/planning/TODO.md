@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-22 <!-- TASK-021 completed -->
+**Last Updated**: 2026-03-23 <!-- TASK-023 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -50,25 +50,7 @@ Active tasks and backlog.
 
 <!-- TASK-022 completed 2026-03-22, moved to DONE.md -->
 
----
-
-### TASK-023 — Fix video pause/play icon synchronization 🟠
-**Priority**: 🟠 Medium — Visual inconsistency
-**Effort**: Low
-**Origin**: Manual testing 2026-03-19
-
-**Description**: The video pause icon does not change to play icon (and vice versa) when toggling playback.
-
-**Reported Issue** (original Russian preserved):
-> Символ паузы не меняется на символ воспроизведения вовремя паузы/воспроизведения
-
-**Code Context**: `playIcon`/`pauseIcon` DOM elements are toggled via `onPlay`/`onPause` video event listeners (~lines 2815-2842). The listeners check `this.currentMedia.tagName === 'VIDEO'` and `!this.isBeingCleaned`. Investigate: Are events firing? Is `isBeingCleaned` stale? Do the DOM elements exist when events fire? Does this happen in both single and compare mode?
-
-**Acceptance Criteria**:
-- [ ] Play icon shown when video is paused
-- [ ] Pause icon shown when video is playing
-- [ ] Works in both single and compare modes
-- [ ] Icon updates immediately on user click/keyboard toggle
+<!-- TASK-023 completed 2026-03-23, moved to DONE.md -->
 
 ---
 

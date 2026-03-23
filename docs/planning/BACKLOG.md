@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-22 <!-- TASK-022 -->
+**Last Updated**: 2026-03-23 <!-- TASK-023 -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -12,6 +12,12 @@ Ideas and tasks not yet prioritized for active development.
 ---
 
 ## From Completed Tasks
+
+### [2026-03-23] From: TASK-023 (Fix video pause/play icon synchronization)
+**Origin**: TASK-023 implementation
+
+- [ ] **Pin Lucide CDN to a specific version** — `index.html` loads `lucide@latest` which can break at any time. Pin to `lucide@1.0.1` (or whichever current) for reproducible builds. The `nodes` → `root` param rename between versions caused this bug silently.
+- [ ] **Add regression test for play/pause icon toggle** — No E2E or unit test verifies that the play/pause icon actually changes state when toggling video playback. Would catch Lucide API drift or similar DOM reference bugs.
 
 ### [2026-03-22] From: TASK-022 (Fix compare mode last-pair error cascade)
 **Origin**: TASK-022 implementation
