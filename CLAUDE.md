@@ -259,6 +259,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- TASK-023 completed (commit 3f5ea37): Fix video pause/play icon synchronization — root cause: `lucide.createIcons({nodes: [el]})` used a non-existent `nodes` param; Lucide silently ignored it and re-scanned the entire document on every call, replacing all `[data-lucide]` SVGs and invalidating cached `playIcon`/`pauseIcon` refs; fix: changed 3 calls from `{nodes: [...]}` to `{root: element}` to scope icon creation to the target subtree (media-viewer.js lines 719, 2102, 2651); 2 BACKLOG items added: pin Lucide CDN version, add play/pause icon toggle regression test
 - Line ending normalization (commit 5306bfd): `.gitattributes` added with `* text=auto eol=lf`; `.prettierrc.json` updated with `endOfLine: "lf"` — ensures consistent LF across all platforms and editors
 - Planned tasks TASK-015 through TASK-028 added (commit 514f455): 14 active tasks covering bugs, E2E reliability, ESLint/docs alignment, UI polish, and v2.0 modularization
 - TASK-015 completed (PR #14): Fixed three bugs — mouseup listener leak in createZoomPopover (AbortController cleanup), signalUserActivity() missing from compare-mode rating handlers (handleLeftLike/handleLeftDislike/handleRightLike/handleRightDislike), extraction pause state not reset on natural completion; code review added 3 low-confidence (25/100) BACKLOG items (commit 682f81b)
