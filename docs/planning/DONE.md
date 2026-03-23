@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-22 <!-- TASK-022 -->
+**Last Updated**: 2026-03-23 <!-- TASK-023 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,15 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-23] Fix video pause/play icon synchronization (TASK-023)
+
+**Summary**: Fixed play/pause icon never updating when toggling video playback. Root cause: `lucide.createIcons({nodes: [el]})` used a non-existent `nodes` param — Lucide silently ignored it and re-scanned the entire document on every call, replacing all `[data-lucide]` SVGs and invalidating cached `playIcon`/`pauseIcon` refs. Fixed by using the correct `root` param to scope icon creation to the target subtree.
+**Key Changes**:
+- `media-viewer.js` — Changed 3 `lucide.createIcons()` calls from `{nodes: [...]}` to `{root: element}` (lines 719, 2102, 2651)
+**Spawned Tasks**: 2 items added to BACKLOG.md (pin Lucide version, add icon toggle regression test)
+
+---
 
 ### [2026-03-22] Fix compare mode last-pair error cascade (TASK-022)
 
