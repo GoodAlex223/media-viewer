@@ -54,10 +54,14 @@ Call `loadFeatureCache()` unconditionally in `handleSortByPrediction()`, after t
 
 - `FEATURE_CACHE_VERSION` bumps from 2 to 3 (existing v2 caches auto-invalidated on first load — one-time re-extraction, then v3 persists)
 - Per-entry value changes from bare array to object with `vector`, `size`, `mtime`
-- `load-folder` IPC adds `mtimeMs` to returned file objects (from the `fs.stat()` call already happening)
-- On `loadFeatureCache()`: compare stored `size`+`mtime` against current file stats. Match → use cached. Mismatch → skip (will be re-extracted)
+- `load-folder` IPC adds `mtimeMs` to returned file objects (from the `fs.stat()` call already happening; `this.mediaFiles = result.files` at line 2184 preserves all properties, so `mtimeMs` flows through automatically)
+- On `loadFeatureCache()`: compare stored `size`+`mtime` against current file stats. Match → use cached. Mismatch → skip (will be re-extracted). Dimension validation changes from `features.length !== expectedDim` to `entry.vector?.length !== expectedDim`.
+
+**In-memory vs on-disk format**: The in-memory `featureCache` Map continues to store `Float32Array` values (not `{vector, size, mtime}` objects). All existing consumers (ML worker scoring, feature comparison) are unaffected. The `{vector, size, mtime}` structure is the on-disk format only.
 
 **File stats lookup**: `loadFeatureCache()` needs current file sizes/mtimes. Build a lookup Map from `this.mediaFiles` (which has `size` and `mtimeMs` from `load-folder`). No extra I/O needed.
+
+**Metadata for `saveFeatureCache()`**: Add a separate `featureMetadata` Map (`filePath → {size, mtime}`) populated at extraction time (when `featureCache.set()` is called) and at cache load time. `saveFeatureCache()` reads from this Map to write `{vector, size, mtime}` per entry. This avoids depending on `this.mediaFiles` at save time (files may have been moved/rated and removed from the array since extraction).
 
 ### 3. Deleted File Pruning
 
@@ -78,7 +82,8 @@ Handled implicitly by `loadFeatureCache()`: build a Set of current filenames fro
 | media-viewer.js | Bump `FEATURE_CACHE_VERSION` 2 → 3 |
 | media-viewer.js | Move `loadFeatureCache()` out of lazy-init guard, call unconditionally before extraction |
 | media-viewer.js | Update `loadFeatureCache()`: validate `size`+`mtime` per entry, prune deleted files |
-| media-viewer.js | Update `saveFeatureCache()`: write `{vector, size, mtime}` per entry |
+| media-viewer.js | Add `featureMetadata` Map (`filePath → {size, mtime}`) populated at extraction and cache load |
+| media-viewer.js | Update `saveFeatureCache()`: write `{vector, size, mtime}` per entry using `featureMetadata` |
 | media-viewer.js | Update progress indicator to show cached count |
 | media-viewer.js | Update completion notification with cached/extracted breakdown |
 | media-viewer.js | "All N features loaded from cache" notification when 0 files need extraction |
