@@ -716,7 +716,7 @@ class MediaViewer {
             // Initialize Lucide icons in the modal
             if (typeof lucide !== 'undefined') {
                 document.body.appendChild(modal);
-                lucide.createIcons({ nodes: [modal] });
+                lucide.createIcons({ root: modal });
             } else {
                 document.body.appendChild(modal);
             }
@@ -2099,7 +2099,7 @@ class MediaViewer {
 
         // Initialize Lucide icons
         if (typeof lucide !== 'undefined') {
-            lucide.createIcons({ nodes: [popover] });
+            lucide.createIcons({ root: popover });
         }
     }
 
@@ -2647,10 +2647,10 @@ class MediaViewer {
         this.closeAllZoomPopovers();
 
         // Initialize Lucide icons for overlay controls (must be after DOM append)
+        // Use root param to scope icon creation — avoids re-replacing global icons
         if (typeof lucide !== 'undefined') {
-            lucide.createIcons({
-                nodes: [this.leftMediaWrapper, this.rightMediaWrapper],
-            });
+            lucide.createIcons({ root: this.leftMediaWrapper });
+            lucide.createIcons({ root: this.rightMediaWrapper });
         }
 
         // Update file info for both media
