@@ -6031,10 +6031,12 @@ class MediaViewer {
             // Wait for ML worker to be ready
             await new Promise((resolve) => setTimeout(resolve, 100));
 
-            // Load cached model and features
+            // Load cached model
             await this.loadMlModel();
-            await this.loadFeatureCache();
         }
+
+        // Always reload feature cache (cleared by loadFolder() on folder switch)
+        await this.loadFeatureCache();
 
         // Train from historical ratings if not already trained
         if (!this.mlStats?.isReady) {
