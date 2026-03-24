@@ -333,6 +333,7 @@ class MediaViewer {
         // ML Prediction state
         this.mlWorker = null;
         this.featureCache = new Map(); // Map<filePath, Float32Array>
+        this.featureMetadata = new Map(); // Map<filePath, {size: number, mtime: number}>
         this.predictionScores = new Map(); // Map<filePath, number (0-1)>
         this.mlModelState = null; // Persisted model weights
         this.isMlEnabled = localStorage.getItem('mlPredictionEnabled') !== 'false';
@@ -936,6 +937,7 @@ class MediaViewer {
 
         this.predictionScores.delete(filePath);
         this.featureCache.delete(filePath);
+        this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
 
         if (this.currentIndex >= this.mediaFiles.length) {
@@ -2192,6 +2194,7 @@ class MediaViewer {
             this.originalMediaFiles = [];
             this.perceptualHashes.clear();
             this.featureCache.clear();
+            this.featureMetadata.clear();
             this.predictionScores.clear();
             // Cancel any ongoing background extraction
             this.cancelBackgroundExtraction();
@@ -5476,7 +5479,7 @@ class MediaViewer {
     }
 
     // Feature cache version - must match FEATURE_VERSION in feature-extractor.js
-    static FEATURE_CACHE_VERSION = 2;
+    static FEATURE_CACHE_VERSION = 3;
 
     async loadFeatureCache() {
         if (!this.baseFolderPath) return 0;

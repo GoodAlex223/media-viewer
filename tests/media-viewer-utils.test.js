@@ -159,6 +159,7 @@ describe('removeFileFromList', () => {
             currentIndex,
             predictionScores: new Map(),
             featureCache: new Map(),
+            featureMetadata: new Map(),
             perceptualHashes: new Map(),
         };
     }
