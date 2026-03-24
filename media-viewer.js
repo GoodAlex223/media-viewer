@@ -5553,7 +5553,21 @@ class MediaViewer {
 
             for (const [fullPath, featureArray] of this.featureCache.entries()) {
                 const filename = await window.electronAPI.path.basename(fullPath);
-                features[filename] = Array.from(featureArray);
+                const meta = this.featureMetadata.get(fullPath);
+                if (meta) {
+                    features[filename] = {
+                        vector: Array.from(featureArray),
+                        size: meta.size,
+                        mtime: meta.mtime,
+                    };
+                } else {
+                    // Fallback: write without metadata (will be re-validated on next load)
+                    features[filename] = {
+                        vector: Array.from(featureArray),
+                        size: 0,
+                        mtime: 0,
+                    };
+                }
             }
 
             await window.electronAPI.writeFile(
