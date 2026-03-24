@@ -5497,23 +5497,44 @@ class MediaViewer {
                         `Feature cache version mismatch: found=${parsed.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
                     );
                     this.featureCache = new Map();
+                    this.featureMetadata = new Map();
                     return 0;
                 }
 
-                // Check feature dimension compatibility (64 dimensions expected)
+                // Build lookup of current files for pruning and validation
+                const currentFiles = new Map();
+                for (const file of this.mediaFiles) {
+                    currentFiles.set(file.name, file);
+                }
+
                 const expectedDim = 64;
                 this.featureCache = new Map();
+                this.featureMetadata = new Map();
 
-                for (const [filename, features] of Object.entries(parsed.features || {})) {
-                    // Skip entries with wrong dimension
-                    if (features.length !== expectedDim) {
+                for (const [filename, entry] of Object.entries(parsed.features || {})) {
+                    // Prune: skip files no longer in folder
+                    const currentFile = currentFiles.get(filename);
+                    if (!currentFile) continue;
+
+                    // Validate dimension
+                    if (entry.vector?.length !== expectedDim) {
                         console.warn(
-                            `Skipping cached features for ${filename}: wrong dimension (${features.length} vs ${expectedDim})`
+                            `Skipping cached features for ${filename}: wrong dimension (${entry.vector?.length} vs ${expectedDim})`
                         );
                         continue;
                     }
+
+                    // Validate size + mtime (skip stale entries)
+                    if (entry.size !== currentFile.size || entry.mtime !== currentFile.mtimeMs) {
+                        console.log(
+                            `Feature cache stale for ${filename}: size ${entry.size}→${currentFile.size}, mtime ${entry.mtime}→${currentFile.mtimeMs}`
+                        );
+                        continue;
+                    }
+
                     const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
-                    this.featureCache.set(fullPath, new Float32Array(features));
+                    this.featureCache.set(fullPath, new Float32Array(entry.vector));
+                    this.featureMetadata.set(fullPath, { size: entry.size, mtime: entry.mtime });
                 }
                 return this.featureCache.size;
             }
