@@ -1096,6 +1096,13 @@ class MediaViewer {
                     mlFeatures = await this.extractFeaturesFromDisplayedMedia();
                     if (mlFeatures) {
                         this.featureCache.set(currentFile.path, mlFeatures);
+                        const ratingFileInfo = this.mediaFiles.find((f) => f.path === currentFile.path);
+                        if (ratingFileInfo) {
+                            this.featureMetadata.set(currentFile.path, {
+                                size: ratingFileInfo.size,
+                                mtime: ratingFileInfo.mtimeMs || 0,
+                            });
+                        }
                     }
                 } catch (err) {
                     console.warn('Could not extract ML features:', err);
@@ -3632,6 +3639,13 @@ class MediaViewer {
                     if (leftFeatures) {
                         this.featureCache.set(leftFile.path, leftFeatures);
                         this.featureCacheDirty = true;
+                        const leftInfo = this.mediaFiles.find((f) => f.path === leftFile.path);
+                        if (leftInfo) {
+                            this.featureMetadata.set(leftFile.path, {
+                                size: leftInfo.size,
+                                mtime: leftInfo.mtimeMs || 0,
+                            });
+                        }
                         console.log('[ML Debug] Left features extracted successfully');
                     }
                 } catch (err) {
@@ -3645,6 +3659,13 @@ class MediaViewer {
                     if (rightFeatures) {
                         this.featureCache.set(rightFile.path, rightFeatures);
                         this.featureCacheDirty = true;
+                        const rightInfo = this.mediaFiles.find((f) => f.path === rightFile.path);
+                        if (rightInfo) {
+                            this.featureMetadata.set(rightFile.path, {
+                                size: rightInfo.size,
+                                mtime: rightInfo.mtimeMs || 0,
+                            });
+                        }
                         console.log('[ML Debug] Right features extracted successfully');
                     }
                 } catch (err) {
@@ -5673,6 +5694,13 @@ class MediaViewer {
                     // Feature extraction using extractFeatures from feature-extractor.js (v2 with metadata)
                     const features = extractFeatures(imageData, metadata);
                     this.featureCache.set(filePath, features);
+                    const computeFileInfo = this.mediaFiles.find((f) => f.path === filePath);
+                    if (computeFileInfo) {
+                        this.featureMetadata.set(filePath, {
+                            size: computeFileInfo.size,
+                            mtime: computeFileInfo.mtimeMs || 0,
+                        });
+                    }
                     cleanup();
                     resolve(features);
                 } catch (error) {
@@ -6196,6 +6224,13 @@ class MediaViewer {
                     if (features) {
                         this.featureCache.set(file.path, features);
                         this.featureCacheDirty = true;
+                        const prioFileInfo = this.mediaFiles.find((f) => f.path === file.path);
+                        if (prioFileInfo) {
+                            this.featureMetadata.set(file.path, {
+                                size: prioFileInfo.size,
+                                mtime: prioFileInfo.mtimeMs || 0,
+                            });
+                        }
                         console.log(`[ML Debug] Priority extraction complete for ${side}: ${file.name}`);
                     }
                 } catch (err) {
@@ -6287,6 +6322,14 @@ class MediaViewer {
                     const features = new Float32Array(message.features);
                     this.featureCache.set(task.filePath, features);
                     this.featureCacheDirty = true;
+                    // Store metadata for cache serialization
+                    const fileInfo = this.mediaFiles.find((f) => f.path === task.filePath);
+                    if (fileInfo) {
+                        this.featureMetadata.set(task.filePath, {
+                            size: fileInfo.size,
+                            mtime: fileInfo.mtimeMs || 0,
+                        });
+                    }
 
                     task.resolve(features);
                     this.featurePendingTasks.delete(message.id);
