@@ -368,6 +368,7 @@ class MediaViewer {
         this.extractionResumeTimer = null; // setTimeout handle for 2s idle resume
         this._extractionLastCurrent = 0; // Last known current count for paused redisplay
         this._extractionLastTotal = 0; // Last known total count for paused redisplay
+        this._extractionCachedCount = 0; // Cached file count for progress display
 
         // User settings
         this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
@@ -6573,9 +6574,6 @@ class MediaViewer {
         this.extractionCompletionTimes = [];
         const runId = ++this.extractionRunId;
 
-        // Show subtle progress indicator
-        this.showBackgroundExtractionProgress(0, this.mediaFiles.length);
-
         // Get files that need extraction (not in cache)
         const filesToProcess = this.mediaFiles
             .map((file, index) => ({ file, index }))
@@ -6584,14 +6582,19 @@ class MediaViewer {
         if (filesToProcess.length === 0) {
             this.isBackgroundExtracting = false;
             this.hideBackgroundExtractionProgress();
+            this.showNotification(`All ${this.mediaFiles.length} features loaded from cache`, 'success');
             return;
         }
 
         // Sort by priority (distance from current index)
         filesToProcess.sort((a, b) => this.calculateFeaturePriority(a.index) - this.calculateFeaturePriority(b.index));
 
-        let completedCount = this.mediaFiles.length - filesToProcess.length;
+        const cachedCount = this.mediaFiles.length - filesToProcess.length;
+        let completedCount = cachedCount;
         const totalCount = this.mediaFiles.length;
+
+        // Show progress with cache info
+        this.showBackgroundExtractionProgress(completedCount, totalCount, null, false, cachedCount);
 
         // Process in batches to avoid memory pressure
         const BATCH_SIZE = 10;
@@ -6658,7 +6661,12 @@ class MediaViewer {
         if (this.extractionRunId === runId && this.extractionStartTime) {
             const totalSecs = Math.round((Date.now() - this.extractionStartTime) / 1000);
             const timeStr = this.formatElapsed(totalSecs);
-            this.showNotification(`Feature extraction complete \u2014 ${totalCount} files in ${timeStr}`, 'success');
+            const extractedCount = totalCount - cachedCount;
+            const cacheNote = cachedCount > 0 ? ` (${cachedCount} cached, ${extractedCount} extracted)` : '';
+            this.showNotification(
+                `Feature extraction complete \u2014 ${totalCount} files${cacheNote} in ${timeStr}`,
+                'success'
+            );
             this.extractionStartTime = null;
         }
 
@@ -6698,6 +6706,7 @@ class MediaViewer {
         this.isBackgroundExtracting = false;
         this.extractionStartTime = null;
         this.extractionCompletionTimes = [];
+        this._extractionCachedCount = 0;
         this.hideBackgroundExtractionProgress();
     }
 
@@ -6794,10 +6803,12 @@ class MediaViewer {
      * @param {string|null} etaText - Formatted ETA string (e.g. "~3m 12s")
      * @param {boolean} [paused=false] - When true, renders paused state instead of extracting
      */
-    showBackgroundExtractionProgress(current, total, etaText = null, paused = false) {
+    showBackgroundExtractionProgress(current, total, etaText = null, paused = false, cachedCount = 0) {
         // Store last known counts for paused state redisplay
         if (current !== null) this._extractionLastCurrent = current;
         if (total !== null) this._extractionLastTotal = total;
+        if (cachedCount > 0) this._extractionCachedCount = cachedCount;
+        const displayCached = this._extractionCachedCount || 0;
         const displayCurrent = current ?? this._extractionLastCurrent ?? 0;
         const displayTotal = total ?? this._extractionLastTotal ?? 0;
 
@@ -6831,7 +6842,7 @@ class MediaViewer {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
                 </svg>
-                <span>Paused \u2014 ${displayCurrent}/${displayTotal} (${percentage}%)</span>
+                <span>Paused \u2014 ${displayCurrent}/${displayTotal} (${percentage}%)${displayCached > 0 ? ` \u2014 ${displayCached} cached` : ''}</span>
             `;
         } else {
             const etaSuffix = etaText ? ` \u2014 ${etaText}` : '';
@@ -6839,7 +6850,7 @@ class MediaViewer {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
                     <path d="M12 2v4m0 12v4m-7-7H3m18 0h-2M5.6 5.6l1.4 1.4m9.9 9.9l1.4 1.4M5.6 18.4l1.4-1.4m9.9-9.9l1.4-1.4"/>
                 </svg>
-                <span>Extracting features: ${displayCurrent}/${displayTotal} (${percentage}%)${etaSuffix}</span>
+                <span>Extracting features: ${displayCurrent}/${displayTotal} (${percentage}%)${displayCached > 0 ? ` \u2014 ${displayCached} cached` : ''}${etaSuffix}</span>
             `;
         }
 
