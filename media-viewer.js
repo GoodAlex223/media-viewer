@@ -5583,11 +5583,13 @@ class MediaViewer {
                         mtime: meta.mtime,
                     };
                 } else {
-                    // Fallback: write without metadata (will be re-validated on next load)
+                    // Fallback: look up current file stats to avoid writing zeros
+                    // (zeros would cause permanent cache miss on next load)
+                    const fileInfo = this.mediaFiles.find((f) => f.path === fullPath);
                     features[filename] = {
                         vector: Array.from(featureArray),
-                        size: 0,
-                        mtime: 0,
+                        size: fileInfo?.size || 0,
+                        mtime: fileInfo?.mtimeMs || 0,
                     };
                 }
             }
