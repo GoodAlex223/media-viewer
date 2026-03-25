@@ -21,6 +21,19 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Add `Plan:` field to TASK-023 DONE.md entry** (50/100) — All prior entries (TASK-020/021/022) include a `**Plan**:` link; TASK-023 omits it. Process consistency issue.
 - [ ] **Clarify DONE.md "3 calls" wording** (50/100) — Third call site was split from 1 call into 2 separate calls (4 total); DONE.md says "Changed 3 calls" without noting the split.
 
+### [2026-03-25] From: PR #22 code review (TASK-024)
+**Origin**: 5 parallel agents + confidence scoring; 1 issue above 80/100 threshold (fixed in 962414e); remaining items below threshold
+
+- [ ] **Update CLAUDE.md Cache Management docs to include `featureMetadata` in `removeFileFromList()`** (75/100) — Docs list 3 caches (predictionScores, featureCache, perceptualHashes) but code now cleans 4. Same omission in JSDoc comment on the method.
+- [ ] **Update `removeFileFromList` test to assert `featureMetadata` cleanup** (75/100) — Test named "cleans up all three caches" doesn't assert `featureMetadata.delete()` and name is now factually wrong (four caches).
+- [ ] **Reuse `fileInfo` param in `computeFeatures()` instead of redundant `mediaFiles.find()`** (75/100) — New `computeFileInfo` lookup duplicates the already-resolved `fileInfo` parameter. CLAUDE.md Best Practices: "consider searching before adding duplicates".
+- [ ] **Clear `extractionStartTime` in all-cached early-return path** (75/100) — `startBackgroundFeatureExtraction()` sets `extractionStartTime` then returns early when all files cached, leaving stale state. Self-heals on next run but observable.
+- [ ] **Fix `_extractionCachedCount` stale after all-cached early-return** (75/100) — Not reset when `filesToProcess.length === 0` early-return bypasses `cancelBackgroundExtraction()`. Stale count could display for next folder.
+- [ ] **Update misleading `FEATURE_CACHE_VERSION` comment** (75/100) — Comment says "must match FEATURE_VERSION in feature-extractor.js" but they now diverge (3 vs 2). Constants serve different purposes (cache schema vs feature vector format).
+- [ ] **Guard `loadFeatureCache()` against clearing in-memory Maps mid-extraction** (75/100) — Unconditional `new Map()` at start could discard up to 30s of unsaved extraction work if user re-clicks "Sort by Prediction" during extraction.
+- [ ] **Index TASK-024 spec in docs/README.md** (75/100) — `docs/superpowers/specs/2026-03-24-task-024-per-folder-feature-cache-design.md` not indexed. Same issue flagged and fixed in PR #19.
+- [ ] **Add "Status: Complete" to archived TASK-024 plan** (75/100) — Archived plan has unchecked checkboxes and no Status field. Recurring issue from PR #19 and PR #20 reviews.
+
 ## From Completed Tasks
 
 ### [2026-03-25] From: TASK-024 (Per-folder feature cache fix)
