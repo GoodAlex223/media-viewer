@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-24 <!-- TASK-023 code review -->
+**Last Updated**: 2026-03-25 <!-- TASK-024 completed -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -22,6 +22,12 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Clarify DONE.md "3 calls" wording** (50/100) — Third call site was split from 1 call into 2 separate calls (4 total); DONE.md says "Changed 3 calls" without noting the split.
 
 ## From Completed Tasks
+
+### [2026-03-25] From: TASK-024 (Per-folder feature cache fix)
+**Origin**: TASK-024 implementation
+
+- [ ] **Replace `mediaFiles.find()` with Map lookup at featureMetadata population sites** — 6 `featureCache.set()` sites use `this.mediaFiles.find(f => f.path === filePath)` for O(n) linear scan per file. For 1000+ file folders, this adds up during extraction. Build a `Map<path, fileInfo>` once per extraction run and use O(1) lookup instead.
+- [ ] **Add unit tests for loadFeatureCache/saveFeatureCache validation logic** — v3 schema has complex validation (version check, size/mtime comparison, dimension check, deleted file pruning) but no automated tests. Mock `window.electronAPI` IPC calls and test: v2→v3 invalidation, stale entry skip, deleted file pruning, dimension mismatch skip, round-trip save→load consistency.
 
 ### [2026-03-23] From: TASK-023 (Fix video pause/play icon synchronization)
 **Origin**: TASK-023 implementation

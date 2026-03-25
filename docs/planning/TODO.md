@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-23 <!-- TASK-023 completed -->
+**Last Updated**: 2026-03-25 <!-- TASK-024 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -52,37 +52,7 @@ Active tasks and backlog.
 
 <!-- TASK-023 completed 2026-03-23, moved to DONE.md -->
 
----
-
-### TASK-024 — Per-folder feature extraction caching 🟠
-**Priority**: 🟠 Medium — Major workflow speedup
-**Effort**: Medium-High
-**Origin**: Manual testing 2026-03-19
-
-**Description**: Feature extraction runs from scratch every time the user switches to a different source folder. For large folders this is very slow. Cache extracted features per folder.
-
-**Reported Issue** (original Russian preserved):
-> Каждый раз, если меняется исходная папка с файлами, экстрактинг фьючерз при сортировке с помощью МЛ происходит заново, что очень затягивает процесс. Можно ли сделать какое-то кеширование в самих папках?
-
-**Design Considerations**:
-- Store a `.feature_cache.json` file in each media folder (similar to `.sort_cache.json`)
-- Cache key: file path + file size + mtime (detect changed files)
-- Load cache on folder open, skip extraction for cached files
-- Invalidation: re-extract if file modified since cache entry
-- Size concern: 64-dim float vector per file — compact enough for JSON
-- Privacy concern: cache files in user's own folders is consistent with existing `.sort_cache.json` pattern
-
-**Merges with BACKLOG**: "Move loadMediaAsImageData off main thread" (related performance concern from TASK-011)
-
-**Acceptance Criteria**:
-- [ ] Feature cache saved per folder after extraction completes
-- [ ] Cached features loaded on folder re-open, skipping extraction
-- [ ] Changed/new files detected and re-extracted
-- [ ] Deleted files pruned from cache
-- [ ] Progress indicator reflects cache hits (e.g., "45 cached, extracting 5 new")
-- [ ] All unit tests pass (`npm test`)
-
----
+<!-- TASK-024 completed 2026-03-25, moved to DONE.md -->
 
 ### TASK-025 — Application logging to file with auto-cleanup 🟡
 **Priority**: 🟡 Normal

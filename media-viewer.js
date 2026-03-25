@@ -333,6 +333,7 @@ class MediaViewer {
         // ML Prediction state
         this.mlWorker = null;
         this.featureCache = new Map(); // Map<filePath, Float32Array>
+        this.featureMetadata = new Map(); // Map<filePath, {size: number, mtime: number}>
         this.predictionScores = new Map(); // Map<filePath, number (0-1)>
         this.mlModelState = null; // Persisted model weights
         this.isMlEnabled = localStorage.getItem('mlPredictionEnabled') !== 'false';
@@ -367,6 +368,7 @@ class MediaViewer {
         this.extractionResumeTimer = null; // setTimeout handle for 2s idle resume
         this._extractionLastCurrent = 0; // Last known current count for paused redisplay
         this._extractionLastTotal = 0; // Last known total count for paused redisplay
+        this._extractionCachedCount = 0; // Cached file count for progress display
 
         // User settings
         this.showRatingConfirmations = localStorage.getItem('showRatingConfirmations') !== 'false'; // default: true
@@ -936,6 +938,7 @@ class MediaViewer {
 
         this.predictionScores.delete(filePath);
         this.featureCache.delete(filePath);
+        this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
 
         if (this.currentIndex >= this.mediaFiles.length) {
@@ -1094,6 +1097,13 @@ class MediaViewer {
                     mlFeatures = await this.extractFeaturesFromDisplayedMedia();
                     if (mlFeatures) {
                         this.featureCache.set(currentFile.path, mlFeatures);
+                        const ratingFileInfo = this.mediaFiles.find((f) => f.path === currentFile.path);
+                        if (ratingFileInfo) {
+                            this.featureMetadata.set(currentFile.path, {
+                                size: ratingFileInfo.size,
+                                mtime: ratingFileInfo.mtimeMs || 0,
+                            });
+                        }
                     }
                 } catch (err) {
                     console.warn('Could not extract ML features:', err);
@@ -2192,6 +2202,7 @@ class MediaViewer {
             this.originalMediaFiles = [];
             this.perceptualHashes.clear();
             this.featureCache.clear();
+            this.featureMetadata.clear();
             this.predictionScores.clear();
             // Cancel any ongoing background extraction
             this.cancelBackgroundExtraction();
@@ -3629,6 +3640,13 @@ class MediaViewer {
                     if (leftFeatures) {
                         this.featureCache.set(leftFile.path, leftFeatures);
                         this.featureCacheDirty = true;
+                        const leftInfo = this.mediaFiles.find((f) => f.path === leftFile.path);
+                        if (leftInfo) {
+                            this.featureMetadata.set(leftFile.path, {
+                                size: leftInfo.size,
+                                mtime: leftInfo.mtimeMs || 0,
+                            });
+                        }
                         console.log('[ML Debug] Left features extracted successfully');
                     }
                 } catch (err) {
@@ -3642,6 +3660,13 @@ class MediaViewer {
                     if (rightFeatures) {
                         this.featureCache.set(rightFile.path, rightFeatures);
                         this.featureCacheDirty = true;
+                        const rightInfo = this.mediaFiles.find((f) => f.path === rightFile.path);
+                        if (rightInfo) {
+                            this.featureMetadata.set(rightFile.path, {
+                                size: rightInfo.size,
+                                mtime: rightInfo.mtimeMs || 0,
+                            });
+                        }
                         console.log('[ML Debug] Right features extracted successfully');
                     }
                 } catch (err) {
@@ -5476,7 +5501,7 @@ class MediaViewer {
     }
 
     // Feature cache version - must match FEATURE_VERSION in feature-extractor.js
-    static FEATURE_CACHE_VERSION = 2;
+    static FEATURE_CACHE_VERSION = 3;
 
     async loadFeatureCache() {
         if (!this.baseFolderPath) return 0;
@@ -5494,23 +5519,44 @@ class MediaViewer {
                         `Feature cache version mismatch: found=${parsed.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
                     );
                     this.featureCache = new Map();
+                    this.featureMetadata = new Map();
                     return 0;
                 }
 
-                // Check feature dimension compatibility (64 dimensions expected)
+                // Build lookup of current files for pruning and validation
+                const currentFiles = new Map();
+                for (const file of this.mediaFiles) {
+                    currentFiles.set(file.name, file);
+                }
+
                 const expectedDim = 64;
                 this.featureCache = new Map();
+                this.featureMetadata = new Map();
 
-                for (const [filename, features] of Object.entries(parsed.features || {})) {
-                    // Skip entries with wrong dimension
-                    if (features.length !== expectedDim) {
+                for (const [filename, entry] of Object.entries(parsed.features || {})) {
+                    // Prune: skip files no longer in folder
+                    const currentFile = currentFiles.get(filename);
+                    if (!currentFile) continue;
+
+                    // Validate dimension
+                    if (entry.vector?.length !== expectedDim) {
                         console.warn(
-                            `Skipping cached features for ${filename}: wrong dimension (${features.length} vs ${expectedDim})`
+                            `Skipping cached features for ${filename}: wrong dimension (${entry.vector?.length} vs ${expectedDim})`
                         );
                         continue;
                     }
+
+                    // Validate size + mtime (skip stale entries)
+                    if (entry.size !== currentFile.size || entry.mtime !== currentFile.mtimeMs) {
+                        console.log(
+                            `Feature cache stale for ${filename}: size ${entry.size}→${currentFile.size}, mtime ${entry.mtime}→${currentFile.mtimeMs}`
+                        );
+                        continue;
+                    }
+
                     const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
-                    this.featureCache.set(fullPath, new Float32Array(features));
+                    this.featureCache.set(fullPath, new Float32Array(entry.vector));
+                    this.featureMetadata.set(fullPath, { size: entry.size, mtime: entry.mtime });
                 }
                 return this.featureCache.size;
             }
@@ -5529,7 +5575,23 @@ class MediaViewer {
 
             for (const [fullPath, featureArray] of this.featureCache.entries()) {
                 const filename = await window.electronAPI.path.basename(fullPath);
-                features[filename] = Array.from(featureArray);
+                const meta = this.featureMetadata.get(fullPath);
+                if (meta) {
+                    features[filename] = {
+                        vector: Array.from(featureArray),
+                        size: meta.size,
+                        mtime: meta.mtime,
+                    };
+                } else {
+                    // Fallback: look up current file stats to avoid writing zeros
+                    // (zeros would cause permanent cache miss on next load)
+                    const fileInfo = this.mediaFiles.find((f) => f.path === fullPath);
+                    features[filename] = {
+                        vector: Array.from(featureArray),
+                        size: fileInfo?.size || 0,
+                        mtime: fileInfo?.mtimeMs || 0,
+                    };
+                }
             }
 
             await window.electronAPI.writeFile(
@@ -5635,6 +5697,13 @@ class MediaViewer {
                     // Feature extraction using extractFeatures from feature-extractor.js (v2 with metadata)
                     const features = extractFeatures(imageData, metadata);
                     this.featureCache.set(filePath, features);
+                    const computeFileInfo = this.mediaFiles.find((f) => f.path === filePath);
+                    if (computeFileInfo) {
+                        this.featureMetadata.set(filePath, {
+                            size: computeFileInfo.size,
+                            mtime: computeFileInfo.mtimeMs || 0,
+                        });
+                    }
                     cleanup();
                     resolve(features);
                 } catch (error) {
@@ -5965,10 +6034,12 @@ class MediaViewer {
             // Wait for ML worker to be ready
             await new Promise((resolve) => setTimeout(resolve, 100));
 
-            // Load cached model and features
+            // Load cached model
             await this.loadMlModel();
-            await this.loadFeatureCache();
         }
+
+        // Always reload feature cache (cleared by loadFolder() on folder switch)
+        await this.loadFeatureCache();
 
         // Train from historical ratings if not already trained
         if (!this.mlStats?.isReady) {
@@ -6158,6 +6229,13 @@ class MediaViewer {
                     if (features) {
                         this.featureCache.set(file.path, features);
                         this.featureCacheDirty = true;
+                        const prioFileInfo = this.mediaFiles.find((f) => f.path === file.path);
+                        if (prioFileInfo) {
+                            this.featureMetadata.set(file.path, {
+                                size: prioFileInfo.size,
+                                mtime: prioFileInfo.mtimeMs || 0,
+                            });
+                        }
                         console.log(`[ML Debug] Priority extraction complete for ${side}: ${file.name}`);
                     }
                 } catch (err) {
@@ -6249,6 +6327,14 @@ class MediaViewer {
                     const features = new Float32Array(message.features);
                     this.featureCache.set(task.filePath, features);
                     this.featureCacheDirty = true;
+                    // Store metadata for cache serialization
+                    const fileInfo = this.mediaFiles.find((f) => f.path === task.filePath);
+                    if (fileInfo) {
+                        this.featureMetadata.set(task.filePath, {
+                            size: fileInfo.size,
+                            mtime: fileInfo.mtimeMs || 0,
+                        });
+                    }
 
                     task.resolve(features);
                     this.featurePendingTasks.delete(message.id);
@@ -6490,9 +6576,6 @@ class MediaViewer {
         this.extractionCompletionTimes = [];
         const runId = ++this.extractionRunId;
 
-        // Show subtle progress indicator
-        this.showBackgroundExtractionProgress(0, this.mediaFiles.length);
-
         // Get files that need extraction (not in cache)
         const filesToProcess = this.mediaFiles
             .map((file, index) => ({ file, index }))
@@ -6501,14 +6584,19 @@ class MediaViewer {
         if (filesToProcess.length === 0) {
             this.isBackgroundExtracting = false;
             this.hideBackgroundExtractionProgress();
+            this.showNotification(`All ${this.mediaFiles.length} features loaded from cache`, 'success');
             return;
         }
 
         // Sort by priority (distance from current index)
         filesToProcess.sort((a, b) => this.calculateFeaturePriority(a.index) - this.calculateFeaturePriority(b.index));
 
-        let completedCount = this.mediaFiles.length - filesToProcess.length;
+        const cachedCount = this.mediaFiles.length - filesToProcess.length;
+        let completedCount = cachedCount;
         const totalCount = this.mediaFiles.length;
+
+        // Show progress with cache info
+        this.showBackgroundExtractionProgress(completedCount, totalCount, null, false, cachedCount);
 
         // Process in batches to avoid memory pressure
         const BATCH_SIZE = 10;
@@ -6575,7 +6663,12 @@ class MediaViewer {
         if (this.extractionRunId === runId && this.extractionStartTime) {
             const totalSecs = Math.round((Date.now() - this.extractionStartTime) / 1000);
             const timeStr = this.formatElapsed(totalSecs);
-            this.showNotification(`Feature extraction complete \u2014 ${totalCount} files in ${timeStr}`, 'success');
+            const extractedCount = totalCount - cachedCount;
+            const cacheNote = cachedCount > 0 ? ` (${cachedCount} cached, ${extractedCount} extracted)` : '';
+            this.showNotification(
+                `Feature extraction complete \u2014 ${totalCount} files${cacheNote} in ${timeStr}`,
+                'success'
+            );
             this.extractionStartTime = null;
         }
 
@@ -6615,6 +6708,7 @@ class MediaViewer {
         this.isBackgroundExtracting = false;
         this.extractionStartTime = null;
         this.extractionCompletionTimes = [];
+        this._extractionCachedCount = 0;
         this.hideBackgroundExtractionProgress();
     }
 
@@ -6711,10 +6805,12 @@ class MediaViewer {
      * @param {string|null} etaText - Formatted ETA string (e.g. "~3m 12s")
      * @param {boolean} [paused=false] - When true, renders paused state instead of extracting
      */
-    showBackgroundExtractionProgress(current, total, etaText = null, paused = false) {
+    showBackgroundExtractionProgress(current, total, etaText = null, paused = false, cachedCount = 0) {
         // Store last known counts for paused state redisplay
         if (current !== null) this._extractionLastCurrent = current;
         if (total !== null) this._extractionLastTotal = total;
+        if (cachedCount > 0) this._extractionCachedCount = cachedCount;
+        const displayCached = this._extractionCachedCount || 0;
         const displayCurrent = current ?? this._extractionLastCurrent ?? 0;
         const displayTotal = total ?? this._extractionLastTotal ?? 0;
 
@@ -6748,7 +6844,7 @@ class MediaViewer {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
                 </svg>
-                <span>Paused \u2014 ${displayCurrent}/${displayTotal} (${percentage}%)</span>
+                <span>Paused \u2014 ${displayCurrent}/${displayTotal} (${percentage}%)${displayCached > 0 ? ` \u2014 ${displayCached} cached` : ''}</span>
             `;
         } else {
             const etaSuffix = etaText ? ` \u2014 ${etaText}` : '';
@@ -6756,7 +6852,7 @@ class MediaViewer {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
                     <path d="M12 2v4m0 12v4m-7-7H3m18 0h-2M5.6 5.6l1.4 1.4m9.9 9.9l1.4 1.4M5.6 18.4l1.4-1.4m9.9-9.9l1.4-1.4"/>
                 </svg>
-                <span>Extracting features: ${displayCurrent}/${displayTotal} (${percentage}%)${etaSuffix}</span>
+                <span>Extracting features: ${displayCurrent}/${displayTotal} (${percentage}%)${displayCached > 0 ? ` \u2014 ${displayCached} cached` : ''}${etaSuffix}</span>
             `;
         }
 

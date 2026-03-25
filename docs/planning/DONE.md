@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-23 <!-- TASK-023 -->
+**Last Updated**: 2026-03-25 <!-- TASK-024 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,21 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-25] Per-folder feature extraction caching (TASK-024)
+
+**Plan**: [docs/archive/plans/2026-03-24-task-024-per-folder-feature-cache.md](../../archive/plans/2026-03-24-task-024-per-folder-feature-cache.md)
+**Spec**: [docs/superpowers/specs/2026-03-24-task-024-per-folder-feature-cache-design.md](../../superpowers/specs/2026-03-24-task-024-per-folder-feature-cache-design.md)
+**Summary**: Fixed feature extraction cache not reloading on folder switch. Root cause: `loadFeatureCache()` was inside the lazy-init guard — workers survive folder switches, so the guard was skipped on 2nd+ folder, and `featureCache` (cleared by `loadFolder()`) was never reloaded from disk. Also bumped cache schema to v3 with per-entry `{vector, size, mtime}` for file change detection and deleted file pruning.
+**Key Changes**:
+- `main.js` — Added `mtimeMs` to `load-folder` IPC response (1 line)
+- `media-viewer.js` — Moved `loadFeatureCache()` out of lazy-init guard (core bug fix)
+- `media-viewer.js` — Cache schema v3: per-entry `{vector, size, mtime}`, `FEATURE_CACHE_VERSION` 2→3
+- `media-viewer.js` — Added `featureMetadata` Map populated at all 6 `featureCache.set()` sites
+- `media-viewer.js` — Progress indicators show cache hits: "All N loaded from cache", "X/Y — N cached", completion breakdown
+**Spawned Tasks**: 2 items added to BACKLOG.md (Map lookup for featureMetadata, unit tests for cache validation)
+
+---
 
 ### [2026-03-23] Fix video pause/play icon synchronization (TASK-023)
 

@@ -110,6 +110,7 @@ app.whenReady().then(() => {
                                 name: file,
                                 path: filePath,
                                 size: stats.size,
+                                mtimeMs: stats.mtimeMs,
                                 type: getMimeType(ext),
                             });
                         }
