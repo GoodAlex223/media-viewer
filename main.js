@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const { execFile } = require('child_process');
 const { promisify } = require('util');
+const logger = require('./logger');
 
 // ffprobe for video metadata extraction
 let ffprobePath;
@@ -65,6 +66,26 @@ function getMimeType(extension) {
 
 // App lifecycle
 app.whenReady().then(() => {
+    // Initialize file logger
+    logger.init(app.getPath('logs'));
+
+    // Intercept console methods to also write to log file
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    const originalError = console.error;
+    console.log = (...args) => {
+        originalLog(...args);
+        logger.log('main', args.join(' '));
+    };
+    console.warn = (...args) => {
+        originalWarn(...args);
+        logger.warn('main', args.join(' '));
+    };
+    console.error = (...args) => {
+        originalError(...args);
+        logger.error('main', args.join(' '));
+    };
+
     createWindow();
 
     // Register Alt+F4 to close the focused window (Windows compatibility)
@@ -246,6 +267,12 @@ app.whenReady().then(() => {
         }
     });
 
+    // Receive renderer errors for file logging (fire-and-forget)
+    ipcMain.on('log-renderer-error', (_event, { level, message, source }) => {
+        const fn = level === 'warn' ? logger.warn : logger.error;
+        fn(source || 'renderer', message);
+    });
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
@@ -261,4 +288,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
     globalShortcut.unregisterAll();
+    logger.cleanup();
 });
