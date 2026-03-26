@@ -60,7 +60,7 @@ media_viewer/
 ├── main.js              # Electron main process, IPC handlers, file operations
 ├── logger.js            # File logger — init/log/warn/error/cleanup/getLogPath; writes to app.getPath('logs')/media-viewer.log; main.js intercepts console.*; renderer errors forwarded via IPC 'log-renderer-error' (fire-and-forget); log deleted on clean exit (will-quit), survives crashes
 ├── preload.js           # Security bridge, context isolation; exposes `window.electronAPI` via contextBridge — file ops, folder ops, probeVideo, `logError: ipcRenderer.send('log-renderer-error', data)` (fire-and-forget, never blocks renderer), invoke wrapper, path utilities
-├── media-viewer.js      # Renderer process, all UI logic (~6300+ lines)
+├── media-viewer.js      # Renderer process, all UI logic (~6300+ lines); constructor registers `window.onerror` and `window.addEventListener('unhandledrejection', ...)` to forward uncaught errors to main-process logger via `window.electronAPI.logError`; `showError()` also forwards errors via `logError`
 ├── index.html           # Main HTML entry point
 ├── styles.css           # Application styling, design system
 ├── sorting-worker.js    # Web Worker for sorting algorithms (MST, similarity)
@@ -175,6 +175,7 @@ media_viewer/
 - User-facing errors via notification system (bottom-right corner)
 - Console logging for debugging
 - Graceful degradation when features unavailable
+- Renderer errors forwarded to main-process file logger via `window.electronAPI.logError`: `showError()` sends explicit errors; `window.onerror` captures uncaught exceptions; `window.addEventListener('unhandledrejection', ...)` captures unhandled promise rejections; all use `{ level: 'error', message, source: 'renderer' }` payload (fire-and-forget, never blocks renderer)
 
 **Data Structures**:
 - MinHeap for priority queue operations
@@ -265,6 +266,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- TASK-025 Task 4 complete (commit e0b104c): Forward renderer errors to file logger — added `window.onerror` handler in MediaViewer constructor (formats `msg at url:line:col`, calls `window.electronAPI.logError({ level: 'error', message, source: 'renderer' })`); added `window.addEventListener('unhandledrejection', ...)` handler (formats `Unhandled promise rejection: ${event.reason}`, same logError call); added `logError` call at top of `showError()` before notification display; all three use guard `if (window.electronAPI && window.electronAPI.logError)` for safe degradation; completes TASK-025 renderer-side logging (Tasks 1–4 all done)
 - TASK-025 Task 3 complete (commit 3902abe): Added `logError` channel to preload bridge — `logError: (data) => ipcRenderer.send('log-renderer-error', data)` exposed via contextBridge; uses `ipcRenderer.send` (fire-and-forget, not `invoke`) so renderer is never blocked; completes IPC plumbing between renderer and main-process logger
 - TASK-025 Task 2 complete (commit 7c26f53): Integrated logger into main process — `require('./logger')` added; `logger.init(app.getPath('logs'))` called at app startup before `createWindow()`; `console.log/warn/error` intercepted to mirror output to logger with source `'main'` (captures all 12 existing calls without touching call sites); new fire-and-forget `ipcMain.on('log-renderer-error', (_event, { level, message, source }) => {...})` handler routes renderer errors to `logger.warn/error` based on level; `logger.cleanup()` called in `will-quit` (deletes log on clean exit, log survives crashes)
 - TASK-025 Task 1 complete (commit 6019189): Added `logger.js` CommonJS module and `tests/logger.test.js` — `init(logDir)` creates dir and opens `media-viewer.log` with `'w'` flag; `log/warn/error(source, msg)` write `[YYYY-MM-DD HH:MM:SS.mmm] [LEVEL] [source] msg\n` via `fs.writeSync`; `cleanup()` closes fd and deletes log file (safe before init, safe twice); `getLogPath()` returns null before init; `logger.js` added to ESLint block 1 (`files: ['main.js', 'logger.js']`); module state reset between tests via `delete require.cache[require.resolve('../logger')]`
