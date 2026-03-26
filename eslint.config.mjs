@@ -1,7 +1,7 @@
 // ESLint flat configuration for Electron media_viewer project.
 //
 // Ten file-group blocks:
-//   1.  Node/Electron main           — main.js
+//   1.  Node/Electron main           — main.js, logger.js
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
 //   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
@@ -36,7 +36,7 @@ export default [
 
     // 1. Node / Electron main process
     {
-        files: ['main.js'],
+        files: ['main.js', 'logger.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',
