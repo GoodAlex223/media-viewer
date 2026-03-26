@@ -59,7 +59,7 @@ Pre-commit hook (Husky + lint-staged + vitest) runs automatically on `git commit
 media_viewer/
 ├── main.js              # Electron main process, IPC handlers, file operations
 ├── logger.js            # File logger — init/log/warn/error/cleanup/getLogPath; writes to app.getPath('logs')/media-viewer.log; main.js intercepts console.*; renderer errors forwarded via IPC 'log-renderer-error' (fire-and-forget); log deleted on clean exit (will-quit), survives crashes
-├── preload.js           # Security bridge, context isolation
+├── preload.js           # Security bridge, context isolation; exposes `window.electronAPI` via contextBridge — file ops, folder ops, probeVideo, `logError: ipcRenderer.send('log-renderer-error', data)` (fire-and-forget, never blocks renderer), invoke wrapper, path utilities
 ├── media-viewer.js      # Renderer process, all UI logic (~6300+ lines)
 ├── index.html           # Main HTML entry point
 ├── styles.css           # Application styling, design system
@@ -265,6 +265,7 @@ media_viewer/
 ## Git Insights
 
 Recent development focus:
+- TASK-025 Task 3 complete (commit 3902abe): Added `logError` channel to preload bridge — `logError: (data) => ipcRenderer.send('log-renderer-error', data)` exposed via contextBridge; uses `ipcRenderer.send` (fire-and-forget, not `invoke`) so renderer is never blocked; completes IPC plumbing between renderer and main-process logger
 - TASK-025 Task 2 complete (commit 7c26f53): Integrated logger into main process — `require('./logger')` added; `logger.init(app.getPath('logs'))` called at app startup before `createWindow()`; `console.log/warn/error` intercepted to mirror output to logger with source `'main'` (captures all 12 existing calls without touching call sites); new fire-and-forget `ipcMain.on('log-renderer-error', (_event, { level, message, source }) => {...})` handler routes renderer errors to `logger.warn/error` based on level; `logger.cleanup()` called in `will-quit` (deletes log on clean exit, log survives crashes)
 - TASK-025 Task 1 complete (commit 6019189): Added `logger.js` CommonJS module and `tests/logger.test.js` — `init(logDir)` creates dir and opens `media-viewer.log` with `'w'` flag; `log/warn/error(source, msg)` write `[YYYY-MM-DD HH:MM:SS.mmm] [LEVEL] [source] msg\n` via `fs.writeSync`; `cleanup()` closes fd and deletes log file (safe before init, safe twice); `getLogPath()` returns null before init; `logger.js` added to ESLint block 1 (`files: ['main.js', 'logger.js']`); module state reset between tests via `delete require.cache[require.resolve('../logger')]`
 - TASK-025 implementation plan added (commit 9abc5da): TDD plan for application logging — creates `logger.js` and `tests/logger.test.js` in Task 1; integrates into `main.js` (require, init, console interception, IPC handler, will-quit cleanup) in Task 2; adds `logError` channel to `preload.js` in Task 3; adds `showError()` IPC call plus `window.onerror`/`unhandledrejection` handlers to `media-viewer.js` in Task 4; adds `logger.js` to ESLint block 1 in Task 5

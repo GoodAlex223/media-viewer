@@ -424,6 +424,21 @@ class MediaViewer {
             console.error('Electron API not available');
             this.showError("Electron API not available. Please make sure you're running this in Electron.");
         }
+
+        // Global error handlers — forward uncaught errors to main process log
+        window.onerror = (msg, url, line, col, _err) => {
+            const message = `${msg} at ${url}:${line}:${col}`;
+            if (window.electronAPI && window.electronAPI.logError) {
+                window.electronAPI.logError({ level: 'error', message, source: 'renderer' });
+            }
+        };
+
+        window.addEventListener('unhandledrejection', (event) => {
+            const message = `Unhandled promise rejection: ${event.reason}`;
+            if (window.electronAPI && window.electronAPI.logError) {
+                window.electronAPI.logError({ level: 'error', message, source: 'renderer' });
+            }
+        });
     }
 
     initializeElements() {
@@ -886,6 +901,9 @@ class MediaViewer {
 
     showError(message, options = {}) {
         console.error('Error:', message);
+        if (window.electronAPI && window.electronAPI.logError) {
+            window.electronAPI.logError({ level: 'error', message, source: 'renderer' });
+        }
         this.showNotification(`❌ ${message}`, 'error', options);
     }
 
