@@ -6992,6 +6992,30 @@ class MediaViewer {
         }
         return reverse;
     }
+
+    executeAction(action) {
+        const actions = {
+            like: () => this.handleLike(),
+            dislike: () => this.handleDislike(),
+            next: () => this.nextMedia(),
+            previous: () => this.previousMedia(),
+            undo: () => this.handleCancel(),
+            leftLike: () => this.handleLeftLike(),
+            leftDislike: () => this.handleLeftDislike(),
+            rightLike: () => this.handleRightLike(),
+            rightDislike: () => this.handleRightDislike(),
+        };
+        actions[action]?.();
+    }
+
+    checkShortcutConflict(mode, currentAction, newKey) {
+        for (const [action, key] of Object.entries(this.shortcuts[mode])) {
+            if (key === newKey && action !== currentAction) {
+                return action;
+            }
+        }
+        return null;
+    }
 }
 
 // Add CSS animations

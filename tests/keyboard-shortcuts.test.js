@@ -163,3 +163,149 @@ describe('buildReverseMap', () => {
         expect(result.single['KeyQ']).toBeUndefined();
     });
 });
+
+describe('executeAction', () => {
+    const executeAction = extractMethod('executeAction');
+
+    it('calls handleLike for "like" action', () => {
+        const ctx = {
+            handleLike: vi.fn(),
+            handleDislike: vi.fn(),
+            nextMedia: vi.fn(),
+            previousMedia: vi.fn(),
+            handleCancel: vi.fn(),
+            handleLeftLike: vi.fn(),
+            handleLeftDislike: vi.fn(),
+            handleRightLike: vi.fn(),
+            handleRightDislike: vi.fn(),
+        };
+        executeAction.call(ctx, 'like');
+        expect(ctx.handleLike).toHaveBeenCalledOnce();
+        expect(ctx.handleDislike).not.toHaveBeenCalled();
+    });
+
+    it('calls nextMedia for "next" action', () => {
+        const ctx = {
+            handleLike: vi.fn(),
+            handleDislike: vi.fn(),
+            nextMedia: vi.fn(),
+            previousMedia: vi.fn(),
+            handleCancel: vi.fn(),
+            handleLeftLike: vi.fn(),
+            handleLeftDislike: vi.fn(),
+            handleRightLike: vi.fn(),
+            handleRightDislike: vi.fn(),
+        };
+        executeAction.call(ctx, 'next');
+        expect(ctx.nextMedia).toHaveBeenCalledOnce();
+    });
+
+    it('calls handleRightDislike for "rightDislike" action', () => {
+        const ctx = {
+            handleLike: vi.fn(),
+            handleDislike: vi.fn(),
+            nextMedia: vi.fn(),
+            previousMedia: vi.fn(),
+            handleCancel: vi.fn(),
+            handleLeftLike: vi.fn(),
+            handleLeftDislike: vi.fn(),
+            handleRightLike: vi.fn(),
+            handleRightDislike: vi.fn(),
+        };
+        executeAction.call(ctx, 'rightDislike');
+        expect(ctx.handleRightDislike).toHaveBeenCalledOnce();
+    });
+
+    it('does nothing for unknown action', () => {
+        const ctx = {
+            handleLike: vi.fn(),
+            handleDislike: vi.fn(),
+            nextMedia: vi.fn(),
+            previousMedia: vi.fn(),
+            handleCancel: vi.fn(),
+            handleLeftLike: vi.fn(),
+            handleLeftDislike: vi.fn(),
+            handleRightLike: vi.fn(),
+            handleRightDislike: vi.fn(),
+        };
+        executeAction.call(ctx, 'nonexistent');
+        expect(ctx.handleLike).not.toHaveBeenCalled();
+        expect(ctx.nextMedia).not.toHaveBeenCalled();
+    });
+});
+
+describe('checkShortcutConflict', () => {
+    const checkShortcutConflict = extractMethod('checkShortcutConflict');
+
+    it('returns null when key is not in use', () => {
+        const ctx = {
+            shortcuts: {
+                single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                compare: {
+                    leftLike: 'KeyQ',
+                    leftDislike: 'KeyW',
+                    rightLike: 'KeyE',
+                    rightDislike: 'KeyR',
+                    next: 'KeyD',
+                    previous: 'KeyA',
+                    undo: 'Ctrl+KeyA',
+                },
+            },
+        };
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyT')).toBeNull();
+    });
+
+    it('returns conflicting action name when key is already used', () => {
+        const ctx = {
+            shortcuts: {
+                single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                compare: {
+                    leftLike: 'KeyQ',
+                    leftDislike: 'KeyW',
+                    rightLike: 'KeyE',
+                    rightDislike: 'KeyR',
+                    next: 'KeyD',
+                    previous: 'KeyA',
+                    undo: 'Ctrl+KeyA',
+                },
+            },
+        };
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyW')).toBe('dislike');
+    });
+
+    it('allows reassigning same key to same action', () => {
+        const ctx = {
+            shortcuts: {
+                single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                compare: {
+                    leftLike: 'KeyQ',
+                    leftDislike: 'KeyW',
+                    rightLike: 'KeyE',
+                    rightDislike: 'KeyR',
+                    next: 'KeyD',
+                    previous: 'KeyA',
+                    undo: 'Ctrl+KeyA',
+                },
+            },
+        };
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyQ')).toBeNull();
+    });
+
+    it('checks only within the same mode', () => {
+        const ctx = {
+            shortcuts: {
+                single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                compare: {
+                    leftLike: 'KeyQ',
+                    leftDislike: 'KeyW',
+                    rightLike: 'KeyE',
+                    rightDislike: 'KeyR',
+                    next: 'KeyD',
+                    previous: 'KeyA',
+                    undo: 'Ctrl+KeyA',
+                },
+            },
+        };
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyE')).toBeNull();
+    });
+});
