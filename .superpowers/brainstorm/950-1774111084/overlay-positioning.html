@@ -1,0 +1,382 @@
+<h2>Compare Mode: Overlay Button Positioning</h2>
+<p class="subtitle">
+    Buttons positioned at bottom of wrapper, below media content. Hover over each pane to see controls appear.
+</p>
+
+<div class="split" style="gap: 20px">
+    <!-- Left pane mockup -->
+    <div
+        style="
+            flex: 1;
+            position: relative;
+            background: #1a1a2e;
+            border-radius: 12px;
+            height: 420px;
+            overflow: hidden;
+            cursor: pointer;
+        "
+        onmouseenter="
+            this.querySelector('.mock-overlay').style.opacity = '1';
+            this.querySelector('.mock-overlay').style.pointerEvents = 'auto';
+        "
+        onmouseleave="
+            setTimeout(() => {
+                if (!this.matches(':hover')) {
+                    this.querySelector('.mock-overlay').style.opacity = '0';
+                    this.querySelector('.mock-overlay').style.pointerEvents = 'none';
+                }
+            }, 500)
+        "
+    >
+        <!-- Simulated media (image) -->
+        <div
+            style="
+                position: absolute;
+                top: 20px;
+                left: 20px;
+                right: 20px;
+                bottom: 80px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            "
+        >
+            <div style="color: rgba(255, 255, 255, 0.6); font-size: 18px; text-align: center">
+                <div style="font-size: 48px; margin-bottom: 10px">🖼️</div>
+                Left Image<br />
+                <span style="font-size: 13px; opacity: 0.7">Media doesn't fill full height</span>
+            </div>
+        </div>
+
+        <!-- Overlay controls - positioned at bottom of wrapper, BELOW media -->
+        <div
+            class="mock-overlay"
+            style="
+                position: absolute;
+                bottom: 16px;
+                left: 50%;
+                transform: translateX(-50%);
+                display: flex;
+                gap: 12px;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                pointer-events: none;
+                z-index: 10;
+            "
+        >
+            <div
+                style="
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.15);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    transition: transform 0.15s;
+                "
+                onmouseenter="this.style.transform = 'scale(1.1)'"
+                onmouseleave="this.style.transform = 'scale(1)'"
+            >
+                <span style="font-size: 20px">🔍</span>
+            </div>
+            <div
+                style="
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.15);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    transition: transform 0.15s;
+                "
+                onmouseenter="this.style.transform = 'scale(1.1)'"
+                onmouseleave="this.style.transform = 'scale(1)'"
+            >
+                <span style="font-size: 20px">💛</span>
+            </div>
+            <div
+                style="
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 50%;
+                    background: rgba(200, 60, 60, 0.3);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    border: 1px solid rgba(255, 100, 100, 0.3);
+                    transition: transform 0.15s;
+                "
+                onmouseenter="this.style.transform = 'scale(1.1)'"
+                onmouseleave="this.style.transform = 'scale(1)'"
+            >
+                <span style="font-size: 20px">👎</span>
+            </div>
+            <div
+                style="
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 50%;
+                    background: rgba(60, 180, 60, 0.3);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    border: 1px solid rgba(100, 255, 100, 0.3);
+                    transition: transform 0.15s;
+                "
+                onmouseenter="this.style.transform = 'scale(1.1)'"
+                onmouseleave="this.style.transform = 'scale(1)'"
+            >
+                <span style="font-size: 20px">👍</span>
+            </div>
+        </div>
+
+        <div style="position: absolute; bottom: 16px; left: 16px; color: rgba(255, 255, 255, 0.4); font-size: 11px">
+            LEFT PANE
+        </div>
+    </div>
+
+    <!-- Right pane mockup (video - full height) -->
+    <div
+        style="
+            flex: 1;
+            position: relative;
+            background: #1a1a2e;
+            border-radius: 12px;
+            height: 420px;
+            overflow: hidden;
+            cursor: pointer;
+        "
+        onmouseenter="
+            this.querySelector('.mock-overlay').style.opacity = '1';
+            this.querySelector('.mock-overlay').style.pointerEvents = 'auto';
+        "
+        onmouseleave="
+            setTimeout(() => {
+                if (!this.matches(':hover')) {
+                    this.querySelector('.mock-overlay').style.opacity = '0';
+                    this.querySelector('.mock-overlay').style.pointerEvents = 'none';
+                }
+            }, 500)
+        "
+    >
+        <!-- Simulated media (video, full height) -->
+        <div
+            style="
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            "
+        >
+            <div style="color: rgba(255, 255, 255, 0.6); font-size: 18px; text-align: center">
+                <div style="font-size: 48px; margin-bottom: 10px">🎬</div>
+                Right Video<br />
+                <span style="font-size: 13px; opacity: 0.7">Media fills full height</span>
+            </div>
+        </div>
+
+        <!-- Simulated native video controls bar -->
+        <div
+            style="
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                height: 40px;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                padding: 0 12px;
+                gap: 8px;
+                z-index: 5;
+            "
+        >
+            <div
+                style="
+                    width: 20px;
+                    height: 20px;
+                    background: rgba(255, 255, 255, 0.7);
+                    border-radius: 3px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 10px;
+                "
+            >
+                ▶
+            </div>
+            <div
+                style="
+                    flex: 1;
+                    height: 4px;
+                    background: rgba(255, 255, 255, 0.2);
+                    border-radius: 2px;
+                    position: relative;
+                "
+            >
+                <div style="width: 35%; height: 100%; background: rgba(255, 255, 255, 0.6); border-radius: 2px"></div>
+            </div>
+            <div style="color: rgba(255, 255, 255, 0.6); font-size: 11px">1:23 / 3:45</div>
+            <div
+                style="
+                    width: 20px;
+                    height: 20px;
+                    background: rgba(255, 255, 255, 0.3);
+                    border-radius: 3px;
+                    font-size: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                "
+            >
+                🔊
+            </div>
+            <div
+                style="
+                    width: 20px;
+                    height: 20px;
+                    background: rgba(255, 255, 255, 0.3);
+                    border-radius: 3px;
+                    font-size: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                "
+            >
+                ⛶
+            </div>
+        </div>
+
+        <!-- Overlay controls - positioned ABOVE video controls when full-height -->
+        <div
+            class="mock-overlay"
+            style="
+                position: absolute;
+                bottom: 56px;
+                left: 50%;
+                transform: translateX(-50%);
+                display: flex;
+                gap: 12px;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                pointer-events: none;
+                z-index: 10;
+            "
+        >
+            <div
+                style="
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.15);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    transition: transform 0.15s;
+                "
+                onmouseenter="this.style.transform = 'scale(1.1)'"
+                onmouseleave="this.style.transform = 'scale(1)'"
+            >
+                <span style="font-size: 20px">🔍</span>
+            </div>
+            <div
+                style="
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.15);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    transition: transform 0.15s;
+                "
+                onmouseenter="this.style.transform = 'scale(1.1)'"
+                onmouseleave="this.style.transform = 'scale(1)'"
+            >
+                <span style="font-size: 20px">💛</span>
+            </div>
+            <div
+                style="
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 50%;
+                    background: rgba(200, 60, 60, 0.3);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    border: 1px solid rgba(255, 100, 100, 0.3);
+                    transition: transform 0.15s;
+                "
+                onmouseenter="this.style.transform = 'scale(1.1)'"
+                onmouseleave="this.style.transform = 'scale(1)'"
+            >
+                <span style="font-size: 20px">👎</span>
+            </div>
+            <div
+                style="
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 50%;
+                    background: rgba(60, 180, 60, 0.3);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    border: 1px solid rgba(100, 255, 100, 0.3);
+                    transition: transform 0.15s;
+                "
+                onmouseenter="this.style.transform = 'scale(1.1)'"
+                onmouseleave="this.style.transform = 'scale(1)'"
+            >
+                <span style="font-size: 20px">👍</span>
+            </div>
+        </div>
+
+        <div style="position: absolute; top: 16px; right: 16px; color: rgba(255, 255, 255, 0.4); font-size: 11px">
+            RIGHT PANE
+        </div>
+    </div>
+</div>
+
+<div style="margin-top: 24px; display: flex; gap: 24px; justify-content: center">
+    <div style="display: flex; align-items: center; gap: 8px">
+        <div style="width: 12px; height: 12px; border-radius: 50%; background: #667eea"></div>
+        <span style="font-size: 14px; color: #aaa">Image: buttons at bottom of wrapper (below media)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px">
+        <div style="width: 12px; height: 12px; border-radius: 50%; background: #11998e"></div>
+        <span style="font-size: 14px; color: #aaa">Video (full-height): buttons above native controls</span>
+    </div>
+</div>
+
+<p style="text-align: center; color: #888; margin-top: 16px; font-size: 13px">
+    ⬆ Hover over each pane to see the overlay controls appear. They linger 500ms after cursor leaves.
+</p>
