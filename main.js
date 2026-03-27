@@ -70,20 +70,21 @@ app.whenReady().then(() => {
     logger.init(app.getPath('logs'));
 
     // Intercept console methods to also write to log file
+    const formatArgs = (args) => args.map((a) => (a instanceof Error ? a.stack || String(a) : String(a))).join(' ');
     const originalLog = console.log;
     const originalWarn = console.warn;
     const originalError = console.error;
     console.log = (...args) => {
         originalLog(...args);
-        logger.log('main', args.join(' '));
+        logger.log('main', formatArgs(args));
     };
     console.warn = (...args) => {
         originalWarn(...args);
-        logger.warn('main', args.join(' '));
+        logger.warn('main', formatArgs(args));
     };
     console.error = (...args) => {
         originalError(...args);
-        logger.error('main', args.join(' '));
+        logger.error('main', formatArgs(args));
     };
 
     createWindow();

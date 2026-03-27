@@ -52,10 +52,16 @@ Central index for all project documentation.
 | [TASK-019 Extract Fullscreen Module][] | Fullscreen module extraction design |
 | [TASK-020 ML Sorting Investigation][] | ML sorting race condition fix design |
 | [TASK-021 Overlay Controls UX][] | Overlay controls positioning fix design |
+| [TASK-022 Compare Last-Pair Fix][] | Compare mode last-pair error cascade fix |
+| [TASK-024 Per-Folder Feature Cache][] | Per-folder feature extraction caching |
+| [TASK-025 Application Logging][] | File-based application logging design |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
 [TASK-021 Overlay Controls UX]: superpowers/specs/2026-03-21-task-021-fix-compare-overlay-ux-design.md
+[TASK-022 Compare Last-Pair Fix]: superpowers/specs/2026-03-22-task-022-fix-compare-last-pair-design.md
+[TASK-024 Per-Folder Feature Cache]: superpowers/specs/2026-03-24-task-024-per-folder-feature-cache-design.md
+[TASK-025 Application Logging]: superpowers/specs/2026-03-26-task-025-application-logging-design.md
 
 ## Archives
 
