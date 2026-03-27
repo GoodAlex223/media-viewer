@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-26 <!-- TASK-025 completed -->
+**Last Updated**: 2026-03-27 <!-- PR #23 code review -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -23,6 +23,18 @@ Ideas and tasks not yet prioritized for active development.
 ---
 
 ## From Code Reviews
+
+### [2026-03-27] From: PR #23 code review (TASK-025)
+**Origin**: 5 parallel agents + confidence scoring; 2 above 80/100 threshold (both fixed in 8fd9934); remaining items below threshold
+
+- [ ] **IPC handler crash on malformed payload** (75/100) — `ipcMain.on('log-renderer-error')` destructures second arg `{ level, message, source }` without null guard; malformed renderer call could throw TypeError in main process; other IPC handlers use try/catch
+- [ ] **Archived plan Status not set to "Complete"** (75/100) — `docs/archive/plans/2026-03-26-task-025-application-logging.md` has `Status: Design approved` instead of `Complete`; CLAUDE.md Task Completion Step 2 requires it; repeat pattern from PR #19/#20
+- [ ] **Archived plan has unchecked checkboxes** (75/100) — TDD step-by-step checkboxes never marked done; CLAUDE.md requires "All sections filled" before archival; repeat pattern from PR #20
+- [ ] **Archived plan deviation not documented** (75/100) — Plan describes `createWriteStream` implementation but code uses `fs.openSync`/`fs.writeSync`; no Execution Log or Key Discoveries section documents this deviation
+- [ ] **DONE.md spec link uses wrong relative path** (50/100) — `../../superpowers/specs/` should be `../superpowers/specs/` (one level up from `docs/planning/`, not two)
+- [x] **Consolidate Git Insights entries** (75/100) — 6 separate TASK-025 bullets instead of one consolidated entry (fixed in conflict resolution during merge)
+- [x] **Stack trace loss in `args.join(' ')`** (85/100) — Fixed in 8fd9934 via `formatArgs()` helper
+- [x] **Spec file not indexed in docs/README.md** (100/100) — Fixed in 8fd9934
 
 ### [2026-03-24] From: PR #21 code review (TASK-023)
 **Origin**: 5 parallel agents + confidence scoring; all items below 80/100 threshold
