@@ -1820,6 +1820,44 @@ body {
     font-size: var(--font-size-base);
 }
 
+/* Editable shortcut keys */
+.shortcut-key {
+    cursor: pointer;
+    border: 1px dashed var(--border-default);
+    transition:
+        border-color 0.15s,
+        background 0.15s;
+}
+
+.shortcut-key:hover {
+    border-color: var(--accent-primary);
+    background: rgba(124, 106, 239, 0.15);
+}
+
+.shortcut-key.listening {
+    border-color: var(--accent-primary);
+    background: rgba(124, 106, 239, 0.25);
+    animation: pulse-border 1s ease-in-out infinite;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+@keyframes pulse-border {
+    0%,
+    100% {
+        border-color: var(--accent-primary);
+    }
+    50% {
+        border-color: transparent;
+    }
+}
+
+.shortcut-conflict-warning {
+    color: var(--color-error, #ef4444);
+    font-size: var(--font-size-xs);
+    margin-top: var(--space-1);
+}
+
 /* Settings section in help overlay */
 .settings-section {
     border-top: 1px solid var(--border-default);
