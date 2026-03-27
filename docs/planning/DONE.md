@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-25 <!-- TASK-024 -->
+**Last Updated**: 2026-03-26 <!-- TASK-025 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,22 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-26] Application logging to file with auto-cleanup (TASK-025)
+
+**Spec**: [docs/superpowers/specs/2026-03-26-task-025-application-logging-design.md](../../superpowers/specs/2026-03-26-task-025-application-logging-design.md)
+**Plan**: [docs/archive/plans/2026-03-26-task-025-application-logging.md](../../archive/plans/2026-03-26-task-025-application-logging.md)
+**Summary**: Added file-based logging for debugging. New `logger.js` module writes timestamped entries to `app.getPath('logs')/media-viewer.log`. Main process intercepts `console.log/warn/error` to mirror output to log file. Renderer errors forwarded via fire-and-forget IPC (`logError` channel). Log deleted on clean exit (`will-quit`); crash logs survive naturally.
+**Key Changes**:
+- `logger.js` — New CommonJS module: `init/log/warn/error/cleanup/getLogPath`, synchronous `fs.writeSync`
+- `tests/logger.test.js` — 12 unit tests covering all exports, edge cases, cleanup safety
+- `main.js` — Logger init, console interception, `ipcMain.on('log-renderer-error')` handler, cleanup on `will-quit`
+- `preload.js` — `logError: (data) => ipcRenderer.send('log-renderer-error', data)` (fire-and-forget)
+- `media-viewer.js` — `showError()` forwards to logger, `window.onerror` + `unhandledrejection` global handlers
+- `eslint.config.mjs` — `logger.js` added to block 1 (Node/main process)
+**Spawned Tasks**: 3 items added to BACKLOG.md (double-init protection, console interception scope, rejection message clarity)
+
+---
 
 ### [2026-03-25] Per-folder feature extraction caching (TASK-024)
 

@@ -2,12 +2,23 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-25 <!-- TASK-024 completed -->
+**Last Updated**: 2026-03-26 <!-- TASK-025 completed -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From TASK-025 (Application Logging)
+
+### [2026-03-26] From: TASK-025 implementation + code review
+**Origin**: Implementation review + code quality review findings
+
+- [ ] **Double-init protection for logger.js** — `init()` should close any existing file descriptor before opening a new one to prevent fd leaks if called twice without cleanup
+- [ ] **Console interception scope** — ffprobe errors at module load (before `app.whenReady()`) are not captured in log file; consider moving interception to module scope after `require('./logger')`
+- [ ] **Unhandled rejection message clarity** — `event.reason` may be an Error object producing `[object Object]` in log; use `String(event.reason)` or `event.reason?.message || event.reason` for clearer output
 
 ---
 

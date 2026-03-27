@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-25 <!-- TASK-024 completed -->
+**Last Updated**: 2026-03-26 <!-- TASK-025 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -54,30 +54,7 @@ Active tasks and backlog.
 
 <!-- TASK-024 completed 2026-03-25, moved to DONE.md -->
 
-### TASK-025 — Application logging to file with auto-cleanup 🟡
-**Priority**: 🟡 Normal
-**Effort**: Low-Medium
-**Origin**: Manual testing 2026-03-19
-
-**Description**: Add file-based application logging for debugging. Clean up log files on each application exit.
-
-**Reported Issue** (original Russian preserved):
-> Записывать логи работы программы в файл. После каждого выхода удалять все логи (чтобы не мусорить)
-
-**Design Considerations**:
-- Write logs to a file in a temp or app-data directory
-- Capture main process logs (console.log/warn/error) + renderer IPC errors
-- On `app.on('before-quit')` or `app.on('will-quit')`, delete the log file
-- Consider keeping the last log file for post-crash debugging (delete previous, keep current)
-- Use Electron's `app.getPath('logs')` for platform-appropriate log directory
-
-**Acceptance Criteria**:
-- [ ] Application logs written to file during runtime
-- [ ] Log file deleted on normal application exit
-- [ ] Log location uses platform-appropriate directory
-- [ ] No performance impact on normal operation
-
----
+<!-- TASK-025 completed 2026-03-26, moved to DONE.md -->
 
 ### TASK-026 — Keyboard shortcut customization 🟡
 **Priority**: 🟡 Normal — v2.0 roadmap feature
