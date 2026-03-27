@@ -211,10 +211,11 @@ media_viewer/
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Completed tasks: TASK-012 through TASK-025. See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+Completed tasks: TASK-012 through TASK-026. See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
-**Active work:**
-- TASK-026 (keyboard shortcut customization): in progress. Implemented: `DEFAULT_SHORTCUTS`, `loadShortcuts()`, `buildKeyString(e)`, `buildReverseMap()`, `executeAction(action)`, `checkShortcutConflict(mode, action, key)`, `saveShortcut(mode, action, newKey)`, `resetShortcuts()`, `renderShortcutRows()`, `attachShortcutKeyListeners()`, constructor init (`this.shortcuts`/`this.shortcutReverseMap`), keydown handler refactored to reverse map lookup (fixed utilities: Escape, F1, Space, I, Z, X; all rating/nav actions via `shortcutReverseMap`). Shortcut methods use global `localStorage` directly (not `this.localStorage`). Unit tests in `tests/keyboard-shortcuts.test.js`; E2E tests in `tests/e2e/keyboard-shortcuts.test.js` (remap, conflict, reset, persistence). Remaining: settings UI overlay.
+**Next planned:**
+- TASK-027: Fix undo when no media remains in folder (🟡 Normal)
+- TASK-028: Research open source media content understanding tools (🟡 Normal, research only)
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
