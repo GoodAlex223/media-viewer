@@ -19,6 +19,18 @@ const DEFAULT_SHORTCUTS = {
     },
 };
 
+const ACTION_LABELS = {
+    like: 'Like media',
+    dislike: 'Dislike media',
+    next: 'Next media',
+    previous: 'Previous media',
+    undo: 'Undo last move',
+    leftLike: 'Left media Like',
+    leftDislike: 'Left media Dislike',
+    rightLike: 'Right media Like',
+    rightDislike: 'Right media Dislike',
+};
+
 // MinHeap (Priority Queue) for efficient MST construction
 class MinHeap {
     constructor(compareFunc = (a, b) => a.distance - b.distance) {
@@ -397,6 +409,7 @@ class MediaViewer {
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
         this.shortcuts = this.loadShortcuts();
         this.shortcutReverseMap = this.buildReverseMap();
+        this.renderShortcutRows();
 
         // Fullscreen manager (v2.0 module pattern — stateful manager with callbacks)
         this.fullscreen = new FullscreenManager({
@@ -1596,6 +1609,11 @@ class MediaViewer {
         const helpCloseBtn = document.getElementById('helpCloseBtn');
         if (helpCloseBtn) {
             helpCloseBtn.addEventListener('click', () => this.toggleHelp());
+        }
+
+        const resetShortcutsBtn = document.getElementById('resetShortcutsBtn');
+        if (resetShortcutsBtn) {
+            resetShortcutsBtn.addEventListener('click', () => this.resetShortcuts());
         }
 
         // Close help overlay when clicking on background
@@ -6978,6 +6996,33 @@ class MediaViewer {
         this.localStorage.setItem('customShortcuts', JSON.stringify(custom));
     }
 
+    keyDisplayName(keyStr) {
+        return keyStr.replace('Key', '').replace('Digit', '').replace('+Key', '+').replace('+Digit', '+');
+    }
+
+    renderShortcutRows() {
+        const singleGrid = document.getElementById('shortcutSingleGrid');
+        const compareGrid = document.getElementById('shortcutCompareGrid');
+        if (!singleGrid || !compareGrid) return;
+
+        singleGrid.innerHTML = '';
+        compareGrid.innerHTML = '';
+
+        for (const [action, key] of Object.entries(this.shortcuts.single)) {
+            const row = document.createElement('div');
+            row.className = 'shortcut-item';
+            row.innerHTML = `<kbd class="shortcut-key" data-action="${action}" data-mode="single">${this.keyDisplayName(key)}</kbd> <span>${ACTION_LABELS[action]}</span>`;
+            singleGrid.appendChild(row);
+        }
+
+        for (const [action, key] of Object.entries(this.shortcuts.compare)) {
+            const row = document.createElement('div');
+            row.className = 'shortcut-item';
+            row.innerHTML = `<kbd class="shortcut-key" data-action="${action}" data-mode="compare">${this.keyDisplayName(key)}</kbd> <span>${ACTION_LABELS[action]}</span>`;
+            compareGrid.appendChild(row);
+        }
+    }
+
     resetShortcuts() {
         const defaults = {
             single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
@@ -6997,7 +7042,7 @@ class MediaViewer {
         };
         this.shortcutReverseMap = this.buildReverseMap();
         this.localStorage.removeItem('customShortcuts');
-        // renderShortcutRows() and attachShortcutKeyListeners() added in Tasks 7-8
+        this.renderShortcutRows?.();
     }
 }
 
