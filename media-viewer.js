@@ -7016,6 +7016,40 @@ class MediaViewer {
         }
         return null;
     }
+
+    saveShortcut(mode, action, newKey) {
+        this.shortcuts[mode][action] = newKey;
+        this.shortcutReverseMap = this.buildReverseMap();
+
+        // Persist the current shortcuts — loadShortcuts merges on load so full save is safe
+        const custom = {
+            single: Object.assign({}, this.shortcuts.single),
+            compare: Object.assign({}, this.shortcuts.compare),
+        };
+        this.localStorage.setItem('customShortcuts', JSON.stringify(custom));
+    }
+
+    resetShortcuts() {
+        const defaults = {
+            single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+            compare: {
+                leftLike: 'KeyQ',
+                leftDislike: 'KeyW',
+                rightLike: 'KeyE',
+                rightDislike: 'KeyR',
+                next: 'KeyD',
+                previous: 'KeyA',
+                undo: 'Ctrl+KeyA',
+            },
+        };
+        this.shortcuts = {
+            single: Object.assign({}, defaults.single),
+            compare: Object.assign({}, defaults.compare),
+        };
+        this.shortcutReverseMap = this.buildReverseMap();
+        this.localStorage.removeItem('customShortcuts');
+        // renderShortcutRows() and attachShortcutKeyListeners() added in Tasks 7-8
+    }
 }
 
 // Add CSS animations

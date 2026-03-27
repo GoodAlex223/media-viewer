@@ -309,3 +309,101 @@ describe('checkShortcutConflict', () => {
         expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyE')).toBeNull();
     });
 });
+
+describe('saveShortcut', () => {
+    const saveShortcut = extractMethod('saveShortcut');
+
+    it('updates shortcut map and saves to localStorage', () => {
+        const stored = {};
+        const ctx = {
+            shortcuts: {
+                single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                compare: {
+                    leftLike: 'KeyQ',
+                    leftDislike: 'KeyW',
+                    rightLike: 'KeyE',
+                    rightDislike: 'KeyR',
+                    next: 'KeyD',
+                    previous: 'KeyA',
+                    undo: 'Ctrl+KeyA',
+                },
+            },
+            shortcutReverseMap: { single: {}, compare: {} },
+            buildReverseMap() {
+                return { single: {}, compare: {} };
+            },
+            localStorage: {
+                setItem: (k, v) => {
+                    stored[k] = v;
+                },
+                removeItem: () => {},
+            },
+        };
+        saveShortcut.call(ctx, 'single', 'like', 'KeyT');
+        expect(ctx.shortcuts.single.like).toBe('KeyT');
+        const saved = JSON.parse(stored.customShortcuts);
+        expect(saved.single.like).toBe('KeyT');
+    });
+
+    it('rebuilds reverse map after save', () => {
+        let rebuildCalled = false;
+        const ctx = {
+            shortcuts: {
+                single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                compare: {
+                    leftLike: 'KeyQ',
+                    leftDislike: 'KeyW',
+                    rightLike: 'KeyE',
+                    rightDislike: 'KeyR',
+                    next: 'KeyD',
+                    previous: 'KeyA',
+                    undo: 'Ctrl+KeyA',
+                },
+            },
+            shortcutReverseMap: { single: {}, compare: {} },
+            buildReverseMap() {
+                rebuildCalled = true;
+                return { single: {}, compare: {} };
+            },
+            localStorage: { setItem: () => {}, removeItem: () => {} },
+        };
+        saveShortcut.call(ctx, 'single', 'like', 'KeyT');
+        expect(rebuildCalled).toBe(true);
+    });
+});
+
+describe('resetShortcuts', () => {
+    const resetShortcuts = extractMethod('resetShortcuts');
+
+    it('restores defaults and clears localStorage', () => {
+        let removedKey = null;
+        const defaults = extractDefaultShortcuts();
+        const ctx = {
+            shortcuts: {
+                single: { like: 'KeyT', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                compare: {
+                    leftLike: 'KeyQ',
+                    leftDislike: 'KeyW',
+                    rightLike: 'KeyE',
+                    rightDislike: 'KeyR',
+                    next: 'KeyD',
+                    previous: 'KeyA',
+                    undo: 'Ctrl+KeyA',
+                },
+            },
+            shortcutReverseMap: { single: {}, compare: {} },
+            buildReverseMap() {
+                return { single: {}, compare: {} };
+            },
+            localStorage: {
+                removeItem: (k) => {
+                    removedKey = k;
+                },
+            },
+        };
+        resetShortcuts.call(ctx);
+        expect(ctx.shortcuts.single).toEqual(defaults.single);
+        expect(ctx.shortcuts.compare).toEqual(defaults.compare);
+        expect(removedKey).toBe('customShortcuts');
+    });
+});
