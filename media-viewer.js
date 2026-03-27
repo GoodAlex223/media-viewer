@@ -395,6 +395,8 @@ class MediaViewer {
         this.customLikeFolder = localStorage.getItem('customLikeFolder') || '';
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
+        this.shortcuts = this.loadShortcuts();
+        this.shortcutReverseMap = this.buildReverseMap();
 
         // Fullscreen manager (v2.0 module pattern — stateful manager with callbacks)
         this.fullscreen = new FullscreenManager({
@@ -1705,22 +1707,21 @@ class MediaViewer {
         document.addEventListener('keydown', (e) => {
             if (this.mediaFiles.length === 0) return;
 
+            // Block navigation during loading
             if (this.isLoading && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
                 e.preventDefault();
                 return;
             }
 
-            // Exit fullscreen and reset zoom with Escape
+            // Fixed utility shortcuts (not customizable)
             if (e.key === 'Escape') {
                 e.preventDefault();
-                // Exit fullscreen first
                 if (this.leftMediaWrapper && this.leftMediaWrapper.classList.contains('fullscreen')) {
                     this.fullscreen.cleanup(this.leftMediaWrapper);
                 }
                 if (this.rightMediaWrapper && this.rightMediaWrapper.classList.contains('fullscreen')) {
                     this.fullscreen.cleanup(this.rightMediaWrapper);
                 }
-                // Reset zoom
                 if (this.isZoomed()) {
                     this.resetZoom('all');
                     return;
@@ -1728,104 +1729,52 @@ class MediaViewer {
                 return;
             }
 
-            // Compare mode shortcuts
-            if (this.isCompareMode) {
-                // Use e.code for letter keys (keyboard layout independent)
-                switch (e.code) {
-                    case 'KeyQ':
-                        e.preventDefault();
-                        if (!this.isLoading) this.handleLeftLike();
-                        break;
-                    case 'KeyW':
-                        e.preventDefault();
-                        if (!this.isLoading) this.handleLeftDislike();
-                        break;
-                    case 'KeyE':
-                        e.preventDefault();
-                        if (!this.isLoading) this.handleRightLike();
-                        break;
-                    case 'KeyR':
-                        e.preventDefault();
-                        if (!this.isLoading) this.handleRightDislike();
-                        break;
-                    case 'KeyZ':
-                        e.preventDefault();
-                        if (this.leftMediaWrapper) {
-                            this.fullscreen.toggle(this.leftMediaWrapper);
-                        }
-                        break;
-                    case 'KeyX':
-                        e.preventDefault();
-                        if (this.rightMediaWrapper) {
-                            this.fullscreen.toggle(this.rightMediaWrapper);
-                        }
-                        break;
-                    case 'KeyA':
-                        e.preventDefault();
-                        if (!this.isLoading) {
-                            if (e.ctrlKey) {
-                                this.handleCancel();
-                            } else {
-                                this.previousMedia();
-                            }
-                        }
-                        break;
-                    case 'KeyD':
-                        e.preventDefault();
-                        if (!this.isLoading) this.nextMedia();
-                        break;
-                }
-                // Use e.key for special keys (consistent across layouts)
-                if (e.key === 'F1') {
-                    e.preventDefault();
-                    this.toggleHelp();
-                }
-                if (e.ctrlKey && e.key === 'ArrowLeft') {
-                    e.preventDefault();
-                    if (!this.isLoading) this.handleCancel();
-                }
+            if (e.key === 'F1') {
+                e.preventDefault();
+                this.toggleHelp();
                 return;
             }
 
-            // Single mode shortcuts
-            switch (e.key) {
-                case ' ':
+            if (!this.isCompareMode) {
+                // Single mode fixed utilities
+                if (e.key === ' ') {
                     e.preventDefault();
                     if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
                         this.togglePlayPause();
                     }
-                    break;
-                case 'ArrowUp':
+                    return;
+                }
+                if (e.code === 'KeyI') {
                     e.preventDefault();
-                    if (!this.isLoading) this.handleLike();
-                    break;
-                case 'ArrowDown':
+                    this.toggleFileInfo();
+                    return;
+                }
+            } else {
+                // Compare mode fixed utilities
+                if (e.code === 'KeyZ') {
                     e.preventDefault();
-                    if (!this.isLoading) this.handleDislike();
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    if (e.ctrlKey) {
-                        if (!this.isLoading) this.handleCancel();
-                    } else {
-                        this.previousMedia();
+                    if (this.leftMediaWrapper) {
+                        this.fullscreen.toggle(this.leftMediaWrapper);
                     }
-                    break;
-                case 'ArrowRight':
+                    return;
+                }
+                if (e.code === 'KeyX') {
                     e.preventDefault();
-                    this.nextMedia();
-                    break;
-                case 'F1':
-                    e.preventDefault();
-                    this.toggleHelp();
-                    break;
-                case 'KeyI':
-                    // Toggle file info panel (only in single mode)
-                    if (!this.isCompareMode && this.mediaFiles.length > 0) {
-                        e.preventDefault();
-                        this.toggleFileInfo();
+                    if (this.rightMediaWrapper) {
+                        this.fullscreen.toggle(this.rightMediaWrapper);
                     }
-                    break;
+                    return;
+                }
+            }
+
+            // Customizable shortcuts via reverse map lookup
+            const mode = this.isCompareMode ? 'compare' : 'single';
+            const keyStr = this.buildKeyString(e);
+            const action = this.shortcutReverseMap[mode][keyStr];
+            if (action && !this.isLoading) {
+                e.preventDefault();
+                this.signalUserActivity();
+                this.executeAction(action);
             }
         });
 

@@ -195,6 +195,10 @@ media_viewer/
 - `buildReverseMap()` inverts `this.shortcuts[mode]` → `{ keyString: actionName }` for O(1) dispatch in keydown handlers
 - `executeAction(action)` dispatches action name strings to handler methods via a local map with optional chaining (`?.()`)
 - `checkShortcutConflict(mode, currentAction, newKey)` returns conflicting action name or null; checks only within same mode
+- `saveShortcut(mode, action, newKey)` updates `this.shortcuts[mode][action]`, rebuilds reverse map, persists full shortcuts to `customShortcuts` in localStorage via `this.localStorage`
+- `resetShortcuts()` restores inline defaults, rebuilds reverse map, removes `customShortcuts` from `this.localStorage`; avoids referencing top-level `DEFAULT_SHORTCUTS` so `extractMethod` tests work in Node.js
+- Constructor initializes `this.shortcuts = this.loadShortcuts()` and `this.shortcutReverseMap = this.buildReverseMap()` alongside other localStorage settings
+- Keydown handler: fixed utilities (Escape, F1, Space/I in single mode, Z/X in compare mode) handled before the reverse map lookup; all customizable actions dispatched via `this.shortcutReverseMap[mode][keyStr]` → `executeAction(action)`
 
 <!-- END AUTO-MANAGED -->
 
@@ -204,7 +208,7 @@ media_viewer/
 Completed tasks: TASK-012 through TASK-025. See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **Active work:**
-- TASK-026 (keyboard shortcut customization): in progress. Implemented: `DEFAULT_SHORTCUTS` top-level constant (single+compare mode maps), `loadShortcuts()` (merges `customShortcuts` from localStorage with defaults), `buildKeyString(e)` (normalizes KeyboardEvent → `"Ctrl+KeyA"` string), `buildReverseMap()` (inverts shortcuts map for O(1) action lookup), `executeAction(action)` (dispatcher for all shortcut actions), `checkShortcutConflict(mode, action, key)` (detects intra-mode key conflicts). Tests in `tests/keyboard-shortcuts.test.js`. Remaining: wire up to keydown handler, settings UI overlay.
+- TASK-026 (keyboard shortcut customization): in progress. Implemented: `DEFAULT_SHORTCUTS`, `loadShortcuts()`, `buildKeyString(e)`, `buildReverseMap()`, `executeAction(action)`, `checkShortcutConflict(mode, action, key)`, `saveShortcut(mode, action, newKey)`, `resetShortcuts()`, constructor init (`this.shortcuts`/`this.shortcutReverseMap`), keydown handler refactored to reverse map lookup (fixed utilities: Escape, F1, Space, I, Z, X; all rating/nav actions via `shortcutReverseMap`). Tests in `tests/keyboard-shortcuts.test.js` (25 passing). Remaining: settings UI overlay.
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
