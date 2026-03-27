@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-26 <!-- TASK-025 completed -->
+**Last Updated**: 2026-03-27 <!-- TASK-026 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -56,38 +56,7 @@ Active tasks and backlog.
 
 <!-- TASK-025 completed 2026-03-26, moved to DONE.md -->
 
-### TASK-026 — Keyboard shortcut customization 🟡
-**Priority**: 🟡 Normal — v2.0 roadmap feature
-**Effort**: High
-**Origin**: Manual testing 2026-03-19 + ROADMAP.md v2.0
-
-**Description**: Allow users to customize keyboard shortcuts. Make compare mode controls the default for both modes (user finds them more comfortable).
-
-**Reported Issues** (original Russian preserved):
-> - Дать пользователю возможность настроить управление
-> - Сделать дефолтное управление для сингл и компар мода одним (компар мод более удобнее)
-> - Дать возможность откатить к дефолтным настройкам
-
-**Design Considerations**:
-- Settings panel (F1) section for key bindings
-- Store custom bindings in localStorage
-- "Reset to defaults" button
-- Unify single/compare mode shortcuts (use compare mode layout as new default)
-- Conflict detection (warn if two actions share same key)
-- Display current bindings in help overlay
-
-**Merges with BACKLOG**:
-- "Keyboard shortcut for zoom toggle" (from visual-scale-controls) — include in configurable shortcuts
-- "Add Shift+click hint to help overlay keyboard shortcuts" (from TASK-007) — include in help overlay update
-- ROADMAP.md v2.0: "Keyboard shortcut customization"
-
-**Acceptance Criteria**:
-- [ ] Users can remap keyboard shortcuts via Settings panel
-- [ ] Default shortcuts unified for single/compare mode (compare mode layout)
-- [ ] "Reset to defaults" button works
-- [ ] Bindings persisted to localStorage
-- [ ] Help overlay (F1) reflects current bindings
-- [ ] No key conflicts allowed
+<!-- TASK-026 completed 2026-03-27, moved to DONE.md -->
 
 ---
 
