@@ -29,7 +29,7 @@ test.describe('Navigation', () => {
     });
 
     test('navigates forward with right arrow key', async () => {
-        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('d');
         await page.waitForTimeout(300); // Wait for media transition
 
         const currentIndex = await page.evaluate(() => window.mediaViewer.currentIndex);
@@ -38,11 +38,11 @@ test.describe('Navigation', () => {
 
     test('navigates backward with left arrow key', async () => {
         // Go forward first
-        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('d');
         await page.waitForTimeout(300);
 
         // Then go back
-        await page.keyboard.press('ArrowLeft');
+        await page.keyboard.press('a');
         await page.waitForTimeout(300);
 
         const currentIndex = await page.evaluate(() => window.mediaViewer.currentIndex);
@@ -72,12 +72,12 @@ test.describe('Navigation', () => {
 
     test('wraps around when navigating past the last file', async () => {
         // Navigate to end (3 files, start at 0)
-        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('d');
         await page.waitForTimeout(200);
-        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('d');
         await page.waitForTimeout(200);
         // Now at index 2 (last file), press right to wrap
-        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('d');
         await page.waitForTimeout(200);
 
         const currentIndex = await page.evaluate(() => window.mediaViewer.currentIndex);

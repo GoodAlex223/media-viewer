@@ -76,16 +76,16 @@ test.describe('Compare Mode', () => {
         await expect(rightMedia).toBeVisible();
     });
 
-    test('navigates pairs with ArrowRight in compare mode', async () => {
+    test('navigates pairs with D key in compare mode', async () => {
         await page.evaluate(() => window.mediaViewer.toggleViewMode());
         await page.waitForTimeout(500);
 
         const indexBefore = await page.evaluate(() => window.mediaViewer.currentIndex);
         expect(indexBefore).toBe(0);
 
-        // ArrowRight skips by 2 in compare mode (shows next pair)
+        // D skips by 2 in compare mode (shows next pair)
         // With an odd number of valid files, index wraps back to 0 (2 >= length-1)
-        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('d');
         await page.waitForTimeout(500);
 
         // Verify navigation was processed (showMedia re-rendered compare panes)

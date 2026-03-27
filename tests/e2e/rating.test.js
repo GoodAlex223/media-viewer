@@ -41,7 +41,7 @@ test.describe('Rating (pre-seeded localStorage)', () => {
             return mv.mediaFiles[mv.currentIndex].name;
         });
 
-        await page.keyboard.press('ArrowUp');
+        await page.keyboard.press('q');
         await page.waitForTimeout(500);
 
         // Verify file exists in like folder
@@ -58,7 +58,7 @@ test.describe('Rating (pre-seeded localStorage)', () => {
             return mv.mediaFiles[mv.currentIndex].name;
         });
 
-        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('w');
         await page.waitForTimeout(500);
 
         // Verify file exists in dislike folder
@@ -89,12 +89,12 @@ test.describe('Rating (pre-seeded localStorage)', () => {
         });
 
         // Like the file
-        await page.keyboard.press('ArrowUp');
+        await page.keyboard.press('q');
         await page.waitForTimeout(500);
         expect(await page.evaluate(() => window.mediaViewer.mediaFiles.length)).toBe(2);
 
         // Undo
-        await page.keyboard.press('Control+ArrowLeft');
+        await page.keyboard.press('Control+a');
         await page.waitForTimeout(500);
 
         // File count should be restored
