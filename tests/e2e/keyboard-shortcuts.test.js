@@ -16,6 +16,9 @@ test.describe('Keyboard Shortcut Customization', () => {
     test.beforeEach(async () => {
         tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
         ({ electronApp, page } = await launchApp());
+        // Clear any stale custom shortcuts from previous test runs
+        await page.evaluate(() => localStorage.removeItem('customShortcuts'));
+        await page.evaluate(() => window.mediaViewer.resetShortcuts());
         await seedLocalStorage(page, {
             customLikeFolder: tmpFixtures.likeDir,
             customDislikeFolder: tmpFixtures.dislikeDir,
@@ -25,6 +28,8 @@ test.describe('Keyboard Shortcut Customization', () => {
     });
 
     test.afterEach(async () => {
+        // Clean up custom shortcuts to prevent pollution of subsequent test files
+        await page.evaluate(() => localStorage.removeItem('customShortcuts')).catch(() => {});
         await closeApp(electronApp);
         await tmpFixtures.cleanup();
     });

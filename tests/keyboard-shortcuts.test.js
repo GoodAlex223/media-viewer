@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
@@ -66,27 +66,36 @@ describe('DEFAULT_SHORTCUTS', () => {
 
 describe('loadShortcuts', () => {
     const loadShortcuts = extractMethod('loadShortcuts');
+    let origLocalStorage;
+
+    beforeEach(() => {
+        origLocalStorage = globalThis.localStorage;
+    });
+
+    afterEach(() => {
+        globalThis.localStorage = origLocalStorage;
+    });
 
     it('returns defaults when no custom shortcuts in localStorage', () => {
+        globalThis.localStorage = { getItem: () => null };
         const defaults = extractDefaultShortcuts();
-        const ctx = { localStorage: { getItem: () => null } };
-        const result = loadShortcuts.call(ctx);
+        const result = loadShortcuts.call({});
         expect(result.single).toEqual(defaults.single);
         expect(result.compare).toEqual(defaults.compare);
     });
 
     it('merges custom overrides with defaults', () => {
         const customShortcuts = { single: { like: 'KeyT' } };
-        const ctx = { localStorage: { getItem: () => JSON.stringify(customShortcuts) } };
-        const result = loadShortcuts.call(ctx);
+        globalThis.localStorage = { getItem: () => JSON.stringify(customShortcuts) };
+        const result = loadShortcuts.call({});
         expect(result.single.like).toBe('KeyT');
         expect(result.single.dislike).toBe('KeyW');
         expect(result.compare.leftLike).toBe('KeyQ');
     });
 
     it('handles invalid JSON in localStorage gracefully', () => {
-        const ctx = { localStorage: { getItem: () => 'not-json' } };
-        const result = loadShortcuts.call(ctx);
+        globalThis.localStorage = { getItem: () => 'not-json' };
+        const result = loadShortcuts.call({});
         const defaults = extractDefaultShortcuts();
         expect(result.single).toEqual(defaults.single);
     });
@@ -312,9 +321,24 @@ describe('checkShortcutConflict', () => {
 
 describe('saveShortcut', () => {
     const saveShortcut = extractMethod('saveShortcut');
+    let origLocalStorage;
+
+    beforeEach(() => {
+        origLocalStorage = globalThis.localStorage;
+    });
+
+    afterEach(() => {
+        globalThis.localStorage = origLocalStorage;
+    });
 
     it('updates shortcut map and saves to localStorage', () => {
         const stored = {};
+        globalThis.localStorage = {
+            setItem: (k, v) => {
+                stored[k] = v;
+            },
+            removeItem: () => {},
+        };
         const ctx = {
             shortcuts: {
                 single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
@@ -332,12 +356,6 @@ describe('saveShortcut', () => {
             buildReverseMap() {
                 return { single: {}, compare: {} };
             },
-            localStorage: {
-                setItem: (k, v) => {
-                    stored[k] = v;
-                },
-                removeItem: () => {},
-            },
         };
         saveShortcut.call(ctx, 'single', 'like', 'KeyT');
         expect(ctx.shortcuts.single.like).toBe('KeyT');
@@ -346,6 +364,7 @@ describe('saveShortcut', () => {
     });
 
     it('rebuilds reverse map after save', () => {
+        globalThis.localStorage = { setItem: () => {}, removeItem: () => {} };
         let rebuildCalled = false;
         const ctx = {
             shortcuts: {
@@ -365,7 +384,6 @@ describe('saveShortcut', () => {
                 rebuildCalled = true;
                 return { single: {}, compare: {} };
             },
-            localStorage: { setItem: () => {}, removeItem: () => {} },
         };
         saveShortcut.call(ctx, 'single', 'like', 'KeyT');
         expect(rebuildCalled).toBe(true);
@@ -374,9 +392,23 @@ describe('saveShortcut', () => {
 
 describe('resetShortcuts', () => {
     const resetShortcuts = extractMethod('resetShortcuts');
+    let origLocalStorage;
+
+    beforeEach(() => {
+        origLocalStorage = globalThis.localStorage;
+    });
+
+    afterEach(() => {
+        globalThis.localStorage = origLocalStorage;
+    });
 
     it('restores defaults and clears localStorage', () => {
         let removedKey = null;
+        globalThis.localStorage = {
+            removeItem: (k) => {
+                removedKey = k;
+            },
+        };
         const defaults = extractDefaultShortcuts();
         const ctx = {
             shortcuts: {
@@ -394,11 +426,6 @@ describe('resetShortcuts', () => {
             shortcutReverseMap: { single: {}, compare: {} },
             buildReverseMap() {
                 return { single: {}, compare: {} };
-            },
-            localStorage: {
-                removeItem: (k) => {
-                    removedKey = k;
-                },
             },
         };
         resetShortcuts.call(ctx);

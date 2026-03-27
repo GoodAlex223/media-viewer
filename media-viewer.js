@@ -6930,7 +6930,7 @@ class MediaViewer {
                 undo: 'Ctrl+KeyA',
             },
         };
-        const raw = this.localStorage.getItem('customShortcuts');
+        const raw = localStorage.getItem('customShortcuts');
         let custom = {};
         if (raw) {
             try {
@@ -6996,7 +6996,7 @@ class MediaViewer {
             single: Object.assign({}, this.shortcuts.single),
             compare: Object.assign({}, this.shortcuts.compare),
         };
-        this.localStorage.setItem('customShortcuts', JSON.stringify(custom));
+        localStorage.setItem('customShortcuts', JSON.stringify(custom));
     }
 
     keyDisplayName(keyStr) {
@@ -7117,7 +7117,7 @@ class MediaViewer {
             compare: Object.assign({}, defaults.compare),
         };
         this.shortcutReverseMap = this.buildReverseMap();
-        this.localStorage.removeItem('customShortcuts');
+        localStorage.removeItem('customShortcuts');
         this.renderShortcutRows?.();
         this.attachShortcutKeyListeners?.();
     }
