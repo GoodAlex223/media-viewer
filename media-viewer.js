@@ -409,7 +409,10 @@ class MediaViewer {
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
         this.shortcuts = this.loadShortcuts();
         this.shortcutReverseMap = this.buildReverseMap();
+        this._listeningState = null;
+        this._listeningHandler = null;
         this.renderShortcutRows();
+        this.attachShortcutKeyListeners();
 
         // Fullscreen manager (v2.0 module pattern — stateful manager with callbacks)
         this.fullscreen = new FullscreenManager({
@@ -7023,6 +7026,79 @@ class MediaViewer {
         }
     }
 
+    startListeningMode(kbdElement) {
+        this.stopListeningMode();
+
+        const action = kbdElement.dataset.action;
+        const mode = kbdElement.dataset.mode;
+
+        kbdElement.classList.add('listening');
+        kbdElement.textContent = 'Press a key...';
+
+        const existingWarning = kbdElement.parentElement.querySelector('.shortcut-conflict-warning');
+        if (existingWarning) existingWarning.remove();
+
+        this._listeningState = { kbdElement, action, mode };
+
+        this._listeningHandler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (e.key === 'Escape') {
+                this.stopListeningMode();
+                return;
+            }
+
+            if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+
+            const newKey = this.buildKeyString(e);
+            const conflict = this.checkShortcutConflict(mode, action, newKey);
+
+            if (conflict) {
+                const warning = document.createElement('div');
+                warning.className = 'shortcut-conflict-warning';
+                warning.textContent = `Already used by "${ACTION_LABELS[conflict]}"`;
+                const existingWarn = kbdElement.parentElement.querySelector('.shortcut-conflict-warning');
+                if (existingWarn) existingWarn.remove();
+                kbdElement.parentElement.appendChild(warning);
+                return;
+            }
+
+            this.saveShortcut(mode, action, newKey);
+            this.stopListeningMode();
+            this.renderShortcutRows();
+            this.attachShortcutKeyListeners();
+        };
+
+        document.addEventListener('keydown', this._listeningHandler, true);
+    }
+
+    stopListeningMode() {
+        if (!this._listeningState) return;
+
+        const { kbdElement, action, mode } = this._listeningState;
+        kbdElement.classList.remove('listening');
+        kbdElement.textContent = this.keyDisplayName(this.shortcuts[mode][action]);
+
+        const warning = kbdElement.parentElement.querySelector('.shortcut-conflict-warning');
+        if (warning) warning.remove();
+
+        if (this._listeningHandler) {
+            document.removeEventListener('keydown', this._listeningHandler, true);
+            this._listeningHandler = null;
+        }
+        this._listeningState = null;
+    }
+
+    attachShortcutKeyListeners() {
+        const keys = document.querySelectorAll('.shortcut-key');
+        keys.forEach((kbd) => {
+            const newKbd = kbd.cloneNode(true);
+            kbd.parentNode.replaceChild(newKbd, kbd);
+            newKbd.addEventListener('click', () => this.startListeningMode(newKbd));
+        });
+    }
+
     resetShortcuts() {
         const defaults = {
             single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
@@ -7043,6 +7119,7 @@ class MediaViewer {
         this.shortcutReverseMap = this.buildReverseMap();
         this.localStorage.removeItem('customShortcuts');
         this.renderShortcutRows?.();
+        this.attachShortcutKeyListeners?.();
     }
 }
 
