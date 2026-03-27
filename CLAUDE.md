@@ -188,12 +188,23 @@ media_viewer/
 
 **Security**: Context isolation enabled, sandbox disabled (required for file ops), IPC bridge via preload.js
 
+**Keyboard Shortcuts**:
+- `DEFAULT_SHORTCUTS` top-level constant defines default key bindings for `single` and `compare` modes (QWER+AD layout)
+- `loadShortcuts()` merges sparse `customShortcuts` object from localStorage over defaults via `Object.assign`; uses `this.localStorage` for testability
+- `buildKeyString(e)` normalizes a KeyboardEvent → `"Ctrl+Shift+KeyA"` string for consistent key identity
+- `buildReverseMap()` inverts `this.shortcuts[mode]` → `{ keyString: actionName }` for O(1) dispatch in keydown handlers
+- `executeAction(action)` dispatches action name strings to handler methods via a local map with optional chaining (`?.()`)
+- `checkShortcutConflict(mode, currentAction, newKey)` returns conflicting action name or null; checks only within same mode
+
 <!-- END AUTO-MANAGED -->
 
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
 Completed tasks: TASK-012 through TASK-025. See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+
+**Active work:**
+- TASK-026 (keyboard shortcut customization): in progress. Implemented: `DEFAULT_SHORTCUTS` top-level constant (single+compare mode maps), `loadShortcuts()` (merges `customShortcuts` from localStorage with defaults), `buildKeyString(e)` (normalizes KeyboardEvent → `"Ctrl+KeyA"` string), `buildReverseMap()` (inverts shortcuts map for O(1) action lookup), `executeAction(action)` (dispatcher for all shortcut actions), `checkShortcutConflict(mode, action, key)` (detects intra-mode key conflicts). Tests in `tests/keyboard-shortcuts.test.js`. Remaining: wire up to keydown handler, settings UI overlay.
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
