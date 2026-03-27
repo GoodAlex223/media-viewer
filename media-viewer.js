@@ -1,5 +1,24 @@
 import { FullscreenManager } from './fullscreen.js';
 
+const DEFAULT_SHORTCUTS = {
+    single: {
+        like: 'KeyQ',
+        dislike: 'KeyW',
+        next: 'KeyD',
+        previous: 'KeyA',
+        undo: 'Ctrl+KeyA',
+    },
+    compare: {
+        leftLike: 'KeyQ',
+        leftDislike: 'KeyW',
+        rightLike: 'KeyE',
+        rightDislike: 'KeyR',
+        next: 'KeyD',
+        previous: 'KeyA',
+        undo: 'Ctrl+KeyA',
+    },
+};
+
 // MinHeap (Priority Queue) for efficient MST construction
 class MinHeap {
     constructor(compareFunc = (a, b) => a.distance - b.distance) {
@@ -6920,6 +6939,40 @@ class MediaViewer {
             clearInterval(this.featureCacheAutoSaveInterval);
             this.featureCacheAutoSaveInterval = null;
         }
+    }
+
+    loadShortcuts() {
+        const defaults = {
+            single: {
+                like: 'KeyQ',
+                dislike: 'KeyW',
+                next: 'KeyD',
+                previous: 'KeyA',
+                undo: 'Ctrl+KeyA',
+            },
+            compare: {
+                leftLike: 'KeyQ',
+                leftDislike: 'KeyW',
+                rightLike: 'KeyE',
+                rightDislike: 'KeyR',
+                next: 'KeyD',
+                previous: 'KeyA',
+                undo: 'Ctrl+KeyA',
+            },
+        };
+        const raw = this.localStorage.getItem('customShortcuts');
+        let custom = {};
+        if (raw) {
+            try {
+                custom = JSON.parse(raw);
+            } catch (_e) {
+                // Invalid JSON — ignore and use defaults
+            }
+        }
+        return {
+            single: Object.assign({}, defaults.single, custom.single),
+            compare: Object.assign({}, defaults.compare, custom.compare),
+        };
     }
 }
 
