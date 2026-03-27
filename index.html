@@ -243,27 +243,16 @@
                     <i data-lucide="x"></i>
                 </button>
                 <h3>Keyboard Shortcuts</h3>
-                <div class="shortcut-section">
+                <div id="shortcutSingleSection" class="shortcut-section">
                     <h4>Single View Mode</h4>
-                    <div class="shortcut-grid">
-                        <div class="shortcut-item"><kbd>↑</kbd> <span>Like (Move to higher folder)</span></div>
-                        <div class="shortcut-item"><kbd>↓</kbd> <span>Dislike (Move to lower folder)</span></div>
-                        <div class="shortcut-item"><kbd>←</kbd> <span>Previous media</span></div>
-                        <div class="shortcut-item"><kbd>→</kbd> <span>Next media</span></div>
+                    <div class="shortcut-grid" id="shortcutSingleGrid">
+                        <!-- Rendered dynamically by renderShortcutRows() -->
                     </div>
                 </div>
-                <div class="shortcut-section">
+                <div id="shortcutCompareSection" class="shortcut-section">
                     <h4>Compare View Mode</h4>
-                    <div class="shortcut-grid">
-                        <div class="shortcut-item"><kbd>Q</kbd> <span>Left media Like</span></div>
-                        <div class="shortcut-item"><kbd>W</kbd> <span>Left media Dislike</span></div>
-                        <div class="shortcut-item"><kbd>E</kbd> <span>Right media Like</span></div>
-                        <div class="shortcut-item"><kbd>R</kbd> <span>Right media Dislike</span></div>
-                        <div class="shortcut-item"><kbd>Z</kbd> <span>Toggle left media fullscreen</span></div>
-                        <div class="shortcut-item"><kbd>X</kbd> <span>Toggle right media fullscreen</span></div>
-                        <div class="shortcut-item"><kbd>A</kbd> <span>Previous pair</span></div>
-                        <div class="shortcut-item"><kbd>D</kbd> <span>Next pair</span></div>
-                        <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>A</kbd> <span>Undo last move</span></div>
+                    <div class="shortcut-grid" id="shortcutCompareGrid">
+                        <!-- Rendered dynamically by renderShortcutRows() -->
                     </div>
                 </div>
                 <div class="shortcut-section">
@@ -278,12 +267,18 @@
                 <div class="shortcut-section">
                     <h4>General</h4>
                     <div class="shortcut-grid">
-                        <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>←</kbd> <span>Undo last move</span></div>
                         <div class="shortcut-item"><kbd>Space</kbd> <span>Play/Pause video</span></div>
                         <div class="shortcut-item"><kbd>Esc</kbd> <span>Exit fullscreen / Reset zoom</span></div>
                         <div class="shortcut-item"><kbd>F1</kbd> <span>Show/Hide this help</span></div>
                         <div class="shortcut-item"><kbd>I</kbd> <span>Toggle file info panel</span></div>
+                        <div class="shortcut-item"><kbd>Z</kbd> <span>Toggle left media fullscreen</span></div>
+                        <div class="shortcut-item"><kbd>X</kbd> <span>Toggle right media fullscreen</span></div>
                     </div>
+                </div>
+                <div class="shortcut-section">
+                    <button id="resetShortcutsBtn" class="folder-btn" title="Reset all shortcuts to defaults">
+                        Reset Shortcuts to Defaults
+                    </button>
                 </div>
                 <div class="shortcut-section settings-section">
                     <h4>Settings</h4>
