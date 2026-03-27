@@ -6974,6 +6974,24 @@ class MediaViewer {
             compare: Object.assign({}, defaults.compare, custom.compare),
         };
     }
+
+    buildKeyString(e) {
+        let key = '';
+        if (e.ctrlKey) key += 'Ctrl+';
+        if (e.shiftKey) key += 'Shift+';
+        key += e.code;
+        return key;
+    }
+
+    buildReverseMap() {
+        const reverse = { single: {}, compare: {} };
+        for (const mode of ['single', 'compare']) {
+            for (const [action, key] of Object.entries(this.shortcuts[mode])) {
+                reverse[mode][key] = action;
+            }
+        }
+        return reverse;
+    }
 }
 
 // Add CSS animations

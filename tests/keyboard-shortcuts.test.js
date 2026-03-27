@@ -91,3 +91,75 @@ describe('loadShortcuts', () => {
         expect(result.single).toEqual(defaults.single);
     });
 });
+
+describe('buildKeyString', () => {
+    const buildKeyString = extractMethod('buildKeyString');
+
+    it('returns e.code for simple key', () => {
+        const e = { code: 'KeyQ', ctrlKey: false, shiftKey: false };
+        expect(buildKeyString.call({}, e)).toBe('KeyQ');
+    });
+
+    it('prepends Ctrl+ when ctrlKey is true', () => {
+        const e = { code: 'KeyA', ctrlKey: true, shiftKey: false };
+        expect(buildKeyString.call({}, e)).toBe('Ctrl+KeyA');
+    });
+
+    it('prepends Shift+ when shiftKey is true', () => {
+        const e = { code: 'KeyD', ctrlKey: false, shiftKey: true };
+        expect(buildKeyString.call({}, e)).toBe('Shift+KeyD');
+    });
+
+    it('prepends both Ctrl+Shift+ when both are true', () => {
+        const e = { code: 'KeyZ', ctrlKey: true, shiftKey: true };
+        expect(buildKeyString.call({}, e)).toBe('Ctrl+Shift+KeyZ');
+    });
+
+    it('handles non-letter codes', () => {
+        const e = { code: 'Space', ctrlKey: false, shiftKey: false };
+        expect(buildKeyString.call({}, e)).toBe('Space');
+    });
+});
+
+describe('buildReverseMap', () => {
+    const buildReverseMap = extractMethod('buildReverseMap');
+
+    it('builds correct reverse map for single mode', () => {
+        const shortcuts = extractDefaultShortcuts();
+        const ctx = { shortcuts };
+        const result = buildReverseMap.call(ctx);
+        expect(result.single['KeyQ']).toBe('like');
+        expect(result.single['KeyW']).toBe('dislike');
+        expect(result.single['KeyD']).toBe('next');
+        expect(result.single['KeyA']).toBe('previous');
+        expect(result.single['Ctrl+KeyA']).toBe('undo');
+    });
+
+    it('builds correct reverse map for compare mode', () => {
+        const shortcuts = extractDefaultShortcuts();
+        const ctx = { shortcuts };
+        const result = buildReverseMap.call(ctx);
+        expect(result.compare['KeyQ']).toBe('leftLike');
+        expect(result.compare['KeyE']).toBe('rightLike');
+        expect(result.compare['KeyR']).toBe('rightDislike');
+    });
+
+    it('reverse map reflects custom overrides', () => {
+        const shortcuts = {
+            single: { like: 'KeyT', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+            compare: {
+                leftLike: 'KeyQ',
+                leftDislike: 'KeyW',
+                rightLike: 'KeyE',
+                rightDislike: 'KeyR',
+                next: 'KeyD',
+                previous: 'KeyA',
+                undo: 'Ctrl+KeyA',
+            },
+        };
+        const ctx = { shortcuts };
+        const result = buildReverseMap.call(ctx);
+        expect(result.single['KeyT']).toBe('like');
+        expect(result.single['KeyQ']).toBeUndefined();
+    });
+});
