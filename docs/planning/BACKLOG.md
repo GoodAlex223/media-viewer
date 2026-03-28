@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-27 <!-- TASK-026 completed -->
+**Last Updated**: 2026-03-28 <!-- PR #24 code review -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -19,6 +19,18 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Extract ShortcutManager module** — keyboard shortcut logic (DEFAULT_SHORTCUTS, loadShortcuts, saveShortcut, resetShortcuts, buildKeyString, buildReverseMap, executeAction, checkShortcutConflict, listening mode, renderShortcutRows) is a natural candidate for v2.0 modularization (same pattern as FullscreenManager)
 - [ ] **Modifier key display in help overlay** — `keyDisplayName()` strips `Key`/`Digit` prefixes but doesn't prettify modifier combos (e.g., `Ctrl+A` displays as `Ctrl+A` which is fine, but `Ctrl+Shift+Q` could be cleaner)
 - [ ] **E2E test userData isolation** — custom shortcuts in localStorage persist across E2E test runs because Electron reuses the same userData directory; consider `app.setPath('userData', tmpDir)` in test setup for full isolation
+
+### [2026-03-28] From: PR #24 code review
+**Origin**: 5 parallel agents + confidence scoring; 10 issues found at 75/100, none above 80 threshold; 5 fixed in d4fde97; remaining items below threshold or author declined with rationale
+
+- [ ] **docs/README.md not updated for TASK-026 spec/plan files** (75/100) — `docs/superpowers/specs/2026-03-27-task-026-keyboard-shortcut-customization-design.md` and `docs/superpowers/plans/2026-03-27-keyboard-shortcut-customization.md` not indexed; recurring since PR #19
+- [ ] **Archived plan has 60 unchecked checkboxes** (75/100) — `docs/archive/plans/2026-03-27-task-026-keyboard-shortcut-customization.md` archived in pre-execution state; repeat pattern from PR #20
+- [ ] **Compare test right-pane assertion removed** (75/100) — `tests/e2e/compare-mode.test.js` no longer asserts right-pane visibility after navigation; author says intentional (old test passed by accident)
+- [x] **Stale cancelBtn tooltips** (75/100) — Fixed in 43e89e6
+- [x] **Reserved key remap not blocked** (75/100) — Fixed in d4fde97
+- [x] **Detached kbdElement crash in resetShortcuts** (75/100) — Fixed in d4fde97
+- [x] **Dead ArrowLeft/ArrowRight loading guard** (75/100) — Fixed in d4fde97
+- [x] **DEFAULT_SHORTCUTS triplicated** (75/100) — Fixed in d4fde97
 
 ---
 
