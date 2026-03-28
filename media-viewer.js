@@ -1728,12 +1728,6 @@ class MediaViewer {
         document.addEventListener('keydown', (e) => {
             if (this.mediaFiles.length === 0) return;
 
-            // Block navigation during loading
-            if (this.isLoading && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
-                e.preventDefault();
-                return;
-            }
-
             // Fixed utility shortcuts (not customizable)
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -6912,24 +6906,6 @@ class MediaViewer {
     }
 
     loadShortcuts() {
-        const defaults = {
-            single: {
-                like: 'KeyQ',
-                dislike: 'KeyW',
-                next: 'KeyD',
-                previous: 'KeyA',
-                undo: 'Ctrl+KeyA',
-            },
-            compare: {
-                leftLike: 'KeyQ',
-                leftDislike: 'KeyW',
-                rightLike: 'KeyE',
-                rightDislike: 'KeyR',
-                next: 'KeyD',
-                previous: 'KeyA',
-                undo: 'Ctrl+KeyA',
-            },
-        };
         const raw = localStorage.getItem('customShortcuts');
         let custom = {};
         if (raw) {
@@ -6940,8 +6916,8 @@ class MediaViewer {
             }
         }
         return {
-            single: Object.assign({}, defaults.single, custom.single),
-            compare: Object.assign({}, defaults.compare, custom.compare),
+            single: Object.assign({}, DEFAULT_SHORTCUTS.single, custom.single),
+            compare: Object.assign({}, DEFAULT_SHORTCUTS.compare, custom.compare),
         };
     }
 
@@ -6979,6 +6955,11 @@ class MediaViewer {
     }
 
     checkShortcutConflict(mode, currentAction, newKey) {
+        // Block reserved keys used by fixed utility shortcuts
+        const reservedKeys = ['F1', 'Space', 'KeyI', 'KeyZ', 'KeyX', 'Escape'];
+        if (reservedKeys.includes(newKey)) {
+            return '_reserved';
+        }
         for (const [action, key] of Object.entries(this.shortcuts[mode])) {
             if (key === newKey && action !== currentAction) {
                 return action;
@@ -7057,7 +7038,10 @@ class MediaViewer {
             if (conflict) {
                 const warning = document.createElement('div');
                 warning.className = 'shortcut-conflict-warning';
-                warning.textContent = `Already used by "${ACTION_LABELS[conflict]}"`;
+                warning.textContent =
+                    conflict === '_reserved'
+                        ? 'Reserved key (used by fixed shortcut)'
+                        : `Already used by "${ACTION_LABELS[conflict]}"`;
                 const existingWarn = kbdElement.parentElement.querySelector('.shortcut-conflict-warning');
                 if (existingWarn) existingWarn.remove();
                 kbdElement.parentElement.appendChild(warning);
@@ -7100,21 +7084,10 @@ class MediaViewer {
     }
 
     resetShortcuts() {
-        const defaults = {
-            single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
-            compare: {
-                leftLike: 'KeyQ',
-                leftDislike: 'KeyW',
-                rightLike: 'KeyE',
-                rightDislike: 'KeyR',
-                next: 'KeyD',
-                previous: 'KeyA',
-                undo: 'Ctrl+KeyA',
-            },
-        };
+        this.stopListeningMode();
         this.shortcuts = {
-            single: Object.assign({}, defaults.single),
-            compare: Object.assign({}, defaults.compare),
+            single: Object.assign({}, DEFAULT_SHORTCUTS.single),
+            compare: Object.assign({}, DEFAULT_SHORTCUTS.compare),
         };
         this.shortcutReverseMap = this.buildReverseMap();
         localStorage.removeItem('customShortcuts');

@@ -67,13 +67,17 @@ describe('DEFAULT_SHORTCUTS', () => {
 describe('loadShortcuts', () => {
     const loadShortcuts = extractMethod('loadShortcuts');
     let origLocalStorage;
+    let origDefaultShortcuts;
 
     beforeEach(() => {
         origLocalStorage = globalThis.localStorage;
+        origDefaultShortcuts = globalThis.DEFAULT_SHORTCUTS;
+        globalThis.DEFAULT_SHORTCUTS = extractDefaultShortcuts();
     });
 
     afterEach(() => {
         globalThis.localStorage = origLocalStorage;
+        globalThis.DEFAULT_SHORTCUTS = origDefaultShortcuts;
     });
 
     it('returns defaults when no custom shortcuts in localStorage', () => {
@@ -317,6 +321,29 @@ describe('checkShortcutConflict', () => {
         };
         expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyE')).toBeNull();
     });
+
+    it('blocks reserved keys used by fixed utility shortcuts', () => {
+        const ctx = {
+            shortcuts: {
+                single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                compare: {
+                    leftLike: 'KeyQ',
+                    leftDislike: 'KeyW',
+                    rightLike: 'KeyE',
+                    rightDislike: 'KeyR',
+                    next: 'KeyD',
+                    previous: 'KeyA',
+                    undo: 'Ctrl+KeyA',
+                },
+            },
+        };
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'F1')).toBe('_reserved');
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'Space')).toBe('_reserved');
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyI')).toBe('_reserved');
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyZ')).toBe('_reserved');
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyX')).toBe('_reserved');
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'Escape')).toBe('_reserved');
+    });
 });
 
 describe('saveShortcut', () => {
@@ -393,13 +420,17 @@ describe('saveShortcut', () => {
 describe('resetShortcuts', () => {
     const resetShortcuts = extractMethod('resetShortcuts');
     let origLocalStorage;
+    let origDefaultShortcuts;
 
     beforeEach(() => {
         origLocalStorage = globalThis.localStorage;
+        origDefaultShortcuts = globalThis.DEFAULT_SHORTCUTS;
+        globalThis.DEFAULT_SHORTCUTS = extractDefaultShortcuts();
     });
 
     afterEach(() => {
         globalThis.localStorage = origLocalStorage;
+        globalThis.DEFAULT_SHORTCUTS = origDefaultShortcuts;
     });
 
     it('restores defaults and clears localStorage', () => {
@@ -427,6 +458,8 @@ describe('resetShortcuts', () => {
             buildReverseMap() {
                 return { single: {}, compare: {} };
             },
+            stopListeningMode() {},
+            _listeningState: null,
         };
         resetShortcuts.call(ctx);
         expect(ctx.shortcuts.single).toEqual(defaults.single);
