@@ -73,8 +73,8 @@ media_viewer/
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
 ├── tests/               # Unit tests (Vitest) + E2E tests (Playwright)
-│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger
-│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom
+│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts
+│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts
 │       ├── fixtures/    # Test media (1x1 PNGs, tiny.mp4)
 │       └── helpers/     # electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
@@ -127,6 +127,7 @@ media_viewer/
 - MediaViewer method testing: `extractMethod(name)` reads source, extracts body with brace-counting, returns `new Function`; call via `.call(mockCtx, ...args)`
 - Algorithm replication pattern: for async methods with heavy DOM dependencies, replicate pure algorithm logic as standalone test helper (see ml-pair-selection.test.js)
 - Time-dependent tests: `vi.useFakeTimers()` + `vi.setSystemTime()`; restore in `afterEach`
+- Browser global mocking: patch `globalThis.localStorage` in `beforeEach`/`afterEach` (save/restore `origLocalStorage`) for methods that call global `localStorage` directly (e.g., shortcut methods)
 
 **Testing (E2E — Playwright)**:
 - Config: `playwright.config.js`; workers: 1, fullyParallel: false (Electron can't parallelize)
@@ -139,6 +140,7 @@ media_viewer/
 - Lucide CDN stub: `page.route('**/unpkg.com/**')` returns empty module
 - Fixtures: 1x1 PNGs (red/green/blue) + tiny.mp4; `createTempFixtureDir()` copies to temp dir
 - `rdp-preload.cjs` loads playwright-core internal `loader.js` by path — update if it breaks after upgrade
+- Shortcut remap E2E pattern: `page.evaluate()` to call `saveShortcut()`/`renderShortcutRows()`/`attachShortcutKeyListeners()` directly on `window.mediaViewer`; or click `.shortcut-key[data-action][data-mode]` to enter listening state then `page.keyboard.press(key)`
 
 <!-- END AUTO-MANAGED -->
 
@@ -188,12 +190,32 @@ media_viewer/
 
 **Security**: Context isolation enabled, sandbox disabled (required for file ops), IPC bridge via preload.js
 
+**Keyboard Shortcuts**:
+- `DEFAULT_SHORTCUTS` top-level constant defines default key bindings for `single` and `compare` modes (QWER+AD layout)
+- `loadShortcuts()` merges sparse `customShortcuts` object from global `localStorage` over defaults via `Object.assign`
+- `buildKeyString(e)` normalizes a KeyboardEvent → `"Ctrl+Shift+KeyA"` string for consistent key identity
+- `buildReverseMap()` inverts `this.shortcuts[mode]` → `{ keyString: actionName }` for O(1) dispatch in keydown handlers
+- `executeAction(action)` dispatches action name strings to handler methods via a local map with optional chaining (`?.()`)
+- `checkShortcutConflict(mode, currentAction, newKey)` returns conflicting action name or null; checks only within same mode
+- `saveShortcut(mode, action, newKey)` updates `this.shortcuts[mode][action]`, rebuilds reverse map, persists full shortcuts to `customShortcuts` in global `localStorage`
+- `resetShortcuts()` restores inline defaults, rebuilds reverse map, removes `customShortcuts` from global `localStorage`; avoids referencing top-level `DEFAULT_SHORTCUTS` so `extractMethod` tests work in Node.js
+- `renderShortcutRows()` re-renders shortcut key labels in the help overlay after save/reset
+- `attachShortcutKeyListeners()` re-attaches click-to-remap listeners on `.shortcut-key` elements after re-render
+- Constructor initializes `this.shortcuts = this.loadShortcuts()` and `this.shortcutReverseMap = this.buildReverseMap()` alongside other localStorage settings
+- Keydown handler: fixed utilities (Escape, F1, Space/I in single mode, Z/X in compare mode) handled before the reverse map lookup; all customizable actions dispatched via `this.shortcutReverseMap[mode][keyStr]` → `executeAction(action)`
+- UI elements: `.shortcut-key[data-action][data-mode]` (clickable key labels in help overlay), `.listening` class (active key-capture state), `.shortcut-conflict-warning` (shows conflicting action name inline), `#resetShortcutsBtn` (reset button)
+- Remap flow: click `.shortcut-key` → element gets `.listening` → press new key → `checkShortcutConflict` → if conflict show `.shortcut-conflict-warning` and stay in listening state; if clear call `saveShortcut()` → rebuild reverse map
+
 <!-- END AUTO-MANAGED -->
 
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Completed tasks: TASK-012 through TASK-025. See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+Completed tasks: TASK-012 through TASK-026. See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+
+**Next planned:**
+- TASK-027: Fix undo when no media remains in folder (🟡 Normal)
+- TASK-028: Research open source media content understanding tools (🟡 Normal, research only)
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
@@ -202,6 +224,7 @@ Completed tasks: TASK-012 through TASK-025. See `docs/planning/DONE.md` for deta
 - `transition-delay` on CSS base rules: always verify fullscreen/hidden state overrides aren't inheriting the delay
 - Feature cache: `loadFeatureCache()` must be called unconditionally before `startBackgroundFeatureExtraction()` — lazy-init guard previously caused cache to not reload on folder switch
 - v2.0 modularization pattern: stateful manager class + constructor-injected callbacks (see FullscreenManager); planned: ZoomManager, CompareManager, SortingManager, MLManager
+- Shortcut localStorage: `loadShortcuts()`, `saveShortcut()`, `resetShortcuts()` use global `localStorage` directly — NOT `this.localStorage`; unit tests mock via `globalThis.localStorage` (not ctx property injection)
 
 <!-- END AUTO-MANAGED -->
 

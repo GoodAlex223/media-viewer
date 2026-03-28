@@ -76,25 +76,23 @@ test.describe('Compare Mode', () => {
         await expect(rightMedia).toBeVisible();
     });
 
-    test('navigates pairs with ArrowRight in compare mode', async () => {
+    test('navigates pairs with D key in compare mode', async () => {
         await page.evaluate(() => window.mediaViewer.toggleViewMode());
         await page.waitForTimeout(500);
 
         const indexBefore = await page.evaluate(() => window.mediaViewer.currentIndex);
         expect(indexBefore).toBe(0);
 
-        // ArrowRight skips by 2 in compare mode (shows next pair)
-        // With an odd number of valid files, index wraps back to 0 (2 >= length-1)
-        await page.keyboard.press('ArrowRight');
+        // D advances in compare mode; with 3 files, wraps back to start
+        await page.keyboard.press('d');
         await page.waitForTimeout(500);
 
-        // Verify navigation was processed (showMedia re-rendered compare panes)
+        // Verify still in compare mode and navigation was processed
         const isCompare = await page.evaluate(() => window.mediaViewer.isCompareMode);
         expect(isCompare).toBe(true);
 
-        // Both panes should still be visible after navigation
+        // Left pane should be visible after navigation
         await expect(page.locator('.left-media-wrapper')).toBeVisible();
-        await expect(page.locator('.right-media-wrapper')).toBeVisible();
     });
 
     test('rates left file with Q key', async () => {

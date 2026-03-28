@@ -1,5 +1,36 @@
 import { FullscreenManager } from './fullscreen.js';
 
+const DEFAULT_SHORTCUTS = {
+    single: {
+        like: 'KeyQ',
+        dislike: 'KeyW',
+        next: 'KeyD',
+        previous: 'KeyA',
+        undo: 'Ctrl+KeyA',
+    },
+    compare: {
+        leftLike: 'KeyQ',
+        leftDislike: 'KeyW',
+        rightLike: 'KeyE',
+        rightDislike: 'KeyR',
+        next: 'KeyD',
+        previous: 'KeyA',
+        undo: 'Ctrl+KeyA',
+    },
+};
+
+const ACTION_LABELS = {
+    like: 'Like media',
+    dislike: 'Dislike media',
+    next: 'Next media',
+    previous: 'Previous media',
+    undo: 'Undo last move',
+    leftLike: 'Left media Like',
+    leftDislike: 'Left media Dislike',
+    rightLike: 'Right media Like',
+    rightDislike: 'Right media Dislike',
+};
+
 // MinHeap (Priority Queue) for efficient MST construction
 class MinHeap {
     constructor(compareFunc = (a, b) => a.distance - b.distance) {
@@ -376,6 +407,12 @@ class MediaViewer {
         this.customLikeFolder = localStorage.getItem('customLikeFolder') || '';
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
+        this.shortcuts = this.loadShortcuts();
+        this.shortcutReverseMap = this.buildReverseMap();
+        this._listeningState = null;
+        this._listeningHandler = null;
+        this.renderShortcutRows();
+        this.attachShortcutKeyListeners();
 
         // Fullscreen manager (v2.0 module pattern — stateful manager with callbacks)
         this.fullscreen = new FullscreenManager({
@@ -1577,6 +1614,11 @@ class MediaViewer {
             helpCloseBtn.addEventListener('click', () => this.toggleHelp());
         }
 
+        const resetShortcutsBtn = document.getElementById('resetShortcutsBtn');
+        if (resetShortcutsBtn) {
+            resetShortcutsBtn.addEventListener('click', () => this.resetShortcuts());
+        }
+
         // Close help overlay when clicking on background
         const helpOverlay = document.getElementById('helpOverlay');
         if (helpOverlay) {
@@ -1686,22 +1728,15 @@ class MediaViewer {
         document.addEventListener('keydown', (e) => {
             if (this.mediaFiles.length === 0) return;
 
-            if (this.isLoading && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
-                e.preventDefault();
-                return;
-            }
-
-            // Exit fullscreen and reset zoom with Escape
+            // Fixed utility shortcuts (not customizable)
             if (e.key === 'Escape') {
                 e.preventDefault();
-                // Exit fullscreen first
                 if (this.leftMediaWrapper && this.leftMediaWrapper.classList.contains('fullscreen')) {
                     this.fullscreen.cleanup(this.leftMediaWrapper);
                 }
                 if (this.rightMediaWrapper && this.rightMediaWrapper.classList.contains('fullscreen')) {
                     this.fullscreen.cleanup(this.rightMediaWrapper);
                 }
-                // Reset zoom
                 if (this.isZoomed()) {
                     this.resetZoom('all');
                     return;
@@ -1709,104 +1744,52 @@ class MediaViewer {
                 return;
             }
 
-            // Compare mode shortcuts
-            if (this.isCompareMode) {
-                // Use e.code for letter keys (keyboard layout independent)
-                switch (e.code) {
-                    case 'KeyQ':
-                        e.preventDefault();
-                        if (!this.isLoading) this.handleLeftLike();
-                        break;
-                    case 'KeyW':
-                        e.preventDefault();
-                        if (!this.isLoading) this.handleLeftDislike();
-                        break;
-                    case 'KeyE':
-                        e.preventDefault();
-                        if (!this.isLoading) this.handleRightLike();
-                        break;
-                    case 'KeyR':
-                        e.preventDefault();
-                        if (!this.isLoading) this.handleRightDislike();
-                        break;
-                    case 'KeyZ':
-                        e.preventDefault();
-                        if (this.leftMediaWrapper) {
-                            this.fullscreen.toggle(this.leftMediaWrapper);
-                        }
-                        break;
-                    case 'KeyX':
-                        e.preventDefault();
-                        if (this.rightMediaWrapper) {
-                            this.fullscreen.toggle(this.rightMediaWrapper);
-                        }
-                        break;
-                    case 'KeyA':
-                        e.preventDefault();
-                        if (!this.isLoading) {
-                            if (e.ctrlKey) {
-                                this.handleCancel();
-                            } else {
-                                this.previousMedia();
-                            }
-                        }
-                        break;
-                    case 'KeyD':
-                        e.preventDefault();
-                        if (!this.isLoading) this.nextMedia();
-                        break;
-                }
-                // Use e.key for special keys (consistent across layouts)
-                if (e.key === 'F1') {
-                    e.preventDefault();
-                    this.toggleHelp();
-                }
-                if (e.ctrlKey && e.key === 'ArrowLeft') {
-                    e.preventDefault();
-                    if (!this.isLoading) this.handleCancel();
-                }
+            if (e.key === 'F1') {
+                e.preventDefault();
+                this.toggleHelp();
                 return;
             }
 
-            // Single mode shortcuts
-            switch (e.key) {
-                case ' ':
+            if (!this.isCompareMode) {
+                // Single mode fixed utilities
+                if (e.key === ' ') {
                     e.preventDefault();
                     if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
                         this.togglePlayPause();
                     }
-                    break;
-                case 'ArrowUp':
+                    return;
+                }
+                if (e.code === 'KeyI') {
                     e.preventDefault();
-                    if (!this.isLoading) this.handleLike();
-                    break;
-                case 'ArrowDown':
+                    this.toggleFileInfo();
+                    return;
+                }
+            } else {
+                // Compare mode fixed utilities
+                if (e.code === 'KeyZ') {
                     e.preventDefault();
-                    if (!this.isLoading) this.handleDislike();
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    if (e.ctrlKey) {
-                        if (!this.isLoading) this.handleCancel();
-                    } else {
-                        this.previousMedia();
+                    if (this.leftMediaWrapper) {
+                        this.fullscreen.toggle(this.leftMediaWrapper);
                     }
-                    break;
-                case 'ArrowRight':
+                    return;
+                }
+                if (e.code === 'KeyX') {
                     e.preventDefault();
-                    this.nextMedia();
-                    break;
-                case 'F1':
-                    e.preventDefault();
-                    this.toggleHelp();
-                    break;
-                case 'KeyI':
-                    // Toggle file info panel (only in single mode)
-                    if (!this.isCompareMode && this.mediaFiles.length > 0) {
-                        e.preventDefault();
-                        this.toggleFileInfo();
+                    if (this.rightMediaWrapper) {
+                        this.fullscreen.toggle(this.rightMediaWrapper);
                     }
-                    break;
+                    return;
+                }
+            }
+
+            // Customizable shortcuts via reverse map lookup
+            const mode = this.isCompareMode ? 'compare' : 'single';
+            const keyStr = this.buildKeyString(e);
+            const action = this.shortcutReverseMap[mode][keyStr];
+            if (action && !this.isLoading) {
+                e.preventDefault();
+                this.signalUserActivity();
+                this.executeAction(action);
             }
         });
 
@@ -6920,6 +6903,196 @@ class MediaViewer {
             clearInterval(this.featureCacheAutoSaveInterval);
             this.featureCacheAutoSaveInterval = null;
         }
+    }
+
+    loadShortcuts() {
+        const raw = localStorage.getItem('customShortcuts');
+        let custom = {};
+        if (raw) {
+            try {
+                custom = JSON.parse(raw);
+            } catch (_e) {
+                // Invalid JSON — ignore and use defaults
+            }
+        }
+        return {
+            single: Object.assign({}, DEFAULT_SHORTCUTS.single, custom.single),
+            compare: Object.assign({}, DEFAULT_SHORTCUTS.compare, custom.compare),
+        };
+    }
+
+    buildKeyString(e) {
+        let key = '';
+        if (e.ctrlKey) key += 'Ctrl+';
+        if (e.shiftKey) key += 'Shift+';
+        key += e.code;
+        return key;
+    }
+
+    buildReverseMap() {
+        const reverse = { single: {}, compare: {} };
+        for (const mode of ['single', 'compare']) {
+            for (const [action, key] of Object.entries(this.shortcuts[mode])) {
+                reverse[mode][key] = action;
+            }
+        }
+        return reverse;
+    }
+
+    executeAction(action) {
+        const actions = {
+            like: () => this.handleLike(),
+            dislike: () => this.handleDislike(),
+            next: () => this.nextMedia(),
+            previous: () => this.previousMedia(),
+            undo: () => this.handleCancel(),
+            leftLike: () => this.handleLeftLike(),
+            leftDislike: () => this.handleLeftDislike(),
+            rightLike: () => this.handleRightLike(),
+            rightDislike: () => this.handleRightDislike(),
+        };
+        actions[action]?.();
+    }
+
+    checkShortcutConflict(mode, currentAction, newKey) {
+        // Block reserved keys used by fixed utility shortcuts
+        const reservedKeys = ['F1', 'Space', 'KeyI', 'KeyZ', 'KeyX', 'Escape'];
+        if (reservedKeys.includes(newKey)) {
+            return '_reserved';
+        }
+        for (const [action, key] of Object.entries(this.shortcuts[mode])) {
+            if (key === newKey && action !== currentAction) {
+                return action;
+            }
+        }
+        return null;
+    }
+
+    saveShortcut(mode, action, newKey) {
+        this.shortcuts[mode][action] = newKey;
+        this.shortcutReverseMap = this.buildReverseMap();
+
+        // Persist the current shortcuts — loadShortcuts merges on load so full save is safe
+        const custom = {
+            single: Object.assign({}, this.shortcuts.single),
+            compare: Object.assign({}, this.shortcuts.compare),
+        };
+        localStorage.setItem('customShortcuts', JSON.stringify(custom));
+    }
+
+    keyDisplayName(keyStr) {
+        return keyStr.replace('Key', '').replace('Digit', '').replace('+Key', '+').replace('+Digit', '+');
+    }
+
+    renderShortcutRows() {
+        const singleGrid = document.getElementById('shortcutSingleGrid');
+        const compareGrid = document.getElementById('shortcutCompareGrid');
+        if (!singleGrid || !compareGrid) return;
+
+        singleGrid.innerHTML = '';
+        compareGrid.innerHTML = '';
+
+        for (const [action, key] of Object.entries(this.shortcuts.single)) {
+            const row = document.createElement('div');
+            row.className = 'shortcut-item';
+            row.innerHTML = `<kbd class="shortcut-key" data-action="${action}" data-mode="single">${this.keyDisplayName(key)}</kbd> <span>${ACTION_LABELS[action]}</span>`;
+            singleGrid.appendChild(row);
+        }
+
+        for (const [action, key] of Object.entries(this.shortcuts.compare)) {
+            const row = document.createElement('div');
+            row.className = 'shortcut-item';
+            row.innerHTML = `<kbd class="shortcut-key" data-action="${action}" data-mode="compare">${this.keyDisplayName(key)}</kbd> <span>${ACTION_LABELS[action]}</span>`;
+            compareGrid.appendChild(row);
+        }
+    }
+
+    startListeningMode(kbdElement) {
+        this.stopListeningMode();
+
+        const action = kbdElement.dataset.action;
+        const mode = kbdElement.dataset.mode;
+
+        kbdElement.classList.add('listening');
+        kbdElement.textContent = 'Press a key...';
+
+        const existingWarning = kbdElement.parentElement.querySelector('.shortcut-conflict-warning');
+        if (existingWarning) existingWarning.remove();
+
+        this._listeningState = { kbdElement, action, mode };
+
+        this._listeningHandler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (e.key === 'Escape') {
+                this.stopListeningMode();
+                return;
+            }
+
+            if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+
+            const newKey = this.buildKeyString(e);
+            const conflict = this.checkShortcutConflict(mode, action, newKey);
+
+            if (conflict) {
+                const warning = document.createElement('div');
+                warning.className = 'shortcut-conflict-warning';
+                warning.textContent =
+                    conflict === '_reserved'
+                        ? 'Reserved key (used by fixed shortcut)'
+                        : `Already used by "${ACTION_LABELS[conflict]}"`;
+                const existingWarn = kbdElement.parentElement.querySelector('.shortcut-conflict-warning');
+                if (existingWarn) existingWarn.remove();
+                kbdElement.parentElement.appendChild(warning);
+                return;
+            }
+
+            this.saveShortcut(mode, action, newKey);
+            this.stopListeningMode();
+            this.renderShortcutRows();
+            this.attachShortcutKeyListeners();
+        };
+
+        document.addEventListener('keydown', this._listeningHandler, true);
+    }
+
+    stopListeningMode() {
+        if (!this._listeningState) return;
+
+        const { kbdElement, action, mode } = this._listeningState;
+        kbdElement.classList.remove('listening');
+        kbdElement.textContent = this.keyDisplayName(this.shortcuts[mode][action]);
+
+        const warning = kbdElement.parentElement.querySelector('.shortcut-conflict-warning');
+        if (warning) warning.remove();
+
+        if (this._listeningHandler) {
+            document.removeEventListener('keydown', this._listeningHandler, true);
+            this._listeningHandler = null;
+        }
+        this._listeningState = null;
+    }
+
+    attachShortcutKeyListeners() {
+        const keys = document.querySelectorAll('.shortcut-key');
+        keys.forEach((kbd) => {
+            const newKbd = kbd.cloneNode(true);
+            kbd.parentNode.replaceChild(newKbd, kbd);
+            newKbd.addEventListener('click', () => this.startListeningMode(newKbd));
+        });
+    }
+
+    resetShortcuts() {
+        this.stopListeningMode();
+        this.shortcuts = {
+            single: Object.assign({}, DEFAULT_SHORTCUTS.single),
+            compare: Object.assign({}, DEFAULT_SHORTCUTS.compare),
+        };
+        this.shortcutReverseMap = this.buildReverseMap();
+        localStorage.removeItem('customShortcuts');
+        this.renderShortcutRows?.();
+        this.attachShortcutKeyListeners?.();
     }
 }
 

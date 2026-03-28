@@ -2,12 +2,23 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-27 <!-- PR #23 code review -->
+**Last Updated**: 2026-03-27 <!-- TASK-026 completed -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From TASK-026 (Keyboard Shortcut Customization)
+
+### [2026-03-27] From: TASK-026 implementation
+**Origin**: Implementation findings + E2E debugging
+
+- [ ] **Extract ShortcutManager module** — keyboard shortcut logic (DEFAULT_SHORTCUTS, loadShortcuts, saveShortcut, resetShortcuts, buildKeyString, buildReverseMap, executeAction, checkShortcutConflict, listening mode, renderShortcutRows) is a natural candidate for v2.0 modularization (same pattern as FullscreenManager)
+- [ ] **Modifier key display in help overlay** — `keyDisplayName()` strips `Key`/`Digit` prefixes but doesn't prettify modifier combos (e.g., `Ctrl+A` displays as `Ctrl+A` which is fine, but `Ctrl+Shift+Q` could be cleaner)
+- [ ] **E2E test userData isolation** — custom shortcuts in localStorage persist across E2E test runs because Electron reuses the same userData directory; consider `app.setPath('userData', tmpDir)` in test setup for full isolation
 
 ---
 

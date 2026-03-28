@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-26 <!-- TASK-025 -->
+**Last Updated**: 2026-03-27 <!-- TASK-026 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,20 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-03-27] Keyboard shortcut customization (TASK-026)
+
+**Spec**: [docs/superpowers/specs/2026-03-27-task-026-keyboard-shortcut-customization-design.md](../../superpowers/specs/2026-03-27-task-026-keyboard-shortcut-customization-design.md)
+**Plan**: [docs/archive/plans/2026-03-27-task-026-keyboard-shortcut-customization.md](../../archive/plans/2026-03-27-task-026-keyboard-shortcut-customization.md)
+**Summary**: Customizable keyboard shortcuts with unified QWER+AD defaults for both single and compare modes. Data-driven shortcut map with reverse lookup replaces hardcoded switch/case. Help overlay shortcuts are dynamically rendered and editable via click-to-remap with conflict detection and "Reset to Defaults" button.
+**Key Changes**:
+- `media-viewer.js` — `DEFAULT_SHORTCUTS` + `ACTION_LABELS` constants, `loadShortcuts()`, `saveShortcut()`, `resetShortcuts()`, `buildKeyString()`, `buildReverseMap()`, `executeAction()`, `checkShortcutConflict()`, `renderShortcutRows()`, `keyDisplayName()`, `startListeningMode()`, `stopListeningMode()`, `attachShortcutKeyListeners()`. Keydown handler refactored from 125-line switch/case to 73-line reverse map lookup.
+- `index.html` — Static shortcut sections replaced with dynamic containers (`#shortcutSingleGrid`, `#shortcutCompareGrid`), Reset button added, General section updated with Z/X entries
+- `styles.css` — `.shortcut-key` editable styles, `.listening` animation, `.shortcut-conflict-warning`
+- `tests/keyboard-shortcuts.test.js` — 25 unit tests for all shortcut methods
+- `tests/e2e/keyboard-shortcuts.test.js` — 4 E2E tests (remap, conflict, reset, persistence)
+- `tests/e2e/rating.test.js`, `navigation.test.js`, `compare-mode.test.js` — Updated for new QWER+AD defaults
+**Spawned Tasks**: 3 items added to BACKLOG.md (ShortcutManager module extraction, modifier key display, E2E userData isolation)
 
 ### [2026-03-26] Application logging to file with auto-cleanup (TASK-025)
 
