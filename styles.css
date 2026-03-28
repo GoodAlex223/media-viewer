@@ -507,6 +507,44 @@ body {
     box-shadow: var(--shadow-glow-primary);
 }
 
+.empty-state-undo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.empty-state-undo-text {
+    font-size: var(--font-size-xl);
+    color: var(--text-secondary);
+    font-weight: var(--font-weight-medium);
+}
+
+.empty-state-undo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-5);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-elevated);
+    color: var(--text-inverse);
+    font-size: var(--font-size-base);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.empty-state-undo-btn:hover {
+    background: var(--color-primary-500);
+    border-color: var(--color-primary-500);
+}
+
 .drop-icon {
     margin-bottom: var(--space-5);
     color: var(--text-secondary);
