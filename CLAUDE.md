@@ -73,7 +73,7 @@ media_viewer/
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
 ├── tests/               # Unit tests (Vitest) + E2E tests (Playwright)
-│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger
+│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts
 │   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts
 │       ├── fixtures/    # Test media (1x1 PNGs, tiny.mp4)
 │       └── helpers/     # electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs
