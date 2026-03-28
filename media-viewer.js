@@ -1726,7 +1726,17 @@ class MediaViewer {
         }
 
         document.addEventListener('keydown', (e) => {
-            if (this.mediaFiles.length === 0) return;
+            if (this.mediaFiles.length === 0) {
+                // Allow undo shortcut even when no media remains
+                const mode = this.isCompareMode ? 'compare' : 'single';
+                const keyStr = this.buildKeyString(e);
+                const action = this.shortcutReverseMap[mode]?.[keyStr];
+                if (action === 'undo' && this.moveHistory.length > 0) {
+                    e.preventDefault();
+                    this.executeAction('undo');
+                }
+                return;
+            }
 
             // Fixed utility shortcuts (not customizable)
             if (e.key === 'Escape') {

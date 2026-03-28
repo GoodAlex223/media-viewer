@@ -46,6 +46,7 @@ function extractMethod(methodName) {
     return new Function(params, methodBody);
 }
 
+const buildKeyString = extractMethod('buildKeyString');
 const formatElapsed = extractMethod('formatElapsed');
 const formatEta = extractMethod('formatEta');
 const formatTimeAgo = extractMethod('formatTimeAgo');
@@ -229,5 +230,31 @@ describe('areFoldersConfigured', () => {
     it('returns falsy when folders are null', () => {
         const ctx = { customLikeFolder: null, customDislikeFolder: null };
         expect(areFoldersConfigured.call(ctx)).toBeFalsy();
+    });
+});
+
+describe('keydown guard — undo in empty state', () => {
+    it('buildKeyString produces correct string for Ctrl+KeyA', () => {
+        const mockEvent = {
+            ctrlKey: true,
+            shiftKey: false,
+            altKey: false,
+            metaKey: false,
+            code: 'KeyA',
+        };
+        const result = buildKeyString.call({}, mockEvent);
+        expect(result).toBe('Ctrl+KeyA');
+    });
+
+    it('buildKeyString produces correct string for plain key', () => {
+        const mockEvent = {
+            ctrlKey: false,
+            shiftKey: false,
+            altKey: false,
+            metaKey: false,
+            code: 'KeyQ',
+        };
+        const result = buildKeyString.call({}, mockEvent);
+        expect(result).toBe('KeyQ');
     });
 });

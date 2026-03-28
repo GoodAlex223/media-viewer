@@ -74,7 +74,7 @@ media_viewer/
 ├── playwright.config.js # E2E test config
 ├── tests/               # Unit tests (Vitest) + E2E tests (Playwright)
 │   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts
-│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts
+│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state
 │       ├── fixtures/    # Test media (1x1 PNGs, tiny.mp4)
 │       └── helpers/     # electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
@@ -158,6 +158,7 @@ media_viewer/
 - Class-based state in MediaViewer; localStorage for user preferences
 - Settings panel (F1) with number inputs/checkboxes wired to localStorage; constructor validates/clamps saved values
 - Empty state: `showEmptyStateWithUndo()` vs `showDropZone()` based on `moveHistory.length`
+- Empty state keydown guard: when `mediaFiles.length === 0`, keydown handler blocks all input EXCEPT undo — undo passes through when `moveHistory.length > 0` (TASK-027 fix)
 - Compare-pair undo: history entries tagged `compareMode: true`; `handleCancel()` detects paired entries and restores both files in one undo
 
 **Index Management**:
@@ -174,6 +175,7 @@ media_viewer/
 **UI Components**:
 - Zoom: `createZoomPopover(target, wrapper, toggleBtn)` / `removeZoomPopover(target)` — single mode static, compare mode dynamic
 - Overlay controls (compare mode only): `position: absolute` (wrapper-relative), `bottom: 56px`, centered; 500ms transition-delay on hide, 0s on hover; fullscreen override sets `transition-delay: 0s`
+- Empty-state undo prompt: `div.empty-state-undo` dynamically created in `showEmptyStateWithUndo()` — centered in media container (flexbox), shows "No media files remaining" text + Undo button calling `handleCancel()`; removed at start of `showMedia()` before rendering new content
 
 **Event Listener Lifecycle**:
 - AbortController pattern for scoped cleanup: FullscreenManager, sortAbortController, backgroundExtractionAbort
@@ -213,14 +215,16 @@ media_viewer/
 
 Completed tasks: TASK-012 through TASK-026. See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
+**In progress:**
+- TASK-027: Fix undo when no media remains in folder (🟡 Normal) — design spec written; approach: (1) keydown guard at line ~1729 allows undo through when `mediaFiles.length === 0 && moveHistory.length > 0`, (2) `showEmptyStateWithUndo()` creates `div.empty-state-undo` centered in media container with visible Undo button, (3) `handleCancel()` needs no changes
+
 **Next planned:**
-- TASK-027: Fix undo when no media remains in folder (🟡 Normal)
 - TASK-028: Research open source media content understanding tools (🟡 Normal, research only)
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
 - Compare mode exit: use `switchToSingleModeUI()` (non-toggling helper), NOT `toggleViewMode()` — the latter re-toggles isCompareMode causing infinite loops when <2 files remain
-- Empty state: `showEmptyStateWithUndo()` (preserves undo toolbar) vs `showDropZone()` (genuine empty) — check `moveHistory.length` to decide
+- Empty state: `showEmptyStateWithUndo()` (preserves undo toolbar) vs `showDropZone()` (genuine empty) — check `moveHistory.length` to decide; keydown guard at line ~1729 blocks all keys when `mediaFiles.length === 0` — undo exception required (TASK-027)
 - `transition-delay` on CSS base rules: always verify fullscreen/hidden state overrides aren't inheriting the delay
 - Feature cache: `loadFeatureCache()` must be called unconditionally before `startBackgroundFeatureExtraction()` — lazy-init guard previously caused cache to not reload on folder switch
 - v2.0 modularization pattern: stateful manager class + constructor-injected callbacks (see FullscreenManager); planned: ZoomManager, CompareManager, SortingManager, MLManager
