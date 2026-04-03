@@ -2306,6 +2306,42 @@ class MediaViewer {
             this.cleanupCurrentMedia();
         }
         this.hideLoadingSpinner();
+
+        // Hide drop zone — this is "folder loaded but empty", not "no folder"
+        this.dropZone.style.display = 'none';
+
+        // Remove any existing empty-state element
+        const existing = this.mediaContainer.querySelector('.empty-state-undo');
+        if (existing) {
+            existing.remove();
+        }
+
+        // Create empty-state undo prompt
+        const emptyState = document.createElement('div');
+        emptyState.className = 'empty-state-undo';
+
+        const text = document.createElement('div');
+        text.className = 'empty-state-undo-text';
+        text.textContent = 'No media files remaining';
+        emptyState.appendChild(text);
+
+        const undoBtn = document.createElement('button');
+        undoBtn.className = 'empty-state-undo-btn';
+        undoBtn.textContent = 'Undo last move';
+        undoBtn.addEventListener('click', () => this.handleCancel());
+        emptyState.appendChild(undoBtn);
+
+        this.mediaContainer.appendChild(emptyState);
+
+        // Show appropriate controls bar with undo button visible
+        if (this.isCompareMode) {
+            this.compareControls.style.display = 'flex';
+            this.controls.style.display = 'none';
+        } else {
+            this.controls.style.display = 'flex';
+            this.compareControls.style.display = 'none';
+        }
+
         this.updateFolderInfo();
         this.updateNavigationInfo();
     }
@@ -2352,6 +2388,12 @@ class MediaViewer {
                 this.showDropZone();
             }
             return;
+        }
+
+        // Clean up empty-state undo prompt if present
+        const emptyState = this.mediaContainer.querySelector('.empty-state-undo');
+        if (emptyState) {
+            emptyState.remove();
         }
 
         if (this.isLoading || this.mediaNavigationInProgress) {
