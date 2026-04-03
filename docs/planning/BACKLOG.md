@@ -2,12 +2,25 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-03-28 <!-- PR #24 code review -->
+**Last Updated**: 2026-04-03 <!-- PR #25 code review -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From TASK-027 (Fix Undo Empty Folder)
+
+### [2026-04-03] From: PR #25 code review
+**Origin**: 5 parallel agents (2 hit rate limits) + confidence scoring; 9 issues found, 4 scored 75/100, none above 80 threshold; 3 fixed in c0f1c3ca; remaining items below threshold or pre-existing patterns
+
+- [ ] **E2E afterEach null safety on tmpFixtures** (75/100) — `tests/e2e/undo-empty-state.test.js` `afterEach` calls `tmpFixtures.cleanup()` without null guard; will crash if `createTempFixtureDir()` throws before assignment; pre-existing pattern across most E2E test files (only `app-launch.test.js` guards)
+- [ ] **Misleading describe label in unit tests** (50/100) — `tests/media-viewer-utils.test.js` describe block "keydown guard — undo in empty state" only tests `buildKeyString()`, not the guard itself; guard covered by E2E tests
+- [x] **DOM leak: .empty-state-undo in showDropZone()** (75/100) — Fixed in c0f1c3ca
+- [x] **Stale .spec.js filename in spec doc** (75/100) — Fixed in c0f1c3ca
+- [x] **docs/README.md not updated for TASK-027 spec** (75/100) — Fixed in c0f1c3ca
 
 ---
 
