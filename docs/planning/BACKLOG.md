@@ -410,6 +410,12 @@ Areas requiring investigation before implementation.
 - [x] Undo when no media remains — Promoted to TODO: TASK-027
 - [x] Research: media content understanding tools — Promoted to TODO: TASK-028
 
+### 2026-04-03 From: TASK-027 (undo empty state fix)
+**Origin**: TASK-027 implementation
+
+- [ ] Centralized `insertFileIntoList()` method — Extract reusable file insertion logic from the 4 undo branches in `handleCancel()` (single, compare, special, compare-tagged-in-single). Each branch duplicates file reconstruction + splice/push + ML reversal. A shared method would reduce ~150 lines of duplication.
+- [ ] Allow F1 (help) through keydown guard in empty state — Currently `showEmptyStateWithUndo()` blocks F1 along with all other non-undo shortcuts. Users may want to check keyboard shortcuts while in the empty state.
+
 ### 2026-02-06 From: code-review-pr-3
 **Origin**: Code review of PR #3
 
