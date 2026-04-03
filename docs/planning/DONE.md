@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-03-27 <!-- TASK-026 -->
+**Last Updated**: 2026-04-03 <!-- TASK-027 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,19 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-03 (March)
+
+### [2026-04-03] Fix undo when no media remains in folder (TASK-027)
+
+**Spec**: [docs/superpowers/specs/2026-03-28-task-027-fix-undo-empty-folder-design.md](../../superpowers/specs/2026-03-28-task-027-fix-undo-empty-folder-design.md)
+**Plan**: [docs/archive/plans/2026-03-28-task-027-fix-undo-empty-folder.md](../../archive/plans/2026-03-28-task-027-fix-undo-empty-folder.md)
+**Summary**: Fixed undo (keyboard shortcut + button click) not working when all media files have been rated/moved out of a folder. Two targeted fixes: keydown guard exception for undo action, and enhanced empty-state UI with visible undo prompt.
+**Key Changes**:
+- `media-viewer.js` — Keydown guard at line ~1729 now allows undo shortcut through when `mediaFiles.length === 0 && moveHistory.length > 0`; `showEmptyStateWithUndo()` enhanced to create visible `div.empty-state-undo` with "No media files remaining" text and Undo button; `showMedia()` cleanup removes empty-state element before rendering restored files
+- `styles.css` — `.empty-state-undo`, `.empty-state-undo-text`, `.empty-state-undo-btn` CSS rules
+- `tests/media-viewer-utils.test.js` — 2 unit tests for `buildKeyString()` method
+- `tests/e2e/undo-empty-state.test.js` — 3 E2E tests (single-mode keyboard undo, button click undo, compare-mode pair undo)
+**Design Note**: When the last compare pair is rated, `switchToSingleModeUI()` switches to single mode before empty state. Undo from this state uses the compare-tagged-history branch in `handleCancel()`, restoring both files in single mode.
+**Spawned Tasks**: 2 items added to BACKLOG.md (centralized `insertFileIntoList()`, F1 through keydown guard)
 
 ### [2026-03-27] Keyboard shortcut customization (TASK-026)
 

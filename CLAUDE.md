@@ -74,7 +74,7 @@ media_viewer/
 ├── playwright.config.js # E2E test config
 ├── tests/               # Unit tests (Vitest) + E2E tests (Playwright)
 │   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts
-│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts
+│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state
 │       ├── fixtures/    # Test media (1x1 PNGs, tiny.mp4)
 │       └── helpers/     # electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
@@ -138,7 +138,7 @@ media_viewer/
 - `mockFolderDialog(electronApp, path)`: replaces `ipcMain` handler for preset path
 - `closeApp()`: races `electronApp.close()` against 5s timeout then SIGKILL; Windows uses `taskkill /F /T /PID` (kills process tree)
 - Lucide CDN stub: `page.route('**/unpkg.com/**')` returns empty module
-- Fixtures: 1x1 PNGs (red/green/blue) + tiny.mp4; `createTempFixtureDir()` copies to temp dir
+- Fixtures: 1x1 PNGs (red/green/blue) + tiny.mp4; `createTempFixtureDir(fixtureNames?)` copies named fixtures to temp dir (default: all 3 PNGs); pass array to select subset (e.g., `['red-1x1.png']` for single-file tests)
 - `rdp-preload.cjs` loads playwright-core internal `loader.js` by path — update if it breaks after upgrade
 - Shortcut remap E2E pattern: `page.evaluate()` to call `saveShortcut()`/`renderShortcutRows()`/`attachShortcutKeyListeners()` directly on `window.mediaViewer`; or click `.shortcut-key[data-action][data-mode]` to enter listening state then `page.keyboard.press(key)`
 
@@ -158,6 +158,7 @@ media_viewer/
 - Class-based state in MediaViewer; localStorage for user preferences
 - Settings panel (F1) with number inputs/checkboxes wired to localStorage; constructor validates/clamps saved values
 - Empty state: `showEmptyStateWithUndo()` vs `showDropZone()` based on `moveHistory.length`
+- Empty state keydown guard: when `mediaFiles.length === 0`, keydown handler blocks all input EXCEPT undo — undo passes through when `moveHistory.length > 0` (TASK-027 fix)
 - Compare-pair undo: history entries tagged `compareMode: true`; `handleCancel()` detects paired entries and restores both files in one undo
 
 **Index Management**:
@@ -174,6 +175,7 @@ media_viewer/
 **UI Components**:
 - Zoom: `createZoomPopover(target, wrapper, toggleBtn)` / `removeZoomPopover(target)` — single mode static, compare mode dynamic
 - Overlay controls (compare mode only): `position: absolute` (wrapper-relative), `bottom: 56px`, centered; 500ms transition-delay on hide, 0s on hover; fullscreen override sets `transition-delay: 0s`
+- Empty-state undo prompt: `div.empty-state-undo` dynamically created in `showEmptyStateWithUndo()` — centered in media container (flexbox); children: `div.empty-state-undo-text` ("No media files remaining") + `button.empty-state-undo-btn` ("Undo last move", calls `handleCancel()`); removed at start of `showMedia()` before rendering new content
 
 **Event Listener Lifecycle**:
 - AbortController pattern for scoped cleanup: FullscreenManager, sortAbortController, backgroundExtractionAbort
@@ -211,16 +213,18 @@ media_viewer/
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Completed tasks: TASK-012 through TASK-026. See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+Completed tasks: TASK-012 through TASK-027 (TASK-027: fix undo shortcut in empty folder state — keydown guard exception + `showEmptyStateWithUndo()` UI + E2E coverage). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+
+**In progress:**
+- (none)
 
 **Next planned:**
-- TASK-027: Fix undo when no media remains in folder (🟡 Normal)
 - TASK-028: Research open source media content understanding tools (🟡 Normal, research only)
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
 - Compare mode exit: use `switchToSingleModeUI()` (non-toggling helper), NOT `toggleViewMode()` — the latter re-toggles isCompareMode causing infinite loops when <2 files remain
-- Empty state: `showEmptyStateWithUndo()` (preserves undo toolbar) vs `showDropZone()` (genuine empty) — check `moveHistory.length` to decide
+- Empty state: `showEmptyStateWithUndo()` (preserves undo toolbar) vs `showDropZone()` (genuine empty) — check `moveHistory.length` to decide; keydown guard at line ~1729 blocks all keys when `mediaFiles.length === 0` except undo — undo passes through when `moveHistory.length > 0` (implemented in TASK-027)
 - `transition-delay` on CSS base rules: always verify fullscreen/hidden state overrides aren't inheriting the delay
 - Feature cache: `loadFeatureCache()` must be called unconditionally before `startBackgroundFeatureExtraction()` — lazy-init guard previously caused cache to not reload on folder switch
 - v2.0 modularization pattern: stateful manager class + constructor-injected callbacks (see FullscreenManager); planned: ZoomManager, CompareManager, SortingManager, MLManager

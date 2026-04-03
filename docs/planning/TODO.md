@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-03-27 <!-- TASK-026 completed -->
+**Last Updated**: 2026-04-03 <!-- TASK-027 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -58,25 +58,7 @@ Active tasks and backlog.
 
 <!-- TASK-026 completed 2026-03-27, moved to DONE.md -->
 
----
-
-### TASK-027 — Fix undo when no media remains in folder 🟡
-**Priority**: 🟡 Normal
-**Effort**: Low
-**Origin**: Manual testing 2026-03-19
-
-**Description**: Undo previous action (Ctrl+Z) does not work when no media files remain in the folder.
-
-**Reported Issue** (original Russian preserved):
-> Не работает отмена предыдущего действия, если в папке не осталось медиа
-
-**Merges with BACKLOG**: "Centralized insertFileIntoList() counterpart" (from centralized-remove-file) — undo restoration path
-
-**Acceptance Criteria**:
-- [ ] Undo works even when mediaFiles[] is empty
-- [ ] File restored to list and displayed after undo
-- [ ] Drop zone hidden, media view restored
-- [ ] Works in both single and compare mode
+<!-- TASK-027 completed 2026-04-03, moved to DONE.md -->
 
 ---
 

@@ -1726,7 +1726,17 @@ class MediaViewer {
         }
 
         document.addEventListener('keydown', (e) => {
-            if (this.mediaFiles.length === 0) return;
+            if (this.mediaFiles.length === 0) {
+                // Allow undo shortcut even when no media remains
+                const mode = this.isCompareMode ? 'compare' : 'single';
+                const keyStr = this.buildKeyString(e);
+                const action = this.shortcutReverseMap[mode]?.[keyStr];
+                if (action === 'undo' && this.moveHistory.length > 0) {
+                    e.preventDefault();
+                    this.executeAction('undo');
+                }
+                return;
+            }
 
             // Fixed utility shortcuts (not customizable)
             if (e.key === 'Escape') {
@@ -2261,6 +2271,11 @@ class MediaViewer {
     }
 
     showDropZone() {
+        // Remove empty-state undo prompt if present (prevents stale overlay on top of drop zone)
+        const emptyState = this.mediaContainer.querySelector('.empty-state-undo');
+        if (emptyState) {
+            emptyState.remove();
+        }
         this.dropZone.style.display = 'flex';
         this.controls.style.display = 'none';
         this.fileInfo.style.display = 'none';
@@ -2296,6 +2311,42 @@ class MediaViewer {
             this.cleanupCurrentMedia();
         }
         this.hideLoadingSpinner();
+
+        // Hide drop zone — this is "folder loaded but empty", not "no folder"
+        this.dropZone.style.display = 'none';
+
+        // Remove any existing empty-state element
+        const existing = this.mediaContainer.querySelector('.empty-state-undo');
+        if (existing) {
+            existing.remove();
+        }
+
+        // Create empty-state undo prompt
+        const emptyState = document.createElement('div');
+        emptyState.className = 'empty-state-undo';
+
+        const text = document.createElement('div');
+        text.className = 'empty-state-undo-text';
+        text.textContent = 'No media files remaining';
+        emptyState.appendChild(text);
+
+        const undoBtn = document.createElement('button');
+        undoBtn.className = 'empty-state-undo-btn';
+        undoBtn.textContent = 'Undo last move';
+        undoBtn.addEventListener('click', () => this.handleCancel());
+        emptyState.appendChild(undoBtn);
+
+        this.mediaContainer.appendChild(emptyState);
+
+        // Show appropriate controls bar with undo button visible
+        if (this.isCompareMode) {
+            this.compareControls.style.display = 'flex';
+            this.controls.style.display = 'none';
+        } else {
+            this.controls.style.display = 'flex';
+            this.compareControls.style.display = 'none';
+        }
+
         this.updateFolderInfo();
         this.updateNavigationInfo();
     }
@@ -2342,6 +2393,12 @@ class MediaViewer {
                 this.showDropZone();
             }
             return;
+        }
+
+        // Clean up empty-state undo prompt if present
+        const emptyState = this.mediaContainer.querySelector('.empty-state-undo');
+        if (emptyState) {
+            emptyState.remove();
         }
 
         if (this.isLoading || this.mediaNavigationInProgress) {
