@@ -2271,6 +2271,11 @@ class MediaViewer {
     }
 
     showDropZone() {
+        // Remove empty-state undo prompt if present (prevents stale overlay on top of drop zone)
+        const emptyState = this.mediaContainer.querySelector('.empty-state-undo');
+        if (emptyState) {
+            emptyState.remove();
+        }
         this.dropZone.style.display = 'flex';
         this.controls.style.display = 'none';
         this.fileInfo.style.display = 'none';

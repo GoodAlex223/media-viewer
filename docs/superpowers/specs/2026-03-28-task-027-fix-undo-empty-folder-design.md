@@ -97,4 +97,4 @@ Existing 1x1 PNG fixtures + `createTempFixtureDir()`. Use `seedLocalStorage` for
 - `media-viewer.js` — keydown guard fix (line ~1729), `showEmptyStateWithUndo()` enhancement (line ~2294)
 - `styles.css` — styling for empty-state undo prompt (if needed)
 - `tests/media-viewer-utils.test.js` — unit tests for guard and empty state
-- `tests/e2e/undo-empty-state.spec.js` — E2E tests (new file)
+- `tests/e2e/undo-empty-state.test.js` — E2E tests (new file)
