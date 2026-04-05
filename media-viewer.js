@@ -381,8 +381,7 @@ class MediaViewer {
         this.pendingCompareTimeout = null; // Fallback timeout ID
         this.previousScores = null; // Snapshot of predictionScores for delta notification
 
-        // CLIP worker state
-        this.clipWorker = null;
+        // CLIP model state (main process IPC)
         this.clipWorkerReady = false;
         this.clipModelDownloading = false;
 
@@ -6149,7 +6148,7 @@ class MediaViewer {
             this.initializeFeaturePool();
 
             if (this.enableClipFeatures) {
-                this.initClipWorker();
+                this.initClipModel();
             }
 
             // Wait for ML worker to be ready
@@ -6409,50 +6408,43 @@ class MediaViewer {
         }
     }
 
-    // ==================== CLIP WORKER ====================
+    // ==================== CLIP FEATURES (Main Process IPC) ====================
 
-    initClipWorker() {
-        try {
-            this.clipWorker = new Worker('clip-worker.js', { type: 'module' });
-            this.clipWorker.onmessage = (e) => this.handleClipWorkerMessage(e);
-            this.clipWorker.onerror = (err) => {
-                console.error('CLIP worker error:', err.message);
-                this.clipWorkerReady = false;
-            };
-            this.clipWorker.postMessage({ type: 'loadModel' });
-        } catch (err) {
-            console.warn('Failed to create CLIP worker:', err.message);
-            this.clipWorker = null;
-        }
-    }
+    async initClipModel() {
+        if (!this.enableClipFeatures) return;
+        if (!window.electronAPI.loadClipModel) return;
 
-    handleClipWorkerMessage(e) {
-        const { type } = e.data;
-        switch (type) {
-            case 'modelReady':
-                this.clipWorkerReady = true;
-                this.clipModelDownloading = false;
-                this.showNotification('CLIP model loaded', 'success');
-                break;
-            case 'modelError':
-                this.clipWorkerReady = false;
-                this.clipModelDownloading = false;
-                console.error('CLIP model failed to load:', e.data.error);
-                this.showNotification('CLIP model unavailable — using basic features only', 'warning');
-                break;
-            case 'downloadProgress':
+        // Listen for download progress
+        if (window.electronAPI.onClipDownloadProgress) {
+            window.electronAPI.onClipDownloadProgress((data) => {
                 this.clipModelDownloading = true;
-                if (e.data.progress % 10 === 0) {
-                    this.showNotification(`Downloading CLIP model... ${e.data.progress}%`, 'info');
+                if (data.progress % 10 === 0) {
+                    this.showNotification(`Downloading CLIP model... ${data.progress}%`, 'info');
                 }
-                break;
-            default:
-                break;
+            });
+        }
+
+        try {
+            const result = await window.electronAPI.loadClipModel();
+            this.clipModelDownloading = false;
+            if (result.success) {
+                this.clipWorkerReady = true;
+                this.showNotification('CLIP model loaded', 'success');
+            } else {
+                this.clipWorkerReady = false;
+                console.error('CLIP model failed to load:', result.error);
+                this.showNotification('CLIP model unavailable — using basic features only', 'warning');
+            }
+        } catch (err) {
+            this.clipWorkerReady = false;
+            this.clipModelDownloading = false;
+            console.error('CLIP model init error:', err.message);
+            this.showNotification('CLIP model unavailable — using basic features only', 'warning');
         }
     }
 
-    async extractClipEmbedding(filePath, imageData = null) {
-        if (!this.clipWorker || !this.clipWorkerReady || !this.enableClipFeatures) {
+    async extractClipEmbedding(filePath, _imageData = null) {
+        if (!this.clipWorkerReady || !this.enableClipFeatures) {
             return null;
         }
 
@@ -6462,38 +6454,17 @@ class MediaViewer {
             return this.extractClipFromVideo(filePath);
         }
 
-        if (!imageData) {
-            try {
-                imageData = await this.loadMediaAsImageData(filePath);
-            } catch (err) {
-                console.warn('Failed to load image for CLIP:', err.message);
-                return null;
+        try {
+            const result = await window.electronAPI.extractClipEmbedding(filePath);
+            if (result.success) {
+                return new Float32Array(result.embedding);
             }
+            console.warn('CLIP extraction failed:', result.error);
+            return null;
+        } catch (err) {
+            console.warn('CLIP extraction error:', err.message);
+            return null;
         }
-
-        return new Promise((resolve) => {
-            const id = `clip-${Date.now()}-${Math.random()}`;
-            const timeout = setTimeout(() => resolve(null), 30000);
-
-            const handler = (e) => {
-                if (e.data.id !== id) return;
-                clearTimeout(timeout);
-                this.clipWorker.removeEventListener('message', handler);
-
-                if (e.data.type === 'result') {
-                    resolve(new Float32Array(e.data.embedding));
-                } else {
-                    console.warn('CLIP extraction error:', e.data.error);
-                    resolve(null);
-                }
-            };
-
-            this.clipWorker.addEventListener('message', handler);
-            this.clipWorker.postMessage({
-                type: 'extract',
-                data: { id, pixelData: imageData.data, width: imageData.width, height: imageData.height },
-            });
-        });
     }
 
     async extractClipFromVideo(filePath) {
@@ -6505,41 +6476,17 @@ class MediaViewer {
                 return null;
             }
 
-            const frames = [];
-            for (const framePath of result.framePaths) {
-                try {
-                    const imgData = await this.loadMediaAsImageData(framePath);
-                    frames.push({ pixelData: imgData.data, width: imgData.width, height: imgData.height });
-                } catch (err) {
-                    console.warn(`Failed to load keyframe ${framePath}:`, err.message);
-                }
-            }
+            const batchResult = await window.electronAPI.extractClipEmbeddingBatch(result.framePaths);
 
+            // Clean up temp files
             if (result.tempDir) {
                 window.electronAPI.cleanupKeyframes(result.tempDir).catch(() => {});
             }
 
-            if (frames.length === 0) return null;
-
-            return new Promise((resolve) => {
-                const id = `clip-video-${Date.now()}-${Math.random()}`;
-                const timeout = setTimeout(() => resolve(null), 120000);
-
-                const handler = (e) => {
-                    if (e.data.id !== id) return;
-                    clearTimeout(timeout);
-                    this.clipWorker.removeEventListener('message', handler);
-
-                    if (e.data.type === 'batchResult') {
-                        resolve(new Float32Array(e.data.embedding));
-                    } else {
-                        resolve(null);
-                    }
-                };
-
-                this.clipWorker.addEventListener('message', handler);
-                this.clipWorker.postMessage({ type: 'extractBatch', data: { id, frames } });
-            });
+            if (batchResult.success) {
+                return new Float32Array(batchResult.embedding);
+            }
+            return null;
         } catch (err) {
             console.warn('Video CLIP extraction failed:', err.message);
             return null;

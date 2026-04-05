@@ -27,6 +27,63 @@ try {
 
 const execFileAsync = promisify(execFile);
 
+// CLIP model for semantic embedding extraction (lazy-loaded)
+let clipProcessor = null;
+let clipVisionModel = null;
+let clipModelLoading = false;
+let clipModelError = null;
+
+async function loadClipModel(event) {
+    if (clipVisionModel) return { success: true };
+    if (clipModelError) return { success: false, error: clipModelError };
+    if (clipModelLoading) {
+        // Wait for in-progress load
+        return new Promise((resolve) => {
+            const check = setInterval(() => {
+                if (!clipModelLoading) {
+                    clearInterval(check);
+                    resolve(clipVisionModel ? { success: true } : { success: false, error: clipModelError });
+                }
+            }, 200);
+        });
+    }
+
+    clipModelLoading = true;
+    try {
+        const { AutoProcessor, CLIPVisionModelWithProjection } = await import('@huggingface/transformers');
+
+        clipProcessor = await AutoProcessor.from_pretrained('Xenova/clip-vit-base-patch32', {
+            progress_callback: (progress) => {
+                if (progress.status === 'progress' && event) {
+                    event.sender.send('clip-download-progress', {
+                        progress: Math.round(progress.progress || 0),
+                        file: progress.file || '',
+                    });
+                }
+            },
+        });
+
+        clipVisionModel = await CLIPVisionModelWithProjection.from_pretrained('Xenova/clip-vit-base-patch32', {
+            dtype: 'q8',
+            progress_callback: (progress) => {
+                if (progress.status === 'progress' && event) {
+                    event.sender.send('clip-download-progress', {
+                        progress: Math.round(progress.progress || 0),
+                        file: progress.file || '',
+                    });
+                }
+            },
+        });
+
+        clipModelLoading = false;
+        return { success: true };
+    } catch (error) {
+        clipModelLoading = false;
+        clipModelError = error.message;
+        return { success: false, error: error.message };
+    }
+}
+
 let mainWindow;
 
 function createWindow() {
@@ -370,6 +427,109 @@ app.whenReady().then(() => {
         try {
             await fs.rm(tempDir, { recursive: true, force: true });
             return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // CLIP model IPC handlers
+    ipcMain.handle('loadClipModel', async (event) => {
+        return loadClipModel(event);
+    });
+
+    ipcMain.handle('extractClipEmbedding', async (event, imagePath) => {
+        // Load model if needed
+        const loadResult = await loadClipModel(event);
+        if (!loadResult.success) {
+            return { success: false, error: loadResult.error };
+        }
+
+        try {
+            const { RawImage } = await import('@huggingface/transformers');
+
+            // Read image file and create RawImage
+            const image = await RawImage.read(imagePath);
+
+            // Process through CLIP vision encoder
+            const inputs = await clipProcessor(image);
+            const output = await clipVisionModel(inputs);
+
+            // Extract and normalize embedding
+            const embedding = output.image_embeds.data;
+            const dim = 512;
+            const result = new Float32Array(dim);
+
+            let norm = 0;
+            for (let i = 0; i < dim; i++) {
+                norm += embedding[i] * embedding[i];
+            }
+            norm = Math.sqrt(norm);
+            for (let i = 0; i < dim; i++) {
+                result[i] = norm > 0 ? embedding[i] / norm : 0;
+            }
+
+            return { success: true, embedding: Array.from(result) };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('extractClipEmbeddingBatch', async (event, imagePaths) => {
+        // Load model if needed
+        const loadResult = await loadClipModel(event);
+        if (!loadResult.success) {
+            return { success: false, error: loadResult.error };
+        }
+
+        try {
+            const { RawImage } = await import('@huggingface/transformers');
+            const dim = 512;
+            const embeddings = [];
+
+            for (const imagePath of imagePaths) {
+                try {
+                    const image = await RawImage.read(imagePath);
+                    const inputs = await clipProcessor(image);
+                    const output = await clipVisionModel(inputs);
+
+                    const embedding = output.image_embeds.data;
+                    const normalized = new Float32Array(dim);
+                    let normVal = 0;
+                    for (let i = 0; i < dim; i++) {
+                        normVal += embedding[i] * embedding[i];
+                    }
+                    normVal = Math.sqrt(normVal);
+                    for (let i = 0; i < dim; i++) {
+                        normalized[i] = normVal > 0 ? embedding[i] / normVal : 0;
+                    }
+                    embeddings.push(Array.from(normalized));
+                } catch (err) {
+                    console.warn(`CLIP extraction failed for ${imagePath}:`, err.message);
+                }
+            }
+
+            if (embeddings.length === 0) {
+                return { success: false, error: 'No valid embeddings' };
+            }
+
+            // Average embeddings
+            const averaged = new Float32Array(dim);
+            for (const emb of embeddings) {
+                for (let i = 0; i < dim; i++) {
+                    averaged[i] += emb[i];
+                }
+            }
+            let norm = 0;
+            for (let i = 0; i < dim; i++) {
+                averaged[i] /= embeddings.length;
+                norm += averaged[i] * averaged[i];
+            }
+            norm = Math.sqrt(norm);
+            for (let i = 0; i < dim; i++) {
+                averaged[i] = norm > 0 ? averaged[i] / norm : 0;
+            }
+
+            return { success: true, embedding: Array.from(averaged), frameCount: embeddings.length };
         } catch (error) {
             return { success: false, error: error.message };
         }
