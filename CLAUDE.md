@@ -119,7 +119,7 @@ media_viewer/
 **Formatting & Linting**:
 - Prettier: tabWidth=4, useTabs=false, singleQuote, semi, trailingComma=es5, printWidth=120, bracketSpacing=true, arrowParens=always, endOfLine="lf"
 - `.gitattributes`: `* text=auto eol=lf` — enforces LF line endings for all files across platforms
-- ESLint flat config (`eslint.config.mjs`): Ten file-group blocks (1: Node/main, 1b: preload, 2a: renderer module, 2b: renderer script, 2c: fullscreen.js, 3a: workers, 3b: shared libs, 4: unit tests, 5a: e2e CJS helpers, 5b: e2e JS tests); shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn, `_`-prefix escape); `eslint-config-prettier` applied last
+- ESLint flat config (`eslint.config.mjs`): Eleven file-group blocks (1: Node/main, 1b: preload, 2a: renderer module, 2b: renderer script, 2c: fullscreen.js, 3a: workers, 3b: shared libs, 3c: clip-worker, 4: unit tests, 5a: e2e CJS helpers, 5b: e2e JS tests); `clip-worker.js` gets its own block (3c) because it uses dynamic `import()` of ESM packages; shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn, `_`-prefix escape); `eslint-config-prettier` applied last
 - Prettier ignores `docs/`, `*.md`, `package-lock.json`
 
 **Testing (Unit — Vitest)**:
