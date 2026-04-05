@@ -364,10 +364,12 @@ class MediaViewer {
         // ML Prediction state
         this.mlWorker = null;
         this.featureCache = new Map(); // Map<filePath, Float32Array>
+        this.clipCache = new Map(); // Map<filePath, Float32Array(512)>
         this.featureMetadata = new Map(); // Map<filePath, {size: number, mtime: number}>
         this.predictionScores = new Map(); // Map<filePath, number (0-1)>
         this.mlModelState = null; // Persisted model weights
         this.isMlEnabled = localStorage.getItem('mlPredictionEnabled') !== 'false';
+        this.enableClipFeatures = localStorage.getItem('enableClipFeatures') !== 'false';
         this.showPredictionBadges = localStorage.getItem('showPredictionBadges') !== 'false';
         this.isSortedByPrediction = false;
         this.mlStats = null; // Current model statistics
@@ -378,6 +380,11 @@ class MediaViewer {
         this.pendingCompareUpdates = 0; // Counter for expected updateComplete messages (2 for rating, 1 for undo)
         this.pendingCompareTimeout = null; // Fallback timeout ID
         this.previousScores = null; // Snapshot of predictionScores for delta notification
+
+        // CLIP worker state
+        this.clipWorker = null;
+        this.clipWorkerReady = false;
+        this.clipModelDownloading = false;
 
         // Feature extraction worker pool state
         this.featureWorkers = []; // Array of Worker instances
@@ -993,6 +1000,7 @@ class MediaViewer {
 
         this.predictionScores.delete(filePath);
         this.featureCache.delete(filePath);
+        this.clipCache.delete(filePath);
         this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
 
@@ -1146,12 +1154,12 @@ class MediaViewer {
         // Extract ML features BEFORE moving file (while media is still accessible)
         let mlFeatures = null;
         if (this.isMlEnabled && this.mlWorker) {
-            mlFeatures = this.featureCache.get(currentFile.path);
-            if (!mlFeatures && this.currentMedia) {
+            let rawFeatures = this.featureCache.get(currentFile.path);
+            if (!rawFeatures && this.currentMedia) {
                 try {
-                    mlFeatures = await this.extractFeaturesFromDisplayedMedia();
-                    if (mlFeatures) {
-                        this.featureCache.set(currentFile.path, mlFeatures);
+                    rawFeatures = await this.extractFeaturesFromDisplayedMedia();
+                    if (rawFeatures) {
+                        this.featureCache.set(currentFile.path, rawFeatures);
                         const ratingFileInfo = this.mediaFiles.find((f) => f.path === currentFile.path);
                         if (ratingFileInfo) {
                             this.featureMetadata.set(currentFile.path, {
@@ -1164,6 +1172,9 @@ class MediaViewer {
                     console.warn('Could not extract ML features:', err);
                 }
             }
+            // Use combined features (64-dim basic + 512-dim CLIP) for ML pipeline
+            const combined = this.getCombinedFeatures(currentFile.path);
+            mlFeatures = combined || (rawFeatures ? Array.from(rawFeatures) : null);
         }
 
         try {
@@ -1693,6 +1704,16 @@ class MediaViewer {
                 e.target.value = value;
                 this.featureWorkerCount = value;
                 localStorage.setItem('featureWorkerCount', value.toString());
+            });
+        }
+
+        // Settings toggle for CLIP features
+        const clipToggle = document.getElementById('clipFeaturesToggle');
+        if (clipToggle) {
+            clipToggle.checked = this.enableClipFeatures;
+            clipToggle.addEventListener('change', () => {
+                this.enableClipFeatures = clipToggle.checked;
+                localStorage.setItem('enableClipFeatures', String(clipToggle.checked));
             });
         }
 
@@ -3732,6 +3753,12 @@ class MediaViewer {
                 }
             }
 
+            // Use combined features (64-dim basic + 512-dim CLIP) for ML pipeline
+            const leftCombined = this.getCombinedFeatures(leftFile.path);
+            leftFeatures = leftCombined || (leftFeatures ? Array.from(leftFeatures) : null);
+            const rightCombined = this.getCombinedFeatures(rightFile.path);
+            rightFeatures = rightCombined || (rightFeatures ? Array.from(rightFeatures) : null);
+
             // Debug: log feature status
             console.log(
                 '[ML Debug] Rating pair - Left features:',
@@ -5559,7 +5586,7 @@ class MediaViewer {
     }
 
     // Feature cache version - must match FEATURE_VERSION in feature-extractor.js
-    static FEATURE_CACHE_VERSION = 3;
+    static FEATURE_CACHE_VERSION = 4;
 
     async loadFeatureCache() {
         if (!this.baseFolderPath) return 0;
@@ -5615,6 +5642,11 @@ class MediaViewer {
                     const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
                     this.featureCache.set(fullPath, new Float32Array(entry.vector));
                     this.featureMetadata.set(fullPath, { size: entry.size, mtime: entry.mtime });
+
+                    // Load CLIP vector if present
+                    if (entry.clipVector && entry.clipVector.length === 512) {
+                        this.clipCache.set(fullPath, new Float32Array(entry.clipVector));
+                    }
                 }
                 return this.featureCache.size;
             }
@@ -5634,9 +5666,11 @@ class MediaViewer {
             for (const [fullPath, featureArray] of this.featureCache.entries()) {
                 const filename = await window.electronAPI.path.basename(fullPath);
                 const meta = this.featureMetadata.get(fullPath);
+                const clipVector = this.clipCache.get(fullPath);
                 if (meta) {
                     features[filename] = {
                         vector: Array.from(featureArray),
+                        clipVector: clipVector ? Array.from(clipVector) : null,
                         size: meta.size,
                         mtime: meta.mtime,
                     };
@@ -5646,6 +5680,7 @@ class MediaViewer {
                     const fileInfo = this.mediaFiles.find((f) => f.path === fullPath);
                     features[filename] = {
                         vector: Array.from(featureArray),
+                        clipVector: clipVector ? Array.from(clipVector) : null,
                         size: fileInfo?.size || 0,
                         mtime: fileInfo?.mtimeMs || 0,
                     };
@@ -5657,6 +5692,7 @@ class MediaViewer {
                 JSON.stringify({
                     version: MediaViewer.FEATURE_CACHE_VERSION,
                     featureDim: 64,
+                    clipDim: 512,
                     features,
                 })
             );
@@ -5854,7 +5890,11 @@ class MediaViewer {
                 const file = likedFiles[i];
                 try {
                     const features = await this.computeFeatures(file.path);
-                    likedFeatures.push(Array.from(features));
+                    const clipVector = await this.extractClipEmbedding(file.path);
+                    const combined = new Float32Array(576);
+                    combined.set(features, 0);
+                    if (clipVector) combined.set(clipVector, 64);
+                    likedFeatures.push(Array.from(combined));
 
                     if ((i + 1) % 10 === 0) {
                         this.updateProgressNotification(`Processing likes: ${i + 1}/${likedFiles.length}`);
@@ -5869,7 +5909,11 @@ class MediaViewer {
                 const file = dislikedFiles[i];
                 try {
                     const features = await this.computeFeatures(file.path);
-                    dislikedFeatures.push(Array.from(features));
+                    const clipVector = await this.extractClipEmbedding(file.path);
+                    const combined = new Float32Array(576);
+                    combined.set(features, 0);
+                    if (clipVector) combined.set(clipVector, 64);
+                    dislikedFeatures.push(Array.from(combined));
 
                     if ((i + 1) % 10 === 0) {
                         this.updateProgressNotification(`Processing dislikes: ${i + 1}/${dislikedFiles.length}`);
@@ -5921,6 +5965,21 @@ class MediaViewer {
         });
     }
 
+    getCombinedFeatures(filePath) {
+        const features = this.featureCache.get(filePath);
+        if (!features) return null;
+
+        const combined = new Float32Array(576);
+        combined.set(features, 0);
+
+        const clipVector = this.clipCache.get(filePath);
+        if (clipVector) {
+            combined.set(clipVector, 64);
+        }
+
+        return Array.from(combined);
+    }
+
     async requestPredictionScores() {
         if (!this.isMlEnabled || !this.mlWorker) return;
 
@@ -5929,9 +5988,9 @@ class MediaViewer {
         const allFeatures = {};
 
         for (const file of this.mediaFiles) {
-            const features = this.featureCache.get(file.path);
-            if (features) {
-                allFeatures[file.name] = Array.from(features);
+            const combined = this.getCombinedFeatures(file.path);
+            if (combined) {
+                allFeatures[file.name] = combined;
             }
         }
 
@@ -6089,6 +6148,10 @@ class MediaViewer {
             this.initializeMlWorker();
             this.initializeFeaturePool();
 
+            if (this.enableClipFeatures) {
+                this.initClipWorker();
+            }
+
             // Wait for ML worker to be ready
             await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -6130,9 +6193,9 @@ class MediaViewer {
         // Collect all features from cache
         const allFeatures = {};
         for (const file of this.mediaFiles) {
-            const features = this.featureCache.get(file.path);
-            if (features) {
-                allFeatures[file.name] = Array.from(features);
+            const combined = this.getCombinedFeatures(file.path);
+            if (combined) {
+                allFeatures[file.name] = combined;
             }
         }
 
@@ -6162,10 +6225,13 @@ class MediaViewer {
             }
         }
 
+        const combined = this.getCombinedFeatures(filePath);
+        if (!combined) return;
+
         this.mlWorker.postMessage({
             type: 'update',
             data: {
-                features: Array.from(features),
+                features: combined,
                 label: actionType === 'like' ? 1 : 0,
             },
         });
@@ -6340,6 +6406,143 @@ class MediaViewer {
             this.startFeatureCacheAutoSave();
         } catch (err) {
             console.warn('[ML Debug] Failed to initialize feature workers:', err);
+        }
+    }
+
+    // ==================== CLIP WORKER ====================
+
+    initClipWorker() {
+        try {
+            this.clipWorker = new Worker('clip-worker.js', { type: 'module' });
+            this.clipWorker.onmessage = (e) => this.handleClipWorkerMessage(e);
+            this.clipWorker.onerror = (err) => {
+                console.error('CLIP worker error:', err.message);
+                this.clipWorkerReady = false;
+            };
+            this.clipWorker.postMessage({ type: 'loadModel' });
+        } catch (err) {
+            console.warn('Failed to create CLIP worker:', err.message);
+            this.clipWorker = null;
+        }
+    }
+
+    handleClipWorkerMessage(e) {
+        const { type } = e.data;
+        switch (type) {
+            case 'modelReady':
+                this.clipWorkerReady = true;
+                this.clipModelDownloading = false;
+                this.showNotification('CLIP model loaded', 'success');
+                break;
+            case 'modelError':
+                this.clipWorkerReady = false;
+                this.clipModelDownloading = false;
+                console.error('CLIP model failed to load:', e.data.error);
+                this.showNotification('CLIP model unavailable — using basic features only', 'warning');
+                break;
+            case 'downloadProgress':
+                this.clipModelDownloading = true;
+                if (e.data.progress % 10 === 0) {
+                    this.showNotification(`Downloading CLIP model... ${e.data.progress}%`, 'info');
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    async extractClipEmbedding(filePath, imageData = null) {
+        if (!this.clipWorker || !this.clipWorkerReady || !this.enableClipFeatures) {
+            return null;
+        }
+
+        const isVideo = /\.(mp4|webm|mov)$/i.test(filePath);
+
+        if (isVideo) {
+            return this.extractClipFromVideo(filePath);
+        }
+
+        if (!imageData) {
+            try {
+                imageData = await this.loadMediaAsImageData(filePath);
+            } catch (err) {
+                console.warn('Failed to load image for CLIP:', err.message);
+                return null;
+            }
+        }
+
+        return new Promise((resolve) => {
+            const id = `clip-${Date.now()}-${Math.random()}`;
+            const timeout = setTimeout(() => resolve(null), 30000);
+
+            const handler = (e) => {
+                if (e.data.id !== id) return;
+                clearTimeout(timeout);
+                this.clipWorker.removeEventListener('message', handler);
+
+                if (e.data.type === 'result') {
+                    resolve(new Float32Array(e.data.embedding));
+                } else {
+                    console.warn('CLIP extraction error:', e.data.error);
+                    resolve(null);
+                }
+            };
+
+            this.clipWorker.addEventListener('message', handler);
+            this.clipWorker.postMessage({
+                type: 'extract',
+                data: { id, pixelData: imageData.data, width: imageData.width, height: imageData.height },
+            });
+        });
+    }
+
+    async extractClipFromVideo(filePath) {
+        if (!window.electronAPI.extractKeyframes) return null;
+
+        try {
+            const result = await window.electronAPI.extractKeyframes(filePath, 20);
+            if (!result.success || !result.framePaths || result.framePaths.length === 0) {
+                return null;
+            }
+
+            const frames = [];
+            for (const framePath of result.framePaths) {
+                try {
+                    const imgData = await this.loadMediaAsImageData(framePath);
+                    frames.push({ pixelData: imgData.data, width: imgData.width, height: imgData.height });
+                } catch (err) {
+                    console.warn(`Failed to load keyframe ${framePath}:`, err.message);
+                }
+            }
+
+            if (result.tempDir) {
+                window.electronAPI.cleanupKeyframes(result.tempDir).catch(() => {});
+            }
+
+            if (frames.length === 0) return null;
+
+            return new Promise((resolve) => {
+                const id = `clip-video-${Date.now()}-${Math.random()}`;
+                const timeout = setTimeout(() => resolve(null), 120000);
+
+                const handler = (e) => {
+                    if (e.data.id !== id) return;
+                    clearTimeout(timeout);
+                    this.clipWorker.removeEventListener('message', handler);
+
+                    if (e.data.type === 'batchResult') {
+                        resolve(new Float32Array(e.data.embedding));
+                    } else {
+                        resolve(null);
+                    }
+                };
+
+                this.clipWorker.addEventListener('message', handler);
+                this.clipWorker.postMessage({ type: 'extractBatch', data: { id, frames } });
+            });
+        } catch (err) {
+            console.warn('Video CLIP extraction failed:', err.message);
+            return null;
         }
     }
 
@@ -6634,10 +6837,14 @@ class MediaViewer {
         this.extractionCompletionTimes = [];
         const runId = ++this.extractionRunId;
 
-        // Get files that need extraction (not in cache)
+        // Get files that need extraction (not in cache, or missing CLIP)
         const filesToProcess = this.mediaFiles
             .map((file, index) => ({ file, index }))
-            .filter(({ file }) => !this.featureCache.has(file.path));
+            .filter(({ file }) => {
+                const hasFeatures = this.featureCache.has(file.path);
+                const hasClip = !this.enableClipFeatures || this.clipCache.has(file.path);
+                return !hasFeatures || !hasClip;
+            });
 
         if (filesToProcess.length === 0) {
             this.isBackgroundExtracting = false;
@@ -6678,19 +6885,36 @@ class MediaViewer {
                 try {
                     const imageData = await this.loadMediaAsImageData(file.path);
                     const priority = this.calculateFeaturePriority(index);
-                    const promise = this.enqueueFeatureExtraction(file.path, imageData, priority)
+
+                    const featurePromise = this.enqueueFeatureExtraction(file.path, imageData, priority)
                         .then(() => {
                             if (this.extractionRunId !== runId) return;
-                            completedCount++;
-                            this.recordExtractionCompletion(completedCount, totalCount);
                         })
                         .catch((err) => {
                             if (this.extractionRunId !== runId) return;
                             console.warn(`Feature extraction failed for ${file.name}:`, err.message);
-                            completedCount++;
-                            this.recordExtractionCompletion(completedCount, totalCount);
                         });
-                    promises.push(promise);
+
+                    const clipPromise = this.extractClipEmbedding(file.path, imageData)
+                        .then((clipVector) => {
+                            if (this.extractionRunId !== runId) return;
+                            if (clipVector) {
+                                this.clipCache.set(file.path, clipVector);
+                                this.featureCacheDirty = true;
+                            }
+                        })
+                        .catch((err) => {
+                            if (this.extractionRunId !== runId) return;
+                            console.warn(`CLIP extraction failed for ${file.name}:`, err.message);
+                        });
+
+                    const combinedPromise = Promise.all([featurePromise, clipPromise]).then(() => {
+                        if (this.extractionRunId !== runId) return;
+                        completedCount++;
+                        this.recordExtractionCompletion(completedCount, totalCount);
+                    });
+
+                    promises.push(combinedPromise);
                 } catch (err) {
                     console.warn(`Failed to load ${file.name}:`, err.message);
                     completedCount++;

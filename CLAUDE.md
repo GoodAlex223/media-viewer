@@ -65,17 +65,17 @@ media_viewer/
 ├── styles.css           # Application styling, design system
 ├── sorting-worker.js    # Web Worker: sorting algorithms (MST, similarity)
 ├── ml-worker.js         # Web Worker: ML prediction tasks
-├── ml-model.js          # ML model definitions (OnlineLogisticRegression)
+├── ml-model.js          # ML model definitions (OnlineLogisticRegression); v3: 576-dim input (64 hand-crafted + 512 CLIP)
 ├── feature-extractor.js # Image feature extraction (64-dim vectors)
 ├── feature-worker.js    # Web Worker: feature extraction
-├── clip-worker.js       # Web Worker: CLIP semantic embedding extraction (planned — TASK-028)
+├── clip-worker.js       # Web Worker: CLIP semantic embedding extraction (512-dim, Xenova/clip-vit-base-patch32 via @huggingface/transformers)
 ├── fullscreen.js        # FullscreenManager ES module (v2.0 modularization pattern)
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
 ├── tests/               # Unit tests (Vitest) + E2E tests (Playwright)
-│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts, clip-worker (planned)
-│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state, clip-graceful-degradation (planned)
+│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts, clip-worker
+│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state
 │       ├── fixtures/    # Test media (1x1 PNGs, tiny.mp4)
 │       └── helpers/     # electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
@@ -171,7 +171,7 @@ media_viewer/
 **Cache Management**:
 - Centralized cleanup via `removeFileFromList()`: array splice + cache cleanup (predictionScores, featureCache, featureMetadata, perceptualHashes) + currentIndex adjustment
 - Feature cache v3: on-disk `{vector, size, mtime}` per entry; `FEATURE_CACHE_VERSION` 2→3 auto-invalidates; in-memory `featureCache` stores `Float32Array` only
-- Feature cache v4 (TASK-028, planned): adds `clipVector: Float32Array(512) | null`; bump `FEATURE_CACHE_VERSION` 3→4 auto-invalidates v3 caches; files without CLIP yet store `null`, ML model uses zero-padded 512-dim for those
+- Feature cache v4 (TASK-028): adds `clipVector: Float32Array(512) | null`; bump `FEATURE_CACHE_VERSION` 3→4 auto-invalidates v3 caches; files without CLIP yet store `null`, ML model uses zero-padded 512-dim for those
 - `featureMetadata` Map decoupled from `this.mediaFiles` — survives files being rated/moved during extraction
 - Stale-entry pruning on load: absent files skipped, size/mtime mismatch triggers re-extraction
 
@@ -188,7 +188,7 @@ media_viewer/
 - Extraction pause/resume: `signalUserActivity()` on all nav/rating actions → 2s idle timer → `resumeExtraction()` resolves `awaitExtractionGate()` promise
 - Generation counter (`extractionRunId`): async callbacks check for stale run ID and return early
 - ML compare refresh: `pendingCompareRefresh`/`pendingCompareUpdates` defer `showMedia()` until re-scoring completes; 3s fallback timeout; `mediaNavigationInProgress` guard prevents double-fire
-- CLIP extraction (TASK-028, planned): runs as second parallel worker call per file in background loop; `awaitExtractionGate()` and `extractionRunId` apply unchanged; graceful degradation — CLIP unavailable means 64-dim only, no crash; ML model dim: 64→576 (64 hand-crafted + 512 CLIP); `OnlineLogisticRegression` auto-resets on dim mismatch via `fromJSON` version/dim check
+- CLIP extraction (TASK-028): `clip-worker.js` Web Worker (module type) runs `Xenova/clip-vit-base-patch32` via `@huggingface/transformers`; produces 512-dim unit-normalized `Float32Array`; `averageEmbeddings()` averages + normalizes multiple frame embeddings; graceful degradation — CLIP unavailable means 64-dim only, no crash; ML model dim: 64→576 (64 hand-crafted + 512 CLIP); `OnlineLogisticRegression` auto-resets on dim mismatch via `fromJSON` version/dim check (version now 3)
 
 **Compare Mode Validation**:
 - `showCompareMedia()` validates files via IPC `checkFileExists` before rendering (parallel Promise.all)
