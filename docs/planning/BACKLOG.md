@@ -11,6 +11,17 @@ Ideas and tasks not yet prioritized for active development.
 
 ---
 
+## From TASK-028 (CLIP Semantic Features)
+
+### [2026-04-05] From: TASK-028 implementation + manual testing
+**Origin**: Architecture decisions and performance observations during 30K-file extraction
+
+- [ ] **ML model not retrained when like/dislike folders change** — Bug: `trainFromHistoricalRatings()` is skipped when `mlStats.isReady` is already true from a previous folder's training; changing like/dislike folders should reset the model and retrain on new data; fix: detect folder path changes (compare stored `customLikeFolder`/`customDislikeFolder` against model's training source) and force retrain
+- [ ] **Unload CLIP model after extraction completes** — CLIP ONNX model consumes ~200-400 MB in main process; stays loaded indefinitely after extraction finishes; add logic to unload (`clipProcessor = null; clipVisionModel = null`) after background extraction completes + force GC; re-load lazily if user opens new folder
+- [ ] **GPU acceleration for CLIP inference (DirectML/CUDA)** — Current CPU inference ~100-200ms/image (~8h for 30K files); DirectML (Windows, any GPU) could reduce to ~10-30ms/image; CUDA (Linux, NVIDIA) ~5-15ms/image; implementation: pass `{ device: 'gpu' }` to `from_pretrained()` in main.js, fallback to CPU if unavailable; add settings toggle for GPU preference
+
+---
+
 ## From TASK-027 (Fix Undo Empty Folder)
 
 ### [2026-04-03] From: PR #25 code review

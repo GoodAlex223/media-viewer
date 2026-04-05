@@ -670,6 +670,7 @@ class MediaViewer {
                         likeFolderInput.value = folder;
                     }
                     this.updateRatingButtonsState();
+                    this.resetMlModel();
                 }
             });
         }
@@ -685,6 +686,7 @@ class MediaViewer {
                         dislikeFolderInput.value = folder;
                     }
                     this.updateRatingButtonsState();
+                    this.resetMlModel();
                 }
             });
         }
@@ -698,6 +700,7 @@ class MediaViewer {
                     likeFolderInput.value = '';
                 }
                 this.updateRatingButtonsState();
+                this.resetMlModel();
             });
         }
 
@@ -710,6 +713,7 @@ class MediaViewer {
                     dislikeFolderInput.value = '';
                 }
                 this.updateRatingButtonsState();
+                this.resetMlModel();
             });
         }
 
@@ -5582,6 +5586,16 @@ class MediaViewer {
         } catch (error) {
             console.error('Failed to save ML model:', error);
         }
+    }
+
+    resetMlModel() {
+        this.mlModelState = null;
+        this.mlStats = null;
+        this.predictionScores = new Map();
+        if (this.mlWorker) {
+            this.mlWorker.postMessage({ type: 'reset' });
+        }
+        this.updateSortPredictionButton();
     }
 
     // Feature cache version - must match FEATURE_VERSION in feature-extractor.js
