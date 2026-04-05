@@ -68,13 +68,14 @@ media_viewer/
 ├── ml-model.js          # ML model definitions (OnlineLogisticRegression)
 ├── feature-extractor.js # Image feature extraction (64-dim vectors)
 ├── feature-worker.js    # Web Worker: feature extraction
+├── clip-worker.js       # Web Worker: CLIP semantic embedding extraction (planned — TASK-028)
 ├── fullscreen.js        # FullscreenManager ES module (v2.0 modularization pattern)
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
 ├── tests/               # Unit tests (Vitest) + E2E tests (Playwright)
-│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts
-│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state
+│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts, clip-worker (planned)
+│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state, clip-graceful-degradation (planned)
 │       ├── fixtures/    # Test media (1x1 PNGs, tiny.mp4)
 │       └── helpers/     # electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
@@ -110,6 +111,7 @@ media_viewer/
 - CommonJS `require()` in main process and workers
 - Browser globals in renderer (no module bundler)
 - ES module `import` in media-viewer.js for extracted modules (e.g., `import { FullscreenManager } from './fullscreen.js'`)
+- Module worker: `new Worker('clip-worker.js', { type: 'module' })` — required for workers that use dynamic `import()` of ESM packages (e.g., `@huggingface/transformers`); supported in Electron 30+ (Chromium 124+)
 
 **Unused variables**:
 - Prefix with `_` (e.g., `_unused`, `_err`) to satisfy ESLint `no-unused-vars` rule (`varsIgnorePattern: '^_'`, `argsIgnorePattern: '^_'`, `caughtErrorsIgnorePattern: '^_'`)
@@ -169,6 +171,7 @@ media_viewer/
 **Cache Management**:
 - Centralized cleanup via `removeFileFromList()`: array splice + cache cleanup (predictionScores, featureCache, featureMetadata, perceptualHashes) + currentIndex adjustment
 - Feature cache v3: on-disk `{vector, size, mtime}` per entry; `FEATURE_CACHE_VERSION` 2→3 auto-invalidates; in-memory `featureCache` stores `Float32Array` only
+- Feature cache v4 (TASK-028, planned): adds `clipVector: Float32Array(512) | null`; bump `FEATURE_CACHE_VERSION` 3→4 auto-invalidates v3 caches; files without CLIP yet store `null`, ML model uses zero-padded 512-dim for those
 - `featureMetadata` Map decoupled from `this.mediaFiles` — survives files being rated/moved during extraction
 - Stale-entry pruning on load: absent files skipped, size/mtime mismatch triggers re-extraction
 
@@ -185,10 +188,17 @@ media_viewer/
 - Extraction pause/resume: `signalUserActivity()` on all nav/rating actions → 2s idle timer → `resumeExtraction()` resolves `awaitExtractionGate()` promise
 - Generation counter (`extractionRunId`): async callbacks check for stale run ID and return early
 - ML compare refresh: `pendingCompareRefresh`/`pendingCompareUpdates` defer `showMedia()` until re-scoring completes; 3s fallback timeout; `mediaNavigationInProgress` guard prevents double-fire
+- CLIP extraction (TASK-028, planned): runs as second parallel worker call per file in background loop; `awaitExtractionGate()` and `extractionRunId` apply unchanged; graceful degradation — CLIP unavailable means 64-dim only, no crash; ML model dim: 64→576 (64 hand-crafted + 512 CLIP); `OnlineLogisticRegression` auto-resets on dim mismatch via `fromJSON` version/dim check
 
 **Compare Mode Validation**:
 - `showCompareMedia()` validates files via IPC `checkFileExists` before rendering (parallel Promise.all)
 - Bounded retry (max 10); graceful fallback to single mode via `switchToSingleModeUI()`
+
+**Key Dependencies** (beyond Electron/Vitest/Playwright):
+- `ffprobe-static`: bundled ffprobe binary for video metadata extraction (main process)
+- `ffmpeg-static`: bundled ffmpeg binary for video keyframe extraction (main process, added TASK-028)
+- `@huggingface/transformers`: CLIP model inference via ONNX Runtime Web (clip-worker.js, added TASK-028)
+- `@vladmandic/face-api`: face detection in renderer
 
 **Security**: Context isolation enabled, sandbox disabled (required for file ops), IPC bridge via preload.js
 
@@ -216,10 +226,10 @@ media_viewer/
 Completed tasks: TASK-012 through TASK-027 (TASK-027: fix undo shortcut in empty folder state — keydown guard exception + `showEmptyStateWithUndo()` UI + E2E coverage). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **In progress:**
-- (none)
+- TASK-028: Add CLIP semantic features to ML prediction pipeline (spec: `docs/superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md`; implementation plan: `docs/superpowers/plans/2026-04-05-clip-semantic-features.md`)
 
 **Next planned:**
-- TASK-028: Research open source media content understanding tools (🟡 Normal, research only)
+- (none)
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs

@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Video metadata extraction
     probeVideo: (videoPath) => ipcRenderer.invoke('probe-video', videoPath),
 
+    // Video keyframe extraction
+    extractKeyframes: (videoPath, maxFrames) => ipcRenderer.invoke('extractKeyframes', videoPath, maxFrames),
+    cleanupKeyframes: (tempDir) => ipcRenderer.invoke('cleanupKeyframes', tempDir),
+
     // Logging (fire-and-forget)
     logError: (data) => ipcRenderer.send('log-renderer-error', data),
 

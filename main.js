@@ -15,6 +15,16 @@ try {
     ffprobePath = null;
 }
 
+// ffmpeg for video keyframe extraction
+let ffmpegPath;
+try {
+    ffmpegPath = require('ffmpeg-static');
+    console.log('ffmpeg loaded from:', ffmpegPath);
+} catch (e) {
+    console.warn('ffmpeg-static not available:', e.message);
+    ffmpegPath = null;
+}
+
 const execFileAsync = promisify(execFile);
 
 let mainWindow;
@@ -264,6 +274,103 @@ app.whenReady().then(() => {
             };
         } catch (error) {
             console.error('Video probe error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('extractKeyframes', async (_event, videoPath, maxFrames = 20) => {
+        if (!ffmpegPath) {
+            return { success: false, error: 'ffmpeg not available' };
+        }
+
+        const os = require('os');
+        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mv-keyframes-'));
+
+        try {
+            // Scene-change detection: extract frames where scene score > 0.3
+            const outputPattern = path.join(tempDir, 'frame-%03d.png');
+            await execFileAsync(
+                ffmpegPath,
+                [
+                    '-i',
+                    videoPath,
+                    '-vf',
+                    `select='gt(scene,0.3)',setpts=N/FRAME_RATE/TB`,
+                    '-frames:v',
+                    String(maxFrames),
+                    '-vsync',
+                    'vfr',
+                    outputPattern,
+                ],
+                { timeout: 60000 }
+            );
+
+            // Read extracted frames
+            const files = await fs.readdir(tempDir);
+            const framePaths = files
+                .filter((f) => f.endsWith('.png'))
+                .sort()
+                .map((f) => path.join(tempDir, f));
+
+            // Fallback: if scene detection yielded < 3 frames, sample uniformly
+            if (framePaths.length < 3) {
+                // Clean up scene-detected frames
+                for (const fp of framePaths) {
+                    await fs.unlink(fp).catch(() => {});
+                }
+
+                // Get duration for uniform sampling
+                let duration = 10; // default fallback
+                if (ffprobePath) {
+                    try {
+                        const probeResult = await execFileAsync(ffprobePath, [
+                            '-v',
+                            'error',
+                            '-show_entries',
+                            'format=duration',
+                            '-of',
+                            'default=noprint_wrappers=1:nokey=1',
+                            videoPath,
+                        ]);
+                        duration = parseFloat(probeResult.stdout.trim()) || 10;
+                    } catch (_e) {
+                        // Use default duration
+                    }
+                }
+
+                // Extract first, middle, last frames
+                const timestamps = [0, duration / 2, Math.max(0, duration - 0.1)];
+                const fallbackPaths = [];
+                for (let idx = 0; idx < timestamps.length; idx++) {
+                    const outPath = path.join(tempDir, `fallback-${idx}.png`);
+                    try {
+                        await execFileAsync(
+                            ffmpegPath,
+                            ['-ss', String(timestamps[idx]), '-i', videoPath, '-frames:v', '1', '-q:v', '2', outPath],
+                            { timeout: 15000 }
+                        );
+                        fallbackPaths.push(outPath);
+                    } catch (_e) {
+                        // Skip failed frame
+                    }
+                }
+
+                return { success: true, framePaths: fallbackPaths, tempDir };
+            }
+
+            return { success: true, framePaths, tempDir };
+        } catch (error) {
+            // Clean up temp dir on error
+            await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('cleanupKeyframes', async (_event, tempDir) => {
+        try {
+            await fs.rm(tempDir, { recursive: true, force: true });
+            return { success: true };
+        } catch (error) {
             return { success: false, error: error.message };
         }
     });
