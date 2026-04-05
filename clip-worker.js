@@ -32,7 +32,8 @@ async function loadModel() {
     isModelLoading = true;
 
     try {
-        const { AutoProcessor, CLIPVisionModelWithProjection } = await import('@huggingface/transformers');
+        const { AutoProcessor, CLIPVisionModelWithProjection } =
+            await import('./node_modules/@huggingface/transformers/dist/transformers.web.js');
 
         processor = await AutoProcessor.from_pretrained(CLIP_MODEL_ID, {
             progress_callback: (progress) => {
@@ -83,7 +84,7 @@ async function extractEmbedding(pixelData, width, height) {
         if (!loaded) return null;
     }
 
-    const { RawImage } = await import('@huggingface/transformers');
+    const { RawImage } = await import('./node_modules/@huggingface/transformers/dist/transformers.web.js');
 
     // Create RawImage from pixel data (RGBA)
     const image = new RawImage(pixelData, width, height, 4);
