@@ -126,7 +126,7 @@ media_viewer/
 - Config: `vitest.config.js`; test files: `tests/**/*.test.js` excluding `tests/e2e/**`
 - CJS modules in ESM tests: `createRequire(import.meta.url)` then `require('../module')`
 - Web Worker modules: stub `globalThis.self = { onmessage: null, postMessage: () => {} }` before `require()`
-- MediaViewer method testing: `extractMethod(name)` reads source, extracts body with brace-counting, returns `new Function`; call via `.call(mockCtx, ...args)`
+- MediaViewer method testing: `extractMethod(name)` reads source, extracts body with brace-counting, returns `new Function`; call via `.call(mockCtx, ...args)`; mock context for `removeFileFromList` must include `clipCache: new Map()` (method calls `this.clipCache.delete()`)
 - Algorithm replication pattern: for async methods with heavy DOM dependencies, replicate pure algorithm logic as standalone test helper (see ml-pair-selection.test.js)
 - Time-dependent tests: `vi.useFakeTimers()` + `vi.setSystemTime()`; restore in `afterEach`
 - Browser global mocking: patch `globalThis.localStorage` in `beforeEach`/`afterEach` (save/restore `origLocalStorage`) for methods that call global `localStorage` directly (e.g., shortcut methods)
@@ -158,7 +158,7 @@ media_viewer/
 
 **State Management**:
 - Class-based state in MediaViewer; localStorage for user preferences
-- Settings panel (F1) with number inputs/checkboxes wired to localStorage; constructor validates/clamps saved values
+- Settings panel (F1) with number inputs/checkboxes wired to localStorage; constructor validates/clamps saved values; `enableClipFeatures` key (default true) toggles CLIP semantic embedding extraction, wired to `#clipFeaturesToggle` checkbox (~87 MB model download on first use)
 - Empty state: `showEmptyStateWithUndo()` vs `showDropZone()` based on `moveHistory.length`
 - Empty state keydown guard: when `mediaFiles.length === 0`, keydown handler blocks all input EXCEPT undo — undo passes through when `moveHistory.length > 0` (TASK-027 fix)
 - Compare-pair undo: history entries tagged `compareMode: true`; `handleCancel()` detects paired entries and restores both files in one undo
@@ -169,9 +169,9 @@ media_viewer/
 - Reset to 0: Folder loads, sort operations, mode switches
 
 **Cache Management**:
-- Centralized cleanup via `removeFileFromList()`: array splice + cache cleanup (predictionScores, featureCache, featureMetadata, perceptualHashes) + currentIndex adjustment
-- Feature cache v3: on-disk `{vector, size, mtime}` per entry; `FEATURE_CACHE_VERSION` 2→3 auto-invalidates; in-memory `featureCache` stores `Float32Array` only
-- Feature cache v4 (TASK-028): adds `clipVector: Float32Array(512) | null`; bump `FEATURE_CACHE_VERSION` 3→4 auto-invalidates v3 caches; files without CLIP yet store `null`, ML model uses zero-padded 512-dim for those
+- Centralized cleanup via `removeFileFromList()`: array splice + cache cleanup (predictionScores, featureCache, clipCache, featureMetadata, perceptualHashes) + currentIndex adjustment
+- Feature cache v4: on-disk `{vector, size, mtime, clipVector?}` per entry; `FEATURE_CACHE_VERSION` 3→4 auto-invalidates v3 caches; in-memory `featureCache` stores `Float32Array(64)` only; `clipCache` stores `Float32Array(512)` separately
+- `getCombinedFeatures(filePath)` merges `featureCache` (64-dim) + `clipCache` (512-dim) → 576-dim `Float32Array`; used by ML pipeline and `requestPredictionScores()`
 - `featureMetadata` Map decoupled from `this.mediaFiles` — survives files being rated/moved during extraction
 - Stale-entry pruning on load: absent files skipped, size/mtime mismatch triggers re-extraction
 
@@ -226,7 +226,7 @@ media_viewer/
 Completed tasks: TASK-012 through TASK-027 (TASK-027: fix undo shortcut in empty folder state — keydown guard exception + `showEmptyStateWithUndo()` UI + E2E coverage). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **In progress:**
-- TASK-028: Add CLIP semantic features to ML prediction pipeline (spec: `docs/superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md`; implementation plan: `docs/superpowers/plans/2026-04-05-clip-semantic-features.md`)
+- TASK-028: Add CLIP semantic features to ML prediction pipeline — cache/extraction/ML integration committed (6b90226); spec: `docs/superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md`; plan: `docs/superpowers/plans/2026-04-05-clip-semantic-features.md`
 
 **Next planned:**
 - (none)

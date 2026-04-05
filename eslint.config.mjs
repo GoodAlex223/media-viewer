@@ -148,6 +148,23 @@ export default [
         },
     },
 
+    // 3c. CLIP Worker (module worker — dynamic import + conditional CJS exports for testing)
+    {
+        files: ['clip-worker.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'script',
+            globals: {
+                ...globals.worker,
+                module: 'readonly',
+            },
+        },
+        rules: {
+            ...sharedRules,
+            'no-undef': 'error',
+        },
+    },
+
     // 3b. Shared libraries loaded via importScripts and browser <script> (have conditional CJS export pattern)
     {
         files: ['feature-extractor.js', 'ml-model.js'],
