@@ -1717,6 +1717,7 @@ class MediaViewer {
             clipToggle.addEventListener('change', () => {
                 this.enableClipFeatures = clipToggle.checked;
                 localStorage.setItem('enableClipFeatures', String(clipToggle.checked));
+                this.resetMlModel();
             });
         }
 
@@ -5360,6 +5361,12 @@ class MediaViewer {
                 console.log('[ML Debug] ML Model initialized:', message.stats);
                 this.mlStats = message.stats;
                 this.updateSortPredictionButton();
+                // If worker reset the model (version/dim mismatch), clear stale state
+                if (message.modelWasReset) {
+                    console.warn('ML model was reset (version/dim mismatch) — clearing stale cache');
+                    this.mlModelState = null;
+                    this.predictionScores = new Map();
+                }
                 // If model was restored with samples, request scores
                 if (message.stats?.isReady && this.mediaFiles.length > 0) {
                     this.requestPredictionScores();

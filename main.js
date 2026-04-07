@@ -54,7 +54,7 @@ async function loadClipModel(event) {
 
         clipProcessor = await AutoProcessor.from_pretrained('Xenova/clip-vit-base-patch32', {
             progress_callback: (progress) => {
-                if (progress.status === 'progress' && event) {
+                if (progress.status === 'progress' && event && !event.sender.isDestroyed()) {
                     event.sender.send('clip-download-progress', {
                         progress: Math.round(progress.progress || 0),
                         file: progress.file || '',
@@ -66,7 +66,7 @@ async function loadClipModel(event) {
         clipVisionModel = await CLIPVisionModelWithProjection.from_pretrained('Xenova/clip-vit-base-patch32', {
             dtype: 'q8',
             progress_callback: (progress) => {
-                if (progress.status === 'progress' && event) {
+                if (progress.status === 'progress' && event && !event.sender.isDestroyed()) {
                     event.sender.send('clip-download-progress', {
                         progress: Math.round(progress.progress || 0),
                         file: progress.file || '',
