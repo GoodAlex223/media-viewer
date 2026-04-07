@@ -224,10 +224,10 @@ media_viewer/
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Completed tasks: TASK-012 through TASK-027 (TASK-027: fix undo shortcut in empty folder state — keydown guard exception + `showEmptyStateWithUndo()` UI + E2E coverage). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+Completed tasks: TASK-012 through TASK-028 (TASK-028: CLIP semantic features for ML prediction — 512-dim CLIP + 64-dim hand-crafted = 576-dim total; CLIP in main process IPC; video via ffmpeg keyframes; ML model reset on folder change). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **In progress:**
-- TASK-028: Add CLIP semantic features to ML prediction pipeline — cache/extraction/ML integration (6b90226); CLIP moved from clip-worker.js Web Worker to main process IPC (d21e213, fix: npm packages can't resolve in Electron Web Workers); ML model now resets when like/dislike folders change via `resetMlModel()` (f4772a9); spec: `docs/superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md`; plan: `docs/superpowers/plans/2026-04-05-clip-semantic-features.md`
+- (none)
 
 **Next planned:**
 - (none)
