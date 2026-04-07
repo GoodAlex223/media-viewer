@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-04-03 <!-- TASK-027 -->
+**Last Updated**: 2026-04-07 <!-- TASK-028 -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -11,6 +11,27 @@ Completed tasks with implementation details and learnings.
 ---
 
 <!-- Organize by month, newest first. -->
+
+## 2026-04 (April)
+
+### [2026-04-07] CLIP semantic features for ML prediction (TASK-028)
+
+**Spec**: [docs/superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md](../../superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md)
+**Plan**: [docs/archive/plans/2026-04-05-task-028-clip-semantic-features.md](../../archive/plans/2026-04-05-task-028-clip-semantic-features.md)
+**Summary**: Added CLIP ViT-B/32 (512-dim) semantic embeddings to ML prediction pipeline, concatenated with existing 64-dim hand-crafted features (576-dim total). CLIP inference runs in main process via IPC (npm packages can't resolve in Electron Web Workers). Video support via ffmpeg scene-change keyframe extraction + averaged embeddings. Also fixed pre-existing bug where ML model wasn't retrained when like/dislike folders change.
+**Key Changes**:
+- `main.js` — ffmpeg-static require, keyframe extraction IPC (`extractKeyframes`, `cleanupKeyframes`), CLIP model loading/inference IPC (`loadClipModel`, `extractClipEmbedding`, `extractClipEmbeddingBatch`)
+- `preload.js` — IPC bridge for all new handlers + `onClipDownloadProgress` listener
+- `media-viewer.js` — Cache v4 format (`clipVector`), `clipCache` Map, `initClipModel()`, `extractClipEmbedding()`, `extractClipFromVideo()`, `getCombinedFeatures()` (64+512=576-dim), `resetMlModel()` on folder changes, settings toggle `enableClipFeatures`
+- `clip-worker.js` — CLIP embedding helpers (`averageEmbeddings`, constants); no longer used as Web Worker at runtime (CLIP moved to main process IPC), kept for unit tests
+- `ml-model.js` — `DEFAULT_FEATURE_DIM` 64→576, `ML_MODEL_VERSION` 2→3
+- `index.html` — CLIP features toggle in settings panel
+- `eslint.config.mjs` — Block 3c for clip-worker.js
+- `tests/clip-worker.test.js` — 8 unit tests for averageEmbeddings
+- `tests/e2e/clip-graceful-degradation.test.js` — 2 E2E tests for disabled/default CLIP behavior
+**Commits**: 11 commits (7ad4dcb..f4772a9)
+
+---
 
 ## 2026-03 (March)
 

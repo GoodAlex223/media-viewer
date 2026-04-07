@@ -66,7 +66,7 @@ async function loadModel() {
     } catch (error) {
         isModelLoading = false;
         modelLoadError = error.message;
-        self.postMessage({ type: 'modelError', error: error.message });
+        self.postMessage({ type: 'modelError', error: `${error.message}\n${error.stack}` });
         return false;
     }
 }

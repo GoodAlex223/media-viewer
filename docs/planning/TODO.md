@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-04-03 <!-- TASK-027 completed -->
+**Last Updated**: 2026-04-07 <!-- TASK-028 completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -60,32 +60,7 @@ Active tasks and backlog.
 
 <!-- TASK-027 completed 2026-04-03, moved to DONE.md -->
 
----
-
-### TASK-028 — 🔍 Research: open source media content understanding tools 🟡
-**Priority**: 🟡 Normal — Research task
-**Effort**: Low (research only)
-**Origin**: Manual testing 2026-03-19
-
-**Description**: Investigate whether open source tools exist for understanding what is depicted in media (photos, videos). Evaluate if these could improve ML prediction quality.
-
-**Reported Issue** (original Russian preserved):
-> Ответить на вопрос: Есть ли в опен сорсе инструменты для определения что изображено, что происходит в медиа (фото, видео и др)? Можно ли это использовать при оценке вероятности того или иного медиа?
-
-**Investigation Areas**:
-- Image classification models (CLIP, ViT, ResNet) — can run locally?
-- Video understanding (scene classification, action recognition)
-- Electron/Node.js compatibility (ONNX Runtime, TensorFlow.js)
-- Integration with existing 64-dim feature vector pipeline
-- Performance: can these run on consumer hardware without GPU?
-- Privacy: all processing must be local (no cloud APIs)
-
-**Acceptance Criteria**:
-- [ ] Survey of available open source tools with pros/cons
-- [ ] Feasibility assessment for Electron desktop app integration
-- [ ] Performance estimates for typical media collections
-- [ ] Recommendation: worth pursuing or not, and why
-- [ ] Document findings in docs/planning/ for future reference
+<!-- TASK-028 completed 2026-04-07, moved to DONE.md -->
 
 ---
 

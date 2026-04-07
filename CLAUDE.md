@@ -68,24 +68,24 @@ media_viewer/
 ├── ml-model.js          # ML model definitions (OnlineLogisticRegression); v3: 576-dim input (64 hand-crafted + 512 CLIP)
 ├── feature-extractor.js # Image feature extraction (64-dim vectors)
 ├── feature-worker.js    # Web Worker: feature extraction
-├── clip-worker.js       # Web Worker: CLIP semantic embedding extraction (512-dim, Xenova/clip-vit-base-patch32 via @huggingface/transformers)
+├── clip-worker.js       # CLIP helper module (averageEmbeddings, CLIP_EMBEDDING_DIM exports); no longer spawned as a Worker — CLIP inference moved to main process IPC (d21e213)
 ├── fullscreen.js        # FullscreenManager ES module (v2.0 modularization pattern)
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
 ├── tests/               # Unit tests (Vitest) + E2E tests (Playwright)
 │   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts, clip-worker
-│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state
+│   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state, clip-graceful-degradation
 │       ├── fixtures/    # Test media (1x1 PNGs, tiny.mp4)
 │       └── helpers/     # electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
 ```
 
 **Data Flow**:
-1. Main process handles file system operations (read, move, copy)
-2. Preload exposes secure IPC bridge to renderer
-3. Renderer (media-viewer.js) manages UI state and user interactions
-4. CPU-intensive tasks delegated to Web Workers (sorting, ML, feature extraction)
+1. Main process handles file system operations (read, move, copy) and CLIP model inference (`loadClipModel`, `extractClipEmbedding`, `extractClipEmbeddingBatch` IPC handlers)
+2. Preload exposes secure IPC bridge to renderer (including CLIP IPC + `onClipDownloadProgress` listener)
+3. Renderer (media-viewer.js) manages UI state and user interactions; calls CLIP via `window.electronAPI` (not a Worker)
+4. CPU-intensive tasks delegated to Web Workers (sorting, ML, feature extraction); CLIP is main-process IPC (not a Worker — npm packages can't resolve in Electron Web Workers)
 
 <!-- END AUTO-MANAGED -->
 
@@ -111,7 +111,7 @@ media_viewer/
 - CommonJS `require()` in main process and workers
 - Browser globals in renderer (no module bundler)
 - ES module `import` in media-viewer.js for extracted modules (e.g., `import { FullscreenManager } from './fullscreen.js'`)
-- Module worker: `new Worker('clip-worker.js', { type: 'module' })` — required for workers that use dynamic `import()` of ESM packages (e.g., `@huggingface/transformers`); supported in Electron 30+ (Chromium 124+)
+- Module worker: `new Worker('clip-worker.js', { type: 'module' })` pattern exists but is NOT used for CLIP inference — `@huggingface/transformers` cannot resolve in Electron Web Workers (npm package resolution unavailable); CLIP moved to main process dynamic `import('@huggingface/transformers')` via IPC
 
 **Unused variables**:
 - Prefix with `_` (e.g., `_unused`, `_err`) to satisfy ESLint `no-unused-vars` rule (`varsIgnorePattern: '^_'`, `argsIgnorePattern: '^_'`, `caughtErrorsIgnorePattern: '^_'`)
@@ -162,6 +162,7 @@ media_viewer/
 - Empty state: `showEmptyStateWithUndo()` vs `showDropZone()` based on `moveHistory.length`
 - Empty state keydown guard: when `mediaFiles.length === 0`, keydown handler blocks all input EXCEPT undo — undo passes through when `moveHistory.length > 0` (TASK-027 fix)
 - Compare-pair undo: history entries tagged `compareMode: true`; `handleCancel()` detects paired entries and restores both files in one undo
+- ML model reset on folder change: `resetMlModel()` nulls `mlModelState`/`mlStats`, resets `predictionScores` Map, posts `{ type: 'reset' }` to mlWorker, calls `updateSortPredictionButton()`; called on like/dislike folder select or clear so stale training doesn't persist across folder configs (f4772a9)
 
 **Index Management**:
 - Wrap-to-start: `moveCurrentFile()` cycles to index 0 when rating last file
@@ -188,7 +189,7 @@ media_viewer/
 - Extraction pause/resume: `signalUserActivity()` on all nav/rating actions → 2s idle timer → `resumeExtraction()` resolves `awaitExtractionGate()` promise
 - Generation counter (`extractionRunId`): async callbacks check for stale run ID and return early
 - ML compare refresh: `pendingCompareRefresh`/`pendingCompareUpdates` defer `showMedia()` until re-scoring completes; 3s fallback timeout; `mediaNavigationInProgress` guard prevents double-fire
-- CLIP extraction (TASK-028): `clip-worker.js` Web Worker (module type) runs `Xenova/clip-vit-base-patch32` via `@huggingface/transformers`; produces 512-dim unit-normalized `Float32Array`; `averageEmbeddings()` averages + normalizes multiple frame embeddings; graceful degradation — CLIP unavailable means 64-dim only, no crash; ML model dim: 64→576 (64 hand-crafted + 512 CLIP); `OnlineLogisticRegression` auto-resets on dim mismatch via `fromJSON` version/dim check (version now 3)
+- CLIP extraction (TASK-028, d21e213 arch fix): `@huggingface/transformers` runs in **main process** (not a Worker — npm packages can't resolve in Electron Web Workers); IPC chain: `initClipModel()` → `window.electronAPI.loadClipModel()` → main `loadClipModel(event)` (lazy, concurrent-safe, emits `clip-download-progress`); images: `extractClipEmbedding(filePath)` → `extractClipEmbedding` IPC → `RawImage.read` + `CLIPVisionModelWithProjection`; videos: `extractClipFromVideo()` → `extractKeyframes` IPC (ffmpeg scene-detect) → `extractClipEmbeddingBatch` IPC (average+normalize); produces 512-dim unit-normalized `Float32Array`; graceful degradation — CLIP unavailable means 64-dim only, no crash; ML model dim: 64→576 (64 hand-crafted + 512 CLIP); `OnlineLogisticRegression` auto-resets on dim mismatch via `fromJSON` version/dim check (version now 3); E2E coverage: `clip-graceful-degradation.test.js`
 
 **Compare Mode Validation**:
 - `showCompareMedia()` validates files via IPC `checkFileExists` before rendering (parallel Promise.all)
@@ -197,7 +198,7 @@ media_viewer/
 **Key Dependencies** (beyond Electron/Vitest/Playwright):
 - `ffprobe-static`: bundled ffprobe binary for video metadata extraction (main process)
 - `ffmpeg-static`: bundled ffmpeg binary for video keyframe extraction (main process, added TASK-028)
-- `@huggingface/transformers`: CLIP model inference via ONNX Runtime Web (clip-worker.js, added TASK-028)
+- `@huggingface/transformers`: CLIP model inference via ONNX Runtime Web (main process IPC, added TASK-028; moved from clip-worker.js in d21e213)
 - `@vladmandic/face-api`: face detection in renderer
 
 **Security**: Context isolation enabled, sandbox disabled (required for file ops), IPC bridge via preload.js
@@ -226,7 +227,7 @@ media_viewer/
 Completed tasks: TASK-012 through TASK-027 (TASK-027: fix undo shortcut in empty folder state — keydown guard exception + `showEmptyStateWithUndo()` UI + E2E coverage). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **In progress:**
-- TASK-028: Add CLIP semantic features to ML prediction pipeline — cache/extraction/ML integration committed (6b90226); spec: `docs/superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md`; plan: `docs/superpowers/plans/2026-04-05-clip-semantic-features.md`
+- TASK-028: Add CLIP semantic features to ML prediction pipeline — cache/extraction/ML integration (6b90226); CLIP moved from clip-worker.js Web Worker to main process IPC (d21e213, fix: npm packages can't resolve in Electron Web Workers); ML model now resets when like/dislike folders change via `resetMlModel()` (f4772a9); spec: `docs/superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md`; plan: `docs/superpowers/plans/2026-04-05-clip-semantic-features.md`
 
 **Next planned:**
 - (none)
@@ -239,6 +240,7 @@ Completed tasks: TASK-012 through TASK-027 (TASK-027: fix undo shortcut in empty
 - Feature cache: `loadFeatureCache()` must be called unconditionally before `startBackgroundFeatureExtraction()` — lazy-init guard previously caused cache to not reload on folder switch
 - v2.0 modularization pattern: stateful manager class + constructor-injected callbacks (see FullscreenManager); planned: ZoomManager, CompareManager, SortingManager, MLManager
 - Shortcut localStorage: `loadShortcuts()`, `saveShortcut()`, `resetShortcuts()` use global `localStorage` directly — NOT `this.localStorage`; unit tests mock via `globalThis.localStorage` (not ctx property injection)
+- `@huggingface/transformers` in Electron Web Workers: bare specifier resolves to Node.js bundle — npm packages cannot resolve in Electron's worker context at all; solution is to run inference in the main process via IPC (d21e213), where dynamic `import('@huggingface/transformers')` works normally
 
 <!-- END AUTO-MANAGED -->
 
