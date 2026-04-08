@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-07 <!-- TASK-028 completion -->
+**Last Updated**: 2026-04-08 <!-- TASK-028 PR #26 code review -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -16,7 +16,19 @@ Ideas and tasks not yet prioritized for active development.
 ### [2026-04-05] From: TASK-028 implementation + manual testing
 **Origin**: Architecture decisions and performance observations during 30K-file extraction
 
+### [2026-04-08] From: PR #26 code review
+**Origin**: 5 parallel agents + confidence scoring; 10 issues found, 5 scored 75/100, none above 80 threshold; 5 fixed in 3fa3a9a; remaining items below threshold
+
 - [x] **ML model not retrained when like/dislike folders change** — Fixed in f4772a9: `resetMlModel()` called from 4 folder change listeners
+- [x] **event.sender.isDestroyed() guard in CLIP progress callback** — Fixed in 3fa3a9a: prevents main process crash if renderer closes during model download
+- [x] **CLIP toggle doesn't reset ML model** — Fixed in 3fa3a9a: `resetMlModel()` now called when enableClipFeatures toggle changes
+- [x] **Stale mlModelState on version/dim mismatch** — Fixed in 3fa3a9a: `initComplete` handler now clears `mlModelState`/`predictionScores` when `modelWasReset` is true
+- [x] **TASK-028 spec not indexed in docs/README.md** — Fixed in 3fa3a9a
+- [x] **ESLint header stale (Ten → Eleven blocks)** — Fixed in 3fa3a9a
+- [ ] **IPC listener accumulation for clip-download-progress** (75/100) — `onClipDownloadProgress` in preload.js uses `ipcRenderer.on()` which accumulates listeners; should use `ipcRenderer.once()` (model loads once per session) or expose an off-handler; currently guarded by lazy-init but fragile if `initClipModel()` is ever called again
+- [ ] **Redundant loadMediaAsImageData for CLIP-only extractions** — `startBackgroundFeatureExtraction()` calls `loadMediaAsImageData()` unconditionally for all files, but `extractClipEmbedding()` ignores the `_imageData` parameter (uses file path via IPC); files that have hand-crafted features but need CLIP decode the image for nothing
+- [ ] **Stale .ml_model.json persisted on disk after version upgrade** — Worker resets model on version/dim mismatch and renderer now clears in-memory state, but the stale v2/64-dim JSON file on disk is never overwritten; every restart re-loads and re-resets until user trains enough for a new save
+- [ ] **Dead worker code in clip-worker.js** — `loadModel()`, `extractEmbedding()`, `self.onmessage` handler with hardcoded `./node_modules/` import path are unused since CLIP moved to main process IPC (d21e213); only `averageEmbeddings` and `CLIP_EMBEDDING_DIM` are used; dead code misleads and brittle path may break on package updates
 - [ ] **CLIP text-based search UI** — CLIP embeddings enable text-image matching ("find photos of dogs"); requires search input UI + text encoder + cosine similarity; embeddings already stored in clipCache
 - [ ] **CLIP-based similarity sorting** — Replace or augment blockhash with CLIP cosine similarity for semantic grouping; embeddings available in clipCache
 - [ ] **Unload CLIP model after extraction completes** — CLIP ONNX model consumes ~200-400 MB in main process; stays loaded indefinitely after extraction finishes; add logic to unload (`clipProcessor = null; clipVisionModel = null`) after background extraction completes + force GC; re-load lazily if user opens new folder

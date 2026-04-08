@@ -162,7 +162,8 @@ media_viewer/
 - Empty state: `showEmptyStateWithUndo()` vs `showDropZone()` based on `moveHistory.length`
 - Empty state keydown guard: when `mediaFiles.length === 0`, keydown handler blocks all input EXCEPT undo — undo passes through when `moveHistory.length > 0` (TASK-027 fix)
 - Compare-pair undo: history entries tagged `compareMode: true`; `handleCancel()` detects paired entries and restores both files in one undo
-- ML model reset on folder change: `resetMlModel()` nulls `mlModelState`/`mlStats`, resets `predictionScores` Map, posts `{ type: 'reset' }` to mlWorker, calls `updateSortPredictionButton()`; called on like/dislike folder select or clear so stale training doesn't persist across folder configs (f4772a9)
+- ML model reset on folder change: `resetMlModel()` nulls `mlModelState`/`mlStats`, resets `predictionScores` Map, posts `{ type: 'reset' }` to mlWorker, calls `updateSortPredictionButton()`; called on like/dislike folder select or clear so stale training doesn't persist across folder configs (f4772a9); also called when `enableClipFeatures` toggle changes to prevent 576-dim vs 64-dim mismatch corrupting predictions
+- ML model reset on dim/version mismatch: `initComplete` handler checks `message.modelWasReset`; if set, clears `this.mlModelState = null` and `this.predictionScores = new Map()` to purge stale renderer-side cache after worker auto-resets
 
 **Index Management**:
 - Wrap-to-start: `moveCurrentFile()` cycles to index 0 when rating last file
@@ -189,7 +190,7 @@ media_viewer/
 - Extraction pause/resume: `signalUserActivity()` on all nav/rating actions → 2s idle timer → `resumeExtraction()` resolves `awaitExtractionGate()` promise
 - Generation counter (`extractionRunId`): async callbacks check for stale run ID and return early
 - ML compare refresh: `pendingCompareRefresh`/`pendingCompareUpdates` defer `showMedia()` until re-scoring completes; 3s fallback timeout; `mediaNavigationInProgress` guard prevents double-fire
-- CLIP extraction (TASK-028, d21e213 arch fix): `@huggingface/transformers` runs in **main process** (not a Worker — npm packages can't resolve in Electron Web Workers); IPC chain: `initClipModel()` → `window.electronAPI.loadClipModel()` → main `loadClipModel(event)` (lazy, concurrent-safe, emits `clip-download-progress`); images: `extractClipEmbedding(filePath)` → `extractClipEmbedding` IPC → `RawImage.read` + `CLIPVisionModelWithProjection`; videos: `extractClipFromVideo()` → `extractKeyframes` IPC (ffmpeg scene-detect) → `extractClipEmbeddingBatch` IPC (average+normalize); produces 512-dim unit-normalized `Float32Array`; graceful degradation — CLIP unavailable means 64-dim only, no crash; ML model dim: 64→576 (64 hand-crafted + 512 CLIP); `OnlineLogisticRegression` auto-resets on dim mismatch via `fromJSON` version/dim check (version now 3); E2E coverage: `clip-graceful-degradation.test.js`
+- CLIP extraction (TASK-028, d21e213 arch fix): `@huggingface/transformers` runs in **main process** (not a Worker — npm packages can't resolve in Electron Web Workers); IPC chain: `initClipModel()` → `window.electronAPI.loadClipModel()` → main `loadClipModel(event)` (lazy, concurrent-safe, emits `clip-download-progress`); progress callbacks guard `!event.sender.isDestroyed()` to prevent crash if renderer closes during download; images: `extractClipEmbedding(filePath)` → `extractClipEmbedding` IPC → `RawImage.read` + `CLIPVisionModelWithProjection`; videos: `extractClipFromVideo()` → `extractKeyframes` IPC (ffmpeg scene-detect) → `extractClipEmbeddingBatch` IPC (average+normalize); produces 512-dim unit-normalized `Float32Array`; graceful degradation — CLIP unavailable means 64-dim only, no crash; ML model dim: 64→576 (64 hand-crafted + 512 CLIP); `OnlineLogisticRegression` auto-resets on dim mismatch via `fromJSON` version/dim check (version now 3); E2E coverage: `clip-graceful-degradation.test.js`
 
 **Compare Mode Validation**:
 - `showCompareMedia()` validates files via IPC `checkFileExists` before rendering (parallel Promise.all)
@@ -241,6 +242,7 @@ Completed tasks: TASK-012 through TASK-028 (TASK-028: CLIP semantic features for
 - v2.0 modularization pattern: stateful manager class + constructor-injected callbacks (see FullscreenManager); planned: ZoomManager, CompareManager, SortingManager, MLManager
 - Shortcut localStorage: `loadShortcuts()`, `saveShortcut()`, `resetShortcuts()` use global `localStorage` directly — NOT `this.localStorage`; unit tests mock via `globalThis.localStorage` (not ctx property injection)
 - `@huggingface/transformers` in Electron Web Workers: bare specifier resolves to Node.js bundle — npm packages cannot resolve in Electron's worker context at all; solution is to run inference in the main process via IPC (d21e213), where dynamic `import('@huggingface/transformers')` works normally
+- IPC progress callbacks with long-running async ops: always guard `event.sender.isDestroyed()` before calling `event.sender.send()` — renderer window may close while main process is still loading a model (e.g., CLIP download)
 
 <!-- END AUTO-MANAGED -->
 
