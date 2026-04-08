@@ -231,11 +231,12 @@ Completed tasks: TASK-012 through TASK-028 (TASK-028: CLIP semantic features for
 - (none)
 
 **Next planned:**
-- (none)
+- Fix Single Mode buttons appearing alongside Compare Mode buttons on folder switch — `loadFolder()` (~L2203) does not reset `isCompareMode`; `hideDropZone()` (~L2264) unconditionally shows `.controls`; fix: call `switchToSingleModeUI()` before `showMedia()` in `loadFolder()`
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
 - Compare mode exit: use `switchToSingleModeUI()` (non-toggling helper), NOT `toggleViewMode()` — the latter re-toggles isCompareMode causing infinite loops when <2 files remain
+- Folder switch in Compare Mode: `loadFolder()` does not reset `isCompareMode`; `hideDropZone()` unconditionally shows `.controls` (single mode buttons) while `showMedia()` also renders compare overlay buttons — both button sets appear; fix: reset `isCompareMode` (or call `switchToSingleModeUI()`) in `loadFolder()` before `showMedia()`
 - Empty state: `showEmptyStateWithUndo()` (preserves undo toolbar) vs `showDropZone()` (genuine empty) — check `moveHistory.length` to decide; keydown guard at line ~1729 blocks all keys when `mediaFiles.length === 0` except undo — undo passes through when `moveHistory.length > 0` (implemented in TASK-027)
 - `transition-delay` on CSS base rules: always verify fullscreen/hidden state overrides aren't inheriting the delay
 - Feature cache: `loadFeatureCache()` must be called unconditionally before `startBackgroundFeatureExtraction()` — lazy-init guard previously caused cache to not reload on folder switch
