@@ -66,6 +66,7 @@ Central index for all project documentation.
 [TASK-025 Application Logging]: superpowers/specs/2026-03-26-task-025-application-logging-design.md
 [TASK-026 Keyboard Shortcuts]: superpowers/specs/2026-03-27-task-026-keyboard-shortcut-customization-design.md
 [TASK-027 Undo Empty State]: superpowers/specs/2026-03-28-task-027-fix-undo-empty-folder-design.md
+[TASK-028 CLIP Semantic Features]: superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md
 
 ## Archives
 

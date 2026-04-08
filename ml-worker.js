@@ -1,6 +1,6 @@
 // ML Worker - Web Worker for preference prediction computations
 // Runs ML operations in separate thread to prevent UI freeze
-// Version 2: 64-dimensional feature vector support
+// Version 3: 576-dimensional feature vector support (64 hand-crafted + 512 CLIP)
 
 // Import dependencies (will be inlined for worker)
 importScripts('ml-model.js');

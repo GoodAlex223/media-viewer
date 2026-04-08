@@ -1,9 +1,9 @@
 // ML Model - Online Logistic Regression with weighted loss for class imbalance
 // Used for preference prediction based on visual features
-// Version 2: 64-dimensional feature vector support
+// Version 3: 576-dimensional feature vector support (64 hand-crafted + 512 CLIP)
 
-const ML_MODEL_VERSION = 2;
-const DEFAULT_FEATURE_DIM = 64;
+const ML_MODEL_VERSION = 3;
+const DEFAULT_FEATURE_DIM = 576; // 64 hand-crafted + 512 CLIP semantic
 
 /**
  * Online Logistic Regression classifier with SGD updates
@@ -11,7 +11,7 @@ const DEFAULT_FEATURE_DIM = 64;
  */
 class OnlineLogisticRegression {
     /**
-     * @param {number} featureDim - Number of features (default: 64)
+     * @param {number} featureDim - Number of features (default: 576)
      */
     constructor(featureDim = DEFAULT_FEATURE_DIM) {
         this.featureDim = featureDim;

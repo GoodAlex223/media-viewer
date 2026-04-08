@@ -7,8 +7,8 @@ describe('OnlineLogisticRegression', () => {
     describe('constructor', () => {
         it('initializes with default feature dimension', () => {
             const model = new OnlineLogisticRegression();
-            expect(model.featureDim).toBe(64);
-            expect(model.weights.length).toBe(65); // featureDim + 1 for bias
+            expect(model.featureDim).toBe(576);
+            expect(model.weights.length).toBe(577); // featureDim + 1 for bias
             expect(model.totalSamples).toBe(0);
             expect(model.positiveCount).toBe(0);
             expect(model.negativeCount).toBe(0);
@@ -183,7 +183,7 @@ describe('OnlineLogisticRegression', () => {
             expect(stats.negativeCount).toBe(0);
             expect(stats.classBalance).toBe(0);
             expect(stats.isReady).toBe(false);
-            expect(stats.featureDim).toBe(64);
+            expect(stats.featureDim).toBe(576);
         });
     });
 
@@ -220,13 +220,13 @@ describe('OnlineLogisticRegression', () => {
     describe('toJSON / fromJSON', () => {
         it('round-trips correctly', () => {
             const model = new OnlineLogisticRegression();
-            model.update([0.5, 0.3, 0.1, 0.9, ...new Array(60).fill(0)], 1);
-            model.update([0.1, 0.8, 0.5, 0.2, ...new Array(60).fill(0)], 0);
+            model.update([0.5, 0.3, 0.1, 0.9, ...new Array(572).fill(0)], 1);
+            model.update([0.1, 0.8, 0.5, 0.2, ...new Array(572).fill(0)], 0);
             const json = model.toJSON();
             const restored = OnlineLogisticRegression.fromJSON(json);
             expect(restored).not.toBeNull();
 
-            const testFeatures = [0.5, 0.3, 0.1, 0.9, ...new Array(60).fill(0)];
+            const testFeatures = [0.5, 0.3, 0.1, 0.9, ...new Array(572).fill(0)];
             expect(restored.predict(testFeatures)).toBeCloseTo(model.predict(testFeatures));
             expect(restored.totalSamples).toBe(model.totalSamples);
             expect(restored.positiveCount).toBe(model.positiveCount);

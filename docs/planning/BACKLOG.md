@@ -2,12 +2,25 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-03 <!-- PR #25 code review -->
+**Last Updated**: 2026-04-07 <!-- TASK-028 completion -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From TASK-028 (CLIP Semantic Features)
+
+### [2026-04-05] From: TASK-028 implementation + manual testing
+**Origin**: Architecture decisions and performance observations during 30K-file extraction
+
+- [x] **ML model not retrained when like/dislike folders change** — Fixed in f4772a9: `resetMlModel()` called from 4 folder change listeners
+- [ ] **CLIP text-based search UI** — CLIP embeddings enable text-image matching ("find photos of dogs"); requires search input UI + text encoder + cosine similarity; embeddings already stored in clipCache
+- [ ] **CLIP-based similarity sorting** — Replace or augment blockhash with CLIP cosine similarity for semantic grouping; embeddings available in clipCache
+- [ ] **Unload CLIP model after extraction completes** — CLIP ONNX model consumes ~200-400 MB in main process; stays loaded indefinitely after extraction finishes; add logic to unload (`clipProcessor = null; clipVisionModel = null`) after background extraction completes + force GC; re-load lazily if user opens new folder
+- [ ] **GPU acceleration for CLIP inference (DirectML/CUDA)** — Current CPU inference ~100-200ms/image (~8h for 30K files); DirectML (Windows, any GPU) could reduce to ~10-30ms/image; CUDA (Linux, NVIDIA) ~5-15ms/image; implementation: pass `{ device: 'gpu' }` to `from_pretrained()` in main.js, fallback to CPU if unavailable; add settings toggle for GPU preference
 
 ---
 

@@ -19,6 +19,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Video metadata extraction
     probeVideo: (videoPath) => ipcRenderer.invoke('probe-video', videoPath),
 
+    // Video keyframe extraction
+    extractKeyframes: (videoPath, maxFrames) => ipcRenderer.invoke('extractKeyframes', videoPath, maxFrames),
+    cleanupKeyframes: (tempDir) => ipcRenderer.invoke('cleanupKeyframes', tempDir),
+
+    // CLIP model (main process)
+    loadClipModel: () => ipcRenderer.invoke('loadClipModel'),
+    extractClipEmbedding: (imagePath) => ipcRenderer.invoke('extractClipEmbedding', imagePath),
+    extractClipEmbeddingBatch: (imagePaths) => ipcRenderer.invoke('extractClipEmbeddingBatch', imagePaths),
+    onClipDownloadProgress: (callback) => ipcRenderer.on('clip-download-progress', (_event, data) => callback(data)),
+
     // Logging (fire-and-forget)
     logError: (data) => ipcRenderer.send('log-renderer-error', data),
 
