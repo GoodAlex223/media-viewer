@@ -2,12 +2,27 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-08 <!-- TASK-028 PR #26 code review -->
+**Last Updated**: 2026-04-08 <!-- manual testing items + TASK-028 PR #26 code review -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From Manual Testing (2026-04-08)
+
+### [2026-04-08] From: manual testing
+**Origin**: User feature ideas and UX observations
+
+- [ ] **Design add-on/extension system for the media viewer** — Define core app identity and core functions; build plugin architecture allowing users to install/uninstall add-ons that extend functionality without cluttering the main app (Основной медиа вьюер уже есть и он неплохой. Я не хочу его захламлять различным функционалом, который возможно и не нужен пользователю, поэтому я думаю о том, чтобы добавить фичу по установке дополнений внутри приложения, которая позволит пользователям устанавливать различные дополнения, которые не включены в основное приложение по той или иной причине. Но тогда нужно определить, что это за приложение, какие его основные функции, и что следует вынести в дополнения); affected: new architecture (no existing code)
+- [ ] **Move all sorting options to add-ons** — All sorting functionality (similarity, prediction, etc.) should be extractable as add-ons rather than core features; blocked by add-on system design (Все варианты сортировки можно перенести в дополнения); affected: media-viewer.js (sorting logic), sorting-worker.js, ml-worker.js
+- [ ] **Add platform integration add-ons (YouTube, TikTok, Twitter, Instagram, Civitai.com)** — Separate add-ons for each platform; ability to request new integrations/plugins via email; consider embedded players (e.g., built-in YouTube player) vs full parsers; consider existing tools like gallery-dl or develop from scratch if necessary; blocked by add-on system design (Добавить следующие как отдельные дополнения: парсинг существующих медиа по ссылкам, интеграцию YouTube, TikTok, Twitter, Instagram, Civitai.com и возможность запросить добавление интеграции или плагина по почте. Лучше добавить возможность интегрировать контент с площадок, а не полноценный парсер. Рассмотреть реализацию с помощью существующих инструментов, таких как gallery-dl); affected: new code
+- [ ] **Add ability to rate media from links in text files** — User selects a folder that may contain a plain text file with URLs; linked media is loaded alongside local media for rating; if a link cannot be retrieved/displayed, handle gracefully — consider best course of action (Пользователь может выбрать папку с медиа или без, в которой может быть текстовый документ с ссылками. Вместе с медиа в папке, медиа которое можно получить по ссылке тоже используется в программе для оценки пользователем. Если нельзя получить и показать медиа по ссылке — нужно продумать наилучший вариант действий); affected: media-viewer.js:~L2203 (loadFolder), main.js (IPC file ops)
+- [ ] **Display platform content without downloading (embedded players/streams)** — Show posts from TikTok, Twitter, YouTube, etc. without downloading them if possible; consider embedded players vs parsing; related to platform integration add-ons but distinct scope (display without download vs full integration) (Реализовать отображение постов с различных платформ без скачивания, если это возможно); affected: new code
+- [ ] **Show thumbnail or low-quality media while loading (progressive loading)** — Display the lowest-quality version or thumbnail first instead of "Loading" placeholder, then progressively load better quality; "stream" the media to users so they can evaluate even from silhouettes or rough images (Можем ли мы отображать миниатюру или самую низкокачественную версию медиа вместо плейсхолдера «Loading», чтобы пользователи могли оценить медиа даже по силуэтам или грубым изображениям. Показывать как медиа загружается онлайн — сначала самое низкое качество, затем постепенно лучше, то есть «стримить» медиа); affected: media-viewer.js (showMedia, showSingleMedia, showCompareMedia), main.js (thumbnail generation IPC)
+- [ ] **Configure interface for different window sizes + Ctrl+/- UI zoom** — Make the interface adapt to different main window sizes (currently only one CSS breakpoint at 768px, no resize handlers); allow users to zoom the entire UI in/out using Ctrl + +/- via `webFrame.setZoomFactor` (Настроить интерфейс для разных размеров основного окна. Разрешить масштабирование интерфейса с помощью Ctrl + +/-); affected: styles.css:~L2094 (@media query), media-viewer.js (no resize handler), preload.js (needs webFrame API exposure)
 
 ---
 
