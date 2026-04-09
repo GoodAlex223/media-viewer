@@ -5366,6 +5366,7 @@ class MediaViewer {
                     console.warn('ML model was reset (version/dim mismatch) — clearing stale cache');
                     this.mlModelState = null;
                     this.predictionScores = new Map();
+                    this.deleteMlModelCache();
                 }
                 // If model was restored with samples, request scores
                 if (message.stats?.isReady && this.mediaFiles.length > 0) {
@@ -5585,13 +5586,22 @@ class MediaViewer {
             await window.electronAPI.writeFile(
                 cacheFile,
                 JSON.stringify({
-                    version: 1,
                     modelState: this.mlModelState,
                     timestamp: Date.now(),
                 })
             );
         } catch (error) {
             console.error('Failed to save ML model:', error);
+        }
+    }
+
+    async deleteMlModelCache() {
+        if (!this.baseFolderPath) return;
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
+            await window.electronAPI.writeFile(cacheFile, '');
+        } catch (_error) {
+            // Ignore — file may not exist
         }
     }
 
