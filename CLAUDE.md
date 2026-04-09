@@ -82,7 +82,7 @@ media_viewer/
 
 **Data Flow**:
 1. Main process handles file system operations (read, move, copy) and CLIP model inference (`loadClipModel`, `extractClipEmbedding`, `extractClipEmbeddingBatch` IPC handlers)
-2. Preload exposes secure IPC bridge to renderer (including CLIP IPC + `onClipDownloadProgress` listener)
+2. Preload exposes secure IPC bridge to renderer (including CLIP IPC + `onClipDownloadProgress` which returns a cleanup function)
 3. Renderer (media-viewer.js) manages UI state and user interactions; calls CLIP via `window.electronAPI` (not a Worker)
 4. CPU-intensive tasks delegated to Web Workers (sorting, ML, feature extraction); CLIP is main-process IPC (not a Worker — npm packages can't resolve in Electron Web Workers)
 
@@ -224,13 +224,12 @@ media_viewer/
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Completed tasks: TASK-012 through TASK-028 (TASK-028: CLIP semantic features for ML prediction — 512-dim CLIP + 64-dim hand-crafted = 576-dim total; CLIP in main process IPC; video via ffmpeg keyframes; ML model reset on folder change). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-09: fixed IPC listener accumulation, skipped redundant image decodes, added `deleteMlModelCache()`, deleted `clip-worker.js`). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **In progress:**
-- `feature/clip-ml-cleanup` — CLIP/ML pipeline cleanup (7 SP); implementation plan at `docs/superpowers/plans/2026-04-09-clip-ml-cleanup.md`; completed: (1) fix `clip-download-progress` IPC listener accumulation, (2) skip `loadMediaAsImageData()` when `featureCache.has(file.path)`, (3) add `deleteMlModelCache()` + call on `modelWasReset` to clear stale `.ml_model.json`, (4) deleted dead `clip-worker.js` + test + ESLint block 3c; branch complete — all 4 tasks done
+- (none)
 
 **Next planned** (week of April 13–17, see `docs/planning/WEEKLY.md`):
-- **Mon — CLIP/ML Pipeline Cleanup** (7 SP): COMPLETE — all 4 tasks done on `feature/clip-ml-cleanup`; see `docs/superpowers/plans/2026-04-09-clip-ml-cleanup.md`
 - **Tue — Compare Mode Fix + Test Quality** (6 SP): Fix Single Mode buttons appearing alongside Compare Mode buttons on folder switch — `loadFolder()` (~L2203) does not reset `isCompareMode`; `hideDropZone()` (~L2264) unconditionally shows `.controls`; fix: call `switchToSingleModeUI()` before `showMedia()` in `loadFolder()`; DRY `toggleViewMode()` single-mode branch with `switchToSingleModeUI()`; add E2E `afterEach` null guard on `tmpFixtures`; fix misleading describe label in `media-viewer-utils.test.js`
 - **Wed — CLIP Similarity Sorting** (5 SP): Implement CLIP cosine similarity sorting using `clipCache` embeddings — replace/augment blockhash; changes to `sorting-worker.js` + `media-viewer.js` sorting integration
 - **Thu — Resource Management** (5 SP): Unload CLIP model after extraction completes (null `clipProcessor`/`clipVisionModel`, ~200–400 MB); add double-init protection to `logger.js` `init()` (close existing fd before opening new one)
