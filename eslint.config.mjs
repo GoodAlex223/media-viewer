@@ -1,6 +1,6 @@
 // ESLint flat configuration for Electron media_viewer project.
 //
-// Eleven file-group blocks:
+// Ten file-group blocks:
 //   1.  Node/Electron main           — main.js, logger.js
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
@@ -8,7 +8,6 @@
 //   2c. Browser renderer modules     — fullscreen.js (ES module, imported by media-viewer.js)
 //   3a. Web Workers                  — sorting-worker.js, ml-worker.js, feature-worker.js
 //   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js
-//   3c. CLIP Worker                  — clip-worker.js (dynamic import + CJS exports)
 //   4.  Unit tests (Vitest)          — tests/**/*.js (excl. e2e)
 //   5a. E2E helpers (CJS)            — tests/e2e/**/*.cjs
 //   5b. E2E tests (Playwright)       — tests/e2e/**/*.js, playwright.config.js
@@ -140,23 +139,6 @@ export default [
                 FEATURE_VERSION: 'readonly',
                 FEATURE_DIM: 'readonly',
                 // Conditional CJS export: typeof module !== 'undefined' && module.exports
-                module: 'readonly',
-            },
-        },
-        rules: {
-            ...sharedRules,
-            'no-undef': 'error',
-        },
-    },
-
-    // 3c. CLIP Worker (module worker — dynamic import + conditional CJS exports for testing)
-    {
-        files: ['clip-worker.js'],
-        languageOptions: {
-            ecmaVersion: 2022,
-            sourceType: 'script',
-            globals: {
-                ...globals.worker,
                 module: 'readonly',
             },
         },
