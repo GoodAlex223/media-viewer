@@ -1,6 +1,6 @@
 # CLIP/ML Pipeline Cleanup — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Clean up four pieces of CLIP/ML technical debt from TASK-028: IPC listener leak, wasted image decodes, broken model persistence, and dead source file.
 
@@ -10,6 +10,8 @@
 
 **Design spec:** `docs/superpowers/specs/2026-04-09-clip-ml-cleanup-design.md`
 
+**Status:** Complete (2026-04-09) — all tasks implemented on `feature/clip-ml-cleanup`
+
 ---
 
 ### Task 1: Fix IPC listener accumulation for `clip-download-progress`
@@ -18,7 +20,7 @@
 - Modify: `preload.js:30`
 - Modify: `media-viewer.js:6434-6465` (`initClipModel()`)
 
-- [ ] **Step 1: Modify `preload.js` to return a cleanup function**
+- [x] **Step 1: Modify `preload.js` to return a cleanup function**
 
 In `preload.js:30`, replace the current `onClipDownloadProgress` that uses bare `ipcRenderer.on()` with a version that returns a removal function:
 
@@ -34,7 +36,7 @@ onClipDownloadProgress: (callback) => {
 },
 ```
 
-- [ ] **Step 2: Modify `initClipModel()` in `media-viewer.js` to call the cleanup function**
+- [x] **Step 2: Modify `initClipModel()` in `media-viewer.js` to call the cleanup function**
 
 In `media-viewer.js`, replace the `initClipModel()` method (lines 6434-6465) with:
 
@@ -80,17 +82,17 @@ async initClipModel() {
 
 Key change: `finally` block ensures the listener is removed whether `loadClipModel()` succeeds or fails.
 
-- [ ] **Step 3: Run lint to verify**
+- [x] **Step 3: Run lint to verify**
 
 Run: `npm run lint`
 Expected: PASS, no new warnings.
 
-- [ ] **Step 4: Run tests to verify no regressions**
+- [x] **Step 4: Run tests to verify no regressions**
 
 Run: `npm test`
 Expected: All 158 tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add preload.js media-viewer.js
@@ -107,7 +109,7 @@ calls it in a finally block after loadClipModel() resolves."
 **Files:**
 - Modify: `media-viewer.js:6854` (in `startBackgroundFeatureExtraction()`)
 
-- [ ] **Step 1: Add `featureCache` guard before `loadMediaAsImageData`**
+- [x] **Step 1: Add `featureCache` guard before `loadMediaAsImageData`**
 
 In `media-viewer.js`, in the `startBackgroundFeatureExtraction()` method, find the extraction loop (around line 6854). Replace:
 
@@ -130,17 +132,17 @@ This is safe because:
 - `enqueueFeatureExtraction()` at line 6652-6656 early-returns for cached files (checks `this.featureCache.has(filePath)` and resolves immediately), never touching `imageData`.
 - `extractClipEmbedding(filePath, _imageData)` at line 6467 ignores the `_imageData` parameter — it reads the file via IPC using the file path.
 
-- [ ] **Step 2: Run lint to verify**
+- [x] **Step 2: Run lint to verify**
 
 Run: `npm run lint`
 Expected: PASS, no new warnings.
 
-- [ ] **Step 3: Run tests to verify no regressions**
+- [x] **Step 3: Run tests to verify no regressions**
 
 Run: `npm test`
 Expected: All 158 tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add media-viewer.js
@@ -159,7 +161,7 @@ during background extraction. CLIP uses the file path via IPC."
 - Modify: `media-viewer.js:5365-5369` (`handleMlWorkerMessage`, `initComplete` case)
 - Add method: `media-viewer.js` (`deleteMlModelCache()`, near `saveMlModel()`)
 
-- [ ] **Step 1: Remove redundant outer `version: 1` from `saveMlModel()`**
+- [x] **Step 1: Remove redundant outer `version: 1` from `saveMlModel()`**
 
 In `media-viewer.js`, find `saveMlModel()` (line 5580). Replace:
 
@@ -206,7 +208,7 @@ with:
 
 The `this.mlModelState` already contains `version: 3` and `featureDim: 576` from `OnlineLogisticRegression.toJSON()`. The load path (`loadMlModel()` at line 5556) reads `parsed.modelState` and sends it to the worker. The outer wrapper `version: 1` was never used by anything.
 
-- [ ] **Step 2: Add `deleteMlModelCache()` method**
+- [x] **Step 2: Add `deleteMlModelCache()` method**
 
 In `media-viewer.js`, immediately after `saveMlModel()` (after line 5596), add:
 
@@ -224,7 +226,7 @@ In `media-viewer.js`, immediately after `saveMlModel()` (after line 5596), add:
 
 Writing an empty string makes the load path (`loadMlModel`) hit `JSON.parse('')` which throws, caught by its existing `catch` block that logs "No ML model cache found".
 
-- [ ] **Step 3: Call `deleteMlModelCache()` on model reset**
+- [x] **Step 3: Call `deleteMlModelCache()` on model reset**
 
 In `media-viewer.js`, find the `modelWasReset` handler in `handleMlWorkerMessage()` (line 5365). Replace:
 
@@ -247,17 +249,17 @@ with:
                 }
 ```
 
-- [ ] **Step 4: Run lint to verify**
+- [x] **Step 4: Run lint to verify**
 
 Run: `npm run lint`
 Expected: PASS, no new warnings.
 
-- [ ] **Step 5: Run tests to verify no regressions**
+- [x] **Step 5: Run tests to verify no regressions**
 
 Run: `npm test`
 Expected: All 158 tests pass. (The ML model save/load path isn't unit-tested; `ml-model.test.js` tests `isCompatible()`/`fromJSON()` which are unchanged.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js
@@ -277,19 +279,19 @@ breaking the reset-on-every-restart cycle."
 - Delete: `tests/clip-worker.test.js`
 - Modify: `eslint.config.mjs:1-14` (header comment), `eslint.config.mjs:152-167` (block 3c)
 
-- [ ] **Step 1: Delete `clip-worker.js`**
+- [x] **Step 1: Delete `clip-worker.js`**
 
 ```bash
 git rm clip-worker.js
 ```
 
-- [ ] **Step 2: Delete `tests/clip-worker.test.js`**
+- [x] **Step 2: Delete `tests/clip-worker.test.js`**
 
 ```bash
 git rm tests/clip-worker.test.js
 ```
 
-- [ ] **Step 3: Remove ESLint block 3c from `eslint.config.mjs`**
+- [x] **Step 3: Remove ESLint block 3c from `eslint.config.mjs`**
 
 In `eslint.config.mjs`, remove the block 3c comment from the header (lines 1-14) and the actual config block (lines 152-167).
 
@@ -355,17 +357,17 @@ with:
     },
 ```
 
-- [ ] **Step 4: Run lint to verify config is valid**
+- [x] **Step 4: Run lint to verify config is valid**
 
 Run: `npm run lint`
 Expected: PASS (no errors about missing files, no config issues).
 
-- [ ] **Step 5: Run tests to verify no regressions**
+- [x] **Step 5: Run tests to verify no regressions**
 
 Run: `npm test`
 Expected: PASS. Test count drops from 158 to 150 (8 tests removed from `clip-worker.test.js`). All remaining tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -383,22 +385,22 @@ CLIP inference to main process IPC. Removes 225 lines of dead code,
 **Files:**
 - Modify: `CLAUDE.md` (architecture section, conventions section)
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `npm test`
 Expected: 150 tests pass (8 removed from clip-worker.test.js).
 
-- [ ] **Step 2: Run lint on entire project**
+- [x] **Step 2: Run lint on entire project**
 
 Run: `npm run lint`
 Expected: PASS, no errors.
 
-- [ ] **Step 3: Run format check**
+- [x] **Step 3: Run format check**
 
 Run: `npm run format:check`
 Expected: PASS, all files formatted.
 
-- [ ] **Step 4: Update CLAUDE.md architecture section**
+- [x] **Step 4: Update CLAUDE.md architecture section**
 
 In `CLAUDE.md`, in the architecture tree, remove the `clip-worker.js` line. Replace:
 
@@ -420,7 +422,7 @@ with:
 │   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts
 ```
 
-- [ ] **Step 5: Update CLAUDE.md conventions section**
+- [x] **Step 5: Update CLAUDE.md conventions section**
 
 In the ESLint description, replace `Eleven file-group blocks` with `Ten file-group blocks` and remove the `3c: clip-worker` reference. Replace:
 
@@ -442,7 +444,7 @@ Also remove the Module worker import reference. Replace:
 
 with nothing (delete the entire line).
 
-- [ ] **Step 6: Update CLAUDE.md git insights in-progress section**
+- [x] **Step 6: Update CLAUDE.md git insights in-progress section**
 
 Replace the in-progress line:
 
@@ -456,12 +458,12 @@ with:
 - `feature/clip-ml-cleanup` — CLIP/ML pipeline cleanup (7 SP); implementation complete, pending review
 ```
 
-- [ ] **Step 7: Run tests one final time**
+- [x] **Step 7: Run tests one final time**
 
 Run: `npm test`
 Expected: 150 tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add CLAUDE.md
