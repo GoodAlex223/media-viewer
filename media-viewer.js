@@ -6435,9 +6435,10 @@ class MediaViewer {
         if (!this.enableClipFeatures) return;
         if (!window.electronAPI.loadClipModel) return;
 
-        // Listen for download progress
+        // Listen for download progress (returns cleanup function)
+        let removeProgressListener;
         if (window.electronAPI.onClipDownloadProgress) {
-            window.electronAPI.onClipDownloadProgress((data) => {
+            removeProgressListener = window.electronAPI.onClipDownloadProgress((data) => {
                 this.clipModelDownloading = true;
                 if (data.progress % 10 === 0) {
                     this.showNotification(`Downloading CLIP model... ${data.progress}%`, 'info');
@@ -6461,6 +6462,10 @@ class MediaViewer {
             this.clipModelDownloading = false;
             console.error('CLIP model init error:', err.message);
             this.showNotification('CLIP model unavailable — using basic features only', 'warning');
+        } finally {
+            if (removeProgressListener) {
+                removeProgressListener();
+            }
         }
     }
 
