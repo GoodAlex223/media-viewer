@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-04-07 <!-- TASK-028 completed -->
+**Last Updated**: 2026-04-09 <!-- CLIP/ML Cleanup completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.

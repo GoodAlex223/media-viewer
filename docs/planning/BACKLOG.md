@@ -40,14 +40,20 @@ Ideas and tasks not yet prioritized for active development.
 - [x] **Stale mlModelState on version/dim mismatch** — Fixed in 3fa3a9a: `initComplete` handler now clears `mlModelState`/`predictionScores` when `modelWasReset` is true
 - [x] **TASK-028 spec not indexed in docs/README.md** — Fixed in 3fa3a9a
 - [x] **ESLint header stale (Ten → Eleven blocks)** — Fixed in 3fa3a9a
-- [ ] **IPC listener accumulation for clip-download-progress** (75/100) — `onClipDownloadProgress` in preload.js uses `ipcRenderer.on()` which accumulates listeners; should use `ipcRenderer.once()` (model loads once per session) or expose an off-handler; currently guarded by lazy-init but fragile if `initClipModel()` is ever called again
-- [ ] **Redundant loadMediaAsImageData for CLIP-only extractions** — `startBackgroundFeatureExtraction()` calls `loadMediaAsImageData()` unconditionally for all files, but `extractClipEmbedding()` ignores the `_imageData` parameter (uses file path via IPC); files that have hand-crafted features but need CLIP decode the image for nothing
-- [ ] **Stale .ml_model.json persisted on disk after version upgrade** — Worker resets model on version/dim mismatch and renderer now clears in-memory state, but the stale v2/64-dim JSON file on disk is never overwritten; every restart re-loads and re-resets until user trains enough for a new save
-- [ ] **Dead worker code in clip-worker.js** — `loadModel()`, `extractEmbedding()`, `self.onmessage` handler with hardcoded `./node_modules/` import path are unused since CLIP moved to main process IPC (d21e213); only `averageEmbeddings` and `CLIP_EMBEDDING_DIM` are used; dead code misleads and brittle path may break on package updates
+- [x] **IPC listener accumulation for clip-download-progress** — Fixed in feature/clip-ml-cleanup: `onClipDownloadProgress` returns cleanup function; `initClipModel()` calls it in `finally` block
+- [x] **Redundant loadMediaAsImageData for CLIP-only extractions** — Fixed in feature/clip-ml-cleanup: `featureCache.has()` guard skips image decode when only CLIP extraction needed
+- [x] **Stale .ml_model.json persisted on disk after version upgrade** — Fixed in feature/clip-ml-cleanup: removed outer `version:1` wrapper from `saveMlModel()`; added `deleteMlModelCache()` called on `modelWasReset`
+- [x] **Dead worker code in clip-worker.js** — Fixed in feature/clip-ml-cleanup: entire file deleted (was never instantiated as Worker); `tests/clip-worker.test.js` deleted; ESLint block 3c removed
 - [ ] **CLIP text-based search UI** — CLIP embeddings enable text-image matching ("find photos of dogs"); requires search input UI + text encoder + cosine similarity; embeddings already stored in clipCache
 - [ ] **CLIP-based similarity sorting** — Replace or augment blockhash with CLIP cosine similarity for semantic grouping; embeddings available in clipCache
 - [ ] **Unload CLIP model after extraction completes** — CLIP ONNX model consumes ~200-400 MB in main process; stays loaded indefinitely after extraction finishes; add logic to unload (`clipProcessor = null; clipVisionModel = null`) after background extraction completes + force GC; re-load lazily if user opens new folder
 - [ ] **GPU acceleration for CLIP inference (DirectML/CUDA)** — Current CPU inference ~100-200ms/image (~8h for 30K files); DirectML (Windows, any GPU) could reduce to ~10-30ms/image; CUDA (Linux, NVIDIA) ~5-15ms/image; implementation: pass `{ device: 'gpu' }` to `from_pretrained()` in main.js, fallback to CPU if unavailable; add settings toggle for GPU preference
+
+### [2026-04-09] From: CLIP/ML Pipeline Cleanup
+**Origin**: Implementation observations during cleanup of TASK-028 debt
+
+- [ ] **DRY CLIP embedding averaging in main.js** — `main.js:515-530` has inline averaging + normalization logic identical to the deleted `averageEmbeddings()` from `clip-worker.js`; if more CLIP consumers appear (e.g., CLIP text search, CLIP similarity sorting), extract to a shared `clip-utils.js` module
+- [ ] **Audit all preload.js `ipcRenderer.on()` for listener accumulation** — The `clip-download-progress` listener was leaking because `ipcRenderer.on()` was used without cleanup; audit remaining `ipcRenderer.on()` registrations in preload.js (currently only `logError` uses `.send()` which is fine); establish pattern: all `.on()` listeners must return cleanup functions
 
 ---
 

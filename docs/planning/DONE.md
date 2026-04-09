@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-04-07 <!-- TASK-028 -->
+**Last Updated**: 2026-04-09 <!-- CLIP/ML Cleanup -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,23 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-04 (April)
+
+### [2026-04-09] CLIP/ML Pipeline Cleanup
+
+**Spec**: [docs/superpowers/specs/2026-04-09-clip-ml-cleanup-design.md](../../superpowers/specs/2026-04-09-clip-ml-cleanup-design.md)
+**Plan**: [docs/archive/plans/2026-04-09-clip-ml-cleanup.md](../../archive/plans/2026-04-09-clip-ml-cleanup.md)
+**Summary**: Four cleanup tasks addressing TASK-028 technical debt: fixed IPC listener accumulation for CLIP download progress, eliminated wasted image decodes during CLIP-only extraction passes, corrected broken ML model persistence (stale `.ml_model.json`), and deleted dead `clip-worker.js` (225 lines) with its tests and ESLint config.
+**Key Changes**:
+- `preload.js` — `onClipDownloadProgress` returns cleanup function (`ipcRenderer.removeListener`)
+- `media-viewer.js` — `initClipModel()` uses `finally` block for listener cleanup; `startBackgroundFeatureExtraction()` guards `loadMediaAsImageData()` with `featureCache.has()` check; `saveMlModel()` removes redundant outer `version:1` wrapper; new `deleteMlModelCache()` method called on `modelWasReset`
+- `clip-worker.js` — **Deleted** (never instantiated as Worker since d21e213)
+- `tests/clip-worker.test.js` — **Deleted** (8 tests for dead code)
+- `eslint.config.mjs` — Removed block 3c, updated header (Eleven → Ten blocks)
+- `CLAUDE.md` — Updated architecture, conventions, git insights
+**Commits**: 4 implementation commits (053a42c..be4f8ee)
+**Spawned Tasks**: 2 items added to BACKLOG.md (DRY CLIP averaging in main.js, audit preload.js `ipcRenderer.on()` listeners)
+
+---
 
 ### [2026-04-07] CLIP semantic features for ML prediction (TASK-028)
 
