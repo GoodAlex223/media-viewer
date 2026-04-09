@@ -6856,7 +6856,8 @@ class MediaViewer {
                 }
 
                 try {
-                    const imageData = await this.loadMediaAsImageData(file.path);
+                    const needsHandCrafted = !this.featureCache.has(file.path);
+                    const imageData = needsHandCrafted ? await this.loadMediaAsImageData(file.path) : null;
                     const priority = this.calculateFeaturePriority(index);
 
                     const featurePromise = this.enqueueFeatureExtraction(file.path, imageData, priority)
