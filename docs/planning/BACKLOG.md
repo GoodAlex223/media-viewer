@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-08 <!-- manual testing items + TASK-028 PR #26 code review -->
+**Last Updated**: 2026-04-10 <!-- PR #27 code review findings -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -54,6 +54,13 @@ Ideas and tasks not yet prioritized for active development.
 
 - [ ] **DRY CLIP embedding averaging in main.js** — `main.js:515-530` has inline averaging + normalization logic identical to the deleted `averageEmbeddings()` from `clip-worker.js`; if more CLIP consumers appear (e.g., CLIP text search, CLIP similarity sorting), extract to a shared `clip-utils.js` module
 - [ ] **Audit all preload.js `ipcRenderer.on()` for listener accumulation** — The `clip-download-progress` listener was leaking because `ipcRenderer.on()` was used without cleanup; audit remaining `ipcRenderer.on()` registrations in preload.js (currently only `logError` uses `.send()` which is fine); establish pattern: all `.on()` listeners must return cleanup functions
+
+### [2026-04-10] From: PR #27 code review
+**Origin**: 5 parallel agents + confidence scoring; 7 issues found, 3 scored >=80 (all doc issues, fixed in ce9dd798); code-level observations below threshold but worth tracking
+
+- [ ] **Rename `deleteMlModelCache()` → `clearMlModelCache()`** — Method writes empty string to `.ml_model.json` rather than deleting it (no `deleteFile` IPC exists); name "delete" is misleading; `clearMlModelCache()` or `invalidateMlModelCache()` better reflects the write-empty-string behavior; affected: `media-viewer.js` (~L5598), CLAUDE.md
+- [ ] **Add `deleteFile` IPC to preload.js** — Currently no file deletion capability in the IPC bridge; `deleteMlModelCache()` works around this by writing empty string; a proper `deleteFile` handler would enable clean cache invalidation and potentially other file cleanup operations; affected: `main.js` (new IPC handler), `preload.js` (new bridge method)
+- [ ] **Add null guard in `enqueueFeatureExtraction` for imageData** — When file needs CLIP-only extraction (has hand-crafted features), `imageData` is passed as `null`; safe today because `featureCache.has()` early-return fires first, but invariant is implicit and fragile (concurrent cache eviction could cause `task.imageData.data` TypeError crash); add defensive `if (!imageData) return null` before queuing task; affected: `media-viewer.js` (~L6654, `enqueueFeatureExtraction`)
 
 ---
 
