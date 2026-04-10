@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-04-09 <!-- CLIP/ML Cleanup completed -->
+**Last Updated**: 2026-04-10 <!-- Compare Mode Fix completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -25,12 +25,7 @@ Active tasks and backlog.
 
 <!-- Defined tasks ready to start. Ordered by priority: 🔴 → 🟠 → 🟡 → 🟢 -->
 
-### [HIGH] Fix Single Mode buttons appearing alongside Compare Mode buttons on folder switch
-- **Problem**: When switching folders while in Compare Mode, media from the new folder loads into Compare Mode but Single Mode control buttons (like, dislike, etc.) also appear — both sets of buttons are visible simultaneously
-- **Root cause**: `loadFolder()` (~L2203) does not reset `isCompareMode`; `hideDropZone()` (~L2264) unconditionally shows `.controls` (single mode buttons); then `showMedia()` (~L2433) sees `isCompareMode === true` and also renders compare mode overlay buttons
-- **Fix**: Reset compare mode state in `loadFolder()` before showing media — either set `this.isCompareMode = false` or call `switchToSingleModeUI()` before `showMedia()`
-- **Affected**: `media-viewer.js:~L2203` (loadFolder), `~L2264` (hideDropZone), `~L2433` (showMedia)
-- **Origin**: manual testing (2026-04-08)
+<!-- Compare Mode Fix completed 2026-04-10, moved to DONE.md -->
 
 <!-- TASK-002 completed 2026-02-05, moved to DONE.md -->
 <!-- TASK-003 completed 2026-02-06, moved to DONE.md -->

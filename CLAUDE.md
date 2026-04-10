@@ -141,6 +141,8 @@ media_viewer/
 - Fixtures: 1x1 PNGs (red/green/blue) + tiny.mp4; `createTempFixtureDir(fixtureNames?)` copies named fixtures to temp dir (default: all 3 PNGs); pass array to select subset (e.g., `['red-1x1.png']` for single-file tests)
 - `rdp-preload.cjs` loads playwright-core internal `loader.js` by path — update if it breaks after upgrade
 - Shortcut remap E2E pattern: `page.evaluate()` to call `saveShortcut()`/`renderShortcutRows()`/`attachShortcutKeyListeners()` directly on `window.mediaViewer`; or click `.shortcut-key[data-action][data-mode]` to enter listening state then `page.keyboard.press(key)`
+- In-test fixture dirs: secondary `createTempFixtureDir()` calls inside a test body (not beforeEach) must use `try/finally` for cleanup — `afterEach` only cleans up `tmpFixtures` from `beforeEach`; use `let secondFolder; try { ... } finally { await secondFolder?.cleanup(); }`
+- Mode-switch UI assertions: when verifying folder-switch or rating resets compare mode, assert BOTH `.controls` visible (`display === 'flex'`) AND `.compare-controls` hidden (`display !== 'flex'`) — checking only one side can miss cases where both button sets appear simultaneously
 
 <!-- END AUTO-MANAGED -->
 
@@ -224,7 +226,7 @@ media_viewer/
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-09: fixed IPC listener accumulation, skipped redundant image decodes, added `deleteMlModelCache()`, deleted `clip-worker.js`) + Compare Mode folder-switch fix (2026-04-10: `switchToSingleModeUI()` inserted before `hideDropZone()` in `loadFolder()`, E2E coverage added). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-09: fixed IPC listener accumulation, skipped redundant image decodes, added `deleteMlModelCache()`, deleted `clip-worker.js`) + Compare Mode folder-switch fix + DRY refactor (2026-04-10: `switchToSingleModeUI()` inserted in `loadFolder()` and `toggleViewMode()` single-mode branch, removes 14-line duplicate block, E2E coverage added). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **In progress:**
 - (none)

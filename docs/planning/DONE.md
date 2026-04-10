@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-04-09 <!-- CLIP/ML Cleanup -->
+**Last Updated**: 2026-04-10 <!-- Compare Mode Fix -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,19 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-04 (April)
+
+### [2026-04-10] Compare Mode Fix + DRY Refactor
+
+**Spec**: [docs/superpowers/specs/2026-04-10-compare-mode-fix-design.md](../../superpowers/specs/2026-04-10-compare-mode-fix-design.md)
+**Plan**: [docs/archive/plans/2026-04-10-compare-mode-fix.md](../../archive/plans/2026-04-10-compare-mode-fix.md)
+**Summary**: Fixed bug where switching folders while in Compare Mode caused both Single Mode and Compare Mode buttons to appear simultaneously. Also DRYed `toggleViewMode()` single-mode branch by replacing 17-line inline UI setup with `switchToSingleModeUI()` call.
+**Key Changes**:
+- `media-viewer.js` — `loadFolder()` now calls `switchToSingleModeUI()` before `hideDropZone()` (~L2248); `toggleViewMode()` else-branch replaced with single `switchToSingleModeUI()` call
+- `tests/e2e/compare-mode.test.js` — New E2E test "resets to single mode when switching folders in compare mode" with try/finally cleanup and dual assertion (controls visible + compare-controls hidden)
+**Commits**: 4 commits (6976fd4..11e417f)
+**Spawned Tasks**: 2 items added to BACKLOG.md (mode-aware `hideDropZone()`, try/finally for pre-existing `twoFileTmp`)
+
+---
 
 ### [2026-04-09] CLIP/ML Pipeline Cleanup
 

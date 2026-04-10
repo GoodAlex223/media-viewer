@@ -487,6 +487,12 @@ Areas requiring investigation before implementation.
 
 - [x] Remove unnecessary loading state resets before recursive retry in showCompareMedia() — Promoted to TODO: TASK-022 (merged into last-pair error fix)
 
+### 2026-04-10 From: compare-mode-fix
+**Origin**: [2026-04-10-compare-mode-fix.md](../archive/plans/2026-04-10-compare-mode-fix.md)
+
+- [ ] Make `hideDropZone()` mode-aware — Currently unconditionally shows `.controls` regardless of `isCompareMode`. Works now because `loadFolder()` resets first, but `hideDropZone()` is called from other paths; a mode-aware version would be more robust.
+- [ ] Add try/finally cleanup to pre-existing `twoFileTmp` in compare-mode E2E — The "switches to single mode when last pair is rated" test (lines 113-161) has the same inline-cleanup pattern that was fixed for `secondFolder`; should use try/finally too.
+
 ---
 
 ## Rejected Ideas

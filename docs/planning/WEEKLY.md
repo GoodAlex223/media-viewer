@@ -98,10 +98,10 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group B: CLIP/ML Pipeline Cleanup** [batch] | 7 |
 
-- [ ] Fix IPC listener accumulation for clip-download-progress (2 SP)
-- [ ] Skip redundant loadMediaAsImageData for CLIP-only extractions (2 SP)
-- [ ] Handle stale .ml_model.json after version upgrade (2 SP)
-- [ ] Remove dead worker code in clip-worker.js (1 SP)
+- [x] Fix IPC listener accumulation for clip-download-progress (2 SP)
+- [x] Skip redundant loadMediaAsImageData for CLIP-only extractions (2 SP)
+- [x] Handle stale .ml_model.json after version upgrade (2 SP)
+- [x] Remove dead worker code in clip-worker.js (1 SP)
 
 **Daily total**: 7 SP
 
@@ -115,8 +115,8 @@ _(No ongoing background tasks this week.)_
 | **Group A: Compare Mode Fix** [batch] | 4 |
 | **Group C: Test Quality** [batch] | 2 |
 
-- [ ] Fix Single Mode buttons on folder switch (3 SP)
-- [ ] DRY `toggleViewMode()` with `switchToSingleModeUI()` (1 SP)
+- [x] Fix Single Mode buttons on folder switch (3 SP)
+- [x] DRY `toggleViewMode()` with `switchToSingleModeUI()` (1 SP)
 - [ ] Add E2E afterEach null safety (1 SP)
 - [ ] Fix misleading describe label (1 SP)
 
