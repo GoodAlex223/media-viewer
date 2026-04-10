@@ -174,7 +174,7 @@ media_viewer/
 - `getCombinedFeatures(filePath)` merges `featureCache` (64-dim) + `clipCache` (512-dim) → 576-dim `Float32Array`; used by ML pipeline and `requestPredictionScores()`
 - `featureMetadata` Map decoupled from `this.mediaFiles` — survives files being rated/moved during extraction
 - Stale-entry pruning on load: absent files skipped, size/mtime mismatch triggers re-extraction
-- ML model cache: `saveMlModel()` writes `{modelState, timestamp}` to `.ml_model.json` (no outer version wrapper — version/dim live inside `modelState`); `deleteMlModelCache()` clears it by writing empty string (called on version/dim mismatch reset)
+- ML model cache: `saveMlModel()` writes `{modelState, timestamp}` to `.ml_model.json` (no outer version wrapper — version/dim live inside `modelState`); `deleteMlModelCache()` clears it by writing empty string (called on version/dim mismatch reset); NOTE: name is misleading — it writes `''` not a real delete, because no `deleteFile` IPC exists in preload.js; rename to `clearMlModelCache()` tracked in BACKLOG
 
 **UI Components**:
 - Zoom: `createZoomPopover(target, wrapper, toggleBtn)` / `removeZoomPopover(target)` — single mode static, compare mode dynamic
@@ -224,13 +224,12 @@ media_viewer/
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-09: fixed IPC listener accumulation, skipped redundant image decodes, added `deleteMlModelCache()`, deleted `clip-worker.js`). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-09: fixed IPC listener accumulation, skipped redundant image decodes, added `deleteMlModelCache()`, deleted `clip-worker.js`) + Compare Mode folder-switch fix (2026-04-10: `switchToSingleModeUI()` inserted before `hideDropZone()` in `loadFolder()`, E2E coverage added). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **In progress:**
 - (none)
 
 **Next planned** (week of April 13–17, see `docs/planning/WEEKLY.md`):
-- **Tue — Compare Mode Fix + Test Quality** (6 SP): Fix Single Mode buttons appearing alongside Compare Mode buttons on folder switch — `loadFolder()` (~L2203) does not reset `isCompareMode`; `hideDropZone()` (~L2264) unconditionally shows `.controls`; fix: call `switchToSingleModeUI()` before `showMedia()` in `loadFolder()`; DRY `toggleViewMode()` single-mode branch with `switchToSingleModeUI()`; add E2E `afterEach` null guard on `tmpFixtures`; fix misleading describe label in `media-viewer-utils.test.js`
 - **Wed — CLIP Similarity Sorting** (5 SP): Implement CLIP cosine similarity sorting using `clipCache` embeddings — replace/augment blockhash; changes to `sorting-worker.js` + `media-viewer.js` sorting integration
 - **Thu — Resource Management** (5 SP): Unload CLIP model after extraction completes (null `clipProcessor`/`clipVisionModel`, ~200–400 MB); add double-init protection to `logger.js` `init()` (close existing fd before opening new one)
 - **Fri — Build & DX** (2 SP): Pin Lucide CDN to specific version in `index.html`; update regression-checker agent for FullscreenManager
@@ -238,7 +237,7 @@ Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-0
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
 - Compare mode exit: use `switchToSingleModeUI()` (non-toggling helper), NOT `toggleViewMode()` — the latter re-toggles isCompareMode causing infinite loops when <2 files remain
-- Folder switch in Compare Mode: `loadFolder()` does not reset `isCompareMode`; `hideDropZone()` unconditionally shows `.controls` (single mode buttons) while `showMedia()` also renders compare overlay buttons — both button sets appear; fix: reset `isCompareMode` (or call `switchToSingleModeUI()`) in `loadFolder()` before `showMedia()`
+- Folder switch in Compare Mode: `loadFolder()` now calls `switchToSingleModeUI()` before `hideDropZone()` (~L2248) — new folders always open in Single Mode (compare context is folder-scoped); E2E test covers this in `compare-mode.test.js` ("resets to single mode when switching folders")
 - Empty state: `showEmptyStateWithUndo()` (preserves undo toolbar) vs `showDropZone()` (genuine empty) — check `moveHistory.length` to decide; keydown guard at line ~1729 blocks all keys when `mediaFiles.length === 0` except undo — undo passes through when `moveHistory.length > 0` (implemented in TASK-027)
 - `transition-delay` on CSS base rules: always verify fullscreen/hidden state overrides aren't inheriting the delay
 - Feature cache: `loadFeatureCache()` must be called unconditionally before `startBackgroundFeatureExtraction()` — lazy-init guard previously caused cache to not reload on folder switch
@@ -247,6 +246,8 @@ Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-0
 - `@huggingface/transformers` in Electron Web Workers: bare specifier resolves to Node.js bundle — npm packages cannot resolve in Electron's worker context at all; solution is to run inference in the main process via IPC (d21e213), where dynamic `import('@huggingface/transformers')` works normally
 - IPC progress callbacks with long-running async ops: always guard `event.sender.isDestroyed()` before calling `event.sender.send()` — renderer window may close while main process is still loading a model (e.g., CLIP download)
 - IPC listener accumulation via `ipcRenderer.on()`: each call registers a new persistent listener — use `.once()` for single-fire events, or return a cleanup function (`() => ipcRenderer.removeListener(channel, handler)`) for multi-fire progress events and call it after the async op completes (success or failure)
+- `deleteMlModelCache()` is misleadingly named — writes empty string to `.ml_model.json`, does not delete the file (no `deleteFile` IPC exists in preload.js/main.js); tracked in BACKLOG as rename to `clearMlModelCache()` + add proper `deleteFile` IPC
+- `enqueueFeatureExtraction` imageData null invariant: when file has hand-crafted features but needs CLIP-only extraction, `imageData` is `null`; safe today because `featureCache.has()` early-return fires first, but fragile under concurrent cache eviction — missing defensive null guard tracked in BACKLOG
 
 <!-- END AUTO-MANAGED -->
 

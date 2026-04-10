@@ -2245,6 +2245,7 @@ class MediaViewer {
             if (this.sortSimilarityBtn) {
                 this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
             }
+            this.switchToSingleModeUI();
             this.hideDropZone();
             await this.showMedia();
             this.updateFolderInfo();
