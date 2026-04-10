@@ -170,31 +170,41 @@ test.describe('Compare Mode', () => {
         expect(isCompare).toBe(true);
 
         // Create a second folder with different fixtures
-        const secondFolder = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png']);
+        let secondFolder;
+        try {
+            secondFolder = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png']);
 
-        // Load second folder while still in compare mode
-        await loadFolder(page, secondFolder.dir);
-        await waitForMedia(page);
+            // Load second folder while still in compare mode
+            await loadFolder(page, secondFolder.dir);
+            await waitForMedia(page);
 
-        // Should have reset to single mode
-        const isCompareAfter = await page.evaluate(() => window.mediaViewer.isCompareMode);
-        expect(isCompareAfter).toBe(false);
+            // Should have reset to single mode
+            const isCompareAfter = await page.evaluate(() => window.mediaViewer.isCompareMode);
+            expect(isCompareAfter).toBe(false);
 
-        // Single mode UI should be active
-        const viewModeLabel = await page.locator('#viewModeLabel').textContent();
-        expect(viewModeLabel).toBe('Single');
+            // Single mode UI should be active
+            const viewModeLabel = await page.locator('#viewModeLabel').textContent();
+            expect(viewModeLabel).toBe('Single');
 
-        // .controls (single mode buttons) should be visible
-        const controlsVisible = await page.evaluate(() => document.querySelector('.controls').style.display === 'flex');
-        expect(controlsVisible).toBe(true);
+            // .controls (single mode buttons) should be visible
+            const controlsVisible = await page.evaluate(
+                () => document.querySelector('.controls').style.display === 'flex'
+            );
+            expect(controlsVisible).toBe(true);
 
-        // compare-mode class should be removed from media container
-        const hasCompareClass = await page.evaluate(() =>
-            document.querySelector('.media-container').classList.contains('compare-mode')
-        );
-        expect(hasCompareClass).toBe(false);
+            // Compare controls should be hidden
+            const compareControlsHidden = await page.evaluate(
+                () => document.querySelector('.compare-controls').style.display !== 'flex'
+            );
+            expect(compareControlsHidden).toBe(true);
 
-        // Clean up second folder
-        await secondFolder.cleanup();
+            // compare-mode class should be removed from media container
+            const hasCompareClass = await page.evaluate(() =>
+                document.querySelector('.media-container').classList.contains('compare-mode')
+            );
+            expect(hasCompareClass).toBe(false);
+        } finally {
+            await secondFolder?.cleanup();
+        }
     });
 });
