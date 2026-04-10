@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-10 <!-- PR #27 code review findings -->
+**Last Updated**: 2026-04-11 <!-- PR #28 code review findings -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -492,6 +492,13 @@ Areas requiring investigation before implementation.
 
 - [ ] Make `hideDropZone()` mode-aware — Currently unconditionally shows `.controls` regardless of `isCompareMode`. Works now because `loadFolder()` resets first, but `hideDropZone()` is called from other paths; a mode-aware version would be more robust.
 - [ ] Add try/finally cleanup to pre-existing `twoFileTmp` in compare-mode E2E — The "switches to single mode when last pair is rated" test (lines 113-161) has the same inline-cleanup pattern that was fixed for `secondFolder`; should use try/finally too.
+
+### [2026-04-11] From: PR #28 code review
+**Origin**: 5 parallel agents + confidence scoring; 4 issues found, 2 scored >=80 (both doc issues, fixed in 54e6246); code-level observations below threshold but worth tracking
+
+- [ ] **Redundant calls in `switchToSingleModeUI()` via `toggleViewMode()`** — When `toggleViewMode()` calls `switchToSingleModeUI()`, `hidePredictionBadges()` and `closeAllZoomPopovers()` run twice (once at top of `toggleViewMode()`, once inside `switchToSingleModeUI()`). Harmless but wasteful; consider splitting `switchToSingleModeUI()` into a core UI-reset (for `toggleViewMode()`) and a full reset (for `loadFolder()` and other callers); affected: `media-viewer.js` (~L3567 `switchToSingleModeUI`, ~L3589 `toggleViewMode`)
+- [ ] **Double `isCompareMode = false` in `toggleViewMode()`** — Line ~3619 toggles `isCompareMode` to `false`, then `switchToSingleModeUI()` sets it `false` again. Correct but confusing for future readers; add a comment clarifying the toggle precedes the helper call; affected: `media-viewer.js` (~L3619, ~L3634)
+- [ ] **Standardize E2E `waitForTimeout` durations** — Compare-mode tests use 200ms, 300ms, 500ms, 1000ms for similar DOM-settling waits with no clear rationale for which value; consider extracting named constants (e.g., `MODE_SWITCH_SETTLE = 300`) or replacing with state-based waits (`waitForFunction`); affected: `tests/e2e/compare-mode.test.js`, `tests/e2e/navigation.test.js`, `tests/e2e/fullscreen.test.js`
 
 ---
 
