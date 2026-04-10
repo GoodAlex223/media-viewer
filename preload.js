@@ -27,7 +27,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadClipModel: () => ipcRenderer.invoke('loadClipModel'),
     extractClipEmbedding: (imagePath) => ipcRenderer.invoke('extractClipEmbedding', imagePath),
     extractClipEmbeddingBatch: (imagePaths) => ipcRenderer.invoke('extractClipEmbeddingBatch', imagePaths),
-    onClipDownloadProgress: (callback) => ipcRenderer.on('clip-download-progress', (_event, data) => callback(data)),
+    onClipDownloadProgress: (callback) => {
+        const handler = (_event, data) => callback(data);
+        ipcRenderer.on('clip-download-progress', handler);
+        return () => ipcRenderer.removeListener('clip-download-progress', handler);
+    },
 
     // Logging (fire-and-forget)
     logError: (data) => ipcRenderer.send('log-renderer-error', data),

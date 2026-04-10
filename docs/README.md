@@ -39,11 +39,13 @@ Central index for all project documentation.
 | [Sorting Cache][]                 | Cache sorting algorithm results             |
 | [Background Feature Extraction][] | Worker pool for parallel feature extraction |
 | [Compare Mode AI Sort Bug][]      | Fix file mismatch in AI sorting mode        |
+| [CLIP/ML Pipeline Cleanup Plan][] | CLIP/ML pipeline cleanup implementation     |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
 [Background Feature Extraction]: archive/plans/2025-12-28_background-feature-extraction.md
 [Compare Mode AI Sort Bug]: archive/plans/2026-01-02_compare-mode-ai-sort-bug.md
+[CLIP/ML Pipeline Cleanup Plan]: archive/plans/2026-04-09-clip-ml-cleanup.md
 
 ## Design Specs
 
@@ -57,6 +59,7 @@ Central index for all project documentation.
 | [TASK-025 Application Logging][] | File-based application logging design |
 | [TASK-026 Keyboard Shortcuts][] | Keyboard shortcut customization design |
 | [TASK-027 Undo Empty State][] | Undo fix when no media remains in folder |
+| [CLIP/ML Pipeline Cleanup][] | CLIP/ML pipeline cleanup (IPC listener, image decode, model cache, dead code) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -67,6 +70,7 @@ Central index for all project documentation.
 [TASK-026 Keyboard Shortcuts]: superpowers/specs/2026-03-27-task-026-keyboard-shortcut-customization-design.md
 [TASK-027 Undo Empty State]: superpowers/specs/2026-03-28-task-027-fix-undo-empty-folder-design.md
 [TASK-028 CLIP Semantic Features]: superpowers/specs/2026-04-05-task-028-clip-semantic-features-design.md
+[CLIP/ML Pipeline Cleanup]: superpowers/specs/2026-04-09-clip-ml-cleanup-design.md
 
 ## Archives
 
@@ -76,4 +80,4 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-02-05*
+*Last Updated: 2026-04-09*

@@ -5366,6 +5366,7 @@ class MediaViewer {
                     console.warn('ML model was reset (version/dim mismatch) — clearing stale cache');
                     this.mlModelState = null;
                     this.predictionScores = new Map();
+                    this.deleteMlModelCache();
                 }
                 // If model was restored with samples, request scores
                 if (message.stats?.isReady && this.mediaFiles.length > 0) {
@@ -5585,13 +5586,22 @@ class MediaViewer {
             await window.electronAPI.writeFile(
                 cacheFile,
                 JSON.stringify({
-                    version: 1,
                     modelState: this.mlModelState,
                     timestamp: Date.now(),
                 })
             );
         } catch (error) {
             console.error('Failed to save ML model:', error);
+        }
+    }
+
+    async deleteMlModelCache() {
+        if (!this.baseFolderPath) return;
+        try {
+            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
+            await window.electronAPI.writeFile(cacheFile, '');
+        } catch (_error) {
+            // Ignore — file may not exist
         }
     }
 
@@ -6435,9 +6445,10 @@ class MediaViewer {
         if (!this.enableClipFeatures) return;
         if (!window.electronAPI.loadClipModel) return;
 
-        // Listen for download progress
+        // Listen for download progress (returns cleanup function)
+        let removeProgressListener;
         if (window.electronAPI.onClipDownloadProgress) {
-            window.electronAPI.onClipDownloadProgress((data) => {
+            removeProgressListener = window.electronAPI.onClipDownloadProgress((data) => {
                 this.clipModelDownloading = true;
                 if (data.progress % 10 === 0) {
                     this.showNotification(`Downloading CLIP model... ${data.progress}%`, 'info');
@@ -6461,6 +6472,10 @@ class MediaViewer {
             this.clipModelDownloading = false;
             console.error('CLIP model init error:', err.message);
             this.showNotification('CLIP model unavailable — using basic features only', 'warning');
+        } finally {
+            if (removeProgressListener) {
+                removeProgressListener();
+            }
         }
     }
 
@@ -6851,7 +6866,8 @@ class MediaViewer {
                 }
 
                 try {
-                    const imageData = await this.loadMediaAsImageData(file.path);
+                    const needsHandCrafted = !this.featureCache.has(file.path);
+                    const imageData = needsHandCrafted ? await this.loadMediaAsImageData(file.path) : null;
                     const priority = this.calculateFeaturePriority(index);
 
                     const featurePromise = this.enqueueFeatureExtraction(file.path, imageData, priority)

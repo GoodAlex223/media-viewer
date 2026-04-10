@@ -68,13 +68,12 @@ media_viewer/
 ├── ml-model.js          # ML model definitions (OnlineLogisticRegression); v3: 576-dim input (64 hand-crafted + 512 CLIP)
 ├── feature-extractor.js # Image feature extraction (64-dim vectors)
 ├── feature-worker.js    # Web Worker: feature extraction
-├── clip-worker.js       # CLIP helper module (averageEmbeddings, CLIP_EMBEDDING_DIM exports); no longer spawned as a Worker — CLIP inference moved to main process IPC (d21e213)
 ├── fullscreen.js        # FullscreenManager ES module (v2.0 modularization pattern)
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
 ├── tests/               # Unit tests (Vitest) + E2E tests (Playwright)
-│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts, clip-worker
+│   ├── *.test.js        # Unit: sorting-worker, ml-model, feature-extractor, media-viewer-utils, ml-pair-selection, logger, keyboard-shortcuts
 │   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state, clip-graceful-degradation
 │       ├── fixtures/    # Test media (1x1 PNGs, tiny.mp4)
 │       └── helpers/     # electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs
@@ -83,7 +82,7 @@ media_viewer/
 
 **Data Flow**:
 1. Main process handles file system operations (read, move, copy) and CLIP model inference (`loadClipModel`, `extractClipEmbedding`, `extractClipEmbeddingBatch` IPC handlers)
-2. Preload exposes secure IPC bridge to renderer (including CLIP IPC + `onClipDownloadProgress` listener)
+2. Preload exposes secure IPC bridge to renderer (including CLIP IPC + `onClipDownloadProgress` which returns a cleanup function)
 3. Renderer (media-viewer.js) manages UI state and user interactions; calls CLIP via `window.electronAPI` (not a Worker)
 4. CPU-intensive tasks delegated to Web Workers (sorting, ML, feature extraction); CLIP is main-process IPC (not a Worker — npm packages can't resolve in Electron Web Workers)
 
@@ -111,7 +110,6 @@ media_viewer/
 - CommonJS `require()` in main process and workers
 - Browser globals in renderer (no module bundler)
 - ES module `import` in media-viewer.js for extracted modules (e.g., `import { FullscreenManager } from './fullscreen.js'`)
-- Module worker: `new Worker('clip-worker.js', { type: 'module' })` pattern exists but is NOT used for CLIP inference — `@huggingface/transformers` cannot resolve in Electron Web Workers (npm package resolution unavailable); CLIP moved to main process dynamic `import('@huggingface/transformers')` via IPC
 
 **Unused variables**:
 - Prefix with `_` (e.g., `_unused`, `_err`) to satisfy ESLint `no-unused-vars` rule (`varsIgnorePattern: '^_'`, `argsIgnorePattern: '^_'`, `caughtErrorsIgnorePattern: '^_'`)
@@ -119,7 +117,7 @@ media_viewer/
 **Formatting & Linting**:
 - Prettier: tabWidth=4, useTabs=false, singleQuote, semi, trailingComma=es5, printWidth=120, bracketSpacing=true, arrowParens=always, endOfLine="lf"
 - `.gitattributes`: `* text=auto eol=lf` — enforces LF line endings for all files across platforms
-- ESLint flat config (`eslint.config.mjs`): Eleven file-group blocks (1: Node/main, 1b: preload, 2a: renderer module, 2b: renderer script, 2c: fullscreen.js, 3a: workers, 3b: shared libs, 3c: clip-worker, 4: unit tests, 5a: e2e CJS helpers, 5b: e2e JS tests); `clip-worker.js` gets its own block (3c) because it uses dynamic `import()` of ESM packages; shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn, `_`-prefix escape); `eslint-config-prettier` applied last
+- ESLint flat config (`eslint.config.mjs`): Ten file-group blocks (1: Node/main, 1b: preload, 2a: renderer module, 2b: renderer script, 2c: fullscreen.js, 3a: workers, 3b: shared libs, 4: unit tests, 5a: e2e CJS helpers, 5b: e2e JS tests); shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn, `_`-prefix escape); `eslint-config-prettier` applied last
 - Prettier ignores `docs/`, `*.md`, `package-lock.json`
 
 **Testing (Unit — Vitest)**:
@@ -163,7 +161,7 @@ media_viewer/
 - Empty state keydown guard: when `mediaFiles.length === 0`, keydown handler blocks all input EXCEPT undo — undo passes through when `moveHistory.length > 0` (TASK-027 fix)
 - Compare-pair undo: history entries tagged `compareMode: true`; `handleCancel()` detects paired entries and restores both files in one undo
 - ML model reset on folder change: `resetMlModel()` nulls `mlModelState`/`mlStats`, resets `predictionScores` Map, posts `{ type: 'reset' }` to mlWorker, calls `updateSortPredictionButton()`; called on like/dislike folder select or clear so stale training doesn't persist across folder configs (f4772a9); also called when `enableClipFeatures` toggle changes to prevent 576-dim vs 64-dim mismatch corrupting predictions
-- ML model reset on dim/version mismatch: `initComplete` handler checks `message.modelWasReset`; if set, clears `this.mlModelState = null` and `this.predictionScores = new Map()` to purge stale renderer-side cache after worker auto-resets
+- ML model reset on dim/version mismatch: `initComplete` handler checks `message.modelWasReset`; if set, clears `this.mlModelState = null` and `this.predictionScores = new Map()` to purge stale renderer-side cache after worker auto-resets; also calls `deleteMlModelCache()` to remove the stale `.ml_model.json` from disk, preventing reset-on-every-restart
 
 **Index Management**:
 - Wrap-to-start: `moveCurrentFile()` cycles to index 0 when rating last file
@@ -176,6 +174,7 @@ media_viewer/
 - `getCombinedFeatures(filePath)` merges `featureCache` (64-dim) + `clipCache` (512-dim) → 576-dim `Float32Array`; used by ML pipeline and `requestPredictionScores()`
 - `featureMetadata` Map decoupled from `this.mediaFiles` — survives files being rated/moved during extraction
 - Stale-entry pruning on load: absent files skipped, size/mtime mismatch triggers re-extraction
+- ML model cache: `saveMlModel()` writes `{modelState, timestamp}` to `.ml_model.json` (no outer version wrapper — version/dim live inside `modelState`); `deleteMlModelCache()` clears it by writing empty string (called on version/dim mismatch reset)
 
 **UI Components**:
 - Zoom: `createZoomPopover(target, wrapper, toggleBtn)` / `removeZoomPopover(target)` — single mode static, compare mode dynamic
@@ -199,7 +198,7 @@ media_viewer/
 **Key Dependencies** (beyond Electron/Vitest/Playwright):
 - `ffprobe-static`: bundled ffprobe binary for video metadata extraction (main process)
 - `ffmpeg-static`: bundled ffmpeg binary for video keyframe extraction (main process, added TASK-028)
-- `@huggingface/transformers`: CLIP model inference via ONNX Runtime Web (main process IPC, added TASK-028; moved from clip-worker.js in d21e213)
+- `@huggingface/transformers`: CLIP model inference via ONNX Runtime Web (main process IPC, added TASK-028)
 - `@vladmandic/face-api`: face detection in renderer
 
 **Security**: Context isolation enabled, sandbox disabled (required for file ops), IPC bridge via preload.js
@@ -225,13 +224,16 @@ media_viewer/
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Completed tasks: TASK-012 through TASK-028 (TASK-028: CLIP semantic features for ML prediction — 512-dim CLIP + 64-dim hand-crafted = 576-dim total; CLIP in main process IPC; video via ffmpeg keyframes; ML model reset on folder change). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-09: fixed IPC listener accumulation, skipped redundant image decodes, added `deleteMlModelCache()`, deleted `clip-worker.js`). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **In progress:**
 - (none)
 
-**Next planned:**
-- Fix Single Mode buttons appearing alongside Compare Mode buttons on folder switch — `loadFolder()` (~L2203) does not reset `isCompareMode`; `hideDropZone()` (~L2264) unconditionally shows `.controls`; fix: call `switchToSingleModeUI()` before `showMedia()` in `loadFolder()`
+**Next planned** (week of April 13–17, see `docs/planning/WEEKLY.md`):
+- **Tue — Compare Mode Fix + Test Quality** (6 SP): Fix Single Mode buttons appearing alongside Compare Mode buttons on folder switch — `loadFolder()` (~L2203) does not reset `isCompareMode`; `hideDropZone()` (~L2264) unconditionally shows `.controls`; fix: call `switchToSingleModeUI()` before `showMedia()` in `loadFolder()`; DRY `toggleViewMode()` single-mode branch with `switchToSingleModeUI()`; add E2E `afterEach` null guard on `tmpFixtures`; fix misleading describe label in `media-viewer-utils.test.js`
+- **Wed — CLIP Similarity Sorting** (5 SP): Implement CLIP cosine similarity sorting using `clipCache` embeddings — replace/augment blockhash; changes to `sorting-worker.js` + `media-viewer.js` sorting integration
+- **Thu — Resource Management** (5 SP): Unload CLIP model after extraction completes (null `clipProcessor`/`clipVisionModel`, ~200–400 MB); add double-init protection to `logger.js` `init()` (close existing fd before opening new one)
+- **Fri — Build & DX** (2 SP): Pin Lucide CDN to specific version in `index.html`; update regression-checker agent for FullscreenManager
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
@@ -244,6 +246,7 @@ Completed tasks: TASK-012 through TASK-028 (TASK-028: CLIP semantic features for
 - Shortcut localStorage: `loadShortcuts()`, `saveShortcut()`, `resetShortcuts()` use global `localStorage` directly — NOT `this.localStorage`; unit tests mock via `globalThis.localStorage` (not ctx property injection)
 - `@huggingface/transformers` in Electron Web Workers: bare specifier resolves to Node.js bundle — npm packages cannot resolve in Electron's worker context at all; solution is to run inference in the main process via IPC (d21e213), where dynamic `import('@huggingface/transformers')` works normally
 - IPC progress callbacks with long-running async ops: always guard `event.sender.isDestroyed()` before calling `event.sender.send()` — renderer window may close while main process is still loading a model (e.g., CLIP download)
+- IPC listener accumulation via `ipcRenderer.on()`: each call registers a new persistent listener — use `.once()` for single-fire events, or return a cleanup function (`() => ipcRenderer.removeListener(channel, handler)`) for multi-fire progress events and call it after the async op completes (success or failure)
 
 <!-- END AUTO-MANAGED -->
 
