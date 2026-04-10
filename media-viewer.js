@@ -2245,6 +2245,7 @@ class MediaViewer {
             if (this.sortSimilarityBtn) {
                 this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
             }
+            this.switchToSingleModeUI();
             this.hideDropZone();
             await this.showMedia();
             this.updateFolderInfo();
@@ -3631,21 +3632,7 @@ class MediaViewer {
                 this.infoToggleBtn.style.display = 'none';
             }
         } else {
-            this.viewModeLabel.textContent = 'Single';
-            this.controls.style.display = 'flex';
-            // Show info toggle button in single mode
-            if (this.infoToggleBtn) {
-                this.infoToggleBtn.style.display = 'flex';
-            }
-            this.compareControls.style.display = 'none';
-            this.mediaContainer.classList.remove('compare-mode');
-            // Hide compare file info panels in single mode
-            this.leftFileInfo.classList.remove('show');
-            this.rightFileInfo.classList.remove('show');
-            this.leftFileInfo.style.display = 'none';
-            this.rightFileInfo.style.display = 'none';
-            // Show main file info panel in single mode
-            this.fileInfo.style.display = 'block';
+            this.switchToSingleModeUI();
         }
 
         // Small delay to ensure cleanup is complete
