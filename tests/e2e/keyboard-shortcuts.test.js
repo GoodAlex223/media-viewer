@@ -30,8 +30,12 @@ test.describe('Keyboard Shortcut Customization', () => {
     test.afterEach(async () => {
         // Clean up custom shortcuts to prevent pollution of subsequent test files
         await page.evaluate(() => localStorage.removeItem('customShortcuts')).catch(() => {});
-        await closeApp(electronApp);
-        await tmpFixtures.cleanup();
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+        }
     });
 
     test('remap like shortcut and verify it works', async () => {
