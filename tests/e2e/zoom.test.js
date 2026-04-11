@@ -12,8 +12,12 @@ test.describe('Zoom Controls', () => {
     });
 
     test.afterEach(async () => {
-        await closeApp(electronApp);
-        await tmpFixtures.cleanup();
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+        }
     });
 
     test('zoom popover opens and closes on button click', async () => {
