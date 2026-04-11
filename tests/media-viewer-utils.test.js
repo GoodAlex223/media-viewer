@@ -234,7 +234,7 @@ describe('areFoldersConfigured', () => {
     });
 });
 
-describe('keydown guard — undo in empty state', () => {
+describe('buildKeyString — key string construction', () => {
     it('buildKeyString produces correct string for Ctrl+KeyA', () => {
         const mockEvent = {
             ctrlKey: true,
