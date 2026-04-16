@@ -17,8 +17,12 @@ test.describe('Fullscreen', () => {
     });
 
     test.afterEach(async () => {
-        await closeApp(electronApp);
-        await tmpFixtures.cleanup();
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+        }
     });
 
     test('Z key toggles left pane fullscreen', async () => {

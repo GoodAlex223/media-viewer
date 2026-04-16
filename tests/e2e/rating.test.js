@@ -26,8 +26,12 @@ test.describe('Rating (pre-seeded localStorage)', () => {
     });
 
     test.afterEach(async () => {
-        await closeApp(electronApp);
-        await tmpFixtures.cleanup();
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+        }
     });
 
     test('like button is enabled when folders are configured', async () => {
@@ -129,8 +133,12 @@ test.describe('Rating (Settings panel folder configuration)', () => {
     });
 
     test.afterEach(async () => {
-        await closeApp(electronApp);
-        await tmpFixtures.cleanup();
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+        }
     });
 
     test('configures like folder via Settings panel', async () => {

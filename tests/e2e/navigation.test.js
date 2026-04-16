@@ -12,8 +12,12 @@ test.describe('Navigation', () => {
     });
 
     test.afterEach(async () => {
-        await closeApp(electronApp);
-        await tmpFixtures.cleanup();
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+        }
     });
 
     test('displays correct file count after loading', async () => {

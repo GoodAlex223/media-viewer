@@ -14,8 +14,12 @@ test.describe('Undo from empty state', () => {
     let electronApp, page, tmpFixtures;
 
     test.afterEach(async () => {
-        await closeApp(electronApp);
-        await tmpFixtures.cleanup();
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+        }
     });
 
     test('single mode — undo via keyboard restores file after rating last one', async () => {

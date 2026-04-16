@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-11 <!-- PR #28 code review findings -->
+**Last Updated**: 2026-04-11 <!-- Group C Test Quality -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -23,6 +23,16 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Display platform content without downloading (embedded players/streams)** — Show posts from TikTok, Twitter, YouTube, etc. without downloading them if possible; consider embedded players vs parsing; related to platform integration add-ons but distinct scope (display without download vs full integration) (Реализовать отображение постов с различных платформ без скачивания, если это возможно); affected: new code
 - [ ] **Show thumbnail or low-quality media while loading (progressive loading)** — Display the lowest-quality version or thumbnail first instead of "Loading" placeholder, then progressively load better quality; "stream" the media to users so they can evaluate even from silhouettes or rough images (Можем ли мы отображать миниатюру или самую низкокачественную версию медиа вместо плейсхолдера «Loading», чтобы пользователи могли оценить медиа даже по силуэтам или грубым изображениям. Показывать как медиа загружается онлайн — сначала самое низкое качество, затем постепенно лучше, то есть «стримить» медиа); affected: media-viewer.js (showMedia, showSingleMedia, showCompareMedia), main.js (thumbnail generation IPC)
 - [ ] **Configure interface for different window sizes + Ctrl+/- UI zoom** — Make the interface adapt to different main window sizes (currently only one CSS breakpoint at 768px, no resize handlers); allow users to zoom the entire UI in/out using Ctrl + +/- via `webFrame.setZoomFactor` (Настроить интерфейс для разных размеров основного окна. Разрешить масштабирование интерфейса с помощью Ctrl + +/-); affected: styles.css:~L2094 (@media query), media-viewer.js (no resize handler), preload.js (needs webFrame API exposure)
+
+---
+
+## From Group C Test Quality (2026-04-11)
+
+### [2026-04-11] From: Group C implementation observations
+**Origin**: Patterns noticed while hardening E2E test teardown across 9 files
+
+- [ ] **Standardize `app-launch.test.js` afterEach to match project pattern** — `app-launch.test.js` guards `tmpFixtures` but not `electronApp` (calls `closeApp(electronApp)` unconditionally); safe because its `beforeEach` always assigns `electronApp`, but inconsistent with the `if (electronApp)` pattern now established in all other 8 E2E files; low priority, cosmetic consistency
+- [ ] **Replace E2E `waitForTimeout` magic numbers with named constants or `waitForFunction`** — Durations (200ms/300ms/500ms/1000ms) across compare-mode/navigation/fullscreen tests have no documented rationale; extract to named constants in `helpers/electron-app.js` or switch to `waitForFunction` with explicit conditions for reliability; already tracked in WEEKLY.md notes but not yet a BACKLOG item
 
 ---
 
@@ -69,8 +79,8 @@ Ideas and tasks not yet prioritized for active development.
 ### [2026-04-03] From: PR #25 code review
 **Origin**: 5 parallel agents (2 hit rate limits) + confidence scoring; 9 issues found, 4 scored 75/100, none above 80 threshold; 3 fixed in c0f1c3ca; remaining items below threshold or pre-existing patterns
 
-- [ ] **E2E afterEach null safety on tmpFixtures** (75/100) — `tests/e2e/undo-empty-state.test.js` `afterEach` calls `tmpFixtures.cleanup()` without null guard; will crash if `createTempFixtureDir()` throws before assignment; pre-existing pattern across most E2E test files (only `app-launch.test.js` guards)
-- [ ] **Misleading describe label in unit tests** (50/100) — `tests/media-viewer-utils.test.js` describe block "keydown guard — undo in empty state" only tests `buildKeyString()`, not the guard itself; guard covered by E2E tests
+- [x] **E2E afterEach null safety on tmpFixtures** (75/100) — Fixed in Group C Test Quality (5e29a56, c8364b8, 25bf2d3); all 7 unguarded E2E files now have `if (electronApp)` / `if (tmpFixtures)` guards
+- [x] **Misleading describe label in unit tests** (50/100) — Fixed in Group C Test Quality (c1b43df); renamed to "buildKeyString — key string construction"
 - [x] **DOM leak: .empty-state-undo in showDropZone()** (75/100) — Fixed in c0f1c3ca
 - [x] **Stale .spec.js filename in spec doc** (75/100) — Fixed in c0f1c3ca
 - [x] **docs/README.md not updated for TASK-027 spec** (75/100) — Fixed in c0f1c3ca

@@ -49,10 +49,10 @@ _(No ongoing background tasks this week.)_
 **Domain**: Testing
 **Total SP**: 2
 
-- [ ] **Add E2E afterEach null safety on tmpFixtures** — 1 SP, NICE TO HAVE
+- [x] **Add E2E afterEach null safety on tmpFixtures** — 1 SP, NICE TO HAVE
   - `afterEach` calls `tmpFixtures.cleanup()` without null guard; crashes if `createTempFixtureDir()` throws
   - Source: BACKLOG (TASK-027 PR #25, 75/100)
-- [ ] **Fix misleading describe label in unit tests** — 1 SP, NICE TO HAVE
+- [x] **Fix misleading describe label in unit tests** — 1 SP, NICE TO HAVE
   - `tests/media-viewer-utils.test.js` describe "keydown guard — undo in empty state" only tests `buildKeyString()`
   - Source: BACKLOG (TASK-027 PR #25, 50/100)
 
@@ -117,8 +117,8 @@ _(No ongoing background tasks this week.)_
 
 - [x] Fix Single Mode buttons on folder switch (3 SP)
 - [x] DRY `toggleViewMode()` with `switchToSingleModeUI()` (1 SP)
-- [ ] Add E2E afterEach null safety (1 SP)
-- [ ] Fix misleading describe label (1 SP)
+- [x] Add E2E afterEach null safety (1 SP)
+- [x] Fix misleading describe label (1 SP)
 
 **Daily total**: 6 SP
 
@@ -179,7 +179,7 @@ _(No ongoing background tasks this week.)_
 |-------|--------|-------|----------|-----|--------|
 | B: CLIP/ML Cleanup | JS logic (CLIP/ML) | 4 | 7 | Mon | Planned |
 | A: Compare Mode Fix | JS logic (mode switching) | 2 | 4 | Tue | Planned |
-| C: Test Quality | Testing | 2 | 2 | Tue | Planned |
+| C: Test Quality | Testing | 2 | 2 | Tue | Done |
 | D: CLIP Similarity Sorting | JS logic (sorting) | 1 | 5 | Wed | Planned |
 | E: Resource Management | JS logic (memory) | 2 | 5 | Thu | Planned |
 | F: Build & DX | Config/tooling | 2 | 2 | Fri | Planned |

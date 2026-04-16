@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-04-10 <!-- Compare Mode Fix -->
+**Last Updated**: 2026-04-11 <!-- Group C Test Quality -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,19 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-04 (April)
+
+### [2026-04-11] Group C: Test Quality
+
+**Spec**: [docs/superpowers/specs/2026-04-11-test-quality-design.md](../../superpowers/specs/2026-04-11-test-quality-design.md)
+**Plan**: [docs/archive/plans/2026-04-11-test-quality.md](../../archive/plans/2026-04-11-test-quality.md)
+**Summary**: Hardened E2E test teardown with null guards and fixed misleading unit test describe label. Two BACKLOG items from TASK-027 PR #25 code review.
+**Key Changes**:
+- `tests/e2e/` (7 files) — Added `if (electronApp)` / `if (tmpFixtures)` guards to `afterEach` blocks, preventing `TypeError` when `beforeEach` throws mid-setup
+- `tests/media-viewer-utils.test.js` — Renamed describe label from "keydown guard — undo in empty state" to "buildKeyString — key string construction"
+**Commits**: 4 commits (5e29a56..c1b43df)
+**Spawned Tasks**: 2 items added to BACKLOG.md (standardize `app-launch.test.js` afterEach pattern, replace `waitForTimeout` magic numbers)
+
+---
 
 ### [2026-04-10] Compare Mode Fix + DRY Refactor
 
