@@ -591,6 +591,167 @@ function sortMediaBySimilarityMST(mediaFiles, hashes, currentIndex) {
     return sorted.map((f) => f.path);
 }
 
+// MST-based sorting using CLIP cosine distance for semantic similarity
+// Parallels sortMediaBySimilarityMST but uses cosine distance instead of Hamming
+function sortMediaBySimilarityClip(mediaFiles, clipVectors, currentIndex) {
+    const total = mediaFiles.length;
+
+    updateProgress('🔄 Building VP-Tree index (CLIP)...', 0, total);
+
+    const filesWithVectors = mediaFiles.filter((f) => clipVectors[f.path]);
+    if (filesWithVectors.length < 2) {
+        throw new Error(`Only ${filesWithVectors.length} files have CLIP embeddings. Need at least 2 to sort.`);
+    }
+
+    const distanceFunc = (file1, file2) => {
+        return calculateCosineDistance(clipVectors[file1.path], clipVectors[file2.path]);
+    };
+
+    const vpTree = new VPTree(filesWithVectors, distanceFunc);
+
+    updateProgress('🔄 Building similarity graph (CLIP)...', 0, total);
+
+    // Dynamic K based on dataset size
+    const N = filesWithVectors.length;
+    const K_NEIGHBORS = Math.min(N - 1, Math.max(20, Math.floor(Math.sqrt(N) * 10)));
+
+    const graph = new Map();
+
+    for (let i = 0; i < filesWithVectors.length; i++) {
+        if (abortFlag) {
+            throw new Error('Sorting cancelled by user');
+        }
+
+        const file = filesWithVectors[i];
+        const neighbors = vpTree.findKNearest(file, K_NEIGHBORS + 1, new Set([file]));
+
+        graph.set(
+            file,
+            neighbors.map(({ item, distance }) => ({
+                neighbor: item,
+                distance,
+            }))
+        );
+
+        if ((i + 1) % 100 === 0) {
+            updateProgress(`🔄 Building graph: ${i + 1}/${filesWithVectors.length}`, i + 1, filesWithVectors.length);
+        }
+    }
+
+    updateProgress('🔄 Computing MST (CLIP)...', 0, total);
+
+    // Prim's algorithm for MST
+    const mst = new Map();
+    const visited = new Set();
+    const pq = new MinHeap();
+
+    // Start with currently viewed file
+    let startFile = filesWithVectors[0];
+    const currentFile = mediaFiles[currentIndex];
+    if (currentFile && clipVectors[currentFile.path]) {
+        const found = filesWithVectors.find((f) => f.path === currentFile.path);
+        if (found) startFile = found;
+    }
+    visited.add(startFile);
+    mst.set(startFile, []);
+
+    const startNeighbors = graph.get(startFile) || [];
+    for (const { neighbor, distance } of startNeighbors) {
+        pq.push({ from: startFile, to: neighbor, distance });
+    }
+
+    while (visited.size < filesWithVectors.length && !pq.isEmpty()) {
+        if (abortFlag) {
+            throw new Error('Sorting cancelled by user');
+        }
+
+        const edge = pq.pop();
+
+        if (!edge || visited.has(edge.to)) continue;
+
+        visited.add(edge.to);
+        if (!mst.has(edge.from)) mst.set(edge.from, []);
+        if (!mst.has(edge.to)) mst.set(edge.to, []);
+        mst.get(edge.from).push(edge.to);
+        mst.get(edge.to).push(edge.from);
+
+        const neighbors = graph.get(edge.to) || [];
+        for (const { neighbor, distance } of neighbors) {
+            if (!visited.has(neighbor)) {
+                pq.push({ from: edge.to, to: neighbor, distance });
+            }
+        }
+
+        if (visited.size % 100 === 0) {
+            updateProgress(
+                `🔄 MST progress: ${visited.size}/${filesWithVectors.length}`,
+                visited.size,
+                filesWithVectors.length
+            );
+        }
+    }
+
+    updateProgress('🔄 Traversing MST...', 0, total);
+
+    // Greedy traversal of MST
+    const sorted = [];
+    const traversed = new Set();
+
+    let current = startFile;
+    traversed.add(current);
+    sorted.push(current);
+
+    while (sorted.length < filesWithVectors.length) {
+        const neighbors = mst.get(current) || [];
+
+        let nearestNeighbor = null;
+        let minDistance = Infinity;
+
+        for (const neighbor of neighbors) {
+            if (!traversed.has(neighbor)) {
+                const distance = distanceFunc(current, neighbor);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestNeighbor = neighbor;
+                }
+            }
+        }
+
+        if (nearestNeighbor) {
+            traversed.add(nearestNeighbor);
+            sorted.push(nearestNeighbor);
+            current = nearestNeighbor;
+        } else {
+            let nearestNode = null;
+            let minDist = Infinity;
+
+            for (const file of filesWithVectors) {
+                if (!traversed.has(file)) {
+                    const dist = distanceFunc(current, file);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestNode = file;
+                    }
+                }
+            }
+
+            if (nearestNode) {
+                traversed.add(nearestNode);
+                sorted.push(nearestNode);
+                current = nearestNode;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Add files without CLIP vectors at the end
+    const filesWithoutVectors = mediaFiles.filter((f) => !clipVectors[f.path]);
+    sorted.push(...filesWithoutVectors);
+
+    return sorted.map((f) => f.path);
+}
+
 // Export for unit testing (conditional CJS, same pattern as ml-model.js)
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance };
@@ -607,12 +768,15 @@ self.onmessage = function (e) {
 
     if (type === 'startSort') {
         abortFlag = false;
-        const { algorithm, mediaFiles, hashes, currentIndex, maxComparisons } = data;
+        const { algorithm, mediaFiles, hashes, clipVectors, currentIndex, maxComparisons } = data;
 
         try {
             let sortedPaths;
 
             switch (algorithm) {
+                case 'clip':
+                    sortedPaths = sortMediaBySimilarityClip(mediaFiles, clipVectors, currentIndex);
+                    break;
                 case 'vptree':
                     sortedPaths = sortMediaBySimilarityVPTree(mediaFiles, hashes, currentIndex);
                     break;
