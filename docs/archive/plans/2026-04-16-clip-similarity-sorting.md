@@ -1,5 +1,16 @@
 # CLIP Similarity Sorting Implementation Plan
 
+**Status**: Complete (2026-04-18)
+
+**Completed commits** (on `feature/clip-similarity-sorting`):
+- `9c7fefe` feat: add calculateCosineDistance for CLIP similarity sorting
+- `e0d07dc` feat: add sortMediaBySimilarityClip MST algorithm for CLIP sorting
+- `7757d40` feat: add CLIP (Semantic) option to sort algorithm dropdown
+- `a538b22` feat: wire CLIP sorting into handleSortBySimilarity
+- `e94ae70` fix: add pre-worker abort check to CLIP sort branch (addresses Task 4 review I1)
+
+**Final verification**: 159/159 unit tests pass, lint clean, Prettier clean. Final code review: Approve with follow-ups (5 BACKLOG items captured, no blockers).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a "CLIP (Semantic)" option to the existing sort algorithm dropdown that sorts files by CLIP cosine similarity using the MST algorithm.
@@ -31,7 +42,7 @@
 - Modify: `sorting-worker.js` (add function after `calculateHammingDistance`, update CJS export block)
 - Test: `tests/sorting-worker.test.js` (add new `describe` block)
 
-- [ ] **Step 1: Update import in tests/sorting-worker.test.js**
+- [x] **Step 1: Update import in tests/sorting-worker.test.js**
 
 Change line 8 to include `calculateCosineDistance`:
 
@@ -39,7 +50,7 @@ Change line 8 to include `calculateCosineDistance`:
 const { MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance } = require('../sorting-worker');
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Add this new `describe` block at the end of `tests/sorting-worker.test.js` (after the `calculateHammingDistance` describe block, before the closing of the file):
 
@@ -96,12 +107,12 @@ describe('calculateCosineDistance', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `npx vitest run tests/sorting-worker.test.js`
 Expected: FAIL — cannot destructure `calculateCosineDistance` from module exports (all new tests fail).
 
-- [ ] **Step 4: Add calculateCosineDistance to sorting-worker.js**
+- [x] **Step 4: Add calculateCosineDistance to sorting-worker.js**
 
 Open `sorting-worker.js`. Find the `calculateHammingDistance` function (~line 260). Add this function directly after it:
 
@@ -123,7 +134,7 @@ function calculateCosineDistance(vec1, vec2) {
 }
 ```
 
-- [ ] **Step 5: Update the CJS export block**
+- [x] **Step 5: Update the CJS export block**
 
 Find the conditional CJS export at the bottom of `sorting-worker.js` (~line 579):
 
@@ -141,12 +152,12 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `npx vitest run tests/sorting-worker.test.js`
 Expected: PASS — all 9 new `calculateCosineDistance` tests pass along with existing tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add sorting-worker.js tests/sorting-worker.test.js
@@ -166,7 +177,7 @@ null/undefined guards, mismatched lengths, and 512-dim CLIP shape."
 **Files:**
 - Modify: `sorting-worker.js` (add function after `sortMediaBySimilarityMST`, add `'clip'` case in message handler)
 
-- [ ] **Step 1: Add sortMediaBySimilarityClip function**
+- [x] **Step 1: Add sortMediaBySimilarityClip function**
 
 Open `sorting-worker.js`. Find the end of `sortMediaBySimilarityMST` function (closing brace ~line 576). Add this new function directly after `sortMediaBySimilarityMST`, before the CJS export block:
 
@@ -339,7 +350,7 @@ function sortMediaBySimilarityClip(mediaFiles, clipVectors, currentIndex) {
 }
 ```
 
-- [ ] **Step 2: Add 'clip' case to message handler switch**
+- [x] **Step 2: Add 'clip' case to message handler switch**
 
 Find the message handler `switch (algorithm)` block (~line 599) in `sorting-worker.js`:
 
@@ -390,17 +401,17 @@ switch (algorithm) {
 }
 ```
 
-- [ ] **Step 3: Run existing tests to verify no regression**
+- [x] **Step 3: Run existing tests to verify no regression**
 
 Run: `npx vitest run tests/sorting-worker.test.js`
 Expected: PASS — all existing tests (including the 9 new `calculateCosineDistance` tests from Task 1) continue to pass. No new tests for `sortMediaBySimilarityClip` since it's not in the module export (it uses `self.postMessage` which can't run in Node.js).
 
-- [ ] **Step 4: Run lint to ensure clean formatting**
+- [x] **Step 4: Run lint to ensure clean formatting**
 
 Run: `npm run lint`
 Expected: PASS — no new lint errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add sorting-worker.js
@@ -420,7 +431,7 @@ clipVectors from data alongside existing hashes field."
 **Files:**
 - Modify: `index.html` (~line 48-49, add option)
 
-- [ ] **Step 1: Read the current dropdown**
+- [x] **Step 1: Read the current dropdown**
 
 Open `index.html`. Find the `<select id="sortAlgorithmSelect">` block (~line 42-51):
 
@@ -437,7 +448,7 @@ Open `index.html`. Find the `<select id="sortAlgorithmSelect">` block (~line 42-
 </select>
 ```
 
-- [ ] **Step 2: Add the CLIP option**
+- [x] **Step 2: Add the CLIP option**
 
 Replace that block with:
 
@@ -455,12 +466,12 @@ Replace that block with:
 </select>
 ```
 
-- [ ] **Step 3: Verify format check passes**
+- [x] **Step 3: Verify format check passes**
 
 Run: `npm run format:check`
 Expected: PASS (or if it fails due to unrelated whitespace, run `npm run format` first then verify).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add index.html
@@ -474,7 +485,7 @@ git commit -m "feat: add CLIP (Semantic) option to sort algorithm dropdown"
 **Files:**
 - Modify: `media-viewer.js` — `handleSortBySimilarity()` method (~line 4016-4267), `algorithmNames` object (~line 4075)
 
-- [ ] **Step 1: Locate the algorithmNames object**
+- [x] **Step 1: Locate the algorithmNames object**
 
 Open `media-viewer.js`. Find the `algorithmNames` object inside `handleSortBySimilarity()` (~line 4075):
 
@@ -497,7 +508,7 @@ const algorithmNames = {
 };
 ```
 
-- [ ] **Step 2: Locate the "No cache - perform full sorting" branch**
+- [x] **Step 2: Locate the "No cache - perform full sorting" branch**
 
 In `handleSortBySimilarity()`, find the `else` branch that performs full sorting (~line 4129):
 
@@ -510,7 +521,7 @@ In `handleSortBySimilarity()`, find the `else` branch that performs full sorting
 
 The next block (approximately lines 4131-4210) is the hash-computation + sort dispatch path. We will branch on `this.sortAlgorithm === 'clip'` inside this `else` branch to skip the hash path entirely.
 
-- [ ] **Step 3: Add CLIP sorting branch**
+- [x] **Step 3: Add CLIP sorting branch**
 
 Replace lines 4129-4210 of `media-viewer.js` (from the `} else {` line through the `const sortedPaths = await this.runSortingWorker({...});` block up to but NOT including the `// Reorder mediaFiles based on sorted paths` comment). The exact current content starts with `} else {` and ends with `});` closing the `runSortingWorker` call.
 
@@ -646,7 +657,7 @@ Replace with:
 
 **Note:** The original code had `const sortedPaths = await this.runSortingWorker(...)` — we've hoisted `let sortedPaths` to above the `if/else` so both branches can assign to it. The code that follows the `runSortingWorker` call (reorder mediaFiles, save sort cache, show success notification) stays unchanged and will continue to execute for both branches.
 
-- [ ] **Step 4: Verify the code after the runSortingWorker call is unchanged**
+- [x] **Step 4: Verify the code after the runSortingWorker call is unchanged**
 
 The next lines after the replaced block (starting around the original line 4212) should remain:
 
@@ -666,17 +677,17 @@ The next lines after the replaced block (starting around the original line 4212)
 
 These lines use `sortedPaths` (now declared as `let` above the branch), so they work correctly for both CLIP and hash paths.
 
-- [ ] **Step 5: Run unit tests**
+- [x] **Step 5: Run unit tests**
 
 Run: `npm test`
 Expected: PASS — 150 unit tests (9 new cosine distance tests from Task 1 + 141 existing).
 
-- [ ] **Step 6: Run lint**
+- [x] **Step 6: Run lint**
 
 Run: `npm run lint`
 Expected: PASS — no new lint errors.
 
-- [ ] **Step 7: Manual smoke test the full sort flow**
+- [x] **Step 7: Manual smoke test the full sort flow**
 
 Launch the app: `npm start`
 
@@ -699,7 +710,7 @@ Edge case verification:
 
 If all pass, proceed to commit. If any fail, stop and debug before committing.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add media-viewer.js
@@ -726,34 +737,34 @@ code path unchanged."
 **Files:**
 - Verify: Full unit test suite + lint + format pass on the complete change set
 
-- [ ] **Step 1: Run full unit test suite**
+- [x] **Step 1: Run full unit test suite**
 
 Run: `npm test`
 Expected: PASS — 150 tests (9 new cosine distance + 141 existing).
 
-- [ ] **Step 2: Run full lint**
+- [x] **Step 2: Run full lint**
 
 Run: `npm run lint`
 Expected: PASS — no errors.
 
-- [ ] **Step 3: Run format check**
+- [x] **Step 3: Run format check**
 
 Run: `npm run format:check`
 Expected: PASS. If it fails, run `npm run format` and then re-verify.
 
-- [ ] **Step 4: Verify no new ESLint warnings introduced**
+- [x] **Step 4: Verify no new ESLint warnings introduced**
 
 Run: `npm run lint 2>&1 | grep -i warning` (bash)
 Expected: Either no output (no warnings) or only pre-existing warnings (same count as before the feature branch).
 
-- [ ] **Step 5: Review the full diff**
+- [x] **Step 5: Review the full diff**
 
 Run: `git diff main...feature/clip-similarity-sorting --stat`
 Expected: 4 files changed: `sorting-worker.js`, `media-viewer.js`, `index.html`, `tests/sorting-worker.test.js`. No other files.
 
 Optionally: `git diff main...feature/clip-similarity-sorting` to visually review each change.
 
-- [ ] **Step 6: Verification complete**
+- [x] **Step 6: Verification complete**
 
 At this point the implementation is complete. Task completion docs (EXTRACT → ARCHIVE → TRANSITION → COMMIT → MEMORY) happen post-PR-merge and are out of scope for this plan.
 

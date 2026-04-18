@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-04-11 <!-- Group C Test Quality completed -->
+**Last Updated**: 2026-04-18 <!-- Group D CLIP Similarity Sorting completed -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -63,6 +63,8 @@ Active tasks and backlog.
 <!-- TASK-027 completed 2026-04-03, moved to DONE.md -->
 
 <!-- TASK-028 completed 2026-04-07, moved to DONE.md -->
+
+<!-- Group D CLIP Similarity Sorting completed 2026-04-18, moved to DONE.md -->
 
 ---
 
