@@ -271,6 +271,22 @@ function calculateHammingDistance(hash1, hash2) {
     return distance;
 }
 
+// Cosine distance for unit-normalized vectors (CLIP embeddings)
+// Returns 1 - dot(a,b), range [0, 2]: 0 = identical, 1 = orthogonal, 2 = opposite
+// Since CLIP vectors are unit-normalized by the extraction pipeline,
+// the full cosine formula simplifies to 1 - dot(a,b).
+function calculateCosineDistance(vec1, vec2) {
+    if (!vec1 || !vec2 || vec1.length !== vec2.length) {
+        return Infinity;
+    }
+
+    let dot = 0;
+    for (let i = 0; i < vec1.length; i++) {
+        dot += vec1[i] * vec2[i];
+    }
+    return 1 - dot;
+}
+
 // Abort flag - set by main thread via message
 let abortFlag = false;
 
@@ -577,7 +593,7 @@ function sortMediaBySimilarityMST(mediaFiles, hashes, currentIndex) {
 
 // Export for unit testing (conditional CJS, same pattern as ml-model.js)
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { MinHeap, VPTree, calculateHammingDistance };
+    module.exports = { MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance };
 }
 
 // Message handler

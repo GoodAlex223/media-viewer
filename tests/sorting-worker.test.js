@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 // sorting-worker.js references `self` (Web Worker global) at module level.
 // Provide a minimal stub so require() succeeds.
 globalThis.self = { onmessage: null, postMessage: () => {} };
-const { MinHeap, VPTree, calculateHammingDistance } = require('../sorting-worker');
+const { MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance } = require('../sorting-worker');
 
 describe('MinHeap', () => {
     it('starts empty', () => {
@@ -170,5 +170,56 @@ describe('calculateHammingDistance', () => {
 
     it('returns full length for completely different strings', () => {
         expect(calculateHammingDistance('0000', '1111')).toBe(4);
+    });
+});
+
+describe('calculateCosineDistance', () => {
+    it('returns 0 for identical unit-normalized vectors', () => {
+        const vec = [1, 0, 0];
+        expect(calculateCosineDistance(vec, vec)).toBe(0);
+    });
+
+    it('returns 1 for orthogonal unit vectors', () => {
+        const vec1 = [1, 0, 0];
+        const vec2 = [0, 1, 0];
+        expect(calculateCosineDistance(vec1, vec2)).toBe(1);
+    });
+
+    it('returns 2 for opposite unit vectors', () => {
+        const vec1 = [1, 0, 0];
+        const vec2 = [-1, 0, 0];
+        expect(calculateCosineDistance(vec1, vec2)).toBe(2);
+    });
+
+    it('computes 1 - dot product for unit-normalized vectors', () => {
+        // Unit vectors at 60 degrees: dot = cos(60) = 0.5, distance = 0.5
+        const vec1 = [1, 0];
+        const vec2 = [0.5, Math.sqrt(3) / 2];
+        const dist = calculateCosineDistance(vec1, vec2);
+        expect(dist).toBeCloseTo(0.5, 5);
+    });
+
+    it('returns Infinity for null vec1', () => {
+        expect(calculateCosineDistance(null, [1, 0, 0])).toBe(Infinity);
+    });
+
+    it('returns Infinity for null vec2', () => {
+        expect(calculateCosineDistance([1, 0, 0], null)).toBe(Infinity);
+    });
+
+    it('returns Infinity for undefined vectors', () => {
+        expect(calculateCosineDistance(undefined, undefined)).toBe(Infinity);
+    });
+
+    it('returns Infinity for mismatched lengths', () => {
+        expect(calculateCosineDistance([1, 0, 0], [1, 0])).toBe(Infinity);
+    });
+
+    it('works with 512-dim vectors (CLIP shape)', () => {
+        const vec1 = new Array(512).fill(0);
+        vec1[0] = 1;
+        const vec2 = new Array(512).fill(0);
+        vec2[0] = 1;
+        expect(calculateCosineDistance(vec1, vec2)).toBe(0);
     });
 });
