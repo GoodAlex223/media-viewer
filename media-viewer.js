@@ -4162,6 +4162,10 @@ class MediaViewer {
 
                     this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
 
+                    if (this.sortAbortController.signal.aborted) {
+                        throw new Error('Sorting cancelled by user');
+                    }
+
                     sortedPaths = await this.runSortingWorker({
                         algorithm: 'clip',
                         mediaFiles: this.mediaFiles.map((f) => ({ path: f.path })),
