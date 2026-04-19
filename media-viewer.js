@@ -4076,6 +4076,7 @@ class MediaViewer {
                 vptree: 'VP-Tree (fastest)',
                 mst: 'MST (best quality)',
                 simple: 'Simple (limited)',
+                clip: 'CLIP (semantic)',
             };
             const algorithmName = algorithmNames[this.sortAlgorithm] || this.sortAlgorithm;
 
@@ -4128,86 +4129,138 @@ class MediaViewer {
                 this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
             } else {
                 // No cache - perform full sorting
-                // Load cached hashes
-                const cachedCount = await this.loadHashCache();
+                let sortedPaths;
+                let sortedCount;
 
-                // Show cache location (one notification)
-                const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.hash_cache.json');
-                this.showNotification(`💾 Cache: ${cacheFile} (${cachedCount} hashes loaded)`, 'info');
+                if (this.sortAlgorithm === 'clip') {
+                    // CLIP semantic sorting — uses clipCache, no hash computation
+                    if (!this.enableClipFeatures) {
+                        throw new Error('CLIP features are disabled. Enable in Settings (F1) to use semantic sorting.');
+                    }
 
-                // Start progress notification
-                this.updateProgressNotification('🔄 Starting hash computation...');
+                    // Collect CLIP vectors from clipCache (Float32Array → plain Array for postMessage serialization)
+                    const clipVectors = {};
+                    let vectorCount = 0;
+                    for (const file of this.mediaFiles) {
+                        const vec = this.clipCache.get(file.path);
+                        if (vec) {
+                            clipVectors[file.path] = Array.from(vec);
+                            vectorCount++;
+                        }
+                    }
 
-                let processed = 0;
-                let newHashes = 0;
-                let skipped = 0;
-                const total = this.mediaFiles.length;
+                    if (vectorCount < 2) {
+                        throw new Error(
+                            `Only ${vectorCount} files have CLIP embeddings. Wait for background extraction to complete, then retry.`
+                        );
+                    }
 
-                for (const file of this.mediaFiles) {
-                    // Check for abort
+                    this.showNotification(
+                        `🧠 Using CLIP embeddings for ${vectorCount} files (${this.mediaFiles.length - vectorCount} without vectors appended at end)`,
+                        'info'
+                    );
+
+                    this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
+
                     if (this.sortAbortController.signal.aborted) {
                         throw new Error('Sorting cancelled by user');
                     }
 
-                    processed++;
+                    sortedPaths = await this.runSortingWorker({
+                        algorithm: 'clip',
+                        mediaFiles: this.mediaFiles.map((f) => ({ path: f.path })),
+                        clipVectors,
+                        currentIndex: this.currentIndex,
+                    });
 
-                    if (!this.perceptualHashes.has(file.path)) {
-                        try {
-                            const hash = await this.computePerceptualHash(file.path);
-                            this.perceptualHashes.set(file.path, hash);
-                            newHashes++;
+                    sortedCount = vectorCount;
+                } else {
+                    // Hash-based sorting (vptree, mst, simple)
+                    // Load cached hashes
+                    const cachedCount = await this.loadHashCache();
 
-                            // Update progress every 5 files or at end
-                            if (processed % 5 === 0 || processed === total) {
-                                this.updateProgressNotification(
-                                    `🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`
-                                );
-                            }
-                        } catch (error) {
-                            console.error(`Failed to compute hash for ${file.path}:`, error);
-                            skipped++;
-                            // Update progress notification instead of showing separate warning
-                            if (processed % 5 === 0 || processed === total) {
-                                this.updateProgressNotification(
-                                    `🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`
-                                );
+                    // Show cache location (one notification)
+                    const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.hash_cache.json');
+                    this.showNotification(`💾 Cache: ${cacheFile} (${cachedCount} hashes loaded)`, 'info');
+
+                    // Start progress notification
+                    this.updateProgressNotification('🔄 Starting hash computation...');
+
+                    let processed = 0;
+                    let newHashes = 0;
+                    let skipped = 0;
+                    const total = this.mediaFiles.length;
+
+                    for (const file of this.mediaFiles) {
+                        // Check for abort
+                        if (this.sortAbortController.signal.aborted) {
+                            throw new Error('Sorting cancelled by user');
+                        }
+
+                        processed++;
+
+                        if (!this.perceptualHashes.has(file.path)) {
+                            try {
+                                const hash = await this.computePerceptualHash(file.path);
+                                this.perceptualHashes.set(file.path, hash);
+                                newHashes++;
+
+                                // Update progress every 5 files or at end
+                                if (processed % 5 === 0 || processed === total) {
+                                    this.updateProgressNotification(
+                                        `🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`
+                                    );
+                                }
+                            } catch (error) {
+                                console.error(`Failed to compute hash for ${file.path}:`, error);
+                                skipped++;
+                                // Update progress notification instead of showing separate warning
+                                if (processed % 5 === 0 || processed === total) {
+                                    this.updateProgressNotification(
+                                        `🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`
+                                    );
+                                }
                             }
                         }
                     }
-                }
 
-                // Check if we have enough hashes to sort
-                const filesWithHashes = this.mediaFiles.filter((f) => this.perceptualHashes.has(f.path));
-                if (filesWithHashes.length < 2) {
-                    throw new Error(`Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`);
-                }
+                    // Check if we have enough hashes to sort
+                    const filesWithHashes = this.mediaFiles.filter((f) => this.perceptualHashes.has(f.path));
+                    if (filesWithHashes.length < 2) {
+                        throw new Error(
+                            `Only ${filesWithHashes.length} files have valid hashes. Need at least 2 to sort.`
+                        );
+                    }
 
-                // Save hash cache
-                await this.saveHashCache();
+                    // Save hash cache
+                    await this.saveHashCache();
 
-                // For Simple algorithm, show K value as separate notification
-                if (this.sortAlgorithm === 'simple') {
+                    // For Simple algorithm, show K value as separate notification
+                    if (this.sortAlgorithm === 'simple') {
+                        const savedK = localStorage.getItem('sortKValue');
+                        const kValue = savedK ? parseInt(savedK, 10) : 500;
+                        const maxK = filesWithHashes.length - 1;
+                        const actualK = Math.min(kValue, maxK);
+                        this.showNotification(`🔢 Using K=${actualK} neighbors per file (max: ${maxK})`, 'info');
+                    }
+
+                    this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
+
+                    // Get K value for simple algorithm
                     const savedK = localStorage.getItem('sortKValue');
                     const kValue = savedK ? parseInt(savedK, 10) : 500;
-                    const maxK = filesWithHashes.length - 1;
-                    const actualK = Math.min(kValue, maxK);
-                    this.showNotification(`🔢 Using K=${actualK} neighbors per file (max: ${maxK})`, 'info');
+
+                    // Delegate sorting to Web Worker to prevent UI freeze when minimized
+                    sortedPaths = await this.runSortingWorker({
+                        algorithm: this.sortAlgorithm,
+                        mediaFiles: this.mediaFiles.map((f) => ({ path: f.path })),
+                        hashes: Object.fromEntries(this.perceptualHashes),
+                        currentIndex: this.currentIndex,
+                        maxComparisons: kValue,
+                    });
+
+                    sortedCount = filesWithHashes.length;
                 }
-
-                this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
-
-                // Get K value for simple algorithm
-                const savedK = localStorage.getItem('sortKValue');
-                const kValue = savedK ? parseInt(savedK, 10) : 500;
-
-                // Delegate sorting to Web Worker to prevent UI freeze when minimized
-                const sortedPaths = await this.runSortingWorker({
-                    algorithm: this.sortAlgorithm,
-                    mediaFiles: this.mediaFiles.map((f) => ({ path: f.path })),
-                    hashes: Object.fromEntries(this.perceptualHashes),
-                    currentIndex: this.currentIndex,
-                    maxComparisons: kValue,
-                });
 
                 // Reorder mediaFiles based on sorted paths
                 const pathToFile = new Map(this.mediaFiles.map((f) => [f.path, f]));
@@ -4227,7 +4280,7 @@ class MediaViewer {
                 this.clearProgressNotification();
 
                 // Show success notification
-                this.showNotification(`✅ Sorted ${filesWithHashes.length} files with ${algorithmName}!`, 'success');
+                this.showNotification(`✅ Sorted ${sortedCount} files with ${algorithmName}!`, 'success');
 
                 this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
             }

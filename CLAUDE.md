@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Key capabilities:
 - Browse media folders with image/video preview
 - Rate files (like/dislike/special) with keyboard shortcuts
-- Visual similarity sorting using perceptual hashing
+- Visual similarity sorting using perceptual hashing and CLIP semantic embeddings
 - ML-based prediction for user preferences
 - Face detection features
 
@@ -63,7 +63,7 @@ media_viewer/
 ├── media-viewer.js      # Renderer process, all UI logic (~6300+ lines, MediaViewer class)
 ├── index.html           # Main HTML entry point
 ├── styles.css           # Application styling, design system
-├── sorting-worker.js    # Web Worker: sorting algorithms (MST, similarity)
+├── sorting-worker.js    # Web Worker: sorting algorithms (MST, similarity, CLIP cosine); exports MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance
 ├── ml-worker.js         # Web Worker: ML prediction tasks
 ├── ml-model.js          # ML model definitions (OnlineLogisticRegression); v3: 576-dim input (64 hand-crafted + 512 CLIP)
 ├── feature-extractor.js # Image feature extraction (64-dim vectors)
@@ -143,7 +143,7 @@ media_viewer/
 - Shortcut remap E2E pattern: `page.evaluate()` to call `saveShortcut()`/`renderShortcutRows()`/`attachShortcutKeyListeners()` directly on `window.mediaViewer`; or click `.shortcut-key[data-action][data-mode]` to enter listening state then `page.keyboard.press(key)`
 - In-test fixture dirs: secondary `createTempFixtureDir()` calls inside a test body (not beforeEach) must use `try/finally` for cleanup — `afterEach` only cleans up `tmpFixtures` from `beforeEach`; use `let secondFolder; try { ... } finally { await secondFolder?.cleanup(); }`
 - Mode-switch UI assertions: when verifying folder-switch or rating resets compare mode, assert BOTH `.controls` visible (`display === 'flex'`) AND `.compare-controls` hidden (`display !== 'flex'`) — checking only one side can miss cases where both button sets appear simultaneously
-- `afterEach` null guards: always guard `if (electronApp)` and `if (tmpFixtures)` before calling `closeApp()`/`cleanup()` — prevents `TypeError` when `beforeEach` throws mid-setup; pattern established in `app-launch.test.js` and `clip-graceful-degradation.test.js`; implemented in all E2E files (compare-mode, fullscreen, navigation, undo-empty-state, zoom, keyboard-shortcuts, rating); `app-launch.test.js` guards `tmpFixtures` but calls `closeApp(electronApp)` unconditionally (safe there since `beforeEach` always assigns `electronApp`)
+- `afterEach` null guards: always guard `if (electronApp)` and `if (tmpFixtures)` before calling `closeApp()`/`cleanup()` — prevents `TypeError` when `beforeEach` throws mid-setup; also guard `page.evaluate()` calls with `if (page)` — `.catch(() => {})` only handles promise rejections, not synchronous `TypeError` from `undefined.evaluate()` when `page` is unassigned; pattern established in all E2E files; `app-launch.test.js` guards `tmpFixtures` but calls `closeApp(electronApp)` unconditionally (safe there since `beforeEach` always assigns `electronApp`)
 
 <!-- END AUTO-MANAGED -->
 
@@ -155,7 +155,7 @@ media_viewer/
 - Renderer errors forwarded to main-process file logger via `window.electronAPI.logError` (fire-and-forget, never blocks renderer)
 - `showError()`, `window.onerror`, and `unhandledrejection` handler all forward to logger
 
-**Data Structures**: MinHeap (priority queue), VPTree (nearest neighbor), perceptual hashing (image similarity), zoomControlsMap keyed by target ('single', 'left', 'right')
+**Data Structures**: MinHeap (priority queue), VPTree (nearest neighbor), perceptual hashing (image similarity), cosine distance for CLIP embeddings (`1 - dot(a,b)` on unit-normalized 512-dim vectors), zoomControlsMap keyed by target ('single', 'left', 'right')
 
 **State Management**:
 - Class-based state in MediaViewer; localStorage for user preferences
@@ -227,13 +227,12 @@ media_viewer/
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-09: fixed IPC listener accumulation, skipped redundant image decodes, added `deleteMlModelCache()`, deleted `clip-worker.js`) + Compare Mode folder-switch fix + DRY refactor (2026-04-10: `switchToSingleModeUI()` inserted in `loadFolder()` and `toggleViewMode()` single-mode branch, removes 14-line duplicate block, E2E coverage added) + Group C Test Quality (2026-04-11: `afterEach` null guards added to all 7 E2E files; `media-viewer-utils.test.js` `buildKeyString` describe label renamed from misleading "keydown guard — undo in empty state"). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
+Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-09: fixed IPC listener accumulation, skipped redundant image decodes, added `deleteMlModelCache()`, deleted `clip-worker.js`) + Compare Mode folder-switch fix + DRY refactor (2026-04-10: `switchToSingleModeUI()` inserted in `loadFolder()` and `toggleViewMode()` single-mode branch, removes 14-line duplicate block, E2E coverage added) + Group C Test Quality (2026-04-11: `afterEach` null guards added to all 7 E2E files; `media-viewer-utils.test.js` `buildKeyString` describe label renamed from misleading "keydown guard — undo in empty state") + Group D CLIP Similarity Sorting (2026-04-18: `calculateCosineDistance` + `sortMediaBySimilarityClip` in `sorting-worker.js`, CLIP branch in `handleSortBySimilarity`, `<option value="clip">` in `index.html`, 9 new unit tests; 159/159 pass; 5 BACKLOG items spawned from PR #29). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
 **In progress:**
-- (none)
+- Nothing active. Group D CLIP Similarity Sorting completed 2026-04-18 on `feature/clip-similarity-sorting`.
 
-**Next planned** (week of April 13–17, see `docs/planning/WEEKLY.md`):
-- **Wed — CLIP Similarity Sorting** (5 SP): Implement CLIP cosine similarity sorting using `clipCache` embeddings — replace/augment blockhash; changes to `sorting-worker.js` + `media-viewer.js` sorting integration
+**Next planned** (see `docs/planning/WEEKLY.md`):
 - **Thu — Resource Management** (5 SP): Unload CLIP model after extraction completes (null `clipProcessor`/`clipVisionModel`, ~200–400 MB); add double-init protection to `logger.js` `init()` (close existing fd before opening new one)
 - **Fri — Build & DX** (2 SP): Pin Lucide CDN to specific version in `index.html`; update regression-checker agent for FullscreenManager
 
@@ -251,6 +250,9 @@ Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-0
 - IPC listener accumulation via `ipcRenderer.on()`: each call registers a new persistent listener — use `.once()` for single-fire events, or return a cleanup function (`() => ipcRenderer.removeListener(channel, handler)`) for multi-fire progress events and call it after the async op completes (success or failure)
 - `deleteMlModelCache()` is misleadingly named — writes empty string to `.ml_model.json`, does not delete the file (no `deleteFile` IPC exists in preload.js/main.js); tracked in BACKLOG as rename to `clearMlModelCache()` + add proper `deleteFile` IPC
 - `enqueueFeatureExtraction` imageData null invariant: when file has hand-crafted features but needs CLIP-only extraction, `imageData` is `null`; safe today because `featureCache.has()` early-return fires first, but fragile under concurrent cache eviction — missing defensive null guard tracked in BACKLOG
+- CLIP sorting worker data shape: `clipVectors` is `{path: number[]}` (plain arrays, not Float32Array); `Array.from(vec)` conversion is for pattern consistency with the hash path (`hashes: {path: string}`) — Float32Array itself serializes fine over `postMessage` via structured clone; renderer calls `Array.from(vec)` when reading from `clipCache` before sending to worker
+- CLIP sorting edge cases in `handleSortBySimilarity()` (no-cache branch only): (1) CLIP disabled — checks `this.enableClipFeatures` and throws `'CLIP features are disabled. Enable in Settings (F1) to use semantic sorting.'`; do NOT fall through to hash path; (2) insufficient vectors — after collecting `clipVectors` from `clipCache` via `Array.from(vec)`, throws if `vectorCount < 2` with `'Only N files have CLIP embeddings. Wait for background extraction to complete, then retry.'`; files without vectors are appended at end of sorted result (info notification shows count); (3) pre-worker abort check — `sortAbortController.signal.aborted` is tested immediately before `runSortingWorker` dispatch (between `updateProgressNotification` and the worker call), mirroring the per-file abort guard in the hash path; cancellations issued while the CLIP info notification is displayed are caught here
+- CLIP sort cache key is the string `'clip'` → adds entry under key `'clip'` in the unified `.sort_cache.json` (NOT a separate `.sort_cache_clip.json` file); existing `saveSortCache/loadSortCache/deleteSortCache` infrastructure handles it with no new code
 
 <!-- END AUTO-MANAGED -->
 

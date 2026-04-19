@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-04-11 <!-- Group C Test Quality -->
+**Last Updated**: 2026-04-18 <!-- Group D CLIP Similarity Sorting -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,22 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-04 (April)
+
+### [2026-04-18] Group D: CLIP Similarity Sorting
+
+**Spec**: [docs/superpowers/specs/2026-04-16-clip-similarity-sorting-design.md](../superpowers/specs/2026-04-16-clip-similarity-sorting-design.md)
+**Plan**: [docs/archive/plans/2026-04-16-clip-similarity-sorting.md](../archive/plans/2026-04-16-clip-similarity-sorting.md)
+**Summary**: Added "CLIP (Semantic)" option to the sort algorithm dropdown. Sorts files by CLIP embedding cosine similarity using the MST algorithm, producing semantic grouping (e.g., photos of same subject cluster together) instead of pixel-similarity grouping from blockhash. Reuses `clipCache` vectors already populated by background extraction (TASK-028); sort order cached via existing `saveSortCache('clip', ...)` infrastructure.
+**Key Changes**:
+- `sorting-worker.js` — New `calculateCosineDistance(vec1, vec2)` (`1 - dot(a,b)` for unit-normalized vectors, `Infinity` on null/mismatched lengths); new `sortMediaBySimilarityClip(mediaFiles, clipVectors, currentIndex)` (MST algorithm reusing VPTree + MinHeap + Prim's); new `case 'clip'` in worker message handler `switch`; `calculateCosineDistance` added to CJS export
+- `media-viewer.js` — `handleSortBySimilarity()` CLIP branch: `enableClipFeatures` guard (throws directing user to Settings F1), vector collection from `clipCache` via `Array.from(vec)`, `vectorCount < 2` guard, pre-worker abort check, worker dispatch with `{ algorithm: 'clip', mediaFiles, clipVectors, currentIndex }`; `sortedCount` variable introduced for shared success notification; `algorithmNames.clip = 'CLIP (semantic)'`
+- `index.html` — New `<option value="clip">CLIP (Semantic)</option>` in `#sortAlgorithmSelect`
+- `tests/sorting-worker.test.js` — 9 unit tests for `calculateCosineDistance` (identical/orthogonal/opposite unit vectors, 60-degree dot product, null/undefined/mismatched-length guards, 512-dim CLIP shape)
+**Commits**: 5 implementation commits on `feature/clip-similarity-sorting` (9c7fefe, e0d07dc, 7757d40, a538b22, e94ae70) + 2 doc commits (2e52767 spec, 17c46c5 plan)
+**Test results**: 159/159 unit tests pass (30 in sorting-worker.test.js including 9 new)
+**Code review**: Approve with follow-ups. 5 spawned BACKLOG items (latent correctness bug in `insertNewFilesInSortedOrder` for CLIP cache hits, MST DRY extraction, unit tests for `sortMediaBySimilarityClip`, doc corrections re: `.sort_cache_clip.json` vs unified `.sort_cache.json`, CLIP toggle-off should invalidate sort cache)
+
+---
 
 ### [2026-04-11] Group C: Test Quality
 

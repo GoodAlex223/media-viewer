@@ -2,12 +2,25 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-11 <!-- Group C Test Quality -->
+**Last Updated**: 2026-04-18 <!-- Group D CLIP Similarity Sorting -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From Group D CLIP Similarity Sorting (2026-04-18)
+
+### [2026-04-18] From: Group D implementation + final code review
+**Origin**: Final code reviewer findings + per-task review of `feature/clip-similarity-sorting` (5 commits, 159/159 tests pass, merged PR TBD)
+
+- [ ] **Cache-hit `insertNewFilesInSortedOrder` uses Hamming distance regardless of algorithm** — `media-viewer.js:5044-5122` unconditionally computes perceptual Hamming distances when inserting new files into a cached sort order, even when the cache belongs to CLIP. Consequence: if a user sorts by CLIP → adds new files to the folder → clicks Sort by Similarity → cache hit → new files get placed using blockhash neighbors, not cosine neighbors. Semantic ordering is silently corrupted for inserted files. Latent pre-existing design limitation; now reachable for CLIP. Recommended fix: branch on algorithm name in `insertNewFilesInSortedOrder` — for `'clip'`, use `calculateCosineDistance` on `clipCache` vectors (append files without CLIP vectors at end). Cheaper alternative: for CLIP cache hits with any new files, skip insertion and append all new files at end. Workaround for users: Shift+click to force re-sort.
+- [ ] **Add unit tests for `sortMediaBySimilarityClip`** — Spec promised tests ("basic 3-file ordering with known vectors, files without vectors appended at end, abort flag respected, single-file error case") but only `calculateCosineDistance` is tested. The 90-line MST implementation has no direct test coverage. Internally consistent with existing `sortMediaBySimilarityMST` (also untested), but the duplication increases drift risk. Tie to item below (MST DRY extraction) for max leverage — a shared helper function can be tested once.
+- [ ] **Extract shared MST helper between `sortMediaBySimilarityMST` and `sortMediaBySimilarityClip`** — ~90 lines of duplicated logic in `sorting-worker.js` (lines 499-588 for Hamming, 594-756 for cosine). Only differences: distance function, eligibility check, error message noun, progress label suffix. Candidate: `_sortMediaBySimilarityGeneric(mediaFiles, distanceFunc, eligibilityCheck, currentIndex, algoLabel)`. Public wrappers become ~8 lines each. Plan explicitly deferred this refactor to keep scope manageable. Low-risk since MST code is already proven and both callers use identical control flow.
+- [ ] **Correct `.sort_cache_clip.json` references in spec + CLAUDE.md** — Spec `docs/superpowers/specs/2026-04-16-clip-similarity-sorting-design.md` (lines 49, 93, 94) and CLAUDE.md git-insights line 255 both claim CLIP sort creates `.sort_cache_clip.json`. Actual implementation uses the unified `.sort_cache.json` file with `'clip'` as a top-level key (pre-existing pattern, `media-viewer.js:4900/4920/4965`). Implementation is correct; docs need updating to say "CLIP sort cache key `'clip'` adds entry under that key in the unified `.sort_cache.json`".
+- [ ] **CLIP toggle-off should invalidate any persisted `'clip'` entry in sort cache** — When user toggles `enableClipFeatures` off via Settings (F1), `resetMlModel()` runs (`media-viewer.js:1720`) but any persisted `.sort_cache.json` entry under `'clip'` remains. If they re-enable CLIP later and click Sort, they get the old cache — potentially with files that no longer have CLIP vectors or vectors extracted with a different model version. Recommended: on CLIP toggle-off, if `this.sortAlgorithm === 'clip'`, either call `deleteSortCache('clip')` or revert `sortAlgorithm` to a hash-based default.
 
 ---
 
