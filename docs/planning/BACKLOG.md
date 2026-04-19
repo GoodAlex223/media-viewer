@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-18 <!-- Group D CLIP Similarity Sorting -->
+**Last Updated**: 2026-04-20 <!-- PR #30 code review (Group D CLIP Similarity Sorting) -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -21,6 +21,13 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Extract shared MST helper between `sortMediaBySimilarityMST` and `sortMediaBySimilarityClip`** — ~90 lines of duplicated logic in `sorting-worker.js` (lines 499-588 for Hamming, 594-756 for cosine). Only differences: distance function, eligibility check, error message noun, progress label suffix. Candidate: `_sortMediaBySimilarityGeneric(mediaFiles, distanceFunc, eligibilityCheck, currentIndex, algoLabel)`. Public wrappers become ~8 lines each. Plan explicitly deferred this refactor to keep scope manageable. Low-risk since MST code is already proven and both callers use identical control flow.
 - [ ] **Correct `.sort_cache_clip.json` references in spec + CLAUDE.md** — Spec `docs/superpowers/specs/2026-04-16-clip-similarity-sorting-design.md` (lines 49, 93, 94) and CLAUDE.md git-insights line 255 both claim CLIP sort creates `.sort_cache_clip.json`. Actual implementation uses the unified `.sort_cache.json` file with `'clip'` as a top-level key (pre-existing pattern, `media-viewer.js:4900/4920/4965`). Implementation is correct; docs need updating to say "CLIP sort cache key `'clip'` adds entry under that key in the unified `.sort_cache.json`".
 - [ ] **CLIP toggle-off should invalidate any persisted `'clip'` entry in sort cache** — When user toggles `enableClipFeatures` off via Settings (F1), `resetMlModel()` runs (`media-viewer.js:1720`) but any persisted `.sort_cache.json` entry under `'clip'` remains. If they re-enable CLIP later and click Sort, they get the old cache — potentially with files that no longer have CLIP vectors or vectors extracted with a different model version. Recommended: on CLIP toggle-off, if `this.sortAlgorithm === 'clip'`, either call `deleteSortCache('clip')` or revert `sortAlgorithm` to a hash-based default.
+
+### [2026-04-20] From: PR #30 code review
+**Origin**: 5 parallel agents + confidence scoring; 1 issue scored 85/100 (CLAUDE.md gotcha factual error, fixed in 24ef763); items below threshold worth tracking
+
+- [ ] **CLIP success notification shows wrong file count** (75/100) — In the CLIP branch of `handleSortBySimilarity()`, `sortedCount = vectorCount` is used in the success toast (`✅ Sorted N files with CLIP (semantic)!`), but `sortMediaBySimilarityClip` returns ALL files: MST-sorted files-with-vectors plus files-without-vectors appended at the end. For a folder with 100 files where 70 have CLIP embeddings, the toast says "Sorted 70" even though all 100 were reordered. Fix: `sortedCount = sortedPaths.length` (or `this.mediaFiles.length`). Cosmetic; affected: `media-viewer.js` CLIP branch.
+- [ ] **`K_NEIGHBORS` local variable uses UPPER_SNAKE_CASE inconsistent with sibling function** (75/100) — In `sortMediaBySimilarityClip`, the local k-neighbors constant is named `K_NEIGHBORS` (UPPER_SNAKE_CASE), but the sibling `sortMediaBySimilarityMST` and other locals nearby (`nearestNeighbor`, `minDistance`, `nearestNode`, `minDist`) use camelCase. CLAUDE.md naming guidance shows `MAX_NOTIFICATIONS`-style for module-level constants; in-function locals follow camelCase. Rename to `kNeighbors` for consistency. Cosmetic; affected: `sorting-worker.js` `sortMediaBySimilarityClip`.
+- [ ] **`calculateCosineDistance([], [])` returns 1 instead of 0 for two empty arrays** (50/100) — Length-mismatch guard passes when both lengths are 0; the dot-product loop never executes; function returns `1 - 0 = 1` (orthogonal) rather than `0` (identical). In practice CLIP always returns 512-dim vectors, so this never triggers — but if a future caller produces empty arrays (e.g., extraction failure mode that returns zero-length arrays instead of null), the result is silently wrong. Defensive: add `if (vec1.length === 0) return 0;` early-return, or assert non-zero length.
 
 ---
 
