@@ -41,6 +41,17 @@ describe('logger', () => {
             expect(fs.existsSync(nestedDir)).toBe(true);
             expect(fs.existsSync(path.join(nestedDir, 'media-viewer.log'))).toBe(true);
         });
+
+        it('closes existing fd before opening a new one on second init', async () => {
+            const { vi } = await import('vitest');
+            const closeSyncSpy = vi.spyOn(fs, 'closeSync');
+            logger.init(testLogDir);
+            const callsAfterFirst = closeSyncSpy.mock.calls.length;
+            logger.init(testLogDir);
+            const callsAfterSecond = closeSyncSpy.mock.calls.length;
+            expect(callsAfterSecond).toBe(callsAfterFirst + 1);
+            closeSyncSpy.mockRestore();
+        });
     });
 
     describe('getLogPath()', () => {
