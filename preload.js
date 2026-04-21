@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadClipModel: () => ipcRenderer.invoke('loadClipModel'),
     extractClipEmbedding: (imagePath) => ipcRenderer.invoke('extractClipEmbedding', imagePath),
     extractClipEmbeddingBatch: (imagePaths) => ipcRenderer.invoke('extractClipEmbeddingBatch', imagePaths),
+    unloadClipModel: () => ipcRenderer.invoke('unloadClipModel'),
     onClipDownloadProgress: (callback) => {
         const handler = (_event, data) => callback(data);
         ipcRenderer.on('clip-download-progress', handler);

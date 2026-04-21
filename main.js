@@ -437,6 +437,16 @@ app.whenReady().then(() => {
         return loadClipModel(event);
     });
 
+    ipcMain.handle('unloadClipModel', () => {
+        if (clipModelLoading) {
+            return { success: false, reason: 'loading' };
+        }
+        clipProcessor = null;
+        clipVisionModel = null;
+        clipModelError = null;
+        return { success: true };
+    });
+
     ipcMain.handle('extractClipEmbedding', async (event, imagePath) => {
         // Load model if needed
         const loadResult = await loadClipModel(event);
