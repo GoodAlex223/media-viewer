@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
@@ -42,8 +42,7 @@ describe('logger', () => {
             expect(fs.existsSync(path.join(nestedDir, 'media-viewer.log'))).toBe(true);
         });
 
-        it('closes existing fd before opening a new one on second init', async () => {
-            const { vi } = await import('vitest');
+        it('closes existing fd before opening a new one on second init', () => {
             const closeSyncSpy = vi.spyOn(fs, 'closeSync');
             logger.init(testLogDir);
             const callsAfterFirst = closeSyncSpy.mock.calls.length;
