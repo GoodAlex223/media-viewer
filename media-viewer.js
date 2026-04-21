@@ -403,6 +403,7 @@ class MediaViewer {
         this.extractionPaused = false; // True while user is navigating/rating
         this.extractionResumeResolve = null; // Resolves awaitExtractionGate() when paused
         this.extractionResumeTimer = null; // setTimeout handle for 2s idle resume
+        this.clipUnloadTimer = null; // setTimeout handle for 30s CLIP model unload after extraction
         this._extractionLastCurrent = 0; // Last known current count for paused redisplay
         this._extractionLastTotal = 0; // Last known total count for paused redisplay
         this._extractionCachedCount = 0; // Cached file count for progress display
@@ -6851,6 +6852,12 @@ class MediaViewer {
             return;
         }
 
+        // Cancel any pending CLIP unload — extraction is restarting, keep the model loaded
+        if (this.clipUnloadTimer !== null) {
+            clearTimeout(this.clipUnloadTimer);
+            this.clipUnloadTimer = null;
+        }
+
         // Cancel any existing background extraction
         this.cancelBackgroundExtraction();
 
@@ -6987,6 +6994,17 @@ class MediaViewer {
         // Trigger ML scoring if enabled and model is ready
         if (this.isMlEnabled && this.mlStats?.isReady) {
             this.requestPredictionScores();
+        }
+
+        // Schedule CLIP model unload 30s from now to reclaim ~200-400 MB.
+        // If extraction restarts within the grace window, the timer is cleared
+        // at the start of startBackgroundFeatureExtraction(). The existing
+        // loadClipModel() lazy path re-loads transparently on next CLIP IPC.
+        if (this.enableClipFeatures) {
+            this.clipUnloadTimer = setTimeout(() => {
+                window.electronAPI.unloadClipModel();
+                this.clipUnloadTimer = null;
+            }, 30000);
         }
     }
 
