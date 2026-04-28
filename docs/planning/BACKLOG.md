@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-21 <!-- Group E Resource Management final review -->
+**Last Updated**: 2026-04-28 <!-- PR #31 post-merge: 3 additional review-derived improvements -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -19,6 +19,13 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Extract `CLIP_UNLOAD_DELAY_MS = 30000` named constant** (Minor M1) — `media-viewer.js:7007` hard-codes the 30-second unload delay. Per CLAUDE.md naming convention (`MAX_NOTIFICATIONS`-style for module-level constants), extract to a top-level constant alongside other constants. Aids future tuning and testability. Cosmetic; not blocking.
 - [ ] **Reconsider `clipModelError` reset behavior on persistent failures** (Minor M2) — `main.js:446` always nulls `clipModelError` on unload. For transient errors (network blip) this enables clean retry. For persistent errors (HF hub unreachable, model files corrupt) the user pays a ~1-2s failed load attempt on every folder-switch cycle. Spec explicitly accepted this tradeoff; revisit only if it becomes noisy in practice. Possible mitigation: track error age and only clear if older than a threshold.
 - [ ] **Trim verbose comment on CLIP unload timer schedule** (Minor M4) — `media-viewer.js:6999-7002` has a 4-line comment explaining cancel-on-restart and transparent-reload semantics. Per CLAUDE.md "default to writing no comments" guidance, could trim to one line. Counter-argument: behavior crosses IPC boundaries with non-obvious timing, so the comment earns its keep. Judgment call, not blocking.
+
+### [2026-04-28] From: PR #31 post-merge code review (additional candidates)
+**Origin**: Final-review confidence scoring on `feature/resource-management` evaluated 5 candidates; 3 below 80-threshold worth tracking as low-priority defensive improvements
+
+- [ ] **`enableClipFeatures` checked at schedule-time only, not at fire-time** (~15/100) — `media-viewer.js:7000` gates `setTimeout(unloadClipModel, 30000)` on `this.enableClipFeatures` at scheduling. If the user toggles CLIP off during the 30s grace window, the timer still fires the unload IPC. In practice this is harmless (the model would also be unloaded if CLIP were never re-enabled) and arguably correct behavior, but a defensive re-check inside the timer callback would be more robust if the unload call ever gains side-effects beyond nulling refs. Not blocking.
+- [ ] **`unloadClipModel` IPC fired without await or error handling in timer callback** (~50/100) — `media-viewer.js:7001-7004` calls `window.electronAPI.unloadClipModel()` fire-and-forget. The IPC returns `{ success: false, reason: 'loading' }` if a load is in flight, but the renderer ignores the result. Acceptable for a best-effort cleanup, but a `.catch()` or `.then((r) => !r.success && logger.warn(...))` would surface unexpected failures during debugging. Not blocking.
+- [ ] **`vi.spyOn(fs, 'closeSync')` in logger test relies on inline `mockRestore()` only** — `tests/logger.test.js:46-53` calls `closeSyncSpy.mockRestore()` at the end of the test body. If the assertion fails, restore is skipped and the spy can leak into the next test in the same file. `vi.spyOn` calls through by default so subsequent tests aren't broken in practice, but moving restore into a `try { ... } finally { closeSyncSpy.mockRestore(); }` block (or to `afterEach`) is more defensive. Test hygiene improvement only; matches the `tmpFixtures` cleanup pattern used in E2E tests.
 
 ---
 
