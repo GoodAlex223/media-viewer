@@ -2,12 +2,23 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-20 <!-- PR #30 code review (Group D CLIP Similarity Sorting) -->
+**Last Updated**: 2026-04-21 <!-- Group E Resource Management final review -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From Group E Resource Management (2026-04-21)
+
+### [2026-04-21] From: Group E final code review (PR #31)
+**Origin**: Final code reviewer findings on `feature/resource-management` (5 implementation commits, 160/160 unit + 39/39 E2E pass, approved for merge)
+
+- [ ] **Extract `CLIP_UNLOAD_DELAY_MS = 30000` named constant** (Minor M1) — `media-viewer.js:7007` hard-codes the 30-second unload delay. Per CLAUDE.md naming convention (`MAX_NOTIFICATIONS`-style for module-level constants), extract to a top-level constant alongside other constants. Aids future tuning and testability. Cosmetic; not blocking.
+- [ ] **Reconsider `clipModelError` reset behavior on persistent failures** (Minor M2) — `main.js:446` always nulls `clipModelError` on unload. For transient errors (network blip) this enables clean retry. For persistent errors (HF hub unreachable, model files corrupt) the user pays a ~1-2s failed load attempt on every folder-switch cycle. Spec explicitly accepted this tradeoff; revisit only if it becomes noisy in practice. Possible mitigation: track error age and only clear if older than a threshold.
+- [ ] **Trim verbose comment on CLIP unload timer schedule** (Minor M4) — `media-viewer.js:6999-7002` has a 4-line comment explaining cancel-on-restart and transparent-reload semantics. Per CLAUDE.md "default to writing no comments" guidance, could trim to one line. Counter-argument: behavior crosses IPC boundaries with non-obvious timing, so the comment earns its keep. Judgment call, not blocking.
 
 ---
 

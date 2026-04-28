@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-04-18 <!-- Group D CLIP Similarity Sorting -->
+**Last Updated**: 2026-04-21 <!-- Group E Resource Management -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,24 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-04 (April)
+
+### [2026-04-21] Group E: Resource Management
+
+**Spec**: [docs/superpowers/specs/2026-04-20-group-e-resource-management-design.md](../superpowers/specs/2026-04-20-group-e-resource-management-design.md)
+**Plan**: [docs/archive/plans/2026-04-20-group-e-resource-management.md](../archive/plans/2026-04-20-group-e-resource-management.md)
+**Summary**: Two backend lifecycle fixes shipped together. (1) CLIP model now unloads 30 seconds after background extraction completes, reclaiming ~200-400 MB of main-process memory; re-loads transparently from transformers.js disk cache on next CLIP IPC. Renderer-side timer is cleared at the start of `startBackgroundFeatureExtraction()` so folder-switch within the grace window keeps the model loaded. (2) `logger.init()` now closes any existing fd before opening a new one, preventing fd leaks on hypothetical double-init. Local-capture pattern in `extractClipEmbedding`/`extractClipEmbeddingBatch` ensures mid-await safety against concurrent `unloadClipModel` IPC.
+**Key Changes**:
+- `main.js` — New `ipcMain.handle('unloadClipModel')` nulls `clipProcessor`/`clipVisionModel`/`clipModelError` (returns `{success: false, reason: 'loading'}` if `clipModelLoading`); `extractClipEmbedding` and `extractClipEmbeddingBatch` capture `processor`/`model` into local consts after `loadClipModel()` resolves with null-guard returning `{success: false, error: 'CLIP unavailable'}`
+- `preload.js` — `unloadClipModel: () => ipcRenderer.invoke('unloadClipModel')` exposed on `electronAPI`
+- `media-viewer.js` — `this.clipUnloadTimer = null` field added to constructor; `clearTimeout` at start of `startBackgroundFeatureExtraction()`; `setTimeout(window.electronAPI.unloadClipModel, 30000)` at end (gated on `this.enableClipFeatures`)
+- `logger.js` — `init(logDir)` closes existing `logFd` (try/catch around invalid-fd) and resets `logFd = null` before opening new fd
+- `tests/logger.test.js` — New unit test asserts `fs.closeSync` is called once on second `init()` via `vi.spyOn` delta assertion
+**Commits**: 5 implementation commits on `feature/resource-management` (b9f3b7e logger guard, a26fba8 vi import cleanup per code review, e7d84d0 unloadClipModel IPC, 782b61a local-capture race mitigation, d65bfdd renderer timer wiring) + 2 doc commits (6c8bb68 spec, ade533e plan)
+**Test results**: 160/160 unit tests pass (13 logger tests including new); 39/39 E2E tests pass (including `clip-graceful-degradation.test.js`)
+**Code review**: Approve for merge. 0 Critical, 0 Important, 4 Minor (M1 named constant for 30000, M2 clipModelError reset behavior on persistent failures, M3 setTimeout/clear race noted as accepted tradeoff, M4 verbose timer comment) — 3 actionable items added to BACKLOG.md
+**PR**: [#31](https://github.com/GoodAlex223/media-viewer/pull/31)
+
+---
 
 ### [2026-04-18] Group D: CLIP Similarity Sorting
 
