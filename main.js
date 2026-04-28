@@ -437,11 +437,28 @@ app.whenReady().then(() => {
         return loadClipModel(event);
     });
 
+    ipcMain.handle('unloadClipModel', () => {
+        if (clipModelLoading) {
+            return { success: false, reason: 'loading' };
+        }
+        clipProcessor = null;
+        clipVisionModel = null;
+        clipModelError = null;
+        return { success: true };
+    });
+
     ipcMain.handle('extractClipEmbedding', async (event, imagePath) => {
         // Load model if needed
         const loadResult = await loadClipModel(event);
         if (!loadResult.success) {
             return { success: false, error: loadResult.error };
+        }
+
+        // Capture local refs to survive a concurrent unloadClipModel during await
+        const processor = clipProcessor;
+        const model = clipVisionModel;
+        if (!processor || !model) {
+            return { success: false, error: 'CLIP unavailable' };
         }
 
         try {
@@ -451,8 +468,8 @@ app.whenReady().then(() => {
             const image = await RawImage.read(imagePath);
 
             // Process through CLIP vision encoder
-            const inputs = await clipProcessor(image);
-            const output = await clipVisionModel(inputs);
+            const inputs = await processor(image);
+            const output = await model(inputs);
 
             // Extract and normalize embedding
             const embedding = output.image_embeds.data;
@@ -481,6 +498,13 @@ app.whenReady().then(() => {
             return { success: false, error: loadResult.error };
         }
 
+        // Capture local refs to survive a concurrent unloadClipModel during await
+        const processor = clipProcessor;
+        const model = clipVisionModel;
+        if (!processor || !model) {
+            return { success: false, error: 'CLIP unavailable' };
+        }
+
         try {
             const { RawImage } = await import('@huggingface/transformers');
             const dim = 512;
@@ -489,8 +513,8 @@ app.whenReady().then(() => {
             for (const imagePath of imagePaths) {
                 try {
                     const image = await RawImage.read(imagePath);
-                    const inputs = await clipProcessor(image);
-                    const output = await clipVisionModel(inputs);
+                    const inputs = await processor(image);
+                    const output = await model(inputs);
 
                     const embedding = output.image_embeds.data;
                     const normalized = new Float32Array(dim);

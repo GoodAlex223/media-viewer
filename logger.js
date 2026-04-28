@@ -5,6 +5,14 @@ let logPath = null;
 let logFd = null;
 
 function init(logDir) {
+    if (logFd !== null) {
+        try {
+            fs.closeSync(logFd);
+        } catch (_e) {
+            // fd already invalid — proceed with re-init
+        }
+        logFd = null;
+    }
     fs.mkdirSync(logDir, { recursive: true });
     logPath = path.join(logDir, 'media-viewer.log');
     logFd = fs.openSync(logPath, 'w');

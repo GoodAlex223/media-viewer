@@ -23,6 +23,7 @@ Plans are archived when:
 | [2025-12-27_sorting-cache.md](2025-12-27_sorting-cache.md) | Sorting algorithm cache | 2026-01-10 |
 | [2025-12-28_background-feature-extraction.md](2025-12-28_background-feature-extraction.md) | Background feature extraction | 2026-01-10 |
 | [2026-01-02_compare-mode-ai-sort-bug.md](2026-01-02_compare-mode-ai-sort-bug.md) | Compare mode AI sort bug | 2026-01-10 |
+| [2026-04-20-group-e-resource-management.md](2026-04-20-group-e-resource-management.md) | Group E: Resource Management (CLIP unload + logger guard) | 2026-04-21 |
 
 ---
 
@@ -107,4 +108,4 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 
 ---
 
-*Last Updated: 2026-02-05*
+*Last Updated: 2026-04-21*

@@ -69,10 +69,10 @@ _(No ongoing background tasks this week.)_
 **Domain**: JS logic (memory/lifecycle)
 **Total SP**: 5
 
-- [ ] **Unload CLIP model after extraction completes** — 3 SP, IMPORTANT
+- [x] **Unload CLIP model after extraction completes** — 3 SP, IMPORTANT
   - CLIP ONNX model ~200–400 MB stays loaded indefinitely; null out `clipProcessor`/`clipVisionModel` after extraction; re-load lazily on next folder
   - Source: BACKLOG (TASK-028)
-- [ ] **Add double-init protection for logger.js** — 2 SP, NICE TO HAVE
+- [x] **Add double-init protection for logger.js** — 2 SP, NICE TO HAVE
   - `init()` should close existing fd before opening new one to prevent fd leaks if called twice
   - Source: BACKLOG (TASK-025)
 
@@ -131,7 +131,7 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group D: CLIP Similarity Sorting** | 5 |
 
-- [ ] Implement CLIP-based similarity sorting (5 SP)
+- [x] Implement CLIP-based similarity sorting (5 SP)
 
 **Daily total**: 5 SP | 🏆 Weekly Challenge
 
@@ -144,8 +144,8 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group E: Resource Management** [batch] | 5 |
 
-- [ ] Unload CLIP model after extraction (3 SP)
-- [ ] Add double-init protection for logger.js (2 SP)
+- [x] Unload CLIP model after extraction (3 SP)
+- [x] Add double-init protection for logger.js (2 SP)
 
 **Daily total**: 5 SP
 
@@ -181,7 +181,7 @@ _(No ongoing background tasks this week.)_
 | A: Compare Mode Fix | JS logic (mode switching) | 2 | 4 | Tue | Planned |
 | C: Test Quality | Testing | 2 | 2 | Tue | Done |
 | D: CLIP Similarity Sorting | JS logic (sorting) | 1 | 5 | Wed | Planned |
-| E: Resource Management | JS logic (memory) | 2 | 5 | Thu | Planned |
+| E: Resource Management | JS logic (memory) | 2 | 5 | Thu | Done |
 | F: Build & DX | Config/tooling | 2 | 2 | Fri | Planned |
 | **Total** | | **13** | **25** | | |
 
