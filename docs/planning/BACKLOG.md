@@ -2,12 +2,25 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-28 <!-- PR #31 post-merge: 3 additional review-derived improvements -->
+**Last Updated**: 2026-04-29 <!-- Group F Build & DX closeout: 4 follow-ups + 1 verification -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From Group F Build & DX (2026-04-29)
+
+### [2026-04-29] From: Group F closeout (PR pending)
+**Origin**: Spec follow-ups + deferred verification + observed cleanup opportunities from `feature/group-f-build-dx`
+
+- [ ] **Full audit of `regression-checker.md` against current `media-viewer.js`** — Group F only fixed Section 2 (FullscreenManager extraction) demonstrably stale. Remaining sections (1, 3-7) were assumed current but never re-verified. Drift candidates: Section 3 (cache cleanup) doesn't mention `clipCache` / `featureMetadata` — both now part of `removeFileFromList()`; Section 4 (extraction pause/resume) might miss `extractionRunId` generation counter; Section 5 wording. Cosmetic-but-misleading; not blocking.
+- [ ] **Migrate Lucide from CDN to bundled npm dependency** — Pinning + SRI is a stopgap. Bundling eliminates the unpkg dependency entirely (offline use, no SRI maintenance, faster cold load). Larger scope: requires build step or manual UMD copy + asset path updates. Tracked since spec; not in v1.1 polish milestone.
+- [ ] **Defensive recheck: dispatch regression-checker on a real fullscreen-touching commit (e.g., `43db8af`)** — Plan Step 2.5 was deferred due to subagent quota exhaustion during execution. Run after quota reset to confirm the agent now references `this.fullscreen.cleanup()` (not the legacy `cleanupFullscreen`) in actual output. Low risk (the symbol replacement was verified by inspection), but a real-output check completes the spec's verification criterion.
+- [ ] **Clean up duplicate `!.claude/agents/` line in `.gitignore`** — `.gitignore` lines 138-139 both read `!.claude/agents/` (intended one to be `!.claude/agents/**`). Functionally harmless under `.claude/*` (which only matches one level), but visually wrong. Trivial fix.
+- [ ] **Update `regression-checker.md` line-count after every major media-viewer.js change** — The agent file's `~7400` reference will drift again as `media-viewer.js` grows or as managers are extracted. Either (a) reword to "growing single-file" and drop the number, (b) regenerate via a pre-commit hook, or (c) accept periodic drift and fix during planned audits. (a) is lowest-effort.
 
 ---
 
