@@ -77,6 +77,8 @@ media_viewer/
 │   └── e2e/             # E2E: app-launch, navigation, rating, compare-mode, fullscreen, zoom, keyboard-shortcuts, undo-empty-state, clip-graceful-degradation
 │       ├── fixtures/    # Test media (1x1 PNGs, tiny.mp4)
 │       └── helpers/     # electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs
+├── .claude/agents/      # Shared agent definitions tracked in git (per-developer settings/history gitignored via .claude/*)
+│   └── regression-checker.md  # Project-specific regression audit agent (tracked since b6ef9d7)
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
 ```
 
@@ -254,6 +256,7 @@ Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-0
 - CLIP sort cache key is the string `'clip'` → adds entry under key `'clip'` in the unified `.sort_cache.json` (NOT a separate `.sort_cache_clip.json` file); existing `saveSortCache/loadSortCache/deleteSortCache` infrastructure handles it with no new code
 - CLIP model unload timer (`this.clipUnloadTimer`): `startBackgroundFeatureExtraction()` clears any pending timer at its start (folder switches cancel unload), then schedules `setTimeout(unloadClipModel, 30000)` at end (only when `enableClipFeatures`); renderer fires `window.electronAPI.unloadClipModel()` IPC; main process nulls `clipProcessor`/`clipVisionModel`/`clipModelError`; on-demand CLIP calls after unload transparently re-load from transformers.js disk cache (~1–2s)
 - CLIP IPC local-capture pattern (mid-await race safety): `extractClipEmbedding` and `extractClipEmbeddingBatch` handlers capture `const processor = clipProcessor; const model = clipVisionModel` into local variables immediately after `loadClipModel()` resolves, before any subsequent `await`; add explicit null guard — if either captured ref is null, return `{ success: false, error: 'CLIP unavailable' }` immediately; use local refs for all subsequent awaits — guarantees in-flight extraction completes with stable refs even if `unloadClipModel` fires mid-await nulling the module-level variables
+- `.claude/` gitignore pattern: `.claude/*` is ignored (per-developer settings, history, secrets); `!.claude/agents/` negation un-ignores the shared agents directory — add new shared agent files under `.claude/agents/` so they ship via PR; never commit other `.claude/` contents (settings.json, history, etc.)
 - `logger.js` double-init guard: `init(logDir)` checks `if (logFd !== null)` and calls `fs.closeSync(logFd)` (wrapped in try/catch for already-invalid fd) before opening a new fd; `logFd = null` is set before reopening regardless of close outcome; unit test in `tests/logger.test.js` asserts `closeSync` is called once on second `init()` via `vi.spyOn(fs, 'closeSync')`; test is synchronous — `vi` is imported at the top of the file alongside other vitest helpers (not via `await import('vitest')` inside the test body)
 
 <!-- END AUTO-MANAGED -->
