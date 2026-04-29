@@ -60,7 +60,7 @@ media_viewer/
 ├── main.js              # Electron main process, IPC handlers, file operations
 ├── logger.js            # File logger (init/log/warn/error/cleanup/getLogPath); writes to app.getPath('logs')/media-viewer.log
 ├── preload.js           # Security bridge (contextBridge → window.electronAPI); exposes file ops, logError (fire-and-forget IPC)
-├── media-viewer.js      # Renderer process, all UI logic (~6300+ lines, MediaViewer class)
+├── media-viewer.js      # Renderer process, all UI logic (~7400 lines, MediaViewer class)
 ├── index.html           # Main HTML entry point
 ├── styles.css           # Application styling, design system
 ├── sorting-worker.js    # Web Worker: sorting algorithms (MST, similarity, CLIP cosine); exports MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance
@@ -229,11 +229,14 @@ media_viewer/
 
 Completed tasks: TASK-012 through TASK-028 + CLIP/ML Pipeline Cleanup (2026-04-09: fixed IPC listener accumulation, skipped redundant image decodes, added `deleteMlModelCache()`, deleted `clip-worker.js`) + Compare Mode folder-switch fix + DRY refactor (2026-04-10: `switchToSingleModeUI()` inserted in `loadFolder()` and `toggleViewMode()` single-mode branch, removes 14-line duplicate block, E2E coverage added) + Group C Test Quality (2026-04-11: `afterEach` null guards added to all 7 E2E files; `media-viewer-utils.test.js` `buildKeyString` describe label renamed from misleading "keydown guard — undo in empty state") + Group D CLIP Similarity Sorting (2026-04-18: `calculateCosineDistance` + `sortMediaBySimilarityClip` in `sorting-worker.js`, CLIP branch in `handleSortBySimilarity`, `<option value="clip">` in `index.html`; 5 BACKLOG items spawned from PR #29; PR #30 code review 2026-04-20: 1 issue fixed in 24ef763, 3 items added to BACKLOG) + Group E Resource Management complete (2026-04-21: `unloadClipModel` IPC handler in `main.js` + preload exposure, e7d84d0; local-capture null guards in `extractClipEmbedding`/`extractClipEmbeddingBatch`; `logger.js` double-init guard; renderer-side `this.clipUnloadTimer` in `media-viewer.js`, d65bfdd — schedules 30s unload after extraction, clears on restart; plan archived at `docs/archive/plans/2026-04-20-group-e-resource-management.md`; PR #31 approved — 3 minor BACKLOG items added: CLIP_UNLOAD_DELAY_MS named constant, clipModelError reset on persistent failures, verbose timer comment). See `docs/planning/DONE.md` for details, `docs/archive/plans/` for archived plans, and `git log` for commit history.
 
-**Next planned** (see `docs/planning/WEEKLY.md`):
-- **Fri — Build & DX** (2 SP): Pin Lucide CDN to specific version in `index.html`; update regression-checker agent for FullscreenManager
+**In progress — Group F Build & DX** (branch `feature/group-f-build-dx`, plan at `docs/planning/plans/2026-04-29-group-f-build-dx.md`):
+- Task 1 DONE (2a5597a): Pin Lucide CDN `@latest` → `@1.14.0` + SHA-384 SRI + `crossorigin=anonymous` in `index.html`
+- Task 2 TODO: Update `.claude/agents/regression-checker.md` — Section 2 rewritten from "AbortController Cleanup" (stale `cleanupFullscreen`/`fullscreenAbortControllers`) to "Fullscreen Lifecycle (FullscreenManager)" (`this.fullscreen.cleanup()`/`this.fullscreen.toggle()`); line-count `6600+` → `~7400`; new Section 8 "v2.0 Modular Subsystems" codifies auditing pattern for future manager extractions (ZoomManager, CompareManager, SortingManager, MLManager planned)
+- Post-merge BACKLOG: full regression-checker audit, migrate Lucide to bundled npm, update CLAUDE.md line-count
 
 **Active gotchas learned from past work:**
 - Lucide `createIcons()`: must use `{root: element}`, NOT `{nodes: [el]}` — `nodes` is silently ignored, causes full-document rescan and invalidates cached icon refs
+- Lucide CDN pinned to `@1.14.0` with SHA-384 SRI in `index.html` (Group F); bump procedure: `curl -sL https://unpkg.com/lucide@<ver>/dist/umd/lucide.min.js | openssl dgst -sha384 -binary | openssl base64 -A`; wrong hash → browser refuses load, icons disappear silently — existing `if (typeof lucide !== 'undefined')` guard at `media-viewer.js:356` prevents crash; E2E tests stub unpkg.com and do not exercise the real CDN
 - Compare mode exit: use `switchToSingleModeUI()` (non-toggling helper), NOT `toggleViewMode()` — the latter re-toggles isCompareMode causing infinite loops when <2 files remain
 - Folder switch in Compare Mode: `loadFolder()` now calls `switchToSingleModeUI()` before `hideDropZone()` (~L2248) — new folders always open in Single Mode (compare context is folder-scoped); E2E test covers this in `compare-mode.test.js` ("resets to single mode when switching folders")
 - Empty state: `showEmptyStateWithUndo()` (preserves undo toolbar) vs `showDropZone()` (genuine empty) — check `moveHistory.length` to decide; keydown guard at line ~1729 blocks all keys when `mediaFiles.length === 0` except undo — undo passes through when `moveHistory.length > 0` (implemented in TASK-027)

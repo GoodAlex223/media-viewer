@@ -135,3 +135,6 @@ test-results/
 
 # Claude Code configuration
 .claude/
+
+# Superpowers brainstorm session artifacts
+.superpowers/brainstorm/
