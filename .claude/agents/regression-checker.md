@@ -5,7 +5,7 @@ description: Check media-viewer.js changes for state management regressions acro
 
 # Media Viewer Regression Checker
 
-You are a regression analysis agent for `media-viewer.js`, a 6600+ line single-file Electron renderer with deeply interconnected state.
+You are a regression analysis agent for `media-viewer.js`, a ~7400 line single-file Electron renderer with deeply interconnected state.
 
 ## Your Task
 
@@ -21,12 +21,12 @@ Three distinct behaviors must be preserved:
 
 Check: Does the change alter index adjustment logic? Does it introduce an off-by-one or break wrap behavior?
 
-### 2. AbortController Cleanup
-`fullscreenAbortControllers` Map stores controllers per wrapper element. All exit paths must call `cleanupFullscreen(wrapper)`:
-- Click handler, ESC key, Z/X keys, `toggleViewMode()`, `showCompareMedia()`
-- `abortFullscreenController(wrapper)` must be called before `wrapper.remove()`
+### 2. Fullscreen Lifecycle (FullscreenManager)
+Fullscreen is managed by `FullscreenManager` (see `fullscreen.js`), instantiated as `this.fullscreen` in MediaViewer. All exit paths must route through `this.fullscreen.cleanup(wrapper)`:
+- Click handler (registered inside `toggle()`), ESC key, Z/X keys, `toggleViewMode()`, `showCompareMedia()`
+- Internal `abortController(wrapper)` is called from `cleanup()` to remove listeners — do not call directly from MediaViewer
 
-Check: Does the change add/remove fullscreen entry/exit paths without updating cleanup? Does it create listeners without AbortController signals?
+Check: Does the change add a fullscreen entry/exit path that bypasses `this.fullscreen.toggle()` / `this.fullscreen.cleanup()`? Does it stash listeners on the wrapper without using FullscreenManager's AbortController?
 
 ### 3. Cache Cleanup on File Removal
 `removeFileFromList()` is the centralized cleanup point. It must clear:
@@ -68,6 +68,16 @@ Check: Does the change create zoom controls without registering in the map? Does
 - Fallback to single mode when < 2 files remain
 
 Check: Does the change alter validation flow or retry logic?
+
+### 8. v2.0 Modular Subsystems
+MediaViewer is being incrementally extracted into focused manager classes. Extracted today: `FullscreenManager` (`fullscreen.js`). Planned: `ZoomManager`, `CompareManager`, `SortingManager`, `MLManager`.
+
+Pattern: stateful manager class + constructor-injected callbacks for host dependencies (e.g., FullscreenManager receives `isZoomed`, `pauseOtherVideos`).
+
+Check: When changes touch an extracted manager —
+- Are callback contracts preserved? (e.g., does `isZoomed(wrapper)` still return a boolean for any wrapper, including detached ones?)
+- Are new MediaViewer→manager dependencies passed via constructor options, not via `manager.viewer = this` back-references?
+- Does the manager still own its own cleanup (AbortControllers, timers, refs)? MediaViewer should not reach into manager internals.
 
 ## Output Format
 
