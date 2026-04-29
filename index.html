@@ -5,7 +5,9 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Media Viewer</title>
         <link rel="stylesheet" href="styles.css" />
-        <!-- Lucide pinned: bump version + regenerate SRI hash via curl|openssl (see PR for procedure) -->
+        <!-- Lucide pinned. To bump: update version, then regenerate SRI via:
+             curl -sL https://unpkg.com/lucide@VERSION/dist/umd/lucide.min.js | openssl dgst -sha384 -binary | openssl base64 -A
+             Prepend "sha384-" to the result. -->
         <script
             src="https://unpkg.com/lucide@1.14.0/dist/umd/lucide.min.js"
             integrity="sha384-jB6ZXxyEV94yzTxgLMvrwwNbn/pTTqwrMDI+v8FV5o5FnId/yn3DJwSdrDujU9A7"
