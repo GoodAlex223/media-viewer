@@ -96,5 +96,5 @@ Check: When changes touch an extracted manager —
 - **Fix**: [suggested fix]
 
 ### No Issues
-[If nothing found, state "No regressions detected in the 7 critical state systems."]
+[If nothing found, state "No regressions detected in the 8 critical state systems."]
 ```
