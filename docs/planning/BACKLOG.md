@@ -2,12 +2,22 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-04-29 <!-- Group F Build & DX closeout: 4 follow-ups + 1 verification -->
+**Last Updated**: 2026-04-30 <!-- PR #32 post-merge: 2 process-level improvements -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From PR #32 Code Review (2026-04-30)
+
+### [2026-04-30] From: PR #32 post-merge review process observations
+**Origin**: Sub-threshold (scored 75/100) findings from the multi-agent code review of `feature/group-f-build-dx`. Three direct findings were fixed in commit `dcbbc26` before merge; these two remaining items are process-level patterns worth automating to prevent recurrence.
+
+- [ ] **Standardize E2E test result reporting in DONE.md entries** — Past groups (C, D, E) consistently include `"39/39 E2E tests pass"` in their DONE.md test-results blurb; Group F's entry lists only unit tests (`"160/160 unit tests pass (no test changes needed — both fixes are static-file edits)"`) without an E2E count. The omission is defensible (no JS code changed) but creates inconsistency across the log. Either (a) require an E2E line on every DONE entry — pass count, "skipped (no JS changes)", or "deferred to manual smoke", or (b) drop the unit-test count too and only report when meaningful. Cosmetic; aids future reviewers spotting test-coverage gaps.
+- [ ] **Pre-archive checklist to prevent recurring archived-plan drift** — Recurring pattern across PRs #19, #20, #27, #29, #32: archived plans land with (a) checkboxes still `- [ ]`, (b) no `Status: Complete` header, (c) the new file not indexed in `docs/README.md`. Each recurrence is caught in code review and fixed in a follow-up commit. Mitigations: (i) add a checklist block at the top of the plan template (TEMPLATES/) that explicitly says "before archive: flip checkboxes, add Status, update docs/README.md", (ii) write a small `scripts/archive-plan.js` helper that flips boxes + adds status + appends to docs/README.md, or (iii) a pre-commit/agent check that flags any new file under `docs/archive/plans/` not yet referenced by `docs/README.md`. (i) is lowest-effort.
 
 ---
 
