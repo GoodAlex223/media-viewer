@@ -133,5 +133,10 @@ dist
 # Playwright test results
 test-results/
 
-# Claude Code configuration
-.claude/
+# Claude Code configuration (per-developer, except shared agents)
+.claude/*
+!.claude/agents/
+!.claude/agents/
+
+# Superpowers brainstorm session artifacts
+.superpowers/brainstorm/

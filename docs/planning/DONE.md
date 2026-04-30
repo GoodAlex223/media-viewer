@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-04-21 <!-- Group E Resource Management -->
+**Last Updated**: 2026-04-29 <!-- Group F Build & DX -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,26 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-04 (April)
+
+### [2026-04-29] Group F: Build & DX
+
+**Spec**: [docs/superpowers/specs/2026-04-29-group-f-build-dx-design.md](../superpowers/specs/2026-04-29-group-f-build-dx-design.md)
+**Plan**: [docs/archive/plans/2026-04-29-group-f-build-dx.md](../archive/plans/2026-04-29-group-f-build-dx.md)
+**Summary**: Two independent tooling fixes shipped together. (1) Lucide icon CDN pinned from `lucide@latest` to `lucide@1.14.0` with SHA-384 SRI integrity hash and `crossorigin="anonymous"`; SRI mismatch causes browser to refuse load (icons silently disappear via existing `if (typeof lucide !== 'undefined')` guard at `media-viewer.js:356` — loud-failure mode by design). (2) `regression-checker` agent updated for the FullscreenManager extraction (TASK-019, March): Section 2 rewritten from "AbortController Cleanup" (stale `cleanupFullscreen`/`fullscreenAbortControllers` symbols) to "Fullscreen Lifecycle (FullscreenManager)" referencing `this.fullscreen.cleanup()` / `.toggle()` / internal `abortController()`; line-count updated `6600+` → `~7400`; new Section 8 "v2.0 Modular Subsystems" codifies the audit pattern for future manager extractions (ZoomManager, CompareManager, SortingManager, MLManager planned). Side effect: added narrow `.gitignore` exception (`.claude/*` + `!.claude/agents/`) so the regression-checker.md ships via PR instead of staying per-developer.
+**Key Changes**:
+- `index.html` — Lucide `<script>` tag pinned to `@1.14.0` with `integrity="sha384-jB6ZXxyEV94yzTxgLMvrwwNbn/pTTqwrMDI+v8FV5o5FnId/yn3DJwSdrDujU9A7"` and `crossorigin="anonymous"`; inline 3-line comment documents the bump procedure (curl|openssl one-liner)
+- `.claude/agents/regression-checker.md` — Section 2 rewrite, line-count fix, new Section 8 (now tracked in git for the first time since `90bae8e` removed `.claude/`)
+- `.gitignore` — `.claude/*` pattern with `!.claude/agents/` exception; `.superpowers/brainstorm/` added (transient brainstorming session artifacts)
+- `CLAUDE.md` — auto-managed sync: `.claude/agents/` added to architecture tree; new gitignore-pattern gotcha; line-count corrected `~6300+` → `~7400` (actual `wc -l` 7468); In-progress block reflects Group F shipping
+**Commits**: 4 implementation commits on `feature/group-f-build-dx` (2a5597a Lucide pin, 009420c comment self-contained per code review, b6ef9d7 track .claude/agents/, 1efbdc1 regression-checker update) + 3 housekeeping (11f4317 brainstorm-ignore + auto-memory, a50ed41 .claude/agents/ doc, plus this closeout) + 2 doc commits (86509ea spec, 042cedc plan)
+**Test results**: 160/160 unit tests pass (no test changes needed — both fixes are static-file edits)
+**Code review**: 1 Important finding addressed (comment "see PR for procedure" → self-contained inline curl|openssl); 0 Critical, 0 remaining Important. Spec compliance review passed for both tasks.
+**Pending verification**:
+- Manual smoke test: user runs `npm start` and confirms icons render across toolbar/dropzone/overlay/playback/settings — required before merge
+- Agent dispatch verification: Step 2.5 deferred due to subagent quota exhaustion; tracked in BACKLOG to run post-quota-reset against commit `43db8af`
+**Spawned BACKLOG items** (5): full regression-checker audit; migrate Lucide to bundled npm; deferred agent dispatch verification; cleanup duplicate `!.claude/agents/` line in .gitignore; auto-update or remove line-count reference in agent file
+
+---
 
 ### [2026-04-21] Group E: Resource Management
 

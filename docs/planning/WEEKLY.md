@@ -80,10 +80,10 @@ _(No ongoing background tasks this week.)_
 **Domain**: Config / tooling
 **Total SP**: 2
 
-- [ ] **Pin Lucide CDN to specific version** — 1 SP, NICE TO HAVE
+- [x] **Pin Lucide CDN to specific version** — 1 SP, NICE TO HAVE
   - `index.html` loads `lucide@latest` — can break silently; pin to current known-good version
   - Source: BACKLOG (TASK-023)
-- [ ] **Update regression-checker agent for FullscreenManager** — 1 SP, NICE TO HAVE
+- [x] **Update regression-checker agent for FullscreenManager** — 1 SP, NICE TO HAVE
   - Agent references extracted methods (`fullscreenAbortControllers`, `cleanupFullscreen()`) — stale since TASK-019
   - Source: BACKLOG (PR #17)
 
@@ -158,8 +158,8 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group F: Build & DX** [batch] | 2 |
 
-- [ ] Pin Lucide CDN to specific version (1 SP)
-- [ ] Update regression-checker agent for FullscreenManager (1 SP)
+- [x] Pin Lucide CDN to specific version (1 SP)
+- [x] Update regression-checker agent for FullscreenManager (1 SP)
 
 **Daily total**: 2 SP (+ buffer capacity for carry-forward)
 
@@ -182,7 +182,7 @@ _(No ongoing background tasks this week.)_
 | C: Test Quality | Testing | 2 | 2 | Tue | Done |
 | D: CLIP Similarity Sorting | JS logic (sorting) | 1 | 5 | Wed | Planned |
 | E: Resource Management | JS logic (memory) | 2 | 5 | Thu | Done |
-| F: Build & DX | Config/tooling | 2 | 2 | Fri | Planned |
+| F: Build & DX | Config/tooling | 2 | 2 | Fri | Done |
 | **Total** | | **13** | **25** | | |
 
 ---

@@ -24,6 +24,7 @@ Plans are archived when:
 | [2025-12-28_background-feature-extraction.md](2025-12-28_background-feature-extraction.md) | Background feature extraction | 2026-01-10 |
 | [2026-01-02_compare-mode-ai-sort-bug.md](2026-01-02_compare-mode-ai-sort-bug.md) | Compare mode AI sort bug | 2026-01-10 |
 | [2026-04-20-group-e-resource-management.md](2026-04-20-group-e-resource-management.md) | Group E: Resource Management (CLIP unload + logger guard) | 2026-04-21 |
+| [2026-04-29-group-f-build-dx.md](2026-04-29-group-f-build-dx.md) | Group F: Build & DX (Lucide CDN pin + regression-checker update) | 2026-04-29 |
 
 ---
 
@@ -108,4 +109,4 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 
 ---
 
-*Last Updated: 2026-04-21*
+*Last Updated: 2026-04-29*
