@@ -754,7 +754,14 @@ function sortMediaBySimilarityClip(mediaFiles, clipVectors, currentIndex) {
 
 // Export for unit testing (conditional CJS, same pattern as ml-model.js)
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance };
+    module.exports = {
+        MinHeap,
+        VPTree,
+        calculateHammingDistance,
+        calculateCosineDistance,
+        sortMediaBySimilarityClip,
+        sortMediaBySimilarityMST,
+    };
 }
 
 // Message handler
