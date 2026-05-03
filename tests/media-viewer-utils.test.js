@@ -46,6 +46,36 @@ function extractMethod(methodName) {
     return new Function(params, methodBody);
 }
 
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+
+function extractAsyncMethod(methodName) {
+    // Match "async methodName(params) {" pattern for async class methods
+    const regex = new RegExp(`^\\s{4}async\\s+${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
+    const match = source.match(regex);
+    if (!match) {
+        throw new Error(`Could not find async method: ${methodName}`);
+    }
+
+    const startIndex = match.index;
+    let braceCount = 0;
+    let methodEnd = -1;
+    const searchStart = startIndex + match[0].length - 1;
+
+    for (let i = searchStart; i < source.length; i++) {
+        if (source[i] === '{') braceCount++;
+        if (source[i] === '}') braceCount--;
+        if (braceCount === 0) {
+            methodEnd = i + 1;
+            break;
+        }
+    }
+
+    const methodBody = source.substring(searchStart + 1, methodEnd - 1);
+    const params = match[1];
+
+    return new AsyncFunction(params, methodBody);
+}
+
 const buildKeyString = extractMethod('buildKeyString');
 const formatElapsed = extractMethod('formatElapsed');
 const formatEta = extractMethod('formatEta');
