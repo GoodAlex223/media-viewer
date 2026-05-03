@@ -1,5 +1,7 @@
 # CLIP Sort Follow-ups Implementation Plan
 
+**Status: Complete** — shipped on `feature/clip-sort-followups` 2026-05-03 (13 commits 779f630..ba7f2bc + closeout). 167/167 unit tests pass, 39/39 E2E pass, final code review approved with 3 sub-threshold minors (M1+M3 polish landed inline as commit 80ac67d; M2 left as cosmetic).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Land three CLIP-similarity-sorting follow-ups from Group D's BACKLOG: (1) make `insertNewFilesInSortedOrder` algorithm-aware so CLIP-cached sorts use cosine distance for new-file placement; (2) clean up stale `'clip'` sort cache and revert `sortAlgorithm` when the user disables CLIP in Settings (F1); (3) add unit tests for `sortMediaBySimilarityClip` plus regression coverage for the algorithm-aware insertion.
@@ -36,7 +38,7 @@
 
 **Why first**: this is a one-line prerequisite. Without it, Task 2's test cannot import `sortMediaBySimilarityClip`. Standalone change, easy commit.
 
-- [ ] **Step 1: Read current exports**
+- [x] **Step 1: Read current exports**
 
 Read `sorting-worker.js:755-758`. Current line 757:
 
@@ -44,7 +46,7 @@ Read `sorting-worker.js:755-758`. Current line 757:
 module.exports = { MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance };
 ```
 
-- [ ] **Step 2: Extend the export list**
+- [x] **Step 2: Extend the export list**
 
 Replace line 757 with:
 
@@ -61,12 +63,12 @@ module.exports = {
 
 (Adding `sortMediaBySimilarityMST` is a freebie — costs nothing and unblocks future MST tests. We do not write MST tests in this PR.)
 
-- [ ] **Step 3: Run tests to confirm no regression**
+- [x] **Step 3: Run tests to confirm no regression**
 
 Run: `npm test`
 Expected: `7 passed (160)` — same as baseline. The added exports don't change runtime behavior; the worker's own `onmessage` handler still calls these functions by their bare names.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add sorting-worker.js
@@ -82,7 +84,7 @@ git commit -m "test(sorting-worker): export sortMediaBySimilarityClip + MST for 
 
 These are characterization tests: the function already ships in main and behaves correctly. The tests document its current behavior and serve as a regression guard for the future MST DRY refactor (which will share code between `sortMediaBySimilarityMST` and `sortMediaBySimilarityClip`).
 
-- [ ] **Step 1: Extend the destructured import (line 8)**
+- [x] **Step 1: Extend the destructured import (line 8)**
 
 Replace the existing line:
 
@@ -102,7 +104,7 @@ const {
 } = require('../sorting-worker');
 ```
 
-- [ ] **Step 2: Append new `describe` block at the end of the file**
+- [x] **Step 2: Append new `describe` block at the end of the file**
 
 After the closing brace of the last existing `describe` block, add:
 
@@ -192,19 +194,19 @@ describe('sortMediaBySimilarityClip', () => {
 });
 ```
 
-- [ ] **Step 3: Run only the new tests to verify they pass**
+- [x] **Step 3: Run only the new tests to verify they pass**
 
 Run: `npx vitest run tests/sorting-worker.test.js -t sortMediaBySimilarityClip`
 Expected: `4 passed`
 
 If the abort test fails because abortFlag persists between tests, adjust `resetAbort()` to use a different reset strategy (e.g., re-`require` the module — though `require.cache` may make that tricky in ESM-via-createRequire context). Document what worked.
 
-- [ ] **Step 4: Run full unit test suite**
+- [x] **Step 4: Run full unit test suite**
 
 Run: `npm test`
 Expected: `7 passed (164)` — was 160, now 164 with 4 new tests added. **All previously-passing tests must still pass.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/sorting-worker.test.js
@@ -222,11 +224,11 @@ This is a trivial mirror of the worker version (`sorting-worker.js:278`). It is 
 
 No dedicated unit test: trivial wrapper of an algorithm that's already tested. The new method is exercised indirectly by Task 5's CLIP-path tests via the mock `ctx`.
 
-- [ ] **Step 1: Locate the insertion point**
+- [x] **Step 1: Locate the insertion point**
 
 Read `media-viewer.js:4446-4465`. Find the closing brace of `calculateHammingDistance(hash1, hash2) {...}` (around line 4458, ends with `}` then a blank line).
 
-- [ ] **Step 2: Insert the new method**
+- [x] **Step 2: Insert the new method**
 
 Add the following method immediately after the closing `}` of `calculateHammingDistance`:
 
@@ -242,7 +244,7 @@ Add the following method immediately after the closing `}` of `calculateHammingD
 
 (Leading blank line + 4-space indent matches surrounding style.)
 
-- [ ] **Step 3: Verify lint and format are clean**
+- [x] **Step 3: Verify lint and format are clean**
 
 Run: `npm run lint`
 Expected: no errors.
@@ -250,12 +252,12 @@ Expected: no errors.
 Run: `npm run format:check`
 Expected: no errors.
 
-- [ ] **Step 4: Run unit tests to confirm no regression**
+- [x] **Step 4: Run unit tests to confirm no regression**
 
 Run: `npm test`
 Expected: `7 passed (164)`. The new method is unused so far; tests must remain green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js
@@ -271,7 +273,7 @@ git commit -m "feat(media-viewer): add calculateCosineDistance method for render
 
 `insertNewFilesInSortedOrder` is `async`. The existing `extractMethod()` uses `new Function(params, body)` which produces a regular (non-async) function — calling `await` inside its body is a syntax error. We need an async-aware extractor.
 
-- [ ] **Step 1: Add `extractAsyncMethod` next to `extractMethod`**
+- [x] **Step 1: Add `extractAsyncMethod` next to `extractMethod`**
 
 After the existing `extractMethod` function (closing brace around line 47), add:
 
@@ -307,12 +309,12 @@ function extractAsyncMethod(methodName) {
 }
 ```
 
-- [ ] **Step 2: Run the existing test suite to verify no regression**
+- [x] **Step 2: Run the existing test suite to verify no regression**
 
 Run: `npm test`
 Expected: `7 passed (164)`. The new helper is defined but unused; existing tests must still pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/media-viewer-utils.test.js
@@ -328,7 +330,7 @@ git commit -m "test(media-viewer-utils): add extractAsyncMethod helper for async
 
 These tests will FAIL initially because `insertNewFilesInSortedOrder` does not yet take an `algorithm` parameter and uses Hamming logic regardless of algorithm. They go green in Task 6.
 
-- [ ] **Step 1: Extract the method**
+- [x] **Step 1: Extract the method**
 
 Locate the line after the existing `extractMethod` calls (currently `tests/media-viewer-utils.test.js:54`). Add:
 
@@ -336,7 +338,7 @@ Locate the line after the existing `extractMethod` calls (currently `tests/media
 const insertNewFilesInSortedOrder = extractAsyncMethod('insertNewFilesInSortedOrder');
 ```
 
-- [ ] **Step 2: Append new `describe` block at the end of the file**
+- [x] **Step 2: Append new `describe` block at the end of the file**
 
 After the closing brace of the last existing `describe` block, add:
 
@@ -431,7 +433,7 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
 });
 ```
 
-- [ ] **Step 3: Run new tests to verify they FAIL with the expected reason**
+- [x] **Step 3: Run new tests to verify they FAIL with the expected reason**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "algorithm-aware"`
 Expected: tests fail. Specifically:
@@ -440,7 +442,7 @@ Expected: tests fail. Specifically:
 
 Confirm at least the first two tests fail with assertion errors (not syntax errors).
 
-- [ ] **Step 4: Commit the failing tests**
+- [x] **Step 4: Commit the failing tests**
 
 ```bash
 git add tests/media-viewer-utils.test.js
@@ -456,11 +458,11 @@ git commit -m "test(insertNewFiles): add CLIP-path tests (red — algorithm-awar
 **Files:**
 - Modify: `media-viewer.js:5045-5123` (function body, signature, body branching)
 
-- [ ] **Step 1: Read the current function**
+- [x] **Step 1: Read the current function**
 
 Read `media-viewer.js:5045-5123`. Confirm signature is currently `async insertNewFilesInSortedOrder(sortedFiles, newFiles)`.
 
-- [ ] **Step 2: Replace the function with algorithm-aware version**
+- [x] **Step 2: Replace the function with algorithm-aware version**
 
 Replace the entire function body (from line 5045 up to and including the closing `}` on line ~5123) with:
 
@@ -597,17 +599,17 @@ Replace the entire function body (from line 5045 up to and including the closing
 
 The hash branch's body is **byte-identical** to the pre-change function (line 5046-5122), just wrapped in an `else`. Diff-review must confirm this.
 
-- [ ] **Step 3: Run only the CLIP-path tests to verify they now pass**
+- [x] **Step 3: Run only the CLIP-path tests to verify they now pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "algorithm-aware"`
 Expected: all 3 tests pass (CLIP path tests now correctly route through cosine; hash regression guard still passes).
 
-- [ ] **Step 4: Run the full unit suite**
+- [x] **Step 4: Run the full unit suite**
 
 Run: `npm test`
 Expected: `7 passed (167)` — was 164, now 167 with 3 new CLIP-path tests passing.
 
-- [ ] **Step 5: Run lint and format**
+- [x] **Step 5: Run lint and format**
 
 Run: `npm run lint`
 Expected: no errors.
@@ -615,7 +617,7 @@ Expected: no errors.
 Run: `npm run format:check`
 Expected: no errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Tests were already committed red in Task 5; this commit ships only the implementation:
 
@@ -631,7 +633,7 @@ git commit -m "fix(insertNewFiles): branch on algorithm — use cosine for CLIP,
 **Files:**
 - Modify: `media-viewer.js:5032`
 
-- [ ] **Step 1: Locate the call site**
+- [x] **Step 1: Locate the call site**
 
 Read `media-viewer.js:5028-5035`. Find the line:
 
@@ -639,7 +641,7 @@ Read `media-viewer.js:5028-5035`. Find the line:
             await this.insertNewFilesInSortedOrder(cachedOrder, newFiles);
 ```
 
-- [ ] **Step 2: Pass `cachedData.algorithm`**
+- [x] **Step 2: Pass `cachedData.algorithm`**
 
 Replace the line with:
 
@@ -647,7 +649,7 @@ Replace the line with:
             await this.insertNewFilesInSortedOrder(cachedOrder, newFiles, cachedData.algorithm);
 ```
 
-- [ ] **Step 3: Verify lint and format**
+- [x] **Step 3: Verify lint and format**
 
 Run: `npm run lint`
 Expected: no errors.
@@ -655,12 +657,12 @@ Expected: no errors.
 Run: `npm run format:check`
 Expected: no errors.
 
-- [ ] **Step 4: Run unit tests**
+- [x] **Step 4: Run unit tests**
 
 Run: `npm test`
 Expected: `7 passed (167)`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js
@@ -674,7 +676,7 @@ git commit -m "fix(applyCachedSortOrder): pass cached algorithm to new-file inse
 **Files:**
 - Modify: `media-viewer.js:1715-1723` (CLIP toggle handler)
 
-- [ ] **Step 1: Read the current handler**
+- [x] **Step 1: Read the current handler**
 
 Read `media-viewer.js:1714-1724`. Current handler:
 
@@ -690,7 +692,7 @@ Read `media-viewer.js:1714-1724`. Current handler:
         }
 ```
 
-- [ ] **Step 2: Replace with async cleanup version**
+- [x] **Step 2: Replace with async cleanup version**
 
 Replace lines 1714-1723 with:
 
@@ -719,7 +721,7 @@ Replace lines 1714-1723 with:
         }
 ```
 
-- [ ] **Step 3: Verify lint and format**
+- [x] **Step 3: Verify lint and format**
 
 Run: `npm run lint`
 Expected: no errors. ESLint may flag `async` listener if a rule disallows it — none currently configured per `eslint.config.mjs`, so should be clean.
@@ -727,12 +729,12 @@ Expected: no errors. ESLint may flag `async` listener if a rule disallows it —
 Run: `npm run format:check`
 Expected: no errors.
 
-- [ ] **Step 4: Run unit tests**
+- [x] **Step 4: Run unit tests**
 
 Run: `npm test`
 Expected: `7 passed (167)`. No tests cover the toggle handler directly (manual test scenarios verify it).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js
@@ -745,7 +747,7 @@ git commit -m "fix(clip-toggle): clean up sort cache + revert sortAlgorithm on d
 
 **Files:** none modified.
 
-- [ ] **Step 1: Run full unit suite from a clean state**
+- [x] **Step 1: Run full unit suite from a clean state**
 
 Run: `npm test`
 Expected: `7 passed (167)`. Specifically:
@@ -753,24 +755,24 @@ Expected: `7 passed (167)`. Specifically:
 - `tests/media-viewer-utils.test.js` — 33 tests (was 30, +3 from Task 5)
 - All other test files unchanged
 
-- [ ] **Step 2: Run lint**
+- [x] **Step 2: Run lint**
 
 Run: `npm run lint`
 Expected: no errors, no warnings on touched files.
 
-- [ ] **Step 3: Run format check**
+- [x] **Step 3: Run format check**
 
 Run: `npm run format:check`
 Expected: clean.
 
-- [ ] **Step 4: Run E2E suite to confirm no regression**
+- [x] **Step 4: Run E2E suite to confirm no regression**
 
 Run: `npm run test:e2e`
 Expected: `39 passed` (matches main baseline). No new E2E tests added; this is a regression check only.
 
 If E2E hangs or fails on Windows, see CLAUDE.md "Testing (E2E — Playwright)" section for known-issue handling. A clean baseline run takes ~3-5 minutes.
 
-- [ ] **Step 5: Manual test scenarios (per spec section "Manual test scenarios")**
+- [x] **Step 5: Manual test scenarios (per spec section "Manual test scenarios")**
 
 Run the application: `npm start`
 
@@ -785,11 +787,11 @@ Run scenarios 1-6 from the spec. Document any deviation. Each scenario must pass
 
 `.sort_cache.json` location: per-folder, alongside the rated media (same dir as `.feature_cache.json`). Inspect via OS file manager or `Get-Content`.
 
-- [ ] **Step 6: Final commit (if any cleanup needed)**
+- [x] **Step 6: Final commit (if any cleanup needed)**
 
 If manual scenarios surface bugs, fix them inline (do not skip — go back to the relevant Task and re-run). If all pass cleanly, no extra commit needed.
 
-- [ ] **Step 7: Push branch and open PR**
+- [x] **Step 7: Push branch and open PR**
 
 ```bash
 git push -u origin feature/clip-sort-followups
@@ -806,11 +808,11 @@ Spec: `docs/superpowers/specs/2026-05-02-clip-sort-followups-design.md`
 
 ## Test plan
 
-- [ ] `npm test` → 167/167 unit tests pass
-- [ ] `npm run lint` clean
-- [ ] `npm run format:check` clean
-- [ ] `npm run test:e2e` → 39/39 (unchanged from main)
-- [ ] Manual scenarios 1-6 pass (per spec)
+- [x] `npm test` → 167/167 unit tests pass
+- [x] `npm run lint` clean
+- [x] `npm run format:check` clean
+- [x] `npm run test:e2e` → 39/39 (unchanged from main)
+- [x] Manual scenarios 1-6 pass (per spec)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
@@ -821,12 +823,12 @@ EOF
 
 ## Self-review checklist (run before final push)
 
-- [ ] **Spec coverage**: every numbered item in spec sections "Task 1", "Task 2", "Task 3", "Manual test scenarios", and "Verification plan" maps to a numbered Task above
-- [ ] **No placeholders**: grep the plan for `TBD|TODO|FIXME|placeholder|XXX` — should be zero matches
-- [ ] **Type consistency**: `algorithm` parameter name used consistently across Tasks 6, 7, and tests
-- [ ] **File paths**: all line references match current code (anchors checked: `media-viewer.js:1715`, `:4446`, `:5032`, `:5045`; `sorting-worker.js:757`)
-- [ ] **Commit boundaries**: 7-8 commits total (one per Task), each independently reviewable
-- [ ] **Test counts**: 160 baseline → 164 after Task 2 → 167 after Task 6, consistent throughout
+- [x] **Spec coverage**: every numbered item in spec sections "Task 1", "Task 2", "Task 3", "Manual test scenarios", and "Verification plan" maps to a numbered Task above
+- [x] **No placeholders**: grep the plan for `TBD|TODO|FIXME|placeholder|XXX` — should be zero matches
+- [x] **Type consistency**: `algorithm` parameter name used consistently across Tasks 6, 7, and tests
+- [x] **File paths**: all line references match current code (anchors checked: `media-viewer.js:1715`, `:4446`, `:5032`, `:5045`; `sorting-worker.js:757`)
+- [x] **Commit boundaries**: 7-8 commits total (one per Task), each independently reviewable
+- [x] **Test counts**: 160 baseline → 164 after Task 2 → 167 after Task 6, consistent throughout
 
 ---
 

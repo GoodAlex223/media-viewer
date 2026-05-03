@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-04-29 <!-- Group F Build & DX -->
+**Last Updated**: 2026-05-03 <!-- CLIP Sort Follow-ups -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -11,6 +11,27 @@ Completed tasks with implementation details and learnings.
 ---
 
 <!-- Organize by month, newest first. -->
+
+## 2026-05 (May)
+
+### [2026-05-03] CLIP Sort Follow-ups
+
+**Spec**: [docs/superpowers/specs/2026-05-02-clip-sort-followups-design.md](../superpowers/specs/2026-05-02-clip-sort-followups-design.md)
+**Plan**: [docs/archive/plans/2026-05-02-clip-sort-followups.md](../archive/plans/2026-05-02-clip-sort-followups.md)
+**Summary**: Three Group D BACKLOG follow-ups shipped together. (1) `insertNewFilesInSortedOrder` is now algorithm-aware: takes a third `algorithm` parameter from `cachedData.algorithm`; CLIP path scores by cosine distance over `clipCache`; hash path is byte-equivalent to pre-change behavior. Files without CLIP vectors are end-appended (matches `sortMediaBySimilarityClip` first-time-sort fallback). Fixes silent semantic-ordering corruption when adding new files to a CLIP-cached folder. (2) CLIP toggle-off in Settings (F1) now cleans up: synchronously reverts `sortAlgorithm` to `'vptree'` (constructor default) and updates the dropdown if the user was on CLIP, then `await deleteSortCache('clip')` clears the persisted entry. Revert-before-await ordering eliminates the transient "CLIP shown but disabled" UI state. (3) Added 7 new unit tests: 4 characterization tests for `sortMediaBySimilarityClip` (worker side, including MST chain ordering, missing-vector fallback, abort-flag throw, insufficient-vectors guard) + 3 algorithm-aware tests for `insertNewFilesInSortedOrder` (renderer side, including a regression guard for the unchanged hash path). Test count 160 → 167.
+**Key Changes**:
+- `media-viewer.js` — New `calculateCosineDistance()` method (~10 LoC, mirrors `sorting-worker.js`); `applyCachedSortOrder` passes `cachedData.algorithm` to insertion; `insertNewFilesInSortedOrder` branches on algorithm with byte-equivalent hash else-branch; CLIP toggle handler is now `async` with revert-before-await cleanup
+- `sorting-worker.js` — Extended `module.exports` to include `sortMediaBySimilarityClip` + `sortMediaBySimilarityMST` (freebie for future MST tests); discoverability comment near `abortFlag = false` flagging test contract
+- `tests/sorting-worker.test.js` — New `describe('sortMediaBySimilarityClip', ...)` block with 4 tests; `resetAbort()` helper exploits worker's outer try/catch to reset abort flag without depending on test's own try/catch
+- `tests/media-viewer-utils.test.js` — New `extractAsyncMethod` helper using `Object.getPrototypeOf(async function(){}).constructor`; new `describe('insertNewFilesInSortedOrder (algorithm-aware)', ...)` block with 3 tests using `extractMethod` pattern
+**Commits**: 13 on `feature/clip-sort-followups` (779f630 spec, e427049 plan, 91f87e6 export extension, bb1052d tests, 30486df review fixes, cdf631e cosine method, ae1f241 extractAsyncMethod, 2252d32 algorithm-aware insertion + tests, 0eaf7ca caller update, 0ce9cec toggle-off cleanup, 80ac67d M1+M3 polish, c538bc0 + ba7f2bc CLAUDE.md syncs, 1a9b1bc BACKLOG bug entry)
+**Test results**: 167/167 unit tests pass (was 160 baseline; +7 new), 39/39 E2E tests pass (unchanged; no E2E added — toggle-off behavior covered by manual scenarios)
+**Code review**: Approve for merge. 0 Critical, 0 Important, 3 Minor (M1 cosine null-return divergence between renderer/worker — fixed in 80ac67d with explanatory comment; M2 inline comments lost during else-branch extraction — left as cosmetic; M3 toggle-off revert-after-await ordering — fixed in 80ac67d with reorder)
+**Manual scenarios**: Scenario 1 attempted on `Act2_Warm` folder; revealed pre-existing CLIP background-extraction bug (separate from this branch's scope) — extraction silently does not fire on folder load, so no CLIP vectors exist for the cache-hit insertion path to be exercised end-to-end. Bug filed in BACKLOG. Remaining scenarios skipped pending extraction-bug fix.
+**Spawned BACKLOG items** (2): CLIP background extraction silently does not fire on folder load (high priority, blocks all CLIP features end-to-end); UX-visible "extraction starting" notification to surface failure modes faster
+**PR**: TBD (pending push)
+
+---
 
 ## 2026-04 (April)
 

@@ -46,6 +46,7 @@ Central index for all project documentation.
 | [CLIP Similarity Sorting Plan][] | CLIP cosine similarity MST-based sort algorithm |
 | [Resource Management Plan][]    | CLIP model unload after extraction + logger double-init guard |
 | [Group F Build & DX Plan][]     | Pin Lucide CDN with SRI + update regression-checker agent for FullscreenManager |
+| [CLIP Sort Follow-ups Plan][]   | Algorithm-aware new-file insertion + CLIP toggle-off cache cleanup + sortMediaBySimilarityClip tests |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -57,6 +58,7 @@ Central index for all project documentation.
 [CLIP Similarity Sorting Plan]: archive/plans/2026-04-16-clip-similarity-sorting.md
 [Resource Management Plan]: archive/plans/2026-04-20-group-e-resource-management.md
 [Group F Build & DX Plan]: archive/plans/2026-04-29-group-f-build-dx.md
+[CLIP Sort Follow-ups Plan]: archive/plans/2026-05-02-clip-sort-followups.md
 
 ## Design Specs
 
@@ -76,6 +78,7 @@ Central index for all project documentation.
 | [CLIP Similarity Sorting][] | CLIP cosine-distance MST-based semantic sort algorithm |
 | [Resource Management][]     | CLIP model unload after extraction + logger.js double-init guard |
 | [Group F Build & DX][]      | Pin Lucide CDN with SRI hash + regression-checker agent update for FullscreenManager |
+| [CLIP Sort Follow-ups][]    | Algorithm-aware new-file insertion (cosine for CLIP cache hits) + toggle-off cache+state cleanup |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -92,6 +95,7 @@ Central index for all project documentation.
 [CLIP Similarity Sorting]: superpowers/specs/2026-04-16-clip-similarity-sorting-design.md
 [Resource Management]: superpowers/specs/2026-04-20-group-e-resource-management-design.md
 [Group F Build & DX]: superpowers/specs/2026-04-29-group-f-build-dx-design.md
+[CLIP Sort Follow-ups]: superpowers/specs/2026-05-02-clip-sort-followups-design.md
 
 ## Archives
 
