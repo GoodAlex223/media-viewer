@@ -1715,10 +1715,23 @@ class MediaViewer {
         const clipToggle = document.getElementById('clipFeaturesToggle');
         if (clipToggle) {
             clipToggle.checked = this.enableClipFeatures;
-            clipToggle.addEventListener('change', () => {
+            clipToggle.addEventListener('change', async () => {
                 this.enableClipFeatures = clipToggle.checked;
                 localStorage.setItem('enableClipFeatures', String(clipToggle.checked));
                 this.resetMlModel();
+
+                if (!clipToggle.checked) {
+                    // CLIP disabled: persisted 'clip' sort cache may now reference files
+                    // without vectors or vectors from a model version that won't load again.
+                    await this.deleteSortCache('clip');
+                    if (this.sortAlgorithm === 'clip') {
+                        this.sortAlgorithm = 'vptree';
+                        localStorage.setItem('sortAlgorithm', 'vptree');
+                        if (this.sortAlgorithmSelect) {
+                            this.sortAlgorithmSelect.value = 'vptree';
+                        }
+                    }
+                }
             });
         }
 
