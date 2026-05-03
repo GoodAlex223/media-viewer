@@ -82,6 +82,7 @@ const formatEta = extractMethod('formatEta');
 const formatTimeAgo = extractMethod('formatTimeAgo');
 const removeFileFromList = extractMethod('removeFileFromList');
 const areFoldersConfigured = extractMethod('areFoldersConfigured');
+const insertNewFilesInSortedOrder = extractAsyncMethod('insertNewFilesInSortedOrder');
 
 describe('formatElapsed', () => {
     it('returns "?" for NaN', () => {
@@ -287,5 +288,98 @@ describe('buildKeyString — key string construction', () => {
         };
         const result = buildKeyString.call({}, mockEvent);
         expect(result).toBe('KeyQ');
+    });
+});
+
+describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
+    function makeCtx(overrides = {}) {
+        return {
+            mediaFiles: [],
+            clipCache: new Map(),
+            perceptualHashes: new Map(),
+            calculateHammingDistance(h1, h2) {
+                if (!h1 || !h2 || h1.length !== h2.length) return Infinity;
+                let d = 0;
+                for (let i = 0; i < h1.length; i++) if (h1[i] !== h2[i]) d++;
+                return d;
+            },
+            calculateCosineDistance(v1, v2) {
+                if (!v1 || !v2 || v1.length !== v2.length) return 1;
+                let dot = 0;
+                for (let i = 0; i < v1.length; i++) dot += v1[i] * v2[i];
+                return 1 - dot;
+            },
+            async computePerceptualHash(_path) {
+                throw new Error('computePerceptualHash should not be called in CLIP path');
+            },
+            updateProgressNotification() {},
+            ...overrides,
+        };
+    }
+
+    it('CLIP path: inserts new file at cosine-nearest position when vector exists', async () => {
+        // Cached order: [a, c] where a~[1,0,0,0], c~[0,1,0,0]
+        // New file b with vector [0.99, 0.14, 0, 0] — very close to a (cosine 0.01), far from c (0.86)
+        // The algorithm picks the j with minimum score (avg distance to neighbors).
+        // j=0: prev=null, next=a, score=0.01 (1 neighbor); j=1: prev=a, next=c, score=0.435; j=2: prev=c, next=null, score=0.86.
+        // j=0 wins → b prepended → [b, a, c]
+        const a = { path: '/a.png' };
+        const b = { path: '/b.png' };
+        const c = { path: '/c.png' };
+        const ctx = makeCtx({
+            mediaFiles: [a, c],
+            clipCache: new Map([
+                ['/a.png', new Float32Array([1, 0, 0, 0])],
+                ['/b.png', new Float32Array([0.99, 0.14, 0, 0])],
+                ['/c.png', new Float32Array([0, 1, 0, 0])],
+            ]),
+        });
+
+        await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'clip');
+
+        // b ends up at index 0 (adjacent to a, prepended)
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+    });
+
+    it('CLIP path: appends new file at end when no CLIP vector', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const noVec = { path: '/no-vec.png' };
+        const ctx = makeCtx({
+            mediaFiles: [a, c],
+            clipCache: new Map([
+                ['/a.png', new Float32Array([1, 0, 0, 0])],
+                ['/c.png', new Float32Array([0, 1, 0, 0])],
+                // /no-vec.png deliberately absent
+            ]),
+        });
+
+        await insertNewFilesInSortedOrder.call(ctx, [a, c], [noVec], 'clip');
+
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png', '/no-vec.png']);
+    });
+
+    it('hash path: regression guard — algorithm !== "clip" still uses Hamming', async () => {
+        // Cached order: [a, c] with hashes — a="0000", c="1111"
+        // New file b with hash "0001" — Hamming 1 from a, Hamming 3 from c.
+        // Same min-score logic: j=0 score=1, j=1 score=2, j=2 score=3. j=0 wins → [b, a, c].
+        // This test passes against the CURRENT algorithm and serves as a regression guard
+        // for Task 6 — the hash branch must remain unchanged.
+        const a = { path: '/a.png' };
+        const b = { path: '/b.png' };
+        const c = { path: '/c.png' };
+        const ctx = makeCtx({
+            mediaFiles: [a, c],
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/b.png', '0001'],
+                ['/c.png', '1111'],
+            ]),
+            // computePerceptualHash should not be called when hash already cached
+        });
+
+        await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree');
+
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
     });
 });
