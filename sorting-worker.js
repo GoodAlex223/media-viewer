@@ -774,6 +774,7 @@ self.onmessage = function (e) {
     }
 
     if (type === 'startSort') {
+        // abortFlag reset is also relied on by tests/sorting-worker.test.js resetAbort()
         abortFlag = false;
         const { algorithm, mediaFiles, hashes, clipVectors, currentIndex, maxComparisons } = data;
 
