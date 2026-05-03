@@ -5036,7 +5036,7 @@ class MediaViewer {
         // If we have new files, find best positions for them
         if (newFiles.length > 0 && cachedOrder.length > 0) {
             this.updateProgressNotification(`🔄 Inserting ${newFiles.length} new files...`);
-            await this.insertNewFilesInSortedOrder(cachedOrder, newFiles);
+            await this.insertNewFilesInSortedOrder(cachedOrder, newFiles, cachedData.algorithm);
         } else {
             // Just use cached order (new files at end if any)
             this.mediaFiles = [...cachedOrder, ...newFiles];
