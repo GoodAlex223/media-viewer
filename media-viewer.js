@@ -4457,6 +4457,13 @@ class MediaViewer {
         return distance;
     }
 
+    calculateCosineDistance(vec1, vec2) {
+        if (!vec1 || !vec2 || vec1.length !== vec2.length) return 1;
+        let dot = 0;
+        for (let i = 0; i < vec1.length; i++) dot += vec1[i] * vec2[i];
+        return 1 - dot;
+    }
+
     // Run sorting in Web Worker to prevent UI freeze when window is minimized
     runSortingWorker(data) {
         return new Promise((resolve, reject) => {
