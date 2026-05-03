@@ -1721,9 +1721,9 @@ class MediaViewer {
                 this.resetMlModel();
 
                 if (!clipToggle.checked) {
-                    // CLIP disabled: persisted 'clip' sort cache may now reference files
-                    // without vectors or vectors from a model version that won't load again.
-                    await this.deleteSortCache('clip');
+                    // Revert sortAlgorithm + dropdown synchronously first so the UI reflects
+                    // the new state instantly (no transient where dropdown shows CLIP but
+                    // CLIP is disabled). Then await the cache deletion IPC.
                     if (this.sortAlgorithm === 'clip') {
                         this.sortAlgorithm = 'vptree';
                         localStorage.setItem('sortAlgorithm', 'vptree');
@@ -1731,6 +1731,9 @@ class MediaViewer {
                             this.sortAlgorithmSelect.value = 'vptree';
                         }
                     }
+                    // Persisted 'clip' sort cache may now reference files without vectors
+                    // or vectors from a model version that won't load again — drop it.
+                    await this.deleteSortCache('clip');
                 }
             });
         }
@@ -4471,6 +4474,9 @@ class MediaViewer {
     }
 
     calculateCosineDistance(vec1, vec2) {
+        // Returns 1 (not Infinity, unlike calculateHammingDistance and the worker's calculateCosineDistance)
+        // because cosine distance is bounded [0, 2]; 1 = orthogonal, the natural "no signal" value.
+        // Dead-code path in practice — callers gate every invocation behind clipCache truthy checks.
         if (!vec1 || !vec2 || vec1.length !== vec2.length) return 1;
         let dot = 0;
         for (let i = 0; i < vec1.length; i++) dot += vec1[i] * vec2[i];
