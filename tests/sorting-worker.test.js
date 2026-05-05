@@ -5,7 +5,13 @@ const require = createRequire(import.meta.url);
 // sorting-worker.js references `self` (Web Worker global) at module level.
 // Provide a minimal stub so require() succeeds.
 globalThis.self = { onmessage: null, postMessage: () => {} };
-const { MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance } = require('../sorting-worker');
+const {
+    MinHeap,
+    VPTree,
+    calculateHammingDistance,
+    calculateCosineDistance,
+    sortMediaBySimilarityClip,
+} = require('../sorting-worker');
 
 describe('MinHeap', () => {
     it('starts empty', () => {
@@ -221,5 +227,82 @@ describe('calculateCosineDistance', () => {
         const vec2 = new Array(512).fill(0);
         vec2[0] = 1;
         expect(calculateCosineDistance(vec1, vec2)).toBe(0);
+    });
+});
+
+describe('sortMediaBySimilarityClip', () => {
+    // Reset abortFlag between tests by sending a startSort-equivalent message.
+    // self.onmessage is assigned by sorting-worker.js during require().
+    // Direct flag access isn't possible (module-private), so we toggle via the message handler.
+    function resetAbort() {
+        // The worker's onmessage handler unconditionally sets abortFlag = false
+        // in the 'startSort' branch (sorting-worker.js, see comment near abortFlag declaration).
+        // Algorithm 'noop' falls through to default → fails on undefined inputs → outer
+        // try/catch in the handler swallows the error and posts {type:'error',...}.
+        // onmessage returns normally; abortFlag has been reset.
+        globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
+    }
+
+    it('orders 3 files by cosine similarity (MST chain)', () => {
+        resetAbort();
+        const files = [
+            { path: '/a.png' }, // close to b
+            { path: '/b.png' }, // close to a, far from c
+            { path: '/c.png' }, // orthogonal to a/b
+        ];
+        const clipVectors = {
+            '/a.png': [1, 0, 0, 0],
+            '/b.png': [0.99, 0.14, 0, 0], // cosine distance ~0.01 to a
+            '/c.png': [0, 1, 0, 0], // cosine distance 1.0 to a, ~0.86 to b
+        };
+        const result = sortMediaBySimilarityClip(files, clipVectors, 0);
+        // Result is array of paths. Start file (currentIndex=0 -> /a.png) is first.
+        // MST connects a-b (0.01, cheapest), then attaches c via b (0.86 < 1.00).
+        expect(result[0]).toBe('/a.png');
+        expect(result).toContain('/b.png');
+        expect(result).toContain('/c.png');
+        expect(result).toHaveLength(3);
+        // a's neighbor in MST is b (cheapest edge), so b should appear before c
+        const idxB = result.indexOf('/b.png');
+        const idxC = result.indexOf('/c.png');
+        expect(idxB).toBeLessThan(idxC);
+    });
+
+    it('appends files without CLIP vectors at the end', () => {
+        resetAbort();
+        const files = [{ path: '/a.png' }, { path: '/b.png' }, { path: '/no-vec.png' }];
+        const clipVectors = {
+            '/a.png': [1, 0, 0, 0],
+            '/b.png': [0.99, 0.14, 0, 0],
+            // /no-vec.png deliberately absent
+        };
+        const result = sortMediaBySimilarityClip(files, clipVectors, 0);
+        expect(result).toHaveLength(3);
+        expect(result[result.length - 1]).toBe('/no-vec.png');
+    });
+
+    it('throws "Sorting cancelled by user" when abort flag is set', () => {
+        // Set abort flag via the worker's onmessage handler
+        globalThis.self.onmessage({ data: { type: 'abort' } });
+        const files = [{ path: '/a.png' }, { path: '/b.png' }, { path: '/c.png' }, { path: '/d.png' }];
+        const clipVectors = {
+            '/a.png': [1, 0, 0, 0],
+            '/b.png': [0.99, 0.14, 0, 0],
+            '/c.png': [0.98, 0.2, 0, 0],
+            '/d.png': [0, 1, 0, 0],
+        };
+        expect(() => sortMediaBySimilarityClip(files, clipVectors, 0)).toThrow('Sorting cancelled by user');
+    });
+
+    it('throws when fewer than 2 files have CLIP vectors', () => {
+        resetAbort();
+        const files = [{ path: '/a.png' }, { path: '/b.png' }];
+        const clipVectors = {
+            '/a.png': [1, 0, 0, 0],
+            // /b.png absent → only 1 file with vector
+        };
+        expect(() => sortMediaBySimilarityClip(files, clipVectors, 0)).toThrow(
+            'Only 1 files have CLIP embeddings. Need at least 2 to sort.'
+        );
     });
 });

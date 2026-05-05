@@ -1715,10 +1715,26 @@ class MediaViewer {
         const clipToggle = document.getElementById('clipFeaturesToggle');
         if (clipToggle) {
             clipToggle.checked = this.enableClipFeatures;
-            clipToggle.addEventListener('change', () => {
+            clipToggle.addEventListener('change', async () => {
                 this.enableClipFeatures = clipToggle.checked;
                 localStorage.setItem('enableClipFeatures', String(clipToggle.checked));
                 this.resetMlModel();
+
+                if (!clipToggle.checked) {
+                    // Revert sortAlgorithm + dropdown synchronously first so the UI reflects
+                    // the new state instantly (no transient where dropdown shows CLIP but
+                    // CLIP is disabled). Then await the cache deletion IPC.
+                    if (this.sortAlgorithm === 'clip') {
+                        this.sortAlgorithm = 'vptree';
+                        localStorage.setItem('sortAlgorithm', 'vptree');
+                        if (this.sortAlgorithmSelect) {
+                            this.sortAlgorithmSelect.value = 'vptree';
+                        }
+                    }
+                    // Persisted 'clip' sort cache may now reference files without vectors
+                    // or vectors from a model version that won't load again — drop it.
+                    await this.deleteSortCache('clip');
+                }
             });
         }
 
@@ -4095,8 +4111,10 @@ class MediaViewer {
                 // Load hash cache for inserting new files
                 await this.loadHashCache();
 
-                // Apply cached order
-                const stats = await this.applyCachedSortOrder(cachedSortData);
+                // Apply cached order — pass current sortAlgorithm explicitly so the
+                // algorithm threads through to insertNewFilesInSortedOrder even if the
+                // cached entry was written before the algorithm field existed (older caches).
+                const stats = await this.applyCachedSortOrder(cachedSortData, this.sortAlgorithm);
 
                 // Save updated hash cache if new files were processed
                 if (stats.added > 0) {
@@ -4455,6 +4473,16 @@ class MediaViewer {
             }
         }
         return distance;
+    }
+
+    calculateCosineDistance(vec1, vec2) {
+        // Returns 1 (not Infinity, unlike calculateHammingDistance and the worker's calculateCosineDistance)
+        // because cosine distance is bounded [0, 2]; 1 = orthogonal, the natural "no signal" value.
+        // Dead-code path in practice — callers gate every invocation behind clipCache truthy checks.
+        if (!vec1 || !vec2 || vec1.length !== vec2.length) return 1;
+        let dot = 0;
+        for (let i = 0; i < vec1.length; i++) dot += vec1[i] * vec2[i];
+        return 1 - dot;
     }
 
     // Run sorting in Web Worker to prevent UI freeze when window is minimized
@@ -4949,6 +4977,7 @@ class MediaViewer {
             }
 
             cache[algorithm] = {
+                algorithm,
                 sortedPaths: fileNames,
                 timestamp: Date.now(),
                 startFile: startFileName,
@@ -4998,7 +5027,7 @@ class MediaViewer {
         }
     }
 
-    async applyCachedSortOrder(cachedData) {
+    async applyCachedSortOrder(cachedData, algorithm) {
         // Get current file names in folder
         const currentFileNames = new Set();
         const fileNameToFile = new Map();
@@ -5029,7 +5058,10 @@ class MediaViewer {
         // If we have new files, find best positions for them
         if (newFiles.length > 0 && cachedOrder.length > 0) {
             this.updateProgressNotification(`🔄 Inserting ${newFiles.length} new files...`);
-            await this.insertNewFilesInSortedOrder(cachedOrder, newFiles);
+            // Prefer explicit algorithm from caller; fall back to the cache entry's algorithm
+            // field (added in feature/clip-sort-followups). Old caches without either route
+            // safely through the Hamming else-branch.
+            await this.insertNewFilesInSortedOrder(cachedOrder, newFiles, algorithm ?? cachedData.algorithm);
         } else {
             // Just use cached order (new files at end if any)
             this.mediaFiles = [...cachedOrder, ...newFiles];
@@ -5042,78 +5074,127 @@ class MediaViewer {
         };
     }
 
-    async insertNewFilesInSortedOrder(sortedFiles, newFiles) {
-        // For each new file, compute hash and find best insertion point
+    async insertNewFilesInSortedOrder(sortedFiles, newFiles, algorithm) {
         const insertions = [];
 
-        for (let i = 0; i < newFiles.length; i++) {
-            const newFile = newFiles[i];
+        if (algorithm === 'clip') {
+            // CLIP path: score by cosine distance over clipCache vectors.
+            // Files without CLIP vectors are end-appended (matches sortMediaBySimilarityClip's
+            // first-time-sort fallback). No on-demand CLIP extraction here — the cache-hit
+            // path is expected to be near-instant; firing main-process inference would
+            // add ~100-200ms per missing file via IPC.
+            for (let i = 0; i < newFiles.length; i++) {
+                const newFile = newFiles[i];
+                const newVec = this.clipCache.get(newFile.path);
 
-            // Compute hash if not already computed
-            if (!this.perceptualHashes.has(newFile.path)) {
-                try {
-                    const hash = await this.computePerceptualHash(newFile.path);
-                    this.perceptualHashes.set(newFile.path, hash);
-                } catch (error) {
-                    console.warn(`Failed to compute hash for ${newFile.path}:`, error);
-                    // File without hash goes to end
+                if (!newVec) {
                     insertions.push({ file: newFile, index: sortedFiles.length, distance: Infinity });
                     continue;
                 }
-            }
 
-            const newHash = this.perceptualHashes.get(newFile.path);
-            if (!newHash) {
-                insertions.push({ file: newFile, index: sortedFiles.length, distance: Infinity });
-                continue;
-            }
+                let bestIndex = sortedFiles.length;
+                let bestScore = Infinity;
 
-            // Find the best position (minimum distance to neighbors)
-            let bestIndex = sortedFiles.length;
-            let bestScore = Infinity;
+                for (let j = 0; j <= sortedFiles.length; j++) {
+                    let score = 0;
+                    let count = 0;
 
-            for (let j = 0; j <= sortedFiles.length; j++) {
-                let score = 0;
-                let count = 0;
+                    if (j > 0) {
+                        const prevVec = this.clipCache.get(sortedFiles[j - 1].path);
+                        if (prevVec) {
+                            score += this.calculateCosineDistance(newVec, prevVec);
+                            count++;
+                        }
+                    }
 
-                // Distance to previous file
-                if (j > 0) {
-                    const prevHash = this.perceptualHashes.get(sortedFiles[j - 1].path);
-                    if (prevHash) {
-                        score += this.calculateHammingDistance(newHash, prevHash);
-                        count++;
+                    if (j < sortedFiles.length) {
+                        const nextVec = this.clipCache.get(sortedFiles[j].path);
+                        if (nextVec) {
+                            score += this.calculateCosineDistance(newVec, nextVec);
+                            count++;
+                        }
+                    }
+
+                    if (count > 0) {
+                        score = score / count;
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestIndex = j;
+                        }
                     }
                 }
 
-                // Distance to next file
-                if (j < sortedFiles.length) {
-                    const nextHash = this.perceptualHashes.get(sortedFiles[j].path);
-                    if (nextHash) {
-                        score += this.calculateHammingDistance(newHash, nextHash);
-                        count++;
-                    }
-                }
+                insertions.push({ file: newFile, index: bestIndex, distance: bestScore });
 
-                if (count > 0) {
-                    score = score / count; // Average distance to neighbors
-                    if (score < bestScore) {
-                        bestScore = score;
-                        bestIndex = j;
-                    }
+                if ((i + 1) % 10 === 0 || i === newFiles.length - 1) {
+                    this.updateProgressNotification(`🔄 Processing new files: ${i + 1}/${newFiles.length}`);
                 }
             }
+        } else {
+            // Hash path (vptree, mst, simple, or undefined): unchanged behavior.
+            for (let i = 0; i < newFiles.length; i++) {
+                const newFile = newFiles[i];
 
-            insertions.push({ file: newFile, index: bestIndex, distance: bestScore });
+                if (!this.perceptualHashes.has(newFile.path)) {
+                    try {
+                        const hash = await this.computePerceptualHash(newFile.path);
+                        this.perceptualHashes.set(newFile.path, hash);
+                    } catch (error) {
+                        console.warn(`Failed to compute hash for ${newFile.path}:`, error);
+                        insertions.push({ file: newFile, index: sortedFiles.length, distance: Infinity });
+                        continue;
+                    }
+                }
 
-            if ((i + 1) % 10 === 0 || i === newFiles.length - 1) {
-                this.updateProgressNotification(`🔄 Processing new files: ${i + 1}/${newFiles.length}`);
+                const newHash = this.perceptualHashes.get(newFile.path);
+                if (!newHash) {
+                    insertions.push({ file: newFile, index: sortedFiles.length, distance: Infinity });
+                    continue;
+                }
+
+                let bestIndex = sortedFiles.length;
+                let bestScore = Infinity;
+
+                for (let j = 0; j <= sortedFiles.length; j++) {
+                    let score = 0;
+                    let count = 0;
+
+                    if (j > 0) {
+                        const prevHash = this.perceptualHashes.get(sortedFiles[j - 1].path);
+                        if (prevHash) {
+                            score += this.calculateHammingDistance(newHash, prevHash);
+                            count++;
+                        }
+                    }
+
+                    if (j < sortedFiles.length) {
+                        const nextHash = this.perceptualHashes.get(sortedFiles[j].path);
+                        if (nextHash) {
+                            score += this.calculateHammingDistance(newHash, nextHash);
+                            count++;
+                        }
+                    }
+
+                    if (count > 0) {
+                        score = score / count;
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestIndex = j;
+                        }
+                    }
+                }
+
+                insertions.push({ file: newFile, index: bestIndex, distance: bestScore });
+
+                if ((i + 1) % 10 === 0 || i === newFiles.length - 1) {
+                    this.updateProgressNotification(`🔄 Processing new files: ${i + 1}/${newFiles.length}`);
+                }
             }
         }
 
         // Sort insertions by index descending so we can insert without affecting indices
         insertions.sort((a, b) => b.index - a.index);
 
-        // Insert files at their best positions
         const result = [...sortedFiles];
         for (const { file, index } of insertions) {
             result.splice(index, 0, file);

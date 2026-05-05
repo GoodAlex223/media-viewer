@@ -754,7 +754,14 @@ function sortMediaBySimilarityClip(mediaFiles, clipVectors, currentIndex) {
 
 // Export for unit testing (conditional CJS, same pattern as ml-model.js)
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance };
+    module.exports = {
+        MinHeap,
+        VPTree,
+        calculateHammingDistance,
+        calculateCosineDistance,
+        sortMediaBySimilarityClip,
+        sortMediaBySimilarityMST,
+    };
 }
 
 // Message handler
@@ -767,6 +774,7 @@ self.onmessage = function (e) {
     }
 
     if (type === 'startSort') {
+        // abortFlag reset is also relied on by tests/sorting-worker.test.js resetAbort()
         abortFlag = false;
         const { algorithm, mediaFiles, hashes, clipVectors, currentIndex, maxComparisons } = data;
 
