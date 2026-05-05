@@ -83,6 +83,7 @@ const formatTimeAgo = extractMethod('formatTimeAgo');
 const removeFileFromList = extractMethod('removeFileFromList');
 const areFoldersConfigured = extractMethod('areFoldersConfigured');
 const insertNewFilesInSortedOrder = extractAsyncMethod('insertNewFilesInSortedOrder');
+const applyCachedSortOrder = extractAsyncMethod('applyCachedSortOrder');
 
 describe('formatElapsed', () => {
     it('returns "?" for NaN', () => {
@@ -381,5 +382,85 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
         await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree');
 
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+    });
+});
+
+describe('applyCachedSortOrder (algorithm threading)', () => {
+    // Regression guard for PR #33 review finding: cachedData.algorithm was undefined
+    // because saveSortCache wasn't writing the field. This test verifies that the
+    // algorithm threads correctly through applyCachedSortOrder → insertNewFilesInSortedOrder
+    // for both code paths (explicit param + cache-entry field) so the CLIP branch is
+    // reachable from the cache-hit path.
+
+    function makeCtx(captured) {
+        return {
+            mediaFiles: [{ path: '/a.png' }, { path: '/b.png' }],
+            // Stub electronAPI.path.basename — uses last path segment
+            // (real impl is async; just mirror the contract)
+            updateProgressNotification() {},
+            async insertNewFilesInSortedOrder(_sortedFiles, _newFiles, algorithm) {
+                captured.algorithm = algorithm;
+            },
+        };
+    }
+
+    // Patch globalThis.window.electronAPI.path.basename for tests since the method calls it.
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = {
+            electronAPI: {
+                path: {
+                    basename: async (p) => p.split('/').pop(),
+                },
+            },
+        };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('threads explicit algorithm parameter through to insertNewFilesInSortedOrder', async () => {
+        const captured = {};
+        const ctx = makeCtx(captured);
+        // mediaFiles has /a.png and /b.png; cachedData has only /a.png so /b.png is "new"
+        const cachedData = { sortedPaths: ['a.png'] };
+
+        await applyCachedSortOrder.call(ctx, cachedData, 'clip');
+
+        expect(captured.algorithm).toBe('clip');
+    });
+
+    it('falls back to cachedData.algorithm when caller passes no explicit algorithm', async () => {
+        const captured = {};
+        const ctx = makeCtx(captured);
+        const cachedData = { sortedPaths: ['a.png'], algorithm: 'mst' };
+
+        await applyCachedSortOrder.call(ctx, cachedData, undefined);
+
+        expect(captured.algorithm).toBe('mst');
+    });
+
+    it('explicit algorithm wins over cache-entry algorithm (caller takes precedence)', async () => {
+        const captured = {};
+        const ctx = makeCtx(captured);
+        // Cache entry says 'mst', but caller is now on 'clip' — caller wins
+        const cachedData = { sortedPaths: ['a.png'], algorithm: 'mst' };
+
+        await applyCachedSortOrder.call(ctx, cachedData, 'clip');
+
+        expect(captured.algorithm).toBe('clip');
+    });
+
+    it('passes undefined when neither source has algorithm (legacy cache + no caller arg)', async () => {
+        const captured = { algorithm: 'unset' };
+        const ctx = makeCtx(captured);
+        // Old cache file with no algorithm field, caller also passes nothing
+        const cachedData = { sortedPaths: ['a.png'] };
+
+        await applyCachedSortOrder.call(ctx, cachedData, undefined);
+
+        // undefined → routes through Hamming else-branch in insertNewFilesInSortedOrder (safe default)
+        expect(captured.algorithm).toBeUndefined();
     });
 });

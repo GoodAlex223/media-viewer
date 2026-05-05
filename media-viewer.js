@@ -4111,8 +4111,10 @@ class MediaViewer {
                 // Load hash cache for inserting new files
                 await this.loadHashCache();
 
-                // Apply cached order
-                const stats = await this.applyCachedSortOrder(cachedSortData);
+                // Apply cached order — pass current sortAlgorithm explicitly so the
+                // algorithm threads through to insertNewFilesInSortedOrder even if the
+                // cached entry was written before the algorithm field existed (older caches).
+                const stats = await this.applyCachedSortOrder(cachedSortData, this.sortAlgorithm);
 
                 // Save updated hash cache if new files were processed
                 if (stats.added > 0) {
@@ -4975,6 +4977,7 @@ class MediaViewer {
             }
 
             cache[algorithm] = {
+                algorithm,
                 sortedPaths: fileNames,
                 timestamp: Date.now(),
                 startFile: startFileName,
@@ -5024,7 +5027,7 @@ class MediaViewer {
         }
     }
 
-    async applyCachedSortOrder(cachedData) {
+    async applyCachedSortOrder(cachedData, algorithm) {
         // Get current file names in folder
         const currentFileNames = new Set();
         const fileNameToFile = new Map();
@@ -5055,7 +5058,10 @@ class MediaViewer {
         // If we have new files, find best positions for them
         if (newFiles.length > 0 && cachedOrder.length > 0) {
             this.updateProgressNotification(`🔄 Inserting ${newFiles.length} new files...`);
-            await this.insertNewFilesInSortedOrder(cachedOrder, newFiles, cachedData.algorithm);
+            // Prefer explicit algorithm from caller; fall back to the cache entry's algorithm
+            // field (added in feature/clip-sort-followups). Old caches without either route
+            // safely through the Hamming else-branch.
+            await this.insertNewFilesInSortedOrder(cachedOrder, newFiles, algorithm ?? cachedData.algorithm);
         } else {
             // Just use cached order (new files at end if any)
             this.mediaFiles = [...cachedOrder, ...newFiles];
