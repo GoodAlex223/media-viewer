@@ -1,3 +1,5 @@
+**Status: Complete** (2026-05-07)
+
 # CLIP Extraction Silent Failure Fix Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -16,11 +18,11 @@
 
 ## Pre-archive Checklist (run before archiving this plan)
 
-- [ ] Flip all `- [ ]` task checkboxes → `- [x]`
-- [ ] Add `**Status: Complete**` header at the top of this file
-- [ ] Add this file to `docs/README.md` index
-- [ ] Move this file from `docs/superpowers/plans/` to `docs/archive/plans/`
-- [ ] Delete the original from `docs/superpowers/plans/` (recurring drift — see CLAUDE.md gotcha)
+- [x] Flip all `- [ ]` task checkboxes → `- [x]`
+- [x] Add `**Status: Complete**` header at the top of this file
+- [x] Add this file to `docs/README.md` index
+- [x] Move this file from `docs/superpowers/plans/` to `docs/archive/plans/`
+- [x] Delete the original from `docs/superpowers/plans/` (recurring drift — see CLAUDE.md gotcha)
 
 ---
 
@@ -42,7 +44,7 @@ No other files modified during implementation. Post-merge cleanup (Task 9) updat
 - Modify: `media-viewer.js` (add stub method near line 6931)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Append the new describe block scaffold + first test to `tests/media-viewer-utils.test.js`**
+- [x] **Step 1: Append the new describe block scaffold + first test to `tests/media-viewer-utils.test.js`**
 
 Append at the end of the file (after the last existing `describe` block):
 
@@ -87,7 +89,7 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test — verify it fails because the method does not exist**
+- [x] **Step 2: Run the test — verify it fails because the method does not exist**
 
 Run:
 ```
@@ -96,7 +98,7 @@ npx vitest run tests/media-viewer-utils.test.js -t kickoffBackgroundExtractionIf
 
 Expected: FAIL — error message contains `"Could not find method: kickoffBackgroundExtractionIfEnabled"` (thrown by `extractMethod()` at [tests/media-viewer-utils.test.js:20](../../../tests/media-viewer-utils.test.js#L20)).
 
-- [ ] **Step 3: Add a minimal stub method to `media-viewer.js`**
+- [x] **Step 3: Add a minimal stub method to `media-viewer.js`**
 
 Locate `async startBackgroundFeatureExtraction()` (currently line ~6931). Insert the new method **immediately before** it (preserve indentation: 4 spaces, class-method style):
 
@@ -109,7 +111,7 @@ Locate `async startBackgroundFeatureExtraction()` (currently line ~6931). Insert
 
 (Leave a blank line between the new method's closing `}` and the existing `async startBackgroundFeatureExtraction()` declaration, per the file's existing style.)
 
-- [ ] **Step 4: Run the test — verify it passes**
+- [x] **Step 4: Run the test — verify it passes**
 
 Run:
 ```
@@ -118,7 +120,7 @@ npx vitest run tests/media-viewer-utils.test.js -t kickoffBackgroundExtractionIf
 
 Expected: PASS — 1 test passed (`does nothing when CLIP is disabled`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/media-viewer-utils.test.js media-viewer.js
@@ -133,7 +135,7 @@ git commit -m "test(clip-kickoff): no-op when enableClipFeatures is false"
 - Modify: `tests/media-viewer-utils.test.js` (add second test inside the same describe)
 - Modify: `media-viewer.js` (extend `kickoffBackgroundExtractionIfEnabled` body)
 
-- [ ] **Step 1: Add the second test inside the existing describe block**
+- [x] **Step 1: Add the second test inside the existing describe block**
 
 Add this `it(...)` block immediately after the first one in the `describe('kickoffBackgroundExtractionIfEnabled', …)` block:
 
@@ -148,7 +150,7 @@ Add this `it(...)` block immediately after the first one in the `describe('kicko
     });
 ```
 
-- [ ] **Step 2: Run the test — verify it fails (method body is empty after the early return)**
+- [x] **Step 2: Run the test — verify it fails (method body is empty after the early return)**
 
 Run:
 ```
@@ -157,7 +159,7 @@ npx vitest run tests/media-viewer-utils.test.js -t "initializes feature pool"
 
 Expected: FAIL — `expected "spy" to be called 1 times, but got 0 times`.
 
-- [ ] **Step 3: Extend the method body in `media-viewer.js`**
+- [x] **Step 3: Extend the method body in `media-viewer.js`**
 
 Replace the stub method body so it now reads:
 
@@ -170,7 +172,7 @@ Replace the stub method body so it now reads:
     }
 ```
 
-- [ ] **Step 4: Run the new test — verify it passes**
+- [x] **Step 4: Run the new test — verify it passes**
 
 Run:
 ```
@@ -179,7 +181,7 @@ npx vitest run tests/media-viewer-utils.test.js -t kickoffBackgroundExtractionIf
 
 Expected: PASS — 2 tests passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/media-viewer-utils.test.js media-viewer.js
@@ -194,7 +196,7 @@ git commit -m "feat(clip-kickoff): init feature pool, CLIP model, and start extr
 - Modify: `tests/media-viewer-utils.test.js`
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Add the third test inside the existing describe block**
+- [x] **Step 1: Add the third test inside the existing describe block**
 
 ```js
     it('skips initializeFeaturePool when workers already exist', () => {
@@ -207,7 +209,7 @@ git commit -m "feat(clip-kickoff): init feature pool, CLIP model, and start extr
     });
 ```
 
-- [ ] **Step 2: Run the test — verify it fails**
+- [x] **Step 2: Run the test — verify it fails**
 
 Run:
 ```
@@ -216,7 +218,7 @@ npx vitest run tests/media-viewer-utils.test.js -t "skips initializeFeaturePool"
 
 Expected: FAIL — `expected "spy" not to be called`.
 
-- [ ] **Step 3: Add the `featureWorkers.length === 0` guard in `media-viewer.js`**
+- [x] **Step 3: Add the `featureWorkers.length === 0` guard in `media-viewer.js`**
 
 Replace the method body so it now reads:
 
@@ -231,7 +233,7 @@ Replace the method body so it now reads:
     }
 ```
 
-- [ ] **Step 4: Run all tests in this describe — verify all 3 pass**
+- [x] **Step 4: Run all tests in this describe — verify all 3 pass**
 
 Run:
 ```
@@ -240,7 +242,7 @@ npx vitest run tests/media-viewer-utils.test.js -t kickoffBackgroundExtractionIf
 
 Expected: PASS — 3 tests passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/media-viewer-utils.test.js media-viewer.js
@@ -255,7 +257,7 @@ git commit -m "feat(clip-kickoff): guard initializeFeaturePool when workers exis
 - Modify: `tests/media-viewer-utils.test.js`
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Add the fourth test inside the existing describe block**
+- [x] **Step 1: Add the fourth test inside the existing describe block**
 
 ```js
     it('skips initClipModel when CLIP is already ready', () => {
@@ -267,7 +269,7 @@ git commit -m "feat(clip-kickoff): guard initializeFeaturePool when workers exis
     });
 ```
 
-- [ ] **Step 2: Run the test — verify it fails**
+- [x] **Step 2: Run the test — verify it fails**
 
 Run:
 ```
@@ -276,7 +278,7 @@ npx vitest run tests/media-viewer-utils.test.js -t "skips initClipModel when CLI
 
 Expected: FAIL — `expected "spy" not to be called`.
 
-- [ ] **Step 3: Add the `clipWorkerReady` guard in `media-viewer.js`** (intentionally minimal — does not yet handle `clipModelDownloading`; that's Task 5)
+- [x] **Step 3: Add the `clipWorkerReady` guard in `media-viewer.js`** (intentionally minimal — does not yet handle `clipModelDownloading`; that's Task 5)
 
 Replace the method body so it now reads:
 
@@ -293,7 +295,7 @@ Replace the method body so it now reads:
     }
 ```
 
-- [ ] **Step 4: Run all tests in this describe — verify all 4 pass**
+- [x] **Step 4: Run all tests in this describe — verify all 4 pass**
 
 Run:
 ```
@@ -302,7 +304,7 @@ npx vitest run tests/media-viewer-utils.test.js -t kickoffBackgroundExtractionIf
 
 Expected: PASS — 4 tests passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/media-viewer-utils.test.js media-viewer.js
@@ -317,7 +319,7 @@ git commit -m "feat(clip-kickoff): guard initClipModel when ready"
 - Modify: `tests/media-viewer-utils.test.js`
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Add the fifth test inside the existing describe block**
+- [x] **Step 1: Add the fifth test inside the existing describe block**
 
 ```js
     it('skips initClipModel when download is in progress', () => {
@@ -329,7 +331,7 @@ git commit -m "feat(clip-kickoff): guard initClipModel when ready"
     });
 ```
 
-- [ ] **Step 2: Run the test — verify it fails**
+- [x] **Step 2: Run the test — verify it fails**
 
 Run:
 ```
@@ -338,7 +340,7 @@ npx vitest run tests/media-viewer-utils.test.js -t "skips initClipModel when dow
 
 Expected: FAIL — `expected "spy" not to be called` (current guard only checks `clipWorkerReady`).
 
-- [ ] **Step 3: Extend the `initClipModel` guard to also check `clipModelDownloading`**
+- [x] **Step 3: Extend the `initClipModel` guard to also check `clipModelDownloading`**
 
 Replace the method body so it now reads:
 
@@ -355,7 +357,7 @@ Replace the method body so it now reads:
     }
 ```
 
-- [ ] **Step 4: Run all tests in this describe — verify all 5 pass**
+- [x] **Step 4: Run all tests in this describe — verify all 5 pass**
 
 Run:
 ```
@@ -364,7 +366,7 @@ npx vitest run tests/media-viewer-utils.test.js -t kickoffBackgroundExtractionIf
 
 Expected: PASS — 5 tests passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/media-viewer-utils.test.js media-viewer.js
@@ -379,7 +381,7 @@ git commit -m "feat(clip-kickoff): also skip initClipModel during download"
 - Modify: `tests/media-viewer-utils.test.js`
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Add the sixth test inside the existing describe block**
+- [x] **Step 1: Add the sixth test inside the existing describe block**
 
 ```js
     it('logs error via window.electronAPI.logError when extraction rejects', async () => {
@@ -397,7 +399,7 @@ git commit -m "feat(clip-kickoff): also skip initClipModel during download"
     });
 ```
 
-- [ ] **Step 2: Run the test — verify it fails AND verify the unhandled rejection symptom**
+- [x] **Step 2: Run the test — verify it fails AND verify the unhandled rejection symptom**
 
 Run:
 ```
@@ -406,7 +408,7 @@ npx vitest run tests/media-viewer-utils.test.js -t "logs error via window.electr
 
 Expected: FAIL — `expected "spy" to be called 1 times, but got 0 times`. (The current method does not catch the rejection; vitest may also surface an unhandled-rejection warning — that's also a sign the catch is missing.)
 
-- [ ] **Step 3: Add the `.catch` handler to the extraction call in `media-viewer.js`**
+- [x] **Step 3: Add the `.catch` handler to the extraction call in `media-viewer.js`**
 
 Replace the method body so it now reads:
 
@@ -427,7 +429,7 @@ Replace the method body so it now reads:
     }
 ```
 
-- [ ] **Step 4: Run all tests in this describe — verify all 6 pass**
+- [x] **Step 4: Run all tests in this describe — verify all 6 pass**
 
 Run:
 ```
@@ -436,7 +438,7 @@ npx vitest run tests/media-viewer-utils.test.js -t kickoffBackgroundExtractionIf
 
 Expected: PASS — 6 tests passed, no unhandled-rejection warnings.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/media-viewer-utils.test.js media-viewer.js
@@ -452,7 +454,7 @@ git commit -m "feat(clip-kickoff): catch and log extraction failures via logErro
 
 This task has no automated test — `loadFolder()` is too DOM-heavy for the `extractMethod()` pattern (it touches `electronAPI`, `mediaContainer`, the lifecycle of `showMedia()`, etc.). The unit tests from Tasks 1-6 plus the manual repro in Task 8 cover correctness.
 
-- [ ] **Step 1: Locate the call site**
+- [x] **Step 1: Locate the call site**
 
 In `media-viewer.js`, find this block inside `loadFolder()` (currently around lines 2266-2273):
 
@@ -468,7 +470,7 @@ In `media-viewer.js`, find this block inside `loadFolder()` (currently around li
             this.updateSortPredictionButton();
 ```
 
-- [ ] **Step 2: Insert the kickoff call between `updateFolderInfo()` and the `console.log`**
+- [x] **Step 2: Insert the kickoff call between `updateFolderInfo()` and the `console.log`**
 
 The block should now read:
 
@@ -486,7 +488,7 @@ The block should now read:
             this.updateSortPredictionButton();
 ```
 
-- [ ] **Step 3: Run the full unit test suite — verify nothing else broke**
+- [x] **Step 3: Run the full unit test suite — verify nothing else broke**
 
 Run:
 ```
@@ -495,7 +497,7 @@ npm test
 
 Expected: PASS — total test count is `prior + 6` (e.g., if prior was 171, new total is 177). All test files green.
 
-- [ ] **Step 4: Run the linter — verify no new warnings**
+- [x] **Step 4: Run the linter — verify no new warnings**
 
 Run:
 ```
@@ -504,7 +506,7 @@ npm run lint
 
 Expected: no errors. (Existing warnings unchanged — do not introduce new ones.)
 
-- [ ] **Step 5: Run Prettier check — verify formatting**
+- [x] **Step 5: Run Prettier check — verify formatting**
 
 Run:
 ```
@@ -513,7 +515,7 @@ npm run format:check
 
 Expected: all files report `(unchanged)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js
@@ -526,38 +528,38 @@ git commit -m "fix(clip): trigger background extraction on folder load"
 
 **Files:** none (manual testing). Document the result in the next task's commit.
 
-- [ ] **Step 1: Start the app**
+- [x] **Step 1: Start the app**
 
 Run:
 ```
 npm start
 ```
 
-- [ ] **Step 2: Confirm CLIP is enabled**
+- [x] **Step 2: Confirm CLIP is enabled**
 
 Press **F1** to open Settings. Confirm the "Enable CLIP semantic features" checkbox is checked. Close Settings.
 
-- [ ] **Step 3: Open a fresh folder (no prior `.feature_cache.json`)**
+- [x] **Step 3: Open a fresh folder (no prior `.feature_cache.json`)**
 
 Use a folder containing several images (e.g., 10+ JPGs/PNGs) that has never been opened by this app. To force a fresh state, delete any pre-existing `.feature_cache.json` in that folder before opening.
 
-- [ ] **Step 4: Within ~5 seconds, observe the extraction progress bar**
+- [x] **Step 4: Within ~5 seconds, observe the extraction progress bar**
 
 Expected: Progress bar appears bottom-center showing `0/N — extracting…` (where N = total files). On first-ever CLIP use, you may also see the "Downloading CLIP model… X%" notification. Wait until extraction completes (notification: `"Feature extraction complete — N files in Xs"`).
 
-- [ ] **Step 5: Confirm `.feature_cache.json` was written**
+- [x] **Step 5: Confirm `.feature_cache.json` was written**
 
 Check the folder: a `.feature_cache.json` file should now exist with non-empty `clipVector` entries. (Hidden file — show hidden files in Explorer if needed.)
 
-- [ ] **Step 6: Click Sort-by-Similarity with the `clip` algorithm**
+- [x] **Step 6: Click Sort-by-Similarity with the `clip` algorithm**
 
 Open the algorithm dropdown next to the Sort button, select `clip`, then click **Sort by Similarity**. Expected: sort proceeds without throwing `"Only 0 files have CLIP embeddings."`. Files reorder by visual similarity.
 
-- [ ] **Step 7: Negative test — disable CLIP, switch folders, confirm no kickoff**
+- [x] **Step 7: Negative test — disable CLIP, switch folders, confirm no kickoff**
 
 Open Settings (F1), uncheck "Enable CLIP semantic features", close Settings. Switch to a different folder. Expected: no progress bar, no `.feature_cache.json` written. (Confirms the `enableClipFeatures` gate.)
 
-- [ ] **Step 8: Re-enable CLIP for normal use**
+- [x] **Step 8: Re-enable CLIP for normal use**
 
 Open Settings, re-check the checkbox, close Settings. (Restores default state for subsequent testing.)
 
@@ -577,7 +579,7 @@ If any step fails, return to Task 6/7 and debug. Do not proceed to Task 9 until 
 
 The auto-memory:memory-updater agent will sync `CLAUDE.md` automatically post-merge. Do not edit `CLAUDE.md` manually in this task.
 
-- [ ] **Step 1: Add Group A entry to `docs/planning/DONE.md`**
+- [x] **Step 1: Add Group A entry to `docs/planning/DONE.md`**
 
 Add a new entry at the top of the "Completed" section (or follow the existing chronological pattern in the file). Use this template, filling in dates and the actual unit/E2E test counts from `npm test` and `npm run test:e2e`:
 
@@ -598,22 +600,22 @@ Add a new entry at the top of the "Completed" section (or follow the existing ch
 **Test results**: <FILL_IN>/<FILL_IN> unit tests pass, <FILL_IN>/<FILL_IN> E2E tests pass.
 ```
 
-- [ ] **Step 2: Update `docs/planning/WEEKLY.md`**
+- [x] **Step 2: Update `docs/planning/WEEKLY.md`**
 
 Find the "Group A: CLIP Extraction Silent Failure" section under "Task Groups". Change the status row in the Summary Table from `Planned` to `Complete (YYYY-MM-DD)`. In the Group A task list, flip `- [ ]` to `- [x]` for the single bullet. In the "Daily Schedule" Monday section, flip the bullet's checkbox.
 
-- [ ] **Step 3: Remove the resolved BACKLOG entry**
+- [x] **Step 3: Remove the resolved BACKLOG entry**
 
 In `docs/planning/BACKLOG.md`, locate the entry titled `CLIP background extraction may silently not fire on folder load` (added 2026-05-03). Remove the entire entry (the heading and its body). If the file uses bullet lists rather than headings, remove just the bullet.
 
-- [ ] **Step 4: Run pre-archive checklist on this plan**
+- [x] **Step 4: Run pre-archive checklist on this plan**
 
 Open this file (`docs/superpowers/plans/2026-05-06-clip-extraction-silent-failure.md`). At the top, change the "Pre-archive Checklist" section: flip `- [ ]` to `- [x]` for each item as you complete it. Add a new line at the very top of the file:
 ```markdown
 **Status: Complete** (2026-05-XX)
 ```
 
-- [ ] **Step 5: Move plan file to archive**
+- [x] **Step 5: Move plan file to archive**
 
 Run:
 ```
@@ -625,11 +627,11 @@ If the spec also has an archive convention (check `docs/archive/specs/` exists; 
 git mv docs/superpowers/specs/2026-05-06-clip-extraction-silent-failure-design.md docs/archive/specs/2026-05-06-clip-extraction-silent-failure-design.md
 ```
 
-- [ ] **Step 6: Update `docs/README.md`**
+- [x] **Step 6: Update `docs/README.md`**
 
 Add a line under the archived-plans index for `2026-05-06-clip-extraction-silent-failure.md` (and the spec, if you moved it). Match the existing entry format in the README.
 
-- [ ] **Step 7: Final sanity run — full test suite**
+- [x] **Step 7: Final sanity run — full test suite**
 
 Run:
 ```
@@ -644,7 +646,7 @@ npm run format:check
 
 Both should report clean.
 
-- [ ] **Step 8: Commit the docs changes**
+- [x] **Step 8: Commit the docs changes**
 
 ```bash
 git add docs/planning/DONE.md docs/planning/WEEKLY.md docs/planning/BACKLOG.md docs/README.md docs/archive/plans/2026-05-06-clip-extraction-silent-failure.md
@@ -653,7 +655,7 @@ git commit -m "docs: archive Group A plan, mark CLIP extraction fix complete"
 
 (Add the spec-move path to `git add` if you moved the spec in Step 5.)
 
-- [ ] **Step 9: Push branch and open PR**
+- [x] **Step 9: Push branch and open PR**
 
 ```bash
 git push -u origin fix/clip-extraction-silent-failure

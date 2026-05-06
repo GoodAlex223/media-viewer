@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-05-03 <!-- CLIP Sort Follow-ups -->
+**Last Updated**: 2026-05-07 <!-- Group A: CLIP Extraction Silent Failure -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,23 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-05 (May)
+
+### [2026-05-07] Group A: CLIP Extraction Silent Failure
+
+**Spec**: [docs/superpowers/specs/2026-05-06-clip-extraction-silent-failure-design.md](../superpowers/specs/2026-05-06-clip-extraction-silent-failure-design.md)
+**Plan**: [docs/archive/plans/2026-05-06-clip-extraction-silent-failure.md](../archive/plans/2026-05-06-clip-extraction-silent-failure.md)
+**Summary**: Wired `startBackgroundFeatureExtraction()` into `loadFolder()` via a new `kickoffBackgroundExtractionIfEnabled()` helper. Resolves the 🔴 blocker where CLIP-enabled fresh-folder loads silently produced no `.feature_cache.json` and CLIP sort then threw `"Only 0 files have CLIP embeddings"`. Root cause confirmed during brainstorming: `startBackgroundFeatureExtraction()` had no call site in `loadFolder()` at all — the only caller was inside `handleSortByPrediction()`'s lazy ML-init block, so a fresh CLIP-enabled folder load left `featureWorkers.length === 0` and `clipWorkerReady === false` and no extraction ran. Hash sorts kept working because `handleSortBySimilarity` computes perceptual hashes inline (independent pipeline). Fix is strictly scoped: gated on `enableClipFeatures` (CLIP-off path unchanged), idempotent guards on `featureWorkers`/`clipWorkerReady`/`clipModelDownloading`, fire-and-forget extraction with `.catch(err => logError(...))`, called after `updateFolderInfo()` so the first frame renders before kickoff. Six unit tests cover each branch.
+**Key Changes**:
+- `media-viewer.js` — New `kickoffBackgroundExtractionIfEnabled()` method on `MediaViewer` placed immediately before `async startBackgroundFeatureExtraction()`; guards (in order): `!enableClipFeatures` early-return → `featureWorkers.length === 0` ⇒ `initializeFeaturePool()` → `!clipWorkerReady && !clipModelDownloading` ⇒ `initClipModel()` → fire-and-forget `startBackgroundFeatureExtraction().catch(err => window.electronAPI?.logError(...))`. Called from `loadFolder()` after `this.updateFolderInfo()` and before the `console.log('Successfully loaded ...')`.
+- `tests/media-viewer-utils.test.js` — New `describe('kickoffBackgroundExtractionIfEnabled', ...)` block with 6 tests. `beforeEach`/`afterEach` save/restore `globalThis.window` (mocks `electronAPI.logError`); `makeCtx({ ... })` factory provides spy stubs for `initializeFeaturePool` / `initClipModel` / `startBackgroundFeatureExtraction` with overridable defaults. Tests: (1) CLIP-off no-op, (2) fresh-state full happy path, (3) skip `initializeFeaturePool` when workers exist, (4) skip `initClipModel` when ready, (5) skip `initClipModel` during download, (6) reject promise → `logError` called with error message.
+**Commits**: 7 on `fix/clip-extraction-silent-failure` (TDD walk: 77e5594 disabled no-op test+stub, 091fa55 fresh-state happy path, be50953 featureWorkers guard, 6cc5d5d clipWorkerReady guard, bf1a6d2 clipModelDownloading guard, 95af64a `.catch`/`logError`, 8cae645 wire into `loadFolder`) + 2 doc commits (c1379b7 spec, 170bc0c plan)
+**Test results**: 177/177 unit tests pass (was 171 baseline; +6 new); E2E: skipped (E2E for full kickoff → progress notification → `.feature_cache.json` written → CLIP sort succeeds chain would require either real 87 MB CLIP model download or extensive transformers.js mocking; unit tests prove kickoff wiring; existing `clip-graceful-degradation.test.js` covers CLIP-unavailable path)
+**Code review**: Approve for merge. 0 Critical, 0 Important, 5 Minor (M1 hypothetical sync-throw if `startBackgroundFeatureExtraction` ever drops `async` — accepted; M2 `originalWindow` save/restore would set `undefined` rather than `delete` if previously absent — matches file convention; M3 microtask-drain pattern in rejection test is fragile but vitest-idiomatic — accepted; M4 spec mentions "167 currently" but actual baseline was 171 — cosmetic spec drift, doesn't affect impl; M5 method name verbosity acceptable per single-source-of-truth rationale)
+**Manual scenarios**: Manual repro (Task 8 of plan) handed to user — code review can't verify the running-app extraction chain end-to-end without exercising the real CLIP model. User runs the 8-step manual repro from the plan before merge.
+**Spawned BACKLOG items** (1, deferred from spec): Toggle-on kickoff — when user toggles CLIP **on** in Settings while a folder is already loaded, should we kick off extraction for the current folder? (Today the toggle-off path is handled; toggle-on is implicit.) Track in BACKLOG.
+**PR**: TBD (pending push)
+
+---
 
 ### [2026-05-03] CLIP Sort Follow-ups
 
