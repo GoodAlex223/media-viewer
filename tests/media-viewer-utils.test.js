@@ -464,3 +464,42 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
         expect(captured.algorithm).toBeUndefined();
     });
 });
+
+describe('kickoffBackgroundExtractionIfEnabled', () => {
+    let originalWindow;
+
+    beforeEach(() => {
+        originalWindow = globalThis.window;
+        globalThis.window = {
+            electronAPI: {
+                logError: vi.fn(),
+            },
+        };
+    });
+
+    afterEach(() => {
+        globalThis.window = originalWindow;
+    });
+
+    function makeCtx(overrides = {}) {
+        return {
+            enableClipFeatures: true,
+            featureWorkers: [],
+            clipWorkerReady: false,
+            clipModelDownloading: false,
+            initializeFeaturePool: vi.fn(),
+            initClipModel: vi.fn(),
+            startBackgroundFeatureExtraction: vi.fn(() => Promise.resolve()),
+            ...overrides,
+        };
+    }
+
+    it('does nothing when CLIP is disabled', () => {
+        const fn = extractMethod('kickoffBackgroundExtractionIfEnabled');
+        const ctx = makeCtx({ enableClipFeatures: false });
+        fn.call(ctx);
+        expect(ctx.initializeFeaturePool).not.toHaveBeenCalled();
+        expect(ctx.initClipModel).not.toHaveBeenCalled();
+        expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+    });
+});

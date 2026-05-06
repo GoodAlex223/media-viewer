@@ -6925,6 +6925,10 @@ class MediaViewer {
         });
     }
 
+    kickoffBackgroundExtractionIfEnabled() {
+        if (!this.enableClipFeatures) return;
+    }
+
     /**
      * Start background feature extraction for all uncached files
      */
