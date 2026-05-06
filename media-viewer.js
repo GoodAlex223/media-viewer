@@ -2267,6 +2267,8 @@ class MediaViewer {
             await this.showMedia();
             this.updateFolderInfo();
 
+            this.kickoffBackgroundExtractionIfEnabled();
+
             console.log(`Successfully loaded ${this.mediaFiles.length} media files`);
 
             // Update ML button state (actual initialization happens when user clicks the button)
