@@ -528,4 +528,12 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
         expect(ctx.initClipModel).not.toHaveBeenCalled();
         expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
     });
+
+    it('skips initClipModel when download is in progress', () => {
+        const fn = extractMethod('kickoffBackgroundExtractionIfEnabled');
+        const ctx = makeCtx({ clipModelDownloading: true });
+        fn.call(ctx);
+        expect(ctx.initClipModel).not.toHaveBeenCalled();
+        expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
+    });
 });
