@@ -6927,6 +6927,9 @@ class MediaViewer {
 
     kickoffBackgroundExtractionIfEnabled() {
         if (!this.enableClipFeatures) return;
+        this.initializeFeaturePool();
+        this.initClipModel();
+        this.startBackgroundFeatureExtraction();
     }
 
     /**
