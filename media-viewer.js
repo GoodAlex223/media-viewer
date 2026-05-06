@@ -6930,7 +6930,9 @@ class MediaViewer {
         if (this.featureWorkers.length === 0) {
             this.initializeFeaturePool();
         }
-        this.initClipModel();
+        if (!this.clipWorkerReady) {
+            this.initClipModel();
+        }
         this.startBackgroundFeatureExtraction();
     }
 

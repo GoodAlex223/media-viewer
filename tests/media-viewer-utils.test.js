@@ -520,4 +520,12 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
         expect(ctx.initClipModel).toHaveBeenCalledTimes(1);
         expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
     });
+
+    it('skips initClipModel when CLIP is already ready', () => {
+        const fn = extractMethod('kickoffBackgroundExtractionIfEnabled');
+        const ctx = makeCtx({ clipWorkerReady: true });
+        fn.call(ctx);
+        expect(ctx.initClipModel).not.toHaveBeenCalled();
+        expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
+    });
 });
