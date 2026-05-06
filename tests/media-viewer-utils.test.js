@@ -536,4 +536,18 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
         expect(ctx.initClipModel).not.toHaveBeenCalled();
         expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
     });
+
+    it('logs error via window.electronAPI.logError when extraction rejects', async () => {
+        const fn = extractMethod('kickoffBackgroundExtractionIfEnabled');
+        const ctx = makeCtx({
+            startBackgroundFeatureExtraction: vi.fn(() => Promise.reject(new Error('boom'))),
+        });
+        fn.call(ctx);
+        // Allow the .catch handler to run on the next microtask
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledTimes(1);
+        const msg = globalThis.window.electronAPI.logError.mock.calls[0][0];
+        expect(msg).toContain('boom');
+    });
 });

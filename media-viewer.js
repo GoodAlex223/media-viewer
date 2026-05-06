@@ -6933,7 +6933,11 @@ class MediaViewer {
         if (!this.clipWorkerReady && !this.clipModelDownloading) {
             this.initClipModel();
         }
-        this.startBackgroundFeatureExtraction();
+        this.startBackgroundFeatureExtraction().catch((err) => {
+            if (window.electronAPI?.logError) {
+                window.electronAPI.logError(`Background extraction failed: ${err?.message ?? err}`);
+            }
+        });
     }
 
     /**
