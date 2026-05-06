@@ -511,4 +511,13 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
         expect(ctx.initClipModel).toHaveBeenCalledTimes(1);
         expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
     });
+
+    it('skips initializeFeaturePool when workers already exist', () => {
+        const fn = extractMethod('kickoffBackgroundExtractionIfEnabled');
+        const ctx = makeCtx({ featureWorkers: [{}] });
+        fn.call(ctx);
+        expect(ctx.initializeFeaturePool).not.toHaveBeenCalled();
+        expect(ctx.initClipModel).toHaveBeenCalledTimes(1);
+        expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
+    });
 });
