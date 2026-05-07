@@ -2,12 +2,22 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-05 <!-- 5 issues from manual testing added -->
+**Last Updated**: 2026-05-07 <!-- 2 issues from PR #34 manual testing added -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From PR #34 Manual Testing (2026-05-07)
+
+### [2026-05-07] From: Group A manual repro session
+**Origin**: User executed the 8-step manual repro for `fix/clip-extraction-silent-failure` (PR #34) and confirmed the CLIP extraction fix works end-to-end. Two unrelated UI bugs surfaced during the session.
+
+- [ ] **Compare-mode → folder-switch leaves stale media wrappers visible** — Repro: enter Compare Mode (2 media files side-by-side), then select a different folder via the change-folder button. Observed: new folder loads in single-file mode (correct — `loadFolder()` calls `switchToSingleModeUI()` before `hideDropZone()` per the existing CLAUDE.md gotcha), BUT the two previous compare-mode media wrappers remain visible, shifted to the left of the viewport and shrunk to small dimensions while the new single-mode media renders to their right. See screenshot in PR #34 thread (vertical red-shirt image right-side, faint shifted/shrunk wrappers left). Suggests `switchToSingleModeUI()` reverts the mode flag and overlay controls but does not remove/hide the leftover `.compare-wrapper` / `.media-wrapper-left` / `.media-wrapper-right` DOM nodes. Likely fix: `switchToSingleModeUI()` should `.remove()` the compare wrappers from `mediaContainer` (or hide them) before the new media renders. Affected: `media-viewer.js` (`switchToSingleModeUI` ~near `loadFolder`/`toggleViewMode` call sites), `styles.css` (compare-wrapper layout). E2E coverage: extend existing `compare-mode.test.js` "resets to single mode when switching folders" to also assert `.compare-wrapper` is not in the DOM after the switch.
+- [ ] **Hash sort + AI sort are not mutually exclusive — separate undo for each is confusing** — Repro: load a folder, click Sort-by-Similarity (any algorithm — VPTree/MST/CLIP), then click Sort-by-Prediction (AI). Observed: both sorts apply in sequence and the user can undo each independently (two separate "Restore Order" affordances). Today they're independent buttons with independent state (`isSortedBySimilarity` + `isSortedByPrediction`) so the undo paths don't interlock. User-suggested fix: unify both into a single Sort menu/dropdown where the algorithm options become `[Similarity (Hamming MST/VPTree/CLIP), AI (Prediction)]` — selecting one displaces the other, and a single "Restore Original Order" button affects whichever sort is active. Alternative: keep the two buttons but make the "active sort" state mutually exclusive — clicking AI-sort while similarity-sorted first restores similarity then applies AI, with a single undo. Affected: `media-viewer.js` (`handleSortBySimilarity` ~L4140+, `handleSortByPrediction` ~L6271+, `originalMediaFiles`/`mediaFiles` swap logic, the two `.btn-label` toggles for "Sort by …"/"Restore Order"), `index.html` (sort-related buttons + algorithm dropdown), possibly `styles.css`. Open design question: does the AI sort go into the existing algorithm `<select>` (`vptree | mst | simple | clip | prediction`), or does the menu get a separate "sort source" axis (similarity vs prediction)?
 
 ---
 
