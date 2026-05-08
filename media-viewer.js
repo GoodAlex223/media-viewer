@@ -6927,19 +6927,28 @@ class MediaViewer {
         });
     }
 
-    kickoffBackgroundExtractionIfEnabled() {
+    async kickoffBackgroundExtractionIfEnabled() {
         if (!this.enableClipFeatures) return;
-        if (this.featureWorkers.length === 0) {
-            this.initializeFeaturePool();
-        }
-        if (!this.clipWorkerReady && !this.clipModelDownloading) {
-            this.initClipModel();
-        }
-        this.startBackgroundFeatureExtraction().catch((err) => {
+        try {
+            if (this.featureWorkers.length === 0) {
+                this.initializeFeaturePool();
+            }
+            // loadFolder() clears featureCache/clipCache/featureMetadata; rehydrate from
+            // disk before extraction so cached entries are honored on every folder switch.
+            await this.loadFeatureCache();
+            // Await CLIP model load so extraction sees clipWorkerReady === true. Without
+            // this, on cold start (first 87 MB download) every extractClipEmbedding call
+            // returns null while the IPC is in flight and the run silently completes
+            // with zero CLIP vectors.
+            if (!this.clipWorkerReady) {
+                await this.initClipModel();
+            }
+            await this.startBackgroundFeatureExtraction();
+        } catch (err) {
             if (window.electronAPI?.logError) {
                 window.electronAPI.logError(`Background extraction failed: ${err?.message ?? err}`);
             }
-        });
+        }
     }
 
     /**
