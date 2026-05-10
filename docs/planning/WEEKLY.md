@@ -16,11 +16,11 @@ _(No ongoing background tasks this week.)_
 
 ## Task Groups
 
-### Group A: CLIP Extraction Silent Failure
+### Group A: CLIP Extraction Silent Failure ✅ Complete (2026-05-07)
 **Domain**: JS logic (CLIP/extraction pipeline)
 **Total SP**: 5
 
-- [ ] **Investigate + fix CLIP background extraction silently not firing on folder load** — 5 SP, 🔴 IMPORTANT (BLOCKER)
+- [x] **Investigate + fix CLIP background extraction silently not firing on folder load** — 5 SP, 🔴 IMPORTANT (BLOCKER)
   - Repro confirmed by user 2026-05-03: enable CLIP, open fresh folder, wait 60+s. No `.feature_cache.json`, no progress notification, no console errors. CLIP sort throws `"Only 0 files have CLIP embeddings"`. Hash sorts work fine on the same folder.
   - Investigation entry point: trace `loadFolder` → `startBackgroundFeatureExtraction` → CLIP queue path. Add diagnostic logging at each guard.
   - Affected: [media-viewer.js](media-viewer.js) (extraction orchestration), possibly [main.js](main.js) (CLIP IPC).
@@ -93,7 +93,7 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group A: CLIP Extraction Silent Failure** | 5 |
 
-- [ ] Investigate + fix CLIP background extraction silent failure (5 SP)
+- [x] Investigate + fix CLIP background extraction silent failure (5 SP) — completed 2026-05-07
 
 **Daily total**: 5 SP
 
@@ -168,7 +168,7 @@ _(No ongoing background tasks this week.)_
 
 | Group | Domain | Tasks | Total SP | Day | Status |
 |-------|--------|-------|----------|-----|--------|
-| A: CLIP Extraction Silent Failure | JS logic (CLIP) | 1 | 5 | Mon | Planned |
+| A: CLIP Extraction Silent Failure | JS logic (CLIP) | 1 | 5 | Mon | ✅ Complete (2026-05-07) |
 | B: AI Prediction Display Bugs | JS logic (ML display) | 2 | 5 | Tue | Planned |
 | C: PR #33 Defensive Follow-ups | JS logic (CLIP/sort hygiene) | 3 | 4 | Wed | Planned |
 | D: Integration Test Pattern | Testing | 1 | 3 | Wed | Planned |

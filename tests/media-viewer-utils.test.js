@@ -464,3 +464,136 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
         expect(captured.algorithm).toBeUndefined();
     });
 });
+
+describe('kickoffBackgroundExtractionIfEnabled', () => {
+    const kickoffBackgroundExtractionIfEnabled = extractAsyncMethod('kickoffBackgroundExtractionIfEnabled');
+    let originalWindow;
+
+    beforeEach(() => {
+        originalWindow = globalThis.window;
+        globalThis.window = {
+            electronAPI: {
+                logError: vi.fn(),
+            },
+        };
+    });
+
+    afterEach(() => {
+        globalThis.window = originalWindow;
+    });
+
+    function makeCtx(overrides = {}) {
+        return {
+            enableClipFeatures: true,
+            featureWorkers: [],
+            clipWorkerReady: false,
+            clipModelDownloading: false,
+            initializeFeaturePool: vi.fn(),
+            initClipModel: vi.fn(() => Promise.resolve()),
+            loadFeatureCache: vi.fn(() => Promise.resolve()),
+            startBackgroundFeatureExtraction: vi.fn(() => Promise.resolve()),
+            ...overrides,
+        };
+    }
+
+    it('does nothing when CLIP is disabled', async () => {
+        const ctx = makeCtx({ enableClipFeatures: false });
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(ctx.initializeFeaturePool).not.toHaveBeenCalled();
+        expect(ctx.initClipModel).not.toHaveBeenCalled();
+        expect(ctx.loadFeatureCache).not.toHaveBeenCalled();
+        expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+    });
+
+    it('initializes feature pool, reloads cache, awaits CLIP model, and starts extraction on fresh state', async () => {
+        const ctx = makeCtx();
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(ctx.initializeFeaturePool).toHaveBeenCalledTimes(1);
+        expect(ctx.loadFeatureCache).toHaveBeenCalledTimes(1);
+        expect(ctx.initClipModel).toHaveBeenCalledTimes(1);
+        expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips initializeFeaturePool when workers already exist', async () => {
+        const ctx = makeCtx({ featureWorkers: [{}] });
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(ctx.initializeFeaturePool).not.toHaveBeenCalled();
+        expect(ctx.loadFeatureCache).toHaveBeenCalledTimes(1);
+        expect(ctx.initClipModel).toHaveBeenCalledTimes(1);
+        expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips initClipModel when CLIP is already ready', async () => {
+        const ctx = makeCtx({ clipWorkerReady: true });
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(ctx.initClipModel).not.toHaveBeenCalled();
+        expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
+    });
+
+    it('still awaits initClipModel when a download is in progress (concurrent-safe IPC dedupes loads)', async () => {
+        // Old behavior skipped initClipModel during download; that left clipWorkerReady=false
+        // when extraction started, so all extractClipEmbedding calls returned null on cold start.
+        // New behavior: always await initClipModel if not ready; underlying loadClipModel IPC is
+        // concurrent-safe and resolves both calls on the same in-flight load.
+        const ctx = makeCtx({ clipModelDownloading: true });
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(ctx.initClipModel).toHaveBeenCalledTimes(1);
+        expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledTimes(1);
+    });
+
+    it('reloads feature cache before starting extraction', async () => {
+        const order = [];
+        const ctx = makeCtx({
+            loadFeatureCache: vi.fn(() => {
+                order.push('loadFeatureCache');
+                return Promise.resolve();
+            }),
+            startBackgroundFeatureExtraction: vi.fn(() => {
+                order.push('startBackgroundFeatureExtraction');
+                return Promise.resolve();
+            }),
+        });
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(order).toEqual(['loadFeatureCache', 'startBackgroundFeatureExtraction']);
+    });
+
+    it('awaits initClipModel before starting extraction (cold-start ordering)', async () => {
+        const order = [];
+        const ctx = makeCtx({
+            initClipModel: vi.fn(
+                () =>
+                    new Promise((resolve) =>
+                        setTimeout(() => {
+                            order.push('initClipModel');
+                            resolve();
+                        }, 5)
+                    )
+            ),
+            startBackgroundFeatureExtraction: vi.fn(() => {
+                order.push('startBackgroundFeatureExtraction');
+                return Promise.resolve();
+            }),
+        });
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(order).toEqual(['initClipModel', 'startBackgroundFeatureExtraction']);
+    });
+
+    it('logs error via window.electronAPI.logError when extraction rejects', async () => {
+        const ctx = makeCtx({
+            startBackgroundFeatureExtraction: vi.fn(() => Promise.reject(new Error('boom'))),
+        });
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledTimes(1);
+        const msg = globalThis.window.electronAPI.logError.mock.calls[0][0];
+        expect(msg).toContain('boom');
+    });
+
+    it('logs error if loadFeatureCache rejects (try/catch covers all awaits)', async () => {
+        const ctx = makeCtx({
+            loadFeatureCache: vi.fn(() => Promise.reject(new Error('cache disk error'))),
+        });
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledTimes(1);
+        expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+    });
+});

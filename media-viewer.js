@@ -2267,6 +2267,8 @@ class MediaViewer {
             await this.showMedia();
             this.updateFolderInfo();
 
+            this.kickoffBackgroundExtractionIfEnabled();
+
             console.log(`Successfully loaded ${this.mediaFiles.length} media files`);
 
             // Update ML button state (actual initialization happens when user clicks the button)
@@ -6923,6 +6925,30 @@ class MediaViewer {
                 img.src = filePath;
             }
         });
+    }
+
+    async kickoffBackgroundExtractionIfEnabled() {
+        if (!this.enableClipFeatures) return;
+        try {
+            if (this.featureWorkers.length === 0) {
+                this.initializeFeaturePool();
+            }
+            // loadFolder() clears featureCache/clipCache/featureMetadata; rehydrate from
+            // disk before extraction so cached entries are honored on every folder switch.
+            await this.loadFeatureCache();
+            // Await CLIP model load so extraction sees clipWorkerReady === true. Without
+            // this, on cold start (first 87 MB download) every extractClipEmbedding call
+            // returns null while the IPC is in flight and the run silently completes
+            // with zero CLIP vectors.
+            if (!this.clipWorkerReady) {
+                await this.initClipModel();
+            }
+            await this.startBackgroundFeatureExtraction();
+        } catch (err) {
+            if (window.electronAPI?.logError) {
+                window.electronAPI.logError(`Background extraction failed: ${err?.message ?? err}`);
+            }
+        }
     }
 
     /**
