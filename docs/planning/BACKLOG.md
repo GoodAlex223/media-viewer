@@ -2,12 +2,23 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-07 <!-- 2 issues from PR #34 manual testing added -->
+**Last Updated**: 2026-05-10 <!-- 3 items from PR #34 code-review follow-up added -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From PR #34 Code Review (2026-05-10)
+
+### [2026-05-10] From: PR #34 review-spawned + filtered-but-noted findings
+**Origin**: Multi-agent code review of `fix/clip-extraction-silent-failure` (PR #34). Two issues scored ≥80/100 were fixed in `4ea65c3` before merge (`loadFeatureCache` ordering + `await initClipModel` race). These three remaining items were either explicitly acknowledged by the author as deferred trade-offs or were sub-threshold (filtered from inline review) but worth tracking.
+
+- [ ] **Duplicate `onClipDownloadProgress` listener risk after dropping `clipModelDownloading` guard** (acknowledged by PR author) — `kickoffBackgroundExtractionIfEnabled()` no longer guards `initClipModel()` behind `!this.clipModelDownloading`; concurrent calls dedupe at the IPC layer but each call re-registers a renderer-side `window.electronAPI.onClipDownloadProgress(...)` listener via `initClipModel`. The listeners are torn down in the `finally` block of each `initClipModel` invocation, so the stack drains as IPC calls resolve — but during overlapping calls (e.g., rapid folder switching mid-download) the user may briefly see duplicate "Downloading CLIP model... N%" toasts. Cosmetic; not a correctness issue. Fix options: (a) re-introduce a renderer-side single-flight guard that returns the in-flight promise, (b) move the progress-listener registration into a shared init sentinel that any concurrent call awaits. Author's response: "cosmetic duplicate progress listener may register; not a correctness issue." Affected: [media-viewer.js:6566-6602](../../media-viewer.js#L6566-L6602) (`initClipModel`), [media-viewer.js:6928-6946](../../media-viewer.js#L6928-L6946) (`kickoffBackgroundExtractionIfEnabled`).
+- [ ] **Pre-existing: `clipCache` is never cleared in `loadFolder()`** (filtered as pre-existing in PR #34 review, ~0/100) — `loadFolder()` clears `featureCache`, `featureMetadata`, `perceptualHashes`, and `predictionScores` on every folder switch but NOT `clipCache`. Introduced when CLIP was added (commit `6b90226`); `clipCache.clear()` has never been added. With the new kickoff path now hitting these caches on every folder load, the existing path-keyed match (`this.clipCache.has(file.path)`) could silently return stale vectors when two folders share path-identical filenames (renames, duplicates across drives). Real bug under specific scenarios; not introduced or worsened by PR #34. Fix: add `this.clipCache.clear();` alongside the other clears at the top of `loadFolder()`. Affected: [media-viewer.js:~L2255-L2260](../../media-viewer.js#L2255-L2260) (cache-clearing block).
+- [ ] **Index `2026-05-06-clip-extraction-silent-failure-design.md` in docs/README.md Design Specs table** (filtered, ~75/100) — PR #34 added the spec under `docs/superpowers/specs/` and indexed the archived plan in `docs/README.md` Archived Plans, but did not add a row to the Design Specs table for the spec itself. Recurring docs-hygiene pattern (PRs #19, #23, #27, #28, #29). Cosmetic; the Pre-archive checklist BACKLOG item (2026-04-30 entry) covers archived-plan drift but not Design Specs index drift — extend that checklist to cover both tables, or fix in-place.
 
 ---
 
