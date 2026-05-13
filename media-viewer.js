@@ -1015,6 +1015,25 @@ class MediaViewer {
         return index;
     }
 
+    restoreFeatureCachesFromHistory(entry) {
+        if (!entry || !entry.mlFeatures) return;
+        const features = entry.mlFeatures;
+        const path = entry.originalPath;
+
+        if (features.length === 576) {
+            this.featureCache.set(path, new Float32Array(features.slice(0, 64)));
+            this.clipCache.set(path, new Float32Array(features.slice(64, 576)));
+        } else if (features.length === 64) {
+            this.featureCache.set(path, new Float32Array(features));
+        } else {
+            return;
+        }
+
+        if (entry.fileSize !== undefined) {
+            this.featureMetadata.set(path, { size: entry.fileSize, mtime: 0 });
+        }
+    }
+
     removeFailedFile(index, side = null) {
         if (index < 0 || index >= this.mediaFiles.length) return;
 

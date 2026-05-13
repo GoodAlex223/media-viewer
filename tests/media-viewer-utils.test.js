@@ -597,3 +597,74 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
         expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
     });
 });
+
+describe('restoreFeatureCachesFromHistory', () => {
+    const restoreFeatureCachesFromHistory = extractMethod('restoreFeatureCachesFromHistory');
+
+    function makeCtx() {
+        return {
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+        };
+    }
+
+    it('splits 576-dim mlFeatures into featureCache(64) + clipCache(512)', () => {
+        const ctx = makeCtx();
+        const mlFeatures = new Float32Array(576);
+        for (let i = 0; i < 576; i++) mlFeatures[i] = i % 256;
+        const entry = { originalPath: '/d/a.png', mlFeatures, fileSize: 1234 };
+
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+
+        const f = ctx.featureCache.get('/d/a.png');
+        const c = ctx.clipCache.get('/d/a.png');
+        expect(f).toBeInstanceOf(Float32Array);
+        expect(f.length).toBe(64);
+        expect(c).toBeInstanceOf(Float32Array);
+        expect(c.length).toBe(512);
+        expect(f[0]).toBe(0);
+        expect(f[63]).toBe(63);
+        expect(c[0]).toBe(64);
+        expect(c[511]).toBe((64 + 511) % 256);
+    });
+
+    it('restores only featureCache when mlFeatures is 64-dim', () => {
+        const ctx = makeCtx();
+        const mlFeatures = new Float32Array(64);
+        for (let i = 0; i < 64; i++) mlFeatures[i] = i;
+        const entry = { originalPath: '/d/b.png', mlFeatures, fileSize: 99 };
+
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+
+        const f = ctx.featureCache.get('/d/b.png');
+        expect(f).toBeInstanceOf(Float32Array);
+        expect(f.length).toBe(64);
+        expect(ctx.clipCache.has('/d/b.png')).toBe(false);
+    });
+
+    it('no-ops when mlFeatures is null or entry is null', () => {
+        const ctx = makeCtx();
+        restoreFeatureCachesFromHistory.call(ctx, { originalPath: '/x', mlFeatures: null, fileSize: 1 });
+        restoreFeatureCachesFromHistory.call(ctx, null);
+        expect(ctx.featureCache.size).toBe(0);
+        expect(ctx.clipCache.size).toBe(0);
+        expect(ctx.featureMetadata.size).toBe(0);
+    });
+
+    it('no-ops when mlFeatures has unexpected length', () => {
+        const ctx = makeCtx();
+        const entry = { originalPath: '/x', mlFeatures: new Float32Array(128), fileSize: 1 };
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+        expect(ctx.featureCache.size).toBe(0);
+        expect(ctx.clipCache.size).toBe(0);
+        expect(ctx.featureMetadata.size).toBe(0);
+    });
+
+    it('restores featureMetadata with mtime:0 from entry.fileSize', () => {
+        const ctx = makeCtx();
+        const entry = { originalPath: '/d/c.png', mlFeatures: new Float32Array(64), fileSize: 5555 };
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+        expect(ctx.featureMetadata.get('/d/c.png')).toEqual({ size: 5555, mtime: 0 });
+    });
+});
