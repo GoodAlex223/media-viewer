@@ -3432,6 +3432,8 @@ class MediaViewer {
                 }
 
                 this.currentIndex = insertIndex;
+                this.restoreFeatureCachesFromHistory(lastMove);
+                if (this.isSortedByPrediction) this.requestPredictionScores();
                 await this.showMedia();
             } catch (error) {
                 console.error('Error undoing special move:', error);
@@ -3489,6 +3491,8 @@ class MediaViewer {
                     this.reverseMlModelUpdate(secondMove.mlFeatures, secondMove.actionType);
                 }
 
+                this.restoreFeatureCachesFromHistory(firstMove);
+                this.restoreFeatureCachesFromHistory(secondMove);
                 this.showNotification(`✅ Restored ${firstMove.fileName}`, 'success');
                 this.showNotification(`✅ Restored ${secondMove.fileName}`, 'success');
                 this.updateFolderInfo();
@@ -3561,6 +3565,8 @@ class MediaViewer {
                     this.reverseMlModelUpdate(secondMove.mlFeatures, secondMove.actionType);
                 }
 
+                this.restoreFeatureCachesFromHistory(firstMove);
+                this.restoreFeatureCachesFromHistory(secondMove);
                 this.showNotification(`Restored ${firstMove.fileName}`, 'success');
                 this.showNotification(`Restored ${secondMove.fileName}`, 'success');
                 this.updateFolderInfo();
@@ -3601,6 +3607,7 @@ class MediaViewer {
                     this.reverseMlModelUpdate(undoMove.mlFeatures, undoMove.actionType);
                 }
 
+                this.restoreFeatureCachesFromHistory(undoMove);
                 this.showNotification(`✅ Restored ${undoMove.fileName}`, 'success');
                 this.updateFolderInfo();
 

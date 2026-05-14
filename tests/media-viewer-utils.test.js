@@ -726,3 +726,174 @@ describe('handleMlWorkerMessage sortComplete', () => {
         expect(ctx.isSortedByPrediction).toBe(true);
     });
 });
+
+describe('handleCancel feature restore', () => {
+    const handleCancel = extractAsyncMethod('handleCancel');
+
+    function make576() {
+        const v = new Float32Array(576);
+        for (let i = 0; i < 576; i++) v[i] = i % 256;
+        return v;
+    }
+    function make64() {
+        const v = new Float32Array(64);
+        for (let i = 0; i < 64; i++) v[i] = i;
+        return v;
+    }
+
+    function commonMocks(overrides = {}) {
+        return {
+            isLoading: false,
+            isCompareMode: false,
+            mediaFiles: [],
+            moveHistory: [],
+            currentIndex: 0,
+            baseFolderPath: '/folder',
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+            predictionScores: new Map(),
+            isSortedByPrediction: false,
+            isMlEnabled: true,
+            mlWorker: { postMessage: vi.fn() },
+            // Methods the handler calls
+            signalUserActivity: () => {},
+            showNotification: () => {},
+            showError: () => {},
+            updateFolderInfo: () => {},
+            showMedia: vi.fn(async () => {}),
+            requestPredictionScores: vi.fn(),
+            // Helper under test — extracted as a real method so the handler can call it
+            restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+            reverseMlModelUpdate(features, actionType) {
+                this.mlWorker.postMessage({
+                    type: 'reverseUpdate',
+                    data: { features: Array.from(features), label: actionType === 'like' ? 1 : 0 },
+                });
+            },
+            ...overrides,
+        };
+    }
+
+    function mockElectronAPI() {
+        globalThis.window = {
+            electronAPI: {
+                moveFile: vi.fn(async ({ fileName }) => ({
+                    success: true,
+                    targetPath: `/folder/${fileName}`,
+                })),
+                path: { basename: async (p) => p.split('/').pop() },
+            },
+        };
+    }
+
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        mockElectronAPI();
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('single-mode like-undo restores featureCache, clipCache, and triggers reverseMlModelUpdate', async () => {
+        const ctx = commonMocks({
+            moveHistory: [
+                {
+                    fileName: 'a.png',
+                    originalPath: '/folder/a.png',
+                    newPath: '/folder/like/a.png',
+                    fileSize: 100,
+                    fileType: 'image/png',
+                    actionType: 'like',
+                    mlFeatures: Array.from(make576()),
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        expect(ctx.featureCache.has('/folder/a.png')).toBe(true);
+        expect(ctx.featureCache.get('/folder/a.png').length).toBe(64);
+        expect(ctx.clipCache.has('/folder/a.png')).toBe(true);
+        expect(ctx.clipCache.get('/folder/a.png').length).toBe(512);
+        expect(ctx.featureMetadata.get('/folder/a.png')).toEqual({ size: 100, mtime: 0 });
+        // reverseMlModelUpdate posts via mlWorker.postMessage
+        const reverseCall = ctx.mlWorker.postMessage.mock.calls.find((c) => c[0].type === 'reverseUpdate');
+        expect(reverseCall).toBeDefined();
+        expect(reverseCall[0].data.label).toBe(1); // like
+        // requestPredictionScores is NOT explicitly called in like/dislike undo
+        // (it's triggered downstream via reverseUpdateComplete debounce in the live app)
+        expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
+    });
+
+    it('compare-mode pair-undo restores caches for both files', async () => {
+        const ctx = commonMocks({
+            isCompareMode: true,
+            moveHistory: [
+                {
+                    fileName: 'a.png',
+                    originalPath: '/folder/a.png',
+                    newPath: '/folder/like/a.png',
+                    fileSize: 100,
+                    fileType: 'image/png',
+                    actionType: 'like',
+                    mlFeatures: Array.from(make576()),
+                },
+                {
+                    fileName: 'b.png',
+                    originalPath: '/folder/b.png',
+                    newPath: '/folder/dislike/b.png',
+                    fileSize: 200,
+                    fileType: 'image/png',
+                    actionType: 'dislike',
+                    mlFeatures: Array.from(make64()),
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        // Both files: featureCache populated
+        expect(ctx.featureCache.has('/folder/a.png')).toBe(true);
+        expect(ctx.featureCache.has('/folder/b.png')).toBe(true);
+        // Only a.png had 576-dim → clipCache should be present for it but not for b.png (64-dim only)
+        expect(ctx.clipCache.has('/folder/a.png')).toBe(true);
+        expect(ctx.clipCache.has('/folder/b.png')).toBe(false);
+        // Two reverseUpdate calls
+        const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
+        expect(reverseCalls.length).toBe(2);
+    });
+
+    it('special-move undo (compare mode) restores featureCache and calls requestPredictionScores when sorted-by-prediction', async () => {
+        const ctx = commonMocks({
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            // Special-move undo in compare mode (branch at L3353 — compareMode && special)
+            mediaFiles: [{ name: 'remaining.png', path: '/folder/remaining.png' }],
+            moveHistory: [
+                {
+                    fileName: 'special.png',
+                    originalPath: '/folder/special.png',
+                    newPath: '/folder/special-folder/special.png',
+                    fileSize: 300,
+                    fileType: 'image/png',
+                    actionType: 'special',
+                    compareMode: true,
+                    remainingFile: { name: 'remaining.png', path: '/folder/remaining.png' },
+                    remainingFileOriginalIndex: 1,
+                    mlFeatures: Array.from(make64()),
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        expect(ctx.featureCache.has('/folder/special.png')).toBe(true);
+        // No reverseUpdate (special is unrated)
+        const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
+        expect(reverseCalls.length).toBe(0);
+        // Special branch needs explicit requestPredictionScores since no reverseUpdateComplete debounce
+        expect(ctx.requestPredictionScores).toHaveBeenCalledTimes(1);
+    });
+});
