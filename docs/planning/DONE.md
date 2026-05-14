@@ -27,7 +27,7 @@ Completed tasks with implementation details and learnings.
 **Code review**: Pending (PR review).
 **Manual scenarios**: Pending user smoke test (interactive Electron app — cannot be run from CLI). Scenarios to verify before merge: (1) AI sort percentages now align with each file's score; (2) AI-sort → undo single rating → badge re-appears with correct %; (3) AI-sort → undo compare pair → both badges re-appear; (4) AI-sort → special-folder rating → undo → badge re-appears; (5) Regression: rate-undo without AI sort works as before (no badge, by design).
 **Spawned BACKLOG items**: (none yet — will surface during PR review or manual smoke).
-**PR**: TBD (filled after PR creation in Task 7).
+**PR**: [#35](https://github.com/GoodAlex223/media-viewer/pull/35)
 
 ---
 
