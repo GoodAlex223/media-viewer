@@ -66,41 +66,7 @@ Active tasks and backlog.
 
 <!-- Group D CLIP Similarity Sorting completed 2026-04-18, moved to DONE.md -->
 
-#### Like-probability not displayed after undo
-**Priority**: 🟠 High
-**Status**: 📋 Planned
-**Effort**: S
-**Origin**: manual testing (2026-05-05)
-
-**Description**: After undoing the last ratings via `handleCancel()`, the prediction percentage badge no longer displays for the restored media. The undo path restores the file entry to `mediaFiles` but does not re-trigger `requestPredictionScores()`, so the badge stays missing until a manual sort or folder reload.
-
-(Russian original: "После отмены последних оценок процент(вероятность) лайка не показывается")
-
-**Acceptance Criteria**:
-- [ ] After undo, the restored file shows its prediction percentage in single mode
-- [ ] After compare-pair undo, both restored files show their percentages
-- [ ] No regression in normal nav/rating prediction display
-
-**Context**:
-- **Files Affected**: [media-viewer.js:3340](media-viewer.js#L3340) (`handleCancel`), [media-viewer.js:6135](media-viewer.js#L6135) (`requestPredictionScores`)
-
-#### Prediction percentages misaligned after similarity-sort cancel + AI sort
-**Priority**: 🟠 High
-**Status**: 📋 Planned
-**Effort**: M
-**Origin**: manual testing (2026-05-05)
-
-**Description**: After canceling Sort-by-Similarity then enabling AI sort order, percentages display in descending value but mismatched with the underlying media (e.g., displayed "99% / 56%, 98% / 55%, 97% / 54%" rather than the correct alignment "99% / 54%, 98% / 55%, 97% / 56%"). Suggests the sort-cancel restore branch in `handleSortByPrediction()` does not actually re-apply the prediction order to media positions, or the badge mapping is stale relative to `mediaFiles[]`.
-
-(Russian original: "Не сбрасывается индикатор(процент) или сам порядок(т.е. показывается в убывающем порядке напр. \"99%\"\"56%\", \"98%\"\"55%\", \"97%\"\"54%\", хотя должно быть \"99%\"\"54%\", \"98%\"\"55%\", \"97%\"\"56%\" в соответсвии с медиа), если отменяется сортировка по схожести и включается порядок ИИ сортировки. По ощущениям, не сбрасывается порядок")
-
-**Acceptance Criteria**:
-- [ ] Reproduce: cancel similarity sort, click AI sort → prediction percentage on each media matches the underlying file's actual score
-- [ ] Add unit test (or fixture-driven check) covering cancel-similarity → AI-sort transition
-- [ ] Verify no double-sorting or score-stale state remains
-
-**Context**:
-- **Files Affected**: [media-viewer.js:6271-6291](media-viewer.js#L6271-L6291) (`handleSortByPrediction` restore branch — filters `originalMediaFiles` but does not re-trigger `requestPredictionScores()` or rebuild badge mapping); similarity-sort cancel path interaction
+<!-- Group B AI Prediction Display Bugs completed 2026-05-14, moved to DONE.md -->
 
 #### Tournament-style compare mode (winner advances, loser tagged with win count)
 **Priority**: 🟡 Medium

@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-05-07 <!-- Group A: CLIP Extraction Silent Failure -->
+**Last Updated**: 2026-05-14 <!-- Group B: AI Prediction Display Bugs -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,23 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-05 (May)
+
+### [2026-05-14] Group B: AI Prediction Display Bugs
+
+**Spec**: [docs/superpowers/specs/2026-05-14-ai-prediction-display-bugs-design.md](../superpowers/specs/2026-05-14-ai-prediction-display-bugs-design.md)
+**Plan**: [docs/superpowers/plans/2026-05-14-ai-prediction-display-bugs.md](../superpowers/plans/2026-05-14-ai-prediction-display-bugs.md) (to be archived after PR merge)
+**Summary**: Fixed two related ML prediction display bugs sharing the root theme "prediction state is not re-synchronized with `mediaFiles` when the file list changes." (1) After undoing a rating via `handleCancel()`, the prediction percentage badge disappeared for the restored file: `removeFileFromList()` aggressively cleared `featureCache`/`clipCache`/`predictionScores`/`featureMetadata` at rating time, so the restored file had no ML state. Fixed by adding `restoreFeatureCachesFromHistory(entry)` helper (inverse of `removeFileFromList`) called in all 4 `handleCancel` branches before `showMedia()`. Special-move branch (no `reverseMlModelUpdate` path) explicitly calls `requestPredictionScores()` when `isSortedByPrediction` is true. (2) AI-sort prediction percentages didn't match underlying files (e.g., "99% / 56%" instead of "99% / 54%"): `sortComplete` handler in `handleMlWorkerMessage` ignored `message.scores` from the ml-worker, leaving `predictionScores` stale from prior `scoreComplete` events. Fixed by iterating `message.scores` and writing into `predictionScores` by path before applying `mediaFiles = sorted`. Also captured `mlFeatures` in `moveToSpecialFolder`'s history entry so special-undo can also restore the badge (was previously omitted).
+**Key Changes**:
+- `media-viewer.js` — New `restoreFeatureCachesFromHistory(entry)` method placed immediately after `removeFileFromList` (~L1018); splits 576-dim into `featureCache`(64) + `clipCache`(512), or restores only `featureCache` for 64-dim, no-ops on null/unexpected; restores `featureMetadata` with `mtime: 0`. `handleMlWorkerMessage` `case 'sortComplete'` now iterates `message.scores` to populate `predictionScores` before reordering. `moveToSpecialFolder` captures `mlFeatures` via `getCombinedFeatures` (or `featureCache` fallback) before the move IPC and attaches to historyEntry. All 4 `handleCancel` branches call the new helper before `showMedia()`; special branch additionally calls `requestPredictionScores()` when AI-sorted. Doc-comment on `removeFileFromList` corrected to list all 5 caches it clears.
+- `tests/media-viewer-utils.test.js` — 3 new `describe` blocks: `restoreFeatureCachesFromHistory` (5 tests covering 576-dim split, 64-dim only, null/null-features no-op, unexpected-length no-op, featureMetadata restoration), `handleMlWorkerMessage sortComplete` (2 tests: score propagation, defensive missing-scores), `handleCancel feature restore` (3 tests: single-mode like-undo with 576-dim, compare-mode pair-undo with mixed 576+64-dim, special-move undo in AI-sorted mode).
+**Commits**: 5 on `fix/ai-prediction-display-bugs` (69f861b helper + tests, 2b2f1dc doc-comment fix, 40c8fe6 sortComplete score propagation + tests, 9efdff4 moveSpecial mlFeatures capture, 0b43a13 handleCancel restore branches + tests) + 3 doc commits prior (bc0379a plan, 7a78e48 CLAUDE.md Next-planned sync, 8956ea5 spec)
+**Test results**: 190/190 unit tests pass (was 180 baseline; +10 new: 5 helper + 2 sortComplete + 3 handleCancel); E2E: skipped (no E2E coverage for ML state transitions today; would require heavy setup — rate ≥3 files for training, kick extraction, sort, undo — tracked as separate BACKLOG item if needed). `npm run lint` and `npm run format:check` clean.
+**Code review**: Pending (PR review).
+**Manual scenarios**: Pending user smoke test (interactive Electron app — cannot be run from CLI). Scenarios to verify before merge: (1) AI sort percentages now align with each file's score; (2) AI-sort → undo single rating → badge re-appears with correct %; (3) AI-sort → undo compare pair → both badges re-appear; (4) AI-sort → special-folder rating → undo → badge re-appears; (5) Regression: rate-undo without AI sort works as before (no badge, by design).
+**Spawned BACKLOG items**: (none yet — will surface during PR review or manual smoke).
+**PR**: TBD (filled after PR creation in Task 7).
+
+---
 
 ### [2026-05-07] Group A: CLIP Extraction Silent Failure
 
