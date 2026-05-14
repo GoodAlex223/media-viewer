@@ -2,12 +2,20 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-10 <!-- 3 items from PR #34 code-review follow-up added -->
+**Last Updated**: 2026-05-14 <!-- 1 item from PR #35 final code review added -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From PR #35 Final Code Review (2026-05-14)
+
+### [2026-05-14] From: PR #35 final review
+
+- [ ] **`moveToSpecialFolder` lacks `extractFeaturesFromDisplayedMedia` fallback for cold-cache special-undo** — Repro: in AI-sorted mode, hit special-folder rating for a file whose features were never extracted (no background extraction completed yet, cold `featureCache`/`clipCache`). `moveToSpecialFolder` reads `getCombinedFeatures` (returns null) and `featureCache.get` (returns undefined), so `mlFeatures = null` in the history entry. After special-undo, `restoreFeatureCachesFromHistory` no-ops; the file is back in `mediaFiles` but `predictionScores` stays empty for it, so the badge does not re-appear — even though the ML model is trained. Asymmetric with `moveCurrentFile` (like/dislike) which already calls `extractFeaturesFromDisplayedMedia()` as a fallback when the cache is cold (L1181-1196). Fix: mirror `moveCurrentFile`'s `extractFeaturesFromDisplayedMedia()` fallback in `moveToSpecialFolder` before capturing `mlFeatures`. Spec explicitly documents this gap as acceptable trade-off but reviewer flagged it as worth tracking. Effort: S (~10-15 LoC + 1 test). Affected: [media-viewer.js:~1342-1347](../../media-viewer.js#L1342-L1347) (`moveToSpecialFolder`), [media-viewer.js:~1181-1196](../../media-viewer.js#L1181-L1196) (reference pattern in `moveCurrentFile`).
 
 ---
 
