@@ -991,7 +991,7 @@ class MediaViewer {
 
     /**
      * Centralized file removal from the media list.
-     * Handles array splice, cache cleanup (predictionScores, featureCache, perceptualHashes),
+     * Handles array splice, cache cleanup (predictionScores, featureCache, clipCache, featureMetadata, perceptualHashes),
      * and currentIndex adjustment.
      * @param {string} filePath - Absolute path of the file to remove
      * @returns {number} The index the file was at before removal, or -1 if not found
