@@ -1336,6 +1336,16 @@ class MediaViewer {
         const targetFolderPath = this.customSpecialFolder;
         const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
 
+        // Extract ML features BEFORE moving file (while media is still accessible).
+        // Captured into history so undo can restore feature caches that
+        // removeFileFromList clears below.
+        let mlFeatures = null;
+        if (this.isMlEnabled && this.mlWorker) {
+            const combined = this.getCombinedFeatures(fileToMove.path);
+            const rawFeatures = this.featureCache.get(fileToMove.path);
+            mlFeatures = combined || (rawFeatures ? Array.from(rawFeatures) : null);
+        }
+
         try {
             const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
 
@@ -1368,6 +1378,7 @@ class MediaViewer {
                 fileSize: fileToMove.size,
                 fileType: fileToMove.type,
                 actionType: 'special',
+                mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
             };
 
             // In compare mode, store remaining file info for proper undo
