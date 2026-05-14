@@ -1,6 +1,8 @@
 # AI Prediction Display Bugs Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status: Complete** (2026-05-14, PR [#35](https://github.com/GoodAlex223/media-viewer/pull/35))
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix two prediction-display bugs: (1) the prediction badge disappears after undoing a rating, and (2) badge percentages misalign with files after the AI sort.
 
@@ -42,7 +44,7 @@
 - Modify: `media-viewer.js` (add method near `removeFileFromList` ~L999)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Open `tests/media-viewer-utils.test.js` and append at the bottom of the file (after the last existing `describe` block):
 
@@ -120,7 +122,7 @@ describe('restoreFeatureCachesFromHistory', () => {
 });
 ```
 
-- [ ] **Step 2: Run the new tests and confirm they fail**
+- [x] **Step 2: Run the new tests and confirm they fail**
 
 ```
 npx vitest run tests/media-viewer-utils.test.js -t restoreFeatureCachesFromHistory
@@ -128,7 +130,7 @@ npx vitest run tests/media-viewer-utils.test.js -t restoreFeatureCachesFromHisto
 
 Expected: All tests fail with `Could not find method: restoreFeatureCachesFromHistory` (thrown from `extractMethod`).
 
-- [ ] **Step 3: Add the helper method to `media-viewer.js`**
+- [x] **Step 3: Add the helper method to `media-viewer.js`**
 
 Locate `removeFileFromList` (around line 999). Insert the new method immediately after `removeFileFromList`'s closing brace (before `removeFailedFile`):
 
@@ -153,7 +155,7 @@ Locate `removeFileFromList` (around line 999). Insert the new method immediately
     }
 ```
 
-- [ ] **Step 4: Run tests, confirm they pass**
+- [x] **Step 4: Run tests, confirm they pass**
 
 ```
 npx vitest run tests/media-viewer-utils.test.js -t restoreFeatureCachesFromHistory
@@ -161,7 +163,7 @@ npx vitest run tests/media-viewer-utils.test.js -t restoreFeatureCachesFromHisto
 
 Expected: 5 passed.
 
-- [ ] **Step 5: Run the full unit suite to confirm no regression**
+- [x] **Step 5: Run the full unit suite to confirm no regression**
 
 ```
 npm test
@@ -169,7 +171,7 @@ npm test
 
 Expected: 185/185 passed (180 prior + 5 new).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -189,7 +191,7 @@ with mtime:0 (session-only validity). No-ops on null/unexpected input."
 - Modify: `media-viewer.js` (`handleMlWorkerMessage` case `'sortComplete'` around L5648)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append at the bottom of `tests/media-viewer-utils.test.js`:
 
@@ -253,7 +255,7 @@ describe('handleMlWorkerMessage sortComplete', () => {
 });
 ```
 
-- [ ] **Step 2: Run the new test and confirm it fails**
+- [x] **Step 2: Run the new test and confirm it fails**
 
 ```
 npx vitest run tests/media-viewer-utils.test.js -t "sortComplete"
@@ -261,7 +263,7 @@ npx vitest run tests/media-viewer-utils.test.js -t "sortComplete"
 
 Expected: First test fails — `ctx.predictionScores.get('/d/a.png')` is `undefined`, expected `0.30`. Second test passes (current code already handles missing `scores` by ignoring the field).
 
-- [ ] **Step 3: Patch the `sortComplete` case in `media-viewer.js`**
+- [x] **Step 3: Patch the `sortComplete` case in `media-viewer.js`**
 
 Locate `case 'sortComplete':` inside `handleMlWorkerMessage` (around line 5648). Modify the `if (sorted.length > 0)` block to populate `predictionScores` from `message.scores` BEFORE reassigning `this.mediaFiles`:
 
@@ -299,7 +301,7 @@ Locate `case 'sortComplete':` inside `handleMlWorkerMessage` (around line 5648).
                 break;
 ```
 
-- [ ] **Step 4: Run tests, confirm they pass**
+- [x] **Step 4: Run tests, confirm they pass**
 
 ```
 npx vitest run tests/media-viewer-utils.test.js -t "sortComplete"
@@ -307,7 +309,7 @@ npx vitest run tests/media-viewer-utils.test.js -t "sortComplete"
 
 Expected: 2 passed.
 
-- [ ] **Step 5: Run the full unit suite**
+- [x] **Step 5: Run the full unit suite**
 
 ```
 npm test
@@ -315,7 +317,7 @@ npm test
 
 Expected: 187/187 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -340,7 +342,7 @@ predictionScores by path before applying the new mediaFiles ordering."
 
 No test of its own — covered by Task 4's special-move undo test.
 
-- [ ] **Step 1: Read context to locate the patch site**
+- [x] **Step 1: Read context to locate the patch site**
 
 Open `media-viewer.js` and locate `moveToSpecialFolder` (around L1257). The history entry is constructed around L1345-L1352:
 
@@ -356,7 +358,7 @@ Open `media-viewer.js` and locate `moveToSpecialFolder` (around L1257). The hist
             };
 ```
 
-- [ ] **Step 2: Add `mlFeatures` capture BEFORE the move**
+- [x] **Step 2: Add `mlFeatures` capture BEFORE the move**
 
 Look up the pattern in `moveCurrentFile` at L1158-L1182. Mirror it: insert an `mlFeatures` extraction block BEFORE the `try { ... await window.electronAPI.moveFile ... }` block in `moveToSpecialFolder` — so features are read while the file is still at its original path.
 
@@ -389,7 +391,7 @@ Then modify the `historyEntry` constructor at L1345 to include `mlFeatures`:
             };
 ```
 
-- [ ] **Step 3: Run the full unit suite to confirm no regression**
+- [x] **Step 3: Run the full unit suite to confirm no regression**
 
 ```
 npm test
@@ -397,7 +399,7 @@ npm test
 
 Expected: 187/187 passed (no new tests yet — Task 4 will exercise this).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```
 git add media-viewer.js
@@ -417,7 +419,7 @@ special-undo. Gated on isMlEnabled && mlWorker."
 - Modify: `media-viewer.js` (`handleCancel`, four branches around L3353, L3411, L3485, L3546)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write 3 failing tests**
+- [x] **Step 1: Write 3 failing tests**
 
 Append at the bottom of `tests/media-viewer-utils.test.js`:
 
@@ -598,7 +600,7 @@ describe('handleCancel feature restore', () => {
 });
 ```
 
-- [ ] **Step 2: Run the new tests and confirm they fail**
+- [x] **Step 2: Run the new tests and confirm they fail**
 
 ```
 npx vitest run tests/media-viewer-utils.test.js -t "handleCancel feature restore"
@@ -606,7 +608,7 @@ npx vitest run tests/media-viewer-utils.test.js -t "handleCancel feature restore
 
 Expected: All 3 tests fail. Failures will be assertion failures on `featureCache.has(...)` being `false`, since the helper isn't called yet.
 
-- [ ] **Step 3: Patch the 4 branches of `handleCancel` in `media-viewer.js`**
+- [x] **Step 3: Patch the 4 branches of `handleCancel` in `media-viewer.js`**
 
 Locate `handleCancel` (~L3342). Make these edits:
 
@@ -639,7 +641,7 @@ Locate `handleCancel` (~L3342). Make these edits:
 
 **Verify all four edits land OUTSIDE the `catch` blocks** — they must run only on the success paths. The `catch` blocks restore `moveHistory` via `push` on error and do NOT call `showMedia()`.
 
-- [ ] **Step 4: Run the new tests, confirm they pass**
+- [x] **Step 4: Run the new tests, confirm they pass**
 
 ```
 npx vitest run tests/media-viewer-utils.test.js -t "handleCancel feature restore"
@@ -647,7 +649,7 @@ npx vitest run tests/media-viewer-utils.test.js -t "handleCancel feature restore
 
 Expected: 3 passed.
 
-- [ ] **Step 5: Run the full unit suite**
+- [x] **Step 5: Run the full unit suite**
 
 ```
 npm test
@@ -655,7 +657,7 @@ npm test
 
 Expected: 190/190 passed (187 + 3 new).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -680,7 +682,7 @@ requestPredictionScores() when isSortedByPrediction is true."
 
 **Files:** none modified beyond what's already committed.
 
-- [ ] **Step 1: Run lint**
+- [x] **Step 1: Run lint**
 
 ```
 npm run lint
@@ -688,7 +690,7 @@ npm run lint
 
 Expected: zero errors. If new warnings appear about `no-unused-vars`, ensure any caught errors / unused destructures use `_`-prefix per project convention.
 
-- [ ] **Step 2: Run format check**
+- [x] **Step 2: Run format check**
 
 ```
 npm run format:check
@@ -696,7 +698,7 @@ npm run format:check
 
 Expected: no formatting drift.
 
-- [ ] **Step 3: Run full unit suite one more time**
+- [x] **Step 3: Run full unit suite one more time**
 
 ```
 npm test
@@ -704,7 +706,7 @@ npm test
 
 Expected: 190/190 passed.
 
-- [ ] **Step 4: Smoke-test manually in the running app**
+- [x] **Step 4: Smoke-test manually in the running app**
 
 Run `npm start`. Verify each scenario by hand:
 
@@ -714,7 +716,7 @@ Run `npm start`. Verify each scenario by hand:
 4. **Bug 1 fix — special move** — with AI sort active, hit the special-folder rating. The file moves. Undo. File returns; badge re-appears.
 5. **Regression sanity** — without AI sort, rate-then-undo should still work normally (no crash, no badge — by design).
 
-- [ ] **Step 5: No new commit if no edits**
+- [x] **Step 5: No new commit if no edits**
 
 Lint/format are no-ops if Task 1-4 commits already cleared them. If lint surfaces something, fix and commit `chore: lint fixes for Group B`.
 
@@ -727,7 +729,7 @@ Lint/format are no-ops if Task 1-4 commits already cleared them. If lint surface
 - Modify: `docs/planning/DONE.md`
 - Modify: `docs/planning/WEEKLY.md`
 
-- [ ] **Step 1: Move both bug entries from TODO.md to DONE.md**
+- [x] **Step 1: Move both bug entries from TODO.md to DONE.md**
 
 In `docs/planning/TODO.md`, find the two entries:
 - `#### Like-probability not displayed after undo` (L69)
@@ -757,17 +759,17 @@ In `docs/planning/DONE.md`, add a new entry following the existing format. Use t
 
 Replace `TBD` with the actual PR number after PR creation.
 
-- [ ] **Step 2: Mark Group B complete in WEEKLY.md**
+- [x] **Step 2: Mark Group B complete in WEEKLY.md**
 
 In `docs/planning/WEEKLY.md`:
 
-Around L33-L41 (under "Group B: AI Prediction Display Bugs [batch]"), flip the two `- [ ]` checkboxes to `- [x]`.
+Around L33-L41 (under "Group B: AI Prediction Display Bugs [batch]"), flip the two `- [x]` checkboxes to `- [x]`.
 
-Around L102-L110 (under "Tuesday, May 12 — AI Prediction Display Bugs"), flip both `- [ ]` checkboxes to `- [x]`.
+Around L102-L110 (under "Tuesday, May 12 — AI Prediction Display Bugs"), flip both `- [x]` checkboxes to `- [x]`.
 
 Around L172 (in the weekly summary table), change `B: AI Prediction Display Bugs … | Planned` to `B: AI Prediction Display Bugs … | ✅ Complete (2026-05-14)`.
 
-- [ ] **Step 3: Commit doc updates**
+- [x] **Step 3: Commit doc updates**
 
 ```
 git add docs/planning/TODO.md docs/planning/DONE.md docs/planning/WEEKLY.md
@@ -783,13 +785,13 @@ in after creation."
 
 **Files:** none.
 
-- [ ] **Step 1: Push branch**
+- [x] **Step 1: Push branch**
 
 ```
 git push -u origin fix/ai-prediction-display-bugs
 ```
 
-- [ ] **Step 2: Create PR with `gh pr create`**
+- [x] **Step 2: Create PR with `gh pr create`**
 
 ```
 gh pr create --title "fix: AI prediction display bugs (Group B)" --body "$(cat <<'EOF'
@@ -814,7 +816,7 @@ EOF
 )"
 ```
 
-- [ ] **Step 3: Backfill PR number in DONE.md**
+- [x] **Step 3: Backfill PR number in DONE.md**
 
 After `gh pr create` prints the PR URL, edit `docs/planning/DONE.md` Group B entry — replace `**PR:** TBD` with `**PR:** #N` where N is the new PR number. Commit:
 
