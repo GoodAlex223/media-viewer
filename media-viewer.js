@@ -5672,6 +5672,15 @@ class MediaViewer {
                     const sorted = message.sortedFilenames.map((name) => filenameToFile.get(name)).filter((f) => f);
 
                     if (sorted.length > 0) {
+                        // Sync prediction scores from worker so badges align with the re-ordered files.
+                        // Without this, badges show stale per-path values from prior scoreComplete events.
+                        if (message.scores) {
+                            for (const [filename, score] of Object.entries(message.scores)) {
+                                const file = filenameToFile.get(filename);
+                                if (file) this.predictionScores.set(file.path, score);
+                            }
+                        }
+
                         this.mediaFiles = sorted;
                         this.currentIndex = 0;
                         this.isSortedByPrediction = true;

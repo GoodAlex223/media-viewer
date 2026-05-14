@@ -668,3 +668,61 @@ describe('restoreFeatureCachesFromHistory', () => {
         expect(ctx.featureMetadata.get('/d/c.png')).toEqual({ size: 5555, mtime: 0 });
     });
 });
+
+describe('handleMlWorkerMessage sortComplete', () => {
+    const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+
+    it('populates predictionScores from message.scores before reordering mediaFiles', () => {
+        const mediaFiles = [
+            { name: 'a.png', path: '/d/a.png' },
+            { name: 'b.png', path: '/d/b.png' },
+            { name: 'c.png', path: '/d/c.png' },
+        ];
+        const ctx = {
+            mediaFiles,
+            predictionScores: new Map(),
+            currentIndex: 2,
+            isSortedByPrediction: false,
+            clearProgressNotification: () => {},
+            showMedia: () => {},
+            updateSortPredictionButton: () => {},
+            showNotification: () => {},
+        };
+
+        handleMlWorkerMessage.call(ctx, {
+            type: 'sortComplete',
+            sortedFilenames: ['b.png', 'a.png', 'c.png'],
+            scores: { 'a.png': 0.3, 'b.png': 0.95, 'c.png': 0.1 },
+        });
+
+        expect(ctx.predictionScores.get('/d/a.png')).toBe(0.3);
+        expect(ctx.predictionScores.get('/d/b.png')).toBe(0.95);
+        expect(ctx.predictionScores.get('/d/c.png')).toBe(0.1);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['b.png', 'a.png', 'c.png']);
+        expect(ctx.isSortedByPrediction).toBe(true);
+        expect(ctx.currentIndex).toBe(0);
+    });
+
+    it('does not crash when message.scores is absent (defensive)', () => {
+        const ctx = {
+            mediaFiles: [{ name: 'a.png', path: '/a' }],
+            predictionScores: new Map(),
+            currentIndex: 0,
+            isSortedByPrediction: false,
+            clearProgressNotification: () => {},
+            showMedia: () => {},
+            updateSortPredictionButton: () => {},
+            showNotification: () => {},
+        };
+
+        expect(() => {
+            handleMlWorkerMessage.call(ctx, {
+                type: 'sortComplete',
+                sortedFilenames: ['a.png'],
+                // scores intentionally omitted
+            });
+        }).not.toThrow();
+        expect(ctx.predictionScores.size).toBe(0);
+        expect(ctx.isSortedByPrediction).toBe(true);
+    });
+});
