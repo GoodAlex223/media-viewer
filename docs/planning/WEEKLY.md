@@ -30,15 +30,10 @@ _(No ongoing background tasks this week.)_
 **Domain**: JS logic (ML prediction display)
 **Total SP**: 5
 
-- [ ] **Fix like-probability not displayed after undo** — 2 SP, 🟠 IMPORTANT
-  - `handleCancel()` restores file to `mediaFiles` but does not re-trigger `requestPredictionScores()`; badge stays missing.
-  - Affected: [media-viewer.js:3340](media-viewer.js#L3340) (`handleCancel`), [media-viewer.js:6135](media-viewer.js#L6135) (`requestPredictionScores`).
-  - Source: TODO.md (added 2026-05-05 from manual testing)
-- [ ] **Fix prediction percentages misaligned after similarity-sort cancel + AI sort** — 3 SP, 🟠 IMPORTANT
-  - User repro: after canceling Sort-by-Similarity then enabling AI sort, percentages display sorted descending but mismatched with media (e.g., "99% / 56%, 98% / 55%, 97% / 54%" instead of "99% / 54%, 98% / 55%, 97% / 56%").
-  - Restore branch in `handleSortByPrediction()` filters `originalMediaFiles` but doesn't re-apply order/badge mapping.
-  - Affected: [media-viewer.js:6271-6291](media-viewer.js#L6271-L6291).
-  - Source: TODO.md (added 2026-05-05 from manual testing)
+- [x] **Fix like-probability not displayed after undo** — 2 SP, 🟠 IMPORTANT ✅ Complete (2026-05-14)
+  - Root cause was different from the original hint: `removeFileFromList` clears all per-path ML caches at rating time, so undo had no features to score with. Fix adds `restoreFeatureCachesFromHistory(entry)` helper called in all 4 `handleCancel` branches.
+- [x] **Fix prediction percentages misaligned after similarity-sort cancel + AI sort** — 3 SP, 🟠 IMPORTANT ✅ Complete (2026-05-14)
+  - Root cause was `sortComplete` ignoring `message.scores` from ml-worker, not the restore branch in `handleSortByPrediction`. Fix iterates `message.scores` into `predictionScores` by path before applying `mediaFiles = sorted`.
 
 ### Group C: PR #33 Defensive Follow-ups [batch]
 **Domain**: JS logic (CLIP/sort hygiene)
@@ -106,8 +101,8 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group B: AI Prediction Display Bugs** [batch] | 5 |
 
-- [ ] Fix like-probability not displayed after undo (2 SP)
-- [ ] Fix prediction percentages misaligned after similarity-sort cancel + AI sort (3 SP)
+- [x] Fix like-probability not displayed after undo (2 SP) ✅ 2026-05-14
+- [x] Fix prediction percentages misaligned after similarity-sort cancel + AI sort (3 SP) ✅ 2026-05-14
 
 **Daily total**: 5 SP
 
@@ -138,6 +133,7 @@ _(No ongoing background tasks this week.)_
 | **Group E: Tournament Mode — Spec** | 3 |
 
 - [ ] Write tournament-style compare mode spec (3 SP)
+- Maybe add it as new mode near Single and Compare?
 
 **Daily total**: 3 SP | 🏆 Weekly Challenge (part 1/2)
 
@@ -169,7 +165,7 @@ _(No ongoing background tasks this week.)_
 | Group | Domain | Tasks | Total SP | Day | Status |
 |-------|--------|-------|----------|-----|--------|
 | A: CLIP Extraction Silent Failure | JS logic (CLIP) | 1 | 5 | Mon | ✅ Complete (2026-05-07) |
-| B: AI Prediction Display Bugs | JS logic (ML display) | 2 | 5 | Tue | Planned |
+| B: AI Prediction Display Bugs | JS logic (ML display) | 2 | 5 | Tue | ✅ Complete (2026-05-14) |
 | C: PR #33 Defensive Follow-ups | JS logic (CLIP/sort hygiene) | 3 | 4 | Wed | Planned |
 | D: Integration Test Pattern | Testing | 1 | 3 | Wed | Planned |
 | E: Tournament Mode — Spec | Design | 1 | 3 | Thu | Planned |

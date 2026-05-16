@@ -48,6 +48,7 @@ Central index for all project documentation.
 | [Group F Build & DX Plan][]     | Pin Lucide CDN with SRI + update regression-checker agent for FullscreenManager |
 | [CLIP Sort Follow-ups Plan][]   | Algorithm-aware new-file insertion + CLIP toggle-off cache cleanup + sortMediaBySimilarityClip tests |
 | [CLIP Extraction Silent Failure Plan][] | Wire `startBackgroundFeatureExtraction()` into `loadFolder()` via `kickoffBackgroundExtractionIfEnabled()` helper |
+| [AI Prediction Display Bugs Plan][]    | Restore feature caches on undo + sortComplete propagates worker scores into predictionScores |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -61,6 +62,7 @@ Central index for all project documentation.
 [Group F Build & DX Plan]: archive/plans/2026-04-29-group-f-build-dx.md
 [CLIP Sort Follow-ups Plan]: archive/plans/2026-05-02-clip-sort-followups.md
 [CLIP Extraction Silent Failure Plan]: archive/plans/2026-05-06-clip-extraction-silent-failure.md
+[AI Prediction Display Bugs Plan]: archive/plans/2026-05-14-ai-prediction-display-bugs.md
 
 ## Design Specs
 
@@ -81,6 +83,8 @@ Central index for all project documentation.
 | [Resource Management][]     | CLIP model unload after extraction + logger.js double-init guard |
 | [Group F Build & DX][]      | Pin Lucide CDN with SRI hash + regression-checker agent update for FullscreenManager |
 | [CLIP Sort Follow-ups][]    | Algorithm-aware new-file insertion (cosine for CLIP cache hits) + toggle-off cache+state cleanup |
+| [CLIP Extraction Silent Failure][] | `kickoffBackgroundExtractionIfEnabled()` helper wired into `loadFolder()` so fresh CLIP folders extract |
+| [AI Prediction Display Bugs][]     | Restore feature caches on undo + propagate worker scores into predictionScores after AI sort |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -98,6 +102,8 @@ Central index for all project documentation.
 [Resource Management]: superpowers/specs/2026-04-20-group-e-resource-management-design.md
 [Group F Build & DX]: superpowers/specs/2026-04-29-group-f-build-dx-design.md
 [CLIP Sort Follow-ups]: superpowers/specs/2026-05-02-clip-sort-followups-design.md
+[CLIP Extraction Silent Failure]: superpowers/specs/2026-05-06-clip-extraction-silent-failure-design.md
+[AI Prediction Display Bugs]: superpowers/specs/2026-05-14-ai-prediction-display-bugs-design.md
 
 ## Archives
 
@@ -107,4 +113,4 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-04-30*
+*Last Updated: 2026-05-14*

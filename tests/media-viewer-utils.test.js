@@ -597,3 +597,303 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
         expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
     });
 });
+
+describe('restoreFeatureCachesFromHistory', () => {
+    const restoreFeatureCachesFromHistory = extractMethod('restoreFeatureCachesFromHistory');
+
+    function makeCtx() {
+        return {
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+        };
+    }
+
+    it('splits 576-dim mlFeatures into featureCache(64) + clipCache(512)', () => {
+        const ctx = makeCtx();
+        const mlFeatures = new Float32Array(576);
+        for (let i = 0; i < 576; i++) mlFeatures[i] = i % 256;
+        const entry = { originalPath: '/d/a.png', mlFeatures, fileSize: 1234 };
+
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+
+        const f = ctx.featureCache.get('/d/a.png');
+        const c = ctx.clipCache.get('/d/a.png');
+        expect(f).toBeInstanceOf(Float32Array);
+        expect(f.length).toBe(64);
+        expect(c).toBeInstanceOf(Float32Array);
+        expect(c.length).toBe(512);
+        expect(f[0]).toBe(0);
+        expect(f[63]).toBe(63);
+        expect(c[0]).toBe(64);
+        expect(c[511]).toBe((64 + 511) % 256);
+    });
+
+    it('restores only featureCache when mlFeatures is 64-dim', () => {
+        const ctx = makeCtx();
+        const mlFeatures = new Float32Array(64);
+        for (let i = 0; i < 64; i++) mlFeatures[i] = i;
+        const entry = { originalPath: '/d/b.png', mlFeatures, fileSize: 99 };
+
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+
+        const f = ctx.featureCache.get('/d/b.png');
+        expect(f).toBeInstanceOf(Float32Array);
+        expect(f.length).toBe(64);
+        expect(ctx.clipCache.has('/d/b.png')).toBe(false);
+    });
+
+    it('no-ops when mlFeatures is null or entry is null', () => {
+        const ctx = makeCtx();
+        restoreFeatureCachesFromHistory.call(ctx, { originalPath: '/x', mlFeatures: null, fileSize: 1 });
+        restoreFeatureCachesFromHistory.call(ctx, null);
+        expect(ctx.featureCache.size).toBe(0);
+        expect(ctx.clipCache.size).toBe(0);
+        expect(ctx.featureMetadata.size).toBe(0);
+    });
+
+    it('no-ops when mlFeatures has unexpected length', () => {
+        const ctx = makeCtx();
+        const entry = { originalPath: '/x', mlFeatures: new Float32Array(128), fileSize: 1 };
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+        expect(ctx.featureCache.size).toBe(0);
+        expect(ctx.clipCache.size).toBe(0);
+        expect(ctx.featureMetadata.size).toBe(0);
+    });
+
+    it('restores featureMetadata with mtime:0 from entry.fileSize', () => {
+        const ctx = makeCtx();
+        const entry = { originalPath: '/d/c.png', mlFeatures: new Float32Array(64), fileSize: 5555 };
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+        expect(ctx.featureMetadata.get('/d/c.png')).toEqual({ size: 5555, mtime: 0 });
+    });
+});
+
+describe('handleMlWorkerMessage sortComplete', () => {
+    const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+
+    it('populates predictionScores from message.scores before reordering mediaFiles', () => {
+        const mediaFiles = [
+            { name: 'a.png', path: '/d/a.png' },
+            { name: 'b.png', path: '/d/b.png' },
+            { name: 'c.png', path: '/d/c.png' },
+        ];
+        const ctx = {
+            mediaFiles,
+            predictionScores: new Map(),
+            currentIndex: 2,
+            isSortedByPrediction: false,
+            clearProgressNotification: () => {},
+            showMedia: () => {},
+            updateSortPredictionButton: () => {},
+            showNotification: () => {},
+        };
+
+        handleMlWorkerMessage.call(ctx, {
+            type: 'sortComplete',
+            sortedFilenames: ['b.png', 'a.png', 'c.png'],
+            scores: { 'a.png': 0.3, 'b.png': 0.95, 'c.png': 0.1 },
+        });
+
+        expect(ctx.predictionScores.get('/d/a.png')).toBe(0.3);
+        expect(ctx.predictionScores.get('/d/b.png')).toBe(0.95);
+        expect(ctx.predictionScores.get('/d/c.png')).toBe(0.1);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['b.png', 'a.png', 'c.png']);
+        expect(ctx.isSortedByPrediction).toBe(true);
+        expect(ctx.currentIndex).toBe(0);
+    });
+
+    it('does not crash when message.scores is absent (defensive)', () => {
+        const ctx = {
+            mediaFiles: [{ name: 'a.png', path: '/a' }],
+            predictionScores: new Map(),
+            currentIndex: 0,
+            isSortedByPrediction: false,
+            clearProgressNotification: () => {},
+            showMedia: () => {},
+            updateSortPredictionButton: () => {},
+            showNotification: () => {},
+        };
+
+        expect(() => {
+            handleMlWorkerMessage.call(ctx, {
+                type: 'sortComplete',
+                sortedFilenames: ['a.png'],
+                // scores intentionally omitted
+            });
+        }).not.toThrow();
+        expect(ctx.predictionScores.size).toBe(0);
+        expect(ctx.isSortedByPrediction).toBe(true);
+    });
+});
+
+describe('handleCancel feature restore', () => {
+    const handleCancel = extractAsyncMethod('handleCancel');
+
+    function make576() {
+        const v = new Float32Array(576);
+        for (let i = 0; i < 576; i++) v[i] = i % 256;
+        return v;
+    }
+    function make64() {
+        const v = new Float32Array(64);
+        for (let i = 0; i < 64; i++) v[i] = i;
+        return v;
+    }
+
+    function commonMocks(overrides = {}) {
+        return {
+            isLoading: false,
+            isCompareMode: false,
+            mediaFiles: [],
+            moveHistory: [],
+            currentIndex: 0,
+            baseFolderPath: '/folder',
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+            predictionScores: new Map(),
+            isSortedByPrediction: false,
+            isMlEnabled: true,
+            mlWorker: { postMessage: vi.fn() },
+            // Methods the handler calls
+            signalUserActivity: () => {},
+            showNotification: () => {},
+            showError: () => {},
+            updateFolderInfo: () => {},
+            showMedia: vi.fn(async () => {}),
+            requestPredictionScores: vi.fn(),
+            // Helper under test — extracted as a real method so the handler can call it
+            restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+            reverseMlModelUpdate(features, actionType) {
+                this.mlWorker.postMessage({
+                    type: 'reverseUpdate',
+                    data: { features: Array.from(features), label: actionType === 'like' ? 1 : 0 },
+                });
+            },
+            ...overrides,
+        };
+    }
+
+    function mockElectronAPI() {
+        globalThis.window = {
+            electronAPI: {
+                moveFile: vi.fn(async ({ fileName }) => ({
+                    success: true,
+                    targetPath: `/folder/${fileName}`,
+                })),
+                path: { basename: async (p) => p.split('/').pop() },
+            },
+        };
+    }
+
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        mockElectronAPI();
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('single-mode like-undo restores featureCache, clipCache, and triggers reverseMlModelUpdate', async () => {
+        const ctx = commonMocks({
+            moveHistory: [
+                {
+                    fileName: 'a.png',
+                    originalPath: '/folder/a.png',
+                    newPath: '/folder/like/a.png',
+                    fileSize: 100,
+                    fileType: 'image/png',
+                    actionType: 'like',
+                    mlFeatures: Array.from(make576()),
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        expect(ctx.featureCache.has('/folder/a.png')).toBe(true);
+        expect(ctx.featureCache.get('/folder/a.png').length).toBe(64);
+        expect(ctx.clipCache.has('/folder/a.png')).toBe(true);
+        expect(ctx.clipCache.get('/folder/a.png').length).toBe(512);
+        expect(ctx.featureMetadata.get('/folder/a.png')).toEqual({ size: 100, mtime: 0 });
+        // reverseMlModelUpdate posts via mlWorker.postMessage
+        const reverseCall = ctx.mlWorker.postMessage.mock.calls.find((c) => c[0].type === 'reverseUpdate');
+        expect(reverseCall).toBeDefined();
+        expect(reverseCall[0].data.label).toBe(1); // like
+        // requestPredictionScores is NOT explicitly called in like/dislike undo
+        // (it's triggered downstream via reverseUpdateComplete debounce in the live app)
+        expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
+    });
+
+    it('compare-mode pair-undo restores caches for both files', async () => {
+        const ctx = commonMocks({
+            isCompareMode: true,
+            moveHistory: [
+                {
+                    fileName: 'a.png',
+                    originalPath: '/folder/a.png',
+                    newPath: '/folder/like/a.png',
+                    fileSize: 100,
+                    fileType: 'image/png',
+                    actionType: 'like',
+                    mlFeatures: Array.from(make576()),
+                },
+                {
+                    fileName: 'b.png',
+                    originalPath: '/folder/b.png',
+                    newPath: '/folder/dislike/b.png',
+                    fileSize: 200,
+                    fileType: 'image/png',
+                    actionType: 'dislike',
+                    mlFeatures: Array.from(make64()),
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        // Both files: featureCache populated
+        expect(ctx.featureCache.has('/folder/a.png')).toBe(true);
+        expect(ctx.featureCache.has('/folder/b.png')).toBe(true);
+        // Only a.png had 576-dim → clipCache should be present for it but not for b.png (64-dim only)
+        expect(ctx.clipCache.has('/folder/a.png')).toBe(true);
+        expect(ctx.clipCache.has('/folder/b.png')).toBe(false);
+        // Two reverseUpdate calls
+        const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
+        expect(reverseCalls.length).toBe(2);
+    });
+
+    it('special-move undo (compare mode) restores featureCache and calls requestPredictionScores when sorted-by-prediction', async () => {
+        const ctx = commonMocks({
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            // Special-move undo in compare mode (branch at L3353 — compareMode && special)
+            mediaFiles: [{ name: 'remaining.png', path: '/folder/remaining.png' }],
+            moveHistory: [
+                {
+                    fileName: 'special.png',
+                    originalPath: '/folder/special.png',
+                    newPath: '/folder/special-folder/special.png',
+                    fileSize: 300,
+                    fileType: 'image/png',
+                    actionType: 'special',
+                    compareMode: true,
+                    remainingFile: { name: 'remaining.png', path: '/folder/remaining.png' },
+                    remainingFileOriginalIndex: 1,
+                    mlFeatures: Array.from(make64()),
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        expect(ctx.featureCache.has('/folder/special.png')).toBe(true);
+        // No reverseUpdate (special is unrated)
+        const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
+        expect(reverseCalls.length).toBe(0);
+        // Special branch needs explicit requestPredictionScores since no reverseUpdateComplete debounce
+        expect(ctx.requestPredictionScores).toHaveBeenCalledTimes(1);
+    });
+});

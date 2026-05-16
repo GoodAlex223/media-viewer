@@ -991,7 +991,7 @@ class MediaViewer {
 
     /**
      * Centralized file removal from the media list.
-     * Handles array splice, cache cleanup (predictionScores, featureCache, perceptualHashes),
+     * Handles array splice, cache cleanup (predictionScores, featureCache, clipCache, featureMetadata, perceptualHashes),
      * and currentIndex adjustment.
      * @param {string} filePath - Absolute path of the file to remove
      * @returns {number} The index the file was at before removal, or -1 if not found
@@ -1013,6 +1013,25 @@ class MediaViewer {
         }
 
         return index;
+    }
+
+    restoreFeatureCachesFromHistory(entry) {
+        if (!entry || !entry.mlFeatures) return;
+        const features = entry.mlFeatures;
+        const path = entry.originalPath;
+
+        if (features.length === 576) {
+            this.featureCache.set(path, new Float32Array(features.slice(0, 64)));
+            this.clipCache.set(path, new Float32Array(features.slice(64, 576)));
+        } else if (features.length === 64) {
+            this.featureCache.set(path, new Float32Array(features));
+        } else {
+            return;
+        }
+
+        if (entry.fileSize !== undefined) {
+            this.featureMetadata.set(path, { size: entry.fileSize, mtime: 0 });
+        }
     }
 
     removeFailedFile(index, side = null) {
@@ -1317,6 +1336,16 @@ class MediaViewer {
         const targetFolderPath = this.customSpecialFolder;
         const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
 
+        // Extract ML features BEFORE moving file (while media is still accessible).
+        // Captured into history so undo can restore feature caches that
+        // removeFileFromList clears below.
+        let mlFeatures = null;
+        if (this.isMlEnabled && this.mlWorker) {
+            const combined = this.getCombinedFeatures(fileToMove.path);
+            const rawFeatures = this.featureCache.get(fileToMove.path);
+            mlFeatures = combined || (rawFeatures ? Array.from(rawFeatures) : null);
+        }
+
         try {
             const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
 
@@ -1349,6 +1378,7 @@ class MediaViewer {
                 fileSize: fileToMove.size,
                 fileType: fileToMove.type,
                 actionType: 'special',
+                mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
             };
 
             // In compare mode, store remaining file info for proper undo
@@ -3402,6 +3432,8 @@ class MediaViewer {
                 }
 
                 this.currentIndex = insertIndex;
+                this.restoreFeatureCachesFromHistory(lastMove);
+                if (this.isSortedByPrediction) this.requestPredictionScores();
                 await this.showMedia();
             } catch (error) {
                 console.error('Error undoing special move:', error);
@@ -3459,6 +3491,8 @@ class MediaViewer {
                     this.reverseMlModelUpdate(secondMove.mlFeatures, secondMove.actionType);
                 }
 
+                this.restoreFeatureCachesFromHistory(firstMove);
+                this.restoreFeatureCachesFromHistory(secondMove);
                 this.showNotification(`✅ Restored ${firstMove.fileName}`, 'success');
                 this.showNotification(`✅ Restored ${secondMove.fileName}`, 'success');
                 this.updateFolderInfo();
@@ -3531,6 +3565,8 @@ class MediaViewer {
                     this.reverseMlModelUpdate(secondMove.mlFeatures, secondMove.actionType);
                 }
 
+                this.restoreFeatureCachesFromHistory(firstMove);
+                this.restoreFeatureCachesFromHistory(secondMove);
                 this.showNotification(`Restored ${firstMove.fileName}`, 'success');
                 this.showNotification(`Restored ${secondMove.fileName}`, 'success');
                 this.updateFolderInfo();
@@ -3571,6 +3607,7 @@ class MediaViewer {
                     this.reverseMlModelUpdate(undoMove.mlFeatures, undoMove.actionType);
                 }
 
+                this.restoreFeatureCachesFromHistory(undoMove);
                 this.showNotification(`✅ Restored ${undoMove.fileName}`, 'success');
                 this.updateFolderInfo();
 
@@ -5653,6 +5690,15 @@ class MediaViewer {
                     const sorted = message.sortedFilenames.map((name) => filenameToFile.get(name)).filter((f) => f);
 
                     if (sorted.length > 0) {
+                        // Sync prediction scores from worker so badges align with the re-ordered files.
+                        // Without this, badges show stale per-path values from prior scoreComplete events.
+                        if (message.scores) {
+                            for (const [filename, score] of Object.entries(message.scores)) {
+                                const file = filenameToFile.get(filename);
+                                if (file) this.predictionScores.set(file.path, score);
+                            }
+                        }
+
                         this.mediaFiles = sorted;
                         this.currentIndex = 0;
                         this.isSortedByPrediction = true;
