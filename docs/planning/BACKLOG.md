@@ -2,12 +2,22 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-14 <!-- 2 items from PR #35 final code review added -->
+**Last Updated**: 2026-05-16 <!-- 2 items from PR #35 multi-agent review added (sub-threshold, post-merge) -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From PR #35 Multi-Agent Code Review (2026-05-16)
+
+### [2026-05-16] From: PR #35 multi-agent review (post-merge)
+**Origin**: Five-agent code review run after the PR's own pre-merge review pass. The review concluded "No issues found" (no findings scored ≥80/100). Two sub-threshold (~75/100) findings are tracked here as defensive/hygiene improvements; the higher-priority items from the earlier in-PR review pass remain in the section below.
+
+- [ ] **Add JSDoc to `restoreFeatureCachesFromHistory` for parity with `removeFileFromList`** (~75/100) — The inverse method `removeFileFromList` has a full JSDoc block (`@param`/`@returns`) documenting the 5-cache cleanup contract. The new `restoreFeatureCachesFromHistory` helper, placed immediately adjacent and documented as its inverse, has no JSDoc — only an inline `// History entry shape` comment. Hygiene; the contract is non-obvious (576/64 length discriminant, `mtime: 0` sentinel, restore-only-3-of-5 caches) and a JSDoc block would make the asymmetry with `removeFileFromList` explicit. Effort: XS (~10 LoC docblock). Affected: [media-viewer.js:~1018-1043](../../media-viewer.js#L1018-L1043) (`restoreFeatureCachesFromHistory`).
+- [ ] **`handleCancel` compare-pair test fixture should tag history entries with `compareMode: true`** (~75/100) — The new test `'compare-mode pair-undo restores caches for both files'` in `describe('handleCancel feature restore')` constructs `moveHistory` entries without the `compareMode: true` field. The fixture still exercises the correct code path (Branch 2 checks `this.isCompareMode`, not the entry flag), so there is no test failure. But CLAUDE.md documents the invariant: "Compare-pair undo: history entries tagged `compareMode: true`; `handleCancel()` detects paired entries and restores both files in one undo." Real ratings push entries with that flag set (compare-rating handler at ~L3865/L3901). Fixture parity would protect against a future tightening of Branch 2's condition that consults the per-entry flag. Effort: XS (~2 LoC fixture tweak). Affected: [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) `handleCancel feature restore` describe block.
 
 ---
 
