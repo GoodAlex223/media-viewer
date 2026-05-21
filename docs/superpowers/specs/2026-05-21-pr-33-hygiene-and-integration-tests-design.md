@@ -208,8 +208,9 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
 ## 4. Testing & Verification
 
 ### Unit tests
-- 3 new integration tests in `tests/integration/cached-sort-path.test.js`
-- 190 → 193 total unit tests
+- 2 new tests in `tests/media-viewer-utils.test.js` (abort check, one per branch of `insertNewFilesInSortedOrder`)
+- 3 new tests in `tests/integration/cached-sort-path.test.js` (CLIP routing, hash routing, missing-algorithm fallback)
+- 190 → 195 total unit tests
 
 ### Existing tests touched
 - Zero. The 3 toggle-handler edits and 2 abort-check edits don't break any existing assertions.
@@ -243,7 +244,7 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
 
 ### Documentation updates after merge
 - `CLAUDE.md`: update existing "Active gotchas" entries — `clipUnloadTimer` toggle-off gap and `insertNewFilesInSortedOrder` no-abort-check gap — change wording from "missing" / "BACKLOG" to "now guarded".
-- `docs/planning/DONE.md`: new entry with unit/E2E test counts per the convention (193/193 unit, 39/39 E2E).
+- `docs/planning/DONE.md`: new entry with unit/E2E test counts per the convention (195/195 unit, 39/39 E2E).
 - `docs/planning/BACKLOG.md`: mark 4 items closed:
   - 3 PR #33 sub-threshold findings (2026-05-05 section)
   - 1 "Process: end-to-end integration tests for cache-hit sort paths" item
