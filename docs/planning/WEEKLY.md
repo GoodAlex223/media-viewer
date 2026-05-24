@@ -116,10 +116,10 @@ _(No ongoing background tasks this week.)_
 | **Group C: PR #33 Defensive Follow-ups** [batch] | 4 |
 | **Group D: Integration Test Pattern** | 3 |
 
-- [ ] Clear `this.clipUnloadTimer` in CLIP toggle-off (1 SP)
-- [ ] try/catch around `deleteSortCache('clip')` (1 SP)
-- [ ] Per-file abort check in `insertNewFilesInSortedOrder` (2 SP)
-- [ ] End-to-end integration test for cache-hit sort paths (3 SP)
+- [x] Clear `this.clipUnloadTimer` in CLIP toggle-off (1 SP)
+- [x] try/catch around `deleteSortCache('clip')` (1 SP)
+- [x] Per-file abort check in `insertNewFilesInSortedOrder` (2 SP)
+- [x] End-to-end integration test for cache-hit sort paths (3 SP)
 
 **Daily total**: 7 SP
 
