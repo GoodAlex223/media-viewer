@@ -405,6 +405,27 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
         expect(ctx.mediaFiles).toBe(originalMediaFiles);
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png']);
     });
+
+    it('hash path: throws "Sort aborted" when sortAbortController.signal.aborted before first iteration', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        const originalMediaFiles = [a, c];
+        const ctx = makeCtx({
+            mediaFiles: originalMediaFiles,
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/b.png', '0001'],
+                ['/c.png', '1111'],
+            ]),
+            sortAbortController: { signal: { aborted: true } },
+        });
+
+        await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree')).rejects.toThrow('Sort aborted');
+
+        expect(ctx.mediaFiles).toBe(originalMediaFiles);
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png']);
+    });
 });
 
 describe('applyCachedSortOrder (algorithm threading)', () => {

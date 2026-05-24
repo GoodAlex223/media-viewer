@@ -5186,6 +5186,9 @@ class MediaViewer {
         } else {
             // Hash path (vptree, mst, simple, or undefined): unchanged behavior.
             for (let i = 0; i < newFiles.length; i++) {
+                if (this.sortAbortController?.signal.aborted) {
+                    throw new Error('Sort aborted');
+                }
                 const newFile = newFiles[i];
 
                 if (!this.perceptualHashes.has(newFile.path)) {
