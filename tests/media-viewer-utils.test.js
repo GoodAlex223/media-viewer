@@ -401,7 +401,8 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
 
         await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'clip')).rejects.toThrow('Sort aborted');
 
-        // mediaFiles must remain untouched (assignment is post-loop on L5242)
+        // mediaFiles must remain untouched (insertNewFilesInSortedOrder only assigns
+        // this.mediaFiles after the loop completes, so throwing mid-loop preserves the original)
         expect(ctx.mediaFiles).toBe(originalMediaFiles);
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png']);
     });
