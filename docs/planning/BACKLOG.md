@@ -2,12 +2,21 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-16 <!-- 2 items from PR #35 multi-agent review added (sub-threshold, post-merge) -->
+**Last Updated**: 2026-05-24 <!-- 2 items extracted from PR #36 work: event-loop yielding deferral + extractAsyncMethod helper extraction trigger -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From PR #36 Work (2026-05-24)
+
+### [2026-05-24] From: PR #36 design + final cross-implementation review
+
+- [ ] **Event-loop yielding in `insertNewFilesInSortedOrder` for pathological cases** — PR #36 added per-file abort checks (outer loop only) in both CLIP and hash branches. Pathological case still uncovered: 100+ new files in a 1000-file cache = ~100k inner-loop iterations on the renderer main thread. Spec explicitly deferred this as an architectural note pending observed UI freeze. If a user reports stutter on very large folders, add `await new Promise(r => setTimeout(r, 0))` every N (e.g., 25) outer iterations to release the event loop. Affected: [media-viewer.js:5125-5200](../../media-viewer.js#L5125-L5200) (`insertNewFilesInSortedOrder` both branches).
+- [ ] **Extract `extractAsyncMethod` helper to `tests/helpers/extract-method.js` on third use** — Currently duplicated in `tests/media-viewer-utils.test.js` and `tests/integration/cached-sort-path.test.js`. The integration-test file's header comment explicitly states the extraction trigger ("If a third test file needs this, extract to `tests/helpers/extract-method.js`"). Project convention: Vitest test files don't share helpers via import today; introducing a shared helper module is justified once we have ≥3 call sites. Affected: future test files that need to extract methods from `media-viewer.js`.
 
 ---
 

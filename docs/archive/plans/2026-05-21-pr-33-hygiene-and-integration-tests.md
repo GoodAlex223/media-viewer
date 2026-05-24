@@ -1,6 +1,9 @@
 # PR #33 Hygiene + Integration Tests Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status: Complete** — Implemented and merged in [PR #36](https://github.com/GoodAlex223/media-viewer/pull/36) (2026-05-24).
+Test results: 195/195 unit tests, 39/39 E2E tests. Manual smoke verified by user.
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Close four PR #33 review follow-ups in one PR — three defensive code hardenings (CLIP toggle-off `clipUnloadTimer` clear, `try/catch` around `deleteSortCache('clip')`, per-file abort check in `insertNewFilesInSortedOrder`) plus one integration test pattern covering both branches of the cache-hit sort call graph.
 
@@ -8,7 +11,7 @@
 
 **Tech Stack:** Electron renderer (vanilla JS, no bundler), Vitest unit tests (`tests/**/*.test.js` glob picks up `tests/integration/` automatically — no config change needed), Husky pre-commit (ESLint + Prettier + `vitest run`).
 
-**Spec:** [docs/superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md](../specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md)
+**Spec:** [docs/superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md](../../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md)
 
 ---
 
@@ -30,26 +33,26 @@
 
 ## Pre-flight
 
-- [ ] **Step P1: Read the spec one more time**
+- [x] **Step P1: Read the spec one more time**
 
 Run: `cat docs/superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md` (or open it in editor).
 
 Skim Sections 1-3 to confirm scope and the exact target code.
 
-- [ ] **Step P2: Confirm starting state is clean**
+- [x] **Step P2: Confirm starting state is clean**
 
 Run: `git status`
 Expected: clean working tree on `main` (or a fresh feature branch already created).
 
 If not clean, stop and resolve uncommitted changes first.
 
-- [ ] **Step P3: Create a feature branch**
+- [x] **Step P3: Create a feature branch**
 
 Run: `git checkout -b feature/pr-33-hygiene-integration-tests`
 
 Expected: switched to a new branch.
 
-- [ ] **Step P4: Baseline test run**
+- [x] **Step P4: Baseline test run**
 
 Run: `npm test`
 Expected: `190 passed (190)` — same baseline the spec projects from.
@@ -65,13 +68,13 @@ If a different count, update the spec's projected 190→193 to match the new bas
 
 **Note:** The toggle handler is an inline `addEventListener` callback (anonymous arrow function), not a named class method, so `extractMethod`/`extractAsyncMethod` can't reach it. We do this change as a code edit + manual smoke test rather than TDD with a unit test. The diff is six lines and reviewable by inspection. Manual smoke at end of Task 9 covers the behavior.
 
-- [ ] **Step 1.1: Read the current toggle handler**
+- [x] **Step 1.1: Read the current toggle handler**
 
 Run: `grep -n "clipFeaturesToggle" media-viewer.js` (use Grep tool — never invoke `grep` from Bash)
 
 Open `media-viewer.js` to lines 1745-1770 and read the existing `clipToggle.addEventListener('change', async () => { ... });` body to confirm it matches the spec's "current code" snippet.
 
-- [ ] **Step 1.2: Edit the toggle-off block**
+- [x] **Step 1.2: Edit the toggle-off block**
 
 Replace this code in `media-viewer.js` (lines ~1753-1767):
 
@@ -126,19 +129,19 @@ if (!clipToggle.checked) {
 
 Use the Edit tool with the full surrounding context (preserve all indentation — these lines are inside an arrow function inside a method, so they have ~20 leading spaces).
 
-- [ ] **Step 1.3: Run lint**
+- [x] **Step 1.3: Run lint**
 
 Run: `npm run lint`
 Expected: no errors (Prettier may auto-fix indentation if invoked via `lint:fix`).
 
 If errors: run `npm run lint:fix` and re-check.
 
-- [ ] **Step 1.4: Run full test suite**
+- [x] **Step 1.4: Run full test suite**
 
 Run: `npm test`
 Expected: `190 passed (190)` — unchanged. We added no new tests yet; existing tests must still pass since this code path is not unit-tested.
 
-- [ ] **Step 1.5: Commit**
+- [x] **Step 1.5: Commit**
 
 ```bash
 git add media-viewer.js
@@ -165,7 +168,7 @@ Expected: pre-commit hook passes (ESLint + Prettier + `vitest run`). Commit succ
 - Test: `tests/media-viewer-utils.test.js` (extend the existing `insertNewFilesInSortedOrder (algorithm-aware)` describe block at line ~295)
 - Modify: `media-viewer.js:5125` (CLIP branch outer for-loop)
 
-- [ ] **Step 2.1: Write the failing test**
+- [x] **Step 2.1: Write the failing test**
 
 Open `tests/media-viewer-utils.test.js` and add the following two new tests inside the existing `describe('insertNewFilesInSortedOrder (algorithm-aware)', ...)` block (around line 385, right before its closing `});`). Test for hash branch goes in this task too so the describe block stays grouped — we'll add the hash-branch fix in Task 3, but the test is small enough to add now and watch it fail.
 
@@ -199,12 +202,12 @@ Add this single test inside the existing `describe`:
     });
 ```
 
-- [ ] **Step 2.2: Run the test to verify it fails**
+- [x] **Step 2.2: Run the test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "CLIP path: throws"`
 Expected: FAIL — the current code has no abort check, so the call resolves normally and mutates `mediaFiles` (test assertion that it throws will fail).
 
-- [ ] **Step 2.3: Add abort check to CLIP branch**
+- [x] **Step 2.3: Add abort check to CLIP branch**
 
 In `media-viewer.js`, locate the CLIP branch of `insertNewFilesInSortedOrder` at line ~5125. Insert the abort check as the first statement inside the outer for-loop body.
 
@@ -239,17 +242,17 @@ With:
                 const newVec = this.clipCache.get(newFile.path);
 ```
 
-- [ ] **Step 2.4: Run the test to verify it passes**
+- [x] **Step 2.4: Run the test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "CLIP path: throws"`
 Expected: PASS.
 
-- [ ] **Step 2.5: Run full test suite to confirm no regression**
+- [x] **Step 2.5: Run full test suite to confirm no regression**
 
 Run: `npm test`
 Expected: `191 passed (191)` — one new test plus all existing 190.
 
-- [ ] **Step 2.6: Commit**
+- [x] **Step 2.6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -275,7 +278,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Test: `tests/media-viewer-utils.test.js` (same `insertNewFilesInSortedOrder` describe block)
 - Modify: `media-viewer.js:5174` (hash branch outer for-loop)
 
-- [ ] **Step 3.1: Write the failing test**
+- [x] **Step 3.1: Write the failing test**
 
 Add this test inside the same `describe('insertNewFilesInSortedOrder (algorithm-aware)', ...)` block in `tests/media-viewer-utils.test.js`, right after the CLIP abort test from Task 2:
 
@@ -304,12 +307,12 @@ Add this test inside the same `describe('insertNewFilesInSortedOrder (algorithm-
     });
 ```
 
-- [ ] **Step 3.2: Run the test to verify it fails**
+- [x] **Step 3.2: Run the test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "hash path: throws"`
 Expected: FAIL — hash branch still has no abort check.
 
-- [ ] **Step 3.3: Add abort check to hash branch**
+- [x] **Step 3.3: Add abort check to hash branch**
 
 In `media-viewer.js`, locate the hash branch's outer for-loop at line ~5174. Insert the same abort check pattern.
 
@@ -338,17 +341,17 @@ With:
                 if (!this.perceptualHashes.has(newFile.path)) {
 ```
 
-- [ ] **Step 3.4: Run the test to verify it passes**
+- [x] **Step 3.4: Run the test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "hash path: throws"`
 Expected: PASS.
 
-- [ ] **Step 3.5: Run full test suite**
+- [x] **Step 3.5: Run full test suite**
 
 Run: `npm test`
 Expected: `192 passed (192)` — two new abort tests plus 190 existing.
 
-- [ ] **Step 3.6: Commit**
+- [x] **Step 3.6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -370,13 +373,13 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 **Files:**
 - Create: `tests/integration/cached-sort-path.test.js`
 
-- [ ] **Step 4.1: Create directory**
+- [x] **Step 4.1: Create directory**
 
 Run: `ls tests/` — confirm there is no existing `integration` subdirectory.
 
 If not present, the Write tool will create the directory automatically when writing the file. No explicit mkdir needed.
 
-- [ ] **Step 4.2: Write the file with the first test (CLIP routing)**
+- [x] **Step 4.2: Write the file with the first test (CLIP routing)**
 
 Create `tests/integration/cached-sort-path.test.js` with this content:
 
@@ -504,7 +507,7 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
 });
 ```
 
-- [ ] **Step 4.3: Run the new test**
+- [x] **Step 4.3: Run the new test**
 
 Run: `npx vitest run tests/integration/cached-sort-path.test.js`
 Expected: `1 passed (1)`. The Vitest glob `tests/**/*.test.js` should pick up `tests/integration/cached-sort-path.test.js` automatically (the only exclusion is `tests/e2e/**`).
@@ -513,12 +516,12 @@ If the test is not collected: confirm the file path matches the glob and that `v
 
 If the test fails: most likely cause is `extractAsyncMethod` source path — the `path.join(__dirname, '..', '..', 'media-viewer.js')` resolves from `tests/integration/` so two `..` segments are needed (vs. one in the existing `tests/*.test.js` files).
 
-- [ ] **Step 4.4: Run full test suite**
+- [x] **Step 4.4: Run full test suite**
 
 Run: `npm test`
 Expected: `193 passed (193)` — one new integration test plus the 192 from Tasks 2-3.
 
-- [ ] **Step 4.5: Commit**
+- [x] **Step 4.5: Commit**
 
 ```bash
 git add tests/integration/cached-sort-path.test.js
@@ -539,7 +542,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 **Files:**
 - Modify: `tests/integration/cached-sort-path.test.js`
 
-- [ ] **Step 5.1: Add the second test**
+- [x] **Step 5.1: Add the second test**
 
 Inside the existing `describe('cache-hit sort path — algorithm threading (integration)', ...)` block in `tests/integration/cached-sort-path.test.js`, add this second test right after the CLIP test:
 
@@ -574,17 +577,17 @@ Inside the existing `describe('cache-hit sort path — algorithm threading (inte
     });
 ```
 
-- [ ] **Step 5.2: Run the test**
+- [x] **Step 5.2: Run the test**
 
 Run: `npx vitest run tests/integration/cached-sort-path.test.js -t "VPTree cache entry"`
 Expected: PASS.
 
-- [ ] **Step 5.3: Run full integration suite**
+- [x] **Step 5.3: Run full integration suite**
 
 Run: `npx vitest run tests/integration/cached-sort-path.test.js`
 Expected: `2 passed (2)`.
 
-- [ ] **Step 5.4: Commit**
+- [x] **Step 5.4: Commit**
 
 ```bash
 git add tests/integration/cached-sort-path.test.js
@@ -603,7 +606,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 **Files:**
 - Modify: `tests/integration/cached-sort-path.test.js`
 
-- [ ] **Step 6.1: Add the third test**
+- [x] **Step 6.1: Add the third test**
 
 Inside the same `describe(...)` block, add this third test right after the VPTree test:
 
@@ -639,17 +642,17 @@ Inside the same `describe(...)` block, add this third test right after the VPTre
     });
 ```
 
-- [ ] **Step 6.2: Run the test**
+- [x] **Step 6.2: Run the test**
 
 Run: `npx vitest run tests/integration/cached-sort-path.test.js -t "old cache entry"`
 Expected: PASS.
 
-- [ ] **Step 6.3: Run full integration suite**
+- [x] **Step 6.3: Run full integration suite**
 
 Run: `npx vitest run tests/integration/cached-sort-path.test.js`
 Expected: `3 passed (3)`.
 
-- [ ] **Step 6.4: Run full test suite (final count check)**
+- [x] **Step 6.4: Run full test suite (final count check)**
 
 Run: `npm test`
 Expected: `193 passed (193)` total — 190 baseline + 2 abort-check tests (Tasks 2 & 3) + 3 integration tests = wait, that's 195. Let me recount.
@@ -658,7 +661,7 @@ Actually: 190 baseline + 2 abort tests (Tasks 2, 3) = 192 + 3 integration tests 
 
 Expected: `195 passed (195)`.
 
-- [ ] **Step 6.5: Commit**
+- [x] **Step 6.5: Commit**
 
 ```bash
 git add tests/integration/cached-sort-path.test.js
@@ -678,24 +681,24 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:** none (verification only)
 
-- [ ] **Step 7.1: Lint everything**
+- [x] **Step 7.1: Lint everything**
 
 Run: `npm run lint`
 Expected: no errors.
 
-- [ ] **Step 7.2: Full unit test suite**
+- [x] **Step 7.2: Full unit test suite**
 
 Run: `npm test`
 Expected: `195 passed (195)`.
 
-- [ ] **Step 7.3: Run E2E tests**
+- [x] **Step 7.3: Run E2E tests**
 
 Run: `npm run test:e2e`
 Expected: `39 passed` (the standing count per CLAUDE.md). All E2E tests pass with no regression from the renderer-side changes.
 
 Note: this is the full E2E suite; depending on hardware it may take 5-15 minutes. Run it once before the documentation updates and once more if you make any further code changes after this point.
 
-- [ ] **Step 7.4: Format check**
+- [x] **Step 7.4: Format check**
 
 Run: `npm run format:check`
 Expected: no files needing formatting (Prettier should already be clean from pre-commit hooks).
@@ -713,7 +716,7 @@ If errors: run `npm run format` and commit any formatting changes separately wit
 - Modify: `docs/README.md`
 - Modify: `CLAUDE.md`
 
-- [ ] **Step 8.1: Mark BACKLOG items closed**
+- [x] **Step 8.1: Mark BACKLOG items closed**
 
 Open `docs/planning/BACKLOG.md` and locate the section "From PR #33 Code Review (2026-05-05)". Strike through or remove these four items (keep the section header; just mark items as closed by changing `- [ ]` to `- [x]` and adding a closure note `✅ 2026-05-21 (PR #XX)`):
 
@@ -724,7 +727,7 @@ Open `docs/planning/BACKLOG.md` and locate the section "From PR #33 Code Review 
 
 Pattern matches prior closures in the same file (e.g., the 2026-05-07 entry for the CLIP extraction silent failure).
 
-- [ ] **Step 8.2: Add DONE.md entry**
+- [x] **Step 8.2: Add DONE.md entry**
 
 Open `docs/planning/DONE.md` and add a new entry at the top of the active log (above the most recent entry — the 2026-05-14 Group B entry). Use this template, mirroring the structure of existing entries:
 
@@ -752,7 +755,7 @@ test pattern covering both branches of the cache-hit sort call graph.
 **PR**: #XX (fill in after creation)
 ```
 
-- [ ] **Step 8.3: Update WEEKLY.md**
+- [x] **Step 8.3: Update WEEKLY.md**
 
 Open `docs/planning/WEEKLY.md` and locate "Wednesday, May 13 — PR #33 Hygiene + Integration Tests" (line ~111). Flip all four `- [ ]` to `- [x]`:
 
@@ -761,7 +764,7 @@ Open `docs/planning/WEEKLY.md` and locate "Wednesday, May 13 — PR #33 Hygiene 
 - [x] Per-file abort check in `insertNewFilesInSortedOrder` (2 SP)
 - [x] End-to-end integration test for cache-hit sort paths (3 SP)
 
-- [ ] **Step 8.4: Update docs/README.md**
+- [x] **Step 8.4: Update docs/README.md**
 
 Open `docs/README.md` and locate the "Design Specs" table. Add a row for this spec:
 
@@ -773,7 +776,7 @@ Maintain table column order matching surrounding rows.
 
 Also: the plan itself is archived in Task 9 (post-merge step), so do NOT add a row to the Archived Plans table here. That happens after merge.
 
-- [ ] **Step 8.5: Update CLAUDE.md "Active gotchas"**
+- [x] **Step 8.5: Update CLAUDE.md "Active gotchas"**
 
 Open `CLAUDE.md` and find these three lines in the "Active gotchas learned from past work" section (under the `<!-- AUTO-MANAGED: git-insights -->` block — the auto-memory agent already prefixed them with "design spec written" earlier; now flip to "now guarded"):
 
@@ -791,7 +794,7 @@ To:
 
 Use parallel rephrasing for the other two entries. Keep the surrounding gotcha text otherwise unchanged so context for future readers is preserved.
 
-- [ ] **Step 8.6: Commit documentation updates**
+- [x] **Step 8.6: Commit documentation updates**
 
 ```bash
 git add docs/planning/BACKLOG.md docs/planning/DONE.md docs/planning/WEEKLY.md docs/README.md CLAUDE.md
@@ -812,13 +815,13 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:** none (verification only — opens PR)
 
-- [ ] **Step 9.1: Launch the app**
+- [x] **Step 9.1: Launch the app**
 
 Run: `npm start` (in a separate terminal — leave it running for the smoke test).
 
 Expected: media-viewer Electron window appears.
 
-- [ ] **Step 9.2: Smoke scenario 1 — CLIP toggle-off cleanup**
+- [x] **Step 9.2: Smoke scenario 1 — CLIP toggle-off cleanup**
 
 1. Open a folder containing at least 10 image files.
 2. Open Settings (F1). Confirm CLIP toggle is on.
@@ -830,7 +833,7 @@ Expected: media-viewer Electron window appears.
 
 Manual verification only — no automation required.
 
-- [ ] **Step 9.3: Smoke scenario 2 — abort mid-sort**
+- [x] **Step 9.3: Smoke scenario 2 — abort mid-sort**
 
 1. In the same folder, re-enable CLIP toggle.
 2. Wait for any pending extraction to finish (or add ~50 new files to the folder so the cache-hit insertion path has work to do).
@@ -840,19 +843,19 @@ Manual verification only — no automation required.
 
 This validates the per-file abort check from Tasks 2-3.
 
-- [ ] **Step 9.4: Close the app**
+- [x] **Step 9.4: Close the app**
 
 Switch to the terminal running `npm start` and press Ctrl+C, or close the Electron window.
 
 If any console errors appeared during smoke testing, stop and investigate before opening PR.
 
-- [ ] **Step 9.5: Push branch**
+- [x] **Step 9.5: Push branch**
 
 Run: `git push -u origin feature/pr-33-hygiene-integration-tests`
 
 Expected: branch pushed to remote.
 
-- [ ] **Step 9.6: Open PR**
+- [x] **Step 9.6: Open PR**
 
 Run this `gh` command, replacing the placeholder once you know the next PR number from `gh pr list`:
 
@@ -890,7 +893,7 @@ EOF
 
 Expected: PR opened. Note the PR number.
 
-- [ ] **Step 9.7: Update DONE.md with PR number**
+- [x] **Step 9.7: Update DONE.md with PR number**
 
 Open `docs/planning/DONE.md` — replace `#XX (fill in after creation)` with the actual PR number from Step 9.6.
 

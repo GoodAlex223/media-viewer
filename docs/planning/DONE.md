@@ -33,7 +33,7 @@ test pattern covering both branches of the cache-hit sort call graph.
 **Test results**: 195/195 unit tests pass, 39/39 E2E tests pass.
 
 **Spec**: [docs/superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md](../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md)
-**Plan**: [docs/superpowers/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md](../superpowers/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md)
+**Plan**: [docs/archive/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md](../archive/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md)
 **PR**: [#36](https://github.com/GoodAlex223/media-viewer/pull/36)
 
 ---

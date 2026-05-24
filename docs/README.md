@@ -49,6 +49,7 @@ Central index for all project documentation.
 | [CLIP Sort Follow-ups Plan][]   | Algorithm-aware new-file insertion + CLIP toggle-off cache cleanup + sortMediaBySimilarityClip tests |
 | [CLIP Extraction Silent Failure Plan][] | Wire `startBackgroundFeatureExtraction()` into `loadFolder()` via `kickoffBackgroundExtractionIfEnabled()` helper |
 | [AI Prediction Display Bugs Plan][]    | Restore feature caches on undo + sortComplete propagates worker scores into predictionScores |
+| [PR #33 Hygiene + Integration Tests Plan][] | Three defensive CLIP toggle/sort fixes + 3-test integration suite catching call-graph wiring bugs |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -63,6 +64,7 @@ Central index for all project documentation.
 [CLIP Sort Follow-ups Plan]: archive/plans/2026-05-02-clip-sort-followups.md
 [CLIP Extraction Silent Failure Plan]: archive/plans/2026-05-06-clip-extraction-silent-failure.md
 [AI Prediction Display Bugs Plan]: archive/plans/2026-05-14-ai-prediction-display-bugs.md
+[PR #33 Hygiene + Integration Tests Plan]: archive/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md
 
 ## Design Specs
 
@@ -115,4 +117,4 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-05-21*
+*Last Updated: 2026-05-24*
