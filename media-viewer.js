@@ -5134,6 +5134,9 @@ class MediaViewer {
             // path is expected to be near-instant; firing main-process inference would
             // add ~100-200ms per missing file via IPC.
             for (let i = 0; i < newFiles.length; i++) {
+                if (this.sortAbortController?.signal.aborted) {
+                    throw new Error('Sort aborted');
+                }
                 const newFile = newFiles[i];
                 const newVec = this.clipCache.get(newFile.path);
 
