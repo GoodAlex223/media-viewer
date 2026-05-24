@@ -147,4 +147,34 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
         // Hash already cached, no on-demand extraction expected
         expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
     });
+
+    it('old cache entry without algorithm field falls through to Hamming (pre-PR#33 format)', async () => {
+        // Pre-PR#33 caches don't have an algorithm field. applyCachedSortOrder must
+        // resolve algorithm = explicit-param ?? cachedData.algorithm and route safely.
+        // Here we call with algorithm=undefined to force fallback to cachedData.algorithm,
+        // which is ALSO undefined — must route to Hamming, not crash.
+        const a = { path: '/a.png' };
+        const b = { path: '/b.png' };
+        const c = { path: '/c.png' };
+        const ctx = makeCtx({
+            mediaFiles: [a, b, c],
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/b.png', '0001'],
+                ['/c.png', '1111'],
+            ]),
+        });
+
+        const cachedData = {
+            // No algorithm field — old format
+            sortedPaths: ['a.png', 'c.png'],
+        };
+
+        const stats = await applyCachedSortOrder.call(ctx, cachedData, undefined);
+
+        expect(stats).toEqual({ cached: 2, removed: 0, added: 1 });
+        // Hash branch reached safely — b inserted at index 0 by Hamming distance
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
+    });
 });
