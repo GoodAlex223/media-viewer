@@ -118,4 +118,33 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
         // Hash branch must NOT have been taken — no on-demand hash computation
         expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
     });
+
+    it('VPTree cache entry routes through hash branch and uses Hamming distance', async () => {
+        // Setup: cached order [a, c] + 1 new file b; all three have perceptual hashes.
+        // Expected: b inserted at index 0 (closest Hamming to a).
+        const a = { path: '/a.png' };
+        const b = { path: '/b.png' };
+        const c = { path: '/c.png' };
+        const ctx = makeCtx({
+            mediaFiles: [a, b, c],
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/b.png', '0001'],
+                ['/c.png', '1111'],
+            ]),
+            // clipCache deliberately empty — must not be consulted
+        });
+
+        const cachedData = {
+            algorithm: 'vptree',
+            sortedPaths: ['a.png', 'c.png'],
+        };
+
+        const stats = await applyCachedSortOrder.call(ctx, cachedData, 'vptree');
+
+        expect(stats).toEqual({ cached: 2, removed: 0, added: 1 });
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        // Hash already cached, no on-demand extraction expected
+        expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
+    });
 });
