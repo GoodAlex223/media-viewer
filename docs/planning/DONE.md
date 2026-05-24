@@ -34,7 +34,7 @@ test pattern covering both branches of the cache-hit sort call graph.
 
 **Spec**: [docs/superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md](../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md)
 **Plan**: [docs/superpowers/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md](../superpowers/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md)
-**PR**: #XX (fill in after creation)
+**PR**: [#36](https://github.com/GoodAlex223/media-viewer/pull/36)
 
 ---
 
