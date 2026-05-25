@@ -164,7 +164,7 @@ Internal state:
 
 | File | Status | Purpose |
 |------|--------|---------|
-| `tournament-engine.js` | **NEW** | `TournamentEngine` + `SwissStrategy` (CommonJS-exportable; mirrors `sorting-worker.js` conditional export so Vitest can `require()` it) |
+| `tournament-engine.js` | **NEW** | `TournamentEngine` + `SwissStrategy` (pure ES module — imported by both `tournament.js` and Vitest tests; unlike `sorting-worker.js`, this file is not loaded as a Web Worker so ESM is the simpler choice) |
 | `tournament.js` | **NEW** | `TournamentManager` ES module (v2.0 pattern, mirrors `fullscreen.js`). Owns config/summary modals, pair-display rendering, state IPC glue, resume prompt. Receives MediaViewer deps via constructor. |
 | `main.js` | MODIFIED | 4 new IPC handlers: `readTournamentState`, `writeTournamentState`, `deleteTournamentState`, `applyTournamentResults` |
 | `preload.js` | MODIFIED | Expose 4 new IPC bindings on `window.electronAPI` |
@@ -589,7 +589,7 @@ All open questions from TODO.md entry are resolved:
 
 | File | New / Modified | LoC estimate | Notes |
 |------|---------------|--------------|-------|
-| `tournament-engine.js` | NEW | ~400 LoC | `TournamentEngine` class + `SwissStrategy` class; CJS-exportable for tests |
+| `tournament-engine.js` | NEW | ~400 LoC | `TournamentEngine` class + `SwissStrategy` class; pure ES module (ESM imports by tests + `tournament.js`) |
 | `tournament.js` | NEW | ~300 LoC | `TournamentManager` ES module; mirrors `fullscreen.js` v2.0 pattern |
 | `main.js` | MODIFIED | +~120 LoC | 4 IPC handlers (read/write/delete state + applyTournamentResults) |
 | `preload.js` | MODIFIED | +~12 LoC | Expose 4 new IPC bindings |
