@@ -108,7 +108,7 @@ export default [
 
     // 2c. Browser renderer modules (ES module — imported by media-viewer.js)
     {
-        files: ['fullscreen.js'],
+        files: ['fullscreen.js', 'tournament-engine.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'module',
