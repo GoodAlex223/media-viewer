@@ -34,6 +34,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('clip-download-progress', handler);
     },
 
+    // Tournament state persistence
+    readTournamentState: (folderPath) => ipcRenderer.invoke('readTournamentState', folderPath),
+    writeTournamentState: (folderPath, state) => ipcRenderer.invoke('writeTournamentState', folderPath, state),
+    deleteTournamentState: (folderPath) => ipcRenderer.invoke('deleteTournamentState', folderPath),
+    applyTournamentResults: (folderPath, tierAssignments) =>
+        ipcRenderer.invoke('applyTournamentResults', folderPath, tierAssignments),
+
     // Logging (fire-and-forget)
     logError: (data) => ipcRenderer.send('log-renderer-error', data),
 

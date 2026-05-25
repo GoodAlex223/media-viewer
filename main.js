@@ -232,6 +232,102 @@ app.whenReady().then(() => {
         }
     });
 
+    // Tournament state persistence
+    ipcMain.handle('readTournamentState', async (_event, folderPath) => {
+        try {
+            const statePath = path.join(folderPath, '.tournament_state.json');
+            const text = await fs.readFile(statePath, 'utf-8');
+            const json = JSON.parse(text);
+            return { success: true, state: json };
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return { success: true, state: null };
+            }
+            return { success: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('writeTournamentState', async (_event, folderPath, state) => {
+        try {
+            const statePath = path.join(folderPath, '.tournament_state.json');
+            const text = JSON.stringify(state, null, 2);
+            await fs.writeFile(statePath, text, 'utf-8');
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('deleteTournamentState', async (_event, folderPath) => {
+        try {
+            const statePath = path.join(folderPath, '.tournament_state.json');
+            await fs.unlink(statePath);
+            return { success: true };
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return { success: true };
+            }
+            return { success: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('applyTournamentResults', async (_event, folderPath, tierAssignments) => {
+        const moved = [];
+        const failed = [];
+
+        const tiers = new Set(Object.values(tierAssignments));
+
+        for (const tier of tiers) {
+            const tierDir = path.join(folderPath, `_Tier-${tier}`);
+            try {
+                await fs.mkdir(tierDir, { recursive: true });
+            } catch (err) {
+                return {
+                    success: false,
+                    error: `Failed to create ${tierDir}: ${err.message}`,
+                    moved,
+                    failed,
+                };
+            }
+        }
+
+        for (const [srcPath, tier] of Object.entries(tierAssignments)) {
+            try {
+                const tierDir = path.join(folderPath, `_Tier-${tier}`);
+                const baseName = path.basename(srcPath);
+                let destPath = path.join(tierDir, baseName);
+
+                let counter = 1;
+                const ext = path.extname(baseName);
+                const stem = path.basename(baseName, ext);
+                while (
+                    await fs
+                        .access(destPath)
+                        .then(() => true)
+                        .catch(() => false)
+                ) {
+                    destPath = path.join(tierDir, `${stem} (${counter})${ext}`);
+                    counter++;
+                }
+
+                await fs.rename(srcPath, destPath);
+                moved.push({ srcPath, destPath });
+            } catch (err) {
+                failed.push({ path: srcPath, error: err.message });
+            }
+        }
+
+        if (failed.length === 0) {
+            try {
+                await fs.unlink(path.join(folderPath, '.tournament_state.json'));
+            } catch (_err) {
+                // state file may not exist — ignore
+            }
+        }
+
+        return { success: failed.length === 0, moved: moved.length, failed };
+    });
+
     ipcMain.handle('check-folder-exists', async (event, folderPath) => {
         try {
             await fs.access(folderPath);
