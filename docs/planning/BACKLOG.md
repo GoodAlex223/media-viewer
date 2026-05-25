@@ -2,12 +2,22 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-24 <!-- 2 items extracted from PR #36 work: event-loop yielding deferral + extractAsyncMethod helper extraction trigger -->
+**Last Updated**: 2026-05-25 <!-- 2 items extracted from PR #36 multi-agent code review: error-message inconsistency + spec test-count drift -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From PR #36 Multi-Agent Code Review (2026-05-25)
+
+### [2026-05-25] From: PR #36 multi-agent review (pre-merge)
+**Origin**: Five-agent code review of `feature/pr-33-hygiene-integration-tests` (PR #36). The review concluded "No issues found" (no findings scored ≥80/100). Two sub-threshold findings are tracked here as defensive/hygiene improvements.
+
+- [ ] **Abort error string inconsistency: `'Sort aborted'` vs `'Sorting cancelled by user'`** (~75/100) — PR #36 added two new abort guards in `insertNewFilesInSortedOrder` (both CLIP and hash branches) that throw `new Error('Sort aborted')`. The other six abort guards already in `handleSortBySimilarity` (L4235, L4266, L4626, L4724, L4789, L4837) all throw `new Error('Sorting cancelled by user')`. The catch block at [media-viewer.js:4345-4348](../../media-viewer.js#L4345-L4348) calls `this.showNotification(\`❌ Error: ${error.message}\`, 'error')` verbatim — so users who cancel during the cache-hit insertion path see `❌ Error: Sort aborted` while every other abort path shows `❌ Error: Sorting cancelled by user`. The PR's design spec ([2026-05-21-pr-33-hygiene-and-integration-tests-design.md:134](../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md#L134)) claimed `'Sort aborted'` matched the existing pattern — that claim was factually wrong, which is how the inconsistency propagated. Minor UX text mismatch, not a functional bug. Fix: change both throws to `new Error('Sorting cancelled by user')` and update the corresponding `.rejects.toThrow('Sort aborted')` assertions in [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js). Effort: XS (4-line code change + 2 test-string updates). Affected: [media-viewer.js](../../media-viewer.js) `insertNewFilesInSortedOrder` (both branches).
+- [ ] **Design spec verification checklist shows stale 193/193 test count** (~25/100) — The new design spec added in PR #36 ([docs/superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md](../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md)) header still reads `**Status**: Draft (pre-implementation)` (line 4) and its Verification Checklist (line 224) says `npm test — 193/193 pass`, but the actual implementation result is 195/195 (correctly recorded in DONE.md). The spec's own Step 6.4 narration acknowledges the 193→195 correction, but the formal checklist + status header were never updated. Pre-implementation planning artifact, not user-facing — but creates an internal contradiction with DONE.md. Fix: flip Status to `Complete` and update the test-count line. Effort: XS (2-line edit). Recurring docs-hygiene pattern that the existing pre-archive checklist BACKLOG item (2026-04-30 entry) already targets — extend that checklist to also cover Design Specs files (currently scoped to archived plans only).
 
 ---
 
