@@ -383,6 +383,50 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
 
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
     });
+
+    it('CLIP path: throws "Sort aborted" when sortAbortController.signal.aborted before first iteration', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        const originalMediaFiles = [a, c];
+        const ctx = makeCtx({
+            mediaFiles: originalMediaFiles,
+            clipCache: new Map([
+                ['/a.png', new Float32Array([1, 0, 0, 0])],
+                ['/b.png', new Float32Array([0.99, 0.14, 0, 0])],
+                ['/c.png', new Float32Array([0, 1, 0, 0])],
+            ]),
+            sortAbortController: { signal: { aborted: true } },
+        });
+
+        await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'clip')).rejects.toThrow('Sort aborted');
+
+        // mediaFiles must remain untouched (insertNewFilesInSortedOrder only assigns
+        // this.mediaFiles after the loop completes, so throwing mid-loop preserves the original)
+        expect(ctx.mediaFiles).toBe(originalMediaFiles);
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png']);
+    });
+
+    it('hash path: throws "Sort aborted" when sortAbortController.signal.aborted before first iteration', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        const originalMediaFiles = [a, c];
+        const ctx = makeCtx({
+            mediaFiles: originalMediaFiles,
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/b.png', '0001'],
+                ['/c.png', '1111'],
+            ]),
+            sortAbortController: { signal: { aborted: true } },
+        });
+
+        await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree')).rejects.toThrow('Sort aborted');
+
+        expect(ctx.mediaFiles).toBe(originalMediaFiles);
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png']);
+    });
 });
 
 describe('applyCachedSortOrder (algorithm threading)', () => {

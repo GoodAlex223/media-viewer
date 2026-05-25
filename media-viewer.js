@@ -1751,6 +1751,12 @@ class MediaViewer {
                 this.resetMlModel();
 
                 if (!clipToggle.checked) {
+                    // Cancel any pending 30s CLIP unload — Group E pattern (d65bfdd)
+                    // requires every code path that changes CLIP state to clear the timer.
+                    if (this.clipUnloadTimer !== null) {
+                        clearTimeout(this.clipUnloadTimer);
+                        this.clipUnloadTimer = null;
+                    }
                     // Revert sortAlgorithm + dropdown synchronously first so the UI reflects
                     // the new state instantly (no transient where dropdown shows CLIP but
                     // CLIP is disabled). Then await the cache deletion IPC.
@@ -1763,7 +1769,12 @@ class MediaViewer {
                     }
                     // Persisted 'clip' sort cache may now reference files without vectors
                     // or vectors from a model version that won't load again — drop it.
-                    await this.deleteSortCache('clip');
+                    try {
+                        await this.deleteSortCache('clip');
+                    } catch (_e) {
+                        // Best-effort cleanup — deleteSortCache already shows a notification
+                        // on failure. Explicit catch makes the contract obvious.
+                    }
                 }
             });
         }
@@ -5123,6 +5134,9 @@ class MediaViewer {
             // path is expected to be near-instant; firing main-process inference would
             // add ~100-200ms per missing file via IPC.
             for (let i = 0; i < newFiles.length; i++) {
+                if (this.sortAbortController?.signal.aborted) {
+                    throw new Error('Sort aborted');
+                }
                 const newFile = newFiles[i];
                 const newVec = this.clipCache.get(newFile.path);
 
@@ -5172,6 +5186,9 @@ class MediaViewer {
         } else {
             // Hash path (vptree, mst, simple, or undefined): unchanged behavior.
             for (let i = 0; i < newFiles.length; i++) {
+                if (this.sortAbortController?.signal.aborted) {
+                    throw new Error('Sort aborted');
+                }
                 const newFile = newFiles[i];
 
                 if (!this.perceptualHashes.has(newFile.path)) {

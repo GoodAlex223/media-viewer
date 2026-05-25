@@ -14,6 +14,30 @@ Completed tasks with implementation details and learnings.
 
 ## 2026-05 (May)
 
+### 2026-05-21 — PR #33 Hygiene + Integration Tests (Groups C + D)
+
+**Summary**: Closed four PR #33 review follow-ups in one PR. Three defensive
+hardenings around CLIP toggle/sort paths and one fixture-driven integration
+test pattern covering both branches of the cache-hit sort call graph.
+
+**Changes**:
+- `media-viewer.js` toggle-off handler: clear `clipUnloadTimer` before
+  cleanup; wrap `deleteSortCache('clip')` in try/catch.
+- `media-viewer.js` `insertNewFilesInSortedOrder`: per-file abort check
+  at the top of the outer for-loop in both CLIP and hash branches.
+- New file `tests/integration/cached-sort-path.test.js`: three tests
+  wiring real `applyCachedSortOrder` → real `insertNewFilesInSortedOrder`
+  to assert algorithm strings thread end-to-end (CLIP, VPTree, missing
+  field fallback).
+
+**Test results**: 195/195 unit tests pass, 39/39 E2E tests pass.
+
+**Spec**: [docs/superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md](../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md)
+**Plan**: [docs/archive/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md](../archive/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md)
+**PR**: [#36](https://github.com/GoodAlex223/media-viewer/pull/36)
+
+---
+
 ### [2026-05-14] Group B: AI Prediction Display Bugs
 
 **Spec**: [docs/superpowers/specs/2026-05-14-ai-prediction-display-bugs-design.md](../superpowers/specs/2026-05-14-ai-prediction-display-bugs-design.md)
