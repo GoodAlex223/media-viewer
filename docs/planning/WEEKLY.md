@@ -132,8 +132,8 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group E: Tournament Mode — Spec** | 3 |
 
-- [ ] Write tournament-style compare mode spec (3 SP)
-- Maybe add it as new mode near Single and Compare?
+- [x] Write tournament-style compare mode spec (3 SP) ✅ 2026-05-25 — `docs/superpowers/specs/2026-05-25-tournament-mode-design.md` (commit 7e7fbff)
+- Added as new mode alongside Single and Compare via 3-way `#modeSelector` segmented control.
 
 **Daily total**: 3 SP | 🏆 Weekly Challenge (part 1/2)
 
@@ -146,7 +146,7 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group F: Tournament Mode — Prototype** | 5 |
 
-- [ ] Build minimal tournament mode prototype (5 SP)
+- [x] Build minimal tournament mode prototype (5 SP) ✅ 2026-05-25 — Swiss-only prototype, commits 8baa83e/ee97298/894d6c6/6c73f9f/acfc3b6 on `feature/tournament-mode`; 41 tests added (Swiss 14 + Engine 13 + Manager 10 + Integration 4); 236/236 unit tests pass; E2E tests deferred to follow-up.
 
 **Daily total**: 5 SP | 🏆 Weekly Challenge (part 2/2)
 
@@ -168,8 +168,8 @@ _(No ongoing background tasks this week.)_
 | B: AI Prediction Display Bugs | JS logic (ML display) | 2 | 5 | Tue | ✅ Complete (2026-05-14) |
 | C: PR #33 Defensive Follow-ups | JS logic (CLIP/sort hygiene) | 3 | 4 | Wed | Planned |
 | D: Integration Test Pattern | Testing | 1 | 3 | Wed | Planned |
-| E: Tournament Mode — Spec | Design | 1 | 3 | Thu | Planned |
-| F: Tournament Mode — Prototype | JS logic (compare) | 1 | 5 | Fri | Planned |
+| E: Tournament Mode — Spec | Design | 1 | 3 | Thu | ✅ Complete (2026-05-25) |
+| F: Tournament Mode — Prototype | JS logic (compare) | 1 | 5 | Fri | ✅ Complete (2026-05-25) |
 | **Total** | | **9** | **25** | | |
 
 ---
