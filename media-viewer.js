@@ -2382,9 +2382,11 @@ class MediaViewer {
         if (this.changeFolderBtn) {
             this.changeFolderBtn.style.display = 'inline-flex';
         }
-        // Show view mode button when media is shown
-        if (this.viewModeBtn) {
-            this.viewModeBtn.style.display = 'inline-flex';
+        // Show the 3-way mode selector when media is shown
+        // (legacy #viewModeBtn stays hidden — kept only for backward-compat code refs)
+        const modeSelector = document.getElementById('modeSelector');
+        if (modeSelector) {
+            modeSelector.style.display = 'inline-flex';
         }
         // Show help button when media is shown
         if (this.helpBtn) {
