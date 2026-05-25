@@ -384,7 +384,7 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
     });
 
-    it('CLIP path: throws "Sort aborted" when sortAbortController.signal.aborted before first iteration', async () => {
+    it('CLIP path: throws "Sorting cancelled by user" when sortAbortController.signal.aborted before first iteration', async () => {
         const a = { path: '/a.png' };
         const c = { path: '/c.png' };
         const b = { path: '/b.png' };
@@ -399,7 +399,9 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             sortAbortController: { signal: { aborted: true } },
         });
 
-        await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'clip')).rejects.toThrow('Sort aborted');
+        await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'clip')).rejects.toThrow(
+            'Sorting cancelled by user'
+        );
 
         // mediaFiles must remain untouched (insertNewFilesInSortedOrder only assigns
         // this.mediaFiles after the loop completes, so throwing mid-loop preserves the original)
@@ -407,7 +409,7 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png']);
     });
 
-    it('hash path: throws "Sort aborted" when sortAbortController.signal.aborted before first iteration', async () => {
+    it('hash path: throws "Sorting cancelled by user" when sortAbortController.signal.aborted before first iteration', async () => {
         const a = { path: '/a.png' };
         const c = { path: '/c.png' };
         const b = { path: '/b.png' };
@@ -422,7 +424,9 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             sortAbortController: { signal: { aborted: true } },
         });
 
-        await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree')).rejects.toThrow('Sort aborted');
+        await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree')).rejects.toThrow(
+            'Sorting cancelled by user'
+        );
 
         expect(ctx.mediaFiles).toBe(originalMediaFiles);
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png']);

@@ -5135,7 +5135,7 @@ class MediaViewer {
             // add ~100-200ms per missing file via IPC.
             for (let i = 0; i < newFiles.length; i++) {
                 if (this.sortAbortController?.signal.aborted) {
-                    throw new Error('Sort aborted');
+                    throw new Error('Sorting cancelled by user');
                 }
                 const newFile = newFiles[i];
                 const newVec = this.clipCache.get(newFile.path);
@@ -5187,7 +5187,7 @@ class MediaViewer {
             // Hash path (vptree, mst, simple, or undefined): unchanged behavior.
             for (let i = 0; i < newFiles.length; i++) {
                 if (this.sortAbortController?.signal.aborted) {
-                    throw new Error('Sort aborted');
+                    throw new Error('Sorting cancelled by user');
                 }
                 const newFile = newFiles[i];
 

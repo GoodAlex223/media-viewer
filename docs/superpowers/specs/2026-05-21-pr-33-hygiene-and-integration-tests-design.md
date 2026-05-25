@@ -1,7 +1,7 @@
 # PR #33 Hygiene + Integration Tests — Design
 
 **Date**: 2026-05-21
-**Status**: Draft (pre-implementation)
+**Status**: Complete (merged in [PR #36](https://github.com/GoodAlex223/media-viewer/pull/36), 2026-05-24)
 **WEEKLY.md row**: Wednesday, May 13 (caught up)
 **Groups**: C (PR #33 Defensive Follow-ups, 4 SP) + D (Integration Test Pattern, 3 SP)
 **Total**: ~7 SP
@@ -221,7 +221,7 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
 - Per CLAUDE.md DONE.md convention, E2E line in changelog will read: `"39/39 E2E tests pass (no new E2E — fixes covered by integration tests)"`.
 
 ### Verification checklist before PR
-1. `npm test` — 193/193 pass
+1. `npm test` — 195/195 pass
 2. `npm run test:e2e` — 39/39 pass (no regression from abort-check edits in renderer hot path)
 3. `npm run lint` — clean
 4. Confirm `vitest.config.js` includes `tests/integration/**/*.test.js` (add explicit include if default glob misses it)
