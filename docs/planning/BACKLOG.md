@@ -2,12 +2,26 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-25 <!-- 2 items extracted from PR #36 multi-agent code review: error-message inconsistency + spec test-count drift -->
+**Last Updated**: 2026-05-25 <!-- 2 UI/UX overhaul items from tournament-mode smoke testing -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From Tournament Mode Smoke Testing (2026-05-25)
+
+### [2026-05-25] From: tournament-mode v1 manual testing
+
+Two overhaul tasks identified during tournament-mode smoke test. Adding new
+features keeps surfacing UI-layering and responsiveness issues that aren't worth
+fixing one-at-a-time anymore — the system needs a coherent pass. Splitting into
+two tasks because they have different shapes (architectural vs. visual).
+
+- [ ] **UI architecture overhaul: mode-aware control system + z-index policy** — Multiple symptoms across features point to the same root cause: there's no coherent system for which UI elements are visible in which mode, or how they layer when they overlap. Concrete pain points: (1) tournament-mode adds a new "mode" but existing compare-mode controls (`.media-overlay-controls`, `.left/right-media-controls`) had to be hidden via reactive CSS rules per-element instead of declared once per mode; (2) the app `.header` (position: fixed, z-index: var(--z-modal)) covers the tournament header on hover because z-index values aren't centrally coordinated; (3) clicking the per-wrapper like/dislike buttons in tournament mode routed to like-folder moves because the buttons exist on the wrapper and stopPropagation, so the tournament pick handler never sees the click (fixed reactively in commit `9f74c64`/`<next-commit>`); (4) media info, file count, and tournament progress all live in different containers with no unified placement system. Proposed: a mode-aware control registry (each mode declares its visible controls + their roles); a z-index scale formalized as CSS custom properties (`--z-overlay-low`, `--z-overlay-high`, `--z-modal`, `--z-tooltip`); convert per-wrapper buttons to a single shared bottom-bar that re-renders its contents based on mode rather than overlaying multiple button sets. Effort: L. Affected: [media-viewer.js](../../media-viewer.js) (control rendering, mode switching), [styles.css](../../styles.css) (z-index variables, control layout), [index.html](../../index.html) (control containers). Likely a 2-day refactor; do before adding the 4th mode (RoundRobin or Bracket strategy).
+- [ ] **Responsive design pass: handle different window sizes, media counts, and tier counts** — The app was built assuming a typical desktop window with a moderate number of files. Stress-testing tournament with 24k files surfaced cases where the UI doesn't scale: progress text overflows when tier counts get long (e.g., `Tiers: 0·0·1·24832` runs off-screen on narrow windows); the file count in the folder-info pill doesn't truncate when N is large; media overlay controls don't reflow when the window narrows; tournament config modal estimates assume ~5sec/game which is wrong at extreme N. Proposed pass: (a) define breakpoints (narrow / typical / wide) and reflow rules for each; (b) truncate numeric displays with a thousands separator + tooltip showing exact count; (c) tier breakdown layout switches to vertical list when string length exceeds container width; (d) modal sizes use `max-width: min(520px, 90vw)` instead of fixed widths; (e) test fixtures include extreme-N case (e.g., 10k file E2E). Effort: M-L. Affected: [styles.css](../../styles.css) (media queries + flex/grid for control bars), [media-viewer.js](../../media-viewer.js) (number formatting, tier breakdown rendering in TournamentManager.getTierBreakdownText). Do AFTER the UI architecture overhaul — easier to apply consistent responsive rules once the layering is rationalized.
 
 ---
 

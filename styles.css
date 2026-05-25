@@ -2289,9 +2289,14 @@ body {
     cursor: pointer;
 }
 
-/* Hide compare-mode like/dislike button rows in tournament mode */
+/* Hide compare-mode like/dislike button rows AND per-wrapper overlay controls
+   in tournament mode. The overlay controls (.media-overlay-controls) are
+   appended to each media wrapper by addMediaOverlayControls() and include
+   like/dislike/special/zoom buttons that stopPropagation, which would otherwise
+   eat clicks meant for the tournament pick handler. */
 .media-container.tournament-mode .left-media-controls,
-.media-container.tournament-mode .right-media-controls {
+.media-container.tournament-mode .right-media-controls,
+.media-container.tournament-mode .media-overlay-controls {
     display: none !important;
 }
 
