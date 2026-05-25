@@ -28,7 +28,7 @@ export class TournamentManager {
     async handlePairResult(winner, loser) {
         if (!this.engine) return false;
         this.engine.recordResult(winner, loser);
-        await this._persistState(this.host.currentFolder);
+        await this._persistState(this.host.baseFolderPath);
         return true;
     }
 
@@ -40,7 +40,7 @@ export class TournamentManager {
         for (const file of this.engine.files) {
             assignments[file] = this.engine.getTier(file);
         }
-        const result = await window.electronAPI.applyTournamentResults(this.host.currentFolder, assignments);
+        const result = await window.electronAPI.applyTournamentResults(this.host.baseFolderPath, assignments);
         if (result.success) {
             this.engine = null;
         }
@@ -49,7 +49,7 @@ export class TournamentManager {
 
     async handleDiscard() {
         this.engine = null;
-        await window.electronAPI.deleteTournamentState(this.host.currentFolder);
+        await window.electronAPI.deleteTournamentState(this.host.baseFolderPath);
     }
 
     validateStateFile(state, currentFiles) {

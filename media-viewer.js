@@ -1,4 +1,5 @@
 import { FullscreenManager } from './fullscreen.js';
+import { TournamentManager } from './tournament.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -17,6 +18,13 @@ const DEFAULT_SHORTCUTS = {
         previous: 'KeyA',
         undo: 'Ctrl+KeyA',
     },
+    tournament: {
+        leftWins: 'KeyQ',
+        rightWins: 'KeyE',
+        undo: 'Ctrl+KeyA',
+        leftSpecial: 'Digit1',
+        rightSpecial: 'Digit2',
+    },
 };
 
 const ACTION_LABELS = {
@@ -29,6 +37,10 @@ const ACTION_LABELS = {
     leftDislike: 'Left media Dislike',
     rightLike: 'Right media Like',
     rightDislike: 'Right media Dislike',
+    leftWins: 'Left media wins',
+    rightWins: 'Right media wins',
+    leftSpecial: 'Left to special folder',
+    rightSpecial: 'Right to special folder',
 };
 
 // MinHeap (Priority Queue) for efficient MST construction
@@ -420,6 +432,11 @@ class MediaViewer {
         this._listeningHandler = null;
         this.renderShortcutRows();
         this.attachShortcutKeyListeners();
+
+        // Tournament manager (v2.0 module pattern — instantiated before fullscreen because
+        // its setup is lightweight and there's no cross-dependency)
+        this.tournament = new TournamentManager(this);
+        this.isTournamentMode = false;
 
         // Fullscreen manager (v2.0 module pattern — stateful manager with callbacks)
         this.fullscreen = new FullscreenManager({
@@ -1782,7 +1799,33 @@ class MediaViewer {
         // Folder settings
         this.setupFolderSettings();
 
-        // Compare mode event listeners
+        // 3-way mode selector (Single/Compare/Tournament)
+        const modeButtons = document.querySelectorAll('.mode-btn');
+        modeButtons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                this.switchMode(btn.dataset.mode);
+            });
+        });
+
+        // Tournament control row buttons
+        const tournamentUndoBtn = document.getElementById('tournamentUndoBtn');
+        if (tournamentUndoBtn) {
+            tournamentUndoBtn.addEventListener('click', () => this.handleTournamentUndo());
+        }
+        const tournamentLeftSpecial = document.getElementById('tournamentLeftSpecialBtn');
+        if (tournamentLeftSpecial) {
+            tournamentLeftSpecial.addEventListener('click', () => this.handleTournamentSpecial('left'));
+        }
+        const tournamentRightSpecial = document.getElementById('tournamentRightSpecialBtn');
+        if (tournamentRightSpecial) {
+            tournamentRightSpecial.addEventListener('click', () => this.handleTournamentSpecial('right'));
+        }
+        const tournamentPauseBtn = document.getElementById('tournamentPauseBtn');
+        if (tournamentPauseBtn) {
+            tournamentPauseBtn.addEventListener('click', () => this.switchMode('single'));
+        }
+
+        // Compare mode event listeners (legacy viewModeBtn kept for backward-compat — hidden in UI)
         if (this.viewModeBtn) {
             this.viewModeBtn.addEventListener('click', () => this.toggleViewMode());
         }
@@ -1811,7 +1854,7 @@ class MediaViewer {
         document.addEventListener('keydown', (e) => {
             if (this.mediaFiles.length === 0) {
                 // Allow undo shortcut even when no media remains
-                const mode = this.isCompareMode ? 'compare' : 'single';
+                const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
                 const keyStr = this.buildKeyString(e);
                 const action = this.shortcutReverseMap[mode]?.[keyStr];
                 if (action === 'undo' && this.moveHistory.length > 0) {
@@ -1832,6 +1875,11 @@ class MediaViewer {
                 }
                 if (this.isZoomed()) {
                     this.resetZoom('all');
+                    return;
+                }
+                // Tournament: Escape pauses (exits to single mode, state preserved)
+                if (this.isTournamentMode) {
+                    this.switchMode('single');
                     return;
                 }
                 return;
@@ -1876,7 +1924,7 @@ class MediaViewer {
             }
 
             // Customizable shortcuts via reverse map lookup
-            const mode = this.isCompareMode ? 'compare' : 'single';
+            const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
             const keyStr = this.buildKeyString(e);
             const action = this.shortcutReverseMap[mode][keyStr];
             if (action && !this.isLoading) {
@@ -2290,6 +2338,9 @@ class MediaViewer {
             this.currentFolderPath = window.electronAPI.path.basename(folderPath);
             this.currentIndex = 0;
             this.moveHistory = [];
+
+            // Check for in-progress tournament (non-blocking: prompt overlays UI)
+            this._checkTournamentResume();
             // Reset sorting state when loading new folder
             this.isSortedBySimilarity = false;
             this.isSortedByPrediction = false;
@@ -3649,6 +3700,368 @@ class MediaViewer {
         }
         this.hidePredictionBadges();
         this.closeAllZoomPopovers();
+    }
+
+    // ---------- Tournament Mode ----------
+    async switchMode(mode) {
+        document.querySelectorAll('.mode-btn').forEach((b) => {
+            b.classList.toggle('active', b.dataset.mode === mode);
+        });
+
+        if (mode === 'single') {
+            if (this.isTournamentMode) this.exitTournamentMode();
+            if (this.isCompareMode) this.switchToSingleModeUI();
+            if (this.mediaFiles.length > 0) {
+                this.currentIndex = 0;
+                this.showMedia();
+            }
+        } else if (mode === 'compare') {
+            if (this.isTournamentMode) this.exitTournamentMode();
+            if (!this.isCompareMode) await this.toggleViewMode();
+        } else if (mode === 'tournament') {
+            if (this.isCompareMode) this.switchToSingleModeUI();
+            await this.enterTournamentMode();
+        }
+    }
+
+    async enterTournamentMode() {
+        if (this.isTournamentMode) {
+            await this.showTournamentPair();
+            return;
+        }
+        this.showTournamentConfigModal();
+    }
+
+    exitTournamentMode() {
+        this.isTournamentMode = false;
+        const overlay = document.getElementById('tournamentOverlay');
+        if (overlay) overlay.style.display = 'none';
+        this.mediaContainer.classList.remove('tournament-mode');
+    }
+
+    showTournamentConfigModal() {
+        const modal = document.getElementById('tournamentConfigModal');
+        const folderEl = document.getElementById('tournamentConfigFolder');
+        const roundsSelect = document.getElementById('tournamentRoundsSelect');
+        const estimateEl = document.getElementById('tournamentConfigEstimate');
+        const startBtn = document.getElementById('tournamentConfigStart');
+        const cancelBtn = document.getElementById('tournamentConfigCancel');
+
+        folderEl.textContent = `${this.baseFolderPath ?? '(no folder)'} (${this.mediaFiles.length} files)`;
+
+        const updateEstimate = () => {
+            const R = parseInt(roundsSelect.value, 10);
+            const N = this.mediaFiles.length;
+            const games = Math.floor(N / 2) * R;
+            const minutes = Math.ceil((games * 5) / 60);
+            estimateEl.textContent = `${N} files → ${R + 1} tier folders · ~${games} games (~${minutes} min)`;
+        };
+        roundsSelect.onchange = updateEstimate;
+        updateEstimate();
+
+        startBtn.disabled = this.mediaFiles.length < 2;
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            startBtn.onclick = null;
+            cancelBtn.onclick = null;
+        };
+
+        startBtn.onclick = async () => {
+            const R = parseInt(roundsSelect.value, 10);
+            cleanup();
+            const ok = await this.tournament.handleStartClick(this.baseFolderPath, R);
+            if (ok) {
+                this.isTournamentMode = true;
+                this.mediaContainer.classList.add('tournament-mode');
+                document.getElementById('tournamentOverlay').style.display = 'block';
+                await this.showTournamentPair();
+            } else {
+                this.switchMode('single');
+            }
+        };
+
+        cancelBtn.onclick = () => {
+            cleanup();
+            this.switchMode('single');
+        };
+
+        modal.style.display = 'flex';
+    }
+
+    async showTournamentPair() {
+        if (!this.isTournamentMode || !this.tournament.engine) return;
+
+        if (this.tournament.engine.isComplete()) {
+            this.showTournamentSummaryModal();
+            return;
+        }
+
+        const pair = this.tournament.engine.getCurrentPair();
+        if (!pair) {
+            this.showTournamentSummaryModal();
+            return;
+        }
+
+        document.getElementById('tournamentProgress').textContent = this.tournament.getProgressText();
+        document.getElementById('tournamentTiers').textContent = this.tournament.getTierBreakdownText();
+
+        const leftIdx = this.mediaFiles.findIndex((f) => f.path === pair.left);
+        const rightIdx = this.mediaFiles.findIndex((f) => f.path === pair.right);
+
+        if (leftIdx === -1 || rightIdx === -1) {
+            const missing = leftIdx === -1 ? pair.left : pair.right;
+            this.showNotification(`File missing — removed from tournament: ${missing}`, 'warning');
+            this.tournament.engine.removeFile(missing);
+            await this.tournament._persistState(this.baseFolderPath);
+            return this.showTournamentPair();
+        }
+
+        // Reuse compare-mode rendering: temporarily activate compare layout w/o the binary toggle
+        if (!this.isCompareMode) {
+            this.isCompareMode = true;
+            this.controls.style.display = 'none';
+            this.compareControls.style.display = 'none';
+            this.mediaContainer.classList.add('compare-mode');
+            this.videoControls.style.display = 'none';
+            this.hideFileInfo();
+            if (this.infoToggleBtn) this.infoToggleBtn.style.display = 'none';
+        }
+        // Keep tournament-mode class so the tournament-specific CSS overrides apply
+        this.mediaContainer.classList.add('tournament-mode');
+
+        this.leftFileIndex = leftIdx;
+        this.rightFileIndex = rightIdx;
+        if (typeof this.showCompareMedia === 'function') {
+            await this.showCompareMedia();
+        }
+
+        this.attachTournamentClickHandlers(pair);
+    }
+
+    attachTournamentClickHandlers(pair) {
+        const leftWrap = this.leftMediaWrapper;
+        const rightWrap = this.rightMediaWrapper;
+        if (!leftWrap || !rightWrap) return;
+
+        // Track current pair on the wrappers so click handlers fire with fresh data
+        leftWrap.dataset.tournamentSide = 'left';
+        rightWrap.dataset.tournamentSide = 'right';
+
+        const handler = async (e) => {
+            if (!this.isTournamentMode) return;
+            const wrap = e.currentTarget;
+            const side = wrap.dataset.tournamentSide;
+            const currentPair = this.tournament.engine?.getCurrentPair();
+            if (!currentPair) return;
+            const winner = side === 'left' ? currentPair.left : currentPair.right;
+            const loser = side === 'left' ? currentPair.right : currentPair.left;
+            await this.handleTournamentPick(winner, loser);
+        };
+
+        // Remove any prior tournament click listeners by replacing the handler key
+        if (this._tournamentLeftHandler) {
+            leftWrap.removeEventListener('click', this._tournamentLeftHandler);
+        }
+        if (this._tournamentRightHandler) {
+            rightWrap.removeEventListener('click', this._tournamentRightHandler);
+        }
+        this._tournamentLeftHandler = handler;
+        this._tournamentRightHandler = handler;
+        leftWrap.addEventListener('click', handler);
+        rightWrap.addEventListener('click', handler);
+
+        // Suppress used vars warning
+        void pair;
+    }
+
+    async handleTournamentPick(winner, loser) {
+        if (!this.isTournamentMode) return;
+        this.signalUserActivity();
+        await this.tournament.handlePairResult(winner, loser);
+        await this.showTournamentPair();
+    }
+
+    async handleTournamentUndo() {
+        if (!this.isTournamentMode || !this.tournament.engine) return;
+        this.tournament.engine.undo();
+        await this.tournament._persistState(this.baseFolderPath);
+        await this.showTournamentPair();
+    }
+
+    async handleTournamentSpecial(side) {
+        if (!this.isTournamentMode || !this.tournament.engine) return;
+        const pair = this.tournament.engine.getCurrentPair();
+        if (!pair) return;
+        const targetPath = side === 'left' ? pair.left : pair.right;
+
+        // Move via existing special-folder logic when available, else fall back to silent removal
+        try {
+            if (typeof this.moveToSpecialFolder === 'function') {
+                await this.moveToSpecialFolder(targetPath);
+            }
+        } catch (err) {
+            this.showNotification(`Special move failed: ${err.message}`, 'error');
+        }
+
+        this.tournament.engine.removeFile(targetPath);
+        await this.tournament._persistState(this.baseFolderPath);
+        await this.showTournamentPair();
+    }
+
+    showTournamentSummaryModal() {
+        const modal = document.getElementById('tournamentSummaryModal');
+        const body = document.getElementById('tournamentSummaryBody');
+        const applyBtn = document.getElementById('tournamentSummaryApply');
+        const discardBtn = document.getElementById('tournamentSummaryDiscard');
+
+        const bd = this.tournament.engine.getTierBreakdown();
+        const maxCount = Math.max(...Object.values(bd), 1);
+        const R = this.tournament.engine.strategy.options.rounds;
+
+        const rows = [];
+        for (let i = R; i >= 0; i--) {
+            const count = bd[i] ?? 0;
+            const pct = Math.round((count / maxCount) * 100);
+            rows.push(
+                `<div class="tier-row">` +
+                    `<span>Tier-${i}</span>` +
+                    `<div class="tier-bar"><div class="tier-bar-fill" style="width:${pct}%"></div></div>` +
+                    `<span>${count} files</span>` +
+                    `</div>`
+            );
+        }
+        body.innerHTML =
+            rows.join('') +
+            `<p style="font-size:12px;margin-top:12px;color:#888">` +
+            `→ Files will move into _Tier-{0..${R}}/ inside ${this.baseFolderPath}</p>`;
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            applyBtn.onclick = null;
+            discardBtn.onclick = null;
+        };
+
+        applyBtn.onclick = async () => {
+            const result = await this.tournament.handleApply();
+            cleanup();
+            if (result.success) {
+                this.showNotification(`Moved ${result.moved} files into tier folders`, 'success');
+                this.exitTournamentMode();
+                this.switchMode('single');
+                if (this.baseFolderPath) await this.loadFolder(this.baseFolderPath);
+            } else {
+                this.showNotification(
+                    `Apply failed: ${result.failed?.length ?? 0} files (${result.error ?? 'unknown'})`,
+                    'error'
+                );
+            }
+        };
+
+        discardBtn.onclick = async () => {
+            await this.tournament.handleDiscard();
+            cleanup();
+            this.exitTournamentMode();
+            this.switchMode('single');
+            this.showNotification('Tournament results discarded', 'info');
+        };
+
+        modal.style.display = 'flex';
+    }
+
+    async _checkTournamentResume() {
+        if (!this.baseFolderPath) return;
+        try {
+            const result = await window.electronAPI.readTournamentState(this.baseFolderPath);
+            if (!result.success || !result.state) return;
+
+            const state = result.state;
+            const currentFiles = this.mediaFiles.map((f) => f.path);
+            const v = this.tournament.validateStateFile(state, currentFiles);
+
+            if (v.valid) {
+                this.showTournamentResumePrompt(state, currentFiles);
+            } else {
+                this.showTournamentInvalidationPrompt(state, v);
+            }
+        } catch (err) {
+            window.electronAPI.logError?.(`Tournament resume check failed: ${err.message}`);
+        }
+    }
+
+    showTournamentResumePrompt(state, currentFiles) {
+        const modal = document.getElementById('tournamentResumeModal');
+        const title = document.getElementById('tournamentResumeTitle');
+        const body = document.getElementById('tournamentResumeBody');
+        const acceptBtn = document.getElementById('tournamentResumeAccept');
+        const discardBtn = document.getElementById('tournamentResumeDiscard');
+
+        title.textContent = 'Resume Tournament?';
+        const startedAgo = Math.round((Date.now() - state.createdAt) / 60000);
+        const progress = state.history.length;
+        const totalGames = Math.floor(state.files.length / 2) * (state.options?.rounds ?? 3);
+        body.innerHTML =
+            `<div class="modal-row"><span>Started:</span><span>${startedAgo} min ago</span></div>` +
+            `<div class="modal-row"><span>Progress:</span><span>${progress}/${totalGames} games</span></div>`;
+        acceptBtn.textContent = 'Resume';
+        discardBtn.textContent = 'Discard';
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            acceptBtn.onclick = null;
+            discardBtn.onclick = null;
+        };
+
+        acceptBtn.onclick = async () => {
+            const ok = await this.tournament.handleResume(state, currentFiles);
+            cleanup();
+            if (ok) {
+                this.isTournamentMode = true;
+                this.mediaContainer.classList.add('tournament-mode');
+                document.getElementById('tournamentOverlay').style.display = 'block';
+                document.querySelectorAll('.mode-btn').forEach((b) => {
+                    b.classList.toggle('active', b.dataset.mode === 'tournament');
+                });
+                await this.showTournamentPair();
+            }
+        };
+        discardBtn.onclick = async () => {
+            await this.tournament.handleDiscard();
+            cleanup();
+        };
+        modal.style.display = 'flex';
+    }
+
+    showTournamentInvalidationPrompt(state, delta) {
+        const modal = document.getElementById('tournamentResumeModal');
+        const title = document.getElementById('tournamentResumeTitle');
+        const body = document.getElementById('tournamentResumeBody');
+        const acceptBtn = document.getElementById('tournamentResumeAccept');
+        const discardBtn = document.getElementById('tournamentResumeDiscard');
+
+        title.textContent = 'Tournament state out of sync';
+        body.innerHTML =
+            `<p>${delta.removed.length} files removed, ${delta.added.length} files added ` +
+            `since tournament was started.</p>`;
+        acceptBtn.textContent = 'Discard and start fresh';
+        discardBtn.textContent = 'Keep state';
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            acceptBtn.onclick = null;
+            discardBtn.onclick = null;
+        };
+
+        acceptBtn.onclick = async () => {
+            await this.tournament.handleDiscard();
+            cleanup();
+        };
+        discardBtn.onclick = () => {
+            cleanup();
+        };
+        // Suppress used vars warning for state param
+        void state;
+        modal.style.display = 'flex';
     }
 
     // Compare mode methods
@@ -7411,6 +7824,7 @@ class MediaViewer {
         return {
             single: Object.assign({}, DEFAULT_SHORTCUTS.single, custom.single),
             compare: Object.assign({}, DEFAULT_SHORTCUTS.compare, custom.compare),
+            tournament: Object.assign({}, DEFAULT_SHORTCUTS.tournament, custom.tournament),
         };
     }
 
@@ -7438,11 +7852,35 @@ class MediaViewer {
             dislike: () => this.handleDislike(),
             next: () => this.nextMedia(),
             previous: () => this.previousMedia(),
-            undo: () => this.handleCancel(),
+            undo: () => {
+                if (this.isTournamentMode) {
+                    this.handleTournamentUndo();
+                } else {
+                    this.handleCancel();
+                }
+            },
             leftLike: () => this.handleLeftLike(),
             leftDislike: () => this.handleLeftDislike(),
             rightLike: () => this.handleRightLike(),
             rightDislike: () => this.handleRightDislike(),
+            leftWins: () => {
+                if (this.isTournamentMode) {
+                    const pair = this.tournament.engine?.getCurrentPair();
+                    if (pair) this.handleTournamentPick(pair.left, pair.right);
+                }
+            },
+            rightWins: () => {
+                if (this.isTournamentMode) {
+                    const pair = this.tournament.engine?.getCurrentPair();
+                    if (pair) this.handleTournamentPick(pair.right, pair.left);
+                }
+            },
+            leftSpecial: () => {
+                if (this.isTournamentMode) this.handleTournamentSpecial('left');
+            },
+            rightSpecial: () => {
+                if (this.isTournamentMode) this.handleTournamentSpecial('right');
+            },
         };
         actions[action]?.();
     }
@@ -7581,6 +8019,7 @@ class MediaViewer {
         this.shortcuts = {
             single: Object.assign({}, DEFAULT_SHORTCUTS.single),
             compare: Object.assign({}, DEFAULT_SHORTCUTS.compare),
+            tournament: Object.assign({}, DEFAULT_SHORTCUTS.tournament),
         };
         this.shortcutReverseMap = this.buildReverseMap();
         localStorage.removeItem('customShortcuts');

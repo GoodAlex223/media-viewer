@@ -5,7 +5,7 @@ function makeHost(mediaFiles = []) {
     return {
         mediaFiles: mediaFiles.map((p) => ({ path: p })),
         showNotification: vi.fn(),
-        currentFolder: '/test/folder',
+        baseFolderPath: '/test/folder',
     };
 }
 
