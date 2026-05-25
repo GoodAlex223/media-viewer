@@ -2239,6 +2239,9 @@ body {
     color: white;
     font-size: 13px;
     gap: 16px;
+    /* Push below the main app header (.header is position: fixed, min-height ~50px) so
+       the hover-revealed menu doesn't cover the tournament progress + pause button. */
+    margin-top: 56px;
 }
 .tournament-progress {
     font-weight: 500;
@@ -2263,6 +2266,21 @@ body {
     transform: translateX(-50%);
     display: flex;
     gap: 8px;
+}
+/* Tournament-mode control buttons override the inherited dark text from .control-btn.
+   The plain Undo button (no like/dislike/special variant) had black text on a
+   dark glass background — unreadable. Use bright text + visible border. */
+.tournament-controls .control-btn {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.tournament-controls .control-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+.tournament-controls .control-btn .btn-label {
+    color: #fff;
 }
 
 /* Make tournament media wrappers clickable to pick winner */
