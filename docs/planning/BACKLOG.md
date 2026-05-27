@@ -2,12 +2,24 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-25 <!-- 2 UI/UX overhaul items from tournament-mode smoke testing -->
+**Last Updated**: 2026-05-26 <!-- Tournament polish + feature-cache streaming session: E2E, cache load latency, extraction dedup -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From Tournament Polish + Feature-Cache Streaming (2026-05-26)
+
+### [2026-05-26] From: tournament-mode polish + large-folder cache crash fixes
+
+- [ ] **Phase H: E2E tests for tournament mode** — Deferred from the original tournament plan (`docs/archive/plans/2026-05-25-tournament-mode.md`, Phase H "fit-as-time-allows"). Now that the UX has settled (mode-enter Continue/Start-over prompt, Save/Discard/Cancel on leave, strict order/seeding), add Playwright coverage: (1) happy path — enter tournament, make picks, complete, Apply moves files into `_Tier-N/`; (2) resume — start, leave with Save, re-enter → Continue restores progress; (3) reconciliation — add/remove a file then resume → "Resume anyway" reconciles; (4) discard + cancel flows. Use the existing E2E helpers (`seedLocalStorage`, `mockFolderDialog`, fixture dirs). Effort: M. Affected: new `tests/e2e/tournament-mode.test.js`.
+- [ ] **Incremental feature-cache serving (avoid ~40s blocking load on huge caches)** — `feature-cache-open` stream-parses the entire `.feature_cache.json` into a session array before returning, so a 259MB/24k-entry cache blocks ~40s before `loadFeatureCache` resolves and extraction/sort can begin. Proposed: serve entries to the renderer as the stream produces them (paused-stream + resume per chunk request, or push batches via `webContents.send`) so extraction starts as soon as the first batch arrives instead of waiting for the full parse. Effort: M. Affected: [main.js](../../main.js) `feature-cache-open`/`feature-cache-chunk`, [media-viewer.js](../../media-viewer.js) `_loadFeatureCacheLocked`. Only worth doing if the startup wait is annoying in practice (compaction to ~130MB already roughly halves it).
+- [ ] **Dedupe concurrent background extraction (kickoff + Sort-by-AI)** — `kickoffBackgroundExtractionIfEnabled` (folder load) and `handleSortByPrediction` (Sort-by-AI click) both call `startBackgroundFeatureExtraction()`, so clicking Sort-by-AI shortly after a folder load runs two overlapping extraction passes over the same files (visible as duplicated `startBackgroundFeatureExtraction` stacks in logs). Harmless (cache writes are idempotent, single-flight now guards load/save) but wasteful. Proposed: a single-flight guard / run-token on `startBackgroundFeatureExtraction` so a second caller joins the in-flight pass instead of starting a new one. Effort: S. Affected: [media-viewer.js](../../media-viewer.js) `startBackgroundFeatureExtraction`.
+
+- [ ] **AI-seeding outcome validation: confirm predicted favorites land in high tiers** — The AI-prediction "best vs worst" round-1 seeding option (shipped 2026-05-26) pairs predicted-best vs predicted-worst in round 1, then runs normal Swiss for rounds 2..R. If the AI's prior is good, predicted-best should consistently land in Tier-R and predicted-worst in Tier-0. We currently have no automated check that this actually happens — it's an unmeasured property of the system. Proposed: after `handleApply` runs, compute Spearman rank correlation between (a) the predicted score ranking at tournament-start time and (b) the final tier assignment. Surface it in the summary modal as "AI–human agreement: 0.XX" (1.0 = perfect, 0 = no correlation, -1.0 = inverted). Acts both as a sanity check (low correlation when seeding=AI indicates the AI is mis-trained or the human is judging on dimensions the AI doesn't capture) and a useful signal for the user about how well their AI matches their actual preferences. Effort: S. Affected: [tournament.js](../../tournament.js) (compute correlation in `handleApply` return value), [media-viewer.js](../../media-viewer.js) `showTournamentSummaryModal` (display the metric when AI seeding was used), possibly a small `tests/integration/ai-seeding-correlation.test.js` for the math. Skip when seeding=random (no baseline to compare against).
 
 ---
 

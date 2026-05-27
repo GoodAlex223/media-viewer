@@ -125,6 +125,46 @@ describe('TournamentManager.handleResume', () => {
     });
 });
 
+describe('TournamentManager.handleResumeReconciled', () => {
+    it('resumes and ignores files added since the tournament started', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        const savedState = tm.engine.serialize();
+
+        // Current folder has 2 extra files (added since tournament started)
+        const currentFiles = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const tm2 = new TournamentManager(host);
+        const result = await tm2.handleResumeReconciled(savedState, currentFiles);
+
+        expect(result.ok).toBe(true);
+        expect(result.removedCount).toBe(0); // nothing removed, only added
+        // Engine still tracks the original 4 — added files are not part of the bracket
+        expect(tm2.engine.files.length).toBe(4);
+        expect(tm2.engine.files).not.toContain('e.jpg');
+    });
+
+    it('purges files removed from disk and re-persists state', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        const savedState = tm.engine.serialize();
+
+        // Current folder is missing 2 of the original files
+        const currentFiles = ['a.jpg', 'b.jpg'];
+        const tm2 = new TournamentManager(host);
+        const result = await tm2.handleResumeReconciled(savedState, currentFiles);
+
+        expect(result.ok).toBe(true);
+        expect(result.removedCount).toBe(2);
+        expect(tm2.engine.files.length).toBe(2);
+        expect(tm2.engine.files).not.toContain('c.jpg');
+        expect(tm2.engine.files).not.toContain('d.jpg');
+        // Removed files trigger a re-persist
+        expect(globalThis.window.electronAPI.writeTournamentState).toHaveBeenCalled();
+    });
+});
+
 describe('TournamentManager progress + breakdown text', () => {
     it('formats progress as "Round X of Y · Game N/M"', async () => {
         const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);

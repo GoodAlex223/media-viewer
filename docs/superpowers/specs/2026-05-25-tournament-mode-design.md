@@ -1,7 +1,7 @@
 # Tournament Mode — Design
 
 **Date**: 2026-05-25
-**Status**: Draft (pre-implementation)
+**Status**: Complete (Swiss-only v1 shipped; RoundRobin/Bracket remain future strategies)
 **WEEKLY.md rows**: Thursday, May 14 (Group E — Spec, 3 SP) + Friday, May 15 (Group F — Prototype, 5 SP)
 **Total**: ~8 SP (3 SP spec + 5 SP Swiss-only prototype)
 **Origin**: TODO.md entry — "Tournament-style compare mode (winner advances, loser tagged with win count)", flagged !COOL during 2026-05-05 manual testing

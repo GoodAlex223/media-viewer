@@ -68,18 +68,19 @@ Active tasks and backlog.
 
 <!-- Group B AI Prediction Display Bugs completed 2026-05-14, moved to DONE.md -->
 
-<!-- Tournament-style compare mode (Groups E + F) completed 2026-05-25.
+<!-- Tournament Mode (Groups E + F) completed 2026-05-25; polish + feature-cache streaming
+     pass completed 2026-05-26 (see DONE.md 2026-05-26). Plan archived:
+     docs/archive/plans/2026-05-25-tournament-mode.md
      Spec: docs/superpowers/specs/2026-05-25-tournament-mode-design.md
-     Plan: docs/superpowers/plans/2026-05-25-tournament-mode.md
-     Commits: 8baa83e, ee97298, 894d6c6, 6c73f9f, acfc3b6 on feature/tournament-mode
      Acceptance criteria status:
        [x] Spec written and approved — Swiss-style chosen for v1; Bracket + RR documented as future strategies
        [x] Mode toggle in UI alongside single/compare — 3-way #modeSelector segmented control
        [x] Winner-advances pair selection — TournamentEngine + SwissStrategy in tournament-engine.js
        [x] Per-file winCount tracked + folder grouping — moves files to <source>/_Tier-{0..R}/
        [x] Undo restores both files (snapshot-based, per-session)
-       [ ] E2E test for full tournament flow — DEFERRED to follow-up (plan Phase H)
-     Tests: 236/236 unit (was 195, +14 Swiss + 13 Engine + 10 Manager + 4 integration). -->
+       [x] Strict/deterministic UX: canonical-order entry, sort disabled in-mode, mode-enter resume prompt
+       [ ] E2E test for full tournament flow — DEFERRED to follow-up (BACKLOG 2026-05-26 / plan Phase H)
+     Tests: 241/241 unit. -->
 
 ---
 

@@ -11,6 +11,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createFolder: (folderPath) => ipcRenderer.invoke('create-folder', folderPath),
     readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
     writeFile: (filePath, data) => ipcRenderer.invoke('write-file', filePath, data),
+    // Streaming feature-cache reader (parse in main, pull in batches) — avoids the renderer
+    // crashing on huge .feature_cache.json files.
+    featureCacheOpen: (filePath) => ipcRenderer.invoke('feature-cache-open', filePath),
+    featureCacheChunk: (offset, limit) => ipcRenderer.invoke('feature-cache-chunk', offset, limit),
+    featureCacheClose: () => ipcRenderer.invoke('feature-cache-close'),
+    // Streaming feature-cache writer (send batches to main, main appends + atomic rename) —
+    // avoids the renderer building a ~130MB JSON string on every 30s auto-save.
+    featureCacheWriteOpen: (filePath, header) => ipcRenderer.invoke('feature-cache-write-open', filePath, header),
+    featureCacheWriteChunk: (entries) => ipcRenderer.invoke('feature-cache-write-chunk', entries),
+    featureCacheWriteClose: () => ipcRenderer.invoke('feature-cache-write-close'),
 
     // Folder operations
     openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'),

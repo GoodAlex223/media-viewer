@@ -14,13 +14,17 @@ export class TournamentManager {
         this.options = options;
     }
 
-    async handleStartClick(folderPath, rounds) {
+    async handleStartClick(folderPath, rounds, opts = {}) {
         const files = this.host.mediaFiles.map((f) => f.path);
         if (files.length < 2) {
             this.host.showNotification('Tournament needs at least 2 files.', 'warning');
             return false;
         }
-        this.engine = new TournamentEngine(files, new SwissStrategy(), { rounds });
+        const engineOptions = { rounds };
+        if (opts.seedingPairings) {
+            engineOptions.round1Pairings = opts.seedingPairings;
+        }
+        this.engine = new TournamentEngine(files, new SwissStrategy(), engineOptions);
         await this._persistState(folderPath);
         return true;
     }
@@ -69,6 +73,23 @@ export class TournamentManager {
         if (!v.valid) return false;
         this.engine = TournamentEngine.deserialize(state, currentFiles);
         return true;
+    }
+
+    // Resume despite a file-set delta (strict validation failed): rebuild from the tournament's
+    // ORIGINAL file set, then purge files that no longer exist on disk. Files added to the
+    // folder since the tournament started are simply ignored — they don't join an in-progress
+    // bracket. Returns { ok, removedCount }.
+    async handleResumeReconciled(state, currentFiles) {
+        this.engine = TournamentEngine.deserialize(state, state.files);
+        const currentSet = new Set(currentFiles);
+        const removed = state.files.filter((f) => !currentSet.has(f));
+        for (const f of removed) {
+            this.engine.removeFile(f);
+        }
+        if (removed.length > 0) {
+            await this._persistState(this.host.baseFolderPath);
+        }
+        return { ok: true, removedCount: removed.length };
     }
 
     getProgressText() {

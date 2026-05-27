@@ -65,6 +65,7 @@ Central index for all project documentation.
 [CLIP Extraction Silent Failure Plan]: archive/plans/2026-05-06-clip-extraction-silent-failure.md
 [AI Prediction Display Bugs Plan]: archive/plans/2026-05-14-ai-prediction-display-bugs.md
 [PR #33 Hygiene + Integration Tests Plan]: archive/plans/2026-05-21-pr-33-hygiene-and-integration-tests.md
+[Tournament Mode Plan]: archive/plans/2026-05-25-tournament-mode.md
 
 ## Design Specs
 

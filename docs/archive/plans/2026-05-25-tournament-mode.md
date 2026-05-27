@@ -1,5 +1,12 @@
 # Tournament Mode Implementation Plan
 
+**Status: Complete (Phases A–G shipped).** Phase H (E2E tests) deferred to BACKLOG
+(2026-05-26 entry). Engine + Swiss strategy + IPC + TournamentManager + 3-way mode
+selector + keyboard shortcuts all landed across commits `ee97298`…`6c73f9f`…`acfc3b6`,
+then a large polish/UX + feature-cache-streaming pass on 2026-05-26 (see
+[DONE.md](../../planning/DONE.md), 2026-05-26 entry). The unchecked `- [ ]` boxes below
+reflect the original task list; treat this archived plan as historical.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add Tournament Mode — a third media-viewing mode (alongside Single and Compare) that ranks every file in the current folder by pairwise judgment, then moves files into win-count tier folders (`<source>/_Tier-0/` through `_Tier-R/`) on disk.

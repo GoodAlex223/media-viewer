@@ -17,14 +17,35 @@ export class SwissStrategy {
     }
 
     init(files, options = {}) {
+        // round1Pairings is a one-shot seeding hint; it must not persist in this.options
+        // (would corrupt round 2+ if re-applied, and is irrelevant on resume).
+        const { round1Pairings, ...restOptions } = options;
         this.files = [...files];
-        this.options = { rounds: 3, ...options };
+        this.options = { rounds: 3, ...restOptions };
         this.winCounts = new Map(files.map((f) => [f, 0]));
         this.playedPairs = new Set();
         this.byes = new Set();
         this.currentRound = 1;
         this.gamesPlayed = 0;
-        this.roundQueue = this._buildRoundPairings();
+
+        if (round1Pairings && Array.isArray(round1Pairings) && round1Pairings.length > 0) {
+            this.roundQueue = round1Pairings.map((p) => [p[0], p[1]]);
+            // Identify any file that didn't appear in the seeding → bye (matches the
+            // unmatched-leftover behavior in _buildRoundPairings).
+            const paired = new Set();
+            for (const [a, b] of round1Pairings) {
+                paired.add(a);
+                paired.add(b);
+            }
+            for (const file of this.files) {
+                if (!paired.has(file)) {
+                    this.byes.add(file);
+                    this.winCounts.set(file, 1);
+                }
+            }
+        } else {
+            this.roundQueue = this._buildRoundPairings();
+        }
     }
 
     _pairKey(a, b) {
@@ -68,13 +89,29 @@ export class SwissStrategy {
                 unmatched = null;
             }
 
-            // Pair within the bucket
+            // Pair within the bucket — prefer un-played pairs, fall back to rematch only if forced
             while (bucket.length >= 2) {
-                const a = bucket.shift();
-                let opponentIdx = bucket.findIndex((b) => !this.playedPairs.has(this._pairKey(a, b)));
-                if (opponentIdx === -1) opponentIdx = 0;
-                const b = bucket[opponentIdx];
-                bucket.splice(opponentIdx, 1);
+                let aIdx = -1;
+                let bIdx = -1;
+                outer: for (let i = 0; i < bucket.length; i++) {
+                    for (let j = i + 1; j < bucket.length; j++) {
+                        if (!this.playedPairs.has(this._pairKey(bucket[i], bucket[j]))) {
+                            aIdx = i;
+                            bIdx = j;
+                            break outer;
+                        }
+                    }
+                }
+                if (aIdx === -1) {
+                    // All remaining bucket members have played each other — accept rematch
+                    aIdx = 0;
+                    bIdx = 1;
+                }
+                const a = bucket[aIdx];
+                const b = bucket[bIdx];
+                // Remove higher index first to keep lower index stable
+                bucket.splice(bIdx, 1);
+                bucket.splice(aIdx, 1);
                 pairs.push([a, b]);
             }
 

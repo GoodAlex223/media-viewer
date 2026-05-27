@@ -1,9 +1,16 @@
 const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs'); // createReadStream/createWriteStream for streaming the feature cache
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const logger = require('./logger');
+
+// Streaming JSON reader for the feature cache (parse a 250MB+ file with a tiny memory
+// footprint instead of fs.readFile + JSON.parse, which peaks past ~1GB and kills the process).
+const { parser: jsonParser } = require('stream-json');
+const { pick: jsonPick } = require('stream-json/filters/Pick');
+const { streamObject: jsonStreamObject } = require('stream-json/streamers/StreamObject');
 
 // ffprobe for video metadata extraction
 let ffprobePath;
@@ -367,6 +374,164 @@ app.whenReady().then(() => {
         }
     });
 
+    // ---- Streaming feature-cache reader ----
+    // The .feature_cache.json can grow to hundreds of MB on large folders; transferring it as
+    // one string + JSON.parse on EITHER process peaks past ~1GB and kills it. Instead we
+    // stream-parse the file with stream-json (SAX-style, tiny footprint), accumulate the
+    // entries here, and let the renderer pull them in small batches via feature-cache-chunk.
+    let featureCacheSession = null; // Array<[filename, entry]> between open and close
+
+    // Read just the top-level "version" field cheaply from the file head (our own writer
+    // always emits it as the first key, so it lives in the first few dozen bytes).
+    const readCacheVersion = (filePath) =>
+        new Promise((resolve) => {
+            try {
+                const s = fsSync.createReadStream(filePath, { encoding: 'utf8', start: 0, end: 255 });
+                let buf = '';
+                s.on('data', (c) => {
+                    buf += c;
+                });
+                s.on('end', () => {
+                    const m = buf.match(/"version"\s*:\s*(\d+)/);
+                    resolve(m ? parseInt(m[1], 10) : null);
+                });
+                s.on('error', () => resolve(null));
+            } catch (_e) {
+                resolve(null);
+            }
+        });
+
+    ipcMain.handle('feature-cache-open', async (_event, filePath) => {
+        try {
+            // Fail fast if the file is missing (avoids a dangling stream).
+            await fs.access(filePath);
+        } catch (_e) {
+            featureCacheSession = null;
+            return { success: false, notFound: true };
+        }
+
+        const version = await readCacheVersion(filePath);
+
+        return new Promise((resolve) => {
+            const entries = [];
+            const pipeline = fsSync
+                .createReadStream(filePath)
+                .pipe(jsonParser())
+                .pipe(jsonPick({ filter: 'features' }))
+                .pipe(jsonStreamObject());
+
+            pipeline.on('data', ({ key, value }) => {
+                entries.push([key, value]);
+            });
+            pipeline.on('end', () => {
+                featureCacheSession = entries;
+                resolve({ success: true, version, count: entries.length });
+            });
+            pipeline.on('error', (err) => {
+                featureCacheSession = null;
+                resolve({ success: false, error: err.message });
+            });
+        });
+    });
+    ipcMain.handle('feature-cache-chunk', async (_event, offset, limit) => {
+        if (!featureCacheSession) return { entries: [] };
+        return { entries: featureCacheSession.slice(offset, offset + limit) };
+    });
+    ipcMain.handle('feature-cache-close', async () => {
+        featureCacheSession = null; // release the parsed array
+        return { success: true };
+    });
+
+    // ---- Streaming feature-cache writer ----
+    // Mirrors the reader: the renderer sends entries in small batches and main appends them to
+    // a temp file as monolithic JSON (same format the reader expects), then atomically renames
+    // into place. Avoids the renderer building a ~130MB JSON string + IPC'ing it every 30s.
+    let featureCacheWriter = null; // { stream, tmpPath, finalPath, first }
+    ipcMain.handle('feature-cache-write-open', async (_event, filePath, header) => {
+        try {
+            // Close any leftover writer from an aborted save.
+            if (featureCacheWriter) {
+                try {
+                    featureCacheWriter.stream.destroy();
+                } catch (_e) {
+                    // ignore
+                }
+                featureCacheWriter = null;
+            }
+            const tmpPath = filePath + '.tmp';
+            const stream = fsSync.createWriteStream(tmpPath, { encoding: 'utf8' });
+            const h = header || {};
+            const prefix =
+                `{"version":${JSON.stringify(h.version ?? null)},` +
+                `"featureDim":${JSON.stringify(h.featureDim ?? 64)},` +
+                `"clipDim":${JSON.stringify(h.clipDim ?? 512)},"features":{`;
+            stream.write(prefix);
+            featureCacheWriter = { stream, tmpPath, finalPath: filePath, first: true };
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+    ipcMain.handle('feature-cache-write-chunk', async (_event, entries) => {
+        if (!featureCacheWriter) return { success: false, error: 'no open writer' };
+        try {
+            let buf = '';
+            for (const [key, value] of entries) {
+                buf += (featureCacheWriter.first ? '' : ',') + JSON.stringify(key) + ':' + JSON.stringify(value);
+                featureCacheWriter.first = false;
+            }
+            if (buf) {
+                // Respect backpressure so a slow disk can't balloon the write buffer.
+                const ok = featureCacheWriter.stream.write(buf);
+                if (!ok) {
+                    await new Promise((resolve) => featureCacheWriter.stream.once('drain', resolve));
+                }
+            }
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+    ipcMain.handle('feature-cache-write-close', async () => {
+        if (!featureCacheWriter) return { success: false, error: 'no open writer' };
+        const writer = featureCacheWriter;
+        featureCacheWriter = null;
+        try {
+            // Write the closing braces, end the stream, and wait for the OS flush ('finish').
+            await new Promise((resolve, reject) => {
+                writer.stream.once('error', reject);
+                writer.stream.once('finish', resolve);
+                writer.stream.end('}}');
+            });
+            // Atomic replace so a crash mid-write never corrupts the live cache. On Windows the
+            // rename can transiently fail with EPERM/EACCES/EBUSY if something briefly holds the
+            // destination open (antivirus, Explorer thumbnailer, a lingering read handle) — retry
+            // a few times before giving up.
+            let lastErr;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                try {
+                    await fs.rename(writer.tmpPath, writer.finalPath);
+                    return { success: true };
+                } catch (err) {
+                    lastErr = err;
+                    if (['EPERM', 'EACCES', 'EBUSY'].includes(err.code) && attempt < 4) {
+                        await new Promise((r) => setTimeout(r, 150));
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+            throw lastErr;
+        } catch (error) {
+            try {
+                await fs.unlink(writer.tmpPath);
+            } catch (_e) {
+                // ignore
+            }
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('write-file', async (_event, filePath, data) => {
         try {
             await fs.writeFile(filePath, data, 'utf8');
@@ -491,8 +656,11 @@ app.whenReady().then(() => {
                     }
                 }
 
-                // Extract first, middle, last frames
-                const timestamps = [0, duration / 2, Math.max(0, duration - 0.1)];
+                // Extract first, middle, last frames.
+                // Clamp timestamps inside the duration so very short videos don't seek past EOF
+                // (ffmpeg can exit with code 0 yet skip writing the output file in that case).
+                const safeDuration = Math.max(0.1, duration);
+                const timestamps = [0, safeDuration / 2, Math.max(0, safeDuration - 0.1)];
                 const fallbackPaths = [];
                 for (let idx = 0; idx < timestamps.length; idx++) {
                     const outPath = path.join(tempDir, `fallback-${idx}.png`);
@@ -502,16 +670,32 @@ app.whenReady().then(() => {
                             ['-ss', String(timestamps[idx]), '-i', videoPath, '-frames:v', '1', '-q:v', '2', outPath],
                             { timeout: 15000 }
                         );
+                        // ffmpeg sometimes exits 0 without writing the file — verify before reporting.
+                        // Without this, downstream RawImage.read throws 404 and accumulates native
+                        // allocations in transformers.js/ONNX Runtime that the renderer can't see.
+                        await fs.access(outPath);
                         fallbackPaths.push(outPath);
                     } catch (_e) {
-                        // Skip failed frame
+                        // Skip failed frame (ffmpeg error OR file not written)
                     }
                 }
 
                 return { success: true, framePaths: fallbackPaths, tempDir };
             }
 
-            return { success: true, framePaths, tempDir };
+            // Defense in depth: also verify scene-detected frames exist. Normally they do
+            // (readdir saw them), but if ffmpeg races a write or the file is unlinked between
+            // readdir and access, we'd otherwise return a broken path.
+            const verifiedFramePaths = [];
+            for (const fp of framePaths) {
+                try {
+                    await fs.access(fp);
+                    verifiedFramePaths.push(fp);
+                } catch (_e) {
+                    // Skip missing
+                }
+            }
+            return { success: true, framePaths: verifiedFramePaths, tempDir };
         } catch (error) {
             // Clean up temp dir on error
             await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});

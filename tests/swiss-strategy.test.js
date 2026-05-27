@@ -28,6 +28,48 @@ describe('SwissStrategy.init', () => {
         s.init(['a.jpg', 'b.jpg']);
         expect(s.options.rounds).toBe(3);
     });
+
+    it('uses round1Pairings when provided and does not persist them in options', () => {
+        const s = new SwissStrategy();
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'];
+        // Best-vs-worst seeding: pair index 0 with N-1, 1 with N-2
+        const seeded = [
+            ['a.jpg', 'd.jpg'],
+            ['b.jpg', 'c.jpg'],
+        ];
+        s.init(files, { rounds: 3, round1Pairings: seeded });
+
+        expect(s.roundQueue).toEqual(seeded);
+        expect(s.byes.size).toBe(0);
+        // round1Pairings must NOT leak into persisted options (it's a one-shot seeding hint)
+        expect(s.options.round1Pairings).toBeUndefined();
+        expect(s.options.rounds).toBe(3);
+    });
+
+    it('awards bye to the unpaired middle file when round1Pairings covers odd N', () => {
+        const s = new SwissStrategy();
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg'];
+        // Seeding pairs (highest vs lowest) — middle file 'c.jpg' (rank 2) gets the bye
+        const seeded = [
+            ['a.jpg', 'e.jpg'],
+            ['b.jpg', 'd.jpg'],
+        ];
+        s.init(files, { rounds: 3, round1Pairings: seeded });
+
+        expect(s.roundQueue).toEqual(seeded);
+        expect(s.byes.has('c.jpg')).toBe(true);
+        expect(s.byes.size).toBe(1);
+        expect(s.winCounts.get('c.jpg')).toBe(1); // bye = +1 win
+        expect(s.winCounts.get('a.jpg')).toBe(0);
+    });
+
+    it('falls back to bucket-based pairing when round1Pairings is empty/missing', () => {
+        const s = new SwissStrategy();
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'];
+        s.init(files, { rounds: 3, round1Pairings: [] }); // empty array → fall back
+
+        expect(s.roundQueue.length).toBe(2); // built via _buildRoundPairings
+    });
 });
 
 describe('SwissStrategy.getNextPair + recordResult', () => {
