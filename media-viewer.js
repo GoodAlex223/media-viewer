@@ -2340,12 +2340,18 @@ class MediaViewer {
                 return;
             }
 
+            // Folder switches always exit tournament mode (mode is folder-scoped, mirrors the
+            // compare-mode reset pattern from 2fbe174). Must run BEFORE both branches diverge
+            // so the empty-folder path also clears tournament UI state.
+            if (this.isTournamentMode) this.exitTournamentMode();
+
             if (result.files.length === 0) {
                 this.mediaFiles = [];
                 this.baseFolderPath = folderPath;
                 this.currentFolderPath = window.electronAPI.path.basename(folderPath);
                 this.currentIndex = 0;
                 this.moveHistory = [];
+                this.tournament.engine = null;
                 this.showDropZone();
                 this.showError('No media files found in the selected folder');
                 return;
@@ -4154,6 +4160,52 @@ class MediaViewer {
 
     async handleTournamentUndo() {
         if (!this.isTournamentMode || !this.tournament.engine) return;
+
+        // If the last action was a special-folder move (recorded by moveToSpecialFolder), the
+        // file was physically moved AND removed from the engine AND its caches were cleared by
+        // removeFileFromList. Engine.removeFile is not history-tracked, so a plain engine.undo()
+        // can't recover from it. Mirror handleCancel's special branch: restore the file on disk,
+        // re-add to engine.files, restore feature caches (PR #35 contract), pop moveHistory.
+        const lastMove = this.moveHistory[this.moveHistory.length - 1];
+        if (lastMove?.actionType === 'special') {
+            this.moveHistory.pop();
+            try {
+                const moveResult = await window.electronAPI.moveFile({
+                    sourcePath: lastMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: lastMove.fileName,
+                });
+                if (!moveResult.success) {
+                    throw new Error(moveResult.error);
+                }
+                const restoredFile = {
+                    name: lastMove.fileName,
+                    path: lastMove.originalPath,
+                    size: lastMove.fileSize,
+                    type: lastMove.fileType,
+                };
+                this.mediaFiles.push(restoredFile);
+                // Re-add to engine.files; engine.removeFile was not history-tracked.
+                if (!this.tournament.engine.files.includes(restoredFile.path)) {
+                    this.tournament.engine.files.push(restoredFile.path);
+                }
+                this.restoreFeatureCachesFromHistory(lastMove);
+                if (this.isSortedByPrediction) this.requestPredictionScores();
+                await this.tournament._persistState(this.baseFolderPath);
+                if (this.showRatingConfirmations) {
+                    this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
+                }
+                this.updateFolderInfo();
+                await this.showTournamentPair();
+            } catch (error) {
+                console.error('Error undoing tournament special:', error);
+                this.showError(`Failed to undo move: ${error.message}`);
+                this.moveHistory.push(lastMove);
+            }
+            return;
+        }
+
+        // Default: undo the engine's last pair-pick (snapshot-restored strategy state).
         this.tournament.engine.undo();
         await this.tournament._persistState(this.baseFolderPath);
         await this.showTournamentPair();

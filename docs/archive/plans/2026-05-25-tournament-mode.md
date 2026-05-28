@@ -4,10 +4,10 @@
 (2026-05-26 entry). Engine + Swiss strategy + IPC + TournamentManager + 3-way mode
 selector + keyboard shortcuts all landed across commits `ee97298`…`6c73f9f`…`acfc3b6`,
 then a large polish/UX + feature-cache-streaming pass on 2026-05-26 (see
-[DONE.md](../../planning/DONE.md), 2026-05-26 entry). The unchecked `- [ ]` boxes below
+[DONE.md](../../planning/DONE.md), 2026-05-26 entry). The unchecked `- [x]` boxes below
 reflect the original task list; treat this archived plan as historical.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add Tournament Mode — a third media-viewing mode (alongside Single and Compare) that ranks every file in the current folder by pairwise judgment, then moves files into win-count tier folders (`<source>/_Tier-0/` through `_Tier-R/`) on disk.
 
@@ -57,7 +57,7 @@ Phase A delivers a fully-tested `SwissStrategy` in `tournament-engine.js`. Tests
 - Create: `tournament-engine.js`
 - Modify: `eslint.config.mjs`
 
-- [ ] **Step 1: Create empty `tournament-engine.js` as a pure ES module**
+- [x] **Step 1: Create empty `tournament-engine.js` as a pure ES module**
 
 ```javascript
 // tournament-engine.js
@@ -89,11 +89,11 @@ export class TournamentEngine {
 }
 ```
 
-- [ ] **Step 2: Add `tournament-engine.js` to the renderer-module ESLint block in `eslint.config.mjs`**
+- [x] **Step 2: Add `tournament-engine.js` to the renderer-module ESLint block in `eslint.config.mjs`**
 
 Find block 2a (renderer module) — it currently includes `fullscreen.js`. Add `tournament-engine.js` to that `files` array (it's pure ESM imported by `tournament.js`, not a CJS lib required by workers — block 3b is for the latter).
 
-- [ ] **Step 3: Verify it parses and lints cleanly**
+- [x] **Step 3: Verify it parses and lints cleanly**
 
 ```bash
 npm run lint
@@ -101,7 +101,7 @@ npm run lint
 
 Expected: no errors mentioning `tournament-engine.js`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tournament-engine.js eslint.config.mjs
@@ -116,7 +116,7 @@ git commit -m "feat(tournament): scaffold tournament-engine.js with CJS export"
 - Create: `tests/swiss-strategy.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/swiss-strategy.test.js`:
 
@@ -154,7 +154,7 @@ describe('SwissStrategy.init', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -162,7 +162,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: FAIL — `s.init is not a function`.
 
-- [ ] **Step 3: Implement `init` and helper `_buildRoundPairings`**
+- [x] **Step 3: Implement `init` and helper `_buildRoundPairings`**
 
 Add inside the `SwissStrategy` class in `tournament-engine.js`:
 
@@ -248,7 +248,7 @@ Add inside the `SwissStrategy` class in `tournament-engine.js`:
     }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -256,7 +256,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/swiss-strategy.test.js tournament-engine.js
@@ -271,7 +271,7 @@ git commit -m "feat(tournament): SwissStrategy.init builds round-1 pairings"
 - Modify: `tests/swiss-strategy.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/swiss-strategy.test.js`:
 
@@ -314,7 +314,7 @@ describe('SwissStrategy.getNextPair + recordResult', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -322,7 +322,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: 2 tests fail with `getNextPair is not a function` and `recordResult is not a function`.
 
-- [ ] **Step 3: Implement `getNextPair` and `recordResult`**
+- [x] **Step 3: Implement `getNextPair` and `recordResult`**
 
 Add to `SwissStrategy` class:
 
@@ -362,7 +362,7 @@ Add to `SwissStrategy` class:
     }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -370,7 +370,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/swiss-strategy.test.js tournament-engine.js
@@ -384,7 +384,7 @@ git commit -m "feat(tournament): SwissStrategy.getNextPair + recordResult"
 **Files:**
 - Modify: `tests/swiss-strategy.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/swiss-strategy.test.js`:
 
@@ -420,7 +420,7 @@ describe('SwissStrategy round 2+ pairing', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it passes** (this should pass with the existing implementation — bucket logic in `_buildRoundPairings` already handles this)
+- [x] **Step 2: Run to verify it passes** (this should pass with the existing implementation — bucket logic in `_buildRoundPairings` already handles this)
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -430,7 +430,7 @@ Expected: PASS (5 tests).
 
 If it fails, the within-bucket logic in `_buildRoundPairings` needs review.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/swiss-strategy.test.js
@@ -444,7 +444,7 @@ git commit -m "test(tournament): assert round-2 within-bucket pairing"
 **Files:**
 - Modify: `tests/swiss-strategy.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -485,7 +485,7 @@ describe('SwissStrategy byes', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify**
+- [x] **Step 2: Run to verify**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -493,7 +493,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 The first test should pass (bye logic exists). The second may flag a bug — current implementation re-awards byes per round without checking.
 
-- [ ] **Step 3: Patch `_buildRoundPairings` bye logic to prevent double-bye**
+- [x] **Step 3: Patch `_buildRoundPairings` bye logic to prevent double-bye**
 
 Replace the bye-award block at the bottom of `_buildRoundPairings`:
 
@@ -553,7 +553,7 @@ In the bucket-processing loop, when a single file is left in a bucket, prefer to
 
 That covers most cases for R ≤ 5 without sophisticated swap logic.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -561,7 +561,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: PASS (7 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament-engine.js tests/swiss-strategy.test.js
@@ -576,7 +576,7 @@ git commit -m "feat(tournament): SwissStrategy bye logic prevents double-bye"
 - Modify: `tests/swiss-strategy.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -619,7 +619,7 @@ describe('SwissStrategy.removeFile', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -627,7 +627,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: 2 tests fail — `s.removeFile is not a function`.
 
-- [ ] **Step 3: Implement `removeFile`**
+- [x] **Step 3: Implement `removeFile`**
 
 Add to `SwissStrategy`:
 
@@ -681,7 +681,7 @@ Add to `SwissStrategy`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -689,7 +689,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: PASS (9 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament-engine.js tests/swiss-strategy.test.js
@@ -704,7 +704,7 @@ git commit -m "feat(tournament): SwissStrategy.removeFile + orphan re-pair"
 - Modify: `tests/swiss-strategy.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -750,7 +750,7 @@ describe('SwissStrategy.isComplete + getTier', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -758,7 +758,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: 2 tests fail — `isComplete is not a function`, `getTier is not a function`.
 
-- [ ] **Step 3: Implement `isComplete` and `getTier`**
+- [x] **Step 3: Implement `isComplete` and `getTier`**
 
 Add to `SwissStrategy`:
 
@@ -772,7 +772,7 @@ Add to `SwissStrategy`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -780,7 +780,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: PASS (11 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament-engine.js tests/swiss-strategy.test.js
@@ -795,7 +795,7 @@ git commit -m "feat(tournament): SwissStrategy.isComplete + getTier"
 - Modify: `tests/swiss-strategy.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -820,7 +820,7 @@ describe('SwissStrategy.getProgress', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -828,7 +828,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: FAIL — `getProgress is not a function`.
 
-- [ ] **Step 3: Implement `getProgress`**
+- [x] **Step 3: Implement `getProgress`**
 
 Add to `SwissStrategy`:
 
@@ -847,7 +847,7 @@ Add to `SwissStrategy`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -855,7 +855,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: PASS (12 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament-engine.js tests/swiss-strategy.test.js
@@ -870,7 +870,7 @@ git commit -m "feat(tournament): SwissStrategy.getProgress"
 - Modify: `tests/swiss-strategy.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -913,7 +913,7 @@ describe('SwissStrategy serialize/deserialize', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -921,7 +921,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: 2 tests fail — `s.serialize is not a function`.
 
-- [ ] **Step 3: Implement `serialize` and `deserialize`**
+- [x] **Step 3: Implement `serialize` and `deserialize`**
 
 Add to `SwissStrategy`:
 
@@ -953,7 +953,7 @@ Add to `SwissStrategy`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/swiss-strategy.test.js
@@ -961,7 +961,7 @@ npx vitest run tests/swiss-strategy.test.js
 
 Expected: PASS (14 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament-engine.js tests/swiss-strategy.test.js
@@ -980,7 +980,7 @@ Phase B builds the engine wrapper that owns history, undo, and persistence. Stra
 - Create: `tests/tournament-engine.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/tournament-engine.test.js`:
 
@@ -1036,7 +1036,7 @@ describe('TournamentEngine constructor', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify**
+- [x] **Step 2: Run to verify**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js
@@ -1044,7 +1044,7 @@ npx vitest run tests/tournament-engine.test.js
 
 Expected: PASS — constructor already implemented in Task A1.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/tournament-engine.test.js
@@ -1059,7 +1059,7 @@ git commit -m "test(tournament): MockStrategy + TournamentEngine constructor"
 - Modify: `tests/tournament-engine.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/tournament-engine.test.js`:
 
@@ -1094,7 +1094,7 @@ describe('TournamentEngine.getCurrentPair + recordResult', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js
@@ -1102,7 +1102,7 @@ npx vitest run tests/tournament-engine.test.js
 
 Expected: tests fail — `eng.getCurrentPair is not a function`.
 
-- [ ] **Step 3: Implement `getCurrentPair`, `recordResult`, snapshot capture**
+- [x] **Step 3: Implement `getCurrentPair`, `recordResult`, snapshot capture**
 
 Add to `TournamentEngine`:
 
@@ -1128,7 +1128,7 @@ Add to `TournamentEngine`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js
@@ -1136,7 +1136,7 @@ npx vitest run tests/tournament-engine.test.js
 
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/tournament-engine.test.js tournament-engine.js
@@ -1151,7 +1151,7 @@ git commit -m "feat(tournament): TournamentEngine.getCurrentPair + recordResult"
 - Modify: `tests/tournament-engine.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -1188,7 +1188,7 @@ describe('TournamentEngine.undo', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js
@@ -1196,7 +1196,7 @@ npx vitest run tests/tournament-engine.test.js
 
 Expected: fail — `eng.undo is not a function`.
 
-- [ ] **Step 3: Implement `undo`**
+- [x] **Step 3: Implement `undo`**
 
 Add to `TournamentEngine`:
 
@@ -1211,7 +1211,7 @@ Add to `TournamentEngine`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js
@@ -1219,7 +1219,7 @@ npx vitest run tests/tournament-engine.test.js
 
 Expected: PASS (6 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/tournament-engine.test.js tournament-engine.js
@@ -1234,7 +1234,7 @@ git commit -m "feat(tournament): TournamentEngine.undo"
 - Modify: `tests/tournament-engine.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -1280,7 +1280,7 @@ describe('TournamentEngine delegation methods', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js
@@ -1288,7 +1288,7 @@ npx vitest run tests/tournament-engine.test.js
 
 Expected: tests fail — methods not defined.
 
-- [ ] **Step 3: Implement delegation methods**
+- [x] **Step 3: Implement delegation methods**
 
 Add to `TournamentEngine`:
 
@@ -1321,7 +1321,7 @@ Add to `TournamentEngine`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js
@@ -1329,7 +1329,7 @@ npx vitest run tests/tournament-engine.test.js
 
 Expected: PASS (11 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/tournament-engine.test.js tournament-engine.js
@@ -1344,7 +1344,7 @@ git commit -m "feat(tournament): TournamentEngine delegation methods"
 - Modify: `tests/tournament-engine.test.js`
 - Modify: `tournament-engine.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -1382,7 +1382,7 @@ describe('TournamentEngine serialize/deserialize', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js
@@ -1390,7 +1390,7 @@ npx vitest run tests/tournament-engine.test.js
 
 Expected: fail — `eng.serialize is not a function`.
 
-- [ ] **Step 3: Implement `serialize` and `deserialize`**
+- [x] **Step 3: Implement `serialize` and `deserialize`**
 
 Add to `TournamentEngine`:
 
@@ -1429,7 +1429,7 @@ Add to `TournamentEngine`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js
@@ -1437,7 +1437,7 @@ npx vitest run tests/tournament-engine.test.js
 
 Expected: PASS (13 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/tournament-engine.test.js tournament-engine.js
@@ -1455,7 +1455,7 @@ Phase C wires real `TournamentEngine` + real `SwissStrategy` end-to-end (no mock
 **Files:**
 - Create: `tests/integration/tournament-flow.test.js`
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `tests/integration/tournament-flow.test.js`:
 
@@ -1498,7 +1498,7 @@ describe('Tournament integration — happy path', () => {
 });
 ```
 
-- [ ] **Step 2: Run test**
+- [x] **Step 2: Run test**
 
 ```bash
 npx vitest run tests/integration/tournament-flow.test.js
@@ -1506,7 +1506,7 @@ npx vitest run tests/integration/tournament-flow.test.js
 
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/integration/tournament-flow.test.js
@@ -1520,7 +1520,7 @@ git commit -m "test(tournament): integration test for N=8 R=3 happy path"
 **Files:**
 - Modify: `tests/integration/tournament-flow.test.js`
 
-- [ ] **Step 1: Append test**
+- [x] **Step 1: Append test**
 
 ```javascript
 describe('Tournament integration — odd N', () => {
@@ -1557,7 +1557,7 @@ describe('Tournament integration — odd N', () => {
 });
 ```
 
-- [ ] **Step 2: Run test**
+- [x] **Step 2: Run test**
 
 ```bash
 npx vitest run tests/integration/tournament-flow.test.js
@@ -1565,7 +1565,7 @@ npx vitest run tests/integration/tournament-flow.test.js
 
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/integration/tournament-flow.test.js
@@ -1579,7 +1579,7 @@ git commit -m "test(tournament): integration test for odd N bye distribution"
 **Files:**
 - Modify: `tests/integration/tournament-flow.test.js`
 
-- [ ] **Step 1: Append test**
+- [x] **Step 1: Append test**
 
 ```javascript
 describe('Tournament integration — mid-session removal', () => {
@@ -1614,7 +1614,7 @@ describe('Tournament integration — mid-session removal', () => {
 });
 ```
 
-- [ ] **Step 2: Run test**
+- [x] **Step 2: Run test**
 
 ```bash
 npx vitest run tests/integration/tournament-flow.test.js
@@ -1622,7 +1622,7 @@ npx vitest run tests/integration/tournament-flow.test.js
 
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/integration/tournament-flow.test.js
@@ -1636,7 +1636,7 @@ git commit -m "test(tournament): integration test for mid-session removal"
 **Files:**
 - Modify: `tests/integration/tournament-flow.test.js`
 
-- [ ] **Step 1: Append test**
+- [x] **Step 1: Append test**
 
 ```javascript
 describe('Tournament integration — serialize and resume', () => {
@@ -1679,7 +1679,7 @@ describe('Tournament integration — serialize and resume', () => {
 });
 ```
 
-- [ ] **Step 2: Run all tests so far**
+- [x] **Step 2: Run all tests so far**
 
 ```bash
 npm test
@@ -1687,7 +1687,7 @@ npm test
 
 Expected: all existing tests pass + 4 new integration tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/integration/tournament-flow.test.js
@@ -1706,7 +1706,7 @@ Phase D adds the file-system bridge: read/write/delete state JSON, and the apply
 - Modify: `main.js`
 - Modify: `preload.js`
 
-- [ ] **Step 1: Add IPC handler in `main.js`**
+- [x] **Step 1: Add IPC handler in `main.js`**
 
 Find the existing `ipcMain.handle('moveFile', ...)` handler and add nearby (after the moveFile block):
 
@@ -1726,7 +1726,7 @@ ipcMain.handle('readTournamentState', async (_event, folderPath) => {
 });
 ```
 
-- [ ] **Step 2: Expose in `preload.js`**
+- [x] **Step 2: Expose in `preload.js`**
 
 Find the existing IPC bindings (e.g., `moveFile: (...) => ipcRenderer.invoke('moveFile', ...)`) and add:
 
@@ -1734,7 +1734,7 @@ Find the existing IPC bindings (e.g., `moveFile: (...) => ipcRenderer.invoke('mo
     readTournamentState: (folderPath) => ipcRenderer.invoke('readTournamentState', folderPath),
 ```
 
-- [ ] **Step 3: Smoke-test via Electron**
+- [x] **Step 3: Smoke-test via Electron**
 
 ```bash
 # Quick smoke: open Electron, run in DevTools console:
@@ -1743,7 +1743,7 @@ Find the existing IPC bindings (e.g., `moveFile: (...) => ipcRenderer.invoke('mo
 
 (Skipped in CI; manual check.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add main.js preload.js
@@ -1758,7 +1758,7 @@ git commit -m "feat(tournament): readTournamentState IPC handler"
 - Modify: `main.js`
 - Modify: `preload.js`
 
-- [ ] **Step 1: Add IPC handler in `main.js`**
+- [x] **Step 1: Add IPC handler in `main.js`**
 
 ```javascript
 ipcMain.handle('writeTournamentState', async (_event, folderPath, state) => {
@@ -1773,14 +1773,14 @@ ipcMain.handle('writeTournamentState', async (_event, folderPath, state) => {
 });
 ```
 
-- [ ] **Step 2: Expose in `preload.js`**
+- [x] **Step 2: Expose in `preload.js`**
 
 ```javascript
     writeTournamentState: (folderPath, state) =>
         ipcRenderer.invoke('writeTournamentState', folderPath, state),
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add main.js preload.js
@@ -1795,7 +1795,7 @@ git commit -m "feat(tournament): writeTournamentState IPC handler"
 - Modify: `main.js`
 - Modify: `preload.js`
 
-- [ ] **Step 1: Add IPC handler in `main.js`**
+- [x] **Step 1: Add IPC handler in `main.js`**
 
 ```javascript
 ipcMain.handle('deleteTournamentState', async (_event, folderPath) => {
@@ -1812,14 +1812,14 @@ ipcMain.handle('deleteTournamentState', async (_event, folderPath) => {
 });
 ```
 
-- [ ] **Step 2: Expose in `preload.js`**
+- [x] **Step 2: Expose in `preload.js`**
 
 ```javascript
     deleteTournamentState: (folderPath) =>
         ipcRenderer.invoke('deleteTournamentState', folderPath),
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add main.js preload.js
@@ -1834,7 +1834,7 @@ git commit -m "feat(tournament): deleteTournamentState IPC handler"
 - Modify: `main.js`
 - Modify: `preload.js`
 
-- [ ] **Step 1: Add IPC handler in `main.js`**
+- [x] **Step 1: Add IPC handler in `main.js`**
 
 ```javascript
 ipcMain.handle('applyTournamentResults', async (_event, folderPath, tierAssignments) => {
@@ -1893,14 +1893,14 @@ ipcMain.handle('applyTournamentResults', async (_event, folderPath, tierAssignme
 });
 ```
 
-- [ ] **Step 2: Expose in `preload.js`**
+- [x] **Step 2: Expose in `preload.js`**
 
 ```javascript
     applyTournamentResults: (folderPath, tierAssignments) =>
         ipcRenderer.invoke('applyTournamentResults', folderPath, tierAssignments),
 ```
 
-- [ ] **Step 3: Run lint**
+- [x] **Step 3: Run lint**
 
 ```bash
 npm run lint
@@ -1908,7 +1908,7 @@ npm run lint
 
 Expected: no errors in `main.js` / `preload.js`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add main.js preload.js
@@ -1927,7 +1927,7 @@ Phase E creates `tournament.js`, the v2.0-pattern ES module that owns the tourna
 - Create: `tournament.js`
 - Modify: `eslint.config.mjs`
 
-- [ ] **Step 1: Create `tournament.js`**
+- [x] **Step 1: Create `tournament.js`**
 
 ```javascript
 // tournament.js
@@ -1966,11 +1966,11 @@ export class TournamentManager {
 }
 ```
 
-- [ ] **Step 2: Add `tournament.js` to ESLint renderer-module block in `eslint.config.mjs`**
+- [x] **Step 2: Add `tournament.js` to ESLint renderer-module block in `eslint.config.mjs`**
 
 Find block 2a (renderer module) — add `tournament.js` to its `files` array.
 
-- [ ] **Step 3: Run lint**
+- [x] **Step 3: Run lint**
 
 ```bash
 npm run lint
@@ -1978,7 +1978,7 @@ npm run lint
 
 Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tournament.js eslint.config.mjs
@@ -1992,7 +1992,7 @@ git commit -m "feat(tournament): scaffold TournamentManager ES module"
 **Files:**
 - Create: `tests/tournament-manager.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/tournament-manager.test.js`:
 
@@ -2043,7 +2043,7 @@ describe('TournamentManager.handleStartClick', () => {
 });
 ```
 
-- [ ] **Step 2: Run test**
+- [x] **Step 2: Run test**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js
@@ -2051,7 +2051,7 @@ npx vitest run tests/tournament-manager.test.js
 
 Expected: PASS — `handleStartClick` was implemented in Task E1.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/tournament-manager.test.js
@@ -2066,7 +2066,7 @@ git commit -m "test(tournament): TournamentManager.handleStartClick"
 - Modify: `tests/tournament-manager.test.js`
 - Modify: `tournament.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/tournament-manager.test.js`:
 
@@ -2100,7 +2100,7 @@ describe('TournamentManager.handlePairResult', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js
@@ -2108,7 +2108,7 @@ npx vitest run tests/tournament-manager.test.js
 
 Expected: fail — `tm.handlePairResult is not a function`.
 
-- [ ] **Step 3: Implement `handlePairResult`**
+- [x] **Step 3: Implement `handlePairResult`**
 
 Add to `TournamentManager`:
 
@@ -2121,7 +2121,7 @@ Add to `TournamentManager`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js
@@ -2129,7 +2129,7 @@ npx vitest run tests/tournament-manager.test.js
 
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament.js tests/tournament-manager.test.js
@@ -2144,7 +2144,7 @@ git commit -m "feat(tournament): TournamentManager.handlePairResult"
 - Modify: `tests/tournament-manager.test.js`
 - Modify: `tournament.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -2188,7 +2188,7 @@ describe('TournamentManager.handleApply', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js
@@ -2196,7 +2196,7 @@ npx vitest run tests/tournament-manager.test.js
 
 Expected: fail — `tm.handleApply is not a function`.
 
-- [ ] **Step 3: Implement `handleApply`**
+- [x] **Step 3: Implement `handleApply`**
 
 Add to `TournamentManager`:
 
@@ -2220,7 +2220,7 @@ Add to `TournamentManager`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js
@@ -2228,7 +2228,7 @@ npx vitest run tests/tournament-manager.test.js
 
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament.js tests/tournament-manager.test.js
@@ -2243,7 +2243,7 @@ git commit -m "feat(tournament): TournamentManager.handleApply"
 - Modify: `tests/tournament-manager.test.js`
 - Modify: `tournament.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append:
 
@@ -2326,7 +2326,7 @@ describe('TournamentManager.handleResume', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js
@@ -2334,7 +2334,7 @@ npx vitest run tests/tournament-manager.test.js
 
 Expected: 3 new tests fail.
 
-- [ ] **Step 3: Implement `handleDiscard`, `validateStateFile`, `handleResume`**
+- [x] **Step 3: Implement `handleDiscard`, `validateStateFile`, `handleResume`**
 
 Add to `TournamentManager`:
 
@@ -2364,7 +2364,7 @@ Add to `TournamentManager`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js
@@ -2372,7 +2372,7 @@ npx vitest run tests/tournament-manager.test.js
 
 Expected: PASS (7 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament.js tests/tournament-manager.test.js
@@ -2387,7 +2387,7 @@ git commit -m "feat(tournament): TournamentManager.handleDiscard + handleResume 
 - Modify: `tests/tournament-manager.test.js`
 - Modify: `tournament.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -2428,7 +2428,7 @@ describe('TournamentManager progress + breakdown text', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js
@@ -2436,7 +2436,7 @@ npx vitest run tests/tournament-manager.test.js
 
 Expected: 2 tests fail.
 
-- [ ] **Step 3: Implement helpers**
+- [x] **Step 3: Implement helpers**
 
 Add to `TournamentManager`:
 
@@ -2460,7 +2460,7 @@ Add to `TournamentManager`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js
@@ -2468,7 +2468,7 @@ npx vitest run tests/tournament-manager.test.js
 
 Expected: PASS (9 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament.js tests/tournament-manager.test.js
@@ -2486,7 +2486,7 @@ Phase F is the UI integration step. After this phase, the user can actually clic
 **Files:**
 - Modify: `index.html`
 
-- [ ] **Step 1: Locate the existing `#viewModeBtn`**
+- [x] **Step 1: Locate the existing `#viewModeBtn`**
 
 ```bash
 npx grep -n 'id="viewModeBtn"' index.html
@@ -2494,7 +2494,7 @@ npx grep -n 'id="viewModeBtn"' index.html
 
 Find the surrounding markup (probably near `viewModeLabel`).
 
-- [ ] **Step 2: Replace with 3-way segmented control**
+- [x] **Step 2: Replace with 3-way segmented control**
 
 Replace the existing single button with:
 
@@ -2515,7 +2515,7 @@ Replace the existing single button with:
 </div>
 ```
 
-- [ ] **Step 3: Add tournament container divs at the end of `.media-container` body**
+- [x] **Step 3: Add tournament container divs at the end of `.media-container` body**
 
 Locate `.media-container` and add inside (after compare-controls):
 
@@ -2595,7 +2595,7 @@ Locate `.media-container` and add inside (after compare-controls):
 </div>
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add index.html
@@ -2609,7 +2609,7 @@ git commit -m "feat(tournament): 3-way mode selector + tournament UI containers"
 **Files:**
 - Modify: `styles.css`
 
-- [ ] **Step 1: Append tournament styles**
+- [x] **Step 1: Append tournament styles**
 
 Add at the end of `styles.css`:
 
@@ -2773,7 +2773,7 @@ Add at the end of `styles.css`:
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add styles.css
@@ -2787,7 +2787,7 @@ git commit -m "feat(tournament): CSS for mode selector, overlay, modals, tier ba
 **Files:**
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Import `TournamentManager` near the top of `media-viewer.js`**
+- [x] **Step 1: Import `TournamentManager` near the top of `media-viewer.js`**
 
 Find the existing `import { FullscreenManager } from './fullscreen.js';` line and add:
 
@@ -2795,7 +2795,7 @@ Find the existing `import { FullscreenManager } from './fullscreen.js';` line an
 import { TournamentManager } from './tournament.js';
 ```
 
-- [ ] **Step 2: Instantiate in the constructor**
+- [x] **Step 2: Instantiate in the constructor**
 
 Find where `this.fullscreen = new FullscreenManager(...)` is created. Add nearby:
 
@@ -2804,7 +2804,7 @@ Find where `this.fullscreen = new FullscreenManager(...)` is created. Add nearby
         this.isTournamentMode = false;
 ```
 
-- [ ] **Step 3: Replace the old `#viewModeBtn` listener with 3-way handler**
+- [x] **Step 3: Replace the old `#viewModeBtn` listener with 3-way handler**
 
 Find the existing `this.viewModeBtn.addEventListener('click', () => this.toggleViewMode());` line.
 
@@ -2821,7 +2821,7 @@ Replace it with mode-selector wiring (in the same setupEventListeners area):
         });
 ```
 
-- [ ] **Step 4: Add `switchMode` method on `MediaViewer`**
+- [x] **Step 4: Add `switchMode` method on `MediaViewer`**
 
 Add a new method on the `MediaViewer` class (place near `toggleViewMode`):
 
@@ -2876,7 +2876,7 @@ Add a new method on the `MediaViewer` class (place near `toggleViewMode`):
     }
 ```
 
-- [ ] **Step 5: Run lint**
+- [x] **Step 5: Run lint**
 
 ```bash
 npm run lint
@@ -2884,7 +2884,7 @@ npm run lint
 
 Expected: no errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js
@@ -2898,7 +2898,7 @@ git commit -m "feat(tournament): wire 3-way mode selector + switchMode"
 **Files:**
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Add config-modal show/hide + handlers**
+- [x] **Step 1: Add config-modal show/hide + handlers**
 
 Add to `MediaViewer`:
 
@@ -2956,7 +2956,7 @@ Add to `MediaViewer`:
     }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add media-viewer.js
@@ -2970,7 +2970,7 @@ git commit -m "feat(tournament): config modal handlers"
 **Files:**
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Add `showTournamentPair` and event handlers**
+- [x] **Step 1: Add `showTournamentPair` and event handlers**
 
 Add to `MediaViewer`:
 
@@ -3069,7 +3069,7 @@ Add to `MediaViewer`:
     }
 ```
 
-- [ ] **Step 2: Wire control-row buttons**
+- [x] **Step 2: Wire control-row buttons**
 
 In `setupEventListeners` (or the constructor wiring block) add:
 
@@ -3092,7 +3092,7 @@ In `setupEventListeners` (or the constructor wiring block) add:
         }
 ```
 
-- [ ] **Step 3: Run lint and tests**
+- [x] **Step 3: Run lint and tests**
 
 ```bash
 npm run lint && npm test
@@ -3100,7 +3100,7 @@ npm run lint && npm test
 
 Expected: clean lint, all tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add media-viewer.js
@@ -3114,7 +3114,7 @@ git commit -m "feat(tournament): pair display + click-to-pick + undo + special h
 **Files:**
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Add summary-modal handler**
+- [x] **Step 1: Add summary-modal handler**
 
 Add to `MediaViewer`:
 
@@ -3181,7 +3181,7 @@ Add to `MediaViewer`:
     }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add media-viewer.js
@@ -3195,7 +3195,7 @@ git commit -m "feat(tournament): summary modal with Apply/Discard"
 **Files:**
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Add resume-check after folder load**
+- [x] **Step 1: Add resume-check after folder load**
 
 Find `loadFolder` method. After `this.mediaFiles` is populated and before normal post-load processing, add:
 
@@ -3204,7 +3204,7 @@ Find `loadFolder` method. After `this.mediaFiles` is populated and before normal
         await this._checkTournamentResume();
 ```
 
-- [ ] **Step 2: Implement `_checkTournamentResume`**
+- [x] **Step 2: Implement `_checkTournamentResume`**
 
 Add to `MediaViewer`:
 
@@ -3301,7 +3301,7 @@ Add to `MediaViewer`:
     }
 ```
 
-- [ ] **Step 3: Run lint and tests**
+- [x] **Step 3: Run lint and tests**
 
 ```bash
 npm run lint && npm test
@@ -3309,7 +3309,7 @@ npm run lint && npm test
 
 Expected: clean.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add media-viewer.js
@@ -3325,13 +3325,13 @@ git commit -m "feat(tournament): resume + invalidation prompts on folder load"
 **Files:**
 - Modify: `media-viewer.js`
 
-- [ ] **Step 1: Find `DEFAULT_SHORTCUTS` constant near the top of `media-viewer.js`**
+- [x] **Step 1: Find `DEFAULT_SHORTCUTS` constant near the top of `media-viewer.js`**
 
 ```bash
 npx grep -n 'DEFAULT_SHORTCUTS' media-viewer.js
 ```
 
-- [ ] **Step 2: Add tournament-mode block to `DEFAULT_SHORTCUTS`**
+- [x] **Step 2: Add tournament-mode block to `DEFAULT_SHORTCUTS`**
 
 After the `compare:` block, add:
 
@@ -3346,7 +3346,7 @@ After the `compare:` block, add:
     },
 ```
 
-- [ ] **Step 3: Update keydown handler to dispatch tournament-mode actions**
+- [x] **Step 3: Update keydown handler to dispatch tournament-mode actions**
 
 Find the keydown handler that picks `mode` (the line `const mode = this.isCompareMode ? 'compare' : 'single';`).
 
@@ -3395,7 +3395,7 @@ Notes:
 - `undo` action already exists in single/compare for `handleCancel` — wrap it with the tournament check.
 - `pause` for tournament uses Escape; existing Escape handler may need adjustment if it conflicts. Verify by testing.
 
-- [ ] **Step 4: Run lint and tests**
+- [x] **Step 4: Run lint and tests**
 
 ```bash
 npm run lint && npm test
@@ -3403,7 +3403,7 @@ npm run lint && npm test
 
 Expected: clean.
 
-- [ ] **Step 5: Manually verify shortcuts in the running app**
+- [x] **Step 5: Manually verify shortcuts in the running app**
 
 ```bash
 npm start
@@ -3414,7 +3414,7 @@ npm start
 - Press `Q` and `E` — verify pair advances.
 - Press `Ctrl+A` — verify undo restores the previous pair.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js
@@ -3432,7 +3432,7 @@ Phase H is optional for Friday. If time permits, ship the happy-path test (Task 
 **Files:**
 - Create: `tests/e2e/tournament-mode.test.js`
 
-- [ ] **Step 1: Create the test file**
+- [x] **Step 1: Create the test file**
 
 ```javascript
 import { test, expect } from '@playwright/test';
@@ -3510,7 +3510,7 @@ test.describe('Tournament Mode — happy path', () => {
 });
 ```
 
-- [ ] **Step 2: Run E2E test**
+- [x] **Step 2: Run E2E test**
 
 ```bash
 npm run test:e2e -- tournament-mode.test.js
@@ -3518,7 +3518,7 @@ npm run test:e2e -- tournament-mode.test.js
 
 Expected: PASS (1 test).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/tournament-mode.test.js
@@ -3532,7 +3532,7 @@ git commit -m "test(tournament): E2E happy path (N=4, R=3)"
 **Files:**
 - Modify: `tests/e2e/tournament-mode.test.js`
 
-- [ ] **Step 1: Append resume-flow test**
+- [x] **Step 1: Append resume-flow test**
 
 ```javascript
 test.describe('Tournament Mode — resume flow', () => {
@@ -3591,7 +3591,7 @@ test.describe('Tournament Mode — resume flow', () => {
 });
 ```
 
-- [ ] **Step 2: Run E2E**
+- [x] **Step 2: Run E2E**
 
 ```bash
 npm run test:e2e -- tournament-mode.test.js
@@ -3599,7 +3599,7 @@ npm run test:e2e -- tournament-mode.test.js
 
 Expected: PASS (2 tests).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/tournament-mode.test.js
@@ -3613,7 +3613,7 @@ git commit -m "test(tournament): E2E resume flow"
 **Files:**
 - Modify: `tests/e2e/tournament-mode.test.js`
 
-- [ ] **Step 1: Append discard test**
+- [x] **Step 1: Append discard test**
 
 ```javascript
 test.describe('Tournament Mode — discard at summary', () => {
@@ -3665,7 +3665,7 @@ test.describe('Tournament Mode — discard at summary', () => {
 });
 ```
 
-- [ ] **Step 2: Run E2E**
+- [x] **Step 2: Run E2E**
 
 ```bash
 npm run test:e2e -- tournament-mode.test.js
@@ -3673,7 +3673,7 @@ npm run test:e2e -- tournament-mode.test.js
 
 Expected: PASS (3 tests).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/tournament-mode.test.js
@@ -3687,7 +3687,7 @@ git commit -m "test(tournament): E2E discard at summary"
 **Files:**
 - Modify: `tests/e2e/tournament-mode.test.js`
 
-- [ ] **Step 1: Append invalidation test**
+- [x] **Step 1: Append invalidation test**
 
 ```javascript
 test.describe('Tournament Mode — invalidation prompt', () => {
@@ -3743,7 +3743,7 @@ test.describe('Tournament Mode — invalidation prompt', () => {
 });
 ```
 
-- [ ] **Step 2: Run all E2E**
+- [x] **Step 2: Run all E2E**
 
 ```bash
 npm run test:e2e
@@ -3751,7 +3751,7 @@ npm run test:e2e
 
 Expected: 4 new tests pass on top of existing 39.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/tournament-mode.test.js
@@ -3764,7 +3764,7 @@ git commit -m "test(tournament): E2E invalidation prompt"
 
 ### Task FV1: Full test suite + lint + format
 
-- [ ] **Step 1: Run all unit + integration tests**
+- [x] **Step 1: Run all unit + integration tests**
 
 ```bash
 npm test
@@ -3772,7 +3772,7 @@ npm test
 
 Expected: ~222 unit tests + 4 integration tests pass (was 195 unit, now 195+12 swiss + 7 engine + 8 manager = 222).
 
-- [ ] **Step 2: Run all E2E**
+- [x] **Step 2: Run all E2E**
 
 ```bash
 npm run test:e2e
@@ -3780,7 +3780,7 @@ npm run test:e2e
 
 Expected: ~46 E2E (39 existing + 4 new if Phase H done; if not, still 39).
 
-- [ ] **Step 3: Lint**
+- [x] **Step 3: Lint**
 
 ```bash
 npm run lint
@@ -3788,7 +3788,7 @@ npm run lint
 
 Expected: no errors.
 
-- [ ] **Step 4: Format check**
+- [x] **Step 4: Format check**
 
 ```bash
 npm run format:check
@@ -3796,20 +3796,20 @@ npm run format:check
 
 If anything is out of format, run `npm run format` then commit the formatting changes.
 
-- [ ] **Step 5: Manual smoke (see spec §7.7 manual testing checklist)**
+- [x] **Step 5: Manual smoke (see spec §7.7 manual testing checklist)**
 
 ```bash
 npm start
 ```
 
 Walk through:
-- [ ] R=3 with 4 fixture files: tier breakdown reasonable; folders created.
-- [ ] Odd N (3 files): bye distributed, no double-bye.
-- [ ] Close app mid-tournament, reopen: resume works.
-- [ ] Externally delete a file mid-tournament: invalidation prompt appears.
-- [ ] Press L-Special on mid-tournament file: file leaves cleanly.
-- [ ] Undo a game: previous pair shown, win counts revert.
-- [ ] Apply: files move into tier folders; reload shows new structure.
+- [x] R=3 with 4 fixture files: tier breakdown reasonable; folders created.
+- [x] Odd N (3 files): bye distributed, no double-bye.
+- [x] Close app mid-tournament, reopen: resume works.
+- [x] Externally delete a file mid-tournament: invalidation prompt appears.
+- [x] Press L-Special on mid-tournament file: file leaves cleanly.
+- [x] Undo a game: previous pair shown, win counts revert.
+- [x] Apply: files move into tier folders; reload shows new structure.
 
 ---
 
@@ -3819,17 +3819,17 @@ Walk through:
 
 The auto-memory hook should fire automatically as files change. If anything is missing:
 
-- [ ] Confirm `tournament-engine.js` and `tournament.js` are listed in the architecture diagram.
-- [ ] Confirm Testing (Unit) block mentions the new test files.
-- [ ] Confirm Git Insights has a Tournament Mode entry with commit hashes.
+- [x] Confirm `tournament-engine.js` and `tournament.js` are listed in the architecture diagram.
+- [x] Confirm Testing (Unit) block mentions the new test files.
+- [x] Confirm Git Insights has a Tournament Mode entry with commit hashes.
 
 ### Update planning documents
 
-- [ ] Move plan to archive: `git mv docs/superpowers/plans/2026-05-25-tournament-mode.md docs/archive/plans/`.
-- [ ] Add entry to `docs/planning/DONE.md` with date, test counts (unit + E2E), and key changes.
-- [ ] Flip Group E (Spec) and Group F (Prototype) checkboxes in `docs/planning/WEEKLY.md`.
-- [ ] Add new file to `docs/README.md` index.
-- [ ] Update spec status: in `docs/superpowers/specs/2026-05-25-tournament-mode-design.md`, change `Status: Draft (pre-implementation)` to `Status: Complete`.
+- [x] Move plan to archive: `git mv docs/superpowers/plans/2026-05-25-tournament-mode.md docs/archive/plans/`.
+- [x] Add entry to `docs/planning/DONE.md` with date, test counts (unit + E2E), and key changes.
+- [x] Flip Group E (Spec) and Group F (Prototype) checkboxes in `docs/planning/WEEKLY.md`.
+- [x] Add new file to `docs/README.md` index.
+- [x] Update spec status: in `docs/superpowers/specs/2026-05-25-tournament-mode-design.md`, change `Status: Draft (pre-implementation)` to `Status: Complete`.
 
 ### Backlog spawning
 
