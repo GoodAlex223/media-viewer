@@ -281,6 +281,10 @@ export class TournamentEngine {
             gameIndex: progressBefore.gamesPlayed,
             timestamp: Date.now(),
             strategyStateSnapshot: snapshot,
+            // Engine-level files list is captured separately from strategyStateSnapshot so
+            // undo() can rewind a removeFile() that happened between picks (getTierBreakdown
+            // and handleApply read engine.files, not strategy.files).
+            filesSnapshot: [...this.files],
         });
     }
 
@@ -290,6 +294,9 @@ export class TournamentEngine {
         const StrategyCtor = Object.getPrototypeOf(this.strategy).constructor;
         const restored = StrategyCtor.deserialize(entry.strategyStateSnapshot);
         Object.assign(this.strategy, restored);
+        if (entry.filesSnapshot) {
+            this.files = [...entry.filesSnapshot];
+        }
     }
 
     removeFile(filePath) {

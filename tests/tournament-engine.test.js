@@ -105,6 +105,31 @@ describe('TournamentEngine.undo', () => {
         expect(() => eng.undo()).not.toThrow();
         expect(eng.history.length).toBe(0);
     });
+
+    it('undo restores engine.files removed between picks (removeFile + recordResult + undo)', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+
+        const firstPair = eng.getCurrentPair();
+        eng.recordResult(firstPair.left, firstPair.right);
+        expect(eng.files).toEqual(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+
+        // File vanishes mid-tournament (e.g., Special-moved to disk-elsewhere)
+        eng.removeFile('c.jpg');
+        expect(eng.files).toEqual(['a.jpg', 'b.jpg', 'd.jpg']);
+
+        const secondPair = eng.getCurrentPair();
+        eng.recordResult(secondPair.left, secondPair.right);
+
+        // Undo the second pick — engine.files must rewind to include c.jpg again,
+        // otherwise getTierBreakdown() and handleApply() under-count.
+        eng.undo();
+        expect(eng.files).toEqual(['a.jpg', 'b.jpg', 'd.jpg']);
+
+        // Undo the first pick — engine.files must rewind to the pre-removeFile state.
+        eng.undo();
+        expect(eng.files).toEqual(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        expect(Object.values(eng.getTierBreakdown()).reduce((a, b) => a + b, 0)).toBe(4);
+    });
 });
 
 describe('TournamentEngine delegation methods', () => {
