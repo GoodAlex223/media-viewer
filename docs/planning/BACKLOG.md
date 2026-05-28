@@ -2,12 +2,38 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-25 <!-- 2 items extracted from PR #36 multi-agent code review: error-message inconsistency + spec test-count drift -->
+**Last Updated**: 2026-05-26 <!-- Tournament polish + feature-cache streaming session: E2E, cache load latency, extraction dedup -->
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+
+---
+
+## From Tournament Polish + Feature-Cache Streaming (2026-05-26)
+
+### [2026-05-26] From: tournament-mode polish + large-folder cache crash fixes
+
+- [ ] **Phase H: E2E tests for tournament mode** — Deferred from the original tournament plan (`docs/archive/plans/2026-05-25-tournament-mode.md`, Phase H "fit-as-time-allows"). Now that the UX has settled (mode-enter Continue/Start-over prompt, Save/Discard/Cancel on leave, strict order/seeding), add Playwright coverage: (1) happy path — enter tournament, make picks, complete, Apply moves files into `_Tier-N/`; (2) resume — start, leave with Save, re-enter → Continue restores progress; (3) reconciliation — add/remove a file then resume → "Resume anyway" reconciles; (4) discard + cancel flows. Use the existing E2E helpers (`seedLocalStorage`, `mockFolderDialog`, fixture dirs). Effort: M. Affected: new `tests/e2e/tournament-mode.test.js`.
+- [ ] **Incremental feature-cache serving (avoid ~40s blocking load on huge caches)** — `feature-cache-open` stream-parses the entire `.feature_cache.json` into a session array before returning, so a 259MB/24k-entry cache blocks ~40s before `loadFeatureCache` resolves and extraction/sort can begin. Proposed: serve entries to the renderer as the stream produces them (paused-stream + resume per chunk request, or push batches via `webContents.send`) so extraction starts as soon as the first batch arrives instead of waiting for the full parse. Effort: M. Affected: [main.js](../../main.js) `feature-cache-open`/`feature-cache-chunk`, [media-viewer.js](../../media-viewer.js) `_loadFeatureCacheLocked`. Only worth doing if the startup wait is annoying in practice (compaction to ~130MB already roughly halves it).
+- [ ] **Dedupe concurrent background extraction (kickoff + Sort-by-AI)** — `kickoffBackgroundExtractionIfEnabled` (folder load) and `handleSortByPrediction` (Sort-by-AI click) both call `startBackgroundFeatureExtraction()`, so clicking Sort-by-AI shortly after a folder load runs two overlapping extraction passes over the same files (visible as duplicated `startBackgroundFeatureExtraction` stacks in logs). Harmless (cache writes are idempotent, single-flight now guards load/save) but wasteful. Proposed: a single-flight guard / run-token on `startBackgroundFeatureExtraction` so a second caller joins the in-flight pass instead of starting a new one. Effort: S. Affected: [media-viewer.js](../../media-viewer.js) `startBackgroundFeatureExtraction`.
+
+- [ ] **AI-seeding outcome validation: confirm predicted favorites land in high tiers** — The AI-prediction "best vs worst" round-1 seeding option (shipped 2026-05-26) pairs predicted-best vs predicted-worst in round 1, then runs normal Swiss for rounds 2..R. If the AI's prior is good, predicted-best should consistently land in Tier-R and predicted-worst in Tier-0. We currently have no automated check that this actually happens — it's an unmeasured property of the system. Proposed: after `handleApply` runs, compute Spearman rank correlation between (a) the predicted score ranking at tournament-start time and (b) the final tier assignment. Surface it in the summary modal as "AI–human agreement: 0.XX" (1.0 = perfect, 0 = no correlation, -1.0 = inverted). Acts both as a sanity check (low correlation when seeding=AI indicates the AI is mis-trained or the human is judging on dimensions the AI doesn't capture) and a useful signal for the user about how well their AI matches their actual preferences. Effort: S. Affected: [tournament.js](../../tournament.js) (compute correlation in `handleApply` return value), [media-viewer.js](../../media-viewer.js) `showTournamentSummaryModal` (display the metric when AI seeding was used), possibly a small `tests/integration/ai-seeding-correlation.test.js` for the math. Skip when seeding=random (no baseline to compare against).
+
+---
+
+## From Tournament Mode Smoke Testing (2026-05-25)
+
+### [2026-05-25] From: tournament-mode v1 manual testing
+
+Two overhaul tasks identified during tournament-mode smoke test. Adding new
+features keeps surfacing UI-layering and responsiveness issues that aren't worth
+fixing one-at-a-time anymore — the system needs a coherent pass. Splitting into
+two tasks because they have different shapes (architectural vs. visual).
+
+- [ ] **UI architecture overhaul: mode-aware control system + z-index policy** — Multiple symptoms across features point to the same root cause: there's no coherent system for which UI elements are visible in which mode, or how they layer when they overlap. Concrete pain points: (1) tournament-mode adds a new "mode" but existing compare-mode controls (`.media-overlay-controls`, `.left/right-media-controls`) had to be hidden via reactive CSS rules per-element instead of declared once per mode; (2) the app `.header` (position: fixed, z-index: var(--z-modal)) covers the tournament header on hover because z-index values aren't centrally coordinated; (3) clicking the per-wrapper like/dislike buttons in tournament mode routed to like-folder moves because the buttons exist on the wrapper and stopPropagation, so the tournament pick handler never sees the click (fixed reactively in commit `9f74c64`/`<next-commit>`); (4) media info, file count, and tournament progress all live in different containers with no unified placement system. Proposed: a mode-aware control registry (each mode declares its visible controls + their roles); a z-index scale formalized as CSS custom properties (`--z-overlay-low`, `--z-overlay-high`, `--z-modal`, `--z-tooltip`); convert per-wrapper buttons to a single shared bottom-bar that re-renders its contents based on mode rather than overlaying multiple button sets. Effort: L. Affected: [media-viewer.js](../../media-viewer.js) (control rendering, mode switching), [styles.css](../../styles.css) (z-index variables, control layout), [index.html](../../index.html) (control containers). Likely a 2-day refactor; do before adding the 4th mode (RoundRobin or Bracket strategy).
+- [ ] **Responsive design pass: handle different window sizes, media counts, and tier counts** — The app was built assuming a typical desktop window with a moderate number of files. Stress-testing tournament with 24k files surfaced cases where the UI doesn't scale: progress text overflows when tier counts get long (e.g., `Tiers: 0·0·1·24832` runs off-screen on narrow windows); the file count in the folder-info pill doesn't truncate when N is large; media overlay controls don't reflow when the window narrows; tournament config modal estimates assume ~5sec/game which is wrong at extreme N. Proposed pass: (a) define breakpoints (narrow / typical / wide) and reflow rules for each; (b) truncate numeric displays with a thousands separator + tooltip showing exact count; (c) tier breakdown layout switches to vertical list when string length exceeds container width; (d) modal sizes use `max-width: min(520px, 90vw)` instead of fixed widths; (e) test fixtures include extreme-N case (e.g., 10k file E2E). Effort: M-L. Affected: [styles.css](../../styles.css) (media queries + flex/grid for control bars), [media-viewer.js](../../media-viewer.js) (number formatting, tier breakdown rendering in TournamentManager.getTierBreakdownText). Do AFTER the UI architecture overhaul — easier to apply consistent responsive rules once the layering is rationalized.
 
 ---
 

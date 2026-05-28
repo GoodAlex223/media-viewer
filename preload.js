@@ -11,6 +11,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createFolder: (folderPath) => ipcRenderer.invoke('create-folder', folderPath),
     readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
     writeFile: (filePath, data) => ipcRenderer.invoke('write-file', filePath, data),
+    // Streaming feature-cache reader (parse in main, pull in batches) — avoids the renderer
+    // crashing on huge .feature_cache.json files.
+    featureCacheOpen: (filePath) => ipcRenderer.invoke('feature-cache-open', filePath),
+    featureCacheChunk: (offset, limit) => ipcRenderer.invoke('feature-cache-chunk', offset, limit),
+    featureCacheClose: () => ipcRenderer.invoke('feature-cache-close'),
+    // Streaming feature-cache writer (send batches to main, main appends + atomic rename) —
+    // avoids the renderer building a ~130MB JSON string on every 30s auto-save.
+    featureCacheWriteOpen: (filePath, header) => ipcRenderer.invoke('feature-cache-write-open', filePath, header),
+    featureCacheWriteChunk: (entries) => ipcRenderer.invoke('feature-cache-write-chunk', entries),
+    featureCacheWriteClose: () => ipcRenderer.invoke('feature-cache-write-close'),
 
     // Folder operations
     openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'),
@@ -33,6 +43,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('clip-download-progress', handler);
         return () => ipcRenderer.removeListener('clip-download-progress', handler);
     },
+
+    // Tournament state persistence
+    readTournamentState: (folderPath) => ipcRenderer.invoke('readTournamentState', folderPath),
+    writeTournamentState: (folderPath, state) => ipcRenderer.invoke('writeTournamentState', folderPath, state),
+    deleteTournamentState: (folderPath) => ipcRenderer.invoke('deleteTournamentState', folderPath),
+    applyTournamentResults: (folderPath, tierAssignments) =>
+        ipcRenderer.invoke('applyTournamentResults', folderPath, tierAssignments),
 
     // Logging (fire-and-forget)
     logError: (data) => ipcRenderer.send('log-renderer-error', data),

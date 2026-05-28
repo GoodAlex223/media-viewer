@@ -2183,3 +2183,226 @@ body {
         margin: 20px;
     }
 }
+
+/* ============================================================ */
+/* Tournament Mode                                              */
+/* ============================================================ */
+
+/* 3-way mode selector (replaces binary viewModeBtn) */
+.mode-selector {
+    display: inline-flex;
+    border: 1px solid var(--border-color, #444);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-right: 8px;
+}
+.mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: transparent;
+    color: var(--text-color, #ddd);
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+}
+.mode-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+.mode-btn.active {
+    background: var(--accent-color, #4a9eff);
+    color: white;
+}
+.mode-btn i {
+    width: 14px;
+    height: 14px;
+}
+
+/* Tournament pair-display overlay (lives inside .media-container) */
+.tournament-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+}
+.tournament-header {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: rgba(0, 0, 0, 0.65);
+    color: white;
+    font-size: 13px;
+    gap: 16px;
+    /* Push below the main app header (.header is position: fixed, min-height ~50px) so
+       the hover-revealed menu doesn't cover the tournament progress + pause button. */
+    margin-top: 56px;
+}
+.tournament-progress {
+    font-weight: 500;
+}
+.tournament-tiers {
+    font-family: monospace;
+}
+.tournament-controls {
+    pointer-events: auto;
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+}
+/* Tournament-mode control buttons override the inherited dark text from .control-btn.
+   The plain Undo button (no like/dislike/special variant) had black text on a
+   dark glass background — unreadable. Use bright text + visible border. */
+.tournament-controls .control-btn {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.tournament-controls .control-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+.tournament-controls .control-btn .btn-label {
+    color: #fff;
+}
+
+/* Floating Undo button for Compare Mode — visible only when isCompareMode AND moveHistory non-empty.
+   Visibility toggled in JS (style.display). Positioned top-center, below the main app header. */
+.compare-undo-btn {
+    position: absolute;
+    top: 64px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.compare-undo-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+.compare-undo-btn .btn-label {
+    color: #fff;
+}
+
+/* Hide deprecated compare-mode bottom button rows in tournament mode.
+   The per-wrapper overlay controls (.media-overlay-controls — Like/Dislike/Special/Zoom)
+   stay visible: their handlers are tournament-aware (Like = "this side wins",
+   Dislike = "other side wins", Special = remove from tournament + move to special folder).
+   Nav arrows are also hidden — manual prev/next would desync the display from the
+   tournament engine's chosen pair (Swiss pairing controls progression, not currentIndex). */
+.media-container.tournament-mode .left-media-controls,
+.media-container.tournament-mode .right-media-controls,
+.media-container.tournament-mode .nav-arrows {
+    display: none !important;
+}
+
+/* Modal overlay (config, summary, resume) */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.modal {
+    background: var(--bg-color, #222);
+    border: 1px solid var(--border-color, #444);
+    border-radius: 8px;
+    padding: 24px;
+    min-width: 360px;
+    max-width: 520px;
+    color: var(--text-color, #ddd);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+.modal h3 {
+    margin: 0 0 16px;
+    font-size: 16px;
+}
+.modal-body {
+    margin-bottom: 16px;
+}
+.modal-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 13px;
+    gap: 16px;
+}
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+.btn {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid var(--border-color, #444);
+    color: var(--text-color, #ddd);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.btn.primary {
+    background: var(--accent-color, #4a9eff);
+    border-color: var(--accent-color, #4a9eff);
+    color: white;
+}
+.btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.05);
+}
+.btn.primary:hover:not(:disabled) {
+    opacity: 0.9;
+}
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Tier breakdown bars in summary modal */
+.tier-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-family: monospace;
+    font-size: 13px;
+}
+.tier-row > span:first-child {
+    min-width: 60px;
+}
+.tier-bar {
+    flex: 1;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+    border-radius: 2px;
+}
+.tier-bar-fill {
+    height: 100%;
+    background: var(--accent-color, #4a9eff);
+}

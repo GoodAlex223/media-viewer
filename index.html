@@ -19,13 +19,23 @@
             <div class="title">Media Viewer</div>
             <div class="header-controls">
                 <div class="folder-info" id="folderInfo">Current: Liked_0</div>
-                <button
-                    class="view-mode-btn"
-                    id="viewModeBtn"
-                    title="Toggle view mode (Single/Compare)"
-                    style="display: none"
-                >
-                    <span class="btn-icon"><i data-lucide="eye"></i></span>
+                <div class="mode-selector" id="modeSelector" style="display: none">
+                    <button class="mode-btn active" id="modeBtnSingle" data-mode="single" type="button">
+                        <i data-lucide="image"></i>
+                        <span>Single</span>
+                    </button>
+                    <button class="mode-btn" id="modeBtnCompare" data-mode="compare" type="button">
+                        <i data-lucide="columns-2"></i>
+                        <span>Compare</span>
+                    </button>
+                    <button class="mode-btn" id="modeBtnTournament" data-mode="tournament" type="button">
+                        <i data-lucide="trophy"></i>
+                        <span>Tournament</span>
+                    </button>
+                </div>
+                <!-- Legacy hidden viewModeBtn kept for backward-compat with media-viewer.js code that
+                     still references it; new code uses #modeSelector. Remove when refs are migrated. -->
+                <button class="view-mode-btn" id="viewModeBtn" style="display: none" type="button">
                     <span class="btn-label" id="viewModeLabel">Single</span>
                 </button>
                 <button
@@ -234,6 +244,97 @@
                 <button class="nav-arrow nav-next" id="navNext" title="Next media (D)">
                     <i data-lucide="chevron-right"></i>
                 </button>
+            </div>
+
+            <!-- Tournament Mode UI -->
+            <div class="tournament-overlay" id="tournamentOverlay" style="display: none">
+                <div class="tournament-header" id="tournamentHeader">
+                    <span class="tournament-progress" id="tournamentProgress"></span>
+                    <span class="tournament-tiers" id="tournamentTiers"></span>
+                </div>
+                <div class="tournament-controls" id="tournamentControls">
+                    <button class="control-btn" id="tournamentUndoBtn" title="Undo (Ctrl+A)">
+                        <span class="btn-icon"><i data-lucide="undo-2"></i></span>
+                        <span class="btn-label">Undo</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Compare Mode floating Undo button -->
+            <button class="compare-undo-btn" id="compareUndoBtn" title="Undo last pair (Ctrl+A)" style="display: none">
+                <span class="btn-icon"><i data-lucide="undo-2"></i></span>
+                <span class="btn-label">Undo</span>
+            </button>
+        </div>
+
+        <!-- Tournament Config Modal -->
+        <div class="modal-overlay" id="tournamentConfigModal" style="display: none">
+            <div class="modal">
+                <h3>Start Tournament</h3>
+                <div class="modal-body">
+                    <div class="modal-row">
+                        <span>Folder:</span>
+                        <span id="tournamentConfigFolder"></span>
+                    </div>
+                    <div class="modal-row">
+                        <span>Rounds:</span>
+                        <input
+                            id="tournamentRoundsSelect"
+                            type="number"
+                            min="1"
+                            max="50"
+                            step="1"
+                            value="3"
+                            style="width: 64px; padding: 4px 8px"
+                        />
+                    </div>
+                    <div class="modal-row">
+                        <span>Seed round 1:</span>
+                        <select id="tournamentSeedingSelect">
+                            <option value="random">Random</option>
+                            <option value="ai">AI prediction (best vs worst)</option>
+                        </select>
+                    </div>
+                    <div
+                        class="modal-hint"
+                        id="tournamentSeedingHint"
+                        style="font-size: 12px; color: #888; margin: -4px 0 4px"
+                    ></div>
+                    <div class="modal-row">
+                        <span>Output:</span>
+                        <span id="tournamentConfigEstimate"></span>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button id="tournamentConfigCancel" class="btn" type="button">Cancel</button>
+                    <button id="tournamentConfigStart" class="btn primary" type="button">Start</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tournament Summary Modal -->
+        <div class="modal-overlay" id="tournamentSummaryModal" style="display: none">
+            <div class="modal">
+                <h3>Tournament Complete</h3>
+                <div class="modal-body" id="tournamentSummaryBody"></div>
+                <div class="modal-actions">
+                    <button id="tournamentSummaryUndo" class="btn" type="button">Undo last pick</button>
+                    <button id="tournamentSummaryDiscard" class="btn" type="button">Discard</button>
+                    <button id="tournamentSummaryApply" class="btn primary" type="button">Apply</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tournament Resume/Invalidation Modal -->
+        <div class="modal-overlay" id="tournamentResumeModal" style="display: none">
+            <div class="modal">
+                <h3 id="tournamentResumeTitle">Resume Tournament?</h3>
+                <div class="modal-body" id="tournamentResumeBody"></div>
+                <div class="modal-actions">
+                    <button id="tournamentResumeCancel" class="btn" type="button">Cancel</button>
+                    <button id="tournamentResumeDiscard" class="btn" type="button">Discard</button>
+                    <button id="tournamentResumeAccept" class="btn primary" type="button">Resume</button>
+                </div>
             </div>
         </div>
 

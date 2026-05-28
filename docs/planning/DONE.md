@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-05-14 <!-- Group B: AI Prediction Display Bugs -->
+**Last Updated**: 2026-05-26 <!-- Tournament Mode polish + feature-cache streaming -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,69 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-05 (May)
+
+### 2026-05-26 — Tournament Mode polish + feature-cache streaming
+
+**Summary**: Multi-day reactive pass on top of the Tournament Mode v1 prototype
+(driven by manual testing), plus a feature-cache infrastructure rewrite forced by
+crashes on a 24k-file / 259MB-cache folder. Tournament mode is now strict and
+deterministic; the feature cache no longer OOMs the renderer or main process.
+Plan archived at `docs/archive/plans/2026-05-25-tournament-mode.md` (Phases A–G;
+Phase H E2E deferred to BACKLOG).
+
+**Tournament Mode changes** ([media-viewer.js](../../media-viewer.js),
+[tournament.js](../../tournament.js), [tournament-engine.js](../../tournament-engine.js),
+[index.html](../../index.html), [styles.css](../../styles.css)):
+- Fixed mode not switching on enter — `showCompareMedia` ignored the engine pair;
+  now injects it via `_restoredPairFiles` and tears down single-mode media first.
+- Reuse the per-wrapper compare overlay buttons for picks (symmetric Q/W/E/R
+  mapping); removed the redundant wrapper-level click handler and the header
+  L/R-Special buttons. Tapping media now only opens fullscreen.
+- Fixed tournament hotkeys not firing — `buildReverseMap` never indexed the
+  `tournament` mode (lookup silently failed). Added `'tournament'` + `?.` guard.
+- Hid the nav arrows in tournament mode (manual prev/next desynced the displayed
+  pair from the engine).
+- Swiss `_buildRoundPairings`: search the full pair space for an un-played pairing
+  before falling back to a rematch (was forcing rematches when `bucket[0]` had
+  played everyone).
+- Apply now clears the viewer — `showDropZone` tears down compare wrappers and
+  `loadFolder` clears `mediaFiles` on an empty folder; Apply awaits `loadFolder`
+  before `switchMode('single')`.
+- Summary modal: "Undo last pick" button.
+- Rounds: free numeric input (1–50) with clamp + Enter-to-start; AI-prediction
+  round-1 seeding (best-vs-worst) with a live hint and availability check
+  (`TournamentEngine`/`SwissStrategy.init` accept `round1Pairings`).
+- Strict/deterministic: restore canonical order on entry; disable all sort
+  controls while in tournament mode (event-proofed + handler guards).
+- Resume UX redesign: the resume prompt moved from folder-open to mode-enter
+  (Continue / Start over); Save / Discard on leave; Cancel on both; loose
+  reconciliation (`handleResumeReconciled`) drops missing files and ignores added
+  ones. Removed the pause button.
+
+**Feature-cache changes** ([main.js](../../main.js), [preload.js](../../preload.js),
+[media-viewer.js](../../media-viewer.js)):
+- Verify ffmpeg keyframe output exists before use — silent non-writes produced 404
+  `RawImage.read` failures that accumulated native ONNX allocations and crashed.
+- Stream-parse the cache in the main process via `stream-json@1.8.0`
+  (`feature-cache-open`/`-chunk`/`-close`) — a 259MB cache parsed at ~242MB peak
+  vs ~1.5GB for monolithic `JSON.parse` (which OOM'd renderer then main).
+- Stream cache writes in 1k batches (`feature-cache-write-*`) with atomic rename +
+  EPERM/EBUSY retry; round vectors to 6 decimals (~halves file size).
+- Single-flight on load + save, plus a shared IO mutex so a streaming read and a
+  rename never overlap (the EPERM cause on Windows).
+
+**Tests**: 236 → 241 unit (Swiss `round1Pairings` ×3, `handleResumeReconciled` ×2).
+E2E: not run this session (deferred); existing suite unaffected. Added `stream-json@1.8.0`.
+
+**Key learnings**:
+- `buildReverseMap` must enumerate every mode or keydown dispatch silently no-ops.
+- Streaming a huge JSON in the *main* process (separate heap, no UI) + batched IPC
+  keeps the renderer from ever holding the giant string; a shared session global
+  needs single-flight/mutex coordination since `loadFeatureCache` is called from
+  multiple paths.
+- Tournament seeding only makes sense for *preference* orderings (AI score →
+  best-vs-worst); visual-similarity sorts have no quality axis and were correctly
+  excluded.
 
 ### 2026-05-21 — PR #33 Hygiene + Integration Tests (Groups C + D)
 

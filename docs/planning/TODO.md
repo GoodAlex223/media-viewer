@@ -68,27 +68,19 @@ Active tasks and backlog.
 
 <!-- Group B AI Prediction Display Bugs completed 2026-05-14, moved to DONE.md -->
 
-#### Tournament-style compare mode (winner advances, loser tagged with win count)
-**Priority**: 🟡 Medium
-**Status**: 📋 Planned
-**Effort**: L
-**Origin**: manual testing (2026-05-05) — user-flagged "implement as soon as possible"
-
-**Description**: New compare mode where the user picks one media (left or right); the winner advances to the next pairing, and the loser is either (a) recorded with a "won-against count" attribute, or (b) moved to a destination folder grouped with other losers of the same win count. Tournament-style elimination ranking — orthogonal to existing like/dislike rating.
-
-(Russian original: "ПРИКОЛЬНО РЕАЛИЗОВАТЬ КАК МОЖНО РАНЬШЕ Режим, где если пользователь выбрал одно медиа(левое или правое), то оно переходит в следующее сравнение, а то что не выграло, либо записывается со значением \"сколько медиа оно победило\" или переносится в соответсвующую папку(к другим проигравшим, но с таким же количеством побед в сравнениях)")
-
-**Acceptance Criteria**:
-- [ ] Spec written and approved before implementation (tournament bracket vs. swiss-style vs. single-elimination — pick approach)
-- [ ] Mode toggle in UI alongside single/compare
-- [ ] Winner-advances pair selection logic distinct from `mlComparePairIndex`
-- [ ] Per-file `winCount` tracked and persisted (or grouped-folder placement on disk)
-- [ ] Undo restores both files and decrements win count
-- [ ] E2E test for full tournament flow
-
-**Context**:
-- **Files Affected**: [media-viewer.js](media-viewer.js) (new compare-pair selection alongside `showCompareMedia` ~L2451+, `handleLeftLike`/`handleRightLike` family), possibly [main.js](main.js) (folder grouping IPC), [index.html](index.html), [styles.css](styles.css)
-- **Open Questions**: Win-count attribute (sidecar JSON?) vs. folder-grouping on disk? When does a tournament "end" — fixed rounds, until one survivor, or user-stops? Interaction with like/dislike (separate state vs. unified)?
+<!-- Tournament Mode (Groups E + F) completed 2026-05-25; polish + feature-cache streaming
+     pass completed 2026-05-26 (see DONE.md 2026-05-26). Plan archived:
+     docs/archive/plans/2026-05-25-tournament-mode.md
+     Spec: docs/superpowers/specs/2026-05-25-tournament-mode-design.md
+     Acceptance criteria status:
+       [x] Spec written and approved — Swiss-style chosen for v1; Bracket + RR documented as future strategies
+       [x] Mode toggle in UI alongside single/compare — 3-way #modeSelector segmented control
+       [x] Winner-advances pair selection — TournamentEngine + SwissStrategy in tournament-engine.js
+       [x] Per-file winCount tracked + folder grouping — moves files to <source>/_Tier-{0..R}/
+       [x] Undo restores both files (snapshot-based, per-session)
+       [x] Strict/deterministic UX: canonical-order entry, sort disabled in-mode, mode-enter resume prompt
+       [ ] E2E test for full tournament flow — DEFERRED to follow-up (BACKLOG 2026-05-26 / plan Phase H)
+     Tests: 241/241 unit. -->
 
 ---
 

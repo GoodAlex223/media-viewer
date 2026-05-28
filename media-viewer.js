@@ -1,4 +1,5 @@
 import { FullscreenManager } from './fullscreen.js';
+import { TournamentManager } from './tournament.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -17,6 +18,17 @@ const DEFAULT_SHORTCUTS = {
         previous: 'KeyA',
         undo: 'Ctrl+KeyA',
     },
+    tournament: {
+        // Like/dislike handlers are tournament-aware (see _tournamentPickFromSide)
+        // so reuse the same Q/W/E/R layout as Compare Mode for muscle memory.
+        leftLike: 'KeyQ',
+        leftDislike: 'KeyW',
+        rightLike: 'KeyE',
+        rightDislike: 'KeyR',
+        undo: 'Ctrl+KeyA',
+        leftSpecial: 'Digit1',
+        rightSpecial: 'Digit2',
+    },
 };
 
 const ACTION_LABELS = {
@@ -29,6 +41,8 @@ const ACTION_LABELS = {
     leftDislike: 'Left media Dislike',
     rightLike: 'Right media Like',
     rightDislike: 'Right media Dislike',
+    leftSpecial: 'Left to special folder',
+    rightSpecial: 'Right to special folder',
 };
 
 // MinHeap (Priority Queue) for efficient MST construction
@@ -421,6 +435,11 @@ class MediaViewer {
         this.renderShortcutRows();
         this.attachShortcutKeyListeners();
 
+        // Tournament manager (v2.0 module pattern — instantiated before fullscreen because
+        // its setup is lightweight and there's no cross-dependency)
+        this.tournament = new TournamentManager(this);
+        this.isTournamentMode = false;
+
         // Fullscreen manager (v2.0 module pattern — stateful manager with callbacks)
         this.fullscreen = new FullscreenManager({
             isZoomed: (wrapper) => {
@@ -571,6 +590,11 @@ class MediaViewer {
 
     updateSortSettingsVisibility() {
         if (!this.sortSettings) return;
+        // Sorting is disabled in tournament mode — keep the K settings hidden.
+        if (this.isTournamentMode) {
+            this.sortSettings.style.display = 'none';
+            return;
+        }
 
         // Show K settings only for Simple algorithm
         if (this.sortAlgorithm === 'simple') {
@@ -1403,6 +1427,12 @@ class MediaViewer {
             // Remove file from array and clean up caches
             this.removeFileFromList(fileToMove.path);
 
+            // Tournament mode: also remove from engine + persist before navigation
+            if (this.isTournamentMode && this.tournament.engine) {
+                this.tournament.engine.removeFile(fileToMove.path);
+                await this.tournament._persistState(this.baseFolderPath);
+            }
+
             // In compare mode, move the remaining file to the end of the list
             if (side === 'left' || side === 'right') {
                 if (remainingFile && this.mediaFiles.length >= 1) {
@@ -1417,6 +1447,12 @@ class MediaViewer {
             }
 
             this.updateFolderInfo();
+
+            // Tournament mode: re-render via engine, skip compare/single navigation logic
+            if (this.isTournamentMode) {
+                await this.showTournamentPair();
+                return;
+            }
 
             // Navigate based on mode
             if (side === 'left' || side === 'right') {
@@ -1782,7 +1818,27 @@ class MediaViewer {
         // Folder settings
         this.setupFolderSettings();
 
-        // Compare mode event listeners
+        // 3-way mode selector (Single/Compare/Tournament)
+        const modeButtons = document.querySelectorAll('.mode-btn');
+        modeButtons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                this.switchMode(btn.dataset.mode);
+            });
+        });
+
+        // Tournament control row buttons
+        const tournamentUndoBtn = document.getElementById('tournamentUndoBtn');
+        if (tournamentUndoBtn) {
+            tournamentUndoBtn.addEventListener('click', () => this.handleTournamentUndo());
+        }
+
+        // Compare-mode floating Undo button
+        this.compareUndoBtn = document.getElementById('compareUndoBtn');
+        if (this.compareUndoBtn) {
+            this.compareUndoBtn.addEventListener('click', () => this.handleCancel());
+        }
+
+        // Compare mode event listeners (legacy viewModeBtn kept for backward-compat — hidden in UI)
         if (this.viewModeBtn) {
             this.viewModeBtn.addEventListener('click', () => this.toggleViewMode());
         }
@@ -1811,7 +1867,7 @@ class MediaViewer {
         document.addEventListener('keydown', (e) => {
             if (this.mediaFiles.length === 0) {
                 // Allow undo shortcut even when no media remains
-                const mode = this.isCompareMode ? 'compare' : 'single';
+                const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
                 const keyStr = this.buildKeyString(e);
                 const action = this.shortcutReverseMap[mode]?.[keyStr];
                 if (action === 'undo' && this.moveHistory.length > 0) {
@@ -1832,6 +1888,11 @@ class MediaViewer {
                 }
                 if (this.isZoomed()) {
                     this.resetZoom('all');
+                    return;
+                }
+                // Tournament: Escape pauses (exits to single mode, state preserved)
+                if (this.isTournamentMode) {
+                    this.switchMode('single');
                     return;
                 }
                 return;
@@ -1876,9 +1937,9 @@ class MediaViewer {
             }
 
             // Customizable shortcuts via reverse map lookup
-            const mode = this.isCompareMode ? 'compare' : 'single';
+            const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
             const keyStr = this.buildKeyString(e);
-            const action = this.shortcutReverseMap[mode][keyStr];
+            const action = this.shortcutReverseMap[mode]?.[keyStr];
             if (action && !this.isLoading) {
                 e.preventDefault();
                 this.signalUserActivity();
@@ -2279,7 +2340,18 @@ class MediaViewer {
                 return;
             }
 
+            // Folder switches always exit tournament mode (mode is folder-scoped, mirrors the
+            // compare-mode reset pattern from 2fbe174). Must run BEFORE both branches diverge
+            // so the empty-folder path also clears tournament UI state.
+            if (this.isTournamentMode) this.exitTournamentMode();
+
             if (result.files.length === 0) {
+                this.mediaFiles = [];
+                this.baseFolderPath = folderPath;
+                this.currentFolderPath = window.electronAPI.path.basename(folderPath);
+                this.currentIndex = 0;
+                this.moveHistory = [];
+                this.tournament.engine = null;
                 this.showDropZone();
                 this.showError('No media files found in the selected folder');
                 return;
@@ -2290,6 +2362,11 @@ class MediaViewer {
             this.currentFolderPath = window.electronAPI.path.basename(folderPath);
             this.currentIndex = 0;
             this.moveHistory = [];
+
+            // A saved tournament in this folder is offered when the user enters Tournament mode
+            // (see enterTournamentMode), not on folder open. Drop any stale in-memory engine so
+            // switching folders never carries a previous folder's tournament across.
+            this.tournament.engine = null;
             // Reset sorting state when loading new folder
             this.isSortedBySimilarity = false;
             this.isSortedByPrediction = false;
@@ -2331,9 +2408,11 @@ class MediaViewer {
         if (this.changeFolderBtn) {
             this.changeFolderBtn.style.display = 'inline-flex';
         }
-        // Show view mode button when media is shown
-        if (this.viewModeBtn) {
-            this.viewModeBtn.style.display = 'inline-flex';
+        // Show the 3-way mode selector when media is shown
+        // (legacy #viewModeBtn stays hidden — kept only for backward-compat code refs)
+        const modeSelector = document.getElementById('modeSelector');
+        if (modeSelector) {
+            modeSelector.style.display = 'inline-flex';
         }
         // Show help button when media is shown
         if (this.helpBtn) {
@@ -2389,6 +2468,19 @@ class MediaViewer {
         this.hidePredictionBadges();
         if (this.currentMedia) {
             this.cleanupCurrentMedia();
+        }
+        // Tear down compare-mode media so stale wrappers don't survive (e.g. after Tournament Apply moved files into subfolders)
+        if (this.leftMediaWrapper) {
+            this.fullscreen.cleanup(this.leftMediaWrapper);
+            this.leftMediaWrapper.remove();
+            this.leftMediaWrapper = null;
+            this.leftMedia = null;
+        }
+        if (this.rightMediaWrapper) {
+            this.fullscreen.cleanup(this.rightMediaWrapper);
+            this.rightMediaWrapper.remove();
+            this.rightMediaWrapper = null;
+            this.rightMedia = null;
         }
     }
 
@@ -2472,6 +2564,7 @@ class MediaViewer {
     }
 
     async showMedia() {
+        this.updateCompareUndoButton();
         if (this.mediaFiles.length === 0) {
             if (this.moveHistory.length > 0) {
                 this.showEmptyStateWithUndo();
@@ -3651,6 +3744,564 @@ class MediaViewer {
         this.closeAllZoomPopovers();
     }
 
+    // Show the floating Compare-mode Undo button when in compare mode (not tournament) with undo history available
+    updateCompareUndoButton() {
+        if (!this.compareUndoBtn) return;
+        const visible = this.isCompareMode && !this.isTournamentMode && this.moveHistory.length > 0;
+        this.compareUndoBtn.style.display = visible ? 'inline-flex' : 'none';
+    }
+
+    // ---------- Tournament Mode ----------
+    async switchMode(mode) {
+        // Leaving an active, incomplete tournament → confirm Save/Discard first. The leave
+        // prompt resumes the switch (to `mode`) after the user chooses.
+        if (
+            this.isTournamentMode &&
+            mode !== 'tournament' &&
+            this.tournament.engine &&
+            !this.tournament.engine.isComplete()
+        ) {
+            this.showTournamentLeavePrompt(mode);
+            return;
+        }
+        await this._applyModeSwitch(mode);
+    }
+
+    async _applyModeSwitch(mode) {
+        document.querySelectorAll('.mode-btn').forEach((b) => {
+            b.classList.toggle('active', b.dataset.mode === mode);
+        });
+
+        if (mode === 'single') {
+            if (this.isTournamentMode) this.exitTournamentMode();
+            if (this.isCompareMode) this.switchToSingleModeUI();
+            if (this.mediaFiles.length > 0) {
+                this.currentIndex = 0;
+                this.showMedia();
+            }
+        } else if (mode === 'compare') {
+            if (this.isTournamentMode) this.exitTournamentMode();
+            if (!this.isCompareMode) await this.toggleViewMode();
+        } else if (mode === 'tournament') {
+            if (this.isCompareMode) this.switchToSingleModeUI();
+            await this.enterTournamentMode();
+        }
+        this.updateCompareUndoButton();
+    }
+
+    // Tournament mode is strict + deterministic: it operates on the canonical folder order, not
+    // a transient sort. Restore the pre-sort order (if any) on entry. predictionScores are kept
+    // so the config modal's AI-seeding option still works — that's the in-tournament equivalent
+    // of sorting first.
+    restoreOriginalOrderForTournament() {
+        if ((this.isSortedBySimilarity || this.isSortedByPrediction) && this.originalMediaFiles.length > 0) {
+            const currentPaths = new Set(this.mediaFiles.map((f) => f.path));
+            this.mediaFiles = this.originalMediaFiles.filter((f) => currentPaths.has(f.path));
+        }
+        this.isSortedBySimilarity = false;
+        this.isSortedByPrediction = false;
+        this.mlComparePairIndex = 0;
+        this.currentIndex = 0;
+        const simLabel = this.sortSimilarityBtn?.querySelector('.btn-label');
+        if (simLabel) simLabel.textContent = 'Sort by Similarity';
+    }
+
+    // Show/hide the header sort controls. Hidden while in tournament mode so sorting can't run
+    // mid-tournament (exit first to sort); restored on exit when a folder is loaded.
+    setSortControlsVisible(visible) {
+        const display = visible ? 'inline-flex' : 'none';
+        if (this.sortSimilarityBtn) this.sortSimilarityBtn.style.display = display;
+        if (this.sortAlgorithmSelect) this.sortAlgorithmSelect.style.display = display;
+        if (visible) {
+            this.updateSortSettingsVisibility();
+            this.updateSortPredictionButton();
+        } else {
+            if (this.sortSettings) this.sortSettings.style.display = 'none';
+            if (this.sortPredictionBtn) this.sortPredictionBtn.style.display = 'none';
+        }
+    }
+
+    async enterTournamentMode() {
+        // Reset to canonical order before any tournament UI (deterministic start).
+        this.restoreOriginalOrderForTournament();
+        // Live engine already in memory (defensive — exit nulls it) → resume directly.
+        if (this.tournament.engine) {
+            await this._enterResumedTournamentUI();
+            return;
+        }
+        // Look for a saved tournament in this folder; offer Continue / Start over if found.
+        let state = null;
+        try {
+            const result = await window.electronAPI.readTournamentState(this.baseFolderPath);
+            if (result.success && result.state) state = result.state;
+        } catch (err) {
+            window.electronAPI.logError?.(`Tournament state read failed: ${err.message}`);
+        }
+        if (state) {
+            const currentFiles = this.mediaFiles.map((f) => f.path);
+            this.showTournamentContinuePrompt(state, currentFiles);
+        } else {
+            this.showTournamentConfigModal();
+        }
+    }
+
+    // Prompt shown when leaving an active tournament: Save (keep state on disk to resume later)
+    // or Discard (delete state). Both then complete the pending mode switch.
+    showTournamentLeavePrompt(targetMode) {
+        const modal = document.getElementById('tournamentResumeModal');
+        const title = document.getElementById('tournamentResumeTitle');
+        const body = document.getElementById('tournamentResumeBody');
+        const acceptBtn = document.getElementById('tournamentResumeAccept');
+        const discardBtn = document.getElementById('tournamentResumeDiscard');
+
+        const cancelBtn = document.getElementById('tournamentResumeCancel');
+        title.textContent = 'Leave tournament?';
+        const p = this.tournament.engine.getProgress();
+        body.innerHTML =
+            `<div class="modal-row"><span>Progress:</span><span>${p.gamesPlayed}/${p.gamesTotal} games</span></div>` +
+            `<p style="font-size:12px;color:#888">Save to resume later from this folder, or discard it.</p>`;
+        acceptBtn.textContent = 'Save & leave';
+        discardBtn.textContent = 'Discard';
+        if (cancelBtn) cancelBtn.style.display = '';
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            acceptBtn.onclick = null;
+            discardBtn.onclick = null;
+            if (cancelBtn) cancelBtn.onclick = null;
+        };
+
+        acceptBtn.onclick = async () => {
+            // State is persisted per-pick; write once more to be safe, then drop the in-memory
+            // engine so re-entering resumes from disk (single source of truth).
+            await this.tournament._persistState(this.baseFolderPath);
+            this.tournament.engine = null;
+            cleanup();
+            await this._applyModeSwitch(targetMode);
+        };
+        discardBtn.onclick = async () => {
+            await this.tournament.handleDiscard();
+            cleanup();
+            await this._applyModeSwitch(targetMode);
+        };
+        // Cancel: stay in tournament mode (nothing changed — we never left).
+        if (cancelBtn) {
+            cancelBtn.onclick = () => cleanup();
+        }
+        modal.style.display = 'flex';
+    }
+
+    // Prompt shown when entering tournament mode with a saved tournament on disk:
+    // Continue (resume, reconciling any file-set delta) or Start over (discard + config).
+    showTournamentContinuePrompt(state, currentFiles) {
+        const modal = document.getElementById('tournamentResumeModal');
+        const title = document.getElementById('tournamentResumeTitle');
+        const body = document.getElementById('tournamentResumeBody');
+        const acceptBtn = document.getElementById('tournamentResumeAccept');
+        const discardBtn = document.getElementById('tournamentResumeDiscard');
+        const cancelBtn = document.getElementById('tournamentResumeCancel');
+
+        title.textContent = 'Resume tournament?';
+        const v = this.tournament.validateStateFile(state, currentFiles);
+        const startedAgo = Math.round((Date.now() - state.createdAt) / 60000);
+        const progress = state.history.length;
+        const totalGames = Math.floor(state.files.length / 2) * (state.options?.rounds ?? 3);
+        let deltaNote = '';
+        if (!v.valid) {
+            deltaNote =
+                `<p style="font-size:12px;color:#888">${v.removed.length} file(s) removed, ` +
+                `${v.added.length} added since start — they'll be reconciled on continue.</p>`;
+        }
+        body.innerHTML =
+            `<div class="modal-row"><span>Started:</span><span>${startedAgo} min ago</span></div>` +
+            `<div class="modal-row"><span>Progress:</span><span>${progress}/${totalGames} games</span></div>` +
+            deltaNote;
+        acceptBtn.textContent = 'Continue';
+        discardBtn.textContent = 'Start over';
+        if (cancelBtn) cancelBtn.style.display = '';
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            acceptBtn.onclick = null;
+            discardBtn.onclick = null;
+            if (cancelBtn) cancelBtn.onclick = null;
+        };
+
+        acceptBtn.onclick = async () => {
+            const result = await this.tournament.handleResumeReconciled(state, currentFiles);
+            cleanup();
+            if (result?.ok) {
+                if (result.removedCount > 0) {
+                    this.showNotification(`Resumed — dropped ${result.removedCount} missing file(s)`, 'info');
+                }
+                await this._enterResumedTournamentUI();
+            }
+        };
+        discardBtn.onclick = async () => {
+            await this.tournament.handleDiscard();
+            cleanup();
+            this.showTournamentConfigModal();
+        };
+        // Cancel: don't enter tournament; the saved state stays on disk for next time.
+        if (cancelBtn) {
+            cancelBtn.onclick = async () => {
+                cleanup();
+                await this._applyModeSwitch('single');
+            };
+        }
+        modal.style.display = 'flex';
+    }
+
+    exitTournamentMode() {
+        this.isTournamentMode = false;
+        const overlay = document.getElementById('tournamentOverlay');
+        if (overlay) overlay.style.display = 'none';
+        this.mediaContainer.classList.remove('tournament-mode');
+        // Restore sort controls (hidden on entry) when a folder is loaded.
+        if (this.mediaFiles.length > 0) {
+            this.setSortControlsVisible(true);
+        }
+    }
+
+    // Build round-1 seeding pairings by AI prediction (best-vs-worst).
+    // Returns [[winnerCandidate, loserCandidate], ...] paths, or null if not enough scores.
+    buildAiSeedingPairings() {
+        if (this.predictionScores.size < 2 || this.mediaFiles.length < 2) return null;
+        const ranked = this.mediaFiles
+            .map((f) => ({ path: f.path, score: this.predictionScores.get(f.path) ?? 0.5 }))
+            .sort((a, b) => b.score - a.score);
+        const pairs = [];
+        let i = 0;
+        let j = ranked.length - 1;
+        while (i < j) {
+            pairs.push([ranked[i].path, ranked[j].path]);
+            i++;
+            j--;
+        }
+        // If odd N, ranked[i] === ranked[j] is the middle file → bye (handled by engine).
+        return pairs;
+    }
+
+    showTournamentConfigModal() {
+        const modal = document.getElementById('tournamentConfigModal');
+        const folderEl = document.getElementById('tournamentConfigFolder');
+        const roundsSelect = document.getElementById('tournamentRoundsSelect');
+        const seedingSelect = document.getElementById('tournamentSeedingSelect');
+        const estimateEl = document.getElementById('tournamentConfigEstimate');
+        const startBtn = document.getElementById('tournamentConfigStart');
+        const cancelBtn = document.getElementById('tournamentConfigCancel');
+
+        folderEl.textContent = `${this.baseFolderPath ?? '(no folder)'} (${this.mediaFiles.length} files)`;
+
+        // Configure the AI seeding option: enabled only when prediction scores exist.
+        const aiOpt = seedingSelect?.querySelector('option[value="ai"]');
+        const aiAvailable = this.predictionScores.size >= 2;
+        if (aiOpt) {
+            aiOpt.disabled = !aiAvailable;
+            aiOpt.textContent = 'AI prediction (best vs worst)';
+            if (!aiAvailable && seedingSelect.value === 'ai') seedingSelect.value = 'random';
+        }
+
+        // Explain the selected seeding, and (when AI is greyed out) how to enable it. Sorting is
+        // disabled inside tournament mode, so the user must score files BEFORE entering.
+        const seedingHint = document.getElementById('tournamentSeedingHint');
+        const updateSeedingHint = () => {
+            if (!seedingHint) return;
+            const scored = this.predictionScores.size;
+            const total = this.mediaFiles.length;
+            if (seedingSelect.value === 'ai') {
+                seedingHint.textContent = `Pairs highest- vs lowest-predicted files in round 1 (${scored}/${total} scored).`;
+            } else if (!aiAvailable) {
+                seedingHint.textContent =
+                    'Tip: “AI prediction” needs scores — exit tournament, click “Sort by Predicted”, then start again.';
+            } else {
+                seedingHint.textContent = 'Round 1 pairs are shuffled at random.';
+            }
+        };
+        seedingSelect.onchange = updateSeedingHint;
+        updateSeedingHint();
+
+        // Clamp the rounds value to [1, 50]; falls back to 3 on empty/NaN.
+        const readRounds = () => {
+            const raw = parseInt(roundsSelect.value, 10);
+            if (!Number.isFinite(raw)) return 3;
+            return Math.max(1, Math.min(50, raw));
+        };
+
+        const updateEstimate = () => {
+            const R = readRounds();
+            const N = this.mediaFiles.length;
+            const games = Math.floor(N / 2) * R;
+            const minutes = Math.ceil((games * 5) / 60);
+            estimateEl.textContent = `${N} files → ${R + 1} tier folders · ~${games} games (~${minutes} min)`;
+        };
+        // 'input' fires as user types; 'change' fires on commit (covers paste, arrow buttons, blur).
+        roundsSelect.oninput = updateEstimate;
+        roundsSelect.onchange = updateEstimate;
+        // Enter in the input starts the tournament; Escape cancels.
+        roundsSelect.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                startBtn.click();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelBtn.click();
+            }
+        };
+        updateEstimate();
+
+        startBtn.disabled = this.mediaFiles.length < 2;
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            startBtn.onclick = null;
+            cancelBtn.onclick = null;
+            roundsSelect.oninput = null;
+            roundsSelect.onchange = null;
+            roundsSelect.onkeydown = null;
+            seedingSelect.onchange = null;
+        };
+
+        startBtn.onclick = async () => {
+            const R = readRounds();
+            const seedMode = seedingSelect?.value ?? 'random';
+            const opts = {};
+            if (seedMode === 'ai') {
+                const pairs = this.buildAiSeedingPairings();
+                if (pairs && pairs.length > 0) {
+                    opts.seedingPairings = pairs;
+                } else {
+                    this.showNotification('AI seeding unavailable — falling back to random', 'info');
+                }
+            }
+            cleanup();
+            const ok = await this.tournament.handleStartClick(this.baseFolderPath, R, opts);
+            if (ok) {
+                this.isTournamentMode = true;
+                this.mediaContainer.classList.add('tournament-mode');
+                this.setSortControlsVisible(false);
+                document.getElementById('tournamentOverlay').style.display = 'block';
+                await this.showTournamentPair();
+            } else {
+                this.switchMode('single');
+            }
+        };
+
+        cancelBtn.onclick = () => {
+            cleanup();
+            this.switchMode('single');
+        };
+
+        modal.style.display = 'flex';
+        // Focus the input so the user can immediately type a custom value
+        setTimeout(() => roundsSelect.focus(), 0);
+    }
+
+    async showTournamentPair() {
+        if (!this.isTournamentMode || !this.tournament.engine) return;
+
+        if (this.tournament.engine.isComplete()) {
+            this.showTournamentSummaryModal();
+            return;
+        }
+
+        const pair = this.tournament.engine.getCurrentPair();
+        if (!pair) {
+            this.showTournamentSummaryModal();
+            return;
+        }
+
+        document.getElementById('tournamentProgress').textContent = this.tournament.getProgressText();
+        document.getElementById('tournamentTiers').textContent = this.tournament.getTierBreakdownText();
+
+        const leftIdx = this.mediaFiles.findIndex((f) => f.path === pair.left);
+        const rightIdx = this.mediaFiles.findIndex((f) => f.path === pair.right);
+
+        if (leftIdx === -1 || rightIdx === -1) {
+            const missing = leftIdx === -1 ? pair.left : pair.right;
+            this.showNotification(`File missing — removed from tournament: ${missing}`, 'warning');
+            this.tournament.engine.removeFile(missing);
+            await this.tournament._persistState(this.baseFolderPath);
+            return this.showTournamentPair();
+        }
+
+        // Reuse compare-mode rendering: temporarily activate compare layout w/o the binary toggle
+        if (!this.isCompareMode) {
+            // Tear down single-mode media before switching layouts (toggleViewMode does this normally)
+            if (this.currentMedia) {
+                this.cleanupCurrentMedia();
+            }
+            this.isCompareMode = true;
+            this.controls.style.display = 'none';
+            this.compareControls.style.display = 'none';
+            this.mediaContainer.classList.add('compare-mode');
+            this.videoControls.style.display = 'none';
+            this.hideFileInfo();
+            if (this.infoToggleBtn) this.infoToggleBtn.style.display = 'none';
+        }
+        // Keep tournament-mode class so the tournament-specific CSS overrides apply
+        this.mediaContainer.classList.add('tournament-mode');
+
+        this.leftFileIndex = leftIdx;
+        this.rightFileIndex = rightIdx;
+        // Force showCompareMedia to display the engine-selected pair (overrides currentIndex-based selection)
+        this._restoredPairFiles = { left: this.mediaFiles[leftIdx], right: this.mediaFiles[rightIdx] };
+        if (typeof this.showCompareMedia === 'function') {
+            await this.showCompareMedia();
+        }
+    }
+
+    async handleTournamentPick(winner, loser) {
+        if (!this.isTournamentMode) return;
+        this.signalUserActivity();
+        await this.tournament.handlePairResult(winner, loser);
+        await this.showTournamentPair();
+    }
+
+    async handleTournamentUndo() {
+        if (!this.isTournamentMode || !this.tournament.engine) return;
+
+        // If the last action was a special-folder move (recorded by moveToSpecialFolder), the
+        // file was physically moved AND removed from the engine AND its caches were cleared by
+        // removeFileFromList. Engine.removeFile is not history-tracked, so a plain engine.undo()
+        // can't recover from it. Mirror handleCancel's special branch: restore the file on disk,
+        // re-add to engine.files, restore feature caches (PR #35 contract), pop moveHistory.
+        const lastMove = this.moveHistory[this.moveHistory.length - 1];
+        if (lastMove?.actionType === 'special') {
+            this.moveHistory.pop();
+            try {
+                const moveResult = await window.electronAPI.moveFile({
+                    sourcePath: lastMove.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: lastMove.fileName,
+                });
+                if (!moveResult.success) {
+                    throw new Error(moveResult.error);
+                }
+                const restoredFile = {
+                    name: lastMove.fileName,
+                    path: lastMove.originalPath,
+                    size: lastMove.fileSize,
+                    type: lastMove.fileType,
+                };
+                this.mediaFiles.push(restoredFile);
+                // Re-add to engine.files; engine.removeFile was not history-tracked.
+                if (!this.tournament.engine.files.includes(restoredFile.path)) {
+                    this.tournament.engine.files.push(restoredFile.path);
+                }
+                this.restoreFeatureCachesFromHistory(lastMove);
+                if (this.isSortedByPrediction) this.requestPredictionScores();
+                await this.tournament._persistState(this.baseFolderPath);
+                if (this.showRatingConfirmations) {
+                    this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
+                }
+                this.updateFolderInfo();
+                await this.showTournamentPair();
+            } catch (error) {
+                console.error('Error undoing tournament special:', error);
+                this.showError(`Failed to undo move: ${error.message}`);
+                this.moveHistory.push(lastMove);
+            }
+            return;
+        }
+
+        // Default: undo the engine's last pair-pick (snapshot-restored strategy state).
+        this.tournament.engine.undo();
+        await this.tournament._persistState(this.baseFolderPath);
+        await this.showTournamentPair();
+    }
+
+    async handleTournamentSpecial(side) {
+        if (!this.isTournamentMode || !this.tournament.engine) return;
+        // moveToSpecialFolder handles engine sync + showTournamentPair when isTournamentMode (see Navigate branch)
+        await this.moveToSpecialFolder(side);
+    }
+
+    showTournamentSummaryModal() {
+        const modal = document.getElementById('tournamentSummaryModal');
+        const body = document.getElementById('tournamentSummaryBody');
+        const applyBtn = document.getElementById('tournamentSummaryApply');
+        const discardBtn = document.getElementById('tournamentSummaryDiscard');
+        const undoBtn = document.getElementById('tournamentSummaryUndo');
+
+        const bd = this.tournament.engine.getTierBreakdown();
+        const maxCount = Math.max(...Object.values(bd), 1);
+        const R = this.tournament.engine.strategy.options.rounds;
+
+        const rows = [];
+        for (let i = R; i >= 0; i--) {
+            const count = bd[i] ?? 0;
+            const pct = Math.round((count / maxCount) * 100);
+            rows.push(
+                `<div class="tier-row">` +
+                    `<span>Tier-${i}</span>` +
+                    `<div class="tier-bar"><div class="tier-bar-fill" style="width:${pct}%"></div></div>` +
+                    `<span>${count} files</span>` +
+                    `</div>`
+            );
+        }
+        body.innerHTML =
+            rows.join('') +
+            `<p style="font-size:12px;margin-top:12px;color:#888">` +
+            `→ Files will move into _Tier-{0..${R}}/ inside ${this.baseFolderPath}</p>`;
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            applyBtn.onclick = null;
+            discardBtn.onclick = null;
+            if (undoBtn) undoBtn.onclick = null;
+        };
+
+        if (undoBtn) {
+            // Enable only if there's a pick to undo
+            undoBtn.disabled = (this.tournament.engine?.history?.length ?? 0) === 0;
+            undoBtn.onclick = async () => {
+                cleanup();
+                await this.handleTournamentUndo();
+            };
+        }
+
+        applyBtn.onclick = async () => {
+            const result = await this.tournament.handleApply();
+            cleanup();
+            if (result.success) {
+                this.showNotification(`Moved ${result.moved} files into tier folders`, 'success');
+                this.exitTournamentMode();
+                // Reload first so mediaFiles + UI reflect the now-empty top-level folder,
+                // then switchMode (no media to show → drop zone already visible).
+                if (this.baseFolderPath) await this.loadFolder(this.baseFolderPath);
+                await this.switchMode('single');
+            } else {
+                this.showNotification(
+                    `Apply failed: ${result.failed?.length ?? 0} files (${result.error ?? 'unknown'})`,
+                    'error'
+                );
+            }
+        };
+
+        discardBtn.onclick = async () => {
+            await this.tournament.handleDiscard();
+            cleanup();
+            this.exitTournamentMode();
+            await this.switchMode('single');
+            this.showNotification('Tournament results discarded', 'info');
+        };
+
+        modal.style.display = 'flex';
+    }
+
+    // Shared UI setup for entering a resumed tournament.
+    async _enterResumedTournamentUI() {
+        this.isTournamentMode = true;
+        this.mediaContainer.classList.add('tournament-mode');
+        this.setSortControlsVisible(false);
+        document.getElementById('tournamentOverlay').style.display = 'block';
+        document.querySelectorAll('.mode-btn').forEach((b) => {
+            b.classList.toggle('active', b.dataset.mode === 'tournament');
+        });
+        await this.showTournamentPair();
+    }
+
     // Compare mode methods
     async toggleViewMode() {
         // Hide prediction badges before switching modes
@@ -3712,9 +4363,18 @@ class MediaViewer {
         }
     }
 
+    async _tournamentPickFromSide(winnerSide) {
+        const pair = this.tournament.engine?.getCurrentPair();
+        if (!pair) return;
+        const winner = winnerSide === 'left' ? pair.left : pair.right;
+        const loser = winnerSide === 'left' ? pair.right : pair.left;
+        await this.handleTournamentPick(winner, loser);
+    }
+
     async handleLeftLike() {
         if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
+        if (this.isTournamentMode) return this._tournamentPickFromSide('left');
         // Left is liked, right is disliked
         await this.moveComparePair('left', 'like', 'dislike');
     }
@@ -3722,6 +4382,7 @@ class MediaViewer {
     async handleLeftDislike() {
         if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
+        if (this.isTournamentMode) return this._tournamentPickFromSide('right');
         // Left is disliked, right is liked
         await this.moveComparePair('left', 'dislike', 'like');
     }
@@ -3729,6 +4390,7 @@ class MediaViewer {
     async handleRightLike() {
         if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
+        if (this.isTournamentMode) return this._tournamentPickFromSide('right');
         // Right is liked, left is disliked
         await this.moveComparePair('right', 'like', 'dislike');
     }
@@ -3736,6 +4398,7 @@ class MediaViewer {
     async handleRightDislike() {
         if (this.mediaFiles.length < 2 || this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
+        if (this.isTournamentMode) return this._tournamentPickFromSide('left');
         // Right is disliked, left is liked
         await this.moveComparePair('right', 'dislike', 'like');
     }
@@ -4081,6 +4744,8 @@ class MediaViewer {
     // Visual Similarity Sorting Functions
 
     async handleSortBySimilarity(forceResort = false) {
+        // Sorting is disabled in tournament mode (strict/deterministic) — exit first to sort.
+        if (this.isTournamentMode) return;
         // If currently computing, cancel the operation
         if (this.isComputingHashes && this.sortAbortController) {
             this.sortAbortController.abort();
@@ -5805,17 +6470,122 @@ class MediaViewer {
     // Feature cache version - must match FEATURE_VERSION in feature-extractor.js
     static FEATURE_CACHE_VERSION = 4;
 
+    // Async mutex serializing ALL feature-cache file IO (load reads + save writes). On Windows,
+    // rename(.tmp → .feature_cache.json) fails with EPERM if the destination has an open handle —
+    // and the streaming reader holds the file open for ~40s while the 30s auto-save tries to
+    // rename over it. Serializing read and write eliminates that overlap. Returns a release fn.
+    async _acquireCacheIoLock() {
+        const prev = this._cacheIoLock || Promise.resolve();
+        let release;
+        this._cacheIoLock = new Promise((resolve) => {
+            release = resolve;
+        });
+        await prev; // wait for the previous holder to release
+        return release;
+    }
+
     async loadFeatureCache() {
+        // Single-flight: concurrent callers (folder-load kickoff + a "Sort by AI" click) must
+        // not both drive the shared main-side streaming session, which would corrupt each
+        // other's chunk offsets and close the session out from under the other — yielding an
+        // empty/partial feature load. Coalesce concurrent calls into one in-flight load.
+        if (this._featureCacheLoadPromise) {
+            return this._featureCacheLoadPromise;
+        }
+        this._featureCacheLoadPromise = this._loadFeatureCacheImpl();
+        try {
+            return await this._featureCacheLoadPromise;
+        } finally {
+            this._featureCacheLoadPromise = null;
+        }
+    }
+
+    async _loadFeatureCacheImpl() {
+        if (!this.baseFolderPath) return 0;
+        const releaseIoLock = await this._acquireCacheIoLock();
+        try {
+            return await this._loadFeatureCacheLocked();
+        } finally {
+            releaseIoLock();
+        }
+    }
+
+    async _loadFeatureCacheLocked() {
         if (!this.baseFolderPath) return 0;
 
-        try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
-            const data = await window.electronAPI.readFile(cacheFile);
+        const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
 
+        // Build lookup of current files for pruning + staleness validation.
+        const currentFiles = new Map();
+        for (const file of this.mediaFiles) {
+            currentFiles.set(file.name, file);
+        }
+        const expectedDim = 64;
+        const freshFeatureCache = new Map();
+        const freshFeatureMetadata = new Map();
+
+        // Validate + populate one cache entry (shared by streaming + legacy paths).
+        const processEntry = async (filename, entry) => {
+            const currentFile = currentFiles.get(filename);
+            if (!currentFile) return; // file no longer in folder — prune
+            if (entry.vector?.length !== expectedDim) return; // wrong dimension
+            if (entry.size !== currentFile.size || entry.mtime !== currentFile.mtimeMs) return; // stale
+
+            const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
+            freshFeatureCache.set(fullPath, new Float32Array(entry.vector));
+            freshFeatureMetadata.set(fullPath, { size: entry.size, mtime: entry.mtime });
+            if (entry.clipVector && entry.clipVector.length === 512) {
+                this.clipCache.set(fullPath, new Float32Array(entry.clipVector));
+            }
+        };
+
+        // Preferred path: parse in the main process and pull entries in small batches.
+        // Keeps the renderer from ever holding the full (potentially 250MB+) JSON string.
+        if (window.electronAPI.featureCacheOpen) {
+            try {
+                const opened = await window.electronAPI.featureCacheOpen(cacheFile);
+                if (!opened.success) {
+                    // notFound or parse error → start with an empty cache (no crash, no data loss)
+                    return 0;
+                }
+                if (opened.version !== MediaViewer.FEATURE_CACHE_VERSION) {
+                    console.warn(
+                        `Feature cache version mismatch: found=${opened.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
+                    );
+                    await window.electronAPI.featureCacheClose();
+                    this.featureCache = new Map();
+                    this.featureMetadata = new Map();
+                    return 0;
+                }
+
+                const CHUNK = 1000;
+                for (let offset = 0; offset < opened.count; offset += CHUNK) {
+                    const { entries } = await window.electronAPI.featureCacheChunk(offset, CHUNK);
+                    for (const [filename, entry] of entries) {
+                        await processEntry(filename, entry);
+                    }
+                }
+                await window.electronAPI.featureCacheClose();
+                this.featureCache = freshFeatureCache;
+                this.featureMetadata = freshFeatureMetadata;
+                return this.featureCache.size;
+            } catch (error) {
+                console.log('Feature cache streaming load failed, falling back to direct read:', error.message);
+                try {
+                    await window.electronAPI.featureCacheClose();
+                } catch (_e) {
+                    // ignore
+                }
+                // fall through to legacy path
+            }
+        }
+
+        // Legacy fallback: single read + parse (older preload, or streaming failed).
+        // Only safe for modest cache sizes.
+        try {
+            const data = await window.electronAPI.readFile(cacheFile);
             if (data) {
                 const parsed = JSON.parse(data);
-
-                // Check version compatibility
                 if (parsed.version !== MediaViewer.FEATURE_CACHE_VERSION) {
                     console.warn(
                         `Feature cache version mismatch: found=${parsed.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
@@ -5824,47 +6594,11 @@ class MediaViewer {
                     this.featureMetadata = new Map();
                     return 0;
                 }
-
-                // Build lookup of current files for pruning and validation
-                const currentFiles = new Map();
-                for (const file of this.mediaFiles) {
-                    currentFiles.set(file.name, file);
-                }
-
-                const expectedDim = 64;
-                this.featureCache = new Map();
-                this.featureMetadata = new Map();
-
                 for (const [filename, entry] of Object.entries(parsed.features || {})) {
-                    // Prune: skip files no longer in folder
-                    const currentFile = currentFiles.get(filename);
-                    if (!currentFile) continue;
-
-                    // Validate dimension
-                    if (entry.vector?.length !== expectedDim) {
-                        console.warn(
-                            `Skipping cached features for ${filename}: wrong dimension (${entry.vector?.length} vs ${expectedDim})`
-                        );
-                        continue;
-                    }
-
-                    // Validate size + mtime (skip stale entries)
-                    if (entry.size !== currentFile.size || entry.mtime !== currentFile.mtimeMs) {
-                        console.log(
-                            `Feature cache stale for ${filename}: size ${entry.size}→${currentFile.size}, mtime ${entry.mtime}→${currentFile.mtimeMs}`
-                        );
-                        continue;
-                    }
-
-                    const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
-                    this.featureCache.set(fullPath, new Float32Array(entry.vector));
-                    this.featureMetadata.set(fullPath, { size: entry.size, mtime: entry.mtime });
-
-                    // Load CLIP vector if present
-                    if (entry.clipVector && entry.clipVector.length === 512) {
-                        this.clipCache.set(fullPath, new Float32Array(entry.clipVector));
-                    }
+                    await processEntry(filename, entry);
                 }
+                this.featureCache = freshFeatureCache;
+                this.featureMetadata = freshFeatureMetadata;
                 return this.featureCache.size;
             }
         } catch (error) {
@@ -5874,36 +6608,99 @@ class MediaViewer {
     }
 
     async saveFeatureCache() {
+        // Single-flight: the 30s auto-save interval can fire while an explicit save is still
+        // streaming, and both share the main-side featureCacheWriter (one temp file). Skip if a
+        // save is already in flight — the in-flight one already captures the latest cache state.
+        if (this._featureCacheSavePromise) {
+            return this._featureCacheSavePromise;
+        }
+        this._featureCacheSavePromise = this._saveFeatureCacheImpl();
+        try {
+            return await this._featureCacheSavePromise;
+        } finally {
+            this._featureCacheSavePromise = null;
+        }
+    }
+
+    async _saveFeatureCacheImpl() {
         if (!this.baseFolderPath || this.featureCache.size === 0) return;
+        const releaseIoLock = await this._acquireCacheIoLock();
+        try {
+            return await this._saveFeatureCacheLocked();
+        } finally {
+            releaseIoLock();
+        }
+    }
+
+    async _saveFeatureCacheLocked() {
+        if (!this.baseFolderPath || this.featureCache.size === 0) return;
+
+        // Round to 6 decimals before serializing. Full-precision floats stringify to
+        // ~17 chars each (e.g. "0.12345678901234567"); 6 decimals is well below the
+        // noise floor for unit-normalized cosine similarity and ~halves the file size
+        // (a 24k-file cache went from 259MB → ~130MB).
+        const round6 = (arr) => {
+            const out = new Array(arr.length);
+            for (let i = 0; i < arr.length; i++) {
+                out[i] = Math.round(arr[i] * 1e6) / 1e6;
+            }
+            return out;
+        };
+
+        // Build the serializable entry for one cache item.
+        const buildEntry = (fullPath, featureArray) => {
+            const meta = this.featureMetadata.get(fullPath);
+            const clipVector = this.clipCache.get(fullPath);
+            const fileInfo = meta ? null : this.mediaFiles.find((f) => f.path === fullPath);
+            return {
+                vector: round6(featureArray),
+                clipVector: clipVector ? round6(clipVector) : null,
+                // Fallback to live file stats (not zeros) so a missing meta doesn't cause a
+                // permanent cache miss on next load.
+                size: meta ? meta.size : fileInfo?.size || 0,
+                mtime: meta ? meta.mtime : fileInfo?.mtimeMs || 0,
+            };
+        };
 
         try {
             const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
-            const features = {};
 
-            for (const [fullPath, featureArray] of this.featureCache.entries()) {
-                const filename = await window.electronAPI.path.basename(fullPath);
-                const meta = this.featureMetadata.get(fullPath);
-                const clipVector = this.clipCache.get(fullPath);
-                if (meta) {
-                    features[filename] = {
-                        vector: Array.from(featureArray),
-                        clipVector: clipVector ? Array.from(clipVector) : null,
-                        size: meta.size,
-                        mtime: meta.mtime,
+            // Preferred path: stream batches to main (main appends + atomic-renames). Keeps the
+            // renderer from ever building a ~130MB JSON string on every 30s auto-save.
+            if (window.electronAPI.featureCacheWriteOpen) {
+                const opened = await window.electronAPI.featureCacheWriteOpen(cacheFile, {
+                    version: MediaViewer.FEATURE_CACHE_VERSION,
+                    featureDim: 64,
+                    clipDim: 512,
+                });
+                if (opened?.success) {
+                    const BATCH = 1000;
+                    let batch = [];
+                    const flush = async () => {
+                        if (batch.length === 0) return;
+                        const res = await window.electronAPI.featureCacheWriteChunk(batch);
+                        if (!res?.success) throw new Error(res?.error || 'write-chunk failed');
+                        batch = [];
                     };
-                } else {
-                    // Fallback: look up current file stats to avoid writing zeros
-                    // (zeros would cause permanent cache miss on next load)
-                    const fileInfo = this.mediaFiles.find((f) => f.path === fullPath);
-                    features[filename] = {
-                        vector: Array.from(featureArray),
-                        clipVector: clipVector ? Array.from(clipVector) : null,
-                        size: fileInfo?.size || 0,
-                        mtime: fileInfo?.mtimeMs || 0,
-                    };
+                    for (const [fullPath, featureArray] of this.featureCache.entries()) {
+                        const filename = await window.electronAPI.path.basename(fullPath);
+                        batch.push([filename, buildEntry(fullPath, featureArray)]);
+                        if (batch.length >= BATCH) await flush();
+                    }
+                    await flush();
+                    const closed = await window.electronAPI.featureCacheWriteClose();
+                    if (!closed?.success) throw new Error(closed?.error || 'write-close failed');
+                    return;
                 }
+                // If open failed, fall through to legacy single-write.
             }
 
+            // Legacy fallback: build the whole object and write once (older preload / small caches).
+            const features = {};
+            for (const [fullPath, featureArray] of this.featureCache.entries()) {
+                const filename = await window.electronAPI.path.basename(fullPath);
+                features[filename] = buildEntry(fullPath, featureArray);
+            }
             await window.electronAPI.writeFile(
                 cacheFile,
                 JSON.stringify({
@@ -6303,6 +7100,11 @@ class MediaViewer {
 
     updateSortPredictionButton() {
         if (!this.sortPredictionBtn) return;
+        // Sorting is disabled in tournament mode — keep the button hidden even if ML events fire.
+        if (this.isTournamentMode) {
+            this.sortPredictionBtn.style.display = 'none';
+            return;
+        }
 
         const isInitialized = this.mlWorker !== null;
         const isReady = this.mlStats?.isReady;
@@ -6334,6 +7136,8 @@ class MediaViewer {
     }
 
     async handleSortByPrediction() {
+        // Sorting is disabled in tournament mode (strict/deterministic) — exit first to sort.
+        if (this.isTournamentMode) return;
         if (!this.isMlEnabled) {
             this.showNotification('ML prediction is disabled', 'warning');
             return;
@@ -7411,6 +8215,7 @@ class MediaViewer {
         return {
             single: Object.assign({}, DEFAULT_SHORTCUTS.single, custom.single),
             compare: Object.assign({}, DEFAULT_SHORTCUTS.compare, custom.compare),
+            tournament: Object.assign({}, DEFAULT_SHORTCUTS.tournament, custom.tournament),
         };
     }
 
@@ -7423,9 +8228,9 @@ class MediaViewer {
     }
 
     buildReverseMap() {
-        const reverse = { single: {}, compare: {} };
-        for (const mode of ['single', 'compare']) {
-            for (const [action, key] of Object.entries(this.shortcuts[mode])) {
+        const reverse = { single: {}, compare: {}, tournament: {} };
+        for (const mode of ['single', 'compare', 'tournament']) {
+            for (const [action, key] of Object.entries(this.shortcuts[mode] ?? {})) {
                 reverse[mode][key] = action;
             }
         }
@@ -7438,11 +8243,23 @@ class MediaViewer {
             dislike: () => this.handleDislike(),
             next: () => this.nextMedia(),
             previous: () => this.previousMedia(),
-            undo: () => this.handleCancel(),
+            undo: () => {
+                if (this.isTournamentMode) {
+                    this.handleTournamentUndo();
+                } else {
+                    this.handleCancel();
+                }
+            },
             leftLike: () => this.handleLeftLike(),
             leftDislike: () => this.handleLeftDislike(),
             rightLike: () => this.handleRightLike(),
             rightDislike: () => this.handleRightDislike(),
+            leftSpecial: () => {
+                if (this.isTournamentMode) this.handleTournamentSpecial('left');
+            },
+            rightSpecial: () => {
+                if (this.isTournamentMode) this.handleTournamentSpecial('right');
+            },
         };
         actions[action]?.();
     }
@@ -7581,6 +8398,7 @@ class MediaViewer {
         this.shortcuts = {
             single: Object.assign({}, DEFAULT_SHORTCUTS.single),
             compare: Object.assign({}, DEFAULT_SHORTCUTS.compare),
+            tournament: Object.assign({}, DEFAULT_SHORTCUTS.tournament),
         };
         this.shortcutReverseMap = this.buildReverseMap();
         localStorage.removeItem('customShortcuts');
