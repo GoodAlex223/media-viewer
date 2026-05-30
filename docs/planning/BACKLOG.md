@@ -2,18 +2,59 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-05-30 <!-- Manual testing batch: skip-pair handling, jump-by-number, compression add-on, compare-mode variants, extraction timing; strengthened mutual-exclusion item with reiteration -->
+**Last Updated**: 2026-05-30 (planning restructure — source-split + pinned process rules)
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
 **Completed work**: See [DONE.md](DONE.md)
 **Strategic direction**: See [ROADMAP.md](ROADMAP.md)
+**Design spec**: See [docs/superpowers/specs/2026-05-30-planning-restructure-design.md](../superpowers/specs/2026-05-30-planning-restructure-design.md)
 
 ---
 
-## From Manual Testing (2026-05-30)
+## 📌 Process Rules (READ BEFORE PROPOSING WORK)
 
-### [2026-05-30] From: manual testing
+This file is split into three source sections. Weekly planning MUST respect the quotas
+below. The split exists because user-flagged feature work was systematically crowded out
+by auto-generated PR-review follow-ups (root cause: BACKLOG was date-ordered, planning
+prompt had no source concept).
+
+### Source sections (in priority order for weekly picks)
+- 🔵 User-Flagged Ideas — user-raised: manual-testing intake, features, bugs, UX.
+- 🟡 Operational & Observation Items — periodic maintenance, audits, dep/version watches.
+- 🟤 Auto-Generated Tech Debt — Claude/automation-surfaced: PR post-merge review,
+  doc hygiene, test backfill, archival.
+
+### Quotas (hard rules for weekly planning)
+- ≥50% of weekly SP from 🔵 User-Flagged
+- ≤25% of weekly SP from 🟡 Operational
+- ≤1 group per week (batch OR solo) from 🟤 Auto-Generated, AND total
+  auto-generated SP ≤25% of weekly SP. PR-review items accumulate;
+  they are NOT spread across the week.
+- Cleanup Week cadence: every ~3 weeks (or when 🟤 grows beyond ~20 SP pending),
+  schedule a dedicated Cleanup Week that inverts the quota — note in WEEKLY.md header
+- Quota Check subsection mandatory in every WEEKLY.md Notes section
+
+### Intake rules (when adding NEW entries)
+- User mentions it → 🔵 User-Flagged with intake date `### [YYYY-MM-DD]`
+- PR post-merge review → 🟤 Auto-Generated under `### [YYYY-MM-DD] PR #N post-merge review`
+- Periodic / audit → 🟡 Operational
+- If unsure, ask before adding — default-to-🔵 if user-raised, default-to-🟤 if Claude-surfaced
+- One entry per concrete actionable item; do NOT merge entries on intake even if they
+  look similar — explicit `[possible-dup-of: ...]` tag instead
+
+### Cross-references
+- Active tasks: TODO.md
+- Completed work: DONE.md
+- Weekly plan: WEEKLY.md (must include Quota Check)
+- Strategic direction: ROADMAP.md, GOALS.md, MILESTONES.md
+
+---
+
+## 🔵 User-Flagged Ideas
+
+### [2026-05-30] Manual testing intake
+
 **Origin**: Batch of UX/feature observations during AI-sorted compare-mode usage; bug-class items live in TODO.md Planned.
 
 - [ ] **Skip-pair handling: "Both good" + "Both bad" corrective-training buttons in AI-sorted compare** — Two buttons grouped next to the existing cancel/undo button in the compare-mode special-button area ([index.html:~210](../../index.html#L210) `#cancelBtnCompare` region): **👍 Both good** and **👎 Both bad**. **Visibility**: only when `isSortedByPrediction === true && isCompareMode === true` (both Extremes and Sequential variants from the related compare-mode-variants item; hidden in single, tournament, and Similarity-sorted compare per user direction "В других режимах эта кнопка не будет логична"). **Mechanic**: each button calls `updateMlModelAfterRating(file, ±1)` for both files at full strength (same magnitude as a regular like/dislike — two training examples per click). Files **stay in the source folder** (no file move). **Original-intent context**: user designed this primarily for Extremes mode to correct cases where the AI sort paired items the model misclassified (predicted best-vs-worst but actually similar quality); Sequential support is opportunistic — same mechanic, different motivation. Bulk-rated files are **corrective training data**, not "judged-and-marked" — no file marker, no badge, files render identically to non-bulk-rated. **Persistence**: hydrated from per-folder `.bulk_rated.json` (`{ version: 1, good: [...], bad: [...] }`) on `loadFolder()`; persisted on every bulk-rating action via new IPC handlers `readBulkRatedFile`/`writeBulkRatedFile` (mirrors existing cache-file IPC pattern); a file is in at most one bucket — re-rating the same file the other direction moves it. Stale entries (file no longer in folder, e.g., renamed/moved externally) pruned silently on load. **Pair-selection: soft suppression with fall-through** — prefer pairs where neither file is in `bulkRatedSet`; fall back to bulk-rated-touching pairs when no fresh pairs remain so the user can re-rate (the model may still be wrong). No empty-state screen needed. **Cleanup**: file moved via like/dislike/special → purge from `bulkRatedSet` + re-save. **Re-rating**: clicking Both Good on an already-bulk-rated file just feeds another training update — supports iterative correction. **Undo (Ctrl+A)**: reverses both `updateMlModelAfterRating` calls, removes both files from `bulkRatedSet`, re-saves disk; history entries tagged `bothGood: true` / `bothBad: true` (analogous to existing `compareMode: true` tag). **Visual feedback**: 3s toast `"👍 Both files marked good (model updated)"` / `"👎 Both files marked bad (model updated)"`, mirroring existing rating UX. **Shortcuts**: `DEFAULT_SHORTCUTS.compare.bothGood: 'KeyS'`, `bothBad: 'KeyD'` (customizable via existing remap UI). **ML model rebuild**: `trainFromHistoricalRatingsAndWait()` gains a pass that re-applies `.bulk_rated.json` as ±1 training examples after walking the like/dislike folders, so corrections survive model reset. Pure-navigation skip remains a no-op for the model (explicit user-choice design — confirmed during brainstorming). (Если во время просмотра медиа в моде сравнения при ИИ сортировке пользователь не оценивает пару, а пропускает ее к следующей или предыдущей паре, то скорее всего пользователь не хочет оценивать пару, возможно потому что пара была не совсем корректно оценена, то есть либо оба хорошего качества и их сложно оценить, либо оба плохого. Можна добавить кнопку и дать выбор: "Оба хорошие" и "Оба плохие". Это кнопка может менять немного порядок постов при ИИ сортировке (влиять на оценку?). В других режимах эта кнопка не будет логична.) Effort: M. Affected: [media-viewer.js](../../media-viewer.js) (new `handleBothGood`/`handleBothBad` methods, `bulkRatedSet` instance state, `loadBulkRatedFile`/`saveBulkRatedFile` helpers, pair-selection fall-through in `showCompareMedia`, undo branches in `handleCancel`, cleanup hook in `moveCurrentFile`/`moveToSpecialFolder`, integration into `trainFromHistoricalRatingsAndWait`, `DEFAULT_SHORTCUTS.compare` additions, `buildReverseMap`/`executeAction` wiring), [index.html](../../index.html) (two new buttons in compare-controls grouped with `#cancelBtnCompare`, conditional show/hide), [styles.css](../../styles.css) (reuse `.control-btn` variant), [main.js](../../main.js) + [preload.js](../../preload.js) (new IPC handlers `readBulkRatedFile`/`writeBulkRatedFile`), [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) (bulk-rating + suppression + fall-through + cleanup-on-move + undo + persistence-round-trip coverage), [tests/e2e/compare-mode.test.js](../../tests/e2e/compare-mode.test.js) (end-to-end click → score change → persist → reload → re-apply → undo).
@@ -22,35 +63,7 @@ Ideas and tasks not yet prioritized for active development.
 - [ ] **Two compare-mode variants: "Extremes" vs "Sequential" with sort-aware score chrome** — Compare mode gains a sub-toggle for pair-selection strategy. **Extremes** = pair `mediaFiles[i]` with `mediaFiles[N-1-i]` (best vs worst, walking both ends inward; terminates at `i >= floor(N/2)`). **Sequential** = pair `mediaFiles[2i]` with `mediaFiles[2i+1]` (top-down non-overlapping adjacent pairs; terminates at `2i+1 >= N`). Both fall back to "switch to single mode" when no more pairs remain (existing UX). **Default**: `'sequential'` for fresh users; last choice persisted to `localStorage.compareVariant` and restored in constructor. **Score chrome** (below each media in `.media-info` area, hidden when no sort active): AI sort → `Predicted: 87%`; Similarity CLIP → `Rank #N · CLIP dist: 0.12`; Similarity Hamming/MST/VPTree → `Rank #N` only (raw distance numbers are not user-friendly). **UI placement**: sub-toggle inside compare-controls area (reuse `.mode-btn` styling for visual parity with top mode selector); hidden in single + tournament modes. **State**: new `this.compareVariant` instance property (`'extremes'` | `'sequential'`); new `getComparePair()` helper replaces inline pair math in `showCompareMedia`; new `getScoreLabel(file)` helper branches on `isSortedByPrediction` / `isSortedBySimilarity` and `sortAlgorithm`. **Interactions**: tournament mode unaffected (Swiss-strategy engine pairing wins); mutual-exclusion item ([2026-05-07]) unaffected (variants operate on whatever order `mediaFiles` is currently in); bug #7 (TODO Planned, mode-switch desync) interacts — when fix path (b) wins (mediaFiles always reflects display order), `getComparePair` math simplifies because `mediaFiles[i]` and the score order align by construction. **Deferred**: per-mode keyboard shortcut to flip variant (e.g., `KeyV`); showing absolute score AND rank simultaneously; stride-N variant. (Можно переопределить текущий компар мод, как компар мод: хорошее и плохое (начало списка и конец) и добавить обычные компар мод (от хорошего до плохого). В каждом режиме использовать проценты и/или данные сортировочных алгоритмов, если они были использованы и предоставляются.) Effort: M-L. Affected: [media-viewer.js](../../media-viewer.js) (new `compareVariant` state, `getComparePair`, `getScoreLabel`, `updateMediaInfo` wiring, `showCompareMedia` pair-selection rewrite, variant-toggle DOM init + click handler), [index.html](../../index.html) (variant toggle in compare-controls), [styles.css](../../styles.css) (toggle styling, score chrome), [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) (pair selection for both variants — odd N, even N, single-file edge), [tests/e2e/compare-mode.test.js](../../tests/e2e/compare-mode.test.js) (variant toggle + score chrome end-to-end).
 - [ ] **Smarter timing for background feature extraction (don't always start on folder open)** — Today `kickoffBackgroundExtractionIfEnabled()` fires unconditionally on every `loadFolder()`, which heavily loads the CPU when a folder contains many files even if the user doesn't intend to use AI sort. Distinct from existing [2026-05-03] "extraction-starting notification" item (that's about *surfacing* extraction visibility; this is about *deciding when to extract*). Proposed options to evaluate: (a) lazy — only extract on first click of an AI-dependent feature (Sort by Prediction, CLIP sort); (b) threshold — auto-extract on folder open only if N < `EXTRACTION_AUTO_LIMIT` (e.g., 500 files), otherwise wait for explicit trigger; (c) settings toggle "Auto-extract on folder open" with sensible default off for first-time users; (d) idle-only — schedule extraction to start only after some quiet period (e.g., 60s with no user input on this folder). Trade-off: lazy extraction means AI sort is slow the first time it's clicked on a large folder, but the app stays responsive. Auto-extract is the current behavior so any change is a UX migration. (Экстракшн фьючерс в каких случаях лучше запускать? Потому что он запускается при открытии папки, что нагружает компьютер, если медиа много в папке.) Effort: S-M. Affected: [media-viewer.js](../../media-viewer.js) (`kickoffBackgroundExtractionIfEnabled` ~L6928, `loadFolder` call site, new settings toggle), Settings panel (F1) in [index.html](../../index.html) + [styles.css](../../styles.css).
 
----
-
-## From PR #38 Multi-Agent Code Review (2026-05-28)
-
-### [2026-05-28] From: PR #38 multi-agent review (post-merge)
-**Origin**: Five-agent code review of `feature/tournament-mode` (PR #38, merged in `c1a5dbf`). Three threshold findings (each ~85/100) were fixed in `06acdc1` (folder-scoped tournament reset, special-undo cache/disk restore, archived-plan checklist) and one ~75/100 engine-symmetry follow-up was fixed in `ee5889d` (`engine.files` rewinds through `undo()` via `filesSnapshot`). The four items below are sub-threshold findings (scores 25–75) tracked here as defensive/hygiene improvements.
-
-- [ ] **Local-capture pattern for `feature-cache-write-chunk` IPC handler** (~75/100) — `main.js` `feature-cache-write-chunk` does `await new Promise((resolve) => featureCacheWriter.stream.once('drain', resolve))` without first capturing `featureCacheWriter` into a local `const writer = featureCacheWriter`. If a concurrent `feature-cache-write-open` (or `-close`) destroys the old stream during this `await`, the drain promise never resolves and the handler hangs. The renderer's `_acquireCacheIoLock` single-flight guard prevents this race in practice today, but the CLIP IPC handlers (`extractClipEmbedding`/`extractClipEmbeddingBatch`, commit `782b61a`) explicitly adopted the local-capture idiom for exactly this class of mid-await race — and CLAUDE.md documents it as the required pattern for all long-running async IPC handlers sharing module-level state. The feature-cache write handlers should follow the same pattern. Effort: XS (3-line change per handler — capture, null-guard, use local ref). Affected: [main.js](../../main.js) `feature-cache-write-chunk` (and parity check on `feature-cache-write-close` which already captures correctly).
-- [ ] **`showCompareMedia()` `<2 files` fallback should also exit tournament mode** (~62/100) — When `showCompareMedia()` is reached via `showTournamentPair()` and a file goes missing from `mediaFiles` between the engine's pair selection and the render (race with external file deletion or rapid removeFile), the `mediaFiles.length < 2` guard calls `switchToSingleModeUI()` and returns — but does not call `exitTournamentMode()`. Result: user is left with single-mode UI visible while `isTournamentMode = true` (tournament keyboard map active, sort controls hidden, tournament overlay still rendered). State-machine consistency gap analogous to the `loadFolder()` issue already fixed in `06acdc1`. Repro is narrow (requires concurrent file deletion mid-render), but the fix is trivial. Effort: XS (1-line guard before `switchToSingleModeUI()` in the `<2` branch). Affected: [media-viewer.js](../../media-viewer.js) `showCompareMedia()` `<2 files` branch.
-- [ ] **Main-process single-flight guard on `feature-cache-open`** (~50/100) — The renderer has `_featureCacheLoadPromise` coalescing + `_acquireCacheIoLock`, but the main-process `feature-cache-open` handler has no defensive guard against re-entry. If two `feature-cache-open` calls arrive before the first pipeline's `'end'` callback fires, the old pipeline's `on('end')` closure can overwrite `featureCacheSession` with stale entries after the new open has started chunking. Renderer-side guards make this unreachable in normal single-window operation, but it's a latent issue for any future code path that calls `feature-cache-open` outside the `loadFeatureCache` single-flight path (manual debug calls, test harnesses, future multi-window). Proposed: capture a generation counter at session start and ignore stream events from prior generations; or explicitly `pipeline.destroy()` the prior stream when a new `feature-cache-open` arrives. Effort: S. Affected: [main.js](../../main.js) `feature-cache-open` handler.
-- [ ] **`TournamentManager._persistState` underscore-prefix called from host (v2.0 visibility)** (~25/100) — `MediaViewer` calls `this.tournament._persistState(this.baseFolderPath)` in three places (`loadFolder` cleanup, `handleTournamentUndo` default and special branches). The underscore prefix marks `_persistState` as private to `TournamentManager`, yet the host reaches into it directly. CLAUDE.md's v2.0 modularization pattern describes constructor-injected dependencies + public-method delegation (`this.fullscreen.toggle()`, `this.fullscreen.cleanup()`) but does not explicitly forbid underscore-method calls — so this is convention drift rather than an explicit rule violation. Two clean refactors: (a) expose `persistState(folderPath)` as a public method that wraps `_persistState`; or (b) constructor-inject a `getBaseFolderPath` callback so `TournamentManager` can resolve folder context itself and `_persistState` becomes truly internal. Cosmetic — does not affect behavior. Effort: XS. Affected: [tournament.js](../../tournament.js) (add public method or constructor arg), [media-viewer.js](../../media-viewer.js) (3 call-site updates).
-
----
-
-## From Tournament Polish + Feature-Cache Streaming (2026-05-26)
-
-### [2026-05-26] From: tournament-mode polish + large-folder cache crash fixes
-
-- [ ] **Phase H: E2E tests for tournament mode** — Deferred from the original tournament plan (`docs/archive/plans/2026-05-25-tournament-mode.md`, Phase H "fit-as-time-allows"). Now that the UX has settled (mode-enter Continue/Start-over prompt, Save/Discard/Cancel on leave, strict order/seeding), add Playwright coverage: (1) happy path — enter tournament, make picks, complete, Apply moves files into `_Tier-N/`; (2) resume — start, leave with Save, re-enter → Continue restores progress; (3) reconciliation — add/remove a file then resume → "Resume anyway" reconciles; (4) discard + cancel flows. Use the existing E2E helpers (`seedLocalStorage`, `mockFolderDialog`, fixture dirs). Effort: M. Affected: new `tests/e2e/tournament-mode.test.js`.
-- [ ] **Incremental feature-cache serving (avoid ~40s blocking load on huge caches)** — `feature-cache-open` stream-parses the entire `.feature_cache.json` into a session array before returning, so a 259MB/24k-entry cache blocks ~40s before `loadFeatureCache` resolves and extraction/sort can begin. Proposed: serve entries to the renderer as the stream produces them (paused-stream + resume per chunk request, or push batches via `webContents.send`) so extraction starts as soon as the first batch arrives instead of waiting for the full parse. Effort: M. Affected: [main.js](../../main.js) `feature-cache-open`/`feature-cache-chunk`, [media-viewer.js](../../media-viewer.js) `_loadFeatureCacheLocked`. Only worth doing if the startup wait is annoying in practice (compaction to ~130MB already roughly halves it).
-- [ ] **Dedupe concurrent background extraction (kickoff + Sort-by-AI)** — `kickoffBackgroundExtractionIfEnabled` (folder load) and `handleSortByPrediction` (Sort-by-AI click) both call `startBackgroundFeatureExtraction()`, so clicking Sort-by-AI shortly after a folder load runs two overlapping extraction passes over the same files (visible as duplicated `startBackgroundFeatureExtraction` stacks in logs). Harmless (cache writes are idempotent, single-flight now guards load/save) but wasteful. Proposed: a single-flight guard / run-token on `startBackgroundFeatureExtraction` so a second caller joins the in-flight pass instead of starting a new one. Effort: S. Affected: [media-viewer.js](../../media-viewer.js) `startBackgroundFeatureExtraction`.
-
-- [ ] **AI-seeding outcome validation: confirm predicted favorites land in high tiers** — The AI-prediction "best vs worst" round-1 seeding option (shipped 2026-05-26) pairs predicted-best vs predicted-worst in round 1, then runs normal Swiss for rounds 2..R. If the AI's prior is good, predicted-best should consistently land in Tier-R and predicted-worst in Tier-0. We currently have no automated check that this actually happens — it's an unmeasured property of the system. Proposed: after `handleApply` runs, compute Spearman rank correlation between (a) the predicted score ranking at tournament-start time and (b) the final tier assignment. Surface it in the summary modal as "AI–human agreement: 0.XX" (1.0 = perfect, 0 = no correlation, -1.0 = inverted). Acts both as a sanity check (low correlation when seeding=AI indicates the AI is mis-trained or the human is judging on dimensions the AI doesn't capture) and a useful signal for the user about how well their AI matches their actual preferences. Effort: S. Affected: [tournament.js](../../tournament.js) (compute correlation in `handleApply` return value), [media-viewer.js](../../media-viewer.js) `showTournamentSummaryModal` (display the metric when AI seeding was used), possibly a small `tests/integration/ai-seeding-correlation.test.js` for the math. Skip when seeding=random (no baseline to compare against).
-
----
-
-## From Tournament Mode Smoke Testing (2026-05-25)
-
-### [2026-05-25] From: tournament-mode v1 manual testing
+### [2026-05-25] Tournament mode smoke-test intake
 
 Two overhaul tasks identified during tournament-mode smoke test. Adding new
 features keeps surfacing UI-layering and responsiveness issues that aren't worth
@@ -60,167 +73,33 @@ two tasks because they have different shapes (architectural vs. visual).
 - [ ] **UI architecture overhaul: mode-aware control system + z-index policy** — Multiple symptoms across features point to the same root cause: there's no coherent system for which UI elements are visible in which mode, or how they layer when they overlap. Concrete pain points: (1) tournament-mode adds a new "mode" but existing compare-mode controls (`.media-overlay-controls`, `.left/right-media-controls`) had to be hidden via reactive CSS rules per-element instead of declared once per mode; (2) the app `.header` (position: fixed, z-index: var(--z-modal)) covers the tournament header on hover because z-index values aren't centrally coordinated; (3) clicking the per-wrapper like/dislike buttons in tournament mode routed to like-folder moves because the buttons exist on the wrapper and stopPropagation, so the tournament pick handler never sees the click (fixed reactively in commit `9f74c64`/`<next-commit>`); (4) media info, file count, and tournament progress all live in different containers with no unified placement system. Proposed: a mode-aware control registry (each mode declares its visible controls + their roles); a z-index scale formalized as CSS custom properties (`--z-overlay-low`, `--z-overlay-high`, `--z-modal`, `--z-tooltip`); convert per-wrapper buttons to a single shared bottom-bar that re-renders its contents based on mode rather than overlaying multiple button sets. Effort: L. Affected: [media-viewer.js](../../media-viewer.js) (control rendering, mode switching), [styles.css](../../styles.css) (z-index variables, control layout), [index.html](../../index.html) (control containers). Likely a 2-day refactor; do before adding the 4th mode (RoundRobin or Bracket strategy).
 - [ ] **Responsive design pass: handle different window sizes, media counts, and tier counts** — The app was built assuming a typical desktop window with a moderate number of files. Stress-testing tournament with 24k files surfaced cases where the UI doesn't scale: progress text overflows when tier counts get long (e.g., `Tiers: 0·0·1·24832` runs off-screen on narrow windows); the file count in the folder-info pill doesn't truncate when N is large; media overlay controls don't reflow when the window narrows; tournament config modal estimates assume ~5sec/game which is wrong at extreme N. Proposed pass: (a) define breakpoints (narrow / typical / wide) and reflow rules for each; (b) truncate numeric displays with a thousands separator + tooltip showing exact count; (c) tier breakdown layout switches to vertical list when string length exceeds container width; (d) modal sizes use `max-width: min(520px, 90vw)` instead of fixed widths; (e) test fixtures include extreme-N case (e.g., 10k file E2E). Effort: M-L. Affected: [styles.css](../../styles.css) (media queries + flex/grid for control bars), [media-viewer.js](../../media-viewer.js) (number formatting, tier breakdown rendering in TournamentManager.getTierBreakdownText). Do AFTER the UI architecture overhaul — easier to apply consistent responsive rules once the layering is rationalized.
 
----
+### [2026-05-07] Manual repro session intake (Group A)
 
-## From PR #36 Multi-Agent Code Review (2026-05-25)
-
-### [2026-05-25] From: PR #36 multi-agent review (pre-merge)
-**Origin**: Five-agent code review of `feature/pr-33-hygiene-integration-tests` (PR #36). The review concluded "No issues found" (no findings scored ≥80/100). Two sub-threshold findings are tracked here as defensive/hygiene improvements.
-
-- [ ] **Abort error string inconsistency: `'Sort aborted'` vs `'Sorting cancelled by user'`** (~75/100) — PR #36 added two new abort guards in `insertNewFilesInSortedOrder` (both CLIP and hash branches) that throw `new Error('Sort aborted')`. The other six abort guards already in `handleSortBySimilarity` (L4235, L4266, L4626, L4724, L4789, L4837) all throw `new Error('Sorting cancelled by user')`. The catch block at [media-viewer.js:4345-4348](../../media-viewer.js#L4345-L4348) calls `this.showNotification(\`❌ Error: ${error.message}\`, 'error')` verbatim — so users who cancel during the cache-hit insertion path see `❌ Error: Sort aborted` while every other abort path shows `❌ Error: Sorting cancelled by user`. The PR's design spec ([2026-05-21-pr-33-hygiene-and-integration-tests-design.md:134](../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md#L134)) claimed `'Sort aborted'` matched the existing pattern — that claim was factually wrong, which is how the inconsistency propagated. Minor UX text mismatch, not a functional bug. Fix: change both throws to `new Error('Sorting cancelled by user')` and update the corresponding `.rejects.toThrow('Sort aborted')` assertions in [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js). Effort: XS (4-line code change + 2 test-string updates). Affected: [media-viewer.js](../../media-viewer.js) `insertNewFilesInSortedOrder` (both branches).
-- [ ] **Design spec verification checklist shows stale 193/193 test count** (~25/100) — The new design spec added in PR #36 ([docs/superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md](../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md)) header still reads `**Status**: Draft (pre-implementation)` (line 4) and its Verification Checklist (line 224) says `npm test — 193/193 pass`, but the actual implementation result is 195/195 (correctly recorded in DONE.md). The spec's own Step 6.4 narration acknowledges the 193→195 correction, but the formal checklist + status header were never updated. Pre-implementation planning artifact, not user-facing — but creates an internal contradiction with DONE.md. Fix: flip Status to `Complete` and update the test-count line. Effort: XS (2-line edit). Recurring docs-hygiene pattern that the existing pre-archive checklist BACKLOG item (2026-04-30 entry) already targets — extend that checklist to also cover Design Specs files (currently scoped to archived plans only).
-
----
-
-## From PR #36 Work (2026-05-24)
-
-### [2026-05-24] From: PR #36 design + final cross-implementation review
-
-- [ ] **Event-loop yielding in `insertNewFilesInSortedOrder` for pathological cases** — PR #36 added per-file abort checks (outer loop only) in both CLIP and hash branches. Pathological case still uncovered: 100+ new files in a 1000-file cache = ~100k inner-loop iterations on the renderer main thread. Spec explicitly deferred this as an architectural note pending observed UI freeze. If a user reports stutter on very large folders, add `await new Promise(r => setTimeout(r, 0))` every N (e.g., 25) outer iterations to release the event loop. Affected: [media-viewer.js:5125-5200](../../media-viewer.js#L5125-L5200) (`insertNewFilesInSortedOrder` both branches).
-- [ ] **Extract `extractAsyncMethod` helper to `tests/helpers/extract-method.js` on third use** — Currently duplicated in `tests/media-viewer-utils.test.js` and `tests/integration/cached-sort-path.test.js`. The integration-test file's header comment explicitly states the extraction trigger ("If a third test file needs this, extract to `tests/helpers/extract-method.js`"). Project convention: Vitest test files don't share helpers via import today; introducing a shared helper module is justified once we have ≥3 call sites. Affected: future test files that need to extract methods from `media-viewer.js`.
-
----
-
-## From PR #35 Multi-Agent Code Review (2026-05-16)
-
-### [2026-05-16] From: PR #35 multi-agent review (post-merge)
-**Origin**: Five-agent code review run after the PR's own pre-merge review pass. The review concluded "No issues found" (no findings scored ≥80/100). Two sub-threshold (~75/100) findings are tracked here as defensive/hygiene improvements; the higher-priority items from the earlier in-PR review pass remain in the section below.
-
-- [ ] **Add JSDoc to `restoreFeatureCachesFromHistory` for parity with `removeFileFromList`** (~75/100) — The inverse method `removeFileFromList` has a full JSDoc block (`@param`/`@returns`) documenting the 5-cache cleanup contract. The new `restoreFeatureCachesFromHistory` helper, placed immediately adjacent and documented as its inverse, has no JSDoc — only an inline `// History entry shape` comment. Hygiene; the contract is non-obvious (576/64 length discriminant, `mtime: 0` sentinel, restore-only-3-of-5 caches) and a JSDoc block would make the asymmetry with `removeFileFromList` explicit. Effort: XS (~10 LoC docblock). Affected: [media-viewer.js:~1018-1043](../../media-viewer.js#L1018-L1043) (`restoreFeatureCachesFromHistory`).
-- [ ] **`handleCancel` compare-pair test fixture should tag history entries with `compareMode: true`** (~75/100) — The new test `'compare-mode pair-undo restores caches for both files'` in `describe('handleCancel feature restore')` constructs `moveHistory` entries without the `compareMode: true` field. The fixture still exercises the correct code path (Branch 2 checks `this.isCompareMode`, not the entry flag), so there is no test failure. But CLAUDE.md documents the invariant: "Compare-pair undo: history entries tagged `compareMode: true`; `handleCancel()` detects paired entries and restores both files in one undo." Real ratings push entries with that flag set (compare-rating handler at ~L3865/L3901). Fixture parity would protect against a future tightening of Branch 2's condition that consults the per-entry flag. Effort: XS (~2 LoC fixture tweak). Affected: [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) `handleCancel feature restore` describe block.
-
----
-
-## From PR #35 Final Code Review (2026-05-14)
-
-### [2026-05-14] From: PR #35 final review
-
-- [ ] **`handleCancel` Branch 3 (single-mode compare-pair undo) has no dedicated unit test** — The three new `handleCancel` tests in PR #35 cover Branches 1, 2, and 4 of the 4 success paths. Branch 3 (single mode, last two history entries both tagged `compareMode: true`, restoring two files in one undo action — [media-viewer.js:3519-3581](../../media-viewer.js#L3519-L3581)) is functionally identical to Branch 2 (the `restoreFeatureCachesFromHistory` calls at L3568-3569 mirror L3494-3495) but takes a different control path. Risk of an undetected bug here is low but real; the spec explicitly identified "Forgotten branch in `handleCancel`" as a risk and four-branch coverage was the mitigation. Effort: XS (~30 LoC test mirroring the compare-pair test with `isCompareMode: false`). Affected: [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) `handleCancel feature restore` describe block.
-- [ ] **`moveToSpecialFolder` lacks `extractFeaturesFromDisplayedMedia` fallback for cold-cache special-undo** — Repro: in AI-sorted mode, hit special-folder rating for a file whose features were never extracted (no background extraction completed yet, cold `featureCache`/`clipCache`). `moveToSpecialFolder` reads `getCombinedFeatures` (returns null) and `featureCache.get` (returns undefined), so `mlFeatures = null` in the history entry. After special-undo, `restoreFeatureCachesFromHistory` no-ops; the file is back in `mediaFiles` but `predictionScores` stays empty for it, so the badge does not re-appear — even though the ML model is trained. Asymmetric with `moveCurrentFile` (like/dislike) which already calls `extractFeaturesFromDisplayedMedia()` as a fallback when the cache is cold (L1181-1196). Fix: mirror `moveCurrentFile`'s `extractFeaturesFromDisplayedMedia()` fallback in `moveToSpecialFolder` before capturing `mlFeatures`. Spec explicitly documents this gap as acceptable trade-off but reviewer flagged it as worth tracking. Effort: S (~10-15 LoC + 1 test). Affected: [media-viewer.js:~1342-1347](../../media-viewer.js#L1342-L1347) (`moveToSpecialFolder`), [media-viewer.js:~1181-1196](../../media-viewer.js#L1181-L1196) (reference pattern in `moveCurrentFile`).
-
----
-
-## From PR #34 Code Review (2026-05-10)
-
-### [2026-05-10] From: PR #34 review-spawned + filtered-but-noted findings
-**Origin**: Multi-agent code review of `fix/clip-extraction-silent-failure` (PR #34). Two issues scored ≥80/100 were fixed in `4ea65c3` before merge (`loadFeatureCache` ordering + `await initClipModel` race). These three remaining items were either explicitly acknowledged by the author as deferred trade-offs or were sub-threshold (filtered from inline review) but worth tracking.
-
-- [ ] **Duplicate `onClipDownloadProgress` listener risk after dropping `clipModelDownloading` guard** (acknowledged by PR author) — `kickoffBackgroundExtractionIfEnabled()` no longer guards `initClipModel()` behind `!this.clipModelDownloading`; concurrent calls dedupe at the IPC layer but each call re-registers a renderer-side `window.electronAPI.onClipDownloadProgress(...)` listener via `initClipModel`. The listeners are torn down in the `finally` block of each `initClipModel` invocation, so the stack drains as IPC calls resolve — but during overlapping calls (e.g., rapid folder switching mid-download) the user may briefly see duplicate "Downloading CLIP model... N%" toasts. Cosmetic; not a correctness issue. Fix options: (a) re-introduce a renderer-side single-flight guard that returns the in-flight promise, (b) move the progress-listener registration into a shared init sentinel that any concurrent call awaits. Author's response: "cosmetic duplicate progress listener may register; not a correctness issue." Affected: [media-viewer.js:6566-6602](../../media-viewer.js#L6566-L6602) (`initClipModel`), [media-viewer.js:6928-6946](../../media-viewer.js#L6928-L6946) (`kickoffBackgroundExtractionIfEnabled`).
-- [ ] **Pre-existing: `clipCache` is never cleared in `loadFolder()`** (filtered as pre-existing in PR #34 review, ~0/100) — `loadFolder()` clears `featureCache`, `featureMetadata`, `perceptualHashes`, and `predictionScores` on every folder switch but NOT `clipCache`. Introduced when CLIP was added (commit `6b90226`); `clipCache.clear()` has never been added. With the new kickoff path now hitting these caches on every folder load, the existing path-keyed match (`this.clipCache.has(file.path)`) could silently return stale vectors when two folders share path-identical filenames (renames, duplicates across drives). Real bug under specific scenarios; not introduced or worsened by PR #34. Fix: add `this.clipCache.clear();` alongside the other clears at the top of `loadFolder()`. Affected: [media-viewer.js:~L2255-L2260](../../media-viewer.js#L2255-L2260) (cache-clearing block).
-- [ ] **Index `2026-05-06-clip-extraction-silent-failure-design.md` in docs/README.md Design Specs table** (filtered, ~75/100) — PR #34 added the spec under `docs/superpowers/specs/` and indexed the archived plan in `docs/README.md` Archived Plans, but did not add a row to the Design Specs table for the spec itself. Recurring docs-hygiene pattern (PRs #19, #23, #27, #28, #29). Cosmetic; the Pre-archive checklist BACKLOG item (2026-04-30 entry) covers archived-plan drift but not Design Specs index drift — extend that checklist to cover both tables, or fix in-place.
-
----
-
-## From PR #34 Manual Testing (2026-05-07)
-
-### [2026-05-07] From: Group A manual repro session
 **Origin**: User executed the 8-step manual repro for `fix/clip-extraction-silent-failure` (PR #34) and confirmed the CLIP extraction fix works end-to-end. Two unrelated UI bugs surfaced during the session.
 
 - [ ] **Compare-mode → folder-switch leaves stale media wrappers visible** — Repro: enter Compare Mode (2 media files side-by-side), then select a different folder via the change-folder button. Observed: new folder loads in single-file mode (correct — `loadFolder()` calls `switchToSingleModeUI()` before `hideDropZone()` per the existing CLAUDE.md gotcha), BUT the two previous compare-mode media wrappers remain visible, shifted to the left of the viewport and shrunk to small dimensions while the new single-mode media renders to their right. See screenshot in PR #34 thread (vertical red-shirt image right-side, faint shifted/shrunk wrappers left). Suggests `switchToSingleModeUI()` reverts the mode flag and overlay controls but does not remove/hide the leftover `.compare-wrapper` / `.media-wrapper-left` / `.media-wrapper-right` DOM nodes. Likely fix: `switchToSingleModeUI()` should `.remove()` the compare wrappers from `mediaContainer` (or hide them) before the new media renders. Affected: `media-viewer.js` (`switchToSingleModeUI` ~near `loadFolder`/`toggleViewMode` call sites), `styles.css` (compare-wrapper layout). E2E coverage: extend existing `compare-mode.test.js` "resets to single mode when switching folders" to also assert `.compare-wrapper` is not in the DOM after the switch.
 - [ ] **Hash sort + AI sort are not mutually exclusive — separate undo for each is confusing** — Repro: load a folder, click Sort-by-Similarity (any algorithm — VPTree/MST/CLIP), then click Sort-by-Prediction (AI). Observed: both sorts apply in sequence and the user can undo each independently (two separate "Restore Order" affordances). Today they're independent buttons with independent state (`isSortedBySimilarity` + `isSortedByPrediction`) so the undo paths don't interlock. User-suggested fix: unify both into a single Sort menu/dropdown where the algorithm options become `[Similarity (Hamming MST/VPTree/CLIP), AI (Prediction)]` — selecting one displaces the other, and a single "Restore Original Order" button affects whichever sort is active. Alternative: keep the two buttons but make the "active sort" state mutually exclusive — clicking AI-sort while similarity-sorted first restores similarity then applies AI, with a single undo. Affected: `media-viewer.js` (`handleSortBySimilarity` ~L4140+, `handleSortByPrediction` ~L6271+, `originalMediaFiles`/`mediaFiles` swap logic, the two `.btn-label` toggles for "Sort by …"/"Restore Order"), `index.html` (sort-related buttons + algorithm dropdown), possibly `styles.css`. Open design question: does the AI sort go into the existing algorithm `<select>` (`vptree | mst | simple | clip | prediction`), or does the menu get a separate "sort source" axis (similarity vs prediction)? **[Strengthened 2026-05-30]**: user re-reported this on a separate occasion ("Я уже раньше писал, но ИИ сортировка и другие должны быть взаимоисключающие друг друга — чтобы нельзя было использовать ИИ сортировку и другую друг за другом без отмены предыдущей или, хотя бы, без указания, что текущая сортировка будет отменена"). Confirms minimum requirement: applying a second sort without first undoing the active one should at minimum **prompt** the user that the current sort will be replaced. Promote priority within the entry.
 
----
+### [2026-05-05] Manual testing intake
 
-## From Manual Testing (2026-05-05)
-
-### [2026-05-05] From: manual testing
 **Origin**: User feature ideas and UX observations during manual session
 
-- [ ] **Add 3-media batch rating mode** — New mode where the user rates 3 media simultaneously: explicitly chooses one for like, one for dislike, leaves the third unrated (stays in folder, not moved). Differs from current compare mode (with 2 media) where rating one auto-rates the other; here the user must assign two ratings explicitly. Could speed up sorting throughput. Optional follow-on: a sort variant that treats the "stays" choice as a third label, but unseen files cannot count as "unrated stays" (Новый режим: оценка 3х медиа сразу. Пользователь выбирает: кому ставится лайк, кому дизлайк, а кто остается не оценен и не перемещается. По сути, очень похоже на режим с 2мя оценками, только теперь пользователь должен определять 2 оценки, а не одну (потому что в режиме с 2мя можно определить одну оценку, а вторая поставится автоматически). Я предполагаю, что такой режим может позволит, как минимум, быстрее сортировать. Можно также добавить сортировку для такого режима, которая будет учитывать те медиа, которые остаются в папке (третья оценка; но при этом те, которые еще не были показаны, не могут считаться таковыми)); affected: `media-viewer.js` (new mode alongside `isCompareMode`/single, ~L345/L1094 mode state, `showCompareMedia` ~L2451+, rating handlers), `index.html` (3-pane layout), `styles.css` (3-pane CSS)
+- [ ] **Add 3-media batch rating mode** — New mode where the user rates 3 media simultaneously: explicitly chooses one for like, one for dislike, leaves the third unrated (stays in folder, not moved). Differs from current compare mode (with 2 media) where rating one auto-rates the other; here the user must assign two ratings explicitly. Could speed up sorting throughput. Optional follow-on: a sort variant that treats the "stays" choice as a third label, but unseen files cannot count as "unrated stays" (Новый режим: оценка 3х медиа сразу. Пользователь выбирает: кому ставится лайк, кому дизлайк, а кто остается не оценен и не перемещается. По сути, очень похоже на режиме с 2мя оценками, только теперь пользователь должен определять 2 оценки, а не одну (потому что в режиме с 2мя можно определить одну оценку, а вторая поставится автоматически). Я предполагаю, что такой режим может позволит, как минимум, быстрее сортировать. Можно также добавить сортировку для такого режима, которая будет учитывать те медиа, которые остаются в папке (третья оценка; но при этом те, которые еще не были показаны, не могут считаться таковыми)); affected: `media-viewer.js` (new mode alongside `isCompareMode`/single, ~L345/L1094 mode state, `showCompareMedia` ~L2451+, rating handlers), `index.html` (3-pane layout), `styles.css` (3-pane CSS)
 - [ ] **Allow ML model retrain (not just restore order)** — Today the user can only restore the original pre-prediction order; no UI affordance to force a model retrain from accumulated ratings. Open design question: does the model retrain incrementally during ratings (current behavior of `updateMlModelAfterRating`), or also on folder open after enough new ratings accumulate across sessions? After each rating session the like/dislike folders gain content from prior decisions and the main folder shrinks — that drift may warrant explicit "retrain from scratch" UX (Возможность переобучить модель (а не только восстановить старый порядок). Модель дообучается во время оценок или во время открытия папки? Т.е. происходит переобучение, если открывать одну и ту же папку, но после какого-то количества оценок (лайк и дизлайк фолдеры дополняются медиа из прошлых оценок той папки, которая выбирается)? То есть после каждой сессии оценок меняется наполнение основной папки, наполнение папок лайков и дизлайков); affected: `media-viewer.js:~L5730` (`resetMlModel`), `~L6271` (`handleSortByPrediction`), `trainFromHistoricalRatingsAndWait`, Settings panel (F1)
 - [ ] **Overlay buttons have 3-stage "jumping" hover/leave transition** — On hover-in then hover-out, the `.media-overlay-controls` buttons cycle through 3 visually distinct states: transparent-bg buttons appear → glass effect (backdrop-filter) kicks in → glass holds while hovered → on mouse-leave glass disappears first, transparent buttons remain briefly, then buttons fade out. The staged transition reads as broken/attention-grabbing. Likely cause: `transition-delay: 500ms` on `.media-overlay-controls` opacity combines with separate `backdrop-filter` transition on `.overlay-btn` and per-button `:hover` background swaps — three transitions on different timelines. Fix: unify into one coordinated transition or remove the staggered delay on hide (Кнопки управления медиа имеют 3 состаяния, которые "прыгают": При навидении показываются кнопки с прозрачным фоном, потом быстро появляется эффект стекла и держится, пока медиа в фокусе (мышка наведена), после переноса мышки с медиа эффект стекла пропадает, появляется прозрачный фон и уже после кнопки пропадают. Проблема: Это выглядит как-будто так не должно быть, ощущения "прыгающих кнопок" очень привлекающих к себе внимание); affected: [styles.css:1623-1716](styles.css#L1623-L1716) (`.media-overlay-controls` `transition-delay: 500ms`, `.overlay-btn` `transition: all`, per-btn `:hover` background swaps)
 - [ ] **Add rotation buttons for media** — Some media files (static images, animated images, videos) display rotated incorrectly. Add manual rotation controls (e.g., 90° CW/CCW buttons) so the user can correct orientation per-file for comfortable viewing/rating. Persistence question: ephemeral (per-session) or saved per-file? (Некоторые медиа (статические или анимированные, в том числе видео) иногда перевернуты. Можно добавить кнопки поворота медиа для комфорта); affected: `media-viewer.js` (`showSingleMedia`/`showCompareMedia`, new rotation state per file or per-mediaFiles entry), `index.html` (rotate buttons — possibly in overlay controls), `styles.css` (CSS `transform: rotate()` on media element + interaction with existing zoom transforms)
 - [ ] **Move media to arbitrary folder via special button** — Add a button to move the current media to any folder the user picks (beyond the fixed like/dislike/special destinations). Folder picker via existing IPC dialog (or a new "recent destinations" picker for speed). History entry needed for undo (Дать возможность переместить медиа в любую папку по спец кнопке); affected: `media-viewer.js` (new handler + folder-picker IPC call + `moveHistory` entry), `main.js` (likely reusable existing file-move IPC; possibly new "browse for folder" IPC if not exposed), `index.html` (button placement — overlay controls or main controls bar), `preload.js`
 
----
+### [2026-05-03] Manual smoke test intake (clip-sort-followups)
 
-## From PR #33 Code Review (2026-05-05)
-
-### [2026-05-05] From: PR #33 sub-threshold findings
-**Origin**: Multi-agent code review of `feature/clip-sort-followups`. The critical issue (cachedData.algorithm undefined → CLIP branch unreachable) was scored 100/100 and fixed in `e1b5fad` before merge. These three remaining items scored below the 80-threshold but are worth tracking as defensive/hygiene improvements.
-
-- [x] ✅ 2026-05-21 (PR #36) — **Clear `this.clipUnloadTimer` in CLIP toggle-off handler** (~50/100) — The Group E pattern (commit `d65bfdd`) requires every code path that changes CLIP state to cancel any pending unload first; `startBackgroundFeatureExtraction()` does this. The new toggle-off handler does not. Race scenario: extraction completes → 30s timer set → user disables CLIP → handler runs cleanup but stale timer remains → user re-enables CLIP and `initClipModel()` begins → stale timer fires `unloadClipModel` IPC mid-load. Mitigated by `main.js` returning `{success:false, reason:'loading'}` (e7d84d0), so no user-facing defect today. Fix: add `clearTimeout(this.clipUnloadTimer); this.clipUnloadTimer = null;` at the top of the `if (!clipToggle.checked)` block in `media-viewer.js`.
-- [x] ✅ 2026-05-21 (PR #36) — **Add try/catch around `await this.deleteSortCache('clip')` in toggle handler** (~25/100) — The async event listener relies on `deleteSortCache`'s internal try/catch to swallow errors, which works today (the method catches all paths and shows a notification). Hygiene-only: explicit caller-side `try/catch (_e) { /* best-effort cleanup */ }` makes the contract obvious to future maintainers and removes the implicit dependency on the callee's error handling. Not a real bug; consider when next touching the file.
-- [x] ✅ 2026-05-21 (PR #36) — **Add per-file abort check to `insertNewFilesInSortedOrder` (both paths)** (~0/100, pre-existing) — Both the hash and CLIP branches iterate `O(N*M)` cosine/Hamming computations on the renderer's main thread with no `sortAbortController.signal.aborted` check inside the inner loop. Cancel during cache-hit insertion is silently ignored. Typical use case (1-50 new files) is fine; pathological case (100+ new files in a 1000-file cache = 100k iterations) freezes UI. Pre-existing — the hash path always lacked the guard; the new CLIP path inherits the gap. Fix: add `if (this.sortAbortController?.signal.aborted) throw new Error('Sort aborted');` once per outer iteration in both branches. Architectural note: also consider yielding to the event loop (`await new Promise(r => setTimeout(r, 0))`) every N files for very large folders.
-- [x] ✅ 2026-05-21 (PR #36) — **Process: end-to-end integration tests for cache-hit sort paths** — PR #33's primary fix slipped through 7 unit tests because they called `insertNewFilesInSortedOrder` directly with explicit `'clip'`, bypassing the broken `applyCachedSortOrder → cachedData.algorithm` plumbing. The fix in `e1b5fad` added `applyCachedSortOrder (algorithm threading)` regression tests with stubbed callees, but a higher-level integration test (load fixture cache file → invoke real cache-hit code path → assert algorithm flows end-to-end) would have caught the bug pre-merge. Pattern recurs: unit-test-the-leaf vs integration-test-the-call-graph. Consider adding a single E2E or fixture-driven integration test per major code path.
-
----
-
-## From feature/clip-sort-followups manual testing (2026-05-03)
-
-### [2026-05-03] From: manual smoke test of branch
 **Origin**: User attempted Scenario 1 of the spec's manual test plan on a 63-file image folder (`Act2_Warm`) and discovered CLIP extraction is not firing on folder load. The branch's actual scope (cache-hit insertion + toggle-off cleanup) is verified by 167/167 unit tests + 39/39 E2E + final code review, but downstream manual scenarios (1-3, 5-6) are blocked by this pre-existing issue.
 
 - [x] ~~🔴 **CLIP background extraction silently does not fire on folder load**~~ — ✅ Resolved 2026-05-07 by Group A (`fix/clip-extraction-silent-failure`). Root cause: `startBackgroundFeatureExtraction()` had no call site in `loadFolder()`. Fix: new `kickoffBackgroundExtractionIfEnabled()` method called after `updateFolderInfo()`. See [DONE.md](DONE.md#2026-05-07-group-a-clip-extraction-silent-failure) and [archived plan](../archive/plans/2026-05-06-clip-extraction-silent-failure.md).
 - [ ] **Add UX-visible "extraction starting" notification** — Even if extraction is firing, the absence of any visible "Loading CLIP model..." or "Extracting features: 0/63" feedback for the first ~1-30 seconds creates a "did anything happen?" moment that prompted the bug above to be reported. Adding a "Starting feature extraction..." toast immediately on folder load (before any per-file progress) would surface failure modes faster and improve perceived responsiveness. Cosmetic but high UX value (now unblocked since 2026-05-07 Group A merged).
 - [ ] **Toggle-on kickoff for CLIP** (deferred from Group A spec) — When the user toggles CLIP **on** in Settings while a folder is already loaded, today's behavior is implicit: nothing happens until they switch folders or click a CLIP-dependent sort. Add a kickoff so toggle-on triggers the same `kickoffBackgroundExtractionIfEnabled()` path as folder load. Affected: `media-viewer.js` (`#clipFeaturesToggle` change handler — currently `async` with revert-before-await cleanup on toggle-off; add inverse op).
 
----
+### [2026-04-08] Manual testing intake
 
-## From PR #32 Code Review (2026-04-30)
-
-### [2026-04-30] From: PR #32 post-merge review process observations
-**Origin**: Sub-threshold (scored 75/100) findings from the multi-agent code review of `feature/group-f-build-dx`. Three direct findings were fixed in commit `dcbbc26` before merge; these two remaining items are process-level patterns worth automating to prevent recurrence.
-
-- [ ] **Standardize E2E test result reporting in DONE.md entries** — Past groups (C, D, E) consistently include `"39/39 E2E tests pass"` in their DONE.md test-results blurb; Group F's entry lists only unit tests (`"160/160 unit tests pass (no test changes needed — both fixes are static-file edits)"`) without an E2E count. The omission is defensible (no JS code changed) but creates inconsistency across the log. Either (a) require an E2E line on every DONE entry — pass count, "skipped (no JS changes)", or "deferred to manual smoke", or (b) drop the unit-test count too and only report when meaningful. Cosmetic; aids future reviewers spotting test-coverage gaps.
-- [ ] **Pre-archive checklist to prevent recurring archived-plan drift** — Recurring pattern across PRs #19, #20, #27, #29, #32: archived plans land with (a) checkboxes still `- [ ]`, (b) no `Status: Complete` header, (c) the new file not indexed in `docs/README.md`. Each recurrence is caught in code review and fixed in a follow-up commit. Mitigations: (i) add a checklist block at the top of the plan template (TEMPLATES/) that explicitly says "before archive: flip checkboxes, add Status, update docs/README.md", (ii) write a small `scripts/archive-plan.js` helper that flips boxes + adds status + appends to docs/README.md, or (iii) a pre-commit/agent check that flags any new file under `docs/archive/plans/` not yet referenced by `docs/README.md`. (i) is lowest-effort.
-
----
-
-## From Group F Build & DX (2026-04-29)
-
-### [2026-04-29] From: Group F closeout (PR pending)
-**Origin**: Spec follow-ups + deferred verification + observed cleanup opportunities from `feature/group-f-build-dx`
-
-- [ ] **Full audit of `regression-checker.md` against current `media-viewer.js`** — Group F only fixed Section 2 (FullscreenManager extraction) demonstrably stale. Remaining sections (1, 3-7) were assumed current but never re-verified. Drift candidates: Section 3 (cache cleanup) doesn't mention `clipCache` / `featureMetadata` — both now part of `removeFileFromList()`; Section 4 (extraction pause/resume) might miss `extractionRunId` generation counter; Section 5 wording. Cosmetic-but-misleading; not blocking.
-- [ ] **Migrate Lucide from CDN to bundled npm dependency** — Pinning + SRI is a stopgap. Bundling eliminates the unpkg dependency entirely (offline use, no SRI maintenance, faster cold load). Larger scope: requires build step or manual UMD copy + asset path updates. Tracked since spec; not in v1.1 polish milestone.
-- [ ] **Defensive recheck: dispatch regression-checker on a real fullscreen-touching commit (e.g., `43db8af`)** — Plan Step 2.5 was deferred due to subagent quota exhaustion during execution. Run after quota reset to confirm the agent now references `this.fullscreen.cleanup()` (not the legacy `cleanupFullscreen`) in actual output. Low risk (the symbol replacement was verified by inspection), but a real-output check completes the spec's verification criterion.
-- [ ] **Clean up duplicate `!.claude/agents/` line in `.gitignore`** — `.gitignore` lines 138-139 both read `!.claude/agents/` (intended one to be `!.claude/agents/**`). Functionally harmless under `.claude/*` (which only matches one level), but visually wrong. Trivial fix.
-- [ ] **Update `regression-checker.md` line-count after every major media-viewer.js change** — The agent file's `~7400` reference will drift again as `media-viewer.js` grows or as managers are extracted. Either (a) reword to "growing single-file" and drop the number, (b) regenerate via a pre-commit hook, or (c) accept periodic drift and fix during planned audits. (a) is lowest-effort.
-
----
-
-## From Group E Resource Management (2026-04-21)
-
-### [2026-04-21] From: Group E final code review (PR #31)
-**Origin**: Final code reviewer findings on `feature/resource-management` (5 implementation commits, 160/160 unit + 39/39 E2E pass, approved for merge)
-
-- [ ] **Extract `CLIP_UNLOAD_DELAY_MS = 30000` named constant** (Minor M1) — `media-viewer.js:7007` hard-codes the 30-second unload delay. Per CLAUDE.md naming convention (`MAX_NOTIFICATIONS`-style for module-level constants), extract to a top-level constant alongside other constants. Aids future tuning and testability. Cosmetic; not blocking.
-- [ ] **Reconsider `clipModelError` reset behavior on persistent failures** (Minor M2) — `main.js:446` always nulls `clipModelError` on unload. For transient errors (network blip) this enables clean retry. For persistent errors (HF hub unreachable, model files corrupt) the user pays a ~1-2s failed load attempt on every folder-switch cycle. Spec explicitly accepted this tradeoff; revisit only if it becomes noisy in practice. Possible mitigation: track error age and only clear if older than a threshold.
-- [ ] **Trim verbose comment on CLIP unload timer schedule** (Minor M4) — `media-viewer.js:6999-7002` has a 4-line comment explaining cancel-on-restart and transparent-reload semantics. Per CLAUDE.md "default to writing no comments" guidance, could trim to one line. Counter-argument: behavior crosses IPC boundaries with non-obvious timing, so the comment earns its keep. Judgment call, not blocking.
-
-### [2026-04-28] From: PR #31 post-merge code review (additional candidates)
-**Origin**: Final-review confidence scoring on `feature/resource-management` evaluated 5 candidates; 3 below 80-threshold worth tracking as low-priority defensive improvements
-
-- [ ] **`enableClipFeatures` checked at schedule-time only, not at fire-time** (~15/100) — `media-viewer.js:7000` gates `setTimeout(unloadClipModel, 30000)` on `this.enableClipFeatures` at scheduling. If the user toggles CLIP off during the 30s grace window, the timer still fires the unload IPC. In practice this is harmless (the model would also be unloaded if CLIP were never re-enabled) and arguably correct behavior, but a defensive re-check inside the timer callback would be more robust if the unload call ever gains side-effects beyond nulling refs. Not blocking.
-- [ ] **`unloadClipModel` IPC fired without await or error handling in timer callback** (~50/100) — `media-viewer.js:7001-7004` calls `window.electronAPI.unloadClipModel()` fire-and-forget. The IPC returns `{ success: false, reason: 'loading' }` if a load is in flight, but the renderer ignores the result. Acceptable for a best-effort cleanup, but a `.catch()` or `.then((r) => !r.success && logger.warn(...))` would surface unexpected failures during debugging. Not blocking.
-- [ ] **`vi.spyOn(fs, 'closeSync')` in logger test relies on inline `mockRestore()` only** — `tests/logger.test.js:46-53` calls `closeSyncSpy.mockRestore()` at the end of the test body. If the assertion fails, restore is skipped and the spy can leak into the next test in the same file. `vi.spyOn` calls through by default so subsequent tests aren't broken in practice, but moving restore into a `try { ... } finally { closeSyncSpy.mockRestore(); }` block (or to `afterEach`) is more defensive. Test hygiene improvement only; matches the `tmpFixtures` cleanup pattern used in E2E tests.
-
----
-
-## From Group D CLIP Similarity Sorting (2026-04-18)
-
-### [2026-04-18] From: Group D implementation + final code review
-**Origin**: Final code reviewer findings + per-task review of `feature/clip-similarity-sorting` (5 commits, 159/159 tests pass, merged PR TBD)
-
-- [x] **Cache-hit `insertNewFilesInSortedOrder` uses Hamming distance regardless of algorithm** — Resolved by `feature/clip-sort-followups` (2026-05-03, commits 2252d32 + 0eaf7ca): function takes new `algorithm` parameter; CLIP path scores by cosine distance over `clipCache`; hash path byte-equivalent to pre-change behavior; `applyCachedSortOrder` passes `cachedData.algorithm`. Regression-guard test added.
-- [x] **Add unit tests for `sortMediaBySimilarityClip`** — Resolved by `feature/clip-sort-followups` (2026-05-03, commits bb1052d + 30486df): 4 characterization tests added covering MST chain ordering, end-append fallback for missing vectors, abort flag throw, insufficient-vectors guard. `sortMediaBySimilarityMST` exported as a freebie for future tests.
-- [ ] **Extract shared MST helper between `sortMediaBySimilarityMST` and `sortMediaBySimilarityClip`** — ~90 lines of duplicated logic in `sorting-worker.js` (lines 499-588 for Hamming, 594-756 for cosine). Only differences: distance function, eligibility check, error message noun, progress label suffix. Candidate: `_sortMediaBySimilarityGeneric(mediaFiles, distanceFunc, eligibilityCheck, currentIndex, algoLabel)`. Public wrappers become ~8 lines each. Plan explicitly deferred this refactor to keep scope manageable. Low-risk since MST code is already proven and both callers use identical control flow.
-- [ ] **Correct `.sort_cache_clip.json` references in spec + CLAUDE.md** — Spec `docs/superpowers/specs/2026-04-16-clip-similarity-sorting-design.md` (lines 49, 93, 94) and CLAUDE.md git-insights line 255 both claim CLIP sort creates `.sort_cache_clip.json`. Actual implementation uses the unified `.sort_cache.json` file with `'clip'` as a top-level key (pre-existing pattern, `media-viewer.js:4900/4920/4965`). Implementation is correct; docs need updating to say "CLIP sort cache key `'clip'` adds entry under that key in the unified `.sort_cache.json`".
-- [x] **CLIP toggle-off should invalidate any persisted `'clip'` entry in sort cache** — Resolved by `feature/clip-sort-followups` (2026-05-03, commits 0ce9cec + 80ac67d M3 polish): handler is now `async`; on disable it synchronously reverts `sortAlgorithm` to `'vptree'` and updates the dropdown (revert-before-await for instant UI), then `await deleteSortCache('clip')` clears the persisted entry. Both fix branches were taken.
-
-### [2026-04-20] From: PR #30 code review
-**Origin**: 5 parallel agents + confidence scoring; 1 issue scored 85/100 (CLAUDE.md gotcha factual error, fixed in 24ef763); items below threshold worth tracking
-
-- [ ] **CLIP success notification shows wrong file count** (75/100) — In the CLIP branch of `handleSortBySimilarity()`, `sortedCount = vectorCount` is used in the success toast (`✅ Sorted N files with CLIP (semantic)!`), but `sortMediaBySimilarityClip` returns ALL files: MST-sorted files-with-vectors plus files-without-vectors appended at the end. For a folder with 100 files where 70 have CLIP embeddings, the toast says "Sorted 70" even though all 100 were reordered. Fix: `sortedCount = sortedPaths.length` (or `this.mediaFiles.length`). Cosmetic; affected: `media-viewer.js` CLIP branch.
-- [ ] **`K_NEIGHBORS` local variable uses UPPER_SNAKE_CASE inconsistent with sibling function** (75/100) — In `sortMediaBySimilarityClip`, the local k-neighbors constant is named `K_NEIGHBORS` (UPPER_SNAKE_CASE), but the sibling `sortMediaBySimilarityMST` and other locals nearby (`nearestNeighbor`, `minDistance`, `nearestNode`, `minDist`) use camelCase. CLAUDE.md naming guidance shows `MAX_NOTIFICATIONS`-style for module-level constants; in-function locals follow camelCase. Rename to `kNeighbors` for consistency. Cosmetic; affected: `sorting-worker.js` `sortMediaBySimilarityClip`.
-- [ ] **`calculateCosineDistance([], [])` returns 1 instead of 0 for two empty arrays** (50/100) — Length-mismatch guard passes when both lengths are 0; the dot-product loop never executes; function returns `1 - 0 = 1` (orthogonal) rather than `0` (identical). In practice CLIP always returns 512-dim vectors, so this never triggers — but if a future caller produces empty arrays (e.g., extraction failure mode that returns zero-length arrays instead of null), the result is silently wrong. Defensive: add `if (vec1.length === 0) return 0;` early-return, or assert non-zero length.
-
----
-
-## From Manual Testing (2026-04-08)
-
-### [2026-04-08] From: manual testing
 **Origin**: User feature ideas and UX observations
 
 - [ ] **Design add-on/extension system for the media viewer** — Define core app identity and core functions; build plugin architecture allowing users to install/uninstall add-ons that extend functionality without cluttering the main app (Основной медиа вьюер уже есть и он неплохой. Я не хочу его захламлять различным функционалом, который возможно и не нужен пользователю, поэтому я думаю о том, чтобы добавить фичу по установке дополнений внутри приложения, которая позволит пользователям устанавливать различные дополнения, которые не включены в основное приложение по той или иной причине. Но тогда нужно определить, что это за приложение, какие его основные функции, и что следует вынести в дополнения); affected: new architecture (no existing code)
@@ -231,25 +110,183 @@ two tasks because they have different shapes (architectural vs. visual).
 - [ ] **Show thumbnail or low-quality media while loading (progressive loading)** — Display the lowest-quality version or thumbnail first instead of "Loading" placeholder, then progressively load better quality; "stream" the media to users so they can evaluate even from silhouettes or rough images (Можем ли мы отображать миниатюру или самую низкокачественную версию медиа вместо плейсхолдера «Loading», чтобы пользователи могли оценить медиа даже по силуэтам или грубым изображениям. Показывать как медиа загружается онлайн — сначала самое низкое качество, затем постепенно лучше, то есть «стримить» медиа); affected: media-viewer.js (showMedia, showSingleMedia, showCompareMedia), main.js (thumbnail generation IPC)
 - [ ] **Configure interface for different window sizes + Ctrl+/- UI zoom** — Make the interface adapt to different main window sizes (currently only one CSS breakpoint at 768px, no resize handlers); allow users to zoom the entire UI in/out using Ctrl + +/- via `webFrame.setZoomFactor` (Настроить интерфейс для разных размеров основного окна. Разрешить масштабирование интерфейса с помощью Ctrl + +/-); affected: styles.css:~L2094 (@media query), media-viewer.js (no resize handler), preload.js (needs webFrame API exposure)
 
+### [2026-02-05] visual-scale-controls follow-ups
+
+**Origin**: [2026-02-05_visual-scale-controls.md](../archive/plans/2026-02-05_visual-scale-controls.md) — plan-spawned improvements; zoom level persistence was originally user-driven.
+
+- [ ] **Zoom level persistence** — Remember zoom level when navigating between media of similar size. Plan: 2026-02-05_visual-scale-controls. Effort: M.
+- [ ] **Slider width responsive to popover space** — Wider slider on larger screens for finer control. Effort: S.
+
 ---
 
-## From Group C Test Quality (2026-04-11)
+## 🟡 Operational & Observation Items
 
-### [2026-04-11] From: Group C implementation observations
+### [2026-04-30] Process observations (PR #32 post-merge)
+
+**Origin**: Sub-threshold (scored 75/100) findings from the multi-agent code review of `feature/group-f-build-dx`. Three direct findings were fixed in commit `dcbbc26` before merge; these two remaining items are process-level patterns worth automating to prevent recurrence.
+
+- [ ] **Standardize E2E test result reporting in DONE.md entries** — Past groups (C, D, E) consistently include `"39/39 E2E tests pass"` in their DONE.md test-results blurb; Group F's entry lists only unit tests (`"160/160 unit tests pass (no test changes needed — both fixes are static-file edits)"`) without an E2E count. The omission is defensible (no JS code changed) but creates inconsistency across the log. Either (a) require an E2E line on every DONE entry — pass count, "skipped (no JS changes)", or "deferred to manual smoke", or (b) drop the unit-test count too and only report when meaningful. Cosmetic; aids future reviewers spotting test-coverage gaps.
+- [ ] **Pre-archive checklist to prevent recurring archived-plan drift** — Recurring pattern across PRs #19, #20, #27, #29, #32: archived plans land with (a) checkboxes still `- [ ]`, (b) no `Status: Complete` header, (c) the new file not indexed in `docs/README.md`. Each recurrence is caught in code review and fixed in a follow-up commit. Mitigations: (i) add a checklist block at the top of the plan template (TEMPLATES/) that explicitly says "before archive: flip checkboxes, add Status, update docs/README.md", (ii) write a small `scripts/archive-plan.js` helper that flips boxes + adds status + appends to docs/README.md, or (iii) a pre-commit/agent check that flags any new file under `docs/archive/plans/` not yet referenced by `docs/README.md`. (i) is lowest-effort.
+
+### [2026-04-29] Group F follow-ups (build/DX)
+
+**Origin**: Spec follow-ups + deferred verification + observed cleanup opportunities from `feature/group-f-build-dx`
+
+- [ ] **Full audit of `regression-checker.md` against current `media-viewer.js`** — Group F only fixed Section 2 (FullscreenManager extraction) demonstrably stale. Remaining sections (1, 3-7) were assumed current but never re-verified. Drift candidates: Section 3 (cache cleanup) doesn't mention `clipCache` / `featureMetadata` — both now part of `removeFileFromList()`; Section 4 (extraction pause/resume) might miss `extractionRunId` generation counter; Section 5 wording. Cosmetic-but-misleading; not blocking.
+- [ ] **Migrate Lucide from CDN to bundled npm dependency** — Pinning + SRI is a stopgap. Bundling eliminates the unpkg dependency entirely (offline use, no SRI maintenance, faster cold load). Larger scope: requires build step or manual UMD copy + asset path updates. Tracked since spec; not in v1.1 polish milestone.
+- [ ] **Defensive recheck: dispatch regression-checker on a real fullscreen-touching commit (e.g., `43db8af`)** — Plan Step 2.5 was deferred due to subagent quota exhaustion during execution. Run after quota reset to confirm the agent now references `this.fullscreen.cleanup()` (not the legacy `cleanupFullscreen`) in actual output. Low risk (the symbol replacement was verified by inspection), but a real-output check completes the spec's verification criterion.
+- [ ] **Clean up duplicate `!.claude/agents/` line in `.gitignore`** — `.gitignore` lines 138-139 both read `!.claude/agents/` (intended one to be `!.claude/agents/**`). Functionally harmless under `.claude/*` (which only matches one level), but visually wrong. Trivial fix.
+- [ ] **Update `regression-checker.md` line-count after every major media-viewer.js change** — The agent file's `~7400` reference will drift again as `media-viewer.js` grows or as managers are extracted. Either (a) reword to "growing single-file" and drop the number, (b) regenerate via a pre-commit hook, or (c) accept periodic drift and fix during planned audits. (a) is lowest-effort.
+
+### [2026-03-23] TASK-023 follow-ups
+
+**Origin**: TASK-023 implementation (Fix video pause/play icon synchronization)
+
+- [ ] **Pin Lucide CDN to a specific version** — `index.html` loads `lucide@latest` which can break at any time. Pin to `lucide@1.0.1` (or whichever current) for reproducible builds. The `nodes` → `root` param rename between versions caused this bug silently.
+- [ ] **Add regression test for play/pause icon toggle** — No E2E or unit test verifies that the play/pause icon actually changes state when toggling video playback. Would catch Lucide API drift or similar DOM reference bugs.
+
+### [periodic] Anonymize author field in package.json
+
+- [ ] **Anonymize author field in package.json** — Security audit follow-up (2026-02-05). Check if author email/name in package.json should be anonymized for privacy. Low effort.
+
+### [periodic] Verify no secrets in git history
+
+- [ ] **Verify no secrets in git history** — Run `git log -p --all -S <pattern>` to confirm no credentials were accidentally committed. High impact, low effort. Added 2026-02-05.
+
+---
+
+## 🟤 Auto-Generated Tech Debt
+
+### [2026-05-28] PR #38 post-merge review follow-ups (4 sub-threshold items)
+
+**Origin**: Five-agent code review of `feature/tournament-mode` (PR #38, merged in `c1a5dbf`). Three threshold findings (each ~85/100) were fixed in `06acdc1` (folder-scoped tournament reset, special-undo cache/disk restore, archived-plan checklist) and one ~75/100 engine-symmetry follow-up was fixed in `ee5889d` (`engine.files` rewinds through `undo()` via `filesSnapshot`). The four items below are sub-threshold findings (scores 25–75) tracked here as defensive/hygiene improvements.
+
+- [ ] **Local-capture pattern for `feature-cache-write-chunk` IPC handler** (~75/100) — `main.js` `feature-cache-write-chunk` does `await new Promise((resolve) => featureCacheWriter.stream.once('drain', resolve))` without first capturing `featureCacheWriter` into a local `const writer = featureCacheWriter`. If a concurrent `feature-cache-write-open` (or `-close`) destroys the old stream during this `await`, the drain promise never resolves and the handler hangs. The renderer's `_acquireCacheIoLock` single-flight guard prevents this race in practice today, but the CLIP IPC handlers (`extractClipEmbedding`/`extractClipEmbeddingBatch`, commit `782b61a`) explicitly adopted the local-capture idiom for exactly this class of mid-await race — and CLAUDE.md documents it as the required pattern for all long-running async IPC handlers sharing module-level state. The feature-cache write handlers should follow the same pattern. Effort: XS (3-line change per handler — capture, null-guard, use local ref). Affected: [main.js](../../main.js) `feature-cache-write-chunk` (and parity check on `feature-cache-write-close` which already captures correctly).
+- [ ] **`showCompareMedia()` `<2 files` fallback should also exit tournament mode** (~62/100) — When `showCompareMedia()` is reached via `showTournamentPair()` and a file goes missing from `mediaFiles` between the engine's pair selection and the render (race with external file deletion or rapid removeFile), the `mediaFiles.length < 2` guard calls `switchToSingleModeUI()` and returns — but does not call `exitTournamentMode()`. Result: user is left with single-mode UI visible while `isTournamentMode = true` (tournament keyboard map active, sort controls hidden, tournament overlay still rendered). State-machine consistency gap analogous to the `loadFolder()` issue already fixed in `06acdc1`. Repro is narrow (requires concurrent file deletion mid-render), but the fix is trivial. Effort: XS (1-line guard before `switchToSingleModeUI()` in the `<2` branch). Affected: [media-viewer.js](../../media-viewer.js) `showCompareMedia()` `<2 files` branch.
+- [ ] **Main-process single-flight guard on `feature-cache-open`** (~50/100) — The renderer has `_featureCacheLoadPromise` coalescing + `_acquireCacheIoLock`, but the main-process `feature-cache-open` handler has no defensive guard against re-entry. If two `feature-cache-open` calls arrive before the first pipeline's `'end'` callback fires, the old pipeline's `on('end')` closure can overwrite `featureCacheSession` with stale entries after the new open has started chunking. Renderer-side guards make this unreachable in normal single-window operation, but it's a latent issue for any future code path that calls `feature-cache-open` outside the `loadFeatureCache` single-flight path (manual debug calls, test harnesses, future multi-window). Proposed: capture a generation counter at session start and ignore stream events from prior generations; or explicitly `pipeline.destroy()` the prior stream when a new `feature-cache-open` arrives. Effort: S. Affected: [main.js](../../main.js) `feature-cache-open` handler.
+- [ ] **`TournamentManager._persistState` underscore-prefix called from host (v2.0 visibility)** (~25/100) — `MediaViewer` calls `this.tournament._persistState(this.baseFolderPath)` in three places (`loadFolder` cleanup, `handleTournamentUndo` default and special branches). The underscore prefix marks `_persistState` as private to `TournamentManager`, yet the host reaches into it directly. CLAUDE.md's v2.0 modularization pattern describes constructor-injected dependencies + public-method delegation (`this.fullscreen.toggle()`, `this.fullscreen.cleanup()`) but does not explicitly forbid underscore-method calls — so this is convention drift rather than an explicit rule violation. Two clean refactors: (a) expose `persistState(folderPath)` as a public method that wraps `_persistState`; or (b) constructor-inject a `getBaseFolderPath` callback so `TournamentManager` can resolve folder context itself and `_persistState` becomes truly internal. Cosmetic — does not affect behavior. Effort: XS. Affected: [tournament.js](../../tournament.js) (add public method or constructor arg), [media-viewer.js](../../media-viewer.js) (3 call-site updates).
+
+### [2026-05-26] Tournament polish + feature-cache streaming follow-ups
+
+- [ ] **Phase H: E2E tests for tournament mode** — Deferred from the original tournament plan (`docs/archive/plans/2026-05-25-tournament-mode.md`, Phase H "fit-as-time-allows"). Now that the UX has settled (mode-enter Continue/Start-over prompt, Save/Discard/Cancel on leave, strict order/seeding), add Playwright coverage: (1) happy path — enter tournament, make picks, complete, Apply moves files into `_Tier-N/`; (2) resume — start, leave with Save, re-enter → Continue restores progress; (3) reconciliation — add/remove a file then resume → "Resume anyway" reconciles; (4) discard + cancel flows. Use the existing E2E helpers (`seedLocalStorage`, `mockFolderDialog`, fixture dirs). Effort: M. Affected: new `tests/e2e/tournament-mode.test.js`.
+- [ ] **Incremental feature-cache serving (avoid ~40s blocking load on huge caches)** — `feature-cache-open` stream-parses the entire `.feature_cache.json` into a session array before returning, so a 259MB/24k-entry cache blocks ~40s before `loadFeatureCache` resolves and extraction/sort can begin. Proposed: serve entries to the renderer as the stream produces them (paused-stream + resume per chunk request, or push batches via `webContents.send`) so extraction starts as soon as the first batch arrives instead of waiting for the full parse. Effort: M. Affected: [main.js](../../main.js) `feature-cache-open`/`feature-cache-chunk`, [media-viewer.js](../../media-viewer.js) `_loadFeatureCacheLocked`. Only worth doing if the startup wait is annoying in practice (compaction to ~130MB already roughly halves it).
+- [ ] **Dedupe concurrent background extraction (kickoff + Sort-by-AI)** — `kickoffBackgroundExtractionIfEnabled` (folder load) and `handleSortByPrediction` (Sort-by-AI click) both call `startBackgroundFeatureExtraction()`, so clicking Sort-by-AI shortly after a folder load runs two overlapping extraction passes over the same files (visible as duplicated `startBackgroundFeatureExtraction` stacks in logs). Harmless (cache writes are idempotent, single-flight now guards load/save) but wasteful. Proposed: a single-flight guard / run-token on `startBackgroundFeatureExtraction` so a second caller joins the in-flight pass instead of starting a new one. Effort: S. Affected: [media-viewer.js](../../media-viewer.js) `startBackgroundFeatureExtraction`.
+- [ ] **AI-seeding outcome validation: confirm predicted favorites land in high tiers** — The AI-prediction "best vs worst" round-1 seeding option (shipped 2026-05-26) pairs predicted-best vs predicted-worst in round 1, then runs normal Swiss for rounds 2..R. If the AI's prior is good, predicted-best should consistently land in Tier-R and predicted-worst in Tier-0. We currently have no automated check that this actually happens — it's an unmeasured property of the system. Proposed: after `handleApply` runs, compute Spearman rank correlation between (a) the predicted score ranking at tournament-start time and (b) the final tier assignment. Surface it in the summary modal as "AI–human agreement: 0.XX" (1.0 = perfect, 0 = no correlation, -1.0 = inverted). Acts both as a sanity check (low correlation when seeding=AI indicates the AI is mis-trained or the human is judging on dimensions the AI doesn't capture) and a useful signal for the user about how well their AI matches their actual preferences. Effort: S. Affected: [tournament.js](../../tournament.js) (compute correlation in `handleApply` return value), [media-viewer.js](../../media-viewer.js) `showTournamentSummaryModal` (display the metric when AI seeding was used), possibly a small `tests/integration/ai-seeding-correlation.test.js` for the math. Skip when seeding=random (no baseline to compare against).
+
+### [2026-05-25] PR #36 multi-agent review follow-ups
+
+**Origin**: Five-agent code review of `feature/pr-33-hygiene-integration-tests` (PR #36). The review concluded "No issues found" (no findings scored ≥80/100). Two sub-threshold findings are tracked here as defensive/hygiene improvements.
+
+- [ ] **Abort error string inconsistency: `'Sort aborted'` vs `'Sorting cancelled by user'`** (~75/100) — PR #36 added two new abort guards in `insertNewFilesInSortedOrder` (both CLIP and hash branches) that throw `new Error('Sort aborted')`. The other six abort guards already in `handleSortBySimilarity` (L4235, L4266, L4626, L4724, L4789, L4837) all throw `new Error('Sorting cancelled by user')`. The catch block at [media-viewer.js:4345-4348](../../media-viewer.js#L4345-L4348) calls `this.showNotification(\`❌ Error: ${error.message}\`, 'error')` verbatim — so users who cancel during the cache-hit insertion path see `❌ Error: Sort aborted` while every other abort path shows `❌ Error: Sorting cancelled by user`. The PR's design spec ([2026-05-21-pr-33-hygiene-and-integration-tests-design.md:134](../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md#L134)) claimed `'Sort aborted'` matched the existing pattern — that claim was factually wrong, which is how the inconsistency propagated. Minor UX text mismatch, not a functional bug. Fix: change both throws to `new Error('Sorting cancelled by user')` and update the corresponding `.rejects.toThrow('Sort aborted')` assertions in [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js). Effort: XS (4-line code change + 2 test-string updates). Affected: [media-viewer.js](../../media-viewer.js) `insertNewFilesInSortedOrder` (both branches).
+- [ ] **Design spec verification checklist shows stale 193/193 test count** (~25/100) — The new design spec added in PR #36 ([docs/superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md](../superpowers/specs/2026-05-21-pr-33-hygiene-and-integration-tests-design.md)) header still reads `**Status**: Draft (pre-implementation)` (line 4) and its Verification Checklist (line 224) says `npm test — 193/193 pass`, but the actual implementation result is 195/195 (correctly recorded in DONE.md). The spec's own Step 6.4 narration acknowledges the 193→195 correction, but the formal checklist + status header were never updated. Pre-implementation planning artifact, not user-facing — but creates an internal contradiction with DONE.md. Fix: flip Status to `Complete` and update the test-count line. Effort: XS (2-line edit). Recurring docs-hygiene pattern that the existing pre-archive checklist BACKLOG item (2026-04-30 entry) already targets — extend that checklist to also cover Design Specs files (currently scoped to archived plans only).
+
+### [2026-05-24] PR #36 design review follow-ups
+
+- [ ] **Event-loop yielding in `insertNewFilesInSortedOrder` for pathological cases** — PR #36 added per-file abort checks (outer loop only) in both CLIP and hash branches. Pathological case still uncovered: 100+ new files in a 1000-file cache = ~100k inner-loop iterations on the renderer main thread. Spec explicitly deferred this as an architectural note pending observed UI freeze. If a user reports stutter on very large folders, add `await new Promise(r => setTimeout(r, 0))` every N (e.g., 25) outer iterations to release the event loop. Affected: [media-viewer.js:5125-5200](../../media-viewer.js#L5125-L5200) (`insertNewFilesInSortedOrder` both branches).
+- [ ] **Extract `extractAsyncMethod` helper to `tests/helpers/extract-method.js` on third use** — Currently duplicated in `tests/media-viewer-utils.test.js` and `tests/integration/cached-sort-path.test.js`. The integration-test file's header comment explicitly states the extraction trigger ("If a third test file needs this, extract to `tests/helpers/extract-method.js`"). Project convention: Vitest test files don't share helpers via import today; introducing a shared helper module is justified once we have ≥3 call sites. Affected: future test files that need to extract methods from `media-viewer.js`.
+
+### [2026-05-16] PR #35 post-merge review follow-ups
+
+**Origin**: Five-agent code review run after the PR's own pre-merge review pass. The review concluded "No issues found" (no findings scored ≥80/100). Two sub-threshold (~75/100) findings are tracked here as defensive/hygiene improvements; the higher-priority items from the earlier in-PR review pass remain in the section below.
+
+- [ ] **Add JSDoc to `restoreFeatureCachesFromHistory` for parity with `removeFileFromList`** (~75/100) — The inverse method `removeFileFromList` has a full JSDoc block (`@param`/`@returns`) documenting the 5-cache cleanup contract. The new `restoreFeatureCachesFromHistory` helper, placed immediately adjacent and documented as its inverse, has no JSDoc — only an inline `// History entry shape` comment. Hygiene; the contract is non-obvious (576/64 length discriminant, `mtime: 0` sentinel, restore-only-3-of-5 caches) and a JSDoc block would make the asymmetry with `removeFileFromList` explicit. Effort: XS (~10 LoC docblock). Affected: [media-viewer.js:~1018-1043](../../media-viewer.js#L1018-L1043) (`restoreFeatureCachesFromHistory`).
+- [ ] **`handleCancel` compare-pair test fixture should tag history entries with `compareMode: true`** (~75/100) — The new test `'compare-mode pair-undo restores caches for both files'` in `describe('handleCancel feature restore')` constructs `moveHistory` entries without the `compareMode: true` field. The fixture still exercises the correct code path (Branch 2 checks `this.isCompareMode`, not the entry flag), so there is no test failure. But CLAUDE.md documents the invariant: "Compare-pair undo: history entries tagged `compareMode: true`; `handleCancel()` detects paired entries and restores both files in one undo." Real ratings push entries with that flag set (compare-rating handler at ~L3865/L3901). Fixture parity would protect against a future tightening of Branch 2's condition that consults the per-entry flag. Effort: XS (~2 LoC fixture tweak). Affected: [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) `handleCancel feature restore` describe block.
+
+### [2026-05-14] PR #35 final review follow-ups
+
+- [ ] **`handleCancel` Branch 3 (single-mode compare-pair undo) has no dedicated unit test** — The three new `handleCancel` tests in PR #35 cover Branches 1, 2, and 4 of the 4 success paths. Branch 3 (single mode, last two history entries both tagged `compareMode: true`, restoring two files in one undo action — [media-viewer.js:3519-3581](../../media-viewer.js#L3519-L3581)) is functionally identical to Branch 2 (the `restoreFeatureCachesFromHistory` calls at L3568-3569 mirror L3494-3495) but takes a different control path. Risk of an undetected bug here is low but real; the spec explicitly identified "Forgotten branch in `handleCancel`" as a risk and four-branch coverage was the mitigation. Effort: XS (~30 LoC test mirroring the compare-pair test with `isCompareMode: false`). Affected: [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) `handleCancel feature restore` describe block.
+- [ ] **`moveToSpecialFolder` lacks `extractFeaturesFromDisplayedMedia` fallback for cold-cache special-undo** — Repro: in AI-sorted mode, hit special-folder rating for a file whose features were never extracted (no background extraction completed yet, cold `featureCache`/`clipCache`). `moveToSpecialFolder` reads `getCombinedFeatures` (returns null) and `featureCache.get` (returns undefined), so `mlFeatures = null` in the history entry. After special-undo, `restoreFeatureCachesFromHistory` no-ops; the file is back in `mediaFiles` but `predictionScores` stays empty for it, so the badge does not re-appear — even though the ML model is trained. Asymmetric with `moveCurrentFile` (like/dislike) which already calls `extractFeaturesFromDisplayedMedia()` as a fallback when the cache is cold (L1181-1196). Fix: mirror `moveCurrentFile`'s `extractFeaturesFromDisplayedMedia()` fallback in `moveToSpecialFolder` before capturing `mlFeatures`. Spec explicitly documents this gap as acceptable trade-off but reviewer flagged it as worth tracking. Effort: S (~10-15 LoC + 1 test). Affected: [media-viewer.js:~1342-1347](../../media-viewer.js#L1342-L1347) (`moveToSpecialFolder`), [media-viewer.js:~1181-1196](../../media-viewer.js#L1181-L1196) (reference pattern in `moveCurrentFile`).
+
+### [2026-05-10] PR #34 review follow-ups
+
+**Origin**: Multi-agent code review of `fix/clip-extraction-silent-failure` (PR #34). Two issues scored ≥80/100 were fixed in `4ea65c3` before merge (`loadFeatureCache` ordering + `await initClipModel` race). These three remaining items were either explicitly acknowledged by the author as deferred trade-offs or were sub-threshold (filtered from inline review) but worth tracking.
+
+- [ ] **Duplicate `onClipDownloadProgress` listener risk after dropping `clipModelDownloading` guard** (acknowledged by PR author) — `kickoffBackgroundExtractionIfEnabled()` no longer guards `initClipModel()` behind `!this.clipModelDownloading`; concurrent calls dedupe at the IPC layer but each call re-registers a renderer-side `window.electronAPI.onClipDownloadProgress(...)` listener via `initClipModel`. The listeners are torn down in the `finally` block of each `initClipModel` invocation, so the stack drains as IPC calls resolve — but during overlapping calls (e.g., rapid folder switching mid-download) the user may briefly see duplicate "Downloading CLIP model... N%" toasts. Cosmetic; not a correctness issue. Fix options: (a) re-introduce a renderer-side single-flight guard that returns the in-flight promise, (b) move the progress-listener registration into a shared init sentinel that any concurrent call awaits. Author's response: "cosmetic duplicate progress listener may register; not a correctness issue." Affected: [media-viewer.js:6566-6602](../../media-viewer.js#L6566-L6602) (`initClipModel`), [media-viewer.js:6928-6946](../../media-viewer.js#L6928-L6946) (`kickoffBackgroundExtractionIfEnabled`).
+- [ ] **Pre-existing: `clipCache` is never cleared in `loadFolder()`** (filtered as pre-existing in PR #34 review, ~0/100) — `loadFolder()` clears `featureCache`, `featureMetadata`, `perceptualHashes`, and `predictionScores` on every folder switch but NOT `clipCache`. Introduced when CLIP was added (commit `6b90226`); `clipCache.clear()` has never been added. With the new kickoff path now hitting these caches on every folder load, the existing path-keyed match (`this.clipCache.has(file.path)`) could silently return stale vectors when two folders share path-identical filenames (renames, duplicates across drives). Real bug under specific scenarios; not introduced or worsened by PR #34. Fix: add `this.clipCache.clear();` alongside the other clears at the top of `loadFolder()`. Affected: [media-viewer.js:~L2255-L2260](../../media-viewer.js#L2255-L2260) (cache-clearing block).
+- [ ] **Index `2026-05-06-clip-extraction-silent-failure-design.md` in docs/README.md Design Specs table** (filtered, ~75/100) — PR #34 added the spec under `docs/superpowers/specs/` and indexed the archived plan in `docs/README.md` Archived Plans, but did not add a row to the Design Specs table for the spec itself. Recurring docs-hygiene pattern (PRs #19, #23, #27, #28, #29). Cosmetic; the Pre-archive checklist BACKLOG item (2026-04-30 entry) covers archived-plan drift but not Design Specs index drift — extend that checklist to cover both tables, or fix in-place.
+
+### [2026-05-05] PR #33 sub-threshold findings
+
+**Origin**: Multi-agent code review of `feature/clip-sort-followups`. The critical issue (cachedData.algorithm undefined → CLIP branch unreachable) was scored 100/100 and fixed in `e1b5fad` before merge. These items scored below the 80-threshold but are worth tracking as defensive/hygiene improvements; the four below were resolved by `feature/pr-33-hygiene-integration-tests` (PR #36, 2026-05-21) and are retained for historical traceability.
+
+- [x] ✅ 2026-05-21 (PR #36) — **Clear `this.clipUnloadTimer` in CLIP toggle-off handler** (~50/100) — The Group E pattern (commit `d65bfdd`) requires every code path that changes CLIP state to cancel any pending unload first; `startBackgroundFeatureExtraction()` does this. The new toggle-off handler does not. Race scenario: extraction completes → 30s timer set → user disables CLIP → handler runs cleanup but stale timer remains → user re-enables CLIP and `initClipModel()` begins → stale timer fires `unloadClipModel` IPC mid-load. Mitigated by `main.js` returning `{success:false, reason:'loading'}` (e7d84d0), so no user-facing defect today. Fix: add `clearTimeout(this.clipUnloadTimer); this.clipUnloadTimer = null;` at the top of the `if (!clipToggle.checked)` block in `media-viewer.js`.
+- [x] ✅ 2026-05-21 (PR #36) — **Add try/catch around `await this.deleteSortCache('clip')` in toggle handler** (~25/100) — The async event listener relies on `deleteSortCache`'s internal try/catch to swallow errors, which works today (the method catches all paths and shows a notification). Hygiene-only: explicit caller-side `try/catch (_e) { /* best-effort cleanup */ }` makes the contract obvious to future maintainers and removes the implicit dependency on the callee's error handling. Not a real bug; consider when next touching the file.
+- [x] ✅ 2026-05-21 (PR #36) — **Add per-file abort check to `insertNewFilesInSortedOrder` (both paths)** (~0/100, pre-existing) — Both the hash and CLIP branches iterate `O(N*M)` cosine/Hamming computations on the renderer's main thread with no `sortAbortController.signal.aborted` check inside the inner loop. Cancel during cache-hit insertion is silently ignored. Typical use case (1-50 new files) is fine; pathological case (100+ new files in a 1000-file cache = 100k iterations) freezes UI. Pre-existing — the hash path always lacked the guard; the new CLIP path inherits the gap. Fix: add `if (this.sortAbortController?.signal.aborted) throw new Error('Sort aborted');` once per outer iteration in both branches. Architectural note: also consider yielding to the event loop (`await new Promise(r => setTimeout(r, 0))`) every N files for very large folders.
+- [x] ✅ 2026-05-21 (PR #36) — **Process: end-to-end integration tests for cache-hit sort paths** — PR #33's primary fix slipped through 7 unit tests because they called `insertNewFilesInSortedOrder` directly with explicit `'clip'`, bypassing the broken `applyCachedSortOrder → cachedData.algorithm` plumbing. The fix in `e1b5fad` added `applyCachedSortOrder (algorithm threading)` regression tests with stubbed callees, but a higher-level integration test (load fixture cache file → invoke real cache-hit code path → assert algorithm flows end-to-end) would have caught the bug pre-merge. Pattern recurs: unit-test-the-leaf vs integration-test-the-call-graph. Consider adding a single E2E or fixture-driven integration test per major code path.
+
+### [2026-04-21] Group E (PR #31) code-review follow-ups
+
+**Origin**: Final code reviewer findings on `feature/resource-management` (5 implementation commits, 160/160 unit + 39/39 E2E pass, approved for merge)
+
+- [ ] **Extract `CLIP_UNLOAD_DELAY_MS = 30000` named constant** (Minor M1) — `media-viewer.js:7007` hard-codes the 30-second unload delay. Per CLAUDE.md naming convention (`MAX_NOTIFICATIONS`-style for module-level constants), extract to a top-level constant alongside other constants. Aids future tuning and testability. Cosmetic; not blocking.
+- [ ] **Reconsider `clipModelError` reset behavior on persistent failures** (Minor M2) — `main.js:446` always nulls `clipModelError` on unload. For transient errors (network blip) this enables clean retry. For persistent errors (HF hub unreachable, model files corrupt) the user pays a ~1-2s failed load attempt on every folder-switch cycle. Spec explicitly accepted this tradeoff; revisit only if it becomes noisy in practice. Possible mitigation: track error age and only clear if older than a threshold.
+- [ ] **Trim verbose comment on CLIP unload timer schedule** (Minor M4) — `media-viewer.js:6999-7002` has a 4-line comment explaining cancel-on-restart and transparent-reload semantics. Per CLAUDE.md "default to writing no comments" guidance, could trim to one line. Counter-argument: behavior crosses IPC boundaries with non-obvious timing, so the comment earns its keep. Judgment call, not blocking.
+
+### [2026-04-28] PR #31 post-merge review follow-ups
+
+**Origin**: Final-review confidence scoring on `feature/resource-management` evaluated 5 candidates; 3 below 80-threshold worth tracking as low-priority defensive improvements
+
+- [ ] **`enableClipFeatures` checked at schedule-time only, not at fire-time** (~15/100) — `media-viewer.js:7000` gates `setTimeout(unloadClipModel, 30000)` on `this.enableClipFeatures` at scheduling. If the user toggles CLIP off during the 30s grace window, the timer still fires the unload IPC. In practice this is harmless (the model would also be unloaded if CLIP were never re-enabled) and arguably correct behavior, but a defensive re-check inside the timer callback would be more robust if the unload call ever gains side-effects beyond nulling refs. Not blocking.
+- [ ] **`unloadClipModel` IPC fired without await or error handling in timer callback** (~50/100) — `media-viewer.js:7001-7004` calls `window.electronAPI.unloadClipModel()` fire-and-forget. The IPC returns `{ success: false, reason: 'loading' }` if a load is in flight, but the renderer ignores the result. Acceptable for a best-effort cleanup, but a `.catch()` or `.then((r) => !r.success && logger.warn(...))` would surface unexpected failures during debugging. Not blocking.
+- [ ] **`vi.spyOn(fs, 'closeSync')` in logger test relies on inline `mockRestore()` only** — `tests/logger.test.js:46-53` calls `closeSyncSpy.mockRestore()` at the end of the test body. If the assertion fails, restore is skipped and the spy can leak into the next test in the same file. `vi.spyOn` calls through by default so subsequent tests aren't broken in practice, but moving restore into a `try { ... } finally { closeSyncSpy.mockRestore(); }` block (or to `afterEach`) is more defensive. Test hygiene improvement only; matches the `tmpFixtures` cleanup pattern used in E2E tests.
+
+### [2026-04-20] PR #30 code-review follow-ups
+
+**Origin**: 5 parallel agents + confidence scoring; 1 issue scored 85/100 (CLAUDE.md gotcha factual error, fixed in 24ef763); items below threshold worth tracking
+
+- [ ] **CLIP success notification shows wrong file count** (75/100) — In the CLIP branch of `handleSortBySimilarity()`, `sortedCount = vectorCount` is used in the success toast (`✅ Sorted N files with CLIP (semantic)!`), but `sortMediaBySimilarityClip` returns ALL files: MST-sorted files-with-vectors plus files-without-vectors appended at the end. For a folder with 100 files where 70 have CLIP embeddings, the toast says "Sorted 70" even though all 100 were reordered. Fix: `sortedCount = sortedPaths.length` (or `this.mediaFiles.length`). Cosmetic; affected: `media-viewer.js` CLIP branch.
+- [ ] **`K_NEIGHBORS` local variable uses UPPER_SNAKE_CASE inconsistent with sibling function** (75/100) — In `sortMediaBySimilarityClip`, the local k-neighbors constant is named `K_NEIGHBORS` (UPPER_SNAKE_CASE), but the sibling `sortMediaBySimilarityMST` and other locals nearby (`nearestNeighbor`, `minDistance`, `nearestNode`, `minDist`) use camelCase. CLAUDE.md naming guidance shows `MAX_NOTIFICATIONS`-style for module-level constants; in-function locals follow camelCase. Rename to `kNeighbors` for consistency. Cosmetic; affected: `sorting-worker.js` `sortMediaBySimilarityClip`.
+- [ ] **`calculateCosineDistance([], [])` returns 1 instead of 0 for two empty arrays** (50/100) — Length-mismatch guard passes when both lengths are 0; the dot-product loop never executes; function returns `1 - 0 = 1` (orthogonal) rather than `0` (identical). In practice CLIP always returns 512-dim vectors, so this never triggers — but if a future caller produces empty arrays (e.g., extraction failure mode that returns zero-length arrays instead of null), the result is silently wrong. Defensive: add `if (vec1.length === 0) return 0;` early-return, or assert non-zero length.
+
+### [2026-04-18] Group D (CLIP sorting) follow-ups
+
+**Origin**: Final code reviewer findings + per-task review of `feature/clip-similarity-sorting` (5 commits, 159/159 tests pass, merged PR TBD)
+
+- [x] **Cache-hit `insertNewFilesInSortedOrder` uses Hamming distance regardless of algorithm** — Resolved by `feature/clip-sort-followups` (2026-05-03, commits 2252d32 + 0eaf7ca): function takes new `algorithm` parameter; CLIP path scores by cosine distance over `clipCache`; hash path byte-equivalent to pre-change behavior; `applyCachedSortOrder` passes `cachedData.algorithm`. Regression-guard test added.
+- [x] **Add unit tests for `sortMediaBySimilarityClip`** — Resolved by `feature/clip-sort-followups` (2026-05-03, commits bb1052d + 30486df): 4 characterization tests added covering MST chain ordering, end-append fallback for missing vectors, abort flag throw, insufficient-vectors guard. `sortMediaBySimilarityMST` exported as a freebie for future tests.
+- [ ] **Extract shared MST helper between `sortMediaBySimilarityMST` and `sortMediaBySimilarityClip`** — ~90 lines of duplicated logic in `sorting-worker.js` (lines 499-588 for Hamming, 594-756 for cosine). Only differences: distance function, eligibility check, error message noun, progress label suffix. Candidate: `_sortMediaBySimilarityGeneric(mediaFiles, distanceFunc, eligibilityCheck, currentIndex, algoLabel)`. Public wrappers become ~8 lines each. Plan explicitly deferred this refactor to keep scope manageable. Low-risk since MST code is already proven and both callers use identical control flow.
+- [ ] **Correct `.sort_cache_clip.json` references in spec + CLAUDE.md** — Spec `docs/superpowers/specs/2026-04-16-clip-similarity-sorting-design.md` (lines 49, 93, 94) and CLAUDE.md git-insights line 255 both claim CLIP sort creates `.sort_cache_clip.json`. Actual implementation uses the unified `.sort_cache.json` file with `'clip'` as a top-level key (pre-existing pattern, `media-viewer.js:4900/4920/4965`). Implementation is correct; docs need updating to say "CLIP sort cache key `'clip'` adds entry under that key in the unified `.sort_cache.json`".
+- [x] **CLIP toggle-off should invalidate any persisted `'clip'` entry in sort cache** — Resolved by `feature/clip-sort-followups` (2026-05-03, commits 0ce9cec + 80ac67d M3 polish): handler is now `async`; on disable it synchronously reverts `sortAlgorithm` to `'vptree'` and updates the dropdown (revert-before-await for instant UI), then `await deleteSortCache('clip')` clears the persisted entry. Both fix branches were taken.
+
+### [2026-04-11] Group C (test quality) follow-ups
+
 **Origin**: Patterns noticed while hardening E2E test teardown across 9 files
 
 - [ ] **Standardize `app-launch.test.js` afterEach to match project pattern** — `app-launch.test.js` guards `tmpFixtures` but not `electronApp` (calls `closeApp(electronApp)` unconditionally); safe because its `beforeEach` always assigns `electronApp`, but inconsistent with the `if (electronApp)` pattern now established in all other 8 E2E files; low priority, cosmetic consistency
 - [ ] **Replace E2E `waitForTimeout` magic numbers with named constants or `waitForFunction`** — Durations (200ms/300ms/500ms/1000ms) across compare-mode/navigation/fullscreen tests have no documented rationale; extract to named constants in `helpers/electron-app.js` or switch to `waitForFunction` with explicit conditions for reliability; already tracked in WEEKLY.md notes but not yet a BACKLOG item
 - [ ] **Guard `page.evaluate()` in keyboard-shortcuts.test.js afterEach** — `await page.evaluate(...).catch(() => {})` throws synchronous TypeError when `page` is undefined (beforeEach failure); `.catch()` only handles promise rejections, not synchronous throws from `undefined.evaluate()`; fix: wrap with `if (page)` for consistency with `if (electronApp)` / `if (tmpFixtures)` guards in the same block; affects only `keyboard-shortcuts.test.js` (the only E2E file with pre-cleanup `page.evaluate`)
 
----
+### [2026-04-11] PR #28 code-review follow-ups
 
-## From TASK-028 (CLIP Semantic Features)
+**Origin**: 5 parallel agents + confidence scoring; 4 issues found, 2 scored >=80 (both doc issues, fixed in 54e6246); code-level observations below threshold but worth tracking
 
-### [2026-04-05] From: TASK-028 implementation + manual testing
-**Origin**: Architecture decisions and performance observations during 30K-file extraction
+- [ ] **Redundant calls in `switchToSingleModeUI()` via `toggleViewMode()`** — When `toggleViewMode()` calls `switchToSingleModeUI()`, `hidePredictionBadges()` and `closeAllZoomPopovers()` run twice (once at top of `toggleViewMode()`, once inside `switchToSingleModeUI()`). Harmless but wasteful; consider splitting `switchToSingleModeUI()` into a core UI-reset (for `toggleViewMode()`) and a full reset (for `loadFolder()` and other callers); affected: `media-viewer.js` (~L3567 `switchToSingleModeUI`, ~L3589 `toggleViewMode`)
+- [ ] **Double `isCompareMode = false` in `toggleViewMode()`** — Line ~3619 toggles `isCompareMode` to `false`, then `switchToSingleModeUI()` sets it `false` again. Correct but confusing for future readers; add a comment clarifying the toggle precedes the helper call; affected: `media-viewer.js` (~L3619, ~L3634)
 
-### [2026-04-08] From: PR #26 code review
+### [2026-04-10] PR #27 code-review follow-ups
+
+**Origin**: 5 parallel agents + confidence scoring; 7 issues found, 3 scored >=80 (all doc issues, fixed in ce9dd798); code-level observations below threshold but worth tracking
+
+- [ ] **Rename `deleteMlModelCache()` → `clearMlModelCache()`** — Method writes empty string to `.ml_model.json` rather than deleting it (no `deleteFile` IPC exists); name "delete" is misleading; `clearMlModelCache()` or `invalidateMlModelCache()` better reflects the write-empty-string behavior; affected: `media-viewer.js` (~L5598), CLAUDE.md
+- [ ] **Add `deleteFile` IPC to preload.js** — Currently no file deletion capability in the IPC bridge; `deleteMlModelCache()` works around this by writing empty string; a proper `deleteFile` handler would enable clean cache invalidation and potentially other file cleanup operations; affected: `main.js` (new IPC handler), `preload.js` (new bridge method)
+- [ ] **Add null guard in `enqueueFeatureExtraction` for imageData** — When file needs CLIP-only extraction (has hand-crafted features), `imageData` is passed as `null`; safe today because `featureCache.has()` early-return fires first, but invariant is implicit and fragile (concurrent cache eviction could cause `task.imageData.data` TypeError crash); add defensive `if (!imageData) return null` before queuing task; affected: `media-viewer.js` (~L6654, `enqueueFeatureExtraction`)
+
+### [2026-04-10] compare-mode-fix follow-ups
+
+**Origin**: [2026-04-10-compare-mode-fix.md](../archive/plans/2026-04-10-compare-mode-fix.md)
+
+- [ ] **Make `hideDropZone()` mode-aware** — Currently unconditionally shows `.controls` regardless of `isCompareMode`. Works now because `loadFolder()` resets first, but `hideDropZone()` is called from other paths; a mode-aware version would be more robust.
+- [ ] **Add try/finally cleanup to pre-existing `twoFileTmp` in compare-mode E2E** — The "switches to single mode when last pair is rated" test (lines 113-161) has the same inline-cleanup pattern that was fixed for `secondFolder`; should use try/finally too.
+
+### [2026-04-09] CLIP/ML Pipeline Cleanup follow-ups
+
+**Origin**: Implementation observations during cleanup of TASK-028 debt
+
+- [ ] **DRY CLIP embedding averaging in main.js** — `main.js:515-530` has inline averaging + normalization logic identical to the deleted `averageEmbeddings()` from `clip-worker.js`; if more CLIP consumers appear (e.g., CLIP text search, CLIP similarity sorting), extract to a shared `clip-utils.js` module
+- [ ] **Audit all preload.js `ipcRenderer.on()` for listener accumulation** — The `clip-download-progress` listener was leaking because `ipcRenderer.on()` was used without cleanup; audit remaining `ipcRenderer.on()` registrations in preload.js (currently only `logError` uses `.send()` which is fine); establish pattern: all `.on()` listeners must return cleanup functions
+
+### [2026-04-08] PR #26 (TASK-028) code-review follow-ups
+
 **Origin**: 5 parallel agents + confidence scoring; 10 issues found, 5 scored 75/100, none above 80 threshold; 5 fixed in 3fa3a9a; remaining items below threshold
 
 - [x] **ML model not retrained when like/dislike folders change** — Fixed in f4772a9: `resetMlModel()` called from 4 folder change listeners
@@ -267,44 +304,15 @@ two tasks because they have different shapes (architectural vs. visual).
 - [ ] **Unload CLIP model after extraction completes** — CLIP ONNX model consumes ~200-400 MB in main process; stays loaded indefinitely after extraction finishes; add logic to unload (`clipProcessor = null; clipVisionModel = null`) after background extraction completes + force GC; re-load lazily if user opens new folder
 - [ ] **GPU acceleration for CLIP inference (DirectML/CUDA)** — Current CPU inference ~100-200ms/image (~8h for 30K files); DirectML (Windows, any GPU) could reduce to ~10-30ms/image; CUDA (Linux, NVIDIA) ~5-15ms/image; implementation: pass `{ device: 'gpu' }` to `from_pretrained()` in main.js, fallback to CPU if unavailable; add settings toggle for GPU preference
 
-### [2026-04-09] From: CLIP/ML Pipeline Cleanup
-**Origin**: Implementation observations during cleanup of TASK-028 debt
+### [2026-04-03] TASK-027 follow-ups
 
-- [ ] **DRY CLIP embedding averaging in main.js** — `main.js:515-530` has inline averaging + normalization logic identical to the deleted `averageEmbeddings()` from `clip-worker.js`; if more CLIP consumers appear (e.g., CLIP text search, CLIP similarity sorting), extract to a shared `clip-utils.js` module
-- [ ] **Audit all preload.js `ipcRenderer.on()` for listener accumulation** — The `clip-download-progress` listener was leaking because `ipcRenderer.on()` was used without cleanup; audit remaining `ipcRenderer.on()` registrations in preload.js (currently only `logError` uses `.send()` which is fine); establish pattern: all `.on()` listeners must return cleanup functions
+**Origin**: TASK-027 implementation (Fix Undo Empty Folder)
 
-### [2026-04-10] From: PR #27 code review
-**Origin**: 5 parallel agents + confidence scoring; 7 issues found, 3 scored >=80 (all doc issues, fixed in ce9dd798); code-level observations below threshold but worth tracking
+- [ ] **Centralized `insertFileIntoList()` method** — Extract reusable file insertion logic from the 4 undo branches in `handleCancel()` (single, compare, special, compare-tagged-in-single). Each branch duplicates file reconstruction + splice/push + ML reversal. A shared method would reduce ~150 lines of duplication.
+- [ ] **Allow F1 (help) through keydown guard in empty state** — Currently `showEmptyStateWithUndo()` blocks F1 along with all other non-undo shortcuts. Users may want to check keyboard shortcuts while in the empty state.
 
-- [ ] **Rename `deleteMlModelCache()` → `clearMlModelCache()`** — Method writes empty string to `.ml_model.json` rather than deleting it (no `deleteFile` IPC exists); name "delete" is misleading; `clearMlModelCache()` or `invalidateMlModelCache()` better reflects the write-empty-string behavior; affected: `media-viewer.js` (~L5598), CLAUDE.md
-- [ ] **Add `deleteFile` IPC to preload.js** — Currently no file deletion capability in the IPC bridge; `deleteMlModelCache()` works around this by writing empty string; a proper `deleteFile` handler would enable clean cache invalidation and potentially other file cleanup operations; affected: `main.js` (new IPC handler), `preload.js` (new bridge method)
-- [ ] **Add null guard in `enqueueFeatureExtraction` for imageData** — When file needs CLIP-only extraction (has hand-crafted features), `imageData` is passed as `null`; safe today because `featureCache.has()` early-return fires first, but invariant is implicit and fragile (concurrent cache eviction could cause `task.imageData.data` TypeError crash); add defensive `if (!imageData) return null` before queuing task; affected: `media-viewer.js` (~L6654, `enqueueFeatureExtraction`)
+### [2026-03-28] PR #24 code-review follow-ups
 
----
-
-## From TASK-027 (Fix Undo Empty Folder)
-
-### [2026-04-03] From: PR #25 code review
-**Origin**: 5 parallel agents (2 hit rate limits) + confidence scoring; 9 issues found, 4 scored 75/100, none above 80 threshold; 3 fixed in c0f1c3ca; remaining items below threshold or pre-existing patterns
-
-- [x] **E2E afterEach null safety on tmpFixtures** (75/100) — Fixed in Group C Test Quality (5e29a56, c8364b8, 25bf2d3); all 7 unguarded E2E files now have `if (electronApp)` / `if (tmpFixtures)` guards
-- [x] **Misleading describe label in unit tests** (50/100) — Fixed in Group C Test Quality (c1b43df); renamed to "buildKeyString — key string construction"
-- [x] **DOM leak: .empty-state-undo in showDropZone()** (75/100) — Fixed in c0f1c3ca
-- [x] **Stale .spec.js filename in spec doc** (75/100) — Fixed in c0f1c3ca
-- [x] **docs/README.md not updated for TASK-027 spec** (75/100) — Fixed in c0f1c3ca
-
----
-
-## From TASK-026 (Keyboard Shortcut Customization)
-
-### [2026-03-27] From: TASK-026 implementation
-**Origin**: Implementation findings + E2E debugging
-
-- [ ] **Extract ShortcutManager module** — keyboard shortcut logic (DEFAULT_SHORTCUTS, loadShortcuts, saveShortcut, resetShortcuts, buildKeyString, buildReverseMap, executeAction, checkShortcutConflict, listening mode, renderShortcutRows) is a natural candidate for v2.0 modularization (same pattern as FullscreenManager)
-- [ ] **Modifier key display in help overlay** — `keyDisplayName()` strips `Key`/`Digit` prefixes but doesn't prettify modifier combos (e.g., `Ctrl+A` displays as `Ctrl+A` which is fine, but `Ctrl+Shift+Q` could be cleaner)
-- [ ] **E2E test userData isolation** — custom shortcuts in localStorage persist across E2E test runs because Electron reuses the same userData directory; consider `app.setPath('userData', tmpDir)` in test setup for full isolation
-
-### [2026-03-28] From: PR #24 code review
 **Origin**: 5 parallel agents + confidence scoring; 10 issues found at 75/100, none above 80 threshold; 5 fixed in d4fde97; remaining items below threshold or author declined with rationale
 
 - [ ] **docs/README.md not updated for TASK-026 spec/plan files** (75/100) — `docs/superpowers/specs/2026-03-27-task-026-keyboard-shortcut-customization-design.md` and `docs/superpowers/plans/2026-03-27-keyboard-shortcut-customization.md` not indexed; recurring since PR #19
@@ -316,22 +324,16 @@ two tasks because they have different shapes (architectural vs. visual).
 - [x] **Dead ArrowLeft/ArrowRight loading guard** (75/100) — Fixed in d4fde97
 - [x] **DEFAULT_SHORTCUTS triplicated** (75/100) — Fixed in d4fde97
 
----
+### [2026-03-27] TASK-026 (keyboard shortcuts) implementation follow-ups
 
-## From TASK-025 (Application Logging)
+**Origin**: Implementation findings + E2E debugging
 
-### [2026-03-26] From: TASK-025 implementation + code review
-**Origin**: Implementation review + code quality review findings
+- [ ] **Extract ShortcutManager module** — keyboard shortcut logic (DEFAULT_SHORTCUTS, loadShortcuts, saveShortcut, resetShortcuts, buildKeyString, buildReverseMap, executeAction, checkShortcutConflict, listening mode, renderShortcutRows) is a natural candidate for v2.0 modularization (same pattern as FullscreenManager)
+- [ ] **Modifier key display in help overlay** — `keyDisplayName()` strips `Key`/`Digit` prefixes but doesn't prettify modifier combos (e.g., `Ctrl+A` displays as `Ctrl+A` which is fine, but `Ctrl+Shift+Q` could be cleaner)
+- [ ] **E2E test userData isolation** — custom shortcuts in localStorage persist across E2E test runs because Electron reuses the same userData directory; consider `app.setPath('userData', tmpDir)` in test setup for full isolation
 
-- [ ] **Double-init protection for logger.js** — `init()` should close any existing file descriptor before opening a new one to prevent fd leaks if called twice without cleanup
-- [ ] **Console interception scope** — ffprobe errors at module load (before `app.whenReady()`) are not captured in log file; consider moving interception to module scope after `require('./logger')`
-- [ ] **Unhandled rejection message clarity** — `event.reason` may be an Error object producing `[object Object]` in log; use `String(event.reason)` or `event.reason?.message || event.reason` for clearer output
+### [2026-03-27] PR #23 code-review follow-ups
 
----
-
-## From Code Reviews
-
-### [2026-03-27] From: PR #23 code review (TASK-025)
 **Origin**: 5 parallel agents + confidence scoring; 2 above 80/100 threshold (both fixed in 8fd9934); remaining items below threshold
 
 - [ ] **IPC handler crash on malformed payload** (75/100) — `ipcMain.on('log-renderer-error')` destructures second arg `{ level, message, source }` without null guard; malformed renderer call could throw TypeError in main process; other IPC handlers use try/catch
@@ -343,15 +345,16 @@ two tasks because they have different shapes (architectural vs. visual).
 - [x] **Stack trace loss in `args.join(' ')`** (85/100) — Fixed in 8fd9934 via `formatArgs()` helper
 - [x] **Spec file not indexed in docs/README.md** (100/100) — Fixed in 8fd9934
 
-### [2026-03-24] From: PR #21 code review (TASK-023)
-**Origin**: 5 parallel agents + confidence scoring; all items below 80/100 threshold
+### [2026-03-26] TASK-025 (logging) implementation follow-ups
 
-- [ ] **Consolidate duplicate Git Insights entries** (75/100) — TASK-023 has two separate bullets in CLAUDE.md Git Insights instead of one consolidated entry like TASK-021/TASK-022. Second entry is also out of chronological order.
-- [ ] **Add explanatory comment to all 3 `lucide.createIcons({ root })` call sites** (60/100) — PR added `// Use root param to scope icon creation` comment only at the compare-pane site (line ~2650), not at modal (line ~719) or zoom popover (line ~2102).
-- [ ] **Add `Plan:` field to TASK-023 DONE.md entry** (50/100) — All prior entries (TASK-020/021/022) include a `**Plan**:` link; TASK-023 omits it. Process consistency issue.
-- [ ] **Clarify DONE.md "3 calls" wording** (50/100) — Third call site was split from 1 call into 2 separate calls (4 total); DONE.md says "Changed 3 calls" without noting the split.
+**Origin**: Implementation review + code quality review findings
 
-### [2026-03-25] From: PR #22 code review (TASK-024)
+- [ ] **Double-init protection for logger.js** — `init()` should close any existing file descriptor before opening a new one to prevent fd leaks if called twice without cleanup
+- [ ] **Console interception scope** — ffprobe errors at module load (before `app.whenReady()`) are not captured in log file; consider moving interception to module scope after `require('./logger')`
+- [ ] **Unhandled rejection message clarity** — `event.reason` may be an Error object producing `[object Object]` in log; use `String(event.reason)` or `event.reason?.message || event.reason` for clearer output
+
+### [2026-03-25] PR #22 code-review follow-ups
+
 **Origin**: 5 parallel agents + confidence scoring; 1 issue above 80/100 threshold (fixed in 962414e); remaining items below threshold
 
 - [ ] **Update CLAUDE.md Cache Management docs to include `featureMetadata` in `removeFileFromList()`** (75/100) — Docs list 3 caches (predictionScores, featureCache, perceptualHashes) but code now cleans 4. Same omission in JSDoc comment on the method.
@@ -364,45 +367,41 @@ two tasks because they have different shapes (architectural vs. visual).
 - [ ] **Index TASK-024 spec in docs/README.md** (75/100) — `docs/superpowers/specs/2026-03-24-task-024-per-folder-feature-cache-design.md` not indexed. Same issue flagged and fixed in PR #19.
 - [ ] **Add "Status: Complete" to archived TASK-024 plan** (75/100) — Archived plan has unchecked checkboxes and no Status field. Recurring issue from PR #19 and PR #20 reviews.
 
-## From Completed Tasks
+### [2026-03-25] TASK-024 follow-ups
 
-### [2026-03-25] From: TASK-024 (Per-folder feature cache fix)
-**Origin**: TASK-024 implementation
+**Origin**: TASK-024 implementation (Per-folder feature cache fix)
 
 - [ ] **Replace `mediaFiles.find()` with Map lookup at featureMetadata population sites** — 6 `featureCache.set()` sites use `this.mediaFiles.find(f => f.path === filePath)` for O(n) linear scan per file. For 1000+ file folders, this adds up during extraction. Build a `Map<path, fileInfo>` once per extraction run and use O(1) lookup instead.
 - [ ] **Add unit tests for loadFeatureCache/saveFeatureCache validation logic** — v3 schema has complex validation (version check, size/mtime comparison, dimension check, deleted file pruning) but no automated tests. Mock `window.electronAPI` IPC calls and test: v2→v3 invalidation, stale entry skip, deleted file pruning, dimension mismatch skip, round-trip save→load consistency.
 
-### [2026-03-23] From: TASK-023 (Fix video pause/play icon synchronization)
-**Origin**: TASK-023 implementation
+### [2026-03-24] PR #21 code-review follow-ups (TASK-023)
 
-- [ ] **Pin Lucide CDN to a specific version** — `index.html` loads `lucide@latest` which can break at any time. Pin to `lucide@1.0.1` (or whichever current) for reproducible builds. The `nodes` → `root` param rename between versions caused this bug silently.
-- [ ] **Add regression test for play/pause icon toggle** — No E2E or unit test verifies that the play/pause icon actually changes state when toggling video playback. Would catch Lucide API drift or similar DOM reference bugs.
+**Origin**: 5 parallel agents + confidence scoring; all items below 80/100 threshold
 
-### [2026-03-22] From: TASK-022 (Fix compare mode last-pair error cascade)
-**Origin**: TASK-022 implementation
+- [ ] **Consolidate duplicate Git Insights entries** (75/100) — TASK-023 has two separate bullets in CLAUDE.md Git Insights instead of one consolidated entry like TASK-021/TASK-022. Second entry is also out of chronological order.
+- [ ] **Add explanatory comment to all 3 `lucide.createIcons({ root })` call sites** (60/100) — PR added `// Use root param to scope icon creation` comment only at the compare-pane site (line ~2650), not at modal (line ~719) or zoom popover (line ~2102).
+- [ ] **Add `Plan:` field to TASK-023 DONE.md entry** (50/100) — All prior entries (TASK-020/021/022) include a `**Plan**:` link; TASK-023 omits it. Process consistency issue.
+- [ ] **Clarify DONE.md "3 calls" wording** (50/100) — Third call site was split from 1 call into 2 separate calls (4 total); DONE.md says "Changed 3 calls" without noting the split.
+
+### [2026-03-22] TASK-022 follow-ups
+
+**Origin**: TASK-022 implementation (Fix compare mode last-pair error cascade)
 
 - [ ] **DRY `toggleViewMode()` single-mode branch with `switchToSingleModeUI()`** — The single-mode UI setup in `toggleViewMode()` (lines ~3430-3445) duplicates `switchToSingleModeUI()`. The else branch could call `switchToSingleModeUI()` instead, keeping all single-mode UI logic in one place. Trivial refactor.
 - [ ] **Handle partial failure in compare-pair undo** — If first file restores but second fails, first file is moved back on disk but both entries are pushed back to history. Pre-existing pattern from compare-mode undo (line ~3311), now also in single-mode compare-pair undo. Low priority — requires transactional file move or rollback logic.
 
-### [2026-03-21] From: TASK-019 (Extract fullscreen module from media-viewer.js)
-**Origin**: TASK-019 code reviews (Task 1, Task 2, and final review)
+### [2026-03-22] PR #19 code-review follow-ups
 
-- [ ] **Rename `abortController()` method in FullscreenManager** — Method name reads as a noun (property access) rather than a verb (action). Confusing because `AbortController` is a well-known browser API class. Consider `releaseController(wrapper)` or `removeController(wrapper)`. No external callers (only used internally by `cleanup()`), so rename is trivial.
-- [ ] **Add wrapper-aware `isZoomed(wrapper)` helper to MediaViewer** — The `isZoomed` callback injected into FullscreenManager duplicates the wrapper-to-target mapping logic (`left-media-wrapper` → `'left'`, etc.). Consider adding a `isWrapperZoomed(wrapper)` method on MediaViewer so the callback can delegate instead of reimplementing. Prevents divergence if zoom state shape changes.
-- [ ] **Add unit tests for FullscreenManager** — Class is independently testable (DOM APIs can be mocked). E2E tests cover behavior end-to-end, but focused unit tests would catch regressions faster and serve as documentation for the manager's contract.
-- [ ] **Clear `wrapper.dataset.wasPlaying` after restore in `cleanup()`** — Pre-existing bug carried over from original code. After restoring video playback state, `wasPlaying` remains on the element. If the same wrapper is reused for different media, stale attribute could cause unintended `video.play()` on next `cleanup()`.
-- [ ] **Fix ESLint header label style inconsistency for block 2c** — Header listing uses em-dash suffix format; block comment uses parenthetical format. Inconsistent with blocks 2a/2b which use parenthetical in the label. Cosmetic only.
+**Origin**: PR #19 code review — 5 parallel agents, confidence scoring (9 issues found, 2 above 80 threshold fixed in 74cf251)
 
-### [2026-03-21] From: TASK-020 — ML sorting pair ordering investigation
-**Origin**: docs/superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
+- [ ] **Add `transition-delay: 0s` to fullscreen overlay rule** — Fixed in 74cf251 (scored 85/100). Keeping for reference: when adding `transition-delay` to base rules, always check fullscreen/hidden state overrides.
+- [ ] **Add `:active` press animation to `.overlay-btn`** — `.control-btn` has `:active` state (TASK-018) but `.overlay-btn` does not. Now that overlay buttons are reliably clickable, the missing press feedback is a UX inconsistency. Pre-existing; not introduced by this PR. (scored 25/100)
+- [ ] **Fix "applies to both compare and single mode" documentation claim** — CLAUDE.md Git Insights and DONE.md say the overlay fix applies to single mode, but `.media-overlay-controls` is only created in compare mode via `addMediaOverlayControls()`. Single mode uses static HTML buttons. Misleading to future developers. (scored 75/100)
+- [ ] **Verify zoom popover not clipped by `overflow: hidden` on `.media-wrapper`** — With `position: absolute` on `.media-overlay-controls`, the upward-expanding `.zoom-popover` is now inside the `overflow: hidden` boundary of `.media-wrapper`. May clip the popover in compare mode. Needs manual verification. (scored 75/100)
+- [ ] **Check archived plan checkboxes before archival** — Plan file archived with 24 unchecked `- [ ]` items and no explicit "Status: Complete" field, violating global CLAUDE.md Step 2 archive requirements. Procedural issue — actual work was completed. (scored 75/100)
 
-- [ ] Content-understanding features — Current 64-dim vector captures color/texture only; integrating CLIP embeddings or similar would improve score discrimination. Ties into TASK-028 research.
-- [ ] Auto re-sort after N ratings — Currently user must manually click "Sort by Prediction" to reorder files; consider auto-re-sorting after every N ratings (configurable, e.g., every 5 or 10) to keep ordering fresh.
-- [ ] Model diagnostics panel — Show weight distribution, feature importance, training sample counts, and prediction confidence histogram in Settings panel; helps users understand model behavior.
-- [ ] Wider score gaps via margin-based pairing — Require minimum score gap (e.g., 0.2) for pairs; skip pairs with tiny gaps (99% vs 97%) that feel like coin flips to the user.
-- [ ] Score confidence indicator — Distinguish high-confidence predictions (many similar training samples) from low-confidence ones (novel features).
+### [2026-03-21] PR #18 code-review follow-ups
 
-### [2026-03-21] From: code-review-pr-18 (Post-merge review findings)
 **Origin**: PR #18 code review — 5 parallel agents, confidence scoring (7 issues at 75/100, none above 80 threshold)
 
 - [ ] **Remove dead `_extractMethod` function from ml-pair-selection.test.js** — Defined but never called; duplicates `extractMethod` from media-viewer-utils.test.js. `_` prefix used to suppress lint warning on dead code rather than genuinely unused param. Either delete or extract to shared test helper. (confidence 75/100)
@@ -413,310 +412,183 @@ two tasks because they have different shapes (architectural vs. visual).
 - [ ] **Mark code-review-pr-17 BACKLOG items as done when fixing them** — PR #18 fixed two items (Single-file renderer pattern, stale Git Insights) but didn't mark them `[x]`. Fixed in post-merge cleanup. (confidence 75/100)
 - [ ] **Set `previousScores` even when `predictionScores.size === 0`** — First-pair rating skips delta notification because the size guard prevents snapshot. Minor edge case but inconsistent with documented "always show notification" behavior. (confidence 75/100)
 
-### [2026-03-21] From: TASK-021 (Fix compare mode overlay controls UX)
-**Origin**: TASK-021 manual testing feedback
+### [2026-03-21] TASK-021 follow-ups
+
+**Origin**: TASK-021 manual testing feedback (Fix compare mode overlay controls UX)
 
 - [ ] **Smart overlay positioning: place buttons below media when space available** — When media has small height, overlay buttons at `bottom: 56px` overlap the media content. Ideal behavior: detect rendered media height (via `object-fit: contain` actual bounds), position buttons just below the media edge when space exists, fall back to current `bottom: 56px` (inside media, above video controls) when media fills the full wrapper height. Requires JS measurement on load/resize. Low priority — affects only small-height media which is rare.
 
-### [2026-03-22] From: code-review-pr-19 (TASK-021 overlay controls UX)
-**Origin**: PR #19 code review — 5 parallel agents, confidence scoring (9 issues found, 2 above 80 threshold fixed in 74cf251)
+### [2026-03-21] TASK-020 (ML sorting) follow-ups
 
-- [ ] **Add `transition-delay: 0s` to fullscreen overlay rule** — Fixed in 74cf251 (scored 85/100). Keeping for reference: when adding `transition-delay` to base rules, always check fullscreen/hidden state overrides.
-- [ ] **Add `:active` press animation to `.overlay-btn`** — `.control-btn` has `:active` state (TASK-018) but `.overlay-btn` does not. Now that overlay buttons are reliably clickable, the missing press feedback is a UX inconsistency. Pre-existing; not introduced by this PR. (scored 25/100)
-- [ ] **Fix "applies to both compare and single mode" documentation claim** — CLAUDE.md Git Insights and DONE.md say the overlay fix applies to single mode, but `.media-overlay-controls` is only created in compare mode via `addMediaOverlayControls()`. Single mode uses static HTML buttons. Misleading to future developers. (scored 75/100)
-- [ ] **Verify zoom popover not clipped by `overflow: hidden` on `.media-wrapper`** — With `position: absolute` on `.media-overlay-controls`, the upward-expanding `.zoom-popover` is now inside the `overflow: hidden` boundary of `.media-wrapper`. May clip the popover in compare mode. Needs manual verification. (scored 75/100)
-- [ ] **Check archived plan checkboxes before archival** — Plan file archived with 24 unchecked `- [ ]` items and no explicit "Status: Complete" field, violating global CLAUDE.md Step 2 archive requirements. Procedural issue — actual work was completed. (scored 75/100)
+**Origin**: docs/superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
 
-### [2026-03-21] From: code-review-pr-17 (Post-merge review findings)
+- [ ] Content-understanding features — Current 64-dim vector captures color/texture only; integrating CLIP embeddings or similar would improve score discrimination. Ties into TASK-028 research.
+- [ ] Auto re-sort after N ratings — Currently user must manually click "Sort by Prediction" to reorder files; consider auto-re-sorting after every N ratings (configurable, e.g., every 5 or 10) to keep ordering fresh.
+- [ ] Model diagnostics panel — Show weight distribution, feature importance, training sample counts, and prediction confidence histogram in Settings panel; helps users understand model behavior.
+- [ ] Wider score gaps via margin-based pairing — Require minimum score gap (e.g., 0.2) for pairs; skip pairs with tiny gaps (99% vs 97%) that feel like coin flips to the user.
+- [ ] Score confidence indicator — Distinguish high-confidence predictions (many similar training samples) from low-confidence ones (novel features).
+
+### [2026-03-21] PR #17 code-review follow-ups
+
 **Origin**: PR #17 code review — 5 parallel agents, confidence scoring
 
 - [x] **Update "Single-file renderer" pattern in CLAUDE.md** — Fixed in PR #18 (TASK-020): updated to "Renderer entry: Core UI logic in `media-viewer.js`; v2.0 modularization..."
 - [ ] **Update `.claude/agents/regression-checker.md` for FullscreenManager** — References `fullscreenAbortControllers`, `cleanupFullscreen()`, and `abortFullscreenController()` which were extracted to `FullscreenManager` in `fullscreen.js`. Agent will give stale guidance on future reviews.
 - [x] **Update stale CLAUDE.md Git Insights entries for TASK-005/TASK-006** — Fixed in PR #18 (TASK-020): added "(pre-extraction)" and "later extracted into FullscreenManager" annotations
 
-### [2026-03-20] From: TASK-018 (UI polish: button press effects and fullscreen guard)
-**Origin**: TASK-018 spec review and implementation
+### [2026-03-21] TASK-019 (FullscreenManager) follow-ups
+
+**Origin**: TASK-019 code reviews (Task 1, Task 2, and final review)
+
+- [ ] **Rename `abortController()` method in FullscreenManager** — Method name reads as a noun (property access) rather than a verb (action). Confusing because `AbortController` is a well-known browser API class. Consider `releaseController(wrapper)` or `removeController(wrapper)`. No external callers (only used internally by `cleanup()`), so rename is trivial.
+- [ ] **Add wrapper-aware `isZoomed(wrapper)` helper to MediaViewer** — The `isZoomed` callback injected into FullscreenManager duplicates the wrapper-to-target mapping logic (`left-media-wrapper` → `'left'`, etc.). Consider adding a `isWrapperZoomed(wrapper)` method on MediaViewer so the callback can delegate instead of reimplementing. Prevents divergence if zoom state shape changes.
+- [ ] **Add unit tests for FullscreenManager** — Class is independently testable (DOM APIs can be mocked). E2E tests cover behavior end-to-end, but focused unit tests would catch regressions faster and serve as documentation for the manager's contract.
+- [ ] **Clear `wrapper.dataset.wasPlaying` after restore in `cleanup()`** — Pre-existing bug carried over from original code. After restoring video playback state, `wasPlaying` remains on the element. If the same wrapper is reused for different media, stale attribute could cause unintended `video.play()` on next `cleanup()`.
+- [ ] **Fix ESLint header label style inconsistency for block 2c** — Header listing uses em-dash suffix format; block comment uses parenthetical format. Inconsistent with blocks 2a/2b which use parenthetical in the label. Cosmetic only.
+
+### [2026-03-20] TASK-018 follow-ups
+
+**Origin**: TASK-018 spec review and implementation (UI polish: button press effects and fullscreen guard)
 
 - [ ] **Add `:hover` state to nav buttons (prev/next)** — TASK-018 revealed that all `.control-btn` elements have per-button `:hover` rules, but navigation arrows are not `.control-btn` and have no hover feedback at all. Consider adding hover effects for consistency.
 - [ ] **Consolidate per-button `:hover` rules into shared base** — Six separate `:hover:not(:disabled)` rules (like, dislike, cancel, special, zoom-toggle, overlay-zoom) all share `transform: translateY(-3px) scale(1.05)`. The transform could be moved to a shared `.control-btn:hover:not(:disabled)` rule, with per-button rules only setting `background`, `border-color`, and `box-shadow`. Reduces duplication.
 
-### [2026-03-20] From: code-review-pr-16
-**Origin**: Code review of PR #16 (TASK-018 UI polish: button press effects and fullscreen guard)
+### [2026-03-20] PR #15 code-review follow-ups
 
-- [x] **Update CLAUDE.md "Detected Patterns > Event Listener Lifecycle" for cleanupFullscreen() guard** — Fixed in commit c0cfdde
-- [x] **Update inline comment on cleanupFullscreen() to reflect early-return behavior** — Fixed in commit c0cfdde
-
-### [2026-03-20] From: TASK-017 (ESLint config and documentation alignment)
-**Origin**: TASK-017 implementation
-
-- [ ] **Add `globals.browser` to ESLint block 3b for feature-extractor.js** — Block 3b only declares `globals.worker` but `feature-extractor.js` is also loaded as a browser `<script>` tag (index.html:354). Currently no browser-only globals are used so no lint errors, but the config doesn't reflect the dual-environment nature. Adding `globals.browser` would future-proof against browser API usage.
-- [ ] **Audit remaining CLAUDE.md Git Insights for stale references** — TASK-017 fixed 3 stale "known discrepancy" references. Other Git Insights entries may similarly reference outdated state (e.g., block counts, old patterns). A sweep would catch remaining drift.
-
-### [2026-03-20] From: code-review-pr-15
 **Origin**: Code review of PR #15 (TASK-016 E2E test reliability improvements)
 
 - [x] **Use `electronApp.once('window')` instead of `.on('window')` in launchApp()** — Applied directly on main (post-merge fix)
 - [ ] **Document waitForNotification() retention decision** — TASK-016 acceptance criterion #3 ("remove or use waitForNotification()") was deferred rather than completed. The reasoning (keep for TASK-022 and future notification tests) exists only in the PR body, not in committed documentation. Scored 75/100 confidence.
 
-### [2026-03-20] From: TASK-016 (E2E test reliability improvements)
+### [2026-03-20] TASK-017 follow-ups
+
+**Origin**: TASK-017 implementation (ESLint config and documentation alignment)
+
+- [ ] **Add `globals.browser` to ESLint block 3b for feature-extractor.js** — Block 3b only declares `globals.worker` but `feature-extractor.js` is also loaded as a browser `<script>` tag (index.html:354). Currently no browser-only globals are used so no lint errors, but the config doesn't reflect the dual-environment nature. Adding `globals.browser` would future-proof against browser API usage.
+- [ ] **Audit remaining CLAUDE.md Git Insights for stale references** — TASK-017 fixed 3 stale "known discrepancy" references. Other Git Insights entries may similarly reference outdated state (e.g., block counts, old patterns). A sweep would catch remaining drift.
+
+### [2026-03-20] TASK-016 follow-ups
+
+**Origin**: TASK-016 implementation (E2E test reliability improvements)
 
 - [ ] **Investigate transient Vitest "No test suite found" failures** — During TASK-016, `npm test` returned "No test suite found in file" for all 4 test files, but the same tests passed moments later via the pre-commit hook. May indicate Vitest version instability or file-system timing issue on Windows. Monitor for recurrence.
 - [ ] **Use waitForNotification() in future E2E tests** — Helper exists in electron-app.js but is unused. Natural candidates: TASK-022 (error cascade notification test), rating notification verification, extraction completion notification test.
 
-### [2026-03-20] From: TASK-015 (Fix zoom and extraction bugs)
+### [2026-03-20] TASK-015 follow-ups
+
+**Origin**: TASK-015 implementation (Fix zoom and extraction bugs)
 
 - [ ] **Rename closeAllZoomPopovers() or add destroyAllZoomPopovers()** — `closeAllZoomPopovers()` only hides popovers visually (removes `.show` class) but does not call `removeZoomPopover()`. Future code paths relying on it for full cleanup would leak listeners. Consider renaming to `hideAllZoomPopovers()` for clarity, or adding a `destroyAllZoomPopovers()` that iterates and calls `removeZoomPopover()`.
 - [ ] **Add unit test for zoom popover AbortController cleanup** — The listener leak was caught by code review, not automated tests. A test verifying `AbortController.abort()` is called during `cleanupCompareMedia()` would prevent regressions.
 
-### [2026-03-20] From: code-review-pr-14
+### [2026-03-20] PR #14 code-review follow-ups
+
 **Origin**: Code review of PR #14 (TASK-015 fix zoom and extraction bugs)
 
 - [ ] **Align extraction completion cleanup ordering with cancelBackgroundExtraction()** — Natural completion path sets `isBackgroundExtracting = false` before clearing pause state (`extractionResumeTimer`, `extractionPaused`, `extractionResumeResolve`), while `cancelBackgroundExtraction()` does the opposite. No functional bug (loop has exited), but inconsistent ordering between the two exit paths. Scored 25/100 confidence.
 - [ ] **Update CLAUDE.md signalUserActivity() caller list** — Detected Patterns section lists only single-mode callers; four compare-mode handlers (`handleLeftLike`, `handleLeftDislike`, `handleRightLike`, `handleRightDislike`) now also call it but aren't documented. Scored 25/100 confidence.
 - [ ] **Add removeZoomPopover('single') to cleanupCurrentMedia() or mode switch** — Compare-mode popovers are now properly aborted via AbortController in `cleanupCompareMedia()`, but single-mode popover AbortController is never aborted during mode transitions. No actual leak (singleton, created once), but asymmetric pattern. Scored 25/100 confidence.
 
-### [2026-03-12] From: TASK-013 (Unit test infrastructure)
+### [2026-03-13] TASK-014 follow-ups
 
-- [ ] **Deduplicate MinHeap/VPTree across sorting-worker.js and media-viewer.js** — Both files contain identical implementations. Extract to a shared `data-structures.js` with the conditional CJS export pattern, then importScripts() in worker and import in renderer.
-- [x] **Add tests for showCompareMedia pair selection logic** — Promoted to TODO: TASK-020 (merged into ML investigation)
+**Origin**: TASK-014 implementation (Playwright E2E tests)
 
-### [2026-03-11] From: TASK-012 (Pre-commit hooks)
+- [ ] **Test E2E suite on Unix/macOS** — `getElectronWrapperPath()` and `getLaunchArgs()` have Unix branches (using node + CJS wrapper) but were only tested on Windows. Needs CI matrix or manual Mac/Linux validation.
+- [ ] **Auto-detect playwright-core loader.js path in rdp-preload.cjs** — Currently hardcoded to `node_modules/playwright-core/lib/server/electron/loader.js`. A playwright-core upgrade that moves this file will break silently. Could use `require.resolve()` or glob.
+- [x] **Update ESLint header comment to reflect 9 file-group blocks** — Promoted to TODO: TASK-017
 
-- [ ] **Promote `no-shadow` from warn → error** — After the codebase has been cleaned up, harden the rule to block commits with shadowed variables rather than just warning. Two known shadow sites remain in `handleCancel()` and the wheel handler.
-- [ ] **Add ESLint rule for no-console in production builds** — Currently `no-console` is off (console.log is intentional for Electron logging). Consider adding a build-time strip or lint warning in a future CI step.
+### [2026-03-12] PR #12 code-review follow-ups
 
-### [2026-03-12] From: code-review-pr-11
-
-- [x] **Document `_`-prefix convention for unused variables in CLAUDE.md** — Promoted to TODO: TASK-017
-- [x] **Fix eslint.config.mjs header comment environment count** — Promoted to TODO: TASK-017
-- [x] **Correct "worker-loaded" classification for feature-extractor.js** — Promoted to TODO: TASK-017
-
----
-
-## Feature Ideas
-
-### Sorting & ML
-
-| Idea | Description | Value | Effort | Source |
-|------|-------------|-------|--------|--------|
-| ~~Force re-sort option~~ | ~~Allow user to discard cached sort and re-sort from scratch~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-007 |
-| ~~Worker count setting~~ | ~~Let user configure number of extraction workers~~ | ~~Low~~ | ~~Low~~ | Promoted to TODO: TASK-009 |
-| ~~Estimated time remaining for extraction~~ | ~~Show ETA during feature extraction~~ | ~~Medium~~ | ~~Medium~~ | Promoted to TODO: TASK-010 |
-
----
-
-## Enhancements
-
-Improvements to existing functionality.
-
-| Enhancement | Area | Value | Effort | Notes |
-|-------------|------|-------|--------|-------|
-| ~~Cache age display in sorting notification~~ | ~~Sorting~~ | ~~Low~~ | ~~Low~~ | Promoted to TODO: TASK-008 |
-| ~~Pause extraction when user is navigating~~ | ~~ML/Perf~~ | ~~Medium~~ | ~~Medium~~ | Promoted to TODO: TASK-011 |
-| ~~Validation in showCompareMedia() for file existence~~ | ~~Compare~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-004 |
-| Anonymize author field in package.json if privacy desired | Config | Low | Low | Security audit: 2026-02-05 |
-| ~~Memory leak guard for exitHandler~~ | ~~Fullscreen~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-005 |
-| ~~Unified fullscreen exit cleanup method~~ | ~~Fullscreen~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-006 |
-| ~~Click/active effect for control buttons~~ | ~~UI~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-018 |
-| ~~Keyboard shortcut for zoom toggle~~ | ~~UI~~ | ~~Low~~ | ~~Low~~ | Promoted to TODO: TASK-026 (merged into keyboard customization) |
-| Zoom level persistence across navigation | UI | Low | Medium | Plan: 2026-02-05_visual-scale-controls |
-| ~~Fix mouseup listener leak in createZoomPopover~~ | ~~Zoom~~ | ~~Medium~~ | ~~Low~~ | Promoted to TODO: TASK-015 |
-| Document fullscreen zoom reversal from TASK-001 | Zoom/UX | Low | Low | Code review: PR #1 |
-| ~~Remove spinner state churn in showCompareMedia() retry~~ | ~~Compare~~ | ~~Low~~ | ~~Low~~ | Promoted to TODO: TASK-022 (merged into last-pair error fix) |
-| ~~Abort fullscreenAbortController before wrapper.remove()~~ | ~~Fullscreen~~ | ~~Low~~ | ~~Low~~ | Fixed in TASK-005 PR review |
-
----
-
-## Technical Debt
-
-Known issues that should be addressed eventually.
-
-| Item | Impact | Effort | Added |
-|------|--------|--------|-------|
-| ~~Centralized removeFile() method~~ | ~~Medium~~ | ~~Medium~~ | Promoted to TODO: TASK-003 |
-| Verify no secrets in git history (`git log -p --all -S`) | High | Low | 2026-02-05 |
-
----
-
-## Research Topics
-
-Areas requiring investigation before implementation.
-
-| Topic | Question | Why Important | Added |
-|-------|----------|---------------|-------|
-| ~~Media content understanding~~ | ~~Open source tools for identifying what's depicted in media?~~ | ~~Could improve ML prediction quality~~ | Promoted to TODO: TASK-028 |
-
----
-
-## Spawned Improvements
-
-<!-- Items generated from completed task reviews. Keep origin for traceability. -->
-
-### 2025-12-27 From: sorting-cache
-**Origin**: [2025-12-27_sorting-cache.md](../archive/plans/2025-12-27_sorting-cache.md)
-
-- [x] Force re-sort option — Promoted to TODO: TASK-007
-- [x] Cache age display — Promoted to TODO: TASK-008
-
-### 2025-12-28 From: background-feature-extraction
-**Origin**: [2025-12-28_background-feature-extraction.md](../archive/plans/2025-12-28_background-feature-extraction.md)
-
-- [x] Worker count setting — Promoted to TODO: TASK-009
-- [x] Estimated time remaining — Promoted to TODO: TASK-010
-- [x] Pause extraction when navigating — Promoted to TODO: TASK-011
-
-### 2025-12-29 From: video-fullscreen-toggle
-**Origin**: [2025-12-29_video-fullscreen-toggle.md](../archive/plans/2025-12-29_video-fullscreen-toggle.md)
-
-- [x] Memory leak guard for exitHandler — Promoted to TODO: TASK-005
-- [x] Unified fullscreen exit cleanup — Promoted to TODO: TASK-006
-
-### 2026-01-02 From: compare-mode-ai-sort-bug
-**Origin**: [2026-01-02_compare-mode-ai-sort-bug.md](../archive/plans/2026-01-02_compare-mode-ai-sort-bug.md)
-
-- [x] Centralized removeFile() method — Promoted to TODO: TASK-003
-- [x] Validation in showCompareMedia() — Promoted to TODO: TASK-004
-
-### 2026-02-05 From: visual-scale-controls
-**Origin**: [2026-02-05_visual-scale-controls.md](../archive/plans/2026-02-05_visual-scale-controls.md)
-
-- [x] Click/active effect for control buttons — Promoted to TODO: TASK-018
-- [x] Keyboard shortcut for zoom toggle — Promoted to TODO: TASK-026 (merged into keyboard customization)
-- [ ] Zoom level persistence — Remember zoom level when navigating between media of similar size
-- [ ] Slider width responsive to popover space — Wider slider on larger screens for finer control
-
-### 2026-02-05 From: code-review-pr-1
-**Origin**: Code review of PR #1
-
-- [x] Fix mouseup listener leak in createZoomPopover — Promoted to TODO: TASK-015
-- [ ] Document fullscreen zoom decision reversal — TASK-002 re-enabled wheel zoom and pan in fullscreen, reversing TASK-001's explicit decision (commit d3b08bb). Add rationale to PROJECT_CONTEXT.md.
-
-### 2026-02-06 From: centralized-remove-file
-**Origin**: [2026-02-06_centralized-remove-file.md](../archive/plans/2026-02-06_centralized-remove-file.md)
-
-- [ ] Batch removal support — `removeFilesFromList(filePaths[])` for removing multiple files in one operation
-- [x] Centralized insertFileIntoList() counterpart — Promoted to TODO: TASK-027 (merged into undo fix)
-- [ ] Event-based cache invalidation — Emit 'file-removed' event so new caches auto-subscribe without modifying removeFileFromList
-
-### 2026-02-06 From: code-review-pr-2
-**Origin**: Code review of PR #2
-
-- [ ] Index strategy parameter for removeFileFromList() — Add optional `indexStrategy` param ('cap'|'wrap') instead of post-call override in moveCurrentFile(). Keeps all index logic in one place rather than split across caller and method.
-
-### 2026-02-06 From: compare-file-validation
-**Origin**: [2026-02-06_compare-file-validation.md](../archive/plans/2026-02-06_compare-file-validation.md)
-
-- [ ] Add same validation to showSingleMedia() — Same vulnerability exists in single view mode. Files deleted externally trigger browser error events instead of being proactively caught.
-- [ ] Batch file validation on folder refresh — Validate all files in mediaFiles[] at once, removing stale entries. Useful for long-running sessions where folder contents change.
-
-### 2026-02-24 From: fullscreen-exithandler-leak-guard
-**Origin**: TASK-005 code review
-
-- [x] Abort fullscreenAbortController before wrapper.remove() — Fixed in PR review: added `abortFullscreenController()` helper, called before `wrapper.remove()` in `showCompareMedia()` and `toggleViewMode()`
-- [x] Add early return guard in cleanupFullscreen() for non-fullscreen wrappers — Promoted to TODO: TASK-018
-
-### 2026-02-24 From: task-006-unified-fullscreen-cleanup
-**Origin**: docs/archive/plans/2026-02-24_task-006-unified-fullscreen-cleanup.md
-
-- [x] ~~Extract setupFullscreen(wrapper) from toggleFullscreen() enter branch~~ — Superseded by TASK-019: fullscreen logic extracted to `FullscreenManager` class in `fullscreen.js`. The enter branch is now `FullscreenManager.toggle()`. A symmetric `setup()`/`cleanup()` split within the manager is still possible but lower priority.
-
-### 2026-02-25 From: task-007-force-resort-option
-**Origin**: TASK-007 implementation
-
-- [x] Add Shift+click hint to help overlay keyboard shortcuts — Promoted to TODO: TASK-026 (merged into keyboard customization)
-- [ ] Force re-sort for ML prediction sort — Apply the same Shift+click force re-sort pattern to `handleSortByPrediction()` for consistency across both sort modes.
-
-### 2026-03-05 From: task-009-worker-count-setting
-**Origin**: TASK-009 implementation
-
-- [ ] Auto-detect optimal worker count via `navigator.hardwareConcurrency` — Use CPU core count as suggested default instead of hardcoded 4. Show detected cores in UI label (e.g., "Feature extraction workers (8 cores detected)").
-- [ ] Show active worker count in background extraction progress — Display "Extracting features (4 workers)..." in the progress indicator so users understand the current parallelism level.
-- [ ] Reinitialize worker pool on setting change or show restart hint — Changing worker count at runtime doesn't affect an already-running pool (guarded by `featureWorkers.length === 0`). Either call `shutdownFeaturePool()` + `initializeFeaturePool()` on change, or add "(takes effect on restart)" label next to the input.
-
-### 2026-03-05 From: task-008-cache-age-display
-**Origin**: docs/archive/plans/2026-03-05_task-008-cache-age-display.md
-
-- [ ] Reuse formatTimeAgo() for other timestamps — Could display ML model age, hash cache age, or other cached data freshness
-- [ ] Add month-level granularity to formatTimeAgo() — Currently stops at weeks; very old caches show "52 weeks ago" instead of "12 months ago"
-- [ ] Fix stale timestamp display when new files merged into cache — When `stats.added > 0`, `saveSortCache()` overwrites disk with `Date.now()` but notification still reads old `cachedSortData.timestamp`. Should update timestamp after re-save or show "just now" for merged caches.
-
-### 2026-03-05 From: task-011-pause-extraction
-**Origin**: TASK-011 implementation
-
-- [ ] Move loadMediaAsImageData off main thread — Use OffscreenCanvas in workers to avoid main-thread image decoding jank entirely. Would eliminate the root cause of UI contention during extraction, making the pause feature a nice-to-have rather than essential.
-- [ ] Per-file extraction gate instead of per-batch — Currently awaitExtractionGate() is checked once per batch (10 files). Moving the gate inside the inner loop (before each loadMediaAsImageData call) would provide more granular pausing with faster response to user activity.
-
-### 2026-03-11 From: code-review-pr-10
-**Origin**: Code review of PR #10 (TASK-011 pause extraction)
-
-- [x] Add signalUserActivity() to compare-mode rating handlers — Promoted to TODO: TASK-015
-- [x] Clean up pause state on natural extraction end — Promoted to TODO: TASK-015
-- [ ] Remove dangling abort listener in awaitExtractionGate — `signal.addEventListener('abort', resolve, {once:true})` is not removed on normal resume path. Each pause/resume cycle accumulates one listener until the AbortController is GC'd at run end. Scored 72/100 confidence.
-
-### 2026-03-05 From: task-010-extraction-eta
-**Origin**: docs/archive/plans/2026-03-05_task-010-extraction-eta.md
-
-- [ ] Show extraction rate in progress pill — Display files/sec alongside ETA (e.g., "45/200 (22%) — ~3m 12s (2.3 files/s)") for throughput visibility
-- [ ] Reuse formatElapsed() for other timed operations — Sort-by-similarity, ML training, and other long operations could show elapsed time on completion
-- [ ] Apply generation counter pattern to sort cancellation — sortAbortController has the same cancel-then-restart race potential as extraction; extractionRunId pattern could prevent stale sort callbacks from corrupting state
-
-### 2026-03-12 From: code-review-pr-12
 **Origin**: Code review of PR #12 (TASK-013 unit test infrastructure)
 
 - [ ] **Move sorting-worker.js to ESLint block 3b or create separate block** — sorting-worker.js now has the conditional CJS export pattern (`typeof module !== 'undefined' && module.exports`) but remains in block 3a. Adding `module: 'readonly'` to 3a also applies it to ml-worker.js and feature-worker.js which don't use `module`, silently permitting accidental CJS code in those pure workers. Scored 75/100 confidence.
 - [x] **Update BACKLOG item for ESLint header comment count** — Resolved by TASK-017 (header updated to "Nine file-group blocks")
 - [ ] **Add globalThis.self teardown in sorting-worker.test.js** — `globalThis.self` is set at module top-level without afterAll cleanup. While Vitest isolates each file in its own worker, adding teardown is defensive best practice. Scored 25/100 confidence.
 
-### [2026-03-13] From: TASK-014 (Playwright E2E tests)
+### [2026-03-12] TASK-013 follow-ups
 
-- [ ] **Test E2E suite on Unix/macOS** — `getElectronWrapperPath()` and `getLaunchArgs()` have Unix branches (using node + CJS wrapper) but were only tested on Windows. Needs CI matrix or manual Mac/Linux validation.
-- [ ] **Auto-detect playwright-core loader.js path in rdp-preload.cjs** — Currently hardcoded to `node_modules/playwright-core/lib/server/electron/loader.js`. A playwright-core upgrade that moves this file will break silently. Could use `require.resolve()` or glob.
-- [x] **Update ESLint header comment to reflect 9 file-group blocks** — Promoted to TODO: TASK-017
+**Origin**: TASK-013 implementation (Unit test infrastructure)
 
-### [2026-03-18] From: code-review-pr-13
-**Origin**: Code review of PR #13 (TASK-014 Playwright E2E tests)
+- [ ] **Deduplicate MinHeap/VPTree across sorting-worker.js and media-viewer.js** — Both files contain identical implementations. Extract to a shared `data-structures.js` with the conditional CJS export pattern, then importScripts() in worker and import in renderer.
+- [x] **Add tests for showCompareMedia pair selection logic** — Promoted to TODO: TASK-020 (merged into ML investigation)
 
-- [x] **Clear setTimeout in closeApp() on successful close** — Promoted to TODO: TASK-016
-- [x] **Register page.route() CDN stub before firstWindow() loads** — Promoted to TODO: TASK-016
-- [x] **Remove or use waitForNotification() export** — Promoted to TODO: TASK-016
-- [x] **Fix stale filename in electron-wrapper.cjs JSDoc** — Promoted to TODO: TASK-017
+### [2026-03-11] TASK-012 follow-ups
 
-### [2026-03-19] From: Manual testing session
-**Origin**: User manual testing — 11 issues reported, 9 promoted to TODO
+**Origin**: TASK-012 implementation (Pre-commit hooks)
 
-- [x] ML sorting pair ordering investigation — Promoted to TODO: TASK-020
-- [x] Compare mode overlay controls UX — Promoted to TODO: TASK-021
-- [x] Compare mode last-pair error cascade — Promoted to TODO: TASK-022
-- [x] Video pause/play icon sync — Promoted to TODO: TASK-023
-- [x] Per-folder feature extraction caching — Promoted to TODO: TASK-024
-- [x] Application logging to file — Promoted to TODO: TASK-025
-- [x] Keyboard shortcut customization — Promoted to TODO: TASK-026
-- [x] Undo when no media remains — Promoted to TODO: TASK-027
-- [x] Research: media content understanding tools — Promoted to TODO: TASK-028
+- [ ] **Promote `no-shadow` from warn → error** — After the codebase has been cleaned up, harden the rule to block commits with shadowed variables rather than just warning. Two known shadow sites remain in `handleCancel()` and the wheel handler.
+- [ ] **Add ESLint rule for no-console in production builds** — Currently `no-console` is off (console.log is intentional for Electron logging). Consider adding a build-time strip or lint warning in a future CI step.
 
-### 2026-04-03 From: TASK-027 (undo empty state fix)
-**Origin**: TASK-027 implementation
+### [2026-03-11] PR #10 code-review follow-up
 
-- [ ] Centralized `insertFileIntoList()` method — Extract reusable file insertion logic from the 4 undo branches in `handleCancel()` (single, compare, special, compare-tagged-in-single). Each branch duplicates file reconstruction + splice/push + ML reversal. A shared method would reduce ~150 lines of duplication.
-- [ ] Allow F1 (help) through keydown guard in empty state — Currently `showEmptyStateWithUndo()` blocks F1 along with all other non-undo shortcuts. Users may want to check keyboard shortcuts while in the empty state.
+**Origin**: Code review of PR #10 (TASK-011 pause extraction)
 
-### 2026-02-06 From: code-review-pr-3
-**Origin**: Code review of PR #3
+- [x] Add signalUserActivity() to compare-mode rating handlers — Promoted to TODO: TASK-015
+- [x] Clean up pause state on natural extraction end — Promoted to TODO: TASK-015
+- [ ] Remove dangling abort listener in awaitExtractionGate — `signal.addEventListener('abort', resolve, {once:true})` is not removed on normal resume path. Each pause/resume cycle accumulates one listener until the AbortController is GC'd at run end. Scored 72/100 confidence.
 
-- [x] Remove unnecessary loading state resets before recursive retry in showCompareMedia() — Promoted to TODO: TASK-022 (merged into last-pair error fix)
+### [2026-03-05] TASK-011 follow-ups
 
-### 2026-04-10 From: compare-mode-fix
-**Origin**: [2026-04-10-compare-mode-fix.md](../archive/plans/2026-04-10-compare-mode-fix.md)
+**Origin**: TASK-011 implementation (pause extraction)
 
-- [ ] Make `hideDropZone()` mode-aware — Currently unconditionally shows `.controls` regardless of `isCompareMode`. Works now because `loadFolder()` resets first, but `hideDropZone()` is called from other paths; a mode-aware version would be more robust.
-- [ ] Add try/finally cleanup to pre-existing `twoFileTmp` in compare-mode E2E — The "switches to single mode when last pair is rated" test (lines 113-161) has the same inline-cleanup pattern that was fixed for `secondFolder`; should use try/finally too.
+- [ ] Move loadMediaAsImageData off main thread — Use OffscreenCanvas in workers to avoid main-thread image decoding jank entirely. Would eliminate the root cause of UI contention during extraction, making the pause feature a nice-to-have rather than essential.
+- [ ] Per-file extraction gate instead of per-batch — Currently awaitExtractionGate() is checked once per batch (10 files). Moving the gate inside the inner loop (before each loadMediaAsImageData call) would provide more granular pausing with faster response to user activity.
 
-### [2026-04-11] From: PR #28 code review
-**Origin**: 5 parallel agents + confidence scoring; 4 issues found, 2 scored >=80 (both doc issues, fixed in 54e6246); code-level observations below threshold but worth tracking
+### [2026-03-05] TASK-010 follow-ups
 
-- [ ] **Redundant calls in `switchToSingleModeUI()` via `toggleViewMode()`** — When `toggleViewMode()` calls `switchToSingleModeUI()`, `hidePredictionBadges()` and `closeAllZoomPopovers()` run twice (once at top of `toggleViewMode()`, once inside `switchToSingleModeUI()`). Harmless but wasteful; consider splitting `switchToSingleModeUI()` into a core UI-reset (for `toggleViewMode()`) and a full reset (for `loadFolder()` and other callers); affected: `media-viewer.js` (~L3567 `switchToSingleModeUI`, ~L3589 `toggleViewMode`)
-- [ ] **Double `isCompareMode = false` in `toggleViewMode()`** — Line ~3619 toggles `isCompareMode` to `false`, then `switchToSingleModeUI()` sets it `false` again. Correct but confusing for future readers; add a comment clarifying the toggle precedes the helper call; affected: `media-viewer.js` (~L3619, ~L3634)
-- [ ] **Standardize E2E `waitForTimeout` durations** — Compare-mode tests use 200ms, 300ms, 500ms, 1000ms for similar DOM-settling waits with no clear rationale for which value; consider extracting named constants (e.g., `MODE_SWITCH_SETTLE = 300`) or replacing with state-based waits (`waitForFunction`); affected: `tests/e2e/compare-mode.test.js`, `tests/e2e/navigation.test.js`, `tests/e2e/fullscreen.test.js`
+**Origin**: TASK-010 implementation (extraction ETA)
+
+- [ ] Show extraction rate in progress pill — Display files/sec alongside ETA (e.g., "45/200 (22%) — ~3m 12s (2.3 files/s)") for throughput visibility
+- [ ] Reuse formatElapsed() for other timed operations — Sort-by-similarity, ML training, and other long operations could show elapsed time on completion
+- [ ] Apply generation counter pattern to sort cancellation — sortAbortController has the same cancel-then-restart race potential as extraction; extractionRunId pattern could prevent stale sort callbacks from corrupting state
+
+### [2026-03-05] TASK-009 follow-ups
+
+**Origin**: TASK-009 implementation (worker count setting)
+
+- [ ] Auto-detect optimal worker count via `navigator.hardwareConcurrency` — Use CPU core count as suggested default instead of hardcoded 4. Show detected cores in UI label (e.g., "Feature extraction workers (8 cores detected)").
+- [ ] Show active worker count in background extraction progress — Display "Extracting features (4 workers)..." in the progress indicator so users understand the current parallelism level.
+- [ ] Reinitialize worker pool on setting change or show restart hint — Changing worker count at runtime doesn't affect an already-running pool (guarded by `featureWorkers.length === 0`). Either call `shutdownFeaturePool()` + `initializeFeaturePool()` on change, or add "(takes effect on restart)" label next to the input.
+
+### [2026-03-05] TASK-008 follow-ups
+
+**Origin**: TASK-008 implementation (cache age display)
+
+- [ ] Reuse formatTimeAgo() for other timestamps — Could display ML model age, hash cache age, or other cached data freshness
+- [ ] Add month-level granularity to formatTimeAgo() — Currently stops at weeks; very old caches show "52 weeks ago" instead of "12 months ago"
+- [ ] Fix stale timestamp display when new files merged into cache — When `stats.added > 0`, `saveSortCache()` overwrites disk with `Date.now()` but notification still reads old `cachedSortData.timestamp`. Should update timestamp after re-save or show "just now" for merged caches.
+
+### [2026-02-25] TASK-007 follow-ups
+
+**Origin**: TASK-007 implementation (force re-sort option)
+
+- [ ] Force re-sort for ML prediction sort — Apply the same Shift+click force re-sort pattern to `handleSortByPrediction()` for consistency across both sort modes.
+
+### [2026-02-06] centralized-remove-file follow-ups
+
+**Origin**: [2026-02-06_centralized-remove-file.md](../archive/plans/2026-02-06_centralized-remove-file.md)
+
+- [ ] Batch removal support — `removeFilesFromList(filePaths[])` for removing multiple files in one operation
+- [ ] Event-based cache invalidation — Emit 'file-removed' event so new caches auto-subscribe without modifying removeFileFromList
+
+### [2026-02-06] PR #2 code-review follow-up
+
+**Origin**: Code review of PR #2
+
+- [ ] Index strategy parameter for removeFileFromList() — Add optional `indexStrategy` param ('cap'|'wrap') instead of post-call override in moveCurrentFile(). Keeps all index logic in one place rather than split across caller and method.
+
+### [2026-02-06] compare-file-validation follow-ups
+
+**Origin**: [2026-02-06_compare-file-validation.md](../archive/plans/2026-02-06_compare-file-validation.md)
+
+- [ ] Add same validation to showSingleMedia() — Same vulnerability exists in single view mode. Files deleted externally trigger browser error events instead of being proactively caught.
+- [ ] Batch file validation on folder refresh — Validate all files in mediaFiles[] at once, removing stale entries. Useful for long-running sessions where folder contents change.
+
+### [2026-02-05] PR #1 code-review follow-up
+
+**Origin**: Code review of PR #1
+
+- [ ] **Document fullscreen zoom decision reversal** — TASK-002 re-enabled wheel zoom and pan in fullscreen, reversing TASK-001's explicit decision (commit d3b08bb). Add rationale to PROJECT_CONTEXT.md.
 
 ---
 
