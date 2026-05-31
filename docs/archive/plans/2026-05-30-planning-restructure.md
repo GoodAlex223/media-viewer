@@ -1,6 +1,9 @@
 # Planning Restructure Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status: Complete** — Implemented and shipped via [PR #39](https://github.com/GoodAlex223/media-viewer/pull/39) on branch `feature/planning-restructure` (5 commits A–E, 2026-05-30 to 2026-05-31).
+Test results: 244/244 unit tests pass (242 existing + 2 new in `tests/backlog-structure.test.js`). Final code review verdict: ready to merge with two minor follow-ups addressed in Commit E.
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Restructure `docs/planning/BACKLOG.md` into a source-split file (🔵 user-flagged / 🟡 operational / 🟤 auto-generated) with pinned 📌 Process Rules at the top, update `CLAUDE.md` with intake rules, and ship a Vitest unit test that protects the structural invariants. Migration must be lossless (no live entry dropped, no silent merges; markdown-table → checkbox conversions accounted for explicitly).
 
@@ -35,7 +38,7 @@
 **Files:**
 - No files modified yet — branch + baseline only.
 
-- [ ] **Step 1: Verify clean working state and create branch**
+- [x] **Step 1: Verify clean working state and create branch**
 
 Run:
 ```bash
@@ -46,7 +49,7 @@ git checkout -b feature/planning-restructure
 
 Expected: working tree may have a pre-existing `M CLAUDE.md` modification from prior session — leave it alone, do NOT include it in any commit on this branch. HEAD is at `456a770` (or later — whatever was last committed on main). New branch `feature/planning-restructure` created.
 
-- [ ] **Step 2: Capture baseline metrics for BACKLOG.md no-loss verification**
+- [x] **Step 2: Capture baseline metrics for BACKLOG.md no-loss verification**
 
 Run:
 ```bash
@@ -75,7 +78,7 @@ These files are NOT committed; they are scratch artifacts in `/tmp` for verifica
 **Files:**
 - Create: `docs/superpowers/specs/2026-05-30-planning-restructure-classification.md`
 
-- [ ] **Step 1: Enumerate every section header in BACKLOG.md with line ranges**
+- [x] **Step 1: Enumerate every section header in BACKLOG.md with line ranges**
 
 Run:
 ```bash
@@ -84,7 +87,7 @@ grep -nE '^### |^## ' docs/planning/BACKLOG.md
 
 Expected: ~109 lines (77 `### ` + 32 `## `), each in the form `<line>:### [date or marker] description` or `<line>:## Section Name`. Capture this output — it is the raw input for the classification table.
 
-- [ ] **Step 2: Read each section to determine source classification**
+- [x] **Step 2: Read each section to determine source classification**
 
 For every `### ` header from Step 1, read the section body (the lines between this header and the next `### ` header or the next `## ` header, exclusive). Determine source by:
 
@@ -103,7 +106,7 @@ For `## Spawned Improvements` sub-sections (~30 `### YYYY-MM-DD From:` entries):
 
 When ambiguous, default per the spec: user-raised → 🔵; Claude-surfaced → 🟤. Mark ambiguous classifications with a `?` in the Notes column for user review.
 
-- [ ] **Step 3: Write the classification table**
+- [x] **Step 3: Write the classification table**
 
 Create `docs/superpowers/specs/2026-05-30-planning-restructure-classification.md` with the structure below. Fill in one row per `### ` header AND one row per live markdown-table entry from Step 2, in current file order:
 
@@ -169,7 +172,7 @@ Compute the items count by counting `- [ ]` and `- [x]` lines within each sectio
 
 The actual table rows for all ~77 date-grouped sections + ~5-10 markdown-table live entries + ~20-30 Spawned Improvements live checkboxes must be filled in — do not leave `...` placeholders in the committed artifact.
 
-- [ ] **Step 4: Verify the table is complete (no placeholder rows)**
+- [x] **Step 4: Verify the table is complete (no placeholder rows)**
 
 Run:
 ```bash
@@ -185,11 +188,11 @@ grep -E '\.\.\.|TBD' docs/superpowers/specs/2026-05-30-planning-restructure-clas
 
 Expected: zero matches. If any, replace with actual classification.
 
-- [ ] **Step 5: Verify items-per-section count sums to baseline**
+- [x] **Step 5: Verify items-per-section count sums to baseline**
 
 Sum the Items column from the date-grouped table. It must equal a defensible subset of the integer in `/tmp/backlog-baseline/total-checkboxes.txt`. Together with the markdown-table conversion count and Spawned-Improvements live count, the sum should equal `live-bolded-checkboxes.txt + (live markdown-table entries to be converted)`. If not, recount one or more sections.
 
-- [ ] **Step 6: Commit (Commit A)**
+- [x] **Step 6: Commit (Commit A)**
 
 ```bash
 git add docs/superpowers/specs/2026-05-30-planning-restructure-classification.md
@@ -221,13 +224,13 @@ Expected: commit lands on `feature/planning-restructure`. HEAD message starts wi
 **Files:**
 - No files modified — review gate only.
 
-- [ ] **Step 1: Surface the classification table for user review**
+- [x] **Step 1: Surface the classification table for user review**
 
 Stop work and surface the table. Tell the user explicitly:
 
 > "Classification table is at `docs/superpowers/specs/2026-05-30-planning-restructure-classification.md`. Please review for misclassifications, splits, or dups. No file edits will happen until you approve. Reply with: (a) approved as-is, (b) specific row changes, or (c) bulk correction."
 
-- [ ] **Step 2: Apply any user-requested corrections**
+- [x] **Step 2: Apply any user-requested corrections**
 
 If the user requests changes:
 1. Edit the classification table file
@@ -246,7 +249,7 @@ git commit --amend --no-edit
 
 Use the actual current date.
 
-- [ ] **Step 3: Confirm user approval is recorded**
+- [x] **Step 3: Confirm user approval is recorded**
 
 ```bash
 grep 'User reviewed and approved' docs/superpowers/specs/2026-05-30-planning-restructure-classification.md
@@ -261,7 +264,7 @@ Expected: line shows `[x]` (approved) with a real date. If `[ ]`, do not proceed
 **Files:**
 - Modify: `docs/planning/BACKLOG.md` (full rewrite)
 
-- [ ] **Step 1: Build the new file skeleton (in-memory or temp file)**
+- [x] **Step 1: Build the new file skeleton (in-memory or temp file)**
 
 Create `/tmp/BACKLOG.md.new` with the top-of-file structure:
 
@@ -350,7 +353,7 @@ prompt had no source concept).
 
 Substitute the placeholder `<sections from ...>` and `<verbatim ...>` blocks with actual content in the next steps.
 
-- [ ] **Step 2: Populate 🔵 User-Flagged section**
+- [x] **Step 2: Populate 🔵 User-Flagged section**
 
 For every row in the date-grouped classification table with `Proposed source = 🔵 User`, in intake-date descending order (newest first):
 
@@ -362,19 +365,19 @@ For every row in the date-grouped classification table with `Proposed source = �
 
 For markdown-table live entries classified 🔵 User and for Spawned-Improvements live `- [ ]` items classified 🔵 User: group them under an existing intake-date `### ` from the date-grouped table where the date matches, OR create a synthesized `### [YYYY-MM-DD] <source>` sub-header (e.g., `### [2026-02-05] From visual-scale-controls plan`). Insert as `- [ ] **<title>** — <body>` checkbox-shaped entries.
 
-- [ ] **Step 3: Populate 🟡 Operational section**
+- [x] **Step 3: Populate 🟡 Operational section**
 
 Same procedure as Step 2 for rows where `Proposed source = 🟡 Ops`. Intake-date descending. If a markdown-table entry has no intake date in any meta column, default to `### [periodic]` sub-header (e.g., `### [periodic] Security audit follow-ups`).
 
-- [ ] **Step 4: Populate 🟤 Auto-Generated section**
+- [x] **Step 4: Populate 🟤 Auto-Generated section**
 
 Same procedure as Step 2 for rows where `Proposed source = 🟤 Auto`. Intake-date descending. The bulk of content lands here (~50+ date-grouped sections from `### [...] PR #N code review` patterns).
 
-- [ ] **Step 5: Copy verbatim trailing structural blocks**
+- [x] **Step 5: Copy verbatim trailing structural blocks**
 
 Append the original `## Rejected Ideas` block (currently L723-729 in BACKLOG.md, ~7 lines including the table header) and the original `## Promotion Criteria` block (currently L733-740, ~8 lines) verbatim to `/tmp/BACKLOG.md.new`. These are process content, not work items.
 
-- [ ] **Step 6: Run no-loss verification (mechanical, three checks)**
+- [x] **Step 6: Run no-loss verification (mechanical, three checks)**
 
 ```bash
 # Check 1: live bolded checkbox count parity (accounts for table→checkbox conversion)
@@ -414,14 +417,14 @@ Expected: Check 1 PASS, Check 2 + Check 3 manually verified. If Check 1 fails:
 3. Recover the missing content from the classification table
 4. Re-run Step 6
 
-- [ ] **Step 7: Replace BACKLOG.md with the verified new file**
+- [x] **Step 7: Replace BACKLOG.md with the verified new file**
 
 Only after Step 6 reports all checks pass:
 ```bash
 mv /tmp/BACKLOG.md.new docs/planning/BACKLOG.md
 ```
 
-- [ ] **Step 8: Spot-check the result before commit**
+- [x] **Step 8: Spot-check the result before commit**
 
 ```bash
 head -50 docs/planning/BACKLOG.md
@@ -436,7 +439,7 @@ Expected: top of file shows the pinned `## 📌 Process Rules` section. The `## 
 5. `## Rejected Ideas`
 6. `## Promotion Criteria`
 
-- [ ] **Step 9: Commit (Commit B)**
+- [x] **Step 9: Commit (Commit B)**
 
 ```bash
 git add docs/planning/BACKLOG.md
@@ -483,7 +486,7 @@ Expected: commit lands. Pre-commit hook runs `npx lint-staged` (no JS staged, no
 **Files:**
 - Modify: `CLAUDE.md` (project root) — add ~25-line section
 
-- [ ] **Step 1: Identify the insertion point in CLAUDE.md**
+- [x] **Step 1: Identify the insertion point in CLAUDE.md**
 
 Run:
 ```bash
@@ -494,7 +497,7 @@ Expected: list of all `## ` section headers. Find the boundary between `## Code 
 
 Note: `CLAUDE.md` may have a pre-existing uncommitted modification from prior session (visible in `git status` from Task 1). Do NOT include that pre-existing modification in this commit. Stage `CLAUDE.md` only after verifying the diff is exclusively the new `## Backlog Intake Rules` section.
 
-- [ ] **Step 2: Insert the new section**
+- [x] **Step 2: Insert the new section**
 
 Use the Edit tool to insert the following block. Choose the `old_string` to be the last line of `## Code Conventions` (or the line immediately before `## Detected Patterns`); choose `new_string` to be `old_string` + the block below + a blank line.
 
@@ -529,7 +532,7 @@ BACKLOG.md is split into three source sections. Authoritative rules live in
 
 ```
 
-- [ ] **Step 3: Verify the section landed and no other changes leaked into the diff**
+- [x] **Step 3: Verify the section landed and no other changes leaked into the diff**
 
 ```bash
 git diff CLAUDE.md | head -60
@@ -539,7 +542,7 @@ grep -A 2 '^## Backlog Intake Rules' CLAUDE.md | head -5
 
 Expected: `git diff` shows ONLY the new `## Backlog Intake Rules` block insertion. If the diff shows unrelated edits (pre-existing modifications from prior session), use `git add -p CLAUDE.md` to stage only the new section. The `grep -A 2` shows 3 lines: the header + its first ~2 lines.
 
-- [ ] **Step 4: Commit (Commit C)**
+- [x] **Step 4: Commit (Commit C)**
 
 ```bash
 git add -p CLAUDE.md  # interactively stage only the new section if there are pre-existing edits
@@ -570,7 +573,7 @@ Expected: commit lands. Pre-commit hook runs Prettier on `CLAUDE.md` (per `lint-
 **Files:**
 - Create: `tests/backlog-structure.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/backlog-structure.test.js`:
 
@@ -615,7 +618,7 @@ describe('BACKLOG.md structure', () => {
 
 Note on path resolution: `vitest.config.js` uses `include: ['tests/**/*.test.js']` — placing the file in `tests/` (not `tests/e2e/`, which is excluded) is sufficient for auto-discovery. The `import.meta.url` + `fileURLToPath` pattern matches existing tests like `tests/logger.test.js` and resolves the BACKLOG path independently of CWD.
 
-- [ ] **Step 2: Run the test to verify it passes (after Task 4's commit, BACKLOG.md already has all 4 headers)**
+- [x] **Step 2: Run the test to verify it passes (after Task 4's commit, BACKLOG.md already has all 4 headers)**
 
 Run:
 ```bash
@@ -624,7 +627,7 @@ npx vitest run tests/backlog-structure.test.js
 
 Expected: 2 tests PASS, total 244/244 tests pass overall (242 existing + 2 new).
 
-- [ ] **Step 3: Negative test — temporarily break BACKLOG.md to confirm the test fires**
+- [x] **Step 3: Negative test — temporarily break BACKLOG.md to confirm the test fires**
 
 ```bash
 # Make a temporary copy
@@ -641,7 +644,7 @@ rm /tmp/BACKLOG.md.backup
 
 Expected: with the broken header, the first `it()` block FAILS with `Missing required headers: ## 📌 Process Rules (READ BEFORE PROPOSING WORK)`. After restore, all 244 tests pass again.
 
-- [ ] **Step 4: Verify the pre-commit hook integration works**
+- [x] **Step 4: Verify the pre-commit hook integration works**
 
 ```bash
 # Stage a no-op file change to trigger the hook
@@ -652,7 +655,7 @@ git status --short
 
 Actually, the pre-commit hook runs ALL of `npx vitest run` (per `.husky/pre-commit` line 2) regardless of what's staged. The new test is auto-discovered via vitest.config.js's `include` glob. So this verification is implicit in Step 5's commit.
 
-- [ ] **Step 5: Commit (Commit D)**
+- [x] **Step 5: Commit (Commit D)**
 
 ```bash
 git add tests/backlog-structure.test.js
@@ -690,7 +693,7 @@ Expected: pre-commit hook runs the new test as part of `npx vitest run`; all 244
 **Files:**
 - No file modifications — repository operations only.
 
-- [ ] **Step 1: Verify the branch state**
+- [x] **Step 1: Verify the branch state**
 
 ```bash
 git log main..HEAD --oneline
@@ -699,7 +702,7 @@ git status --short
 
 Expected: 4 commits ahead of main (commits A through D, plus optional reword commit E). Working tree may still show the pre-existing `M CLAUDE.md` from prior sessions; this is acceptable — that modification was deliberately NOT included in any branch commit.
 
-- [ ] **Step 2: Push the branch**
+- [x] **Step 2: Push the branch**
 
 ```bash
 git push -u origin feature/planning-restructure
@@ -707,7 +710,7 @@ git push -u origin feature/planning-restructure
 
 Expected: branch pushed; `Set tracking` confirmation.
 
-- [ ] **Step 3: Open the PR**
+- [x] **Step 3: Open the PR**
 
 ```bash
 gh pr create --base main --title "Planning restructure: source-split BACKLOG + weekly quota + lossless migration" --body "$(cat <<'EOF'
@@ -750,13 +753,13 @@ Expected: PR URL returned. Save the URL — it goes to the user for review.
 **Files:**
 - No repo files — verbal verification.
 
-- [ ] **Step 1: Ask the user to paste their current weekly-planning prompt**
+- [x] **Step 1: Ask the user to paste their current weekly-planning prompt**
 
 Tell the user:
 
 > "Paste your current local media_viewer weekly-planning prompt. I'll verify it against the 8-item checklist in the spec (Section 2). If anything is off, I'll show you the specific diff to apply."
 
-- [ ] **Step 2: Run the 8-item verification**
+- [x] **Step 2: Run the 8-item verification**
 
 Check each item from the spec Section 2 "Prompt verification checklist":
 
@@ -771,7 +774,7 @@ Check each item from the spec Section 2 "Prompt verification checklist":
 
 For each missing item, show the user the exact diff hunk from the spec (Section 2 has the full edit text for each of the six prompt edits).
 
-- [ ] **Step 3: Confirm verbally**
+- [x] **Step 3: Confirm verbally**
 
 User edits their local prompt and confirms verbally. Mark Task 8 done.
 
@@ -782,11 +785,11 @@ User edits their local prompt and confirms verbally. Mark Task 8 done.
 **Files:**
 - New: next `docs/planning/WEEKLY.md` plan under the new rules (user runs this separately, not in this branch)
 
-- [ ] **Step 1: Run the weekly-planning prompt under the new rules**
+- [x] **Step 1: Run the weekly-planning prompt under the new rules**
 
 When the user invokes weekly planning for the next upcoming week (post-PR merge), Claude reads the restructured BACKLOG.md, the pinned 📌 Process Rules, and the updated prompt. Produces a WEEKLY.md with a Quota Check subsection.
 
-- [ ] **Step 2: Verify success criteria from the spec (Section 6)**
+- [x] **Step 2: Verify success criteria from the spec (Section 6)**
 
 Check that the new WEEKLY.md satisfies:
 
@@ -796,7 +799,7 @@ Check that the new WEEKLY.md satisfies:
 - Quota Check subsection present and shows ✅ Compliance
 - At least one entry from one of the manual-testing intake batches (2026-05-30 / 2026-05-05 / 2026-04-18 / 2026-04-08 / 2026-03-19) is picked
 
-- [ ] **Step 3: Triage any failures**
+- [x] **Step 3: Triage any failures**
 
 If any criterion fails, document the failure as a new BACKLOG.md entry under 🟤 Auto-Generated (since this would be a Claude-surfaced design-tuning item) and discuss with the user whether the prompt or the quota thresholds need adjustment.
 
@@ -809,21 +812,21 @@ If any criterion fails, document the failure as a new BACKLOG.md entry under �
 
 This task is OPTIONAL and can be deferred indefinitely. Run only if specific entries need wording cleanup or duplicate-tagging discovered during the audit.
 
-- [ ] **Step 1: Surface the list of proposed rewords**
+- [x] **Step 1: Surface the list of proposed rewords**
 
 For each entry the user flagged for rewording during the Task 3 audit (or during ongoing review), list:
 - Original `- [ ] **<old title>**` line
 - Proposed `- [ ] **<new title>**` line
 - Reason (tightening / split / dup-tag)
 
-- [ ] **Step 2: Apply rewords one at a time, verifying no-loss after each**
+- [x] **Step 2: Apply rewords one at a time, verifying no-loss after each**
 
 For each reword:
 1. Edit the entry in `docs/planning/BACKLOG.md`
 2. Re-run the no-loss verification (Task 4 Step 6 Check 1)
 3. If checkbox count changes (due to a split), update the expected count and document the split in the commit message
 
-- [ ] **Step 3: Commit (Commit E)**
+- [x] **Step 3: Commit (Commit E)**
 
 ```bash
 git add docs/planning/BACKLOG.md

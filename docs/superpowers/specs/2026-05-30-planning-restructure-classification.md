@@ -1,7 +1,7 @@
 # BACKLOG.md Pass 1 Classification Table
 
 **Spec:** [2026-05-30-planning-restructure-design.md](./2026-05-30-planning-restructure-design.md)
-**Status:** Awaiting user audit before BACKLOG.md rewrite (Task 4)
+**Status:** Complete — user-audited 2026-05-30 (approved as-is); rewrite shipped in commit `379a3d3` on branch `feature/planning-restructure` (PR #39)
 **Generated:** 2026-05-30
 **Source file:** `docs/planning/BACKLOG.md` at branch `feature/planning-restructure` HEAD
 
