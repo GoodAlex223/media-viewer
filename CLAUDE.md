@@ -163,6 +163,33 @@ media_viewer/
 
 <!-- END AUTO-MANAGED -->
 
+## Backlog Intake Rules
+
+BACKLOG.md is split into three source sections. Authoritative rules live in
+`docs/planning/BACKLOG.md` 📌 Process Rules section — read it first. Summary:
+
+### Where new entries go
+- User mentioned it (in conversation, manual testing, idea sharing) → 🔵 User-Flagged
+- Claude/automation surfaced it (PR post-merge review, /code-review pass,
+  CLAUDE.md staleness, docs/README.md drift, archived-plan checklist) → 🟤 Auto-Generated
+- Periodic maintenance, audits, dep/version watches (regression-checker audit, Lucide
+  CDN→bundled migration tracking, electron/Husky upgrade watches) → 🟡 Operational
+- Unsure → ask before adding; default-to-🔵 if user-raised, default-to-🟤 if Claude-surfaced.
+
+### Intake format
+- Group by intake date: `### [YYYY-MM-DD] <event description>`
+- One entry per concrete actionable item; never silently merge similar entries on intake —
+  tag `[possible-dup-of: <other-entry-title>]` instead
+- Required entry shape: `- [ ] **Short title** — body with context, cross-refs,
+  affected files`
+
+### Rate limit on 🟤 Auto-Generated
+- PR post-merge review follow-ups accumulate in a single `### [YYYY-MM-DD] PR #N
+  post-merge review` section per PR — they do NOT spread into the weekly plan unless
+  this week is a Cleanup Week (declared in WEEKLY.md header)
+- When 🟤 grows beyond ~20 SP of pending items, surface this in the next planning
+  conversation as a Cleanup Week trigger
+
 <!-- AUTO-MANAGED: patterns -->
 ## Detected Patterns
 
