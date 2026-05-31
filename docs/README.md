@@ -93,6 +93,7 @@ Central index for all project documentation.
 | [AI Prediction Display Bugs][]     | Restore feature caches on undo + propagate worker scores into predictionScores after AI sort |
 | [Planning Restructure][]           | BACKLOG.md source-split design (🔵 / 🟡 / 🟤) + pinned 📌 Process Rules + weekly quota enforcement |
 | [Planning Restructure Classification][] | Pass-1 classification artifact (user-audited): one row per existing BACKLOG section mapped to 🔵 / 🟡 / 🟤 |
+| [Re-rate Compare Correction][] | "Both good / Both bad" corrective-training buttons in AI-sorted compare + per-folder `.bulk_rated.json` persistence (Group 0 part 1) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -115,6 +116,7 @@ Central index for all project documentation.
 [AI Prediction Display Bugs]: superpowers/specs/2026-05-14-ai-prediction-display-bugs-design.md
 [Planning Restructure]: superpowers/specs/2026-05-30-planning-restructure-design.md
 [Planning Restructure Classification]: superpowers/specs/2026-05-30-planning-restructure-classification.md
+[Re-rate Compare Correction]: superpowers/specs/2026-05-31-rerate-compare-correction-design.md
 
 ## Archives
 
