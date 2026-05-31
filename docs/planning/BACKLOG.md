@@ -142,7 +142,7 @@ two tasks because they have different shapes (architectural vs. visual).
 
 **Origin**: TASK-023 implementation (Fix video pause/play icon synchronization)
 
-- [ ] **Pin Lucide CDN to a specific version** — `index.html` loads `lucide@latest` which can break at any time. Pin to `lucide@1.0.1` (or whichever current) for reproducible builds. The `nodes` → `root` param rename between versions caused this bug silently.
+- [ ] **Pin Lucide CDN to a specific version** — `index.html` loads `lucide@latest` which can break at any time. Pin to `lucide@1.0.1` (or whichever current) for reproducible builds. The `nodes` → `root` param rename between versions caused this bug silently. [possible-dup-of: "Migrate Lucide from CDN to bundled npm dependency" in `### [2026-04-29] Group F follow-ups (build/DX)`] — both items address the same Lucide-CDN reliability gap; the Group F entry supersedes this one with a bundled-npm migration plan, but pinning is the lower-effort stopgap.
 - [ ] **Add regression test for play/pause icon toggle** — No E2E or unit test verifies that the play/pause icon actually changes state when toggling video playback. Would catch Lucide API drift or similar DOM reference bugs.
 
 ### [periodic] Anonymize author field in package.json

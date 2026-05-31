@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-30
 **Author**: brainstorming session with user (alexminak32@gmail.com)
-**Status**: Design — awaiting user review before plan generation
+**Status**: Complete (implemented on branch `feature/planning-restructure`, 4 commits + 1 reword pass)
 **Related**: `docs/planning/BACKLOG.md`, `docs/planning/WEEKLY.md`, `docs/planning/TODO.md`, `CLAUDE.md`
 **Reference**: Mirrors the rating_bot project's planning restructure (spec at `C:\Users\alexm\Projects\rule_bots\rating_bot\docs\superpowers\specs\2026-05-30-planning-restructure-design.md`)
 
