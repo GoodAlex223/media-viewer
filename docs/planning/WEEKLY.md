@@ -1,10 +1,11 @@
 # Weekly Plan
 
-**Week**: Monday May 11 – Friday May 15, 2026
-**Created**: 2026-05-05
-**Sources**: MILESTONES.md, ROADMAP.md, GOALS.md, BACKLOG.md, TODO.md, git log (last 2 weeks), previous WEEKLY.md (April 13-17, archived below)
+**Week**: Monday June 1 – Friday June 5, 2026
+**Created**: 2026-05-31
+**Sources**: MILESTONES.md, ROADMAP.md, GOALS.md, BACKLOG.md (📌 Process Rules), TODO.md, git log (last 2 weeks), previous WEEKLY.md (May 11–15, archived below)
+**Type**: 🟢 Normal week (user-priority). A Cleanup Week is **due** but deferred — see Quota Check.
 
-**Context**: PR #33 (CLIP sort follow-ups) merged today (2026-05-05); branch fully closed out. No previous-week carry-forward. Manual testing during PR #33 surfaced one 🔴 HIGH-priority blocker (CLIP background extraction silently does not fire on folder load) plus two 🟠 prediction-display bugs. Three weeks of unplanned execution (Groups D/E/F + CLIP Sort Follow-ups, April 18 – May 5) all delivered successfully — velocity remains ~25 SP/week.
+**Context**: User-priority week led by two 🔴 Critical user-flagged items. The week leads off with a **re-rate / mode-correction** feature (compare + tournament) — pulled ahead of everything else at the user's request so the correction UX can be dogfooded as early as possible (compare correction testable EOD Mon, tournament correction Tue). **JXL + extended-format viewer support** follows immediately as the 🏆 Weekly Challenge (user flagged it urgent — it blocks opening files the user already has). Total raised to **30 SP** (above the 25 baseline) at the user's explicit direction so nothing is truncated; daily load stays within the 5–8 SP band. No formal carry-forward (May 11–15 fully closed; Groups C/D landed via PR #36 on 2026-05-24).
 
 ---
 
@@ -16,191 +17,193 @@ _(No ongoing background tasks this week.)_
 
 ## Task Groups
 
-### Group A: CLIP Extraction Silent Failure ✅ Complete (2026-05-07)
-**Domain**: JS logic (CLIP/extraction pipeline)
-**Total SP**: 5
+### Group 0: Re-rate / mode-correction (compare + tournament) 🔵
+**Domain**: JS logic (rating correction + ML training)
+**Source**: 🔵 User-Flagged
+**Total SP**: 8 — solo (large, multi-mode)
 
-- [x] **Investigate + fix CLIP background extraction silently not firing on folder load** — 5 SP, 🔴 IMPORTANT (BLOCKER)
-  - Repro confirmed by user 2026-05-03: enable CLIP, open fresh folder, wait 60+s. No `.feature_cache.json`, no progress notification, no console errors. CLIP sort throws `"Only 0 files have CLIP embeddings"`. Hash sorts work fine on the same folder.
-  - Investigation entry point: trace `loadFolder` → `startBackgroundFeatureExtraction` → CLIP queue path. Add diagnostic logging at each guard.
-  - Affected: [media-viewer.js](media-viewer.js) (extraction orchestration), possibly [main.js](main.js) (CLIP IPC).
-  - Source: BACKLOG (2026-05-03 manual testing — top priority per CLAUDE.md "Next planned")
+- [ ] **"Both good / Both bad" corrective-training buttons in AI-sorted compare** — 5 SP, 🟠 IMPORTANT
+  - Per [BACKLOG.md:60](BACKLOG.md#L60) (2026-05-30). Two buttons grouped with `#cancelBtnCompare`; visible only when `isSortedByPrediction === true && isCompareMode === true`. Each click calls `updateMlModelAfterRating(file, ±1)` for **both** files at full strength; files **stay in the source folder** (no move). Persisted to per-folder `.bulk_rated.json` via new `readBulkRatedFile`/`writeBulkRatedFile` IPC; pair-selection soft-suppresses bulk-rated pairs with fall-through; undo (Ctrl+A) reverses both updates and removes both from `bulkRatedSet`; shortcuts `bothGood: 'KeyS'`, `bothBad: 'KeyD'`; integrated into `trainFromHistoricalRatingsAndWait()` so corrections survive model reset.
+  - Affected: [media-viewer.js](../../media-viewer.js), [index.html](../../index.html), [styles.css](../../styles.css), [main.js](../../main.js) + [preload.js](../../preload.js) (IPC), [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js), [tests/e2e/compare-mode.test.js](../../tests/e2e/compare-mode.test.js).
+- [ ] **Re-rate / override a pick in tournament mode** — 3 SP, 🟠 IMPORTANT (new design beyond BACKLOG)
+  - Tournament picks only affect tier assignment (files move to `_Tier-N` at Apply), so "wrongly rated by mode" means a pick that mis-tiered a file. Add an affordance to redo/override the current or a recent pick (extends the existing "Undo last pick"); short design pass required since the BACKLOG entry explicitly scoped the correction buttons to compare-only. Decide: re-pick last pair vs. mark-as-equal (both advance / neither). Reuse the engine's existing `undo()` + `strategyStateSnapshot` machinery where possible.
+  - Affected: [tournament.js](../../tournament.js) (TournamentManager + engine interaction), [tournament-engine.js](../../tournament-engine.js) (override/re-pick path), [media-viewer.js](../../media-viewer.js) (tournament overlay control), [index.html](../../index.html)/[styles.css](../../styles.css) (button), [tests/tournament-manager.test.js](../../tests/tournament-manager.test.js).
 
-### Group B: AI Prediction Display Bugs [batch]
-**Domain**: JS logic (ML prediction display)
-**Total SP**: 5
+### Group A: JXL + extended-format viewer support 🏆 🔵
+**Domain**: JS logic (decode pipeline)
+**Source**: 🔵 User-Flagged
+**Total SP**: 8 — solo (🔴 Critical, urgent)
 
-- [x] **Fix like-probability not displayed after undo** — 2 SP, 🟠 IMPORTANT ✅ Complete (2026-05-14)
-  - Root cause was different from the original hint: `removeFileFromList` clears all per-path ML caches at rating time, so undo had no features to score with. Fix adds `restoreFeatureCachesFromHistory(entry)` helper called in all 4 `handleCancel` branches.
-- [x] **Fix prediction percentages misaligned after similarity-sort cancel + AI sort** — 3 SP, 🟠 IMPORTANT ✅ Complete (2026-05-14)
-  - Root cause was `sortComplete` ignoring `message.scores` from ml-worker, not the restore branch in `handleSortByPrediction`. Fix iterates `message.scores` into `predictionScores` by path before applying `mediaFiles = sorted`.
+- [ ] **Add JXL + extended-format viewing (full commit)** — 8 SP, 🔴 IMPORTANT (URGENT, user-flagged)
+  - Per TODO.md "JXL + extended format viewer support" (🔴 Critical). User produces JXL (+ other formats from the sibling `media_compression` project) the viewer can't currently open. Chromium dropped native JPEG XL in 2022 → an in-app WASM decoder is required (`jxl-oxide-wasm` or official `libjxl` WASM build).
+  - Acceptance: audit `media_compression` extensions (which render natively vs need a decoder); WASM lib evaluation (licence / bundle size / perf / animated-JXL); expand `SUPPORTED_EXTENSIONS` / file-type detection in [main.js](../../main.js); decode→Canvas→blob branch in `showSingleMedia`/`showCompareMedia` (native vs WASM); feature-extraction (hand-crafted + CLIP) on decoded JXL via the existing ImageData path; loading state during decode; graceful fallback on decode failure; unit test (format detection) + E2E smoke (fixture JXL).
+  - Affected: [main.js](../../main.js), [media-viewer.js](../../media-viewer.js), [preload.js](../../preload.js), [package.json](../../package.json), [index.html](../../index.html).
 
-### Group C: PR #33 Defensive Follow-ups [batch]
-**Domain**: JS logic (CLIP/sort hygiene)
+### Group B: Mode-switch display bugs [batch] 🔵
+**Domain**: JS logic (mode/compare UI state)
+**Source**: 🔵 User-Flagged
+**Total SP**: 7
+
+- [ ] **AI-sort + mode-switch shows different first media (single vs compare)** — 5 SP, 🔴 IMPORTANT
+  - TODO.md BUG (🔴 Critical). After Sort-by-Prediction + rating pairs in compare, switching to single shows a different first file than the leftmost compare file. Two indexing schemes (`mediaFiles` vs `filesWithScores` via `mlComparePairIndex`) are never reconciled before `_applyModeSwitch()` sets `currentIndex = 0`. Likely fix path (b): keep both arrays in sync as ratings happen.
+  - Affected: [media-viewer.js](../../media-viewer.js) (`_applyModeSwitch` ~L3779, `moveComparePair` ~L4614, `showCompareMedia` ML branch ~L2720-2744).
+- [ ] **Compare-mode → folder-switch leaves stale media wrappers visible** — 2 SP, 🟠 IMPORTANT
+  - BACKLOG.md (2026-05-07). New folder loads in single mode but the old `.compare-wrapper` / `.media-wrapper-left/right` nodes remain shifted/shrunk on the left. Fix: `switchToSingleModeUI()` should `.remove()`/hide the compare wrappers before the new media renders.
+  - Affected: [media-viewer.js](../../media-viewer.js) (`switchToSingleModeUI`), [styles.css](../../styles.css); extend `compare-mode.test.js` "resets to single mode when switching folders".
+  - **Same domain as the desync bug** (both touch `switchToSingleModeUI` / `_applyModeSwitch`) → one branch, one PR, one review.
+
+### Group C: CLIP extraction UX [batch] 🔵
+**Domain**: JS logic (extraction UX)
+**Source**: 🔵 User-Flagged
 **Total SP**: 4
 
-- [ ] **Clear `this.clipUnloadTimer` in CLIP toggle-off handler** — 1 SP, NICE TO HAVE
-  - Race scenario: extraction completes → 30s timer set → user disables CLIP → handler runs cleanup but stale timer remains → re-enable CLIP + `initClipModel()` begins → stale timer fires `unloadClipModel` IPC mid-load. Mitigated by main.js `{success:false, reason:'loading'}`, so no user-facing defect today; pure hygiene.
-  - Source: BACKLOG (PR #33 sub-threshold, ~50/100)
-- [ ] **Add try/catch around `await this.deleteSortCache('clip')` in toggle handler** — 1 SP, NICE TO HAVE
-  - Caller-side try/catch makes the "best-effort cleanup" contract explicit; removes implicit dependency on callee's internal error handling.
-  - Source: BACKLOG (PR #33 sub-threshold, ~25/100)
-- [ ] **Add per-file abort check to `insertNewFilesInSortedOrder` (both paths)** — 2 SP, NICE TO HAVE
-  - Both hash and CLIP branches iterate O(N*M) on the main thread with no `sortAbortController.signal.aborted` check inside the inner loop. Pathological case: 100+ new files in a 1000-file cache freezes UI.
-  - Fix: `if (this.sortAbortController?.signal.aborted) throw new Error('Sort aborted');` once per outer iteration.
-  - Source: BACKLOG (PR #33 sub-threshold, pre-existing)
+- [ ] **Add UX-visible "extraction starting" notification** — 2 SP, 🟢 NICE TO HAVE
+  - BACKLOG.md (2026-05-03). A "Starting feature extraction…" toast immediately on folder load (before per-file progress) surfaces failure modes faster and improves perceived responsiveness.
+- [ ] **Toggle-on kickoff for CLIP** — 2 SP, 🟢 NICE TO HAVE
+  - BACKLOG.md (2026-05-03, deferred from Group A spec). Toggling CLIP **on** while a folder is loaded should trigger the same `kickoffBackgroundExtractionIfEnabled()` path as folder load. Affected: `#clipFeaturesToggle` change handler in [media-viewer.js](../../media-viewer.js).
 
-### Group D: Integration Test Pattern
-**Domain**: Testing
+### Group D: Security & privacy audit [batch] 🟡
+**Domain**: Ops / security
+**Source**: 🟡 Operational
 **Total SP**: 3
 
-- [ ] **End-to-end integration test for cache-hit sort paths** — 3 SP, NICE TO HAVE
-  - PR #33's primary fix slipped through 7 unit tests because they bypassed the `applyCachedSortOrder → cachedData.algorithm` plumbing. Pattern: unit-test-the-leaf vs. integration-test-the-call-graph.
-  - Add one fixture-driven integration test per major code path (load fixture cache → invoke real `applyCachedSortOrder` → assert algorithm flows end-to-end).
-  - Source: BACKLOG (PR #33 process improvement)
-
-### Group E: Tournament Mode — Spec
-**Domain**: Design / specification
-**Total SP**: 3
-
-- [ ] **Write spec for tournament-style compare mode** — 3 SP, IMPORTANT (user-flagged !COOL)
-  - Resolve open design questions: bracket vs. swiss-style vs. single-elimination; win-count attribute (sidecar JSON?) vs. folder-grouping on disk; tournament termination (fixed rounds, single survivor, user-stops); interaction with like/dislike (separate state vs. unified).
-  - Output: `docs/superpowers/specs/2026-05-14-tournament-compare-mode-design.md` + `docs/planning/plans/2026-05-14_tournament-compare-mode.md`.
-  - Source: TODO.md (added 2026-05-05 from manual testing)
-
-### Group F: Tournament Mode — Prototype
-**Domain**: JS logic (compare mode extension)
-**Total SP**: 5
-
-- [ ] **Build minimal tournament mode prototype** — 5 SP, IMPORTANT (Weekly Challenge)
-  - Following spec from Group E: implement winner-advances pair selection + per-file `winCount` state in memory. Skip persistence and folder-grouping for prototype. Wire to existing compare mode UI as a toggle.
-  - Goal: get user feedback on the interaction model before locking in persistence/folder design.
-  - Source: TODO.md (tournament-style compare mode)
+- [ ] **Verify no secrets in git history** — 2 SP, 🟢 NICE TO HAVE (high impact, low effort)
+  - BACKLOG.md (periodic). Run `git log -p --all -S <pattern>` to confirm no credentials were ever committed.
+- [ ] **Anonymize author field in package.json** — 1 SP, 🟢 NICE TO HAVE
+  - BACKLOG.md (periodic). Check whether the author email/name in `package.json` should be anonymized for privacy.
 
 ---
 
 ## Daily Schedule
 
-### Monday, May 11 — Critical Bug Investigation
-> Front-load the HIGH-priority CLIP extraction blocker. Until this is fixed, no CLIP-dependent features are testable end-to-end.
+### Monday, June 1 — Re-rate: Compare Correction
+> Lead off with the user's top ask so the compare correction UX is testable by end of day. Highest-uncertainty piece of the re-rate work (new ML-corrective + persistence path) lands first.
 
 | Group | SP |
 |-------|----|
-| **Group A: CLIP Extraction Silent Failure** | 5 |
+| **Group 0: Re-rate / mode-correction** (part 1 — compare) | 6 |
 
-- [x] Investigate + fix CLIP background extraction silent failure (5 SP) — completed 2026-05-07
+- [ ] "Both good / Both bad" corrective buttons in AI-sorted compare (5 SP) + start tournament override design (1 SP)
 
-**Daily total**: 5 SP
+**Daily total**: 6 SP
 
 ---
 
-### Tuesday, May 12 — AI Prediction Display Bugs
-> Both bugs touch the ML prediction display layer; batch into one branch/PR.
+### Tuesday, June 2 — Re-rate: Tournament Correction → JXL Kickoff
+> Finish the tournament re-rate path (tournament correction testable today), then pivot to JXL with the highest-risk decision first: the WASM decoder evaluation.
 
 | Group | SP |
 |-------|----|
-| **Group B: AI Prediction Display Bugs** [batch] | 5 |
+| **Group 0: Re-rate / mode-correction** (part 2 — tournament) | 2 |
+| **Group A: JXL viewer support** (part 1 — audit + WASM eval) | 4 |
 
-- [x] Fix like-probability not displayed after undo (2 SP) ✅ 2026-05-14
-- [x] Fix prediction percentages misaligned after similarity-sort cancel + AI sort (3 SP) ✅ 2026-05-14
+- [ ] Tournament re-rate / override a pick (2 SP) — Group 0 completes
+- [ ] JXL: format audit of `media_compression` + WASM libjxl evaluation + extension-filter wiring (4 SP)
 
-**Daily total**: 5 SP
+**Daily total**: 6 SP
 
 ---
 
-### Wednesday, May 13 — PR #33 Hygiene + Integration Tests
-> All three Group C items are quick CLIP/sort hygiene fixes from PR #33 review. Group D is the process-level integration test that would have caught PR #33's main bug — natural to land alongside the hygiene fixes since they share the same code paths.
+### Wednesday, June 3 — JXL: Decode + Render + Tests
+> Complete JXL end-to-end. Lighter SP day by design — it is the overrun buffer for the urgent, library-risk JXL work.
 
 | Group | SP |
 |-------|----|
-| **Group C: PR #33 Defensive Follow-ups** [batch] | 4 |
-| **Group D: Integration Test Pattern** | 3 |
+| **Group A: JXL viewer support** (part 2 — decode/render/integration/tests) | 4 |
 
-- [x] Clear `this.clipUnloadTimer` in CLIP toggle-off (1 SP)
-- [x] try/catch around `deleteSortCache('clip')` (1 SP)
-- [x] Per-file abort check in `insertNewFilesInSortedOrder` (2 SP)
-- [x] End-to-end integration test for cache-hit sort paths (3 SP)
+- [ ] JXL: decode→Canvas branch, render in `showSingleMedia`/`showCompareMedia`, feature-extraction integration, loading state, graceful fallback, unit + E2E smoke (4 SP) — Group A completes
+
+**Daily total**: 4 SP | 🏆 Weekly Challenge complete
+
+---
+
+### Thursday, June 4 — Mode-Switch Display Bugs
+> Both bugs share the mode-switch display path; batch into one branch/PR.
+
+| Group | SP |
+|-------|----|
+| **Group B: Mode-switch display bugs** [batch] | 7 |
+
+- [ ] AI-sort + mode-switch first-media desync (5 SP)
+- [ ] Compare-mode → folder-switch stale wrappers (2 SP)
 
 **Daily total**: 7 SP
 
 ---
 
-### Thursday, May 14 — Tournament Mode Design 🏆
-> Weekly Challenge: end-to-end design + prototype for the user-flagged !COOL feature. Today: spec only.
+### Friday, June 5 — Extraction UX + Security
+> Two small batches: user-facing CLIP extraction UX, then the periodic security/privacy audit.
 
 | Group | SP |
 |-------|----|
-| **Group E: Tournament Mode — Spec** | 3 |
+| **Group C: CLIP extraction UX** [batch] | 4 |
+| **Group D: Security & privacy audit** [batch] | 3 |
 
-- [x] Write tournament-style compare mode spec (3 SP) ✅ 2026-05-25 — `docs/superpowers/specs/2026-05-25-tournament-mode-design.md` (commit 7e7fbff)
-- Added as new mode alongside Single and Compare via 3-way `#modeSelector` segmented control.
+- [ ] "Extraction starting" notification (2 SP)
+- [ ] CLIP toggle-on kickoff (2 SP)
+- [ ] Verify no secrets in git history (2 SP)
+- [ ] Anonymize package.json author field (1 SP)
 
-**Daily total**: 3 SP | 🏆 Weekly Challenge (part 1/2)
-
----
-
-### Friday, May 15 — Tournament Mode Prototype 🏆
-> Weekly Challenge continued: minimal interaction prototype. Skip persistence/folder grouping; goal is user-feedback iteration on the model.
-
-| Group | SP |
-|-------|----|
-| **Group F: Tournament Mode — Prototype** | 5 |
-
-- [x] Build minimal tournament mode prototype (5 SP) ✅ 2026-05-25 — Swiss-only prototype, commits 8baa83e/ee97298/894d6c6/6c73f9f/acfc3b6 on `feature/tournament-mode`; 41 tests added (Swiss 14 + Engine 13 + Manager 10 + Integration 4); 236/236 unit tests pass; E2E tests deferred to follow-up.
-
-**Daily total**: 5 SP | 🏆 Weekly Challenge (part 2/2)
+**Daily total**: 7 SP
 
 ---
 
 ## Weekly Challenge 🏆
 
-**Tournament-style compare mode — design + prototype** (Groups E + F, Thu+Fri, 8 SP total) — Hard backlog item.
+**JXL + extended-format viewer support** (Group A, Tue–Wed, 8 SP) — the hardest, highest-value strategic item on the board.
 
-**Why this one**: The user explicitly flagged this feature as "implement as soon as possible" / !COOL during the 2026-05-05 manual testing session. It's the most user-energizing item on the board. It's also the right scope for a 2-day stretch: too large for a single-day batch (8 SP), but breaks cleanly into "spec Thu, prototype Fri" — if Thursday's spec runs long, Friday absorbs the carry-forward without disrupting the rest of the week. The prototype-first approach lets the user react to the interaction model before locking in persistence/folder-grouping design, which the spec flags as the highest-uncertainty axis.
+**Why this one**: The user flagged it as urgent ("необходимо срочно… чтобы я уже мог открывать их") — it blocks opening files they already produce. It is also the most technically demanding pick this week: it requires evaluating and integrating a WASM `libjxl` decoder, branching the render path by format, and threading decoded output through the existing feature-extraction pipeline — genuinely stretch scope. The re-rate work (Group 0) is the week's lead-off priority for early dogfooding, but JXL is the stretch challenge: bigger, riskier, and the one that unblocks a class of files entirely.
 
 ---
 
 ## Summary Table
 
-| Group | Domain | Tasks | Total SP | Day | Status |
-|-------|--------|-------|----------|-----|--------|
-| A: CLIP Extraction Silent Failure | JS logic (CLIP) | 1 | 5 | Mon | ✅ Complete (2026-05-07) |
-| B: AI Prediction Display Bugs | JS logic (ML display) | 2 | 5 | Tue | ✅ Complete (2026-05-14) |
-| C: PR #33 Defensive Follow-ups | JS logic (CLIP/sort hygiene) | 3 | 4 | Wed | Planned |
-| D: Integration Test Pattern | Testing | 1 | 3 | Wed | Planned |
-| E: Tournament Mode — Spec | Design | 1 | 3 | Thu | ✅ Complete (2026-05-25) |
-| F: Tournament Mode — Prototype | JS logic (compare) | 1 | 5 | Fri | ✅ Complete (2026-05-25) |
-| **Total** | | **9** | **25** | | |
+| Group | Domain | Source | Tasks | Total SP | Day | Status |
+|-------|--------|--------|-------|----------|-----|--------|
+| 0: Re-rate / mode-correction | JS logic (rating/ML) | 🔵 User | 2 | 8 | Mon–Tue | Planned |
+| A: JXL viewer support 🏆 | JS logic (decode) | 🔵 User | 1 | 8 | Tue–Wed | Planned |
+| B: Mode-switch display bugs [batch] | JS logic (mode UI) | 🔵 User | 2 | 7 | Thu | Planned |
+| C: CLIP extraction UX [batch] | JS logic (extraction UX) | 🔵 User | 2 | 4 | Fri | Planned |
+| D: Security & privacy audit [batch] | Ops / security | 🟡 Ops | 2 | 3 | Fri | Planned |
+| **Total** | | | **9** | **30** | | |
 
 ---
 
 ## Notes
 
-- **Velocity baseline**: Last formal weekly plan (April 13-17) hit 25 SP and completed all groups. Three weeks of unplanned execution since then averaged ~7-8 SP per delivery cycle (Group D CLIP Sort, Group E Resource Mgmt, Group F Build & DX, CLIP Sort Follow-ups). This week targets the same 25 SP.
-- **Front-loading rationale**: Group A (Mon) is the 🔴 blocker — investigating it first means CLIP-dependent fixes downstream (Groups C/D Wed) land in a known-working extraction pipeline.
-- **Group B reasoning**: Both prediction display bugs share the ML scoring/badge pipeline; batching avoids two separate `requestPredictionScores` audit passes.
-- **Wed double-load (7 SP)**: Group C is mostly trivial (1+1+2 SP); Group D is the real integration-test addition. They share CLIP/sort code, so one branch/PR is cleaner than two.
-- **Risk: Group A scope creep**: If the silent-failure root cause turns out to be in `main.js` IPC (vs. the renderer extraction queue), the fix could push to 8 SP. If so, drop Group D from Wed (defer to next week) — the integration-test pattern is process improvement, not blocking.
-- **No carry-forward**: Previous WEEKLY.md (April 13-17) is fully complete; no leftover items.
-- **Open BACKLOG candidates if Friday finishes early**: ML model retrain UX (BACKLOG 2026-05-05), rotation buttons for media (BACKLOG 2026-05-05), or PR #28 redundant-call cleanup (BACKLOG, ~3 SP).
+- **Lead-off rationale (Group 0 before JXL)**: User explicitly asked to pull the re-rate / mode-correction work ahead of JXL to dogfood the correction UX as early as possible. Compare correction is testable EOD Mon; tournament correction EOD Tue.
+- **JXL risk buffer**: Group A carries an 8-SP tag but its load is exploratory (WASM decoder evaluation is the unknown). It gets the Tue-PM → Wed block with a deliberately light Wednesday (4 SP) so an overrun has room without bumping Thursday's critical bug work.
+- **Overrun bump order** (if any group slips): drop **Group D** (🟡, NICE) first, then **Group C** (🟢, NICE). Never bump **Group B** (🔴/🟠 critical user bugs) or **Group 0** (lead-off priority).
+- **Tournament re-rate is new design**: BACKLOG.md:60 scoped the correction buttons to compare-only. The tournament half of Group 0 needs a short design decision (re-pick last pair vs. mark-as-equal) — handle inline Mon/Tue; if it balloons, split the tournament half into a follow-up and ship compare correction this week.
+- **Roadmap drift flag**: MILESTONES.md / ROADMAP.md / GOALS.md were last updated 2026-02-05 and still list v1.1 tasks (video fullscreen toggle, visual scale controls) that have long since shipped. The actual work has diverged well past the documented roadmap. JXL is net-new, user-urgent format support and proceeds regardless — but a roadmap/milestones refresh is overdue and worth a planning conversation soon (candidate for the deferred Cleanup Week).
+- **No carry-forward**: Previous WEEKLY (May 11–15) fully complete; Groups C/D landed via PR #36 (2026-05-24).
+
+### Quota Check
+- 🔵 **User-Flagged SP**: 27 / 30 (**90%**) — ✅ must be ≥50%
+- 🟡 **Operational SP**: 3 / 30 (**10%**) — ✅ must be ≤25%
+- 🟤 **Auto-Generated SP**: 0 / 30 (**0%**) — ✅ must be ≤25% AND ≤1 group (zero this week — see below)
+- **Cleanup Week status**: **due** (both triggers met) → **deferred to June 8–12**
+- **Last Cleanup Week**: never recorded
+- **Compliance**: ✅ all quotas met. ⚠️ **Deviation noted**: A Cleanup Week is overdue — the 🟤 Auto-Generated Tech Debt section holds well over 20 SP of pending PR-review follow-ups (PRs #39, #38, #36, #35, #34, #30, #28, #27, #24, #23, #22, #21, #19, #18 …) and no prior Cleanup Week is on record, so both cadence triggers ("every ~3 weeks" and ">20 SP pending") are satisfied. It is deferred this week — and zero auto-generated work is pulled in — because two 🔴 Critical user-flagged items (urgent JXL viewer, mode-switch bug) plus the user's explicitly-requested re-rate feature take precedence. Concentrating all auto-debt into a dedicated Cleanup Week (target **June 8–12**) is cleaner than dribbling it across this user-priority week. **Action**: declare June 8–12 a Cleanup Week (inverted quota) in next week's plan.
 
 ---
 
 ## Previous Week Summary
 
-### Week: April 13 – April 17, 2026 — ✅ Complete
+### Week: May 11 – May 15, 2026 — ✅ Complete
 
-**Result**: All 6 groups delivered (Groups A through F), 25 SP planned and completed within the original Mon-Fri window. See `docs/archive/plans/` and `docs/planning/DONE.md` for full closure records.
+**Result**: All 6 groups delivered (25 SP planned). Groups A, B, E, F completed within the original Mon–Fri window; Groups C + D (PR #33 hygiene + integration tests) landed slightly later via PR #36 (merged 2026-05-24). Tournament Mode (Groups E + F) shipped 2026-05-25 with a deterministic-UX + feature-cache-streaming polish pass on 2026-05-26.
 
 **Key deliveries**:
-- Group A — Compare Mode folder-switch fix (PR #28, merged 2026-04-10)
-- Group B — CLIP/ML Pipeline Cleanup (4 tasks, 2026-04-09)
-- Group C — Test Quality (afterEach null guards across 7 E2E files, 2026-04-11)
-- Group D — CLIP Similarity Sorting (PR #29 + #30, 2026-04-18 / 2026-04-20)
-- Group E — Resource Management (PR #31, 2026-04-21 + 2026-04-28)
-- Group F — Build & DX (PR #32, 2026-04-29 / 2026-04-30)
+- Group A — CLIP extraction silent-failure fix (`kickoffBackgroundExtractionIfEnabled`, PR #34, 2026-05-07)
+- Group B — AI prediction display bugs (`restoreFeatureCachesFromHistory` + `sortComplete` scores propagation, PR #35, 2026-05-14)
+- Group C — PR #33 defensive follow-ups (clipUnloadTimer clear, deleteSortCache try/catch, per-file abort checks) — PR #36, 2026-05-24
+- Group D — Integration test pattern (`tests/integration/cached-sort-path.test.js`) — PR #36, 2026-05-24
+- Group E — Tournament Mode spec (`docs/superpowers/specs/2026-05-25-tournament-mode-design.md`)
+- Group F — Tournament Mode prototype (Swiss strategy + engine + TournamentManager + UI integration; 241/241 unit tests)
 
-**Post-week unplanned execution (April 18 – May 5)**:
-- CLIP Sort Follow-ups (PR #33, merged 2026-05-05) — algorithm-aware `insertNewFilesInSortedOrder`, async CLIP toggle-off handler, 7 new unit tests, defensive PR #33 fix (`saveSortCache` algorithm field + `applyCachedSortOrder` explicit param).
+**Velocity learning**: 25 SP/week remained the validated cadence; this week (June 1–5) intentionally raises the target to 30 SP at user direction to absorb the added re-rate feature without truncating planned work.
 
-**Velocity learning**: 25 SP/week is the validated cadence. First-week conservative estimate from April 13-17 plan held; carry forward to May 11-15.
+### Week: April 13 – April 17, 2026 — ✅ Complete
+
+All 6 groups delivered, 25 SP. See `docs/archive/plans/` and `docs/planning/DONE.md` for closure records. (Compare-mode folder-switch fix, CLIP/ML pipeline cleanup, test-quality hardening, CLIP similarity sorting, resource management, build & DX.)
