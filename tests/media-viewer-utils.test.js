@@ -941,3 +941,60 @@ describe('handleCancel feature restore', () => {
         expect(ctx.requestPredictionScores).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('bulk-rated persistence', () => {
+    const loadBulkRatedFile = extractAsyncMethod('loadBulkRatedFile');
+    const saveBulkRatedFile = extractAsyncMethod('saveBulkRatedFile');
+    let origWindow;
+    let written;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        written = null;
+        globalThis.window = {
+            electronAPI: {
+                readBulkRatedFile: async () => ({
+                    success: true,
+                    data: { version: 1, good: ['a.jpg', 'gone.jpg'], bad: ['b.jpg'] },
+                }),
+                writeBulkRatedFile: async (_folder, data) => {
+                    written = data;
+                    return { success: true };
+                },
+            },
+        };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('hydrates the bulkRated map and prunes filenames absent from mediaFiles', async () => {
+        const ctx = {
+            baseFolderPath: '/folder',
+            mediaFiles: [
+                { name: 'a.jpg', path: '/folder/a.jpg' },
+                { name: 'b.jpg', path: '/folder/b.jpg' },
+            ],
+            bulkRated: new Map(),
+        };
+        ctx.saveBulkRatedFile = saveBulkRatedFile.bind(ctx);
+        await loadBulkRatedFile.call(ctx);
+        expect(ctx.bulkRated.get('a.jpg')).toBe('good');
+        expect(ctx.bulkRated.get('b.jpg')).toBe('bad');
+        expect(ctx.bulkRated.has('gone.jpg')).toBe(false);
+        // stale 'gone.jpg' pruned -> file re-saved without it
+        expect(written).toEqual({ version: 1, good: ['a.jpg'], bad: ['b.jpg'] });
+    });
+
+    it('serializes the bulkRated map back to {version, good, bad}', async () => {
+        const ctx = {
+            baseFolderPath: '/folder',
+            bulkRated: new Map([
+                ['x.png', 'good'],
+                ['y.png', 'bad'],
+            ]),
+        };
+        await saveBulkRatedFile.call(ctx);
+        expect(written).toEqual({ version: 1, good: ['x.png'], bad: ['y.png'] });
+    });
+});

@@ -394,6 +394,8 @@ class MediaViewer {
         this.pendingCompareUpdates = 0; // Counter for expected updateComplete messages (2 for rating, 1 for undo)
         this.pendingCompareTimeout = null; // Fallback timeout ID
         this.previousScores = null; // Snapshot of predictionScores for delta notification
+        // Corrective training: filename -> 'good' | 'bad' (mirrors per-folder .bulk_rated.json)
+        this.bulkRated = new Map();
 
         // CLIP model state (main process IPC)
         this.clipWorkerReady = false;
@@ -6992,6 +6994,42 @@ class MediaViewer {
         }
 
         return Array.from(combined);
+    }
+
+    async loadBulkRatedFile() {
+        this.bulkRated = new Map();
+        if (!this.baseFolderPath) return;
+        try {
+            const result = await window.electronAPI.readBulkRatedFile(this.baseFolderPath);
+            if (!result.success || !result.data) return;
+            const validNames = new Set(this.mediaFiles.map((f) => f.name));
+            let pruned = false;
+            for (const name of result.data.good || []) {
+                if (validNames.has(name)) this.bulkRated.set(name, 'good');
+                else pruned = true;
+            }
+            for (const name of result.data.bad || []) {
+                if (validNames.has(name)) this.bulkRated.set(name, 'bad');
+                else pruned = true;
+            }
+            if (pruned) await this.saveBulkRatedFile();
+        } catch (err) {
+            console.warn('Failed to load .bulk_rated.json:', err.message);
+        }
+    }
+
+    async saveBulkRatedFile() {
+        if (!this.baseFolderPath) return;
+        const data = { version: 1, good: [], bad: [] };
+        for (const [name, bucket] of this.bulkRated) {
+            if (bucket === 'good') data.good.push(name);
+            else if (bucket === 'bad') data.bad.push(name);
+        }
+        try {
+            await window.electronAPI.writeBulkRatedFile(this.baseFolderPath, data);
+        } catch (err) {
+            console.warn('Failed to save .bulk_rated.json:', err.message);
+        }
     }
 
     async requestPredictionScores() {
