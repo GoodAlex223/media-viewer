@@ -46,7 +46,7 @@ test.describe('CLIP graceful degradation', () => {
         });
 
         // Navigate through files to exercise code paths that check enableClipFeatures
-        await page.keyboard.press('d');
+        await page.keyboard.press('s');
         await page.waitForTimeout(500);
 
         expect(clipErrors).toHaveLength(0);
