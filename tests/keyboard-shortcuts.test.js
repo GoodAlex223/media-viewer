@@ -44,7 +44,7 @@ describe('DEFAULT_SHORTCUTS', () => {
         expect(shortcuts.single).toEqual({
             like: 'KeyQ',
             dislike: 'KeyW',
-            next: 'KeyD',
+            next: 'KeyS',
             previous: 'KeyA',
             undo: 'Ctrl+KeyA',
         });
@@ -57,10 +57,18 @@ describe('DEFAULT_SHORTCUTS', () => {
             leftDislike: 'KeyW',
             rightLike: 'KeyE',
             rightDislike: 'KeyR',
-            next: 'KeyD',
+            next: 'KeyS',
             previous: 'KeyA',
             undo: 'Ctrl+KeyA',
+            bothGood: 'KeyD',
+            bothBad: 'KeyF',
         });
+    });
+
+    it('compare mode has no duplicate key bindings', () => {
+        const shortcuts = extractDefaultShortcuts();
+        const keys = Object.values(shortcuts.compare);
+        expect(new Set(keys).size).toBe(keys.length);
     });
 });
 
@@ -143,7 +151,7 @@ describe('buildReverseMap', () => {
         const result = buildReverseMap.call(ctx);
         expect(result.single['KeyQ']).toBe('like');
         expect(result.single['KeyW']).toBe('dislike');
-        expect(result.single['KeyD']).toBe('next');
+        expect(result.single['KeyS']).toBe('next');
         expect(result.single['KeyA']).toBe('previous');
         expect(result.single['Ctrl+KeyA']).toBe('undo');
     });

@@ -5,7 +5,7 @@ const DEFAULT_SHORTCUTS = {
     single: {
         like: 'KeyQ',
         dislike: 'KeyW',
-        next: 'KeyD',
+        next: 'KeyS',
         previous: 'KeyA',
         undo: 'Ctrl+KeyA',
     },
@@ -14,9 +14,11 @@ const DEFAULT_SHORTCUTS = {
         leftDislike: 'KeyW',
         rightLike: 'KeyE',
         rightDislike: 'KeyR',
-        next: 'KeyD',
+        next: 'KeyS',
         previous: 'KeyA',
         undo: 'Ctrl+KeyA',
+        bothGood: 'KeyD',
+        bothBad: 'KeyF',
     },
     tournament: {
         // Like/dislike handlers are tournament-aware (see _tournamentPickFromSide)
@@ -43,6 +45,8 @@ const ACTION_LABELS = {
     rightDislike: 'Right media Dislike',
     leftSpecial: 'Left to special folder',
     rightSpecial: 'Right to special folder',
+    bothGood: 'Both media good',
+    bothBad: 'Both media bad',
 };
 
 // MinHeap (Priority Queue) for efficient MST construction
@@ -553,6 +557,8 @@ class MediaViewer {
         this.leftSpecialBtn = document.getElementById('leftSpecialBtn');
         this.rightSpecialBtn = document.getElementById('rightSpecialBtn');
         this.cancelBtnCompare = document.getElementById('cancelBtnCompare');
+        this.bothGoodBtn = document.getElementById('bothGoodBtn');
+        this.bothBadBtn = document.getElementById('bothBadBtn');
 
         // Compare mode file info panels
         this.leftFileInfo = document.getElementById('leftFileInfo');
@@ -1869,6 +1875,12 @@ class MediaViewer {
         if (this.rightSpecialBtn) {
             this.rightSpecialBtn.addEventListener('click', () => this.moveToSpecialFolder('right'));
         }
+        if (this.bothGoodBtn) {
+            this.bothGoodBtn.addEventListener('click', () => this.handleBothGood());
+        }
+        if (this.bothBadBtn) {
+            this.bothBadBtn.addEventListener('click', () => this.handleBothBad());
+        }
 
         document.addEventListener('keydown', (e) => {
             if (this.mediaFiles.length === 0) {
@@ -2762,6 +2774,7 @@ class MediaViewer {
         // Store references for use in moveComparePair
         this.compareLeftFile = leftFile;
         this.compareRightFile = rightFile;
+        this.updateBulkRateButtonsVisibility();
 
         // Safety check: ensure left and right are different files
         if (!leftFile || !rightFile || leftFile === rightFile) {
@@ -7147,6 +7160,12 @@ class MediaViewer {
                 this.displayPredictionBadge(rightScore, 'right');
             }
         }
+    }
+
+    updateBulkRateButtonsVisibility() {
+        const el = document.getElementById('bulkRateControls');
+        if (!el) return;
+        el.style.display = this.isCompareMode && this.isSortedByPrediction ? 'flex' : 'none';
     }
 
     displayPredictionBadge(score, position) {
