@@ -195,6 +195,8 @@ describe('removeFileFromList', () => {
             clipCache: new Map(),
             featureMetadata: new Map(),
             perceptualHashes: new Map(),
+            bulkRated: new Map(),
+            saveBulkRatedFile: vi.fn(),
         };
     }
 
@@ -996,5 +998,199 @@ describe('bulk-rated persistence', () => {
         };
         await saveBulkRatedFile.call(ctx);
         expect(written).toEqual({ version: 1, good: ['x.png'], bad: ['y.png'] });
+    });
+});
+
+describe('applyBulkRating', () => {
+    const applyBulkRating = extractAsyncMethod('applyBulkRating');
+
+    function makeCtx(overrides = {}) {
+        return {
+            isSortedByPrediction: true,
+            isCompareMode: true,
+            compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+            compareRightFile: { name: 'b.jpg', path: '/f/b.jpg' },
+            bulkRated: new Map(),
+            moveHistory: [],
+            getCombinedFeatures: () => [1, 2, 3],
+            updateMlModelWithFeatures: vi.fn(),
+            saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
+            showNotification: vi.fn(),
+            nextMedia: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    it('trains both files as like and records them as good, then advances', async () => {
+        const ctx = makeCtx();
+        await applyBulkRating.call(ctx, 'good');
+        expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledTimes(2);
+        expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'like');
+        expect(ctx.bulkRated.get('a.jpg')).toBe('good');
+        expect(ctx.bulkRated.get('b.jpg')).toBe('good');
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.moveHistory[0].bothGood).toBe(true);
+        expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
+        expect(ctx.nextMedia).toHaveBeenCalledOnce();
+    });
+
+    it('trains both files as dislike for the bad bucket', async () => {
+        const ctx = makeCtx();
+        await applyBulkRating.call(ctx, 'bad');
+        expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'dislike');
+        expect(ctx.bulkRated.get('a.jpg')).toBe('bad');
+        expect(ctx.moveHistory[0].bothBad).toBe(true);
+    });
+
+    it('no-ops outside AI-sorted compare mode', async () => {
+        const ctx = makeCtx({ isSortedByPrediction: false });
+        await applyBulkRating.call(ctx, 'good');
+        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toHaveLength(0);
+        expect(ctx.nextMedia).not.toHaveBeenCalled();
+        expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
+    });
+
+    it('no-ops when a compare file is missing', async () => {
+        const ctx = makeCtx({ compareRightFile: null });
+        await applyBulkRating.call(ctx, 'good');
+        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
+    });
+
+    it('stores null features (no training) when the cache misses', async () => {
+        const ctx = makeCtx({ getCombinedFeatures: () => null });
+        await applyBulkRating.call(ctx, 'good');
+        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
+        expect(ctx.bulkRated.get('a.jpg')).toBe('good');
+        expect(ctx.moveHistory[0].bulkFiles[0].features).toBeNull();
+    });
+});
+
+describe('undoBulkRating', () => {
+    const undoBulkRating = extractAsyncMethod('undoBulkRating');
+
+    it('reverses both updates and clears both files from bulkRated', async () => {
+        const ctx = {
+            bulkRated: new Map([
+                ['a.jpg', 'good'],
+                ['b.jpg', 'good'],
+            ]),
+            reverseMlModelUpdate: vi.fn(),
+            saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
+            showNotification: vi.fn(),
+        };
+        const lastMove = {
+            bothGood: true,
+            bothBad: false,
+            bulkFiles: [
+                { name: 'a.jpg', features: [1, 2, 3] },
+                { name: 'b.jpg', features: [4, 5, 6] },
+            ],
+        };
+        await undoBulkRating.call(ctx, lastMove);
+        expect(ctx.reverseMlModelUpdate).toHaveBeenCalledTimes(2);
+        expect(ctx.reverseMlModelUpdate).toHaveBeenCalledWith([1, 2, 3], 'like');
+        expect(ctx.reverseMlModelUpdate).toHaveBeenNthCalledWith(2, [4, 5, 6], 'like');
+        expect(ctx.showNotification).toHaveBeenCalledWith('↩️ Bulk rating undone', 'info');
+        expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+    });
+
+    it('skips ML reversal for files stored with null features', async () => {
+        const ctx = {
+            bulkRated: new Map([['a.jpg', 'bad']]),
+            reverseMlModelUpdate: vi.fn(),
+            saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
+            showNotification: vi.fn(),
+        };
+        const lastMove = {
+            bothGood: false,
+            bothBad: true,
+            bulkFiles: [{ name: 'a.jpg', features: null }],
+        };
+        await undoBulkRating.call(ctx, lastMove);
+        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
+        expect(ctx.bulkRated.has('a.jpg')).toBe(false);
+    });
+});
+
+describe('removeFileFromList bulk-rated purge', () => {
+    const removeFileFromList = extractMethod('removeFileFromList');
+
+    function makeCtx() {
+        return {
+            mediaFiles: [
+                { name: 'a.jpg', path: '/f/a.jpg' },
+                { name: 'b.jpg', path: '/f/b.jpg' },
+            ],
+            predictionScores: new Map(),
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+            perceptualHashes: new Map(),
+            bulkRated: new Map([['a.jpg', 'good']]),
+            currentIndex: 0,
+            saveBulkRatedFile: vi.fn(),
+        };
+    }
+
+    it('purges a removed file from bulkRated and re-saves', () => {
+        const ctx = makeCtx();
+        removeFileFromList.call(ctx, '/f/a.jpg');
+        expect(ctx.bulkRated.has('a.jpg')).toBe(false);
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+    });
+
+    it('does not re-save when the removed file was not bulk-rated', () => {
+        const ctx = makeCtx();
+        removeFileFromList.call(ctx, '/f/b.jpg');
+        expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
+    });
+});
+
+describe('collectBulkRatedTrainingExamples', () => {
+    const collect = extractAsyncMethod('collectBulkRatedTrainingExamples');
+
+    it('splits cached combined features into liked/disliked by bucket', async () => {
+        const ctx = {
+            bulkRated: new Map([
+                ['a.jpg', 'good'],
+                ['b.jpg', 'bad'],
+            ]),
+            mediaFiles: [
+                { name: 'a.jpg', path: '/f/a.jpg' },
+                { name: 'b.jpg', path: '/f/b.jpg' },
+            ],
+            getCombinedFeatures: (p) => (p === '/f/a.jpg' ? [1, 1] : [2, 2]),
+        };
+        const result = await collect.call(ctx);
+        expect(result.liked).toEqual([[1, 1]]);
+        expect(result.disliked).toEqual([[2, 2]]);
+    });
+
+    it('skips bulk-rated names no longer present in mediaFiles', async () => {
+        const ctx = {
+            bulkRated: new Map([['gone.jpg', 'good']]),
+            mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
+            getCombinedFeatures: () => [9, 9],
+        };
+        const result = await collect.call(ctx);
+        expect(result.liked).toEqual([]);
+        expect(result.disliked).toEqual([]);
+    });
+
+    it('computes 576-dim features when the cache misses', async () => {
+        const ctx = {
+            bulkRated: new Map([['a.jpg', 'good']]),
+            mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
+            getCombinedFeatures: () => null,
+            computeFeatures: async () => new Float32Array(64).fill(0.5),
+            extractClipEmbedding: async () => new Float32Array(512).fill(0.1),
+        };
+        const result = await collect.call(ctx);
+        expect(result.liked).toHaveLength(1);
+        expect(result.liked[0]).toHaveLength(576);
+        expect(result.disliked).toEqual([]);
     });
 });

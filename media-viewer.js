@@ -1026,6 +1026,7 @@ class MediaViewer {
         const index = this.mediaFiles.findIndex((f) => f.path === filePath);
         if (index === -1) return -1;
 
+        const removedName = this.mediaFiles[index].name;
         this.mediaFiles.splice(index, 1);
 
         this.predictionScores.delete(filePath);
@@ -1033,6 +1034,9 @@ class MediaViewer {
         this.clipCache.delete(filePath);
         this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
+        if (this.bulkRated.delete(removedName)) {
+            this.saveBulkRatedFile();
+        }
 
         if (this.currentIndex >= this.mediaFiles.length) {
             this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
@@ -2379,6 +2383,8 @@ class MediaViewer {
             this.predictionScores.clear();
             // Cancel any ongoing background extraction
             this.cancelBackgroundExtraction();
+            // Hydrate corrective-training records for this folder (prunes stale filenames)
+            await this.loadBulkRatedFile();
             if (this.sortSimilarityBtn) {
                 this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
             }
@@ -3475,6 +3481,16 @@ class MediaViewer {
         await this.moveCurrentFile('dislike');
     }
 
+    async undoBulkRating(lastMove) {
+        const actionType = lastMove.bothGood ? 'like' : 'dislike';
+        for (const f of lastMove.bulkFiles) {
+            if (f.features) this.reverseMlModelUpdate(f.features, actionType);
+            this.bulkRated.delete(f.name);
+        }
+        await this.saveBulkRatedFile();
+        this.showNotification('↩️ Bulk rating undone', 'info');
+    }
+
     async handleCancel() {
         if (this.moveHistory.length === 0) {
             this.showNotification('No moves to undo', 'error');
@@ -3486,6 +3502,14 @@ class MediaViewer {
 
         // Check if last move was a special move in compare mode
         const lastMove = this.moveHistory[this.moveHistory.length - 1];
+
+        // Bulk rating (Both good / Both bad): no file move to reverse — just undo the ML updates.
+        if (lastMove.bothGood || lastMove.bothBad) {
+            this.moveHistory.pop();
+            await this.undoBulkRating(lastMove);
+            return;
+        }
+
         if (this.isCompareMode && lastMove.compareMode && lastMove.actionType === 'special') {
             // Undo special folder move in compare mode
             this.moveHistory.pop();
@@ -6874,6 +6898,31 @@ class MediaViewer {
         });
     }
 
+    async collectBulkRatedTrainingExamples() {
+        const liked = [];
+        const disliked = [];
+        for (const [name, bucket] of this.bulkRated) {
+            const file = this.mediaFiles.find((f) => f.name === name);
+            if (!file) continue;
+            let combined = this.getCombinedFeatures(file.path);
+            if (!combined) {
+                try {
+                    const features = await this.computeFeatures(file.path);
+                    const clipVector = await this.extractClipEmbedding(file.path);
+                    const merged = new Float32Array(576);
+                    merged.set(features, 0);
+                    if (clipVector) merged.set(clipVector, 64);
+                    combined = Array.from(merged);
+                } catch (err) {
+                    console.warn(`Skipping bulk-rated ${name}:`, err.message);
+                    continue;
+                }
+            }
+            (bucket === 'good' ? liked : disliked).push(combined);
+        }
+        return { liked, disliked };
+    }
+
     async trainFromHistoricalRatings() {
         if (!this.isMlEnabled || !this.mlWorker) return;
         if (!this.customLikeFolder || !this.customDislikeFolder) return;
@@ -6938,6 +6987,12 @@ class MediaViewer {
                     console.warn(`Skipping ${file.name}:`, err.message);
                 }
             }
+
+            // Re-apply corrective bulk ratings (these files stay in the source folder and are
+            // never in the like/dislike folders, so a from-scratch rebuild can't recover them).
+            const bulkExamples = await this.collectBulkRatedTrainingExamples();
+            likedFeatures.push(...bulkExamples.liked);
+            dislikedFeatures.push(...bulkExamples.disliked);
 
             // Send to ML worker for training
             if (likedFeatures.length > 0 || dislikedFeatures.length > 0) {
@@ -7321,6 +7376,49 @@ class MediaViewer {
                 label: label,
             },
         });
+    }
+
+    async applyBulkRating(bucket) {
+        if (!this.isSortedByPrediction || !this.isCompareMode) return;
+        const left = this.compareLeftFile;
+        const right = this.compareRightFile;
+        if (!left || !right) return;
+
+        const actionType = bucket === 'good' ? 'like' : 'dislike';
+        const bulkFiles = [];
+        for (const f of [left, right]) {
+            const features = this.getCombinedFeatures(f.path);
+            if (features) {
+                this.updateMlModelWithFeatures(features, actionType);
+            }
+            bulkFiles.push({ name: f.name, features });
+            this.bulkRated.set(f.name, bucket);
+        }
+
+        await this.saveBulkRatedFile();
+
+        this.moveHistory.push({
+            bothGood: bucket === 'good',
+            bothBad: bucket === 'bad',
+            bulkFiles,
+        });
+
+        this.showNotification(
+            bucket === 'good'
+                ? '👍 Both files marked good (model updated)'
+                : '👎 Both files marked bad (model updated)',
+            'success'
+        );
+
+        this.nextMedia();
+    }
+
+    async handleBothGood() {
+        await this.applyBulkRating('good');
+    }
+
+    async handleBothBad() {
+        await this.applyBulkRating('bad');
     }
 
     /**
@@ -8292,6 +8390,8 @@ class MediaViewer {
             leftDislike: () => this.handleLeftDislike(),
             rightLike: () => this.handleRightLike(),
             rightDislike: () => this.handleRightDislike(),
+            bothGood: () => this.handleBothGood(),
+            bothBad: () => this.handleBothBad(),
             leftSpecial: () => {
                 if (this.isTournamentMode) this.handleTournamentSpecial('left');
             },
