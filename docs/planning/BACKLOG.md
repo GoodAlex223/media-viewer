@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-06-02 (Group 0 part 1 shipped — bulk-rate compare; intake from manual testing)
+**Last Updated**: 2026-06-02 (PR #40 merged — bulk-rate compare; +4 sub-threshold review follow-ups)
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -163,6 +163,15 @@ two tasks because they have different shapes (architectural vs. visual).
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-06-02] PR #40 post-merge review follow-ups (4 sub-threshold items)
+
+**Origin**: Five-agent code review of `feature/re-rate-mode-correction` (PR #40, merged in `cd2ec6a`). One threshold finding (~85/100) — the bulk-rating undo branch in `handleCancel` returning without `showMedia()` / `requestPredictionScores()` — was fixed by the author in `6d685df` (adds `requestPredictionScores()` + `await showMedia()` + `prevPairIndex` rewind to the rated pair) before merge. The four items below are sub-threshold findings (each ~25/100) tracked here as defensive/hygiene improvements.
+
+- [ ] **Guard the compare-pair undo branch against non-file-move entries** (~25/100) — `handleCancel`'s compare-pair branch is `} else if (this.isCompareMode && this.moveHistory.length >= 2) {` ([media-viewer.js:3595](../../media-viewer.js#L3595)), which pops two entries and calls `moveFile({ sourcePath: lastMove.newPath })` on both without verifying they are `compareMode: true` file-move entries. The new bulk-rating entry shape `{ bothGood, bothBad, bulkFiles }` has no `newPath`. The earlier `bothGood || bothBad` branch only inspects the LAST entry, so the concern is a mixed history where a bulk entry is the 2nd-from-top while a compare entry is on top — `moveFile` would be called with `undefined` and show a spurious "Failed to undo move". Review concluded this is currently unreachable (bulk-rate always pushes one entry then advances, so a bulk entry is never buried under a lone compare entry in the strict paired flow), but the branch lacks the defensive entry-type check its sibling special-move branch already has (`lastMove.compareMode && lastMove.actionType === 'special'`). Fix: add `&& lastMove.compareMode` (or `&& !lastMove.bothGood && !lastMove.bothBad`) to the compare-pair condition. Effort: XS. Affected: [media-viewer.js](../../media-viewer.js) `handleCancel`.
+- [ ] **`loadBulkRatedFile`/`saveBulkRatedFile` catch blocks use `console.warn`, not `logError`** (~25/100) — Both helpers ([media-viewer.js:7094](../../media-viewer.js#L7094), [media-viewer.js:7108](../../media-viewer.js#L7108)) swallow async IPC/disk errors with `console.warn` rather than forwarding to `window.electronAPI.logError`. CLAUDE.md documents the renderer-error-forwarding pattern, but review found peer cache helpers (`loadSortCache`, `loadFeatureCache`, `saveSortCache`) also use `console.*` and the CLAUDE.md line describes the global `window.onerror`/`unhandledrejection`/`showError` path — so this is consistent with existing code and not an explicit rule violation. Tracked only for eventual consistency if the cache helpers are standardized on `logError`. Effort: XS. Affected: [media-viewer.js](../../media-viewer.js).
+- [ ] **`#compareActionBar` buttons use bare `<i data-lucide>` without `<span class="btn-icon">` wrapper** (~25/100) — `#bothGoodBtn` / `#bothBadBtn` / `#compareUndoBtn` ([index.html:266-281](../../index.html#L266-L281)) place the Lucide icon directly inside the button (e.g. `<i data-lucide="thumbs-up">` at [index.html:273](../../index.html#L273)), whereas every `.control-btn` elsewhere in `index.html` wraps it as `<span class="btn-icon"><i ...></i></span>` (e.g. lines 194/198/215). The new `.overlay-btn [data-lucide]` CSS sizes the bare icon correctly, so this renders fine — purely a markup-consistency nit, and only `btn-label` (not `btn-icon`) is documented in CLAUDE.md. Fix only if normalizing button markup. Effort: XS. Affected: [index.html](../../index.html).
+- [ ] **`removeFileFromList` calls `saveBulkRatedFile()` without `await`** (~25/100) — The synchronous `removeFileFromList` fires the async `saveBulkRatedFile()` fire-and-forget when a bulk-rated file is removed ([media-viewer.js:1044](../../media-viewer.js#L1044)). Errors are caught inside `saveBulkRatedFile` (→ `console.warn`), and `removeFileFromList` is called from many sync contexts where awaiting is impractical, so this is intentional best-effort persistence (matching the documented `logError` fire-and-forget idiom) rather than a bug. Tracked only as a noted design choice. Effort: N/A (likely WONTFIX). Affected: [media-viewer.js](../../media-viewer.js).
 
 ### [2026-06-02] Group 0 part 1 bug-fix follow-ups (2 items)
 
