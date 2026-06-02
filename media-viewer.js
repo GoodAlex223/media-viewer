@@ -2585,6 +2585,7 @@ class MediaViewer {
 
     async showMedia() {
         this.updateCompareUndoButton();
+        this.updateBulkRateButtonsVisibility();
         if (this.mediaFiles.length === 0) {
             if (this.moveHistory.length > 0) {
                 this.showEmptyStateWithUndo();
@@ -7162,10 +7163,15 @@ class MediaViewer {
         }
     }
 
+    // Both Good / Both Bad live in the compare action bar (#compareActionBar) alongside the
+    // floating Undo button. They appear only in AI-sorted compare (not tournament — which has
+    // its own undo and tournament-aware Like/Dislike). Each button is toggled individually
+    // because Undo, their sibling in the same bar, has a different visibility condition.
     updateBulkRateButtonsVisibility() {
-        const el = document.getElementById('bulkRateControls');
-        if (!el) return;
-        el.style.display = this.isCompareMode && this.isSortedByPrediction ? 'flex' : 'none';
+        const show = this.isCompareMode && this.isSortedByPrediction && !this.isTournamentMode;
+        const display = show ? 'inline-flex' : 'none';
+        if (this.bothGoodBtn) this.bothGoodBtn.style.display = display;
+        if (this.bothBadBtn) this.bothBadBtn.style.display = display;
     }
 
     displayPredictionBadge(score, position) {
@@ -8367,6 +8373,20 @@ class MediaViewer {
                 // Invalid JSON — ignore and use defaults
             }
         }
+        // One-time migration. saveShortcut persists the FULL shortcuts object, so a binding
+        // frozen before a default change (e.g. next: 'KeyD') would otherwise override the new
+        // default (next: 'KeyS') forever. Bump the version and drop the now-stale overrides so
+        // the new defaults reach existing users; intentional remaps of other actions are kept.
+        // v1 -> v2: 'next' remapped KeyD -> KeyS in single + compare (compare also gained
+        // bothGood/bothBad, which simply fall through to defaults since they were never stored).
+        if (raw && (custom.version || 1) < 2) {
+            if (custom.single) delete custom.single.next;
+            if (custom.compare) delete custom.compare.next;
+            custom.version = 2;
+            if (typeof localStorage.setItem === 'function') {
+                localStorage.setItem('customShortcuts', JSON.stringify(custom));
+            }
+        }
         return {
             single: Object.assign({}, DEFAULT_SHORTCUTS.single, custom.single),
             compare: Object.assign({}, DEFAULT_SHORTCUTS.compare, custom.compare),
@@ -8439,8 +8459,11 @@ class MediaViewer {
         this.shortcuts[mode][action] = newKey;
         this.shortcutReverseMap = this.buildReverseMap();
 
-        // Persist the current shortcuts — loadShortcuts merges on load so full save is safe
+        // Persist the current shortcuts — loadShortcuts merges on load so full save is safe.
+        // version must be written so the v1->v2 migration in loadShortcuts does not re-run and
+        // clobber an intentional 'next' remap on the next load.
         const custom = {
+            version: 2,
             single: Object.assign({}, this.shortcuts.single),
             compare: Object.assign({}, this.shortcuts.compare),
         };

@@ -2274,43 +2274,24 @@ body {
     color: #fff;
 }
 
-/* Floating Undo button for Compare Mode — visible only when isCompareMode AND moveHistory non-empty.
-   Visibility toggled in JS (style.display). Positioned top-center, below the main app header. */
+/* Neutral (undo) variant of the square overlay button used in the compare action bar.
+   The green/red variants (overlay-like-btn / overlay-dislike-btn) are reused for Both Good/Bad. */
 .compare-undo-btn {
-    position: absolute;
-    top: 64px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 50;
-    pointer-events: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    color: #fff;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-}
-.compare-undo-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.35);
-}
-.compare-undo-btn .btn-label {
-    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 /* Hide deprecated compare-mode bottom button rows in tournament mode.
    The per-wrapper overlay controls (.media-overlay-controls — Like/Dislike/Special/Zoom)
    stay visible: their handlers are tournament-aware (Like = "this side wins",
    Dislike = "other side wins", Special = remove from tournament + move to special folder).
-   Nav arrows are also hidden — manual prev/next would desync the display from the
-   tournament engine's chosen pair (Swiss pairing controls progression, not currentIndex). */
+   Nav arrows + the compare action bar are hidden — manual prev/next would desync the display
+   from the tournament engine's chosen pair (Swiss pairing controls progression, not currentIndex);
+   tournament has its own undo (#tournamentUndoBtn). */
 .media-container.tournament-mode .left-media-controls,
 .media-container.tournament-mode .right-media-controls,
-.media-container.tournament-mode .nav-arrows {
+.media-container.tournament-mode .nav-arrows,
+.media-container.tournament-mode .compare-action-bar {
     display: none !important;
 }
 
@@ -2406,8 +2387,20 @@ body {
     height: 100%;
     background: var(--accent-color, #4a9eff);
 }
-.bulk-rate-controls {
+/* Compare-mode bottom-center action cluster: Both Good / Undo / Both Bad as square overlay
+   buttons. Positioned relative to .media-container (which is position: relative). The container
+   ignores pointer events so the gaps don't block media interaction; each button opts back in. */
+.compare-action-bar {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
-    gap: 8px;
+    gap: var(--space-4);
     align-items: center;
+    z-index: 50;
+    pointer-events: none;
+}
+.compare-action-bar .overlay-btn {
+    pointer-events: auto;
 }
