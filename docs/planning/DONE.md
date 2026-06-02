@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-05-26 <!-- Tournament Mode polish + feature-cache streaming -->
+**Last Updated**: 2026-06-02 <!-- Group 0 part 1: re-rate / mode-correction (compare) -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -11,6 +11,69 @@ Completed tasks with implementation details and learnings.
 ---
 
 <!-- Organize by month, newest first. -->
+
+## 2026-06 (June)
+
+### 2026-06-02 — Group 0 part 1: Re-rate / mode-correction (compare)
+
+**Summary**: Added "👍 Both good / 👎 Both bad" corrective-training buttons to AI-sorted
+compare mode. Each click trains **both** displayed files into the ML model (good→like,
+bad→dislike) **without moving them**, persists to a per-folder `.bulk_rated.json`, records
+one undo entry, toasts, and advances to the next pair. Corrections re-inject on every model
+rebuild so they survive resets. Compare-only scope — tournament re-rate is Group 0 part 2
+(deferred to a separate branch). Built via the superpowers brainstorm → spec → plan →
+subagent-driven-development pipeline. Plan archived at
+[docs/archive/plans/2026-05-31-rerate-compare-correction.md](../archive/plans/2026-05-31-rerate-compare-correction.md);
+design spec at
+[docs/superpowers/specs/2026-05-31-rerate-compare-correction-design.md](../superpowers/specs/2026-05-31-rerate-compare-correction-design.md).
+
+**Branch**: `feature/re-rate-mode-correction` (`21d95bc`, `be49cdc`, `6c70172`, `6c8a3fe`,
+`b4455b6`; manual-testing fixes `b32b718`).
+
+**Implementation** (10 TDD tasks) — [main.js](../../main.js), [preload.js](../../preload.js),
+[media-viewer.js](../../media-viewer.js), [index.html](../../index.html), [styles.css](../../styles.css):
+- IPC `readBulkRatedFile`/`writeBulkRatedFile` (mirror tournament-state; `.bulk_rated.json`
+  `{version:1, good:[], bad:[]}` of filenames).
+- `this.bulkRated` Map (filename→'good'|'bad'); `loadBulkRatedFile()` (hydrate + stale-prune in
+  `loadFolder`) / `saveBulkRatedFile()`.
+- `applyBulkRating(bucket)`, `handleBothGood()`/`handleBothBad()`, `undoBulkRating()`;
+  `handleCancel` intercepts `bothGood||bothBad` as its first branch; `removeFileFromList` purges
+  + conditionally re-saves; `collectBulkRatedTrainingExamples()` re-injected as a third pass in
+  `trainFromHistoricalRatings()`.
+- Shortcuts: `DEFAULT_SHORTCUTS` single+compare `next` KeyD→KeyS; compare gains `bothGood:KeyD`,
+  `bothBad:KeyF`; `ACTION_LABELS`/`executeAction` wiring; `#compareActionBar` cluster +
+  `updateBulkRateButtonsVisibility()`.
+
+**Design deviations from [BACKLOG.md:60]**: soft-suppression / fall-through dropped (bulk-rated
+files treated as regular posts — re-raised in BACKLOG 2026-06-02); shortcuts shipped KeyD/KeyF
+(not KeyS/KeyD); no badge, no live re-sort.
+
+**Post-implementation manual-testing fixes** (`b32b718`) — three bugs found after the feature
+landed on the branch:
+1. **Buttons invisible** — placed inside `.compare-controls`, which is `display:none` during
+   compare browsing (overlay controls used instead). Relocated to a bottom-center
+   `#compareActionBar` cluster of square icon-only overlay buttons (👍 / ↩ undo / 👎);
+   `updateBulkRateButtonsVisibility()` now toggles each button, excludes tournament, runs from
+   `showMedia()`.
+2. **"S" didn't advance pairs** — a stale full `customShortcuts` object in localStorage froze
+   `next:KeyD` over the new `KeyS` default. Added a one-time v1→v2 migration in `loadShortcuts()`
+   (drops the stale `next`, preserves other remaps); `saveShortcut()` now stamps `version:2`.
+   Nav-arrow tooltip D→S.
+3. **Undo placement** — moved from top-center rectangular (pre-existing tournament-era styling,
+   not this branch) into the bottom-center square cluster per user preference.
+
+**Tests**: 262/262 unit tests pass (feature tests 244→257 across
+[tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) +
+[tests/keyboard-shortcuts.test.js](../../tests/keyboard-shortcuts.test.js); +3 shortcut-migration
+tests in the fix). E2E: compare-mode 7/7 pass (incl. "navigates pairs with S key" + "Both good
+records a bulk rating… and undo clears it"). Lint clean. (Pre-existing, unrelated
+`app-launch.test.js` `#viewModeBtn` E2E failure noted — out of scope.)
+
+**Follow-ups spawned** (BACKLOG 2026-06-02): 🔵 don't re-pair already-bulk-rated files (re-raised
+suppression); 🔵 investigate "both bad" convergence plateau; 🟤 assert bulk-rate button
+visibility in tests; 🟤 store shortcut deltas + persist tournament shortcuts.
+
+---
 
 ## 2026-05 (May)
 

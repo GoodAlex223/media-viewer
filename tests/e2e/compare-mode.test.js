@@ -80,15 +80,15 @@ test.describe('Compare Mode', () => {
         await expect(rightMedia).toBeVisible();
     });
 
-    test('navigates pairs with D key in compare mode', async () => {
+    test('navigates pairs with S key in compare mode', async () => {
         await page.evaluate(() => window.mediaViewer.toggleViewMode());
         await page.waitForTimeout(500);
 
         const indexBefore = await page.evaluate(() => window.mediaViewer.currentIndex);
         expect(indexBefore).toBe(0);
 
-        // D advances in compare mode; with 3 files, wraps back to start
-        await page.keyboard.press('d');
+        // S advances in compare mode; with 3 files, wraps back to start
+        await page.keyboard.press('s');
         await page.waitForTimeout(500);
 
         // Verify still in compare mode and navigation was processed
@@ -162,6 +162,46 @@ test.describe('Compare Mode', () => {
 
         // Clean up temp dir
         await twoFileTmp.cleanup();
+    });
+
+    test('Both good records a bulk rating, persists it, and undo clears it', async () => {
+        await seedLocalStorage(page, { mlPredictionEnabled: 'true' });
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        // Force AI-sorted compare state and a known pair, then bulk-rate.
+        const result = await page.evaluate(async () => {
+            const mv = window.mediaViewer;
+            mv.isCompareMode = true;
+            mv.isSortedByPrediction = true;
+            mv.compareLeftFile = mv.mediaFiles[0];
+            mv.compareRightFile = mv.mediaFiles[1];
+            mv.getCombinedFeatures = () => [0.1, 0.2, 0.3];
+            await mv.applyBulkRating('good');
+            const inMemory = [...mv.bulkRated.entries()];
+            const onDisk = await window.electronAPI.readBulkRatedFile(mv.baseFolderPath);
+            return { inMemory, onDisk, historyLen: mv.moveHistory.length };
+        });
+
+        expect(result.inMemory).toHaveLength(2);
+        expect(result.inMemory.every(([, bucket]) => bucket === 'good')).toBe(true);
+        expect(result.onDisk.data.good).toHaveLength(2);
+        expect(result.historyLen).toBe(1);
+
+        // Wait for any in-flight showMedia() triggered by nextMedia() to complete
+        // before calling handleCancel (it guards on isLoading).
+        await page.waitForFunction(() => !window.mediaViewer.isLoading);
+
+        // Undo clears the buckets and the on-disk record.
+        const afterUndo = await page.evaluate(async () => {
+            const mv = window.mediaViewer;
+            await mv.handleCancel();
+            const onDisk = await window.electronAPI.readBulkRatedFile(mv.baseFolderPath);
+            return { size: mv.bulkRated.size, good: onDisk.data ? onDisk.data.good.length : 0 };
+        });
+
+        expect(afterUndo.size).toBe(0);
+        expect(afterUndo.good).toBe(0);
     });
 
     test('resets to single mode when switching folders in compare mode', async () => {

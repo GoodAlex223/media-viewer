@@ -5,7 +5,7 @@ const DEFAULT_SHORTCUTS = {
     single: {
         like: 'KeyQ',
         dislike: 'KeyW',
-        next: 'KeyD',
+        next: 'KeyS',
         previous: 'KeyA',
         undo: 'Ctrl+KeyA',
     },
@@ -14,9 +14,11 @@ const DEFAULT_SHORTCUTS = {
         leftDislike: 'KeyW',
         rightLike: 'KeyE',
         rightDislike: 'KeyR',
-        next: 'KeyD',
+        next: 'KeyS',
         previous: 'KeyA',
         undo: 'Ctrl+KeyA',
+        bothGood: 'KeyD',
+        bothBad: 'KeyF',
     },
     tournament: {
         // Like/dislike handlers are tournament-aware (see _tournamentPickFromSide)
@@ -43,6 +45,8 @@ const ACTION_LABELS = {
     rightDislike: 'Right media Dislike',
     leftSpecial: 'Left to special folder',
     rightSpecial: 'Right to special folder',
+    bothGood: 'Both media good',
+    bothBad: 'Both media bad',
 };
 
 // MinHeap (Priority Queue) for efficient MST construction
@@ -394,6 +398,8 @@ class MediaViewer {
         this.pendingCompareUpdates = 0; // Counter for expected updateComplete messages (2 for rating, 1 for undo)
         this.pendingCompareTimeout = null; // Fallback timeout ID
         this.previousScores = null; // Snapshot of predictionScores for delta notification
+        // Corrective training: filename -> 'good' | 'bad' (mirrors per-folder .bulk_rated.json)
+        this.bulkRated = new Map();
 
         // CLIP model state (main process IPC)
         this.clipWorkerReady = false;
@@ -551,6 +557,8 @@ class MediaViewer {
         this.leftSpecialBtn = document.getElementById('leftSpecialBtn');
         this.rightSpecialBtn = document.getElementById('rightSpecialBtn');
         this.cancelBtnCompare = document.getElementById('cancelBtnCompare');
+        this.bothGoodBtn = document.getElementById('bothGoodBtn');
+        this.bothBadBtn = document.getElementById('bothBadBtn');
 
         // Compare mode file info panels
         this.leftFileInfo = document.getElementById('leftFileInfo');
@@ -1024,6 +1032,7 @@ class MediaViewer {
         const index = this.mediaFiles.findIndex((f) => f.path === filePath);
         if (index === -1) return -1;
 
+        const removedName = this.mediaFiles[index].name;
         this.mediaFiles.splice(index, 1);
 
         this.predictionScores.delete(filePath);
@@ -1031,6 +1040,9 @@ class MediaViewer {
         this.clipCache.delete(filePath);
         this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
+        if (this.bulkRated.delete(removedName)) {
+            this.saveBulkRatedFile();
+        }
 
         if (this.currentIndex >= this.mediaFiles.length) {
             this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
@@ -1863,6 +1875,12 @@ class MediaViewer {
         if (this.rightSpecialBtn) {
             this.rightSpecialBtn.addEventListener('click', () => this.moveToSpecialFolder('right'));
         }
+        if (this.bothGoodBtn) {
+            this.bothGoodBtn.addEventListener('click', () => this.handleBothGood());
+        }
+        if (this.bothBadBtn) {
+            this.bothBadBtn.addEventListener('click', () => this.handleBothBad());
+        }
 
         document.addEventListener('keydown', (e) => {
             if (this.mediaFiles.length === 0) {
@@ -2377,6 +2395,8 @@ class MediaViewer {
             this.predictionScores.clear();
             // Cancel any ongoing background extraction
             this.cancelBackgroundExtraction();
+            // Hydrate corrective-training records for this folder (prunes stale filenames)
+            await this.loadBulkRatedFile();
             if (this.sortSimilarityBtn) {
                 this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
             }
@@ -2565,6 +2585,7 @@ class MediaViewer {
 
     async showMedia() {
         this.updateCompareUndoButton();
+        this.updateBulkRateButtonsVisibility();
         if (this.mediaFiles.length === 0) {
             if (this.moveHistory.length > 0) {
                 this.showEmptyStateWithUndo();
@@ -2754,6 +2775,7 @@ class MediaViewer {
         // Store references for use in moveComparePair
         this.compareLeftFile = leftFile;
         this.compareRightFile = rightFile;
+        this.updateBulkRateButtonsVisibility();
 
         // Safety check: ensure left and right are different files
         if (!leftFile || !rightFile || leftFile === rightFile) {
@@ -3473,6 +3495,16 @@ class MediaViewer {
         await this.moveCurrentFile('dislike');
     }
 
+    async undoBulkRating(lastMove) {
+        const actionType = lastMove.bothGood ? 'like' : 'dislike';
+        for (const f of lastMove.bulkFiles) {
+            if (f.features) this.reverseMlModelUpdate(f.features, actionType);
+            this.bulkRated.delete(f.name);
+        }
+        await this.saveBulkRatedFile();
+        this.showNotification('↩️ Bulk rating undone', 'info');
+    }
+
     async handleCancel() {
         if (this.moveHistory.length === 0) {
             this.showNotification('No moves to undo', 'error');
@@ -3484,6 +3516,22 @@ class MediaViewer {
 
         // Check if last move was a special move in compare mode
         const lastMove = this.moveHistory[this.moveHistory.length - 1];
+
+        // Bulk rating (Both good / Both bad): no file move to reverse — just undo the ML updates,
+        // then refresh the UI like the other handleCancel branches do. Return to the pair that was
+        // bulk-rated (applyBulkRating advanced past it), re-score prediction badges (the ML model
+        // was just reverted), and re-render so the floating Undo button visibility updates.
+        if (lastMove.bothGood || lastMove.bothBad) {
+            this.moveHistory.pop();
+            await this.undoBulkRating(lastMove);
+            if (typeof lastMove.prevPairIndex === 'number') {
+                this.mlComparePairIndex = lastMove.prevPairIndex;
+            }
+            if (this.isSortedByPrediction) this.requestPredictionScores();
+            await this.showMedia();
+            return;
+        }
+
         if (this.isCompareMode && lastMove.compareMode && lastMove.actionType === 'special') {
             // Undo special folder move in compare mode
             this.moveHistory.pop();
@@ -6872,6 +6920,31 @@ class MediaViewer {
         });
     }
 
+    async collectBulkRatedTrainingExamples() {
+        const liked = [];
+        const disliked = [];
+        for (const [name, bucket] of this.bulkRated) {
+            const file = this.mediaFiles.find((f) => f.name === name);
+            if (!file) continue;
+            let combined = this.getCombinedFeatures(file.path);
+            if (!combined) {
+                try {
+                    const features = await this.computeFeatures(file.path);
+                    const clipVector = await this.extractClipEmbedding(file.path);
+                    const merged = new Float32Array(576);
+                    merged.set(features, 0);
+                    if (clipVector) merged.set(clipVector, 64);
+                    combined = Array.from(merged);
+                } catch (err) {
+                    console.warn(`Skipping bulk-rated ${name}:`, err.message);
+                    continue;
+                }
+            }
+            (bucket === 'good' ? liked : disliked).push(combined);
+        }
+        return { liked, disliked };
+    }
+
     async trainFromHistoricalRatings() {
         if (!this.isMlEnabled || !this.mlWorker) return;
         if (!this.customLikeFolder || !this.customDislikeFolder) return;
@@ -6937,6 +7010,12 @@ class MediaViewer {
                 }
             }
 
+            // Re-apply corrective bulk ratings (these files stay in the source folder and are
+            // never in the like/dislike folders, so a from-scratch rebuild can't recover them).
+            const bulkExamples = await this.collectBulkRatedTrainingExamples();
+            likedFeatures.push(...bulkExamples.liked);
+            dislikedFeatures.push(...bulkExamples.disliked);
+
             // Send to ML worker for training
             if (likedFeatures.length > 0 || dislikedFeatures.length > 0) {
                 this.mlWorker.postMessage({
@@ -6992,6 +7071,42 @@ class MediaViewer {
         }
 
         return Array.from(combined);
+    }
+
+    async loadBulkRatedFile() {
+        this.bulkRated = new Map();
+        if (!this.baseFolderPath) return;
+        try {
+            const result = await window.electronAPI.readBulkRatedFile(this.baseFolderPath);
+            if (!result.success || !result.data) return;
+            const validNames = new Set(this.mediaFiles.map((f) => f.name));
+            let pruned = false;
+            for (const name of result.data.good || []) {
+                if (validNames.has(name)) this.bulkRated.set(name, 'good');
+                else pruned = true;
+            }
+            for (const name of result.data.bad || []) {
+                if (validNames.has(name)) this.bulkRated.set(name, 'bad');
+                else pruned = true;
+            }
+            if (pruned) await this.saveBulkRatedFile();
+        } catch (err) {
+            console.warn('Failed to load .bulk_rated.json:', err.message);
+        }
+    }
+
+    async saveBulkRatedFile() {
+        if (!this.baseFolderPath) return;
+        const data = { version: 1, good: [], bad: [] };
+        for (const [name, bucket] of this.bulkRated) {
+            if (bucket === 'good') data.good.push(name);
+            else if (bucket === 'bad') data.bad.push(name);
+        }
+        try {
+            await window.electronAPI.writeBulkRatedFile(this.baseFolderPath, data);
+        } catch (err) {
+            console.warn('Failed to save .bulk_rated.json:', err.message);
+        }
     }
 
     async requestPredictionScores() {
@@ -7054,6 +7169,17 @@ class MediaViewer {
                 this.displayPredictionBadge(rightScore, 'right');
             }
         }
+    }
+
+    // Both Good / Both Bad live in the compare action bar (#compareActionBar) alongside the
+    // floating Undo button. They appear only in AI-sorted compare (not tournament — which has
+    // its own undo and tournament-aware Like/Dislike). Each button is toggled individually
+    // because Undo, their sibling in the same bar, has a different visibility condition.
+    updateBulkRateButtonsVisibility() {
+        const show = this.isCompareMode && this.isSortedByPrediction && !this.isTournamentMode;
+        const display = show ? 'inline-flex' : 'none';
+        if (this.bothGoodBtn) this.bothGoodBtn.style.display = display;
+        if (this.bothBadBtn) this.bothBadBtn.style.display = display;
     }
 
     displayPredictionBadge(score, position) {
@@ -7283,6 +7409,51 @@ class MediaViewer {
                 label: label,
             },
         });
+    }
+
+    async applyBulkRating(bucket) {
+        if (!this.isSortedByPrediction || !this.isCompareMode) return;
+        const left = this.compareLeftFile;
+        const right = this.compareRightFile;
+        if (!left || !right) return;
+
+        const actionType = bucket === 'good' ? 'like' : 'dislike';
+        const bulkFiles = [];
+        for (const f of [left, right]) {
+            const features = this.getCombinedFeatures(f.path);
+            if (features) {
+                this.updateMlModelWithFeatures(features, actionType);
+            }
+            bulkFiles.push({ name: f.name, features });
+            this.bulkRated.set(f.name, bucket);
+        }
+
+        await this.saveBulkRatedFile();
+
+        this.moveHistory.push({
+            bothGood: bucket === 'good',
+            bothBad: bucket === 'bad',
+            bulkFiles,
+            // Pair index BEFORE nextMedia() advances — lets undo return to the rated pair.
+            prevPairIndex: this.mlComparePairIndex,
+        });
+
+        this.showNotification(
+            bucket === 'good'
+                ? '👍 Both files marked good (model updated)'
+                : '👎 Both files marked bad (model updated)',
+            'success'
+        );
+
+        this.nextMedia();
+    }
+
+    async handleBothGood() {
+        await this.applyBulkRating('good');
+    }
+
+    async handleBothBad() {
+        await this.applyBulkRating('bad');
     }
 
     /**
@@ -8212,6 +8383,20 @@ class MediaViewer {
                 // Invalid JSON — ignore and use defaults
             }
         }
+        // One-time migration. saveShortcut persists the FULL shortcuts object, so a binding
+        // frozen before a default change (e.g. next: 'KeyD') would otherwise override the new
+        // default (next: 'KeyS') forever. Bump the version and drop the now-stale overrides so
+        // the new defaults reach existing users; intentional remaps of other actions are kept.
+        // v1 -> v2: 'next' remapped KeyD -> KeyS in single + compare (compare also gained
+        // bothGood/bothBad, which simply fall through to defaults since they were never stored).
+        if (raw && (custom.version || 1) < 2) {
+            if (custom.single) delete custom.single.next;
+            if (custom.compare) delete custom.compare.next;
+            custom.version = 2;
+            if (typeof localStorage.setItem === 'function') {
+                localStorage.setItem('customShortcuts', JSON.stringify(custom));
+            }
+        }
         return {
             single: Object.assign({}, DEFAULT_SHORTCUTS.single, custom.single),
             compare: Object.assign({}, DEFAULT_SHORTCUTS.compare, custom.compare),
@@ -8254,6 +8439,8 @@ class MediaViewer {
             leftDislike: () => this.handleLeftDislike(),
             rightLike: () => this.handleRightLike(),
             rightDislike: () => this.handleRightDislike(),
+            bothGood: () => this.handleBothGood(),
+            bothBad: () => this.handleBothBad(),
             leftSpecial: () => {
                 if (this.isTournamentMode) this.handleTournamentSpecial('left');
             },
@@ -8282,8 +8469,11 @@ class MediaViewer {
         this.shortcuts[mode][action] = newKey;
         this.shortcutReverseMap = this.buildReverseMap();
 
-        // Persist the current shortcuts — loadShortcuts merges on load so full save is safe
+        // Persist the current shortcuts — loadShortcuts merges on load so full save is safe.
+        // version must be written so the v1->v2 migration in loadShortcuts does not re-run and
+        // clobber an intentional 'next' remap on the next load.
         const custom = {
+            version: 2,
             single: Object.assign({}, this.shortcuts.single),
             compare: Object.assign({}, this.shortcuts.compare),
         };

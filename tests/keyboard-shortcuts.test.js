@@ -44,7 +44,7 @@ describe('DEFAULT_SHORTCUTS', () => {
         expect(shortcuts.single).toEqual({
             like: 'KeyQ',
             dislike: 'KeyW',
-            next: 'KeyD',
+            next: 'KeyS',
             previous: 'KeyA',
             undo: 'Ctrl+KeyA',
         });
@@ -57,10 +57,18 @@ describe('DEFAULT_SHORTCUTS', () => {
             leftDislike: 'KeyW',
             rightLike: 'KeyE',
             rightDislike: 'KeyR',
-            next: 'KeyD',
+            next: 'KeyS',
             previous: 'KeyA',
             undo: 'Ctrl+KeyA',
+            bothGood: 'KeyD',
+            bothBad: 'KeyF',
         });
+    });
+
+    it('compare mode has no duplicate key bindings', () => {
+        const shortcuts = extractDefaultShortcuts();
+        const keys = Object.values(shortcuts.compare);
+        expect(new Set(keys).size).toBe(keys.length);
     });
 });
 
@@ -105,6 +113,85 @@ describe('loadShortcuts', () => {
     });
 });
 
+describe('loadShortcuts migration (v1 -> v2)', () => {
+    const loadShortcuts = extractMethod('loadShortcuts');
+    let origLocalStorage;
+    let origDefaultShortcuts;
+
+    beforeEach(() => {
+        origLocalStorage = globalThis.localStorage;
+        origDefaultShortcuts = globalThis.DEFAULT_SHORTCUTS;
+        globalThis.DEFAULT_SHORTCUTS = extractDefaultShortcuts();
+    });
+
+    afterEach(() => {
+        globalThis.localStorage = origLocalStorage;
+        globalThis.DEFAULT_SHORTCUTS = origDefaultShortcuts;
+    });
+
+    it('drops a stale next override so the new KeyS default applies', () => {
+        const stale = {
+            single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+            compare: {
+                leftLike: 'KeyQ',
+                leftDislike: 'KeyW',
+                rightLike: 'KeyE',
+                rightDislike: 'KeyR',
+                next: 'KeyD',
+                previous: 'KeyA',
+                undo: 'Ctrl+KeyA',
+            },
+        };
+        const stored = { customShortcuts: JSON.stringify(stale) };
+        globalThis.localStorage = {
+            getItem: (k) => stored[k] ?? null,
+            setItem: (k, v) => {
+                stored[k] = v;
+            },
+        };
+        const result = loadShortcuts.call({});
+        expect(result.single.next).toBe('KeyS');
+        expect(result.compare.next).toBe('KeyS');
+        // bothGood/bothBad come from defaults since they were never stored
+        expect(result.compare.bothGood).toBe('KeyD');
+        expect(result.compare.bothBad).toBe('KeyF');
+        // migration persisted: version bumped, stale next removed
+        const persisted = JSON.parse(stored.customShortcuts);
+        expect(persisted.version).toBe(2);
+        expect(persisted.single.next).toBeUndefined();
+        expect(persisted.compare.next).toBeUndefined();
+    });
+
+    it('preserves an intentional non-next remap through migration', () => {
+        const stale = { single: { like: 'KeyT', next: 'KeyD' } };
+        const stored = { customShortcuts: JSON.stringify(stale) };
+        globalThis.localStorage = {
+            getItem: (k) => stored[k] ?? null,
+            setItem: (k, v) => {
+                stored[k] = v;
+            },
+        };
+        const result = loadShortcuts.call({});
+        expect(result.single.like).toBe('KeyT'); // intentional remap kept
+        expect(result.single.next).toBe('KeyS'); // stale next dropped -> new default
+    });
+
+    it('does not re-migrate (or clobber an intentional next remap) when version is current', () => {
+        const current = { version: 2, single: { next: 'KeyP' } };
+        const stored = { customShortcuts: JSON.stringify(current) };
+        let setCalled = false;
+        globalThis.localStorage = {
+            getItem: (k) => stored[k] ?? null,
+            setItem: () => {
+                setCalled = true;
+            },
+        };
+        const result = loadShortcuts.call({});
+        expect(result.single.next).toBe('KeyP'); // post-v2 intentional remap preserved
+        expect(setCalled).toBe(false); // no re-persist
+    });
+});
+
 describe('buildKeyString', () => {
     const buildKeyString = extractMethod('buildKeyString');
 
@@ -143,7 +230,7 @@ describe('buildReverseMap', () => {
         const result = buildReverseMap.call(ctx);
         expect(result.single['KeyQ']).toBe('like');
         expect(result.single['KeyW']).toBe('dislike');
-        expect(result.single['KeyD']).toBe('next');
+        expect(result.single['KeyS']).toBe('next');
         expect(result.single['KeyA']).toBe('previous');
         expect(result.single['Ctrl+KeyA']).toBe('undo');
     });
@@ -388,6 +475,7 @@ describe('saveShortcut', () => {
         expect(ctx.shortcuts.single.like).toBe('KeyT');
         const saved = JSON.parse(stored.customShortcuts);
         expect(saved.single.like).toBe('KeyT');
+        expect(saved.version).toBe(2); // version persisted so migration does not re-run
     });
 
     it('rebuilds reverse map after save', () => {

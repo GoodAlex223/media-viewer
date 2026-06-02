@@ -241,7 +241,7 @@
                 <button class="nav-arrow nav-prev" id="navPrev" title="Previous media (A)">
                     <i data-lucide="chevron-left"></i>
                 </button>
-                <button class="nav-arrow nav-next" id="navNext" title="Next media (D)">
+                <button class="nav-arrow nav-next" id="navNext" title="Next media (S)">
                     <i data-lucide="chevron-right"></i>
                 </button>
             </div>
@@ -260,11 +260,35 @@
                 </div>
             </div>
 
-            <!-- Compare Mode floating Undo button -->
-            <button class="compare-undo-btn" id="compareUndoBtn" title="Undo last pair (Ctrl+A)" style="display: none">
-                <span class="btn-icon"><i data-lucide="undo-2"></i></span>
-                <span class="btn-label">Undo</span>
-            </button>
+            <!-- Compare Mode bottom action bar: corrective bulk-rate buttons (AI-sorted compare only)
+                 flanking the Undo button. Each button self-gates via JS — Both Good/Bad through
+                 updateBulkRateButtonsVisibility(), Undo through updateCompareUndoButton(). -->
+            <div class="compare-action-bar" id="compareActionBar">
+                <button
+                    class="overlay-btn overlay-like-btn"
+                    id="bothGoodBtn"
+                    title="Both good (D)"
+                    style="display: none"
+                >
+                    <i data-lucide="thumbs-up"></i>
+                </button>
+                <button
+                    class="overlay-btn compare-undo-btn"
+                    id="compareUndoBtn"
+                    title="Undo last action (Ctrl+A)"
+                    style="display: none"
+                >
+                    <i data-lucide="undo-2"></i>
+                </button>
+                <button
+                    class="overlay-btn overlay-dislike-btn"
+                    id="bothBadBtn"
+                    title="Both bad (F)"
+                    style="display: none"
+                >
+                    <i data-lucide="thumbs-down"></i>
+                </button>
+            </div>
         </div>
 
         <!-- Tournament Config Modal -->

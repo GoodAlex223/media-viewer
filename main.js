@@ -278,6 +278,31 @@ app.whenReady().then(() => {
         }
     });
 
+    ipcMain.handle('readBulkRatedFile', async (_event, folderPath) => {
+        try {
+            const filePath = path.join(folderPath, '.bulk_rated.json');
+            const text = await fs.readFile(filePath, 'utf-8');
+            const json = JSON.parse(text);
+            return { success: true, data: json };
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return { success: true, data: null };
+            }
+            return { success: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('writeBulkRatedFile', async (_event, folderPath, data) => {
+        try {
+            const filePath = path.join(folderPath, '.bulk_rated.json');
+            const text = JSON.stringify(data, null, 2);
+            await fs.writeFile(filePath, text, 'utf-8');
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    });
+
     ipcMain.handle('applyTournamentResults', async (_event, folderPath, tierAssignments) => {
         const moved = [];
         const failed = [];

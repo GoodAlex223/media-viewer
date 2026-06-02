@@ -22,7 +22,7 @@ _(No ongoing background tasks this week.)_
 **Source**: 🔵 User-Flagged
 **Total SP**: 8 — solo (large, multi-mode)
 
-- [ ] **"Both good / Both bad" corrective-training buttons in AI-sorted compare** — 5 SP, 🟠 IMPORTANT
+- [x] **"Both good / Both bad" corrective-training buttons in AI-sorted compare** — 5 SP, 🟠 IMPORTANT — ✅ **shipped 2026-06-02** (branch `feature/re-rate-mode-correction`; see [DONE.md](DONE.md)). Deviations: suppression dropped (regular-post treatment), shortcuts KeyD/KeyF, buttons in `#compareActionBar`. Manual-testing fixes in `b32b718`.
   - Per [BACKLOG.md:60](BACKLOG.md#L60) (2026-05-30). Two buttons grouped with `#cancelBtnCompare`; visible only when `isSortedByPrediction === true && isCompareMode === true`. Each click calls `updateMlModelAfterRating(file, ±1)` for **both** files at full strength; files **stay in the source folder** (no move). Persisted to per-folder `.bulk_rated.json` via new `readBulkRatedFile`/`writeBulkRatedFile` IPC; pair-selection soft-suppresses bulk-rated pairs with fall-through; undo (Ctrl+A) reverses both updates and removes both from `bulkRatedSet`; shortcuts `bothGood: 'KeyS'`, `bothBad: 'KeyD'`; integrated into `trainFromHistoricalRatingsAndWait()` so corrections survive model reset.
   - Affected: [media-viewer.js](../../media-viewer.js), [index.html](../../index.html), [styles.css](../../styles.css), [main.js](../../main.js) + [preload.js](../../preload.js) (IPC), [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js), [tests/e2e/compare-mode.test.js](../../tests/e2e/compare-mode.test.js).
 - [ ] **Re-rate / override a pick in tournament mode** — 3 SP, 🟠 IMPORTANT (new design beyond BACKLOG)
@@ -83,7 +83,7 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group 0: Re-rate / mode-correction** (part 1 — compare) | 6 |
 
-- [ ] "Both good / Both bad" corrective buttons in AI-sorted compare (5 SP) + start tournament override design (1 SP)
+- [x] "Both good / Both bad" corrective buttons in AI-sorted compare (5 SP) — ✅ shipped 2026-06-02 (+ manual-testing fixes). Tournament override (part 2) deferred to its own branch.
 
 **Daily total**: 6 SP
 
@@ -160,7 +160,7 @@ _(No ongoing background tasks this week.)_
 
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
-| 0: Re-rate / mode-correction | JS logic (rating/ML) | 🔵 User | 2 | 8 | Mon–Tue | Planned |
+| 0: Re-rate / mode-correction | JS logic (rating/ML) | 🔵 User | 2 | 8 | Mon–Tue | part 1 ✅ (2026-06-02) · part 2 (tournament) pending |
 | A: JXL viewer support 🏆 | JS logic (decode) | 🔵 User | 1 | 8 | Tue–Wed | Planned |
 | B: Mode-switch display bugs [batch] | JS logic (mode UI) | 🔵 User | 2 | 7 | Thu | Planned |
 | C: CLIP extraction UX [batch] | JS logic (extraction UX) | 🔵 User | 2 | 4 | Fri | Planned |

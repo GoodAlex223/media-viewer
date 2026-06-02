@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteTournamentState: (folderPath) => ipcRenderer.invoke('deleteTournamentState', folderPath),
     applyTournamentResults: (folderPath, tierAssignments) =>
         ipcRenderer.invoke('applyTournamentResults', folderPath, tierAssignments),
+    readBulkRatedFile: (folderPath) => ipcRenderer.invoke('readBulkRatedFile', folderPath),
+    writeBulkRatedFile: (folderPath, data) => ipcRenderer.invoke('writeBulkRatedFile', folderPath, data),
 
     // Logging (fire-and-forget)
     logError: (data) => ipcRenderer.send('log-renderer-error', data),
