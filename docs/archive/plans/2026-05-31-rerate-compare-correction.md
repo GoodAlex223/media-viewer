@@ -1,6 +1,8 @@
 # Re-rate / Mode-Correction (Compare) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status: Complete** — implemented 2026-06-02 on branch `feature/re-rate-mode-correction`; all tasks shipped (259->262 unit tests, compare-mode E2E 7/7). Post-implementation manual-testing fixes (button visibility, undo placement, shortcut migration) landed in commit `b32b718`. See [DONE.md](../../planning/DONE.md).
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add "👍 Both good / 👎 Both bad" corrective-training buttons to AI-sorted compare mode that feed both displayed files into the ML model without moving them, persisting corrections to a per-folder `.bulk_rated.json` so they survive model rebuilds.
 
@@ -35,7 +37,7 @@
 
 No unit test (main-process IPC handlers are not unit-tested in this project; verified via E2E in Task 10 and lint here).
 
-- [ ] **Step 1: Add the two IPC handlers in `main.js`**
+- [x] **Step 1: Add the two IPC handlers in `main.js`**
 
 Insert immediately after the `deleteTournamentState` handler block (which ends at `});` near L279), mirroring the tournament-state pattern:
 
@@ -66,7 +68,7 @@ Insert immediately after the `deleteTournamentState` handler block (which ends a
     });
 ```
 
-- [ ] **Step 2: Expose both channels in `preload.js`**
+- [x] **Step 2: Expose both channels in `preload.js`**
 
 Insert after the `deleteTournamentState` exposure (~L50):
 
@@ -75,12 +77,12 @@ Insert after the `deleteTournamentState` exposure (~L50):
     writeBulkRatedFile: (folderPath, data) => ipcRenderer.invoke('writeBulkRatedFile', folderPath, data),
 ```
 
-- [ ] **Step 3: Lint to verify no syntax errors**
+- [x] **Step 3: Lint to verify no syntax errors**
 
 Run: `npm run lint`
 Expected: PASS (no errors in `main.js` / `preload.js`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add main.js preload.js
@@ -96,7 +98,7 @@ git commit -m "feat(ipc): add readBulkRatedFile/writeBulkRatedFile handlers for 
 - Modify: `media-viewer.js` (add `loadBulkRatedFile` / `saveBulkRatedFile` methods, e.g. next to `getCombinedFeatures`)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/media-viewer-utils.test.js` (the file already defines `extractAsyncMethod`):
 
@@ -159,12 +161,12 @@ describe('bulk-rated persistence', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "bulk-rated persistence"`
 Expected: FAIL with "Could not find method: loadBulkRatedFile".
 
-- [ ] **Step 3: Add the constructor state**
+- [x] **Step 3: Add the constructor state**
 
 In `media-viewer.js`, after `this.previousScores = null;` (~L396) add:
 
@@ -173,7 +175,7 @@ In `media-viewer.js`, after `this.previousScores = null;` (~L396) add:
         this.bulkRated = new Map();
 ```
 
-- [ ] **Step 4: Add the two helper methods**
+- [x] **Step 4: Add the two helper methods**
 
 In `media-viewer.js`, add these methods to the `MediaViewer` class (place them right after `getCombinedFeatures(filePath) { ... }`):
 
@@ -215,12 +217,12 @@ In `media-viewer.js`, add these methods to the `MediaViewer` class (place them r
     }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "bulk-rated persistence"`
 Expected: PASS (2 tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -236,7 +238,7 @@ git commit -m "feat(ml): add bulkRated state + .bulk_rated.json load/save helper
 
 Verified by the full suite still passing + E2E (Task 10). `loadFolder` is not unit-tested directly.
 
-- [ ] **Step 1: Add the hydration call**
+- [x] **Step 1: Add the hydration call**
 
 In `loadFolder()`, immediately after `this.cancelBackgroundExtraction();` (~L2379) add:
 
@@ -247,12 +249,12 @@ In `loadFolder()`, immediately after `this.cancelBackgroundExtraction();` (~L237
 
 (`this.mediaFiles` is already assigned above at `this.mediaFiles = result.files;`, so the stale-prune has the current file set.)
 
-- [ ] **Step 2: Run the full suite to confirm no regressions**
+- [x] **Step 2: Run the full suite to confirm no regressions**
 
 Run: `npm test`
 Expected: PASS (all existing tests still green).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add media-viewer.js
@@ -268,7 +270,7 @@ git commit -m "feat(ml): hydrate .bulk_rated.json in loadFolder"
 - Modify: `media-viewer.js` `executeAction()` (~L8262, before the closing `};`)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/media-viewer-utils.test.js`:
 
@@ -339,12 +341,12 @@ describe('applyBulkRating', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "applyBulkRating"`
 Expected: FAIL with "Could not find method: applyBulkRating".
 
-- [ ] **Step 3: Add the three methods**
+- [x] **Step 3: Add the three methods**
 
 In `media-viewer.js`, add to the `MediaViewer` class (place near `updateMlModelAfterRating`):
 
@@ -393,7 +395,7 @@ In `media-viewer.js`, add to the `MediaViewer` class (place near `updateMlModelA
     }
 ```
 
-- [ ] **Step 4: Wire the actions into `executeAction`**
+- [x] **Step 4: Wire the actions into `executeAction`**
 
 In `executeAction()` (~L8262), add two entries to the `actions` map (after `rightDislike: () => this.handleRightDislike(),`):
 
@@ -402,12 +404,12 @@ In `executeAction()` (~L8262), add two entries to the `actions` map (after `righ
             bothBad: () => this.handleBothBad(),
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "applyBulkRating"`
 Expected: PASS (5 tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -423,7 +425,7 @@ git commit -m "feat(ml): add applyBulkRating + handleBothGood/handleBothBad + ex
 - Modify: `media-viewer.js` `handleCancel()` (~L3486, right after `const lastMove = ...`)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/media-viewer-utils.test.js`:
 
@@ -475,12 +477,12 @@ describe('undoBulkRating', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "undoBulkRating"`
 Expected: FAIL with "Could not find method: undoBulkRating".
 
-- [ ] **Step 3: Add the `undoBulkRating` method**
+- [x] **Step 3: Add the `undoBulkRating` method**
 
 In `media-viewer.js`, add to the `MediaViewer` class (place right before `handleCancel`):
 
@@ -496,7 +498,7 @@ In `media-viewer.js`, add to the `MediaViewer` class (place right before `handle
     }
 ```
 
-- [ ] **Step 4: Add the intercept branch in `handleCancel`**
+- [x] **Step 4: Add the intercept branch in `handleCancel`**
 
 In `handleCancel()`, immediately after `const lastMove = this.moveHistory[this.moveHistory.length - 1];` (~L3486) and before the `if (this.isCompareMode && lastMove.compareMode && ...)` branch, add:
 
@@ -509,12 +511,12 @@ In `handleCancel()`, immediately after `const lastMove = this.moveHistory[this.m
         }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "undoBulkRating"`
 Expected: PASS (2 tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -529,7 +531,7 @@ git commit -m "feat(ml): undo Both good/Both bad via handleCancel bulk-rating br
 - Modify: `media-viewer.js` `removeFileFromList()` (~L1027-1033)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/media-viewer-utils.test.js`:
 
@@ -569,12 +571,12 @@ describe('removeFileFromList bulk-rated purge', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "removeFileFromList bulk-rated purge"`
 Expected: FAIL (`ctx.bulkRated` still contains `a.jpg`; `saveBulkRatedFile` not called).
 
-- [ ] **Step 3: Capture the filename and purge**
+- [x] **Step 3: Capture the filename and purge**
 
 In `removeFileFromList()`, change the top of the method so the filename is captured before the splice, and add the purge after the existing cache deletes. The method becomes:
 
@@ -603,17 +605,17 @@ In `removeFileFromList()`, change the top of the method so the filename is captu
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "removeFileFromList bulk-rated purge"`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Run the full suite (removeFileFromList is widely used)**
+- [x] **Step 5: Run the full suite (removeFileFromList is widely used)**
 
 Run: `npm test`
 Expected: PASS (all green — the existing `removeFileFromList` tests already include the cache Maps; `bulkRated` defaults must exist in their ctx. If any pre-existing `removeFileFromList` test fails with "bulkRated is undefined", add `bulkRated: new Map()` to that test's mock context.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -629,7 +631,7 @@ git commit -m "feat(ml): purge bulk-rated entry when a file is moved out of the 
 - Modify: `media-viewer.js` `trainFromHistoricalRatings()` (~L6940, before the `if (likedFeatures.length > 0 || dislikedFeatures.length > 0)` post)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/media-viewer-utils.test.js`:
 
@@ -681,12 +683,12 @@ describe('collectBulkRatedTrainingExamples', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "collectBulkRatedTrainingExamples"`
 Expected: FAIL with "Could not find method: collectBulkRatedTrainingExamples".
 
-- [ ] **Step 3: Add the `collectBulkRatedTrainingExamples` method**
+- [x] **Step 3: Add the `collectBulkRatedTrainingExamples` method**
 
 In `media-viewer.js`, add to the `MediaViewer` class (place right before `trainFromHistoricalRatings`):
 
@@ -717,7 +719,7 @@ In `media-viewer.js`, add to the `MediaViewer` class (place right before `trainF
     }
 ```
 
-- [ ] **Step 4: Call it from `trainFromHistoricalRatings`**
+- [x] **Step 4: Call it from `trainFromHistoricalRatings`**
 
 In `trainFromHistoricalRatings()`, immediately before the `if (likedFeatures.length > 0 || dislikedFeatures.length > 0) {` block (~L6940) add:
 
@@ -729,12 +731,12 @@ In `trainFromHistoricalRatings()`, immediately before the `if (likedFeatures.len
             dislikedFeatures.push(...bulkExamples.disliked);
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "collectBulkRatedTrainingExamples"`
 Expected: PASS (3 tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -749,7 +751,7 @@ git commit -m "feat(ml): re-inject bulk-rated corrections in trainFromHistorical
 - Modify: `media-viewer.js` `DEFAULT_SHORTCUTS` (~L4-32) and `ACTION_LABELS` (~L34-46)
 - Test: `tests/keyboard-shortcuts.test.js` (~L42-64)
 
-- [ ] **Step 1: Update the failing assertions**
+- [x] **Step 1: Update the failing assertions**
 
 In `tests/keyboard-shortcuts.test.js`, replace the `single` assertion (L44-50) with:
 
@@ -789,12 +791,12 @@ Add a new test inside the `describe('DEFAULT_SHORTCUTS', ...)` block:
     });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/keyboard-shortcuts.test.js -t "DEFAULT_SHORTCUTS"`
 Expected: FAIL (current defaults still have `next: 'KeyD'` and no `bothGood`/`bothBad`).
 
-- [ ] **Step 3: Update `DEFAULT_SHORTCUTS`**
+- [x] **Step 3: Update `DEFAULT_SHORTCUTS`**
 
 In `media-viewer.js`, change the `single` and `compare` blocks (`tournament` is unchanged):
 
@@ -832,7 +834,7 @@ const DEFAULT_SHORTCUTS = {
 };
 ```
 
-- [ ] **Step 4: Add the action labels**
+- [x] **Step 4: Add the action labels**
 
 In `ACTION_LABELS` (~L34), add two entries (after `rightSpecial: 'Right to special folder',`):
 
@@ -841,12 +843,12 @@ In `ACTION_LABELS` (~L34), add two entries (after `rightSpecial: 'Right to speci
     bothBad: 'Both media bad',
 ```
 
-- [ ] **Step 5: Run the full suite to verify pass + no regressions**
+- [x] **Step 5: Run the full suite to verify pass + no regressions**
 
 Run: `npm test`
 Expected: PASS (the updated `DEFAULT_SHORTCUTS` tests pass; nothing else asserts `next: 'KeyD'`).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/keyboard-shortcuts.test.js
@@ -864,7 +866,7 @@ git commit -m "feat(shortcuts): A/S/D/F compare cluster — next->S, bothGood=D,
 
 No unit test (DOM wiring); verified by E2E (Task 10) + manual smoke.
 
-- [ ] **Step 1: Add the buttons in `index.html`**
+- [x] **Step 1: Add the buttons in `index.html`**
 
 Inside `#compareControls`, between the closing `</div>` of `.left-media-controls` (L222) and the opening `<div class="right-media-controls">` (L223), insert:
 
@@ -881,7 +883,7 @@ Inside `#compareControls`, between the closing `</div>` of `.left-media-controls
                 </div>
 ```
 
-- [ ] **Step 2: Cache the DOM refs**
+- [x] **Step 2: Cache the DOM refs**
 
 In `media-viewer.js`, after `this.cancelBtnCompare = document.getElementById('cancelBtnCompare');` (~L553) add:
 
@@ -890,7 +892,7 @@ In `media-viewer.js`, after `this.cancelBtnCompare = document.getElementById('ca
         this.bothBadBtn = document.getElementById('bothBadBtn');
 ```
 
-- [ ] **Step 3: Attach click listeners**
+- [x] **Step 3: Attach click listeners**
 
 In `media-viewer.js`, after the `if (this.leftLikeBtn) { this.leftLikeBtn.addEventListener('click', () => this.handleLeftLike()); }` block (~L1846), add:
 
@@ -903,7 +905,7 @@ In `media-viewer.js`, after the `if (this.leftLikeBtn) { this.leftLikeBtn.addEve
         }
 ```
 
-- [ ] **Step 4: Add the visibility helper**
+- [x] **Step 4: Add the visibility helper**
 
 In `media-viewer.js`, add to the `MediaViewer` class (place near `updateBulkRateButtonsVisibility`'s callers, e.g. after `updatePredictionBadges`):
 
@@ -915,7 +917,7 @@ In `media-viewer.js`, add to the `MediaViewer` class (place near `updateBulkRate
     }
 ```
 
-- [ ] **Step 5: Call the helper from `showCompareMedia`**
+- [x] **Step 5: Call the helper from `showCompareMedia`**
 
 In `showCompareMedia()`, immediately after `this.compareRightFile = rightFile;` (~L2756) add:
 
@@ -923,7 +925,7 @@ In `showCompareMedia()`, immediately after `this.compareRightFile = rightFile;` 
         this.updateBulkRateButtonsVisibility();
 ```
 
-- [ ] **Step 6: Add the container style**
+- [x] **Step 6: Add the container style**
 
 Append to `styles.css`:
 
@@ -935,12 +937,12 @@ Append to `styles.css`:
 }
 ```
 
-- [ ] **Step 7: Lint + full suite**
+- [x] **Step 7: Lint + full suite**
 
 Run: `npm run lint && npm test`
 Expected: PASS (lint clean; all unit tests green).
 
-- [ ] **Step 8: Manual smoke test**
+- [x] **Step 8: Manual smoke test**
 
 Run: `npm start`. Load a folder with ≥4 media, click **Sort by Predicted**, switch to **Compare** mode. Verify:
 - The Both Good / Both Bad buttons appear only in AI-sorted compare (hidden in single mode and in non-AI compare).
@@ -948,7 +950,7 @@ Run: `npm start`. Load a folder with ≥4 media, click **Sort by Predicted**, sw
 - Pressing `D` / `F` triggers the same actions; `S` goes to the next pair, `A` to the previous.
 - `Ctrl+A` shows "Bulk rating undone".
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add index.html media-viewer.js styles.css
@@ -962,14 +964,14 @@ git commit -m "feat(ui): Both good/Both bad compare buttons + visibility + liste
 **Files:**
 - Modify: `tests/e2e/compare-mode.test.js` (append a test)
 
-- [ ] **Step 1: Check the E2E nav-key default**
+- [x] **Step 1: Check the E2E nav-key default**
 
 Search `tests/e2e/keyboard-shortcuts.test.js` and `tests/e2e/navigation.test.js` for `KeyD` used as the next/forward navigation key. If any test presses `KeyD` to advance, update it to `KeyS` (the new default). Run `npm run test:e2e` after to confirm green.
 
 Run: `npx playwright test tests/e2e/keyboard-shortcuts.test.js`
 Expected: PASS (after any `KeyD`→`KeyS` nav updates).
 
-- [ ] **Step 2: Write the E2E test**
+- [x] **Step 2: Write the E2E test**
 
 Append to `tests/e2e/compare-mode.test.js` (follow the file's existing `launchApp`/`seedLocalStorage`/`loadFolder` helpers; use `{ force: true }` clicks per the overlay-interception convention). The test drives the bulk-rate path directly via `page.evaluate` on `window.mediaViewer` to avoid depending on ML training in the harness:
 
@@ -1010,17 +1012,17 @@ test('Both good records a bulk rating, persists it, and undo clears it', async (
 });
 ```
 
-- [ ] **Step 3: Run the E2E test**
+- [x] **Step 3: Run the E2E test**
 
 Run: `npx playwright test tests/e2e/compare-mode.test.js`
 Expected: PASS (new test green; existing compare-mode tests still pass).
 
-- [ ] **Step 4: Run the full E2E suite**
+- [x] **Step 4: Run the full E2E suite**
 
 Run: `npm run test:e2e`
 Expected: PASS (all E2E green).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/e2e/compare-mode.test.js tests/e2e/keyboard-shortcuts.test.js tests/e2e/navigation.test.js
