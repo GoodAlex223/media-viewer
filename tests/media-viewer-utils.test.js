@@ -942,6 +942,46 @@ describe('handleCancel feature restore', () => {
         // Special branch needs explicit requestPredictionScores since no reverseUpdateComplete debounce
         expect(ctx.requestPredictionScores).toHaveBeenCalledTimes(1);
     });
+
+    it('bulk-rating undo reverses ML, returns to the rated pair, and refreshes the UI', async () => {
+        const ctx = commonMocks({
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            mlComparePairIndex: 5, // advanced past the rated pair by applyBulkRating's nextMedia()
+            undoBulkRating: vi.fn(async () => {}),
+            moveHistory: [
+                {
+                    bothGood: true,
+                    bothBad: false,
+                    bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
+                    prevPairIndex: 3,
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        expect(ctx.undoBulkRating).toHaveBeenCalledOnce();
+        expect(ctx.moveHistory).toHaveLength(0); // entry popped
+        expect(ctx.mlComparePairIndex).toBe(3); // returned to the bulk-rated pair
+        expect(ctx.requestPredictionScores).toHaveBeenCalledOnce(); // badges re-scored after ML revert
+        expect(ctx.showMedia).toHaveBeenCalledOnce(); // re-render (refreshes the floating Undo button)
+    });
+
+    it('bulk-rating undo tolerates a legacy entry without prevPairIndex (no jump, still refreshes)', async () => {
+        const ctx = commonMocks({
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            mlComparePairIndex: 4,
+            undoBulkRating: vi.fn(async () => {}),
+            moveHistory: [{ bothBad: true, bulkFiles: [{ name: 'a.jpg', features: null }] }],
+        });
+
+        await handleCancel.call(ctx);
+
+        expect(ctx.mlComparePairIndex).toBe(4); // unchanged when prevPairIndex is absent
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+    });
 });
 
 describe('bulk-rated persistence', () => {

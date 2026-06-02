@@ -3517,10 +3517,18 @@ class MediaViewer {
         // Check if last move was a special move in compare mode
         const lastMove = this.moveHistory[this.moveHistory.length - 1];
 
-        // Bulk rating (Both good / Both bad): no file move to reverse — just undo the ML updates.
+        // Bulk rating (Both good / Both bad): no file move to reverse — just undo the ML updates,
+        // then refresh the UI like the other handleCancel branches do. Return to the pair that was
+        // bulk-rated (applyBulkRating advanced past it), re-score prediction badges (the ML model
+        // was just reverted), and re-render so the floating Undo button visibility updates.
         if (lastMove.bothGood || lastMove.bothBad) {
             this.moveHistory.pop();
             await this.undoBulkRating(lastMove);
+            if (typeof lastMove.prevPairIndex === 'number') {
+                this.mlComparePairIndex = lastMove.prevPairIndex;
+            }
+            if (this.isSortedByPrediction) this.requestPredictionScores();
+            await this.showMedia();
             return;
         }
 
@@ -7426,6 +7434,8 @@ class MediaViewer {
             bothGood: bucket === 'good',
             bothBad: bucket === 'bad',
             bulkFiles,
+            // Pair index BEFORE nextMedia() advances — lets undo return to the rated pair.
+            prevPairIndex: this.mlComparePairIndex,
         });
 
         this.showNotification(
