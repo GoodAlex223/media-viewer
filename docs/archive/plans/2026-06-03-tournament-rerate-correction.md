@@ -1,6 +1,8 @@
 # Tournament Re-rate (Mark-as-Equal) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status: Complete** — implemented 2026-06-03 on branch `feature/tournament-re-rate` (commits `351892c`, `523fcd7`, `9d002f9`, `c98695f`, `e21d00b`, `74752b1`); all 5 tasks shipped (264→275 unit tests, lint clean, final whole-feature review "Ready to merge — Yes", manual smoke passed). E2E skipped (tournament mode has no Playwright coverage yet — backfill tracked in BACKLOG 🟤 2026-06-03). See [DONE.md](../../planning/DONE.md).
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add "Both Win / Both Lose" draw buttons to tournament mode so the user can declare a matchup a tie instead of being forced to pick a winner.
 
@@ -34,7 +36,7 @@
 - Modify: `tournament-engine.js` (after `recordResult`, which ends at L169)
 - Test: `tests/swiss-strategy.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append a new describe block to `tests/swiss-strategy.test.js`:
 
@@ -88,12 +90,12 @@ describe('SwissStrategy.recordDraw', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/swiss-strategy.test.js -t "recordDraw"`
 Expected: FAIL with `s.recordDraw is not a function`.
 
-- [ ] **Step 3: Add the `recordDraw` method**
+- [x] **Step 3: Add the `recordDraw` method**
 
 In `tournament-engine.js`, insert immediately after the `recordResult` method (after its closing `}` at L169, before `removeFile`):
 
@@ -118,12 +120,12 @@ In `tournament-engine.js`, insert immediately after the `recordResult` method (a
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/swiss-strategy.test.js -t "recordDraw"`
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament-engine.js tests/swiss-strategy.test.js
@@ -138,7 +140,7 @@ git commit -m "feat(tournament): SwissStrategy.recordDraw (win=+1 both, lose=+0 
 - Modify: `tournament-engine.js` (after `TournamentEngine.recordResult`, which ends at L289, before `undo()` at L291)
 - Test: `tests/tournament-engine.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append a new describe block to `tests/tournament-engine.test.js` (uses the real `SwissStrategy`, already imported at the top of the file):
 
@@ -189,12 +191,12 @@ describe('TournamentEngine.recordDraw', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/tournament-engine.test.js -t "recordDraw"`
 Expected: FAIL with `eng.recordDraw is not a function`.
 
-- [ ] **Step 3: Add the `recordDraw` method**
+- [x] **Step 3: Add the `recordDraw` method**
 
 In `tournament-engine.js`, insert immediately after `TournamentEngine.recordResult` (after its closing `}` at L289, before `undo()` at L291). Note: `undo()` itself needs **no change** — it restores `strategyStateSnapshot` + `filesSnapshot`, which a draw provides exactly like a pick.
 
@@ -219,17 +221,17 @@ In `tournament-engine.js`, insert immediately after `TournamentEngine.recordResu
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/tournament-engine.test.js -t "recordDraw"`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Run the engine suites to confirm no regression**
+- [x] **Step 5: Run the engine suites to confirm no regression**
 
 Run: `npx vitest run tests/tournament-engine.test.js tests/swiss-strategy.test.js tests/integration/tournament-flow.test.js`
 Expected: PASS (all green).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tournament-engine.js tests/tournament-engine.test.js
@@ -244,7 +246,7 @@ git commit -m "feat(tournament): TournamentEngine.recordDraw with snapshot (undo
 - Modify: `tournament.js` (after `handlePairResult`, which ends at L37)
 - Test: `tests/tournament-manager.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append a new describe block to `tests/tournament-manager.test.js` (the file's `makeHost` helper and `window.electronAPI` mock in `beforeEach` already provide `writeTournamentState`):
 
@@ -275,12 +277,12 @@ describe('TournamentManager.handlePairDraw', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/tournament-manager.test.js -t "handlePairDraw"`
 Expected: FAIL with `tm.handlePairDraw is not a function`.
 
-- [ ] **Step 3: Add the `handlePairDraw` method**
+- [x] **Step 3: Add the `handlePairDraw` method**
 
 In `tournament.js`, insert immediately after `handlePairResult` (after its closing `}` at L37, before `handleApply`):
 
@@ -293,12 +295,12 @@ In `tournament.js`, insert immediately after `handlePairResult` (after its closi
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/tournament-manager.test.js -t "handlePairDraw"`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tournament.js tests/tournament-manager.test.js
@@ -313,7 +315,7 @@ git commit -m "feat(tournament): TournamentManager.handlePairDraw (record + pers
 - Modify: `media-viewer.js` `DEFAULT_SHORTCUTS.tournament` (~L23-33), `ACTION_LABELS` (~L36-50), `executeAction` (~L8426-8450), and add `handleTournamentDraw` near `handleTournamentPick` (~L4207)
 - Test: `tests/keyboard-shortcuts.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append two tests inside the existing `describe('DEFAULT_SHORTCUTS', ...)` block in `tests/keyboard-shortcuts.test.js` (after the "compare mode has no duplicate key bindings" test at L72):
 
@@ -331,12 +333,12 @@ Append two tests inside the existing `describe('DEFAULT_SHORTCUTS', ...)` block 
     });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/keyboard-shortcuts.test.js -t "DEFAULT_SHORTCUTS"`
 Expected: FAIL (`shortcuts.tournament.bothWin` is `undefined`).
 
-- [ ] **Step 3: Add the two tournament shortcut defaults**
+- [x] **Step 3: Add the two tournament shortcut defaults**
 
 In `media-viewer.js`, in the `DEFAULT_SHORTCUTS.tournament` block, add two entries after `rightDislike: 'KeyR',` (L29):
 
@@ -348,7 +350,7 @@ In `media-viewer.js`, in the `DEFAULT_SHORTCUTS.tournament` block, add two entri
 
 (Resulting tournament keys: Q, W, E, R, D, F, Ctrl+A, Digit1, Digit2 — all unique.)
 
-- [ ] **Step 4: Add the action labels**
+- [x] **Step 4: Add the action labels**
 
 In `ACTION_LABELS` (~L36), add two entries after `bothBad: 'Both media bad',` (L49):
 
@@ -357,7 +359,7 @@ In `ACTION_LABELS` (~L36), add two entries after `bothBad: 'Both media bad',` (L
     bothLose: 'Both lose (tie down)',
 ```
 
-- [ ] **Step 5: Wire dispatch in `executeAction`**
+- [x] **Step 5: Wire dispatch in `executeAction`**
 
 In `executeAction()`, add two entries to the `actions` map after `bothBad: () => this.handleBothBad(),` (L8443):
 
@@ -368,7 +370,7 @@ In `executeAction()`, add two entries to the `actions` map after `bothBad: () =>
 
 (Dispatch is per-mode via `this.shortcutReverseMap[mode][keyStr]`, so `D` resolves to `bothGood`→`handleBothGood` in compare and `bothWin`→`handleTournamentDraw('win')` in tournament — no collision.)
 
-- [ ] **Step 6: Add the `handleTournamentDraw` method**
+- [x] **Step 6: Add the `handleTournamentDraw` method**
 
 In `media-viewer.js`, insert immediately after `handleTournamentPick` (after its closing `}` at ~L4207, before `handleTournamentUndo` at ~L4209):
 
@@ -389,12 +391,12 @@ In `media-viewer.js`, insert immediately after `handleTournamentPick` (after its
     }
 ```
 
-- [ ] **Step 7: Run the tests + lint**
+- [x] **Step 7: Run the tests + lint**
 
 Run: `npx vitest run tests/keyboard-shortcuts.test.js && npm run lint`
 Expected: PASS (new shortcut tests green; lint clean — `handleTournamentDraw` has no unused vars).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add media-viewer.js tests/keyboard-shortcuts.test.js
@@ -412,7 +414,7 @@ git commit -m "feat(tournament): bothWin/bothLose shortcuts + handleTournamentDr
 
 No unit test (DOM wiring + an overlay-only method, consistent with the untested `handleTournamentPick`/`handleTournamentUndo`); verified by lint, the full suite, and manual smoke. Engine/manager behavior is already covered by Tasks 1-3.
 
-- [ ] **Step 1: Add the two buttons in `index.html`**
+- [x] **Step 1: Add the two buttons in `index.html`**
 
 Inside `#tournamentControls`, immediately after the `#tournamentUndoBtn` button's closing `</button>` (L259) and before the `</div>` that closes `#tournamentControls` (L260), insert:
 
@@ -429,7 +431,7 @@ Inside `#tournamentControls`, immediately after the `#tournamentUndoBtn` button'
 
 (Label spans MUST be `<span class="btn-label">` — the rule `.tournament-controls .control-btn .btn-label { color: #fff; }` targets `.btn-label`; a plain `<span>` renders unreadably dark.)
 
-- [ ] **Step 2: Attach click listeners**
+- [x] **Step 2: Attach click listeners**
 
 In `media-viewer.js`, immediately after the existing `tournamentUndoBtn` listener block (which ends with its closing `}` at ~L1845), add:
 
@@ -444,12 +446,12 @@ In `media-viewer.js`, immediately after the existing `tournamentUndoBtn` listene
         }
 ```
 
-- [ ] **Step 3: Lint + full unit suite**
+- [x] **Step 3: Lint + full unit suite**
 
 Run: `npm run lint && npm test`
 Expected: PASS (lint clean; all unit tests green — total rises by the 11 tests added in Tasks 1-4, i.e. 264 → 275).
 
-- [ ] **Step 4: Manual smoke test**
+- [x] **Step 4: Manual smoke test**
 
 Run: `npm start`. Load a folder with ≥4 media, switch to **Tournament** mode (`#modeBtnTournament`), start a tournament. Verify:
 - **Both Win** and **Both Lose** buttons appear in the tournament overlay controls (white labels, readable) next to Undo.
@@ -458,7 +460,7 @@ Run: `npm start`. Load a folder with ≥4 media, switch to **Tournament** mode (
 - Pressing `D` / `F` triggers Both Win / Both Lose; `Ctrl+A` (Undo) reverses the last draw and re-shows the same pair.
 - Buttons are absent in single and compare modes (overlay hidden).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add index.html media-viewer.js styles.css

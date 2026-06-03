@@ -25,7 +25,7 @@ _(No ongoing background tasks this week.)_
 - [x] **"Both good / Both bad" corrective-training buttons in AI-sorted compare** — 5 SP, 🟠 IMPORTANT — ✅ **shipped 2026-06-02** (branch `feature/re-rate-mode-correction`; see [DONE.md](DONE.md)). Deviations: suppression dropped (regular-post treatment), shortcuts KeyD/KeyF, buttons in `#compareActionBar`. Manual-testing fixes in `b32b718`.
   - Per [BACKLOG.md:60](BACKLOG.md#L60) (2026-05-30). Two buttons grouped with `#cancelBtnCompare`; visible only when `isSortedByPrediction === true && isCompareMode === true`. Each click calls `updateMlModelAfterRating(file, ±1)` for **both** files at full strength; files **stay in the source folder** (no move). Persisted to per-folder `.bulk_rated.json` via new `readBulkRatedFile`/`writeBulkRatedFile` IPC; pair-selection soft-suppresses bulk-rated pairs with fall-through; undo (Ctrl+A) reverses both updates and removes both from `bulkRatedSet`; shortcuts `bothGood: 'KeyS'`, `bothBad: 'KeyD'`; integrated into `trainFromHistoricalRatingsAndWait()` so corrections survive model reset.
   - Affected: [media-viewer.js](../../media-viewer.js), [index.html](../../index.html), [styles.css](../../styles.css), [main.js](../../main.js) + [preload.js](../../preload.js) (IPC), [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js), [tests/e2e/compare-mode.test.js](../../tests/e2e/compare-mode.test.js).
-- [ ] **Re-rate / override a pick in tournament mode** — 3 SP, 🟠 IMPORTANT (new design beyond BACKLOG)
+- [x] **Re-rate / mark-as-equal in tournament mode** — 3 SP, 🟠 IMPORTANT — ✅ **shipped 2026-06-03** (branch `feature/tournament-re-rate`; see [DONE.md](DONE.md)). Design decision: **mark-as-equal** (not re-pick — undo already re-shows the last pair). Two draw buttons **Both Win** (both +1) / **Both Lose** (both +0) via `SwissStrategy.recordDraw` + `TournamentEngine.recordDraw` (reuses existing `undo()` + `strategyStateSnapshot`, zero new undo code); shortcuts `bothWin: 'KeyD'` / `bothLose: 'KeyF'`. No ML, no new IPC, no persistence-format change. 264→275 unit tests.
   - Tournament picks only affect tier assignment (files move to `_Tier-N` at Apply), so "wrongly rated by mode" means a pick that mis-tiered a file. Add an affordance to redo/override the current or a recent pick (extends the existing "Undo last pick"); short design pass required since the BACKLOG entry explicitly scoped the correction buttons to compare-only. Decide: re-pick last pair vs. mark-as-equal (both advance / neither). Reuse the engine's existing `undo()` + `strategyStateSnapshot` machinery where possible.
   - Affected: [tournament.js](../../tournament.js) (TournamentManager + engine interaction), [tournament-engine.js](../../tournament-engine.js) (override/re-pick path), [media-viewer.js](../../media-viewer.js) (tournament overlay control), [index.html](../../index.html)/[styles.css](../../styles.css) (button), [tests/tournament-manager.test.js](../../tests/tournament-manager.test.js).
 
@@ -97,7 +97,7 @@ _(No ongoing background tasks this week.)_
 | **Group 0: Re-rate / mode-correction** (part 2 — tournament) | 2 |
 | **Group A: JXL viewer support** (part 1 — audit + WASM eval) | 4 |
 
-- [ ] Tournament re-rate / override a pick (2 SP) — Group 0 completes
+- [x] Tournament re-rate / mark-as-equal (2 SP) — Group 0 completes — ✅ shipped 2026-06-03
 - [ ] JXL: format audit of `media_compression` + WASM libjxl evaluation + extension-filter wiring (4 SP)
 
 **Daily total**: 6 SP
