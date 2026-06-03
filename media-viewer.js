@@ -1847,6 +1847,14 @@ class MediaViewer {
         if (tournamentUndoBtn) {
             tournamentUndoBtn.addEventListener('click', () => this.handleTournamentUndo());
         }
+        const tournamentBothWinBtn = document.getElementById('tournamentBothWinBtn');
+        if (tournamentBothWinBtn) {
+            tournamentBothWinBtn.addEventListener('click', () => this.handleTournamentDraw('win'));
+        }
+        const tournamentBothLoseBtn = document.getElementById('tournamentBothLoseBtn');
+        if (tournamentBothLoseBtn) {
+            tournamentBothLoseBtn.addEventListener('click', () => this.handleTournamentDraw('lose'));
+        }
 
         // Compare-mode floating Undo button
         this.compareUndoBtn = document.getElementById('compareUndoBtn');
