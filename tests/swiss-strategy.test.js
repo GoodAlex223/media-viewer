@@ -324,8 +324,8 @@ describe('SwissStrategy.recordDraw', () => {
         const s = new SwissStrategy();
         s.init(['a.jpg', 'b.jpg'], { rounds: 1 });
         const [a, b] = s.getNextPair();
-        expect(() => s.recordDraw(a, a, 'win')).toThrow();
-        expect(() => s.recordDraw('not-in-pair.jpg', b, 'win')).toThrow();
+        expect(() => s.recordDraw(a, a, 'win')).toThrow('Invalid draw');
+        expect(() => s.recordDraw('not-in-pair.jpg', b, 'win')).toThrow('Invalid draw');
     });
 
     it('throws when there is no active pair', () => {
