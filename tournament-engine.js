@@ -307,6 +307,25 @@ export class TournamentEngine {
         });
     }
 
+    recordDraw(a, b, outcome) {
+        const snapshot = this.strategy.serialize();
+        const progressBefore = this.strategy.getProgress();
+        this.strategy.recordDraw(a, b, outcome);
+        this.history.push({
+            draw: true,
+            outcome,
+            a,
+            b,
+            round: progressBefore.round,
+            gameIndex: progressBefore.gamesPlayed,
+            timestamp: Date.now(),
+            strategyStateSnapshot: snapshot,
+            // Mirror recordResult: capture engine.files so undo() can rewind a removeFile()
+            // that happened between picks.
+            filesSnapshot: [...this.files],
+        });
+    }
+
     undo() {
         if (this.history.length === 0) return;
         const entry = this.history.pop();
