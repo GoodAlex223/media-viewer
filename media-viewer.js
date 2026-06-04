@@ -27,6 +27,8 @@ const DEFAULT_SHORTCUTS = {
         leftDislike: 'KeyW',
         rightLike: 'KeyE',
         rightDislike: 'KeyR',
+        bothWin: 'KeyD',
+        bothLose: 'KeyF',
         undo: 'Ctrl+KeyA',
         leftSpecial: 'Digit1',
         rightSpecial: 'Digit2',
@@ -47,6 +49,8 @@ const ACTION_LABELS = {
     rightSpecial: 'Right to special folder',
     bothGood: 'Both media good',
     bothBad: 'Both media bad',
+    bothWin: 'Both win (tie up)',
+    bothLose: 'Both lose (tie down)',
 };
 
 // MinHeap (Priority Queue) for efficient MST construction
@@ -1842,6 +1846,14 @@ class MediaViewer {
         const tournamentUndoBtn = document.getElementById('tournamentUndoBtn');
         if (tournamentUndoBtn) {
             tournamentUndoBtn.addEventListener('click', () => this.handleTournamentUndo());
+        }
+        const tournamentBothWinBtn = document.getElementById('tournamentBothWinBtn');
+        if (tournamentBothWinBtn) {
+            tournamentBothWinBtn.addEventListener('click', () => this.handleTournamentDraw('win'));
+        }
+        const tournamentBothLoseBtn = document.getElementById('tournamentBothLoseBtn');
+        if (tournamentBothLoseBtn) {
+            tournamentBothLoseBtn.addEventListener('click', () => this.handleTournamentDraw('lose'));
         }
 
         // Compare-mode floating Undo button
@@ -4203,6 +4215,21 @@ class MediaViewer {
         if (!this.isTournamentMode) return;
         this.signalUserActivity();
         await this.tournament.handlePairResult(winner, loser);
+        await this.showTournamentPair();
+    }
+
+    async handleTournamentDraw(outcome) {
+        if (!this.isTournamentMode || !this.tournament.engine) return;
+        this.signalUserActivity();
+        const pair = this.tournament.engine.getCurrentPair();
+        if (!pair) return;
+        await this.tournament.handlePairDraw(pair.left, pair.right, outcome);
+        if (this.showRatingConfirmations) {
+            this.showNotification(
+                outcome === 'win' ? '🤝 Both advance (tie)' : '👎 Both stay (tie)',
+                outcome === 'win' ? 'success' : 'info'
+            );
+        }
         await this.showTournamentPair();
     }
 
@@ -8441,6 +8468,8 @@ class MediaViewer {
             rightDislike: () => this.handleRightDislike(),
             bothGood: () => this.handleBothGood(),
             bothBad: () => this.handleBothBad(),
+            bothWin: () => this.handleTournamentDraw('win'),
+            bothLose: () => this.handleTournamentDraw('lose'),
             leftSpecial: () => {
                 if (this.isTournamentMode) this.handleTournamentSpecial('left');
             },

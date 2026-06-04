@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-06-02 (PR #40 merged — bulk-rate compare; +4 sub-threshold review follow-ups)
+**Last Updated**: 2026-06-03 (Group 0 part 2 tournament re-rate shipped; +2 🔵 user-flagged + 3 🟤 follow-ups)
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -52,6 +52,13 @@ prompt had no source concept).
 ---
 
 ## 🔵 User-Flagged Ideas
+
+### [2026-06-03] Group 0 part 2 (tournament re-rate) manual-testing intake
+
+**Origin**: Manual smoke test of the shipped tournament "Both Win / Both Lose" mark-as-equal feature (branch `feature/tournament-re-rate`). Feature works; user surfaced two adjacent tournament-mode UX gaps.
+
+- [ ] **Explicit pause/exit button in tournament mode** — Add a visible control in the tournament overlay (`#tournamentControls`, next to Undo / Both Win / Both Lose) that lets the user leave tournament mode in one click, instead of relying on Escape or the mode-selector. Today the only exits are the `Escape` key and clicking another `#modeSelector` button — both route through `switchMode('single')` → the Save/Discard/Cancel leave prompt (`showTournamentLeavePrompt`), so the underlying machinery already exists; this is purely an affordance: a labelled button (e.g. "Exit" / pause icon) wired to the same `switchMode('single')` path. Note the original tournament pause button was removed in `c6914ef` in favor of Escape + mode-selector — this re-adds a discoverable affordance. Effort: XS-S. Affected: [index.html](../../index.html) (`#tournamentControls` button), [media-viewer.js](../../media-viewer.js) (click → `switchMode('single')`), [styles.css](../../styles.css).
+- [ ] **Confirm before app close when a tournament is in progress (Alt+F4 / window "X")** — When an incomplete tournament is active (`isTournamentMode` + in-progress `engine`), closing the app window should prompt the user (Save / Discard / Cancel) before quitting, mirroring the in-app Escape/mode-switch leave prompt — otherwise an accidental Alt+F4 or window-close silently abandons the session (state is persisted to `.tournament_state.json` so it's resumable, but the user gets no chance to Apply results). Implementation: intercept `BrowserWindow` `'close'` event in [main.js](../../main.js) with `event.preventDefault()` + an IPC round-trip to the renderer asking whether a tournament is active and what the user chose (or surface a native `dialog.showMessageBox`). Needs care: the existing in-app leave prompt is renderer-side DOM; the window-close path is main-process and fires outside the renderer's control. Consider generalizing to any unsaved-state guard later. Effort: S-M. Affected: [main.js](../../main.js) (window `close` handler + IPC), [preload.js](../../preload.js) (IPC channel), [media-viewer.js](../../media-viewer.js) (respond with tournament-active state / reuse `showTournamentLeavePrompt`).
 
 ### [2026-06-02] Group 0 part 1 manual-testing intake
 
@@ -163,6 +170,14 @@ two tasks because they have different shapes (architectural vs. visual).
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-06-03] Group 0 part 2 (tournament re-rate) follow-ups (3 items)
+
+**Origin**: Subagent-driven implementation + two-stage reviews + final whole-feature review of the tournament "Both Win / Both Lose" mark-as-equal feature (branch `feature/tournament-re-rate`, commits `351892c`…`74752b1`). Final review verdict was "Ready to merge — Yes, no critical/important issues"; these are the surfaced low-severity follow-ups.
+
+- [ ] **No E2E coverage for tournament mode (incl. the new draw buttons)** — Tournament mode has zero Playwright coverage; this feature followed that precedent (engine/manager unit tests + manual smoke only). A tournament E2E would exercise: enter tournament → Both Win advances + tiers move up → Both Lose advances + tiers unchanged → Ctrl+A undo restores the pair → buttons absent in single/compare. Blocked on the broader "tournament E2E backfill" already implied since the v1 prototype. Effort: M. Affected: new `tests/e2e/tournament.test.js`, e2e helpers.
+- [ ] **Strengthen `TournamentEngine.recordDraw` history-shape test** (~minor, from Task 2 review) — The "pushes a draw history entry" test asserts `strategyStateSnapshot` is truthy but does not assert `filesSnapshot` is present, and the 'lose'-then-undo test checks only `pair.left`'s win-count (not `pair.right`) after undo. Behavioral coverage exists indirectly (the undo test exercises `filesSnapshot`), but the shape assertion is incomplete. Fix: add `expect(eng.history[0].filesSnapshot).toBeTruthy()` and a `pair.right` win-count assertion. Effort: XS. Affected: [tests/tournament-engine.test.js](../../tests/tournament-engine.test.js).
+- [ ] **`handleTournamentUndo` two-stack interleaving: special-move shadows a later draw/pick** (~minor, pre-existing, from final review) — `handleTournamentUndo` reads the last `moveHistory` entry to detect a special-folder move, but draws and picks record only in `engine.history` (not `moveHistory`). So the sequence special-move → draw → Undo undoes the *special move* (top of `moveHistory`) rather than the draw (top of `engine.history`), because the two undo stacks are consulted independently. This is a pre-existing characteristic of the special-move-vs-engine-history design (it already affects special→pick), NOT introduced by the draw feature, and is rare in practice. A proper fix would unify ordering across the two stacks (e.g., a single timestamped action log). Effort: M (design). Affected: [media-viewer.js](../../media-viewer.js) `handleTournamentUndo`, [tournament-engine.js](../../tournament-engine.js). [possible-dup-of: any existing tournament-undo-ordering note]
 
 ### [2026-06-02] PR #40 post-merge review follow-ups (4 sub-threshold items)
 

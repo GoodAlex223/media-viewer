@@ -52,6 +52,7 @@ Central index for all project documentation.
 | [PR #33 Hygiene + Integration Tests Plan][] | Three defensive CLIP toggle/sort fixes + 3-test integration suite catching call-graph wiring bugs |
 | [Planning Restructure Plan][]                | BACKLOG.md source-split (🔵 user / 🟡 ops / 🟤 auto) + pinned 📌 Process Rules + Vitest structural test + CLAUDE.md intake rules |
 | [Re-rate Compare Correction Plan][]          | "Both good / Both bad" corrective-training buttons in AI-sorted compare + per-folder `.bulk_rated.json` (Group 0 part 1) |
+| [Tournament Re-rate Plan][]                  | "Both Win / Both Lose" mark-as-equal draw buttons in tournament mode via `recordDraw` (reuses engine undo) (Group 0 part 2) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -70,6 +71,7 @@ Central index for all project documentation.
 [Tournament Mode Plan]: archive/plans/2026-05-25-tournament-mode.md
 [Planning Restructure Plan]: archive/plans/2026-05-30-planning-restructure.md
 [Re-rate Compare Correction Plan]: archive/plans/2026-05-31-rerate-compare-correction.md
+[Tournament Re-rate Plan]: archive/plans/2026-06-03-tournament-rerate-correction.md
 
 ## Design Specs
 
@@ -96,6 +98,7 @@ Central index for all project documentation.
 | [Planning Restructure][]           | BACKLOG.md source-split design (🔵 / 🟡 / 🟤) + pinned 📌 Process Rules + weekly quota enforcement |
 | [Planning Restructure Classification][] | Pass-1 classification artifact (user-audited): one row per existing BACKLOG section mapped to 🔵 / 🟡 / 🟤 |
 | [Re-rate Compare Correction][] | "Both good / Both bad" corrective-training buttons in AI-sorted compare + per-folder `.bulk_rated.json` persistence (Group 0 part 1) |
+| [Tournament Re-rate][] | "Both Win / Both Lose" mark-as-equal draw outcomes in tournament mode via `recordDraw` (reuses engine undo); no ML, no new IPC (Group 0 part 2) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -118,6 +121,7 @@ Central index for all project documentation.
 [AI Prediction Display Bugs]: superpowers/specs/2026-05-14-ai-prediction-display-bugs-design.md
 [Planning Restructure]: superpowers/specs/2026-05-30-planning-restructure-design.md
 [Planning Restructure Classification]: superpowers/specs/2026-05-30-planning-restructure-classification.md
+[Tournament Re-rate]: superpowers/specs/2026-06-03-tournament-rerate-correction-design.md
 [Re-rate Compare Correction]: superpowers/specs/2026-05-31-rerate-compare-correction-design.md
 
 ## Archives

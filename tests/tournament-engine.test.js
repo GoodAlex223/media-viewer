@@ -198,3 +198,48 @@ describe('TournamentEngine serialize/deserialize', () => {
         expect(() => JSON.parse(text)).not.toThrow();
     });
 });
+
+describe('TournamentEngine.recordDraw', () => {
+    it('pushes a draw history entry with outcome and a snapshot', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg'], new SwissStrategy(), { rounds: 1 });
+        const pair = eng.getCurrentPair();
+        eng.recordDraw(pair.left, pair.right, 'win');
+
+        expect(eng.history.length).toBe(1);
+        expect(eng.history[0].draw).toBe(true);
+        expect(eng.history[0].outcome).toBe('win');
+        expect(eng.history[0].a).toBe(pair.left);
+        expect(eng.history[0].b).toBe(pair.right);
+        expect(eng.history[0].strategyStateSnapshot).toBeTruthy();
+        expect(eng.strategy.winCounts.get(pair.left)).toBe(1);
+        expect(eng.strategy.winCounts.get(pair.right)).toBe(1);
+    });
+
+    it('undo() after a draw restores win counts and the round queue', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+        const pair = eng.getCurrentPair();
+        eng.recordDraw(pair.left, pair.right, 'win');
+        expect(eng.strategy.winCounts.get(pair.left)).toBe(1);
+        expect(eng.strategy.gamesPlayed).toBe(1);
+
+        eng.undo();
+
+        expect(eng.history.length).toBe(0);
+        expect(eng.strategy.winCounts.get(pair.left)).toBe(0);
+        expect(eng.strategy.winCounts.get(pair.right)).toBe(0);
+        expect(eng.strategy.gamesPlayed).toBe(0);
+        // the same pair is current again
+        const again = eng.getCurrentPair();
+        expect([again.left, again.right].sort()).toEqual([pair.left, pair.right].sort());
+    });
+
+    it("'lose' draw then undo leaves all win counts at zero throughout", () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg'], new SwissStrategy(), { rounds: 1 });
+        const pair = eng.getCurrentPair();
+        eng.recordDraw(pair.left, pair.right, 'lose');
+        expect(eng.strategy.winCounts.get(pair.left)).toBe(0);
+        eng.undo();
+        expect(eng.strategy.winCounts.get(pair.left)).toBe(0);
+        expect(eng.history.length).toBe(0);
+    });
+});

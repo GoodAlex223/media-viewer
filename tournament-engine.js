@@ -168,6 +168,25 @@ export class SwissStrategy {
         this.gamesPlayed++;
     }
 
+    recordDraw(a, b, outcome) {
+        if (this.roundQueue.length === 0) {
+            throw new Error('No active pair to record');
+        }
+        const [x, y] = this.roundQueue[0];
+        const validPair = (a === x && b === y) || (a === y && b === x);
+        if (!validPair) {
+            throw new Error(`Invalid draw: expected the current pair [${x}, ${y}], got [${a}, ${b}]`);
+        }
+        this.roundQueue.shift();
+        if (outcome === 'win') {
+            this.winCounts.set(a, (this.winCounts.get(a) ?? 0) + 1);
+            this.winCounts.set(b, (this.winCounts.get(b) ?? 0) + 1);
+        }
+        // outcome === 'lose' → neither file gains a win
+        this.playedPairs.add(this._pairKey(x, y));
+        this.gamesPlayed++;
+    }
+
     removeFile(file) {
         if (!this.files.includes(file)) return;
 
@@ -284,6 +303,25 @@ export class TournamentEngine {
             // Engine-level files list is captured separately from strategyStateSnapshot so
             // undo() can rewind a removeFile() that happened between picks (getTierBreakdown
             // and handleApply read engine.files, not strategy.files).
+            filesSnapshot: [...this.files],
+        });
+    }
+
+    recordDraw(a, b, outcome) {
+        const snapshot = this.strategy.serialize();
+        const progressBefore = this.strategy.getProgress();
+        this.strategy.recordDraw(a, b, outcome);
+        this.history.push({
+            draw: true,
+            outcome,
+            a,
+            b,
+            round: progressBefore.round,
+            gameIndex: progressBefore.gamesPlayed,
+            timestamp: Date.now(),
+            strategyStateSnapshot: snapshot,
+            // Mirror recordResult: capture engine.files so undo() can rewind a removeFile()
+            // that happened between picks.
             filesSnapshot: [...this.files],
         });
     }

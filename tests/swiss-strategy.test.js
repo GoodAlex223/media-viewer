@@ -288,3 +288,51 @@ describe('SwissStrategy serialize/deserialize', () => {
         expect(s2.files).toEqual(s.files);
     });
 });
+
+describe('SwissStrategy.recordDraw', () => {
+    it("'win' gives both files +1 win and consumes the pair", () => {
+        const s = new SwissStrategy();
+        s.init(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], { rounds: 3 });
+        const [a, b] = s.getNextPair();
+
+        s.recordDraw(a, b, 'win');
+
+        expect(s.winCounts.get(a)).toBe(1);
+        expect(s.winCounts.get(b)).toBe(1);
+        expect(s.gamesPlayed).toBe(1);
+        expect(s.playedPairs.has(s._pairKey(a, b))).toBe(true);
+        // pair consumed → next pair excludes a and b
+        const [c, d] = s.getNextPair();
+        expect([a, b]).not.toContain(c);
+        expect([a, b]).not.toContain(d);
+    });
+
+    it("'lose' changes no win counts but still consumes the pair", () => {
+        const s = new SwissStrategy();
+        s.init(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], { rounds: 3 });
+        const [a, b] = s.getNextPair();
+
+        s.recordDraw(a, b, 'lose');
+
+        expect(s.winCounts.get(a)).toBe(0);
+        expect(s.winCounts.get(b)).toBe(0);
+        expect(s.gamesPlayed).toBe(1);
+        expect(s.playedPairs.has(s._pairKey(a, b))).toBe(true);
+    });
+
+    it('throws when the pair is not the current pair', () => {
+        const s = new SwissStrategy();
+        s.init(['a.jpg', 'b.jpg'], { rounds: 1 });
+        const [a, b] = s.getNextPair();
+        expect(() => s.recordDraw(a, a, 'win')).toThrow('Invalid draw');
+        expect(() => s.recordDraw('not-in-pair.jpg', b, 'win')).toThrow('Invalid draw');
+    });
+
+    it('throws when there is no active pair', () => {
+        const s = new SwissStrategy();
+        s.init(['a.jpg', 'b.jpg'], { rounds: 1 });
+        s.recordResult(...s.getNextPair());
+        // round 1 exhausted, rounds=1 → no next pair
+        expect(() => s.recordDraw('a.jpg', 'b.jpg', 'win')).toThrow('No active pair to record');
+    });
+});

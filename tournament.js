@@ -36,6 +36,13 @@ export class TournamentManager {
         return true;
     }
 
+    async handlePairDraw(a, b, outcome) {
+        if (!this.engine) return false;
+        this.engine.recordDraw(a, b, outcome);
+        await this._persistState(this.host.baseFolderPath);
+        return true;
+    }
+
     async handleApply() {
         if (!this.engine || !this.engine.isComplete()) {
             return { success: false, error: 'Tournament not complete' };

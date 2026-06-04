@@ -165,6 +165,31 @@ describe('TournamentManager.handleResumeReconciled', () => {
     });
 });
 
+describe('TournamentManager.handlePairDraw', () => {
+    it('records the draw and persists state', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 1);
+
+        const pair = tm.engine.getCurrentPair();
+        const ok = await tm.handlePairDraw(pair.left, pair.right, 'win');
+
+        expect(ok).toBe(true);
+        expect(tm.engine.history.length).toBe(1);
+        expect(tm.engine.history[0].draw).toBe(true);
+        expect(tm.engine.history[0].outcome).toBe('win');
+        // once on start, once on the draw
+        expect(globalThis.window.electronAPI.writeTournamentState).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns false when there is no engine', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg']);
+        const tm = new TournamentManager(host);
+        const ok = await tm.handlePairDraw('a.jpg', 'b.jpg', 'lose');
+        expect(ok).toBe(false);
+    });
+});
+
 describe('TournamentManager progress + breakdown text', () => {
     it('formats progress as "Round X of Y · Game N/M"', async () => {
         const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);

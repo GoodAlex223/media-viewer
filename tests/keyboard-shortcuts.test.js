@@ -70,6 +70,18 @@ describe('DEFAULT_SHORTCUTS', () => {
         const keys = Object.values(shortcuts.compare);
         expect(new Set(keys).size).toBe(keys.length);
     });
+
+    it('tournament mode includes bothWin=D and bothLose=F', () => {
+        const shortcuts = extractDefaultShortcuts();
+        expect(shortcuts.tournament.bothWin).toBe('KeyD');
+        expect(shortcuts.tournament.bothLose).toBe('KeyF');
+    });
+
+    it('tournament mode has no duplicate key bindings', () => {
+        const shortcuts = extractDefaultShortcuts();
+        const keys = Object.values(shortcuts.tournament);
+        expect(new Set(keys).size).toBe(keys.length);
+    });
 });
 
 describe('loadShortcuts', () => {

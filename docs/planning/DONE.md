@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-02 <!-- Group 0 part 1: re-rate / mode-correction (compare) -->
+**Last Updated**: 2026-06-03 <!-- Group 0 part 2: re-rate / mark-as-equal (tournament) -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,60 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-03 — Group 0 part 2: Re-rate / mark-as-equal (tournament)
+
+**Summary**: Added **Both Win / Both Lose** draw buttons to tournament mode — the
+tournament sibling of part 1's compare-mode "Both good / Both bad". Instead of being
+forced to pick a winner, the user can declare a Swiss matchup a draw: **Both Win** gives
+both files +1 win (advance together, same higher tier); **Both Lose** gives neither a win
+(both stay). Operates on the Swiss bracket only — **no ML model, no new IPC, no
+persistence-format change**. A draw consumes the current pair exactly like a pick (shifts
+the round queue, marks `playedPairs`, bumps `gamesPlayed`), and is recorded through the
+**same `history` + `strategyStateSnapshot` machinery** picks use, so the existing `undo()`
+reverses a draw with zero new undo code. Design decision (re-pick vs. mark-as-equal):
+mark-as-equal — undo already restores the last pair for re-picking, so re-pick added no
+new capability. Built via the superpowers brainstorm → spec → plan →
+subagent-driven-development pipeline. Plan archived at
+[docs/archive/plans/2026-06-03-tournament-rerate-correction.md](../archive/plans/2026-06-03-tournament-rerate-correction.md);
+design spec at
+[docs/superpowers/specs/2026-06-03-tournament-rerate-correction-design.md](../superpowers/specs/2026-06-03-tournament-rerate-correction-design.md).
+
+**Branch**: `feature/tournament-re-rate` (`351892c`, `523fcd7`, `9d002f9`, `c98695f`,
+`e21d00b`, `74752b1`).
+
+**Implementation** (5 TDD tasks) — [tournament-engine.js](../../tournament-engine.js),
+[tournament.js](../../tournament.js), [media-viewer.js](../../media-viewer.js),
+[index.html](../../index.html):
+- `SwissStrategy.recordDraw(a, b, outcome)` — `'win'` → +1 both, `'lose'` → +0 both; guards
+  on empty queue + non-current pair; shifts queue, marks `playedPairs`, bumps `gamesPlayed`.
+- `TournamentEngine.recordDraw(a, b, outcome)` — pre-mutation snapshot + history entry
+  `{ draw:true, outcome, a, b, round, gameIndex, timestamp, strategyStateSnapshot,
+  filesSnapshot }`; `undo()` unchanged (reverses draws for free).
+- `TournamentManager.handlePairDraw(a, b, outcome)` — record + `_persistState`; false when no
+  engine.
+- `handleTournamentDraw(outcome)` renderer method (guard → `signalUserActivity` → current pair
+  → `handlePairDraw` → toast → `showTournamentPair`); undo routes through the existing
+  engine-undo branch (draws live in `engine.history`, not `moveHistory`).
+- Shortcuts `DEFAULT_SHORTCUTS.tournament` += `bothWin:'KeyD'` / `bothLose:'KeyF'`;
+  `ACTION_LABELS` + `executeAction` wiring (action-name isolation: D/F resolve per-mode);
+  `#tournamentBothWinBtn` (chevrons-up) / `#tournamentBothLoseBtn` (chevrons-down) in
+  `#tournamentControls` + click listeners. No `styles.css` change (existing
+  `.tournament-controls` flex+gap covers layout).
+
+**Tests**: 275/275 unit tests pass (264→275: +4 `SwissStrategy.recordDraw`,
++3 `TournamentEngine.recordDraw`, +2 `TournamentManager.handlePairDraw`,
++2 keyboard-shortcuts). Lint clean (1 pre-existing unrelated warning). Final whole-feature
+review: "Ready to merge — Yes, no critical/important issues". E2E: skipped (tournament mode
+has no Playwright coverage yet — backfill tracked in BACKLOG 🟤 2026-06-03); manual smoke
+test passed (buttons visible/readable, D/F + Ctrl+A undo verified).
+
+**Follow-ups spawned** (BACKLOG 2026-06-03): 🔵 explicit pause/exit button in tournament
+mode; 🔵 confirm-before-app-close when a tournament is in progress (Alt+F4 / window X);
+🟤 tournament E2E backfill; 🟤 strengthen `recordDraw` history-shape test; 🟤
+`handleTournamentUndo` two-stack interleaving (pre-existing).
+
+---
 
 ### 2026-06-02 — Group 0 part 1: Re-rate / mode-correction (compare)
 
