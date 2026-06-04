@@ -5,6 +5,7 @@ const fsSync = require('fs'); // createReadStream/createWriteStream for streamin
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const logger = require('./logger');
+const { isMediaFile, getMimeType } = require('./media-formats');
 
 // Streaming JSON reader for the feature cache (parse a 250MB+ file with a tiny memory
 // footprint instead of fs.readFile + JSON.parse, which peaks past ~1GB and kills the process).
@@ -116,26 +117,6 @@ function createWindow() {
             mainWindow.webContents.toggleDevTools();
         }
     });
-}
-
-// Helper functions
-function isMediaFile(extension) {
-    const mediaExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm', '.mov'];
-    return mediaExtensions.includes(extension);
-}
-
-function getMimeType(extension) {
-    const mimeTypes = {
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-        '.mp4': 'video/mp4',
-        '.webm': 'video/webm',
-        '.mov': 'video/quicktime',
-    };
-    return mimeTypes[extension] || 'application/octet-stream';
 }
 
 // App lifecycle
