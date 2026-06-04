@@ -380,6 +380,31 @@ app.whenReady().then(() => {
         }
     });
 
+    // Read any file as raw bytes (no encoding) and return an ArrayBuffer. Used by the JXL
+    // decode pipeline, which needs the original compressed bytes rather than a UTF-8 string.
+    ipcMain.handle('read-file-buffer', async (_event, filePath) => {
+        try {
+            const data = await fs.readFile(filePath); // Buffer (no encoding)
+            // Slice out exactly this Buffer's view — Node Buffers can be windows into a larger
+            // pooled ArrayBuffer, so returning data.buffer directly would leak unrelated bytes.
+            return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+        } catch (_error) {
+            return null;
+        }
+    });
+
+    // Read the vendored jxl-oxide decoder wasm and return its bytes as an ArrayBuffer. Passing
+    // explicit wasm bytes to the decode worker avoids fetch(file://) resolution issues.
+    ipcMain.handle('read-jxl-wasm', async () => {
+        try {
+            const wasmPath = path.join(__dirname, 'vendor', 'jxl-oxide-wasm', 'jxl_oxide_wasm_bg.wasm');
+            const data = await fs.readFile(wasmPath);
+            return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+        } catch (_error) {
+            return null;
+        }
+    });
+
     // ---- Streaming feature-cache reader ----
     // The .feature_cache.json can grow to hundreds of MB on large folders; transferring it as
     // one string + JSON.parse on EITHER process peaks past ~1GB and kills it. Instead we
