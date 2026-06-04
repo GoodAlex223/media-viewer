@@ -99,6 +99,7 @@ Central index for all project documentation.
 | [Planning Restructure Classification][] | Pass-1 classification artifact (user-audited): one row per existing BACKLOG section mapped to 🔵 / 🟡 / 🟤 |
 | [Re-rate Compare Correction][] | "Both good / Both bad" corrective-training buttons in AI-sorted compare + per-folder `.bulk_rated.json` persistence (Group 0 part 1) |
 | [Tournament Re-rate][] | "Both Win / Both Lose" mark-as-equal draw outcomes in tournament mode via `recordDraw` (reuses engine undo); no ML, no new IPC (Group 0 part 2) |
+| [JXL Viewer Support][] | JXL + animated-JXL viewing via `jxl-oxide-wasm` decode worker → Canvas; format audit + WASM eval + decode/render/feature-extraction design (Group A) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -123,6 +124,7 @@ Central index for all project documentation.
 [Planning Restructure Classification]: superpowers/specs/2026-05-30-planning-restructure-classification.md
 [Tournament Re-rate]: superpowers/specs/2026-06-03-tournament-rerate-correction-design.md
 [Re-rate Compare Correction]: superpowers/specs/2026-05-31-rerate-compare-correction-design.md
+[JXL Viewer Support]: superpowers/specs/2026-06-04-jxl-viewer-support-design.md
 
 ## Archives
 
