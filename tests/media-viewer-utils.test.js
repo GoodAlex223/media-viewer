@@ -715,6 +715,22 @@ describe('restoreFeatureCachesFromHistory', () => {
     });
 });
 
+describe('isJxl', () => {
+    const isJxl = extractMethod('isJxl');
+    it('matches .jxl including double/stacked extensions', () => {
+        expect(isJxl.call({}, 'a.jxl')).toBe(true);
+        expect(isJxl.call({}, 'photo.jpg.jxl')).toBe(true);
+        expect(isJxl.call({}, 'loop.gif.jxl')).toBe(true);
+        expect(isJxl.call({}, 'name.jpeg.jpg.jxl')).toBe(true);
+        expect(isJxl.call({}, 'C:\\x\\b.png.JXL')).toBe(true); // case-insensitive
+    });
+    it('does not match non-jxl paths', () => {
+        expect(isJxl.call({}, 'a.jpg')).toBe(false);
+        expect(isJxl.call({}, 'a.jxl.png')).toBe(false);
+        expect(isJxl.call({}, 'jxl')).toBe(false);
+    });
+});
+
 describe('handleMlWorkerMessage sortComplete', () => {
     const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
 

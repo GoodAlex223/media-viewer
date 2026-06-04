@@ -848,6 +848,10 @@ class MediaViewer {
         });
     }
 
+    isJxl(filePath) {
+        return /\.jxl$/i.test(filePath);
+    }
+
     // Convert Windows path to properly encoded file:// URL
     pathToFileURL(filePath) {
         // Replace backslashes with forward slashes
