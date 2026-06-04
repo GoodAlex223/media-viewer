@@ -217,3 +217,47 @@ cleared by `cleanupCurrentMedia()` / navigation so loops never leak across files
 - Animated-JXL play/pause UI (auto-loop only, GIF parity).
 - Preserving JXL ICC profiles / wide-gamut/HDR tone mapping (decode at sRGB 8-bit for v1;
   HDR tracked separately if it ever matters for this collection).
+
+---
+
+## 9. Spike outcome (2026-06-04, Task 1)
+
+Verified `jxl-oxide-wasm@0.12.6` against real `media_compression` output in Node.
+
+**Decode results** (all succeeded, no OOM):
+
+| File | Dims | Animated | Frames | Output |
+|---|---|---|---|---|
+| `*.png.jxl` (1.48 MB) | 1518×1455 | no | 1 | PNG 2.3 MB |
+| `*.jpg.jxl` (388 KB) | 3280×2500 | no | 1 | PNG 3.8 MB |
+| `*.gif.jxl` (**27.8 MB**) | 1280×720 | **yes** | **270** | 270 PNGs, ~77 MB total; per-frame `duration` 300–400 ms; `numLoops: 0` (loop forever) |
+
+**Confirmed API:** `init({ module_or_path })` (default export; accepts raw wasm bytes / URL /
+`WebAssembly.Module`; `initSync` also exists). `JxlImage`: `feedBytes`, `tryInit`, `render(idx?)`,
+getters `width`/`height`/`animated`/`loaded`/`numLoadedKeyframes`/`numLoops`, `forceSrgb` setter,
+`renderingRegion`. `RenderResult`: `encodeToPng()`, `duration`/`durationNumerator`/`durationDenominator`,
+`iccProfile`.
+
+**Decisions forced by the spike:**
+
+1. **No raw-RGBA accessor.** `RenderResult` yields pixels ONLY via `encodeToPng()`. The
+   PNG-blob → `createImageBitmap`/canvas path is therefore **mandatory** (not a fallback).
+   Risk #2 resolved: PNG round-trip everywhere.
+2. **`encodeToPng()` is terminal on a `RenderResult`.** Reading any getter (e.g. `.duration`)
+   or calling `.free()` **after** `encodeToPng()` throws "null pointer passed to rust".
+   → The worker MUST read `.duration` (and any other metadata) **before** calling
+   `encodeToPng()`, and call `encodeToPng()` exactly once, last, per result. Do not `free()`
+   the result afterward.
+3. **ESM-only package.** No UMD/CJS build → the decoder cannot load into the existing classic
+   workers. A **module worker** (`new Worker(url, { type: 'module' })`) is required (Risk #1
+   confirmed). The glue resolves wasm via `import.meta.url` (works under `file://`) but tries
+   `instantiateStreaming(fetch(...))` first — `fetch(file://)` fails in Electron, falling back
+   to `instantiate(bytes)` (works, with a warning). **Robust path: read the vendored `.wasm`
+   bytes and pass them explicitly via `init({ module_or_path: bytes })`** — the exact call that
+   worked in the spike — to avoid any `file://` fetch fragility.
+4. **Bundle:** `jxl_oxide_wasm_bg.wasm` = **1.62 MB**; vendored under `vendor/jxl-oxide-wasm/`
+   (MIT/Apache-2.0, license files included). Risk #3/#4 resolved.
+
+**Contingency:** if the module worker proves troublesome under Electron `file://` during
+integration (Task 5/6), fall back to **main-process decode via IPC** (CLIP already runs there) —
+the same `init({ module_or_path: bytes })` Node path is proven to work in the main process.

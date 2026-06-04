@@ -296,25 +296,45 @@ In `main.js`, immediately after the `read-file` handler (ends ~L400):
     });
 ```
 
-- [ ] **Step 2: Expose it in preload**
+- [ ] **Step 2: Add the vendored-wasm reader (for the decode worker's explicit-bytes init, spec §9)**
+
+In `main.js`, after the `read-file-buffer` handler (`__dirname` is the app root where `vendor/` lives):
+
+```js
+    const path = require('path'); // if not already required at top of main.js
+    ipcMain.handle('read-jxl-wasm', async () => {
+        try {
+            const wasmPath = path.join(__dirname, 'vendor', 'jxl-oxide-wasm', 'jxl_oxide_wasm_bg.wasm');
+            const data = await fs.readFile(wasmPath);
+            return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+        } catch (_error) {
+            return null;
+        }
+    });
+```
+
+(If `path` is already required at the top of `main.js`, do not re-require it — reuse the existing binding.)
+
+- [ ] **Step 3: Expose both in preload**
 
 In `preload.js`, next to `readFile` (line 12):
 
 ```js
     readFileBuffer: (filePath) => ipcRenderer.invoke('read-file-buffer', filePath),
+    readJxlWasm: () => ipcRenderer.invoke('read-jxl-wasm'),
 ```
 
-- [ ] **Step 3: Manual smoke (no unit test — IPC needs the Electron runtime)**
+- [ ] **Step 4: Manual smoke (no unit test — IPC needs the Electron runtime)**
 
 Run: `npm start`, then in DevTools console:
-`await window.electronAPI.readFileBuffer('<path to any file>')`
-Expected: an `ArrayBuffer` of the right `byteLength`; a bad path returns `null`.
+`await window.electronAPI.readFileBuffer('<path to any file>')` → an `ArrayBuffer` of the right `byteLength`; a bad path returns `null`.
+`await window.electronAPI.readJxlWasm()` → an `ArrayBuffer` of ~1.62 MB (the vendored wasm).
 
-- [ ] **Step 4: Lint + commit**
+- [ ] **Step 5: Lint + commit**
 
 ```bash
 git add main.js preload.js
-git commit -m "feat(jxl): add read-file-buffer IPC for binary reads (security-reviewed)"
+git commit -m "feat(jxl): add read-file-buffer + read-jxl-wasm IPC (security-reviewed)"
 ```
 
 **End of Part 1.** At this point JXL files **list** in folders and arrive as `image/jxl`, but still render blank — Part 2 makes them display.
@@ -328,7 +348,17 @@ git commit -m "feat(jxl): add read-file-buffer IPC for binary reads (security-re
 - Modify: `media-viewer.js` (`decodeJxl()`, `this.jxlFrameCache = new Map()` in constructor, worker lifecycle)
 - Modify: `tests/media-viewer-utils.test.js` (test `decodeJxl` message handling with a mocked worker)
 
-> If Task 1 Step 5 chose the classic-worker fallback, replace the worker's `import`/`init` lines with that approach; the `onmessage` protocol below is unchanged.
+> **Spike-confirmed constraints (Task 1, see spec §9) — the worker MUST honor these:**
+> 1. `jxl-oxide-wasm` is **ESM-only** → this is a **module worker** (`{ type: 'module' }`).
+> 2. **No raw-RGBA accessor** → PNG via `encodeToPng()` is the only pixel path.
+> 3. **`encodeToPng()` is terminal**: read `r.duration` (and any metadata) BEFORE calling
+>    `encodeToPng()`; call `encodeToPng()` exactly once, last; do NOT `r.free()` after.
+> 4. **wasm init**: pass the vendored `.wasm` **bytes explicitly** via
+>    `init({ module_or_path: wasmBytes })` to avoid `fetch(file://)` fragility under Electron.
+>    The main thread reads the bytes once (via `readFileBuffer` on the vendored path) and sends
+>    them to the worker in an `{ type: 'init', wasmBytes }` message before the first decode.
+> If the module worker proves troublesome under Electron `file://`, fall back to main-process
+> decode via IPC (spec §9 contingency) — same `init({ module_or_path: bytes })` call.
 
 - [ ] **Step 1: Create the worker**
 
@@ -336,23 +366,29 @@ Create `jxl-decode-worker.js`:
 
 ```js
 // Module Web Worker: decodes JXL bytes to per-frame PNG blobs + durations.
-// Protocol in:  { type: 'decode', id, buffer }
-// Protocol out: { type: 'decoded', id, frames: [{pngBytes, duration}], width, height, animated, numLoops }
+// Protocol in:  { type: 'init', wasmBytes }   (sent once before first decode)
+//               { type: 'decode', id, buffer }
+// Protocol out: { type: 'ready' }
+//               { type: 'decoded', id, frames: [{pngBytes, duration}], width, height, animated, numLoops }
 //               { type: 'error', id, message }
 import init, { JxlImage } from './vendor/jxl-oxide-wasm/jxl_oxide_wasm.js';
 
 let ready = null;
-function ensureReady() {
-    if (!ready) ready = init('./vendor/jxl-oxide-wasm/jxl_oxide_wasm_bg.wasm');
-    return ready;
-}
 
 self.onmessage = async (e) => {
     const msg = e.data;
+    if (msg.type === 'init') {
+        // Explicit-bytes init (spike-confirmed robust path under Electron file://).
+        ready = init({ module_or_path: new Uint8Array(msg.wasmBytes) });
+        await ready;
+        self.postMessage({ type: 'ready' });
+        return;
+    }
     if (msg.type !== 'decode') return;
     const { id, buffer } = msg;
     try {
-        await ensureReady();
+        if (!ready) throw new Error('decoder not initialized');
+        await ready;
         const img = new JxlImage();
         img.feedBytes(new Uint8Array(buffer));
         if (!img.tryInit()) throw new Error('JXL header incomplete');
@@ -362,14 +398,16 @@ self.onmessage = async (e) => {
         const transfer = [];
         for (let i = 0; i < count; i++) {
             const r = img.render(animated ? i : undefined);
-            const pngBytes = r.encodeToPng(); // Uint8Array
-            frames.push({ pngBytes, duration: animated ? r.duration : 0 });
+            const duration = animated ? r.duration : 0; // READ metadata BEFORE encodeToPng()
+            const pngBytes = r.encodeToPng(); // terminal — must be last; do not free() after
+            frames.push({ pngBytes, duration });
             transfer.push(pngBytes.buffer);
         }
-        self.postMessage(
-            { type: 'decoded', id, frames, width: img.width, height: img.height, animated, numLoops: img.numLoops },
-            transfer
-        );
+        const width = img.width;
+        const height = img.height;
+        const numLoops = img.numLoops;
+        img.free();
+        self.postMessage({ type: 'decoded', id, frames, width, height, animated, numLoops }, transfer);
     } catch (err) {
         self.postMessage({ type: 'error', id, message: String(err && err.message ? err.message : err) });
     }
@@ -439,21 +477,29 @@ Add methods on `MediaViewer`:
 
 ```js
     ensureJxlWorker() {
-        if (this.jxlWorker) return this.jxlWorker;
+        if (this.jxlWorker) return this._jxlReady;
         this.jxlWorker = new Worker('jxl-decode-worker.js', { type: 'module' });
         this.jxlWorker.addEventListener('message', (e) => {
             const m = e.data;
+            if (m.type === 'ready') { this._jxlResolveReady(); return; }
             const pending = this._jxlPending.get(m.id);
             if (!pending) return;
             this._jxlPending.delete(m.id);
             if (m.type === 'error') pending.reject(new Error(m.message));
             else pending.resolve(m);
         });
-        return this.jxlWorker;
+        // Explicit-bytes wasm init (spec §9): main process reads the vendored .wasm.
+        this._jxlReady = new Promise((res) => { this._jxlResolveReady = res; });
+        window.electronAPI.readJxlWasm().then((wasmBytes) => {
+            this.jxlWorker.postMessage({ type: 'init', wasmBytes }, [wasmBytes]);
+        });
+        return this._jxlReady;
     }
 
     async decodeJxl(filePath) {
+        this._jxlPending = this._jxlPending || new Map();
         if (this.jxlFrameCache.has(filePath)) return this.jxlFrameCache.get(filePath);
+        await this.ensureJxlWorker(); // resolves once worker posts {type:'ready'}
         const buffer = await window.electronAPI.readFileBuffer(filePath);
         if (!buffer) throw new Error('Could not read JXL file: ' + filePath);
         const worker = this.ensureJxlWorker();
