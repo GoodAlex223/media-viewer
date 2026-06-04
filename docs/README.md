@@ -29,8 +29,10 @@ Central index for all project documentation.
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
 | [Video Fullscreen Toggle][] | Exit fullscreen on second video click |
+| [JXL Viewer Support Plan][] | JXL + animated-JXL decode/render/feature-extraction (Group A) |
 
 [Video Fullscreen Toggle]: planning/plans/2025-12-29_video-fullscreen-toggle.md
+[JXL Viewer Support Plan]: superpowers/plans/2026-06-04-jxl-viewer-support.md
 
 ## Archived Plans
 
