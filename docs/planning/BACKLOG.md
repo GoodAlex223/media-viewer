@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-06-03 (Group 0 part 2 tournament re-rate shipped; +2 🔵 user-flagged + 3 🟤 follow-ups)
+**Last Updated**: 2026-06-04 (PR #41 tournament re-rate merged in `2d8ce83`; post-merge /code-review → no threshold findings, +2 🟤 sub-threshold follow-ups)
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -170,6 +170,13 @@ two tasks because they have different shapes (architectural vs. visual).
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-06-04] PR #41 post-merge review follow-ups (2 sub-threshold items)
+
+**Origin**: Five-agent `/code-review` of `feature/tournament-re-rate` (PR #41, merged in `2d8ce83`). No finding scored ≥80/100, so the review posted "No issues found". The two items below are the highest-scoring sub-threshold candidates, tracked as defensive/hygiene improvements. (The third candidate — incomplete `filesSnapshot` shape assertion in the `recordDraw` test, ~25/100 — is already filed under `### [2026-06-03] Group 0 part 2 (tournament re-rate) follow-ups` → "Strengthen `TournamentEngine.recordDraw` history-shape test"; not duplicated here.)
+
+- [ ] **`handleTournamentDraw` + draw-button click listeners lack an `isLoading` guard** (~75/100) — The new `handleTournamentDraw(outcome)` method ([media-viewer.js](../../media-viewer.js)) and the click listeners for `#tournamentBothWinBtn` / `#tournamentBothLoseBtn` call into the engine with no `if (this.isLoading) return;` (or `mediaNavigationInProgress`) guard. The keyboard path is safe — the keydown dispatcher gates actions on `!this.isLoading` — but the buttons are a pure click affordance: a rapid double-click while `showTournamentPair()` → `showCompareMedia()` is still awaiting can fire a second `recordDraw` after `roundQueue` has already shifted, and `SwissStrategy.recordDraw` then throws `'No active pair to record'` as an unhandled promise rejection (there is no try/catch in `handleTournamentDraw`). This mirrors the **pre-existing** `handleTournamentPick` gap (same missing guard), so it is not a regression introduced by this PR — but the new draw buttons make the double-click more reachable than the overlay-media pick path. Fix: add `if (this.isLoading) return;` at the top of `handleTournamentDraw` (and/or inside the click lambdas), and/or wrap the `recordDraw` call so a thrown "no active pair" is swallowed. Consider applying the same guard to `handleTournamentPick` for symmetry. Effort: XS. Affected: [media-viewer.js](../../media-viewer.js) (`handleTournamentDraw` + `#tournamentBothWinBtn`/`#tournamentBothLoseBtn` click wiring).
+- [ ] **New tournament draw buttons not cached as instance properties** (~15/100) — `#tournamentBothWinBtn` / `#tournamentBothLoseBtn` are referenced via local `const` in their click-wiring block rather than stored as `this.tournamentBothWinBtn` / `this.tournamentBothLoseBtn`. This matches the established **tournament**-button pattern (e.g. `#tournamentUndoBtn` is also a local `const`) and differs only from the **compare**-mode `this.bothGoodBtn` / `this.bothBadBtn`, which are cached because `updateBulkRateButtonsVisibility()` toggles their display dynamically. The draw buttons have no such per-state visibility method today (overlay show/hide handles them), so there is no functional impact — purely a consistency note that would matter only if a future "disable draw buttons when the tournament is complete / on the summary modal" guard is added. CLAUDE.md does not require caching these. Effort: XS. Affected: [media-viewer.js](../../media-viewer.js).
 
 ### [2026-06-03] Group 0 part 2 (tournament re-rate) follow-ups (3 items)
 
