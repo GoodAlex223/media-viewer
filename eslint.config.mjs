@@ -7,6 +7,7 @@
 //   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
 //   2c. Browser renderer modules     — fullscreen.js (ES module, imported by media-viewer.js)
 //   3a. Web Workers                  — sorting-worker.js, ml-worker.js, feature-worker.js
+//   3a-jxl. Module Web Worker        — jxl-decode-worker.js (ES module worker)
 //   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js, media-formats.js
 //   4.  Unit tests (Vitest)          — tests/**/*.js (excl. e2e)
 //   5a. E2E helpers (CJS)            — tests/e2e/**/*.cjs
@@ -140,6 +141,22 @@ export default [
                 FEATURE_DIM: 'readonly',
                 // Conditional CJS export: typeof module !== 'undefined' && module.exports
                 module: 'readonly',
+            },
+        },
+        rules: {
+            ...sharedRules,
+            'no-undef': 'error',
+        },
+    },
+
+    // 3a-jxl. Module Web Worker (ES module worker — `new Worker(url, { type: 'module' })`)
+    {
+        files: ['jxl-decode-worker.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: {
+                ...globals.worker,
             },
         },
         rules: {

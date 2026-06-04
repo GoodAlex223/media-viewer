@@ -383,6 +383,14 @@ class MediaViewer {
         this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
         this.sortingWorker = null; // Web Worker for sorting to prevent UI freeze
 
+        // JXL decode state (module Web Worker)
+        this.jxlWorker = null;
+        this.jxlFrameCache = new Map(); // filePath -> { frames, width, height, animated, numLoops }
+        this._jxlReqId = 0;
+        this._jxlPending = new Map(); // id -> { resolve, reject }
+        this._jxlReady = null;
+        this._jxlResolveReady = null;
+
         // ML Prediction state
         this.mlWorker = null;
         this.featureCache = new Map(); // Map<filePath, Float32Array>
@@ -863,6 +871,73 @@ class MediaViewer {
             .join('/');
         // Add file:// protocol
         return `file:///${encoded}`;
+    }
+
+    ensureJxlWorker() {
+        if (this.jxlWorker) return this._jxlReady;
+        this.jxlWorker = new Worker('jxl-decode-worker.js', { type: 'module' });
+        this.jxlWorker.addEventListener('message', (e) => {
+            const m = e.data;
+            if (m.type === 'ready') {
+                if (this._jxlResolveReady) this._jxlResolveReady();
+                return;
+            }
+            const pending = this._jxlPending.get(m.id);
+            if (!pending) return;
+            this._jxlPending.delete(m.id);
+            if (m.type === 'error') pending.reject(new Error(m.message));
+            else pending.resolve(m);
+        });
+        this.jxlWorker.addEventListener('error', (e) => {
+            const msg = (e && e.message) || 'JXL decode worker crashed';
+            for (const { reject } of this._jxlPending.values()) reject(new Error(msg));
+            this._jxlPending.clear();
+            if (this._jxlResolveReady) {
+                this._jxlReady = Promise.reject(new Error(msg));
+                this._jxlReady.catch(() => {}); // suppress unhandled rejection
+                this._jxlResolveReady = null;
+            }
+            this.jxlWorker = null; // allow re-creation on the next decode attempt
+        });
+        // Explicit-bytes wasm init (spike §9): main process reads the vendored .wasm.
+        this._jxlReady = new Promise((res) => {
+            this._jxlResolveReady = res;
+        });
+        window.electronAPI
+            .readJxlWasm()
+            .then((wasmBytes) => {
+                this.jxlWorker.postMessage({ type: 'init', wasmBytes }, [wasmBytes]);
+            })
+            .catch((err) => {
+                this._jxlReady = Promise.reject(
+                    new Error('JXL WASM load failed: ' + (err && err.message ? err.message : err))
+                );
+                this._jxlReady.catch(() => {});
+                this.jxlWorker = null;
+            });
+        return this._jxlReady;
+    }
+
+    async decodeJxl(filePath) {
+        this._jxlPending = this._jxlPending || new Map();
+        if (this.jxlFrameCache.has(filePath)) return this.jxlFrameCache.get(filePath);
+        await this.ensureJxlWorker(); // resolves once the worker posts {type:'ready'}
+        const buffer = await window.electronAPI.readFileBuffer(filePath);
+        if (!buffer) throw new Error('Could not read JXL file: ' + filePath);
+        const id = ++this._jxlReqId;
+        const decoded = await new Promise((resolve, reject) => {
+            this._jxlPending.set(id, { resolve, reject });
+            this.jxlWorker.postMessage({ type: 'decode', id, buffer }, [buffer]);
+        });
+        const entry = {
+            frames: decoded.frames,
+            width: decoded.width,
+            height: decoded.height,
+            animated: decoded.animated,
+            numLoops: decoded.numLoops,
+        };
+        this.jxlFrameCache.set(filePath, entry);
+        return entry;
     }
 
     formatTimeAgo(timestamp) {

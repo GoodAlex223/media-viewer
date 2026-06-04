@@ -1250,3 +1250,119 @@ describe('collectBulkRatedTrainingExamples', () => {
         expect(result.disliked).toEqual([]);
     });
 });
+
+describe('decodeJxl', () => {
+    const decodeJxl = extractAsyncMethod('decodeJxl');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = { electronAPI: { readFileBuffer: vi.fn(async () => new ArrayBuffer(8)) } };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('returns a cached entry without reading the file again', async () => {
+        const cached = { frames: [], width: 1, height: 1, animated: false, numLoops: 0 };
+        const ctx = {
+            jxlFrameCache: new Map([['a.png.jxl', cached]]),
+            ensureJxlWorker: vi.fn(),
+        };
+        const result = await decodeJxl.call(ctx, 'a.png.jxl');
+        expect(result).toBe(cached);
+        expect(globalThis.window.electronAPI.readFileBuffer).not.toHaveBeenCalled();
+        expect(ctx.ensureJxlWorker).not.toHaveBeenCalled();
+    });
+
+    it('reads bytes, posts to the worker, resolves + caches decoded frames', async () => {
+        // mock worker that echoes a 'decoded' reply keyed by the request id
+        const listeners = {};
+        const worker = {
+            addEventListener: (ev, fn) => {
+                (listeners[ev] = listeners[ev] || []).push(fn);
+            },
+            postMessage: vi.fn((m) => {
+                queueMicrotask(() =>
+                    (listeners.message || []).forEach((f) =>
+                        f({
+                            data: {
+                                type: 'decoded',
+                                id: m.id,
+                                frames: [{ pngBytes: new Uint8Array([1]), duration: 0 }],
+                                width: 4,
+                                height: 4,
+                                animated: false,
+                                numLoops: 0,
+                            },
+                        })
+                    )
+                );
+            }),
+        };
+        const ctx = {
+            jxlFrameCache: new Map(),
+            _jxlReqId: 0,
+            _jxlPending: new Map(),
+            jxlWorker: worker,
+            // Stub ensureJxlWorker: attach a production-mirroring listener, resolve immediately.
+            ensureJxlWorker() {
+                if (!this._attached) {
+                    worker.addEventListener('message', (e) => {
+                        const m = e.data;
+                        if (m.type === 'ready') return;
+                        const pending = this._jxlPending.get(m.id);
+                        if (!pending) return;
+                        this._jxlPending.delete(m.id);
+                        if (m.type === 'error') pending.reject(new Error(m.message));
+                        else pending.resolve(m);
+                    });
+                    this._attached = true;
+                }
+                return Promise.resolve();
+            },
+        };
+        const result = await decodeJxl.call(ctx, 'a.png.jxl');
+        expect(globalThis.window.electronAPI.readFileBuffer).toHaveBeenCalledWith('a.png.jxl');
+        expect(result.animated).toBe(false);
+        expect(result.frames).toHaveLength(1);
+        expect(ctx.jxlFrameCache.get('a.png.jxl')).toBe(result); // cached after decode
+    });
+
+    it('rejects when the worker replies with an error', async () => {
+        const listeners = {};
+        const worker = {
+            addEventListener: (ev, fn) => {
+                (listeners[ev] = listeners[ev] || []).push(fn);
+            },
+            postMessage: vi.fn((m) => {
+                queueMicrotask(() =>
+                    (listeners.message || []).forEach((f) =>
+                        f({ data: { type: 'error', id: m.id, message: 'bad jxl' } })
+                    )
+                );
+            }),
+        };
+        const ctx = {
+            jxlFrameCache: new Map(),
+            _jxlReqId: 0,
+            _jxlPending: new Map(),
+            jxlWorker: worker,
+            ensureJxlWorker() {
+                if (!this._attached) {
+                    worker.addEventListener('message', (e) => {
+                        const m = e.data;
+                        if (m.type === 'ready') return;
+                        const pending = this._jxlPending.get(m.id);
+                        if (!pending) return;
+                        this._jxlPending.delete(m.id);
+                        if (m.type === 'error') pending.reject(new Error(m.message));
+                        else pending.resolve(m);
+                    });
+                    this._attached = true;
+                }
+                return Promise.resolve();
+            },
+        };
+        await expect(decodeJxl.call(ctx, 'bad.png.jxl')).rejects.toThrow('bad jxl');
+    });
+});
