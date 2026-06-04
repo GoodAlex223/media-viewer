@@ -390,6 +390,10 @@ class MediaViewer {
         this._jxlPending = new Map(); // id -> { resolve, reject }
         this._jxlReady = null;
         this._jxlResolveReady = null;
+        // NOTE: _jxlObjectURLs is shared across single + both compare sides. Safe only because
+        // compare always cleans + re-renders BOTH sides together; a future per-side re-render
+        // must scope URL revocation per side to avoid blanking the still-displayed side.
+        this._jxlObjectURLs = null; // Set<string> of active object URLs for decoded JXL frames
 
         // ML Prediction state
         this.mlWorker = null;
@@ -938,6 +942,20 @@ class MediaViewer {
         };
         this.jxlFrameCache.set(filePath, entry);
         return entry;
+    }
+
+    jxlFrameToObjectURL(frame) {
+        const blob = new Blob([frame.pngBytes], { type: 'image/png' });
+        const url = URL.createObjectURL(blob);
+        this._jxlObjectURLs = this._jxlObjectURLs || new Set();
+        this._jxlObjectURLs.add(url);
+        return url;
+    }
+
+    revokeJxlObjectURLs() {
+        if (!this._jxlObjectURLs) return;
+        for (const url of this._jxlObjectURLs) URL.revokeObjectURL(url);
+        this._jxlObjectURLs.clear();
     }
 
     formatTimeAgo(timestamp) {
@@ -2672,6 +2690,9 @@ class MediaViewer {
         this.isVideoLoading = false;
         this.mediaNavigationInProgress = false;
         this.isBeingCleaned = false;
+
+        // Release any object URLs created for decoded JXL frames
+        this.revokeJxlObjectURLs();
     }
 
     async showMedia() {
@@ -2724,7 +2745,25 @@ class MediaViewer {
 
         if (file.type.startsWith('image/')) {
             this.currentMedia = document.createElement('img');
-            this.currentMedia.src = fileUrl;
+            if (this.isJxl(file.path)) {
+                try {
+                    const decoded = await this.decodeJxl(file.path);
+                    if (!decoded.frames || decoded.frames.length === 0) {
+                        throw new Error('JXL decoded with no frames');
+                    }
+                    // Task 6: render frame 0 statically (animation added in a later task)
+                    this.currentMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                } catch (err) {
+                    window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
+                    this.showNotification('Could not decode JXL file', 'error');
+                    this.isLoading = false;
+                    this.mediaNavigationInProgress = false;
+                    this.hideLoadingSpinner();
+                    return; // graceful skip — do not crash
+                }
+            } else {
+                this.currentMedia.src = fileUrl;
+            }
             this.videoControls.style.display = 'none';
             this.setupImageHandlers(file);
         } else if (file.type.startsWith('video/')) {
@@ -2944,7 +2983,26 @@ class MediaViewer {
         const leftFileUrl = this.pathToFileURL(leftFile.path);
         if (leftFile.type.startsWith('image/')) {
             this.leftMedia = document.createElement('img');
-            this.leftMedia.src = leftFileUrl;
+            if (this.isJxl(leftFile.path)) {
+                try {
+                    const decoded = await this.decodeJxl(leftFile.path);
+                    if (!decoded.frames || decoded.frames.length === 0) {
+                        throw new Error('JXL decoded with no frames');
+                    }
+                    // Task 6: render frame 0 statically (animation added in a later task)
+                    this.leftMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                } catch (err) {
+                    window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
+                    this.showNotification('Could not decode JXL file', 'error');
+                    this.isLoading = false;
+                    this.mediaNavigationInProgress = false;
+                    this.hideLoadingSpinner();
+                    this.leftMedia = null;
+                    return; // graceful skip — do not crash
+                }
+            } else {
+                this.leftMedia.src = leftFileUrl;
+            }
             this.setupCompareImageHandlers(this.leftMedia, leftFile, 'left');
         } else if (leftFile.type.startsWith('video/')) {
             this.leftMedia = document.createElement('video');
@@ -2962,7 +3020,26 @@ class MediaViewer {
         const rightFileUrl = this.pathToFileURL(rightFile.path);
         if (rightFile.type.startsWith('image/')) {
             this.rightMedia = document.createElement('img');
-            this.rightMedia.src = rightFileUrl;
+            if (this.isJxl(rightFile.path)) {
+                try {
+                    const decoded = await this.decodeJxl(rightFile.path);
+                    if (!decoded.frames || decoded.frames.length === 0) {
+                        throw new Error('JXL decoded with no frames');
+                    }
+                    // Task 6: render frame 0 statically (animation added in a later task)
+                    this.rightMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                } catch (err) {
+                    window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
+                    this.showNotification('Could not decode JXL file', 'error');
+                    this.isLoading = false;
+                    this.mediaNavigationInProgress = false;
+                    this.hideLoadingSpinner();
+                    this.rightMedia = null;
+                    return; // graceful skip — do not crash
+                }
+            } else {
+                this.rightMedia.src = rightFileUrl;
+            }
             this.setupCompareImageHandlers(this.rightMedia, rightFile, 'right');
         } else if (rightFile.type.startsWith('video/')) {
             this.rightMedia = document.createElement('video');
@@ -4893,6 +4970,9 @@ class MediaViewer {
         }
 
         this.isBeingCleaned = false;
+
+        // Release any object URLs created for decoded JXL frames
+        this.revokeJxlObjectURLs();
     }
 
     // Visual Similarity Sorting Functions
