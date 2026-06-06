@@ -195,6 +195,7 @@ describe('removeFileFromList', () => {
             clipCache: new Map(),
             featureMetadata: new Map(),
             perceptualHashes: new Map(),
+            jxlFrameCache: new Map(),
             bulkRated: new Map(),
             saveBulkRatedFile: vi.fn(),
         };
@@ -223,6 +224,16 @@ describe('removeFileFromList', () => {
         expect(ctx.predictionScores.has('/a.jpg')).toBe(false);
         expect(ctx.featureCache.has('/a.jpg')).toBe(false);
         expect(ctx.perceptualHashes.has('/a.jpg')).toBe(false);
+    });
+
+    it('purges the jxlFrameCache entry for the removed file', () => {
+        const ctx = createContext(['/a.png.jxl', '/b.png.jxl'], 0);
+        ctx.jxlFrameCache.set('/a.png.jxl', { frames: [] });
+        ctx.jxlFrameCache.set('/b.png.jxl', { frames: [] });
+
+        removeFileFromList.call(ctx, '/a.png.jxl');
+        expect(ctx.jxlFrameCache.has('/a.png.jxl')).toBe(false);
+        expect(ctx.jxlFrameCache.has('/b.png.jxl')).toBe(true); // untouched
     });
 
     it('caps currentIndex when removing last file while at end', () => {
@@ -1196,6 +1207,7 @@ describe('removeFileFromList bulk-rated purge', () => {
             clipCache: new Map(),
             featureMetadata: new Map(),
             perceptualHashes: new Map(),
+            jxlFrameCache: new Map(),
             bulkRated: new Map([['a.jpg', 'good']]),
             currentIndex: 0,
             saveBulkRatedFile: vi.fn(),
@@ -1337,6 +1349,72 @@ describe('decodeJxl', () => {
         expect(result.animated).toBe(false);
         expect(result.frames).toHaveLength(1);
         expect(ctx.jxlFrameCache.get('a.png.jxl')).toBe(result); // cached after decode
+    });
+
+    it('evicts the oldest entry beyond the LRU cap of 8 and keeps recently-used entries', async () => {
+        // Build an echoing mock worker (mirrors the happy-path test setup).
+        const listeners = {};
+        const worker = {
+            addEventListener: (ev, fn) => {
+                (listeners[ev] = listeners[ev] || []).push(fn);
+            },
+            postMessage: vi.fn((m) => {
+                queueMicrotask(() =>
+                    (listeners.message || []).forEach((f) =>
+                        f({
+                            data: {
+                                type: 'decoded',
+                                id: m.id,
+                                frames: [{ pngBytes: new Uint8Array([1]), duration: 0 }],
+                                width: 4,
+                                height: 4,
+                                animated: false,
+                                numLoops: 0,
+                            },
+                        })
+                    )
+                );
+            }),
+        };
+        // Pre-seed exactly 8 dummy entries (oldest -> newest by insertion order).
+        const jxlFrameCache = new Map();
+        for (let i = 0; i < 8; i++) {
+            jxlFrameCache.set(`seed-${i}.jxl`, { frames: [], width: 1, height: 1, animated: false, numLoops: 0 });
+        }
+        const ctx = {
+            jxlFrameCache,
+            _jxlReqId: 0,
+            _jxlPending: new Map(),
+            jxlWorker: worker,
+            ensureJxlWorker() {
+                if (!this._attached) {
+                    worker.addEventListener('message', (e) => {
+                        const m = e.data;
+                        if (m.type === 'ready') return;
+                        const pending = this._jxlPending.get(m.id);
+                        if (!pending) return;
+                        this._jxlPending.delete(m.id);
+                        if (m.type === 'error') pending.reject(new Error(m.message));
+                        else pending.resolve(m);
+                    });
+                    this._attached = true;
+                }
+                return Promise.resolve();
+            },
+        };
+
+        // Cache-hit on the oldest seed should move it to most-recently-used so it survives eviction.
+        const survivor = await decodeJxl.call(ctx, 'seed-0.jxl');
+        expect(survivor).toBe(jxlFrameCache.get('seed-0.jxl'));
+
+        // Decode a 9th distinct path -> size stays bounded at 8, oldest-remaining seed evicted.
+        await decodeJxl.call(ctx, 'new.png.jxl');
+        expect(ctx.jxlFrameCache.size).toBe(8);
+        // seed-1 was the oldest after seed-0 was bumped to MRU, so it is evicted.
+        expect(ctx.jxlFrameCache.has('seed-1.jxl')).toBe(false);
+        // seed-0 (recently used) survived; the new entry is present.
+        expect(ctx.jxlFrameCache.has('seed-0.jxl')).toBe(true);
+        expect(ctx.jxlFrameCache.has('new.png.jxl')).toBe(true);
     });
 
     it('rejects when the worker replies with an error', async () => {

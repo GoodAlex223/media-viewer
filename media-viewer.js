@@ -926,7 +926,12 @@ class MediaViewer {
 
     async decodeJxl(filePath) {
         this._jxlPending = this._jxlPending || new Map();
-        if (this.jxlFrameCache.has(filePath)) return this.jxlFrameCache.get(filePath);
+        if (this.jxlFrameCache.has(filePath)) {
+            const cached = this.jxlFrameCache.get(filePath);
+            this.jxlFrameCache.delete(filePath);
+            this.jxlFrameCache.set(filePath, cached); // move to most-recently-used (end)
+            return cached;
+        }
         await this.ensureJxlWorker(); // resolves once the worker posts {type:'ready'}
         const buffer = await window.electronAPI.readFileBuffer(filePath);
         if (!buffer) throw new Error('Could not read JXL file: ' + filePath);
@@ -943,6 +948,14 @@ class MediaViewer {
             numLoops: decoded.numLoops,
         };
         this.jxlFrameCache.set(filePath, entry);
+        // Bound the cache as a true-LRU. Animated JXL entries can be very large
+        // (a 270-frame file holds ~77 MB of PNG bytes), so cap to a small number
+        // of most-recently-used entries to avoid unbounded growth across navigation.
+        const JXL_CACHE_MAX = 8;
+        while (this.jxlFrameCache.size > JXL_CACHE_MAX) {
+            const oldestKey = this.jxlFrameCache.keys().next().value; // Map preserves insertion order
+            this.jxlFrameCache.delete(oldestKey);
+        }
         return entry;
     }
 
@@ -1198,6 +1211,7 @@ class MediaViewer {
         this.predictionScores.delete(filePath);
         this.featureCache.delete(filePath);
         this.clipCache.delete(filePath);
+        this.jxlFrameCache.delete(filePath);
         this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
         if (this.bulkRated.delete(removedName)) {
