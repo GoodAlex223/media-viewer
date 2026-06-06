@@ -731,6 +731,17 @@ describe('isJxl', () => {
     });
 });
 
+describe('computeJxlFrameSchedule', () => {
+    const fn = extractMethod('computeJxlFrameSchedule');
+    it('passes through ms durations and floors zero/short frames to MIN_MS (20)', () => {
+        // jxl-oxide RenderResult.duration is in MILLISECONDS already (e.g. 300, 400).
+        expect(fn.call({}, [{ duration: 300 }, { duration: 400 }, { duration: 0 }])).toEqual([300, 400, 20]);
+    });
+    it('handles a single frame', () => {
+        expect(fn.call({}, [{ duration: 0 }])).toEqual([20]);
+    });
+});
+
 describe('handleMlWorkerMessage sortComplete', () => {
     const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
 

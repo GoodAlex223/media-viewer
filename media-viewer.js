@@ -394,6 +394,8 @@ class MediaViewer {
         // compare always cleans + re-renders BOTH sides together; a future per-side re-render
         // must scope URL revocation per side to avoid blanking the still-displayed side.
         this._jxlObjectURLs = null; // Set<string> of active object URLs for decoded JXL frames
+        this._jxlAnimToken = null; // identity token for the active animated-JXL playback loop
+        this._jxlAnimTimer = null; // setTimeout handle for the next animation frame
 
         // ML Prediction state
         this.mlWorker = null;
@@ -956,6 +958,63 @@ class MediaViewer {
         if (!this._jxlObjectURLs) return;
         for (const url of this._jxlObjectURLs) URL.revokeObjectURL(url);
         this._jxlObjectURLs.clear();
+    }
+
+    // Pure helper: map decoded JXL frames to per-frame display delays (ms).
+    // jxl-oxide RenderResult.duration is already in MILLISECONDS; floor zero/short
+    // frames to MIN_MS so a 0-duration frame doesn't busy-loop the scheduler.
+    computeJxlFrameSchedule(frames) {
+        const MIN_MS = 20;
+        return frames.map((f) => Math.max(MIN_MS, Math.round(f.duration || 0)));
+    }
+
+    // Animated JXL playback: decode ONE frame at a time to an ImageBitmap, draw, close it.
+    // Never holds more than ~1 decoded frame in memory (270x720p as bitmaps would be ~1GB).
+    async startJxlAnimation(decoded) {
+        const canvas = document.createElement('canvas');
+        canvas.className = 'media-display';
+        canvas.width = decoded.width;
+        canvas.height = decoded.height;
+        this.currentMedia = canvas; // caller appends this.currentMedia after we return
+        const ctx = canvas.getContext('2d');
+        const delays = this.computeJxlFrameSchedule(decoded.frames);
+        const token = {}; // identity token for teardown
+        this._jxlAnimToken = token;
+        let i = 0;
+        let loop = 0;
+        const drawNext = async () => {
+            if (this._jxlAnimToken !== token) return; // superseded by navigation/cleanup
+            let bmp;
+            try {
+                bmp = await createImageBitmap(new Blob([decoded.frames[i].pngBytes], { type: 'image/png' }));
+            } catch (_e) {
+                return; // decode glitch — stop this animation quietly
+            }
+            if (this._jxlAnimToken !== token) {
+                if (bmp.close) bmp.close();
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bmp, 0, 0);
+            if (bmp.close) bmp.close();
+            const delay = delays[i];
+            i++;
+            if (i >= decoded.frames.length) {
+                i = 0;
+                loop++;
+                if (decoded.numLoops !== 0 && loop >= decoded.numLoops) return; // finite loops done
+            }
+            this._jxlAnimTimer = setTimeout(drawNext, delay);
+        };
+        drawNext();
+    }
+
+    stopJxlAnimation() {
+        this._jxlAnimToken = null;
+        if (this._jxlAnimTimer) {
+            clearTimeout(this._jxlAnimTimer);
+            this._jxlAnimTimer = null;
+        }
     }
 
     formatTimeAgo(timestamp) {
@@ -2660,6 +2719,10 @@ class MediaViewer {
 
     // Improved cleanup method
     cleanupCurrentMedia() {
+        // Stop any animated-JXL playback first so navigating away never leaks a timer,
+        // even if currentMedia is already null (early-return below).
+        this.stopJxlAnimation();
+
         if (!this.currentMedia) return;
 
         this.isBeingCleaned = true;
@@ -2743,6 +2806,7 @@ class MediaViewer {
 
         const fileUrl = this.pathToFileURL(file.path);
 
+        let jxlAnimated = false;
         if (file.type.startsWith('image/')) {
             this.currentMedia = document.createElement('img');
             if (this.isJxl(file.path)) {
@@ -2751,8 +2815,15 @@ class MediaViewer {
                     if (!decoded.frames || decoded.frames.length === 0) {
                         throw new Error('JXL decoded with no frames');
                     }
-                    // Task 6: render frame 0 statically (animation added in a later task)
-                    this.currentMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                    if (decoded.animated && decoded.frames.length > 1) {
+                        // Animated JXL: drive a <canvas>, decoding one frame at a time.
+                        // startJxlAnimation replaces this.currentMedia with the canvas.
+                        jxlAnimated = true;
+                        await this.startJxlAnimation(decoded);
+                    } else {
+                        // Static JXL: render frame 0 via the existing <img> + object-URL path.
+                        this.currentMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                    }
                 } catch (err) {
                     window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
                     this.showNotification('Could not decode JXL file', 'error');
@@ -2765,7 +2836,12 @@ class MediaViewer {
                 this.currentMedia.src = fileUrl;
             }
             this.videoControls.style.display = 'none';
-            this.setupImageHandlers(file);
+            // A <canvas> has no 'load' event, so setupImageHandlers (which gates on an
+            // 'load' listener) would never hide the spinner or reset state. The animated
+            // path is finished synchronously below (after append), via finishJxlCanvasDisplay.
+            if (!jxlAnimated) {
+                this.setupImageHandlers(file);
+            }
         } else if (file.type.startsWith('video/')) {
             this.currentMedia = document.createElement('video');
             this.currentMedia.src = fileUrl;
@@ -2783,9 +2859,21 @@ class MediaViewer {
         this.currentMedia.style.display = 'none';
         this.mediaContainer.appendChild(this.currentMedia);
 
+        // Animated-JXL canvas: dimensions are known immediately (no async 'load'),
+        // so finish display now — after append — un-hiding the canvas set above.
+        if (jxlAnimated) {
+            this.finishJxlCanvasDisplay(file);
+        }
+
         this.closeAllZoomPopovers();
 
         this.updateBasicFileInfo(file);
+        // For the animated-JXL canvas there is no async 'load' to call
+        // updateFileInfoWithDimensions later, so write dimensions now (after the
+        // basic info reset above would otherwise clobber them).
+        if (jxlAnimated) {
+            this.updateFileInfoWithDimensions(file);
+        }
         this.updateNavigationInfo();
 
         // Prioritize feature extraction for displayed file (after small delay for media to load)
@@ -3294,6 +3382,31 @@ class MediaViewer {
         this.currentMedia.addEventListener('error', onError);
     }
 
+    // Post-display work for an animated-JXL <canvas>. Mirrors the onLoad path of
+    // setupImageHandlers, but runs synchronously because a canvas has no 'load'
+    // event and its dimensions are known the moment it is created.
+    finishJxlCanvasDisplay(_file) {
+        const canvas = this.currentMedia;
+        if (!canvas || canvas.tagName !== 'CANVAS' || this.isBeingCleaned) return;
+        this.hideLoadingSpinner();
+        // Size the canvas to fit the screen (fitMediaToScreen only handles IMG/VIDEO).
+        // object-fit is IGNORED on <canvas>, so we compute explicit aspect-preserving
+        // CSS pixel dimensions instead. Mirror fitMediaToScreen, which never upscales
+        // small media (it shows it at native size), so clamp the fit scale to <= 1.
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const scale = Math.min(vw / canvas.width, vh / canvas.height, 1);
+        canvas.style.width = Math.round(canvas.width * scale) + 'px';
+        canvas.style.height = Math.round(canvas.height * scale) + 'px';
+        canvas.style.maxWidth = 'none';
+        canvas.style.maxHeight = 'none';
+        canvas.style.display = 'block';
+        this.isLoading = false;
+        this.mediaNavigationInProgress = false;
+        this.setupZoomEvents(canvas, 'single');
+        this.updatePredictionBadges();
+    }
+
     setupVideoHandlers(file) {
         this.isVideoLoading = true;
 
@@ -3538,6 +3651,14 @@ class MediaViewer {
                     if (video.duration && !isNaN(video.duration)) {
                         detailsText += `\nDuration: ${this.formatDuration(video.duration)}`;
                     }
+                }
+            } else if (this.currentMedia.tagName === 'CANVAS') {
+                // Animated-JXL canvas: dimensions are the canvas's intrinsic size.
+                const canvas = this.currentMedia;
+                if (canvas.width && canvas.height) {
+                    const aspectRatio = (canvas.width / canvas.height).toFixed(2);
+                    detailsText += `\nDimensions: ${canvas.width} × ${canvas.height}`;
+                    detailsText += `\nAspect ratio: ${aspectRatio}:1`;
                 }
             }
         }
