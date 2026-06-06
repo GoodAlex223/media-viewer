@@ -5490,7 +5490,31 @@ class MediaViewer {
                     reject(new Error(`Image load error: ${error.message || 'Unknown error'}`));
                 });
 
-                img.src = filePath;
+                if (this.isJxl(filePath)) {
+                    this.decodeJxl(filePath)
+                        .then((decoded) => {
+                            if (!decoded.frames || decoded.frames.length === 0) {
+                                cleanup();
+                                reject(new Error('JXL decoded with no frames'));
+                                return;
+                            }
+                            // Local, self-contained object URL: revoke as soon as the img loads/fails.
+                            // (Do NOT use jxlFrameToObjectURL here — that set is revoked on media-display
+                            //  cleanup and could revoke this in-flight extraction URL mid-load.)
+                            const url = URL.createObjectURL(
+                                new Blob([decoded.frames[0].pngBytes], { type: 'image/png' })
+                            );
+                            img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+                            img.addEventListener('error', () => URL.revokeObjectURL(url), { once: true });
+                            img.src = url;
+                        })
+                        .catch((err) => {
+                            cleanup();
+                            reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
+                        });
+                } else {
+                    img.src = filePath;
+                }
             }
         });
     }
@@ -7222,7 +7246,31 @@ class MediaViewer {
                     reject(new Error('Image load error'));
                 });
 
-                img.src = filePath;
+                if (this.isJxl(filePath)) {
+                    this.decodeJxl(filePath)
+                        .then((decoded) => {
+                            if (!decoded.frames || decoded.frames.length === 0) {
+                                cleanup();
+                                reject(new Error('JXL decoded with no frames'));
+                                return;
+                            }
+                            // Local, self-contained object URL: revoke as soon as the img loads/fails.
+                            // (Do NOT use jxlFrameToObjectURL here — that set is revoked on media-display
+                            //  cleanup and could revoke this in-flight extraction URL mid-load.)
+                            const url = URL.createObjectURL(
+                                new Blob([decoded.frames[0].pngBytes], { type: 'image/png' })
+                            );
+                            img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+                            img.addEventListener('error', () => URL.revokeObjectURL(url), { once: true });
+                            img.src = url;
+                        })
+                        .catch((err) => {
+                            cleanup();
+                            reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
+                        });
+                } else {
+                    img.src = filePath;
+                }
             }
         });
     }
@@ -8267,7 +8315,31 @@ class MediaViewer {
                     reject(new Error('Image load error'));
                 });
 
-                img.src = filePath;
+                if (this.isJxl(filePath)) {
+                    this.decodeJxl(filePath)
+                        .then((decoded) => {
+                            if (!decoded.frames || decoded.frames.length === 0) {
+                                cleanup();
+                                reject(new Error('JXL decoded with no frames'));
+                                return;
+                            }
+                            // Local, self-contained object URL: revoke as soon as the img loads/fails.
+                            // (Do NOT use jxlFrameToObjectURL here — that set is revoked on media-display
+                            //  cleanup and could revoke this in-flight extraction URL mid-load.)
+                            const url = URL.createObjectURL(
+                                new Blob([decoded.frames[0].pngBytes], { type: 'image/png' })
+                            );
+                            img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+                            img.addEventListener('error', () => URL.revokeObjectURL(url), { once: true });
+                            img.src = url;
+                        })
+                        .catch((err) => {
+                            cleanup();
+                            reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
+                        });
+                } else {
+                    img.src = filePath;
+                }
             }
         });
     }
