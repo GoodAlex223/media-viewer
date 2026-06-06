@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // CLIP model (main process)
     loadClipModel: () => ipcRenderer.invoke('loadClipModel'),
     extractClipEmbedding: (imagePath) => ipcRenderer.invoke('extractClipEmbedding', imagePath),
+    extractClipEmbeddingFromBuffer: (pngBytes) => ipcRenderer.invoke('extractClipEmbeddingFromBuffer', pngBytes),
     extractClipEmbeddingBatch: (imagePaths) => ipcRenderer.invoke('extractClipEmbeddingBatch', imagePaths),
     unloadClipModel: () => ipcRenderer.invoke('unloadClipModel'),
     onClipDownloadProgress: (callback) => {

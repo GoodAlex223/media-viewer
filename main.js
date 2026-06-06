@@ -802,6 +802,51 @@ app.whenReady().then(() => {
         }
     });
 
+    ipcMain.handle('extractClipEmbeddingFromBuffer', async (event, pngBytes) => {
+        // Load model if needed
+        const loadResult = await loadClipModel(event);
+        if (!loadResult.success) {
+            return { success: false, error: loadResult.error };
+        }
+
+        // Capture local refs to survive a concurrent unloadClipModel during await
+        const processor = clipProcessor;
+        const model = clipVisionModel;
+        if (!processor || !model) {
+            return { success: false, error: 'CLIP unavailable' };
+        }
+
+        try {
+            const { RawImage } = await import('@huggingface/transformers');
+
+            // Build RawImage from decoded PNG bytes (JXL frame-0) instead of a path
+            const blob = new Blob([Buffer.from(pngBytes)], { type: 'image/png' });
+            const image = await RawImage.fromBlob(blob);
+
+            // Process through CLIP vision encoder
+            const inputs = await processor(image);
+            const output = await model(inputs);
+
+            // Extract and normalize embedding
+            const embedding = output.image_embeds.data;
+            const dim = 512;
+            const result = new Float32Array(dim);
+
+            let norm = 0;
+            for (let i = 0; i < dim; i++) {
+                norm += embedding[i] * embedding[i];
+            }
+            norm = Math.sqrt(norm);
+            for (let i = 0; i < dim; i++) {
+                result[i] = norm > 0 ? embedding[i] / norm : 0;
+            }
+
+            return { success: true, embedding: Array.from(result) };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('extractClipEmbeddingBatch', async (event, imagePaths) => {
         // Load model if needed
         const loadResult = await loadClipModel(event);

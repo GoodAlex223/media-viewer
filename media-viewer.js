@@ -8007,6 +8007,25 @@ class MediaViewer {
             return this.extractClipFromVideo(filePath);
         }
 
+        if (this.isJxl(filePath)) {
+            try {
+                const decoded = await this.decodeJxl(filePath);
+                if (!decoded.frames || decoded.frames.length === 0) {
+                    return null;
+                }
+                // Send a COPY of the cached frame-0 PNG bytes (no transfer — display still needs them).
+                const result = await window.electronAPI.extractClipEmbeddingFromBuffer(decoded.frames[0].pngBytes);
+                if (result.success) {
+                    return new Float32Array(result.embedding);
+                }
+                console.warn('CLIP extraction failed (jxl):', result.error);
+                return null;
+            } catch (err) {
+                console.warn('CLIP extraction error (jxl):', err.message);
+                return null;
+            }
+        }
+
         try {
             const result = await window.electronAPI.extractClipEmbedding(filePath);
             if (result.success) {
