@@ -390,6 +390,7 @@ class MediaViewer {
         this._jxlPending = new Map(); // id -> { resolve, reject }
         this._jxlReady = null;
         this._jxlResolveReady = null;
+        this._jxlRejectReady = null;
         // NOTE: _jxlObjectURLs is shared across single + both compare sides. Safe only because
         // compare always cleans + re-renders BOTH sides together; a future per-side re-render
         // must scope URL revocation per side to avoid blanking the still-displayed side.
@@ -898,16 +899,17 @@ class MediaViewer {
             const msg = (e && e.message) || 'JXL decode worker crashed';
             for (const { reject } of this._jxlPending.values()) reject(new Error(msg));
             this._jxlPending.clear();
-            if (this._jxlResolveReady) {
-                this._jxlReady = Promise.reject(new Error(msg));
-                this._jxlReady.catch(() => {}); // suppress unhandled rejection
+            if (this._jxlRejectReady) {
+                this._jxlRejectReady(new Error(msg));
+                this._jxlRejectReady = null;
                 this._jxlResolveReady = null;
             }
             this.jxlWorker = null; // allow re-creation on the next decode attempt
         });
         // Explicit-bytes wasm init (spike §9): main process reads the vendored .wasm.
-        this._jxlReady = new Promise((res) => {
+        this._jxlReady = new Promise((res, rej) => {
             this._jxlResolveReady = res;
+            this._jxlRejectReady = rej;
         });
         window.electronAPI
             .readJxlWasm()
@@ -915,10 +917,13 @@ class MediaViewer {
                 this.jxlWorker.postMessage({ type: 'init', wasmBytes }, [wasmBytes]);
             })
             .catch((err) => {
-                this._jxlReady = Promise.reject(
-                    new Error('JXL WASM load failed: ' + (err && err.message ? err.message : err))
-                );
-                this._jxlReady.catch(() => {});
+                if (this._jxlRejectReady) {
+                    this._jxlRejectReady(
+                        new Error('JXL WASM load failed: ' + (err && err.message ? err.message : err))
+                    );
+                    this._jxlRejectReady = null;
+                    this._jxlResolveReady = null;
+                }
                 this.jxlWorker = null;
             });
         return this._jxlReady;
