@@ -882,11 +882,20 @@ class MediaViewer {
 
     ensureJxlWorker() {
         if (this.jxlWorker) return this._jxlReady;
-        this.jxlWorker = new Worker('jxl-decode-worker.js', { type: 'module' });
-        this.jxlWorker.addEventListener('message', (e) => {
+        // Local ref so the error/init-failure paths terminate THIS worker instance and only
+        // null this.jxlWorker if it still points here (a newer worker may have replaced it).
+        const worker = new Worker('jxl-decode-worker.js', { type: 'module' });
+        this.jxlWorker = worker;
+        const teardownWorker = () => {
+            worker.terminate(); // release the underlying thread (was leaked before)
+            if (this.jxlWorker === worker) this.jxlWorker = null; // allow re-creation next decode
+        };
+        worker.addEventListener('message', (e) => {
             const m = e.data;
             if (m.type === 'ready') {
                 if (this._jxlResolveReady) this._jxlResolveReady();
+                this._jxlResolveReady = null; // init settled — drop the resolver refs
+                this._jxlRejectReady = null;
                 return;
             }
             const pending = this._jxlPending.get(m.id);
@@ -895,7 +904,7 @@ class MediaViewer {
             if (m.type === 'error') pending.reject(new Error(m.message));
             else pending.resolve(m);
         });
-        this.jxlWorker.addEventListener('error', (e) => {
+        worker.addEventListener('error', (e) => {
             const msg = (e && e.message) || 'JXL decode worker crashed';
             for (const { reject } of this._jxlPending.values()) reject(new Error(msg));
             this._jxlPending.clear();
@@ -904,7 +913,7 @@ class MediaViewer {
                 this._jxlRejectReady = null;
                 this._jxlResolveReady = null;
             }
-            this.jxlWorker = null; // allow re-creation on the next decode attempt
+            teardownWorker();
         });
         // Explicit-bytes wasm init (spike §9): main process reads the vendored .wasm.
         this._jxlReady = new Promise((res, rej) => {
@@ -914,7 +923,8 @@ class MediaViewer {
         window.electronAPI
             .readJxlWasm()
             .then((wasmBytes) => {
-                this.jxlWorker.postMessage({ type: 'init', wasmBytes }, [wasmBytes]);
+                if (!wasmBytes) throw new Error('JXL WASM unavailable (read-jxl-wasm returned null)');
+                worker.postMessage({ type: 'init', wasmBytes }, [wasmBytes]);
             })
             .catch((err) => {
                 if (this._jxlRejectReady) {
@@ -924,7 +934,7 @@ class MediaViewer {
                     this._jxlRejectReady = null;
                     this._jxlResolveReady = null;
                 }
-                this.jxlWorker = null;
+                teardownWorker();
             });
         return this._jxlReady;
     }
@@ -1000,13 +1010,32 @@ class MediaViewer {
         this._jxlAnimToken = token;
         let i = 0;
         let loop = 0;
+        let consecutiveFailures = 0;
+        // Advance to the next frame, wrapping + counting loops. Returns false once a finite
+        // numLoops has completed (caller stops), true to keep playing.
+        const advance = () => {
+            i++;
+            if (i >= decoded.frames.length) {
+                i = 0;
+                loop++;
+                if (decoded.numLoops !== 0 && loop >= decoded.numLoops) return false; // finite loops done
+            }
+            return true;
+        };
         const drawNext = async () => {
             if (this._jxlAnimToken !== token) return; // superseded by navigation/cleanup
+            const delay = delays[i];
             let bmp;
             try {
                 bmp = await createImageBitmap(new Blob([decoded.frames[i].pngBytes], { type: 'image/png' }));
+                consecutiveFailures = 0;
             } catch (_e) {
-                return; // decode glitch — stop this animation quietly
+                // Skip a single corrupt frame and keep playing; bail only if an entire pass fails.
+                consecutiveFailures++;
+                if (consecutiveFailures >= decoded.frames.length) return; // whole animation undecodable
+                if (!advance()) return;
+                this._jxlAnimTimer = setTimeout(drawNext, delay);
+                return;
             }
             if (this._jxlAnimToken !== token) {
                 if (bmp.close) bmp.close();
@@ -1015,13 +1044,7 @@ class MediaViewer {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(bmp, 0, 0);
             if (bmp.close) bmp.close();
-            const delay = delays[i];
-            i++;
-            if (i >= decoded.frames.length) {
-                i = 0;
-                loop++;
-                if (decoded.numLoops !== 0 && loop >= decoded.numLoops) return; // finite loops done
-            }
+            if (!advance()) return;
             this._jxlAnimTimer = setTimeout(drawNext, delay);
         };
         drawNext();
@@ -2899,6 +2922,32 @@ class MediaViewer {
         setTimeout(() => this.prioritizeDisplayedFilesExtraction(), 200);
     }
 
+    // Shared tail for "a file became unusable mid-render" (missing on disk OR undecodable JXL):
+    // fall back to single mode when < 2 files remain, else retry the pair (bounded). The caller
+    // must have already removeFileFromList()'d the bad file and reset isLoading /
+    // mediaNavigationInProgress / hidden the spinner before calling this.
+    async _retryCompareAfterRemoval(retryCount) {
+        if (this.mediaFiles.length < 2) {
+            this.switchToSingleModeUI();
+            if (this.mediaFiles.length === 1) {
+                this.showNotification('Not enough files for compare mode', 'info');
+                this.currentIndex = 0;
+                await this.showMedia();
+            } else if (this.moveHistory.length > 0) {
+                this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                this.showEmptyStateWithUndo();
+            } else {
+                this.showDropZone();
+            }
+            return;
+        }
+        if (retryCount >= 10) {
+            this.showNotification('Too many unusable files, unable to find valid pair', 'error');
+            return;
+        }
+        return this.showCompareMedia(retryCount + 1);
+    }
+
     async showCompareMedia(retryCount = 0) {
         if (this.mediaFiles.length < 2) {
             // Clean up any stale compare media from a prior render
@@ -3043,39 +3092,10 @@ class MediaViewer {
 
         if (removedCount > 0) {
             this.showNotification(`Skipped ${removedCount} missing file${removedCount > 1 ? 's' : ''}`, 'warning');
-
-            if (this.mediaFiles.length < 2) {
-                this.isLoading = false;
-                this.mediaNavigationInProgress = false;
-                this.hideLoadingSpinner();
-
-                this.switchToSingleModeUI();
-
-                if (this.mediaFiles.length === 1) {
-                    this.showNotification('Not enough files for compare mode', 'info');
-                    this.currentIndex = 0;
-                    await this.showMedia();
-                } else if (this.moveHistory.length > 0) {
-                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
-                    this.showEmptyStateWithUndo();
-                } else {
-                    this.showDropZone();
-                }
-                return;
-            }
-
-            // Retry with remaining files (bounded to prevent deep recursion)
-            if (retryCount >= 10) {
-                this.isLoading = false;
-                this.mediaNavigationInProgress = false;
-                this.hideLoadingSpinner();
-                this.showNotification('Too many missing files, unable to find valid pair', 'error');
-                return;
-            }
             this.isLoading = false;
             this.mediaNavigationInProgress = false;
             this.hideLoadingSpinner();
-            return this.showCompareMedia(retryCount + 1);
+            return this._retryCompareAfterRemoval(retryCount);
         }
 
         console.log('Showing compare media:', leftFile.name, 'vs', rightFile.name);
@@ -3096,16 +3116,19 @@ class MediaViewer {
                     if (!decoded.frames || decoded.frames.length === 0) {
                         throw new Error('JXL decoded with no frames');
                     }
-                    // Task 6: render frame 0 statically (animation added in a later task)
+                    // Compare mode shows frame 0 only (no animation in compare for v1).
                     this.leftMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
                 } catch (err) {
+                    // Undecodable JXL: purge it and retry the pair (mirrors the missing-file path),
+                    // rather than leaving compare half-rendered.
                     window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
-                    this.showNotification('Could not decode JXL file', 'error');
+                    this.showNotification('Skipping undecodable JXL file', 'warning');
+                    this.leftMedia = null; // detached <img>, never appended
+                    this.removeFileFromList(leftFile.path);
                     this.isLoading = false;
                     this.mediaNavigationInProgress = false;
                     this.hideLoadingSpinner();
-                    this.leftMedia = null;
-                    return; // graceful skip — do not crash
+                    return this._retryCompareAfterRemoval(retryCount);
                 }
             } else {
                 this.leftMedia.src = leftFileUrl;
@@ -3133,16 +3156,19 @@ class MediaViewer {
                     if (!decoded.frames || decoded.frames.length === 0) {
                         throw new Error('JXL decoded with no frames');
                     }
-                    // Task 6: render frame 0 statically (animation added in a later task)
+                    // Compare mode shows frame 0 only (no animation in compare for v1).
                     this.rightMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
                 } catch (err) {
+                    // Undecodable JXL: purge it and retry the pair. The retry re-enters
+                    // showCompareMedia, whose start-cleanup revokes the already-set left object URL.
                     window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
-                    this.showNotification('Could not decode JXL file', 'error');
+                    this.showNotification('Skipping undecodable JXL file', 'warning');
+                    this.rightMedia = null; // detached <img>, never appended
+                    this.removeFileFromList(rightFile.path);
                     this.isLoading = false;
                     this.mediaNavigationInProgress = false;
                     this.hideLoadingSpinner();
-                    this.rightMedia = null;
-                    return; // graceful skip — do not crash
+                    return this._retryCompareAfterRemoval(retryCount);
                 }
             } else {
                 this.rightMedia.src = rightFileUrl;

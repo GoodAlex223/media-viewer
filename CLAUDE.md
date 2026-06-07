@@ -123,7 +123,7 @@ media_viewer/
 **Formatting & Linting**:
 - Prettier: tabWidth=4, useTabs=false, singleQuote, semi, trailingComma=es5, printWidth=120, bracketSpacing=true, arrowParens=always, endOfLine="lf"
 - `.gitattributes`: `* text=auto eol=lf` — enforces LF line endings for all files across platforms
-- ESLint flat config (`eslint.config.mjs`): Ten file-group blocks (1: Node/main, 1b: preload, 2a: renderer module, 2b: renderer script, 2c: fullscreen.js + tournament-engine.js + tournament.js, 3a: workers, 3b: shared libs — feature-extractor.js + ml-model.js + media-formats.js, 4: unit tests, 5a: e2e CJS helpers, 5b: e2e JS tests); shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn, `_`-prefix escape); `eslint-config-prettier` applied last
+- ESLint flat config (`eslint.config.mjs`): Eleven file-group blocks (1: Node/main, 1b: preload, 2a: renderer module, 2b: renderer script, 2c: fullscreen.js + tournament-engine.js + tournament.js, 3a: workers, 3a-jxl: jxl-decode-worker.js (ES module worker — `sourceType: 'module'` + worker globals), 3b: shared libs — feature-extractor.js + ml-model.js + media-formats.js, 4: unit tests, 5a: e2e CJS helpers, 5b: e2e JS tests); shared rules: eqeqeq, curly, prefer-const, no-var, no-shadow (warn), no-unused-vars (warn, `_`-prefix escape); `eslint-config-prettier` applied last
 - Prettier ignores `docs/`, `*.md`, `package-lock.json`
 
 **Testing (Unit — Vitest)**:
