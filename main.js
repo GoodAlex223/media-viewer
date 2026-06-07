@@ -5,6 +5,7 @@ const fsSync = require('fs'); // createReadStream/createWriteStream for streamin
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const logger = require('./logger');
+const { isMediaFile, getMimeType } = require('./media-formats');
 
 // Streaming JSON reader for the feature cache (parse a 250MB+ file with a tiny memory
 // footprint instead of fs.readFile + JSON.parse, which peaks past ~1GB and kills the process).
@@ -116,26 +117,6 @@ function createWindow() {
             mainWindow.webContents.toggleDevTools();
         }
     });
-}
-
-// Helper functions
-function isMediaFile(extension) {
-    const mediaExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm', '.mov'];
-    return mediaExtensions.includes(extension);
-}
-
-function getMimeType(extension) {
-    const mimeTypes = {
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-        '.mp4': 'video/mp4',
-        '.webm': 'video/webm',
-        '.mov': 'video/quicktime',
-    };
-    return mimeTypes[extension] || 'application/octet-stream';
 }
 
 // App lifecycle
@@ -395,6 +376,31 @@ app.whenReady().then(() => {
             return data;
         } catch (_error) {
             // Return null if file doesn't exist or can't be read
+            return null;
+        }
+    });
+
+    // Read any file as raw bytes (no encoding) and return an ArrayBuffer. Used by the JXL
+    // decode pipeline, which needs the original compressed bytes rather than a UTF-8 string.
+    ipcMain.handle('read-file-buffer', async (_event, filePath) => {
+        try {
+            const data = await fs.readFile(filePath); // Buffer (no encoding)
+            // Slice out exactly this Buffer's view — Node Buffers can be windows into a larger
+            // pooled ArrayBuffer, so returning data.buffer directly would leak unrelated bytes.
+            return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+        } catch (_error) {
+            return null;
+        }
+    });
+
+    // Read the vendored jxl-oxide decoder wasm and return its bytes as an ArrayBuffer. Passing
+    // explicit wasm bytes to the decode worker avoids fetch(file://) resolution issues.
+    ipcMain.handle('read-jxl-wasm', async () => {
+        try {
+            const wasmPath = path.join(__dirname, 'vendor', 'jxl-oxide-wasm', 'jxl_oxide_wasm_bg.wasm');
+            const data = await fs.readFile(wasmPath);
+            return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+        } catch (_error) {
             return null;
         }
     });
@@ -771,6 +777,51 @@ app.whenReady().then(() => {
 
             // Read image file and create RawImage
             const image = await RawImage.read(imagePath);
+
+            // Process through CLIP vision encoder
+            const inputs = await processor(image);
+            const output = await model(inputs);
+
+            // Extract and normalize embedding
+            const embedding = output.image_embeds.data;
+            const dim = 512;
+            const result = new Float32Array(dim);
+
+            let norm = 0;
+            for (let i = 0; i < dim; i++) {
+                norm += embedding[i] * embedding[i];
+            }
+            norm = Math.sqrt(norm);
+            for (let i = 0; i < dim; i++) {
+                result[i] = norm > 0 ? embedding[i] / norm : 0;
+            }
+
+            return { success: true, embedding: Array.from(result) };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('extractClipEmbeddingFromBuffer', async (event, pngBytes) => {
+        // Load model if needed
+        const loadResult = await loadClipModel(event);
+        if (!loadResult.success) {
+            return { success: false, error: loadResult.error };
+        }
+
+        // Capture local refs to survive a concurrent unloadClipModel during await
+        const processor = clipProcessor;
+        const model = clipVisionModel;
+        if (!processor || !model) {
+            return { success: false, error: 'CLIP unavailable' };
+        }
+
+        try {
+            const { RawImage } = await import('@huggingface/transformers');
+
+            // Build RawImage from decoded PNG bytes (JXL frame-0) instead of a path
+            const blob = new Blob([Buffer.from(pngBytes)], { type: 'image/png' });
+            const image = await RawImage.fromBlob(blob);
 
             // Process through CLIP vision encoder
             const inputs = await processor(image);

@@ -82,29 +82,6 @@ Active tasks and backlog.
        [ ] E2E test for full tournament flow — DEFERRED to follow-up (BACKLOG 2026-05-26 / plan Phase H)
      Tests: 241/241 unit. -->
 
-#### JXL + extended format viewer support
-**Priority**: 🔴 Critical
-**Status**: 📋 Planned
-**Effort**: L
-
-**Description**: The user produces files in JXL and other formats (defined in the sibling `C:\Users\alexm\Projects\media_compression` project — likely AVIF, WebP-lossless, HEIF, or similar) that the viewer currently cannot open. Marked urgent: blocks viewing files the user already has. JXL is the headline format — Chromium dropped native JPEG XL support in 2022, so an in-app decoder is required (WASM port of `libjxl`, e.g., `jxl-oxide-wasm` or the official `libjxl` WASM build). Other formats may already work via native Chromium decoders; needs an audit. (Необходимо срочно добавить поддержку jxl формата и других форматов, определенных в `C:\Users\alexm\Projects\media_compression`, чтобы я уже мог открывать их в приложении.)
-
-**Acceptance Criteria**:
-- [ ] Audit the format list in `media_compression`; enumerate which formats already render in Electron and which need a decoder
-- [ ] Add JXL decoding path (WASM library evaluation: licence, bundle size, perf on large images, animated-JXL support)
-- [ ] Update folder-scanning filter (`SUPPORTED_EXTENSIONS` / file-type detection in [main.js](../../main.js)) to include the new extensions
-- [ ] Update preview rendering in [media-viewer.js](../../media-viewer.js) (`showSingleMedia` / `showCompareMedia`) — JXL goes through decode → Canvas → blob URL; native formats use the existing `<img>` path
-- [ ] Feature extraction pipeline (hand-crafted features + CLIP embedding) must work on decoded JXL (likely via Canvas → ImageData path that already exists)
-- [ ] Loading state during WASM decode (some JXL files are large; decode is non-trivial)
-- [ ] Graceful fallback when decode fails (similar to CLIP graceful degradation)
-- [ ] Tests: unit test for format detection; E2E smoke test with a fixture JXL file
-
-**Context**:
-- **Current**: Folder scan filters to a fixed list of natively-supported extensions; JXL and friends are silently excluded from `mediaFiles`
-- **Proposed**: Extension list expanded; decode path branches by extension (native vs WASM); UI is format-agnostic
-- **Files Affected**: [main.js](../../main.js) (extension filter, possibly file-type detection IPC), [media-viewer.js](../../media-viewer.js) (`showSingleMedia` / `showCompareMedia` decode branching, `loadMediaAsImageData` for feature extraction), [preload.js](../../preload.js) (potentially new IPC if WASM lives main-side), [package.json](../../package.json) (new dep), [index.html](../../index.html) (no expected changes unless preview chrome differs)
-- **Open Questions**: Run WASM decoder in main process (IPC the decoded image back to renderer) or directly in renderer (bundle as inline WASM)? Animated JXL — out of scope for v1? Cross-reference with BACKLOG item "Lossless compression add-on" (same toolchain produces these files).
-
 #### BUG: AI-sort + ratings + mode-switch shows different first media in single vs compare
 **Priority**: 🔴 Critical
 **Status**: 📋 Planned

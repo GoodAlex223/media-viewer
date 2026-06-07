@@ -7,7 +7,8 @@
 //   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
 //   2c. Browser renderer modules     — fullscreen.js (ES module, imported by media-viewer.js)
 //   3a. Web Workers                  — sorting-worker.js, ml-worker.js, feature-worker.js
-//   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js
+//   3a-jxl. Module Web Worker        — jxl-decode-worker.js (ES module worker)
+//   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js, media-formats.js
 //   4.  Unit tests (Vitest)          — tests/**/*.js (excl. e2e)
 //   5a. E2E helpers (CJS)            — tests/e2e/**/*.cjs
 //   5b. E2E tests (Playwright)       — tests/e2e/**/*.js, playwright.config.js
@@ -148,9 +149,25 @@ export default [
         },
     },
 
+    // 3a-jxl. Module Web Worker (ES module worker — `new Worker(url, { type: 'module' })`)
+    {
+        files: ['jxl-decode-worker.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: {
+                ...globals.worker,
+            },
+        },
+        rules: {
+            ...sharedRules,
+            'no-undef': 'error',
+        },
+    },
+
     // 3b. Shared libraries loaded via importScripts and browser <script> (have conditional CJS export pattern)
     {
-        files: ['feature-extractor.js', 'ml-model.js'],
+        files: ['feature-extractor.js', 'ml-model.js', 'media-formats.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script',

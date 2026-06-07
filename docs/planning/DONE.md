@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-03 <!-- Group 0 part 2: re-rate / mark-as-equal (tournament) -->
+**Last Updated**: 2026-06-07 <!-- Group A: JXL + animated-JXL viewer support -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,41 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-07 — Group A: JXL + animated-JXL viewer support 🏆
+
+**Summary**: The viewer can now open `.jxl` files — including **animated** JXL converted
+from GIFs — produced by the sibling `media_compression` project. Chromium dropped native
+JPEG XL in 2022, so decoding runs in a dedicated **renderer module Web Worker**
+(`jxl-decode-worker.js`) wrapping the pure-Rust `jxl-oxide-wasm` decoder (MIT/Apache-2.0,
+~1.62 MB wasm, vendored under `vendor/jxl-oxide-wasm/`). Static JXL renders as an object-URL
+`<img>` in single + compare mode; animated JXL plays GIF-style on a `<canvas>` (single mode)
+with per-frame just-in-time decode (≈1 frame resident, avoiding ~1 GB for a 270-frame 720p
+loop). Decoded frame-0 feeds the existing hand-crafted feature path and a new
+`extractClipEmbeddingFromBuffer` CLIP IPC, giving JXL full 64+512-dim parity. Graceful
+degradation throughout: decode/worker/init failures surface as a toast + skip (never a hang
+or crash). Built via the superpowers brainstorm → spec → plan → subagent-driven-development
+pipeline (10 tasks, per-task + final whole-branch review).
+
+**Plan**: [archive/plans/2026-06-04-jxl-viewer-support.md](../archive/plans/2026-06-04-jxl-viewer-support.md) ·
+**Spec**: [superpowers/specs/2026-06-04-jxl-viewer-support-design.md](../superpowers/specs/2026-06-04-jxl-viewer-support-design.md)
+
+**Key changes**:
+- **Detection**: `media-formats.js` shared CJS module (extracted `isMediaFile`/`getMimeType` from `main.js`) registers `.jxl` → `image/jxl`; renderer `isJxl()` (handles stacked `*.jpg.jxl`).
+- **IPC**: `read-file-buffer` (raw bytes for decode) + `read-jxl-wasm` (explicit-bytes worker init, avoids `fetch(file://)`) + `extractClipEmbeddingFromBuffer` (CLIP on decoded PNG via `RawImage.fromBlob`).
+- **Decode worker** (`jxl-decode-worker.js`): module worker; reads `RenderResult.duration` BEFORE the terminal `encodeToPng()`; transferable PNG frames; init/ready/decode/error protocol.
+- **Renderer** (`media-viewer.js`): `decodeJxl()` + LRU(8) `jxlFrameCache` (purged in `removeFileFromList`); static render branch (single + both compare sides); `startJxlAnimation`/`stopJxlAnimation`/`computeJxlFrameSchedule`/`finishJxlCanvasDisplay` (canvas loop with token teardown, aspect-preserving sizing); JXL routed into all 3 feature-extraction sites + the CLIP chokepoint.
+- **Vendored**: `jxl-oxide-wasm` dep + `vendor/jxl-oxide-wasm/` assets.
+
+**Tests**: 275 → **289 unit tests pass** (media-formats ×5, isJxl ×2, decodeJxl ×4 incl. LRU + error, computeJxlFrameSchedule ×2, removeFileFromList purge ×1). New E2E `tests/e2e/jxl-rendering.test.js` (static `.jxl` renders) passes; full E2E 40 pass / **1 pre-existing unrelated fail** (`app-launch.test.js` asserts the legacy hidden `#viewModeBtn` — fails on clean tree too, filed to BACKLOG). Lint clean (1 pre-existing warning). Static + animated JXL manually confirmed by the user.
+
+**Deviations from plan**: feature extraction routed JXL through a decoded-PNG object URL into the existing `new Image()` path (simpler than a `getExtractionImageData` helper; sidesteps `fetch(file://)`); animation decodes one frame at a time (plan's pre-decode-all would cost ~1 GB for 270 frames); added `read-jxl-wasm` IPC for explicit-bytes init after the spike showed `jxl-oxide-wasm` is ESM-only + needs a module worker + `encodeToPng()` is terminal.
+
+**Final-review fix**: `ensureJxlWorker` rejected a *new* `_jxlReady` promise on init failure, leaving concurrent awaiters of the *original* promise hung forever — fixed in `84bf62b` (reject the original via stored `_jxlRejectReady`; null `jxlWorker` for recovery).
+
+**BACKLOG spawned (5)**: 🔵 progressive/streaming animated-decode (frame-0-first, fixes the user-observed slow load on 270-frame files); 🟤 pre-existing `#viewModeBtn` E2E assertion, worker init `try/catch`, shared `_jxlObjectURLs` per-side hazard, pre-existing generic preload `invoke` passthrough.
+
+**Commits**: `cb38175` (spec) → `84bf62b` (fix) on `feature/jxl-viewer-support` (16 commits).
 
 ### 2026-06-03 — Group 0 part 2: Re-rate / mark-as-equal (tournament)
 

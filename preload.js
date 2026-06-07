@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     checkFileExists: (filePath) => ipcRenderer.invoke('check-file-exists', filePath),
     createFolder: (folderPath) => ipcRenderer.invoke('create-folder', folderPath),
     readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+    readFileBuffer: (filePath) => ipcRenderer.invoke('read-file-buffer', filePath),
+    readJxlWasm: () => ipcRenderer.invoke('read-jxl-wasm'),
     writeFile: (filePath, data) => ipcRenderer.invoke('write-file', filePath, data),
     // Streaming feature-cache reader (parse in main, pull in batches) — avoids the renderer
     // crashing on huge .feature_cache.json files.
@@ -36,6 +38,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // CLIP model (main process)
     loadClipModel: () => ipcRenderer.invoke('loadClipModel'),
     extractClipEmbedding: (imagePath) => ipcRenderer.invoke('extractClipEmbedding', imagePath),
+    extractClipEmbeddingFromBuffer: (pngBytes) => ipcRenderer.invoke('extractClipEmbeddingFromBuffer', pngBytes),
     extractClipEmbeddingBatch: (imagePaths) => ipcRenderer.invoke('extractClipEmbeddingBatch', imagePaths),
     unloadClipModel: () => ipcRenderer.invoke('unloadClipModel'),
     onClipDownloadProgress: (callback) => {

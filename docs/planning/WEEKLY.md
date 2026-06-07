@@ -34,7 +34,7 @@ _(No ongoing background tasks this week.)_
 **Source**: 🔵 User-Flagged
 **Total SP**: 8 — solo (🔴 Critical, urgent)
 
-- [ ] **Add JXL + extended-format viewing (full commit)** — 8 SP, 🔴 IMPORTANT (URGENT, user-flagged)
+- [x] **Add JXL + extended-format viewing (full commit)** — 8 SP, 🔴 IMPORTANT (URGENT, user-flagged) — ✅ **shipped 2026-06-07** (branch `feature/jxl-viewer-support`; see [DONE.md](DONE.md)). Scope narrowed to JXL-only (static + animated); 289 unit tests + 1 E2E smoke; plan archived. 5 BACKLOG follow-ups spawned.
   - Per TODO.md "JXL + extended format viewer support" (🔴 Critical). User produces JXL (+ other formats from the sibling `media_compression` project) the viewer can't currently open. Chromium dropped native JPEG XL in 2022 → an in-app WASM decoder is required (`jxl-oxide-wasm` or official `libjxl` WASM build).
   - Acceptance: audit `media_compression` extensions (which render natively vs need a decoder); WASM lib evaluation (licence / bundle size / perf / animated-JXL); expand `SUPPORTED_EXTENSIONS` / file-type detection in [main.js](../../main.js); decode→Canvas→blob branch in `showSingleMedia`/`showCompareMedia` (native vs WASM); feature-extraction (hand-crafted + CLIP) on decoded JXL via the existing ImageData path; loading state during decode; graceful fallback on decode failure; unit test (format detection) + E2E smoke (fixture JXL).
   - Affected: [main.js](../../main.js), [media-viewer.js](../../media-viewer.js), [preload.js](../../preload.js), [package.json](../../package.json), [index.html](../../index.html).
@@ -98,7 +98,7 @@ _(No ongoing background tasks this week.)_
 | **Group A: JXL viewer support** (part 1 — audit + WASM eval) | 4 |
 
 - [x] Tournament re-rate / mark-as-equal (2 SP) — Group 0 completes — ✅ shipped 2026-06-03
-- [ ] JXL: format audit of `media_compression` + WASM libjxl evaluation + extension-filter wiring (4 SP)
+- [x] JXL: format audit of `media_compression` + WASM libjxl evaluation + extension-filter wiring (4 SP) — ✅ shipped 2026-06-07 (chose `jxl-oxide-wasm`; media-formats.js + isJxl + read-file-buffer/read-jxl-wasm IPC)
 
 **Daily total**: 6 SP
 
@@ -111,7 +111,7 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group A: JXL viewer support** (part 2 — decode/render/integration/tests) | 4 |
 
-- [ ] JXL: decode→Canvas branch, render in `showSingleMedia`/`showCompareMedia`, feature-extraction integration, loading state, graceful fallback, unit + E2E smoke (4 SP) — Group A completes
+- [x] JXL: decode→Canvas branch, render in `showSingleMedia`/`showCompareMedia`, feature-extraction integration, loading state, graceful fallback, unit + E2E smoke (4 SP) — Group A completes — ✅ shipped 2026-06-07 (+ animated-JXL canvas playback)
 
 **Daily total**: 4 SP | 🏆 Weekly Challenge complete
 

@@ -383,6 +383,21 @@ class MediaViewer {
         this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
         this.sortingWorker = null; // Web Worker for sorting to prevent UI freeze
 
+        // JXL decode state (module Web Worker)
+        this.jxlWorker = null;
+        this.jxlFrameCache = new Map(); // filePath -> { frames, width, height, animated, numLoops }
+        this._jxlReqId = 0;
+        this._jxlPending = new Map(); // id -> { resolve, reject }
+        this._jxlReady = null;
+        this._jxlResolveReady = null;
+        this._jxlRejectReady = null;
+        // NOTE: _jxlObjectURLs is shared across single + both compare sides. Safe only because
+        // compare always cleans + re-renders BOTH sides together; a future per-side re-render
+        // must scope URL revocation per side to avoid blanking the still-displayed side.
+        this._jxlObjectURLs = null; // Set<string> of active object URLs for decoded JXL frames
+        this._jxlAnimToken = null; // identity token for the active animated-JXL playback loop
+        this._jxlAnimTimer = null; // setTimeout handle for the next animation frame
+
         // ML Prediction state
         this.mlWorker = null;
         this.featureCache = new Map(); // Map<filePath, Float32Array>
@@ -848,6 +863,10 @@ class MediaViewer {
         });
     }
 
+    isJxl(filePath) {
+        return /\.jxl$/i.test(filePath);
+    }
+
     // Convert Windows path to properly encoded file:// URL
     pathToFileURL(filePath) {
         // Replace backslashes with forward slashes
@@ -859,6 +878,184 @@ class MediaViewer {
             .join('/');
         // Add file:// protocol
         return `file:///${encoded}`;
+    }
+
+    ensureJxlWorker() {
+        if (this.jxlWorker) return this._jxlReady;
+        // Local ref so the error/init-failure paths terminate THIS worker instance and only
+        // null this.jxlWorker if it still points here (a newer worker may have replaced it).
+        const worker = new Worker('jxl-decode-worker.js', { type: 'module' });
+        this.jxlWorker = worker;
+        const teardownWorker = () => {
+            worker.terminate(); // release the underlying thread (was leaked before)
+            if (this.jxlWorker === worker) this.jxlWorker = null; // allow re-creation next decode
+        };
+        worker.addEventListener('message', (e) => {
+            const m = e.data;
+            if (m.type === 'ready') {
+                if (this._jxlResolveReady) this._jxlResolveReady();
+                this._jxlResolveReady = null; // init settled — drop the resolver refs
+                this._jxlRejectReady = null;
+                return;
+            }
+            const pending = this._jxlPending.get(m.id);
+            if (!pending) return;
+            this._jxlPending.delete(m.id);
+            if (m.type === 'error') pending.reject(new Error(m.message));
+            else pending.resolve(m);
+        });
+        worker.addEventListener('error', (e) => {
+            const msg = (e && e.message) || 'JXL decode worker crashed';
+            for (const { reject } of this._jxlPending.values()) reject(new Error(msg));
+            this._jxlPending.clear();
+            if (this._jxlRejectReady) {
+                this._jxlRejectReady(new Error(msg));
+                this._jxlRejectReady = null;
+                this._jxlResolveReady = null;
+            }
+            teardownWorker();
+        });
+        // Explicit-bytes wasm init (spike §9): main process reads the vendored .wasm.
+        this._jxlReady = new Promise((res, rej) => {
+            this._jxlResolveReady = res;
+            this._jxlRejectReady = rej;
+        });
+        window.electronAPI
+            .readJxlWasm()
+            .then((wasmBytes) => {
+                if (!wasmBytes) throw new Error('JXL WASM unavailable (read-jxl-wasm returned null)');
+                worker.postMessage({ type: 'init', wasmBytes }, [wasmBytes]);
+            })
+            .catch((err) => {
+                if (this._jxlRejectReady) {
+                    this._jxlRejectReady(
+                        new Error('JXL WASM load failed: ' + (err && err.message ? err.message : err))
+                    );
+                    this._jxlRejectReady = null;
+                    this._jxlResolveReady = null;
+                }
+                teardownWorker();
+            });
+        return this._jxlReady;
+    }
+
+    async decodeJxl(filePath) {
+        this._jxlPending = this._jxlPending || new Map();
+        if (this.jxlFrameCache.has(filePath)) {
+            const cached = this.jxlFrameCache.get(filePath);
+            this.jxlFrameCache.delete(filePath);
+            this.jxlFrameCache.set(filePath, cached); // move to most-recently-used (end)
+            return cached;
+        }
+        await this.ensureJxlWorker(); // resolves once the worker posts {type:'ready'}
+        const buffer = await window.electronAPI.readFileBuffer(filePath);
+        if (!buffer) throw new Error('Could not read JXL file: ' + filePath);
+        const id = ++this._jxlReqId;
+        const decoded = await new Promise((resolve, reject) => {
+            this._jxlPending.set(id, { resolve, reject });
+            this.jxlWorker.postMessage({ type: 'decode', id, buffer }, [buffer]);
+        });
+        const entry = {
+            frames: decoded.frames,
+            width: decoded.width,
+            height: decoded.height,
+            animated: decoded.animated,
+            numLoops: decoded.numLoops,
+        };
+        this.jxlFrameCache.set(filePath, entry);
+        // Bound the cache as a true-LRU. Animated JXL entries can be very large
+        // (a 270-frame file holds ~77 MB of PNG bytes), so cap to a small number
+        // of most-recently-used entries to avoid unbounded growth across navigation.
+        const JXL_CACHE_MAX = 8;
+        while (this.jxlFrameCache.size > JXL_CACHE_MAX) {
+            const oldestKey = this.jxlFrameCache.keys().next().value; // Map preserves insertion order
+            this.jxlFrameCache.delete(oldestKey);
+        }
+        return entry;
+    }
+
+    jxlFrameToObjectURL(frame) {
+        const blob = new Blob([frame.pngBytes], { type: 'image/png' });
+        const url = URL.createObjectURL(blob);
+        this._jxlObjectURLs = this._jxlObjectURLs || new Set();
+        this._jxlObjectURLs.add(url);
+        return url;
+    }
+
+    revokeJxlObjectURLs() {
+        if (!this._jxlObjectURLs) return;
+        for (const url of this._jxlObjectURLs) URL.revokeObjectURL(url);
+        this._jxlObjectURLs.clear();
+    }
+
+    // Pure helper: map decoded JXL frames to per-frame display delays (ms).
+    // jxl-oxide RenderResult.duration is already in MILLISECONDS; floor zero/short
+    // frames to MIN_MS so a 0-duration frame doesn't busy-loop the scheduler.
+    computeJxlFrameSchedule(frames) {
+        const MIN_MS = 20;
+        return frames.map((f) => Math.max(MIN_MS, Math.round(f.duration || 0)));
+    }
+
+    // Animated JXL playback: decode ONE frame at a time to an ImageBitmap, draw, close it.
+    // Never holds more than ~1 decoded frame in memory (270x720p as bitmaps would be ~1GB).
+    async startJxlAnimation(decoded) {
+        const canvas = document.createElement('canvas');
+        canvas.className = 'media-display';
+        canvas.width = decoded.width;
+        canvas.height = decoded.height;
+        this.currentMedia = canvas; // caller appends this.currentMedia after we return
+        const ctx = canvas.getContext('2d');
+        const delays = this.computeJxlFrameSchedule(decoded.frames);
+        const token = {}; // identity token for teardown
+        this._jxlAnimToken = token;
+        let i = 0;
+        let loop = 0;
+        let consecutiveFailures = 0;
+        // Advance to the next frame, wrapping + counting loops. Returns false once a finite
+        // numLoops has completed (caller stops), true to keep playing.
+        const advance = () => {
+            i++;
+            if (i >= decoded.frames.length) {
+                i = 0;
+                loop++;
+                if (decoded.numLoops !== 0 && loop >= decoded.numLoops) return false; // finite loops done
+            }
+            return true;
+        };
+        const drawNext = async () => {
+            if (this._jxlAnimToken !== token) return; // superseded by navigation/cleanup
+            const delay = delays[i];
+            let bmp;
+            try {
+                bmp = await createImageBitmap(new Blob([decoded.frames[i].pngBytes], { type: 'image/png' }));
+                consecutiveFailures = 0;
+            } catch (_e) {
+                // Skip a single corrupt frame and keep playing; bail only if an entire pass fails.
+                consecutiveFailures++;
+                if (consecutiveFailures >= decoded.frames.length) return; // whole animation undecodable
+                if (!advance()) return;
+                this._jxlAnimTimer = setTimeout(drawNext, delay);
+                return;
+            }
+            if (this._jxlAnimToken !== token) {
+                if (bmp.close) bmp.close();
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bmp, 0, 0);
+            if (bmp.close) bmp.close();
+            if (!advance()) return;
+            this._jxlAnimTimer = setTimeout(drawNext, delay);
+        };
+        drawNext();
+    }
+
+    stopJxlAnimation() {
+        this._jxlAnimToken = null;
+        if (this._jxlAnimTimer) {
+            clearTimeout(this._jxlAnimTimer);
+            this._jxlAnimTimer = null;
+        }
     }
 
     formatTimeAgo(timestamp) {
@@ -1042,6 +1239,7 @@ class MediaViewer {
         this.predictionScores.delete(filePath);
         this.featureCache.delete(filePath);
         this.clipCache.delete(filePath);
+        this.jxlFrameCache.delete(filePath);
         this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
         if (this.bulkRated.delete(removedName)) {
@@ -2563,6 +2761,10 @@ class MediaViewer {
 
     // Improved cleanup method
     cleanupCurrentMedia() {
+        // Stop any animated-JXL playback first so navigating away never leaks a timer,
+        // even if currentMedia is already null (early-return below).
+        this.stopJxlAnimation();
+
         if (!this.currentMedia) return;
 
         this.isBeingCleaned = true;
@@ -2593,6 +2795,9 @@ class MediaViewer {
         this.isVideoLoading = false;
         this.mediaNavigationInProgress = false;
         this.isBeingCleaned = false;
+
+        // Release any object URLs created for decoded JXL frames
+        this.revokeJxlObjectURLs();
     }
 
     async showMedia() {
@@ -2643,11 +2848,42 @@ class MediaViewer {
 
         const fileUrl = this.pathToFileURL(file.path);
 
+        let jxlAnimated = false;
         if (file.type.startsWith('image/')) {
             this.currentMedia = document.createElement('img');
-            this.currentMedia.src = fileUrl;
+            if (this.isJxl(file.path)) {
+                try {
+                    const decoded = await this.decodeJxl(file.path);
+                    if (!decoded.frames || decoded.frames.length === 0) {
+                        throw new Error('JXL decoded with no frames');
+                    }
+                    if (decoded.animated && decoded.frames.length > 1) {
+                        // Animated JXL: drive a <canvas>, decoding one frame at a time.
+                        // startJxlAnimation replaces this.currentMedia with the canvas.
+                        jxlAnimated = true;
+                        await this.startJxlAnimation(decoded);
+                    } else {
+                        // Static JXL: render frame 0 via the existing <img> + object-URL path.
+                        this.currentMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                    }
+                } catch (err) {
+                    window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
+                    this.showNotification('Could not decode JXL file', 'error');
+                    this.isLoading = false;
+                    this.mediaNavigationInProgress = false;
+                    this.hideLoadingSpinner();
+                    return; // graceful skip — do not crash
+                }
+            } else {
+                this.currentMedia.src = fileUrl;
+            }
             this.videoControls.style.display = 'none';
-            this.setupImageHandlers(file);
+            // A <canvas> has no 'load' event, so setupImageHandlers (which gates on an
+            // 'load' listener) would never hide the spinner or reset state. The animated
+            // path is finished synchronously below (after append), via finishJxlCanvasDisplay.
+            if (!jxlAnimated) {
+                this.setupImageHandlers(file);
+            }
         } else if (file.type.startsWith('video/')) {
             this.currentMedia = document.createElement('video');
             this.currentMedia.src = fileUrl;
@@ -2665,13 +2901,51 @@ class MediaViewer {
         this.currentMedia.style.display = 'none';
         this.mediaContainer.appendChild(this.currentMedia);
 
+        // Animated-JXL canvas: dimensions are known immediately (no async 'load'),
+        // so finish display now — after append — un-hiding the canvas set above.
+        if (jxlAnimated) {
+            this.finishJxlCanvasDisplay(file);
+        }
+
         this.closeAllZoomPopovers();
 
         this.updateBasicFileInfo(file);
+        // For the animated-JXL canvas there is no async 'load' to call
+        // updateFileInfoWithDimensions later, so write dimensions now (after the
+        // basic info reset above would otherwise clobber them).
+        if (jxlAnimated) {
+            this.updateFileInfoWithDimensions(file);
+        }
         this.updateNavigationInfo();
 
         // Prioritize feature extraction for displayed file (after small delay for media to load)
         setTimeout(() => this.prioritizeDisplayedFilesExtraction(), 200);
+    }
+
+    // Shared tail for "a file became unusable mid-render" (missing on disk OR undecodable JXL):
+    // fall back to single mode when < 2 files remain, else retry the pair (bounded). The caller
+    // must have already removeFileFromList()'d the bad file and reset isLoading /
+    // mediaNavigationInProgress / hidden the spinner before calling this.
+    async _retryCompareAfterRemoval(retryCount) {
+        if (this.mediaFiles.length < 2) {
+            this.switchToSingleModeUI();
+            if (this.mediaFiles.length === 1) {
+                this.showNotification('Not enough files for compare mode', 'info');
+                this.currentIndex = 0;
+                await this.showMedia();
+            } else if (this.moveHistory.length > 0) {
+                this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                this.showEmptyStateWithUndo();
+            } else {
+                this.showDropZone();
+            }
+            return;
+        }
+        if (retryCount >= 10) {
+            this.showNotification('Too many unusable files, unable to find valid pair', 'error');
+            return;
+        }
+        return this.showCompareMedia(retryCount + 1);
     }
 
     async showCompareMedia(retryCount = 0) {
@@ -2818,39 +3092,10 @@ class MediaViewer {
 
         if (removedCount > 0) {
             this.showNotification(`Skipped ${removedCount} missing file${removedCount > 1 ? 's' : ''}`, 'warning');
-
-            if (this.mediaFiles.length < 2) {
-                this.isLoading = false;
-                this.mediaNavigationInProgress = false;
-                this.hideLoadingSpinner();
-
-                this.switchToSingleModeUI();
-
-                if (this.mediaFiles.length === 1) {
-                    this.showNotification('Not enough files for compare mode', 'info');
-                    this.currentIndex = 0;
-                    await this.showMedia();
-                } else if (this.moveHistory.length > 0) {
-                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
-                    this.showEmptyStateWithUndo();
-                } else {
-                    this.showDropZone();
-                }
-                return;
-            }
-
-            // Retry with remaining files (bounded to prevent deep recursion)
-            if (retryCount >= 10) {
-                this.isLoading = false;
-                this.mediaNavigationInProgress = false;
-                this.hideLoadingSpinner();
-                this.showNotification('Too many missing files, unable to find valid pair', 'error');
-                return;
-            }
             this.isLoading = false;
             this.mediaNavigationInProgress = false;
             this.hideLoadingSpinner();
-            return this.showCompareMedia(retryCount + 1);
+            return this._retryCompareAfterRemoval(retryCount);
         }
 
         console.log('Showing compare media:', leftFile.name, 'vs', rightFile.name);
@@ -2865,7 +3110,29 @@ class MediaViewer {
         const leftFileUrl = this.pathToFileURL(leftFile.path);
         if (leftFile.type.startsWith('image/')) {
             this.leftMedia = document.createElement('img');
-            this.leftMedia.src = leftFileUrl;
+            if (this.isJxl(leftFile.path)) {
+                try {
+                    const decoded = await this.decodeJxl(leftFile.path);
+                    if (!decoded.frames || decoded.frames.length === 0) {
+                        throw new Error('JXL decoded with no frames');
+                    }
+                    // Compare mode shows frame 0 only (no animation in compare for v1).
+                    this.leftMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                } catch (err) {
+                    // Undecodable JXL: purge it and retry the pair (mirrors the missing-file path),
+                    // rather than leaving compare half-rendered.
+                    window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
+                    this.showNotification('Skipping undecodable JXL file', 'warning');
+                    this.leftMedia = null; // detached <img>, never appended
+                    this.removeFileFromList(leftFile.path);
+                    this.isLoading = false;
+                    this.mediaNavigationInProgress = false;
+                    this.hideLoadingSpinner();
+                    return this._retryCompareAfterRemoval(retryCount);
+                }
+            } else {
+                this.leftMedia.src = leftFileUrl;
+            }
             this.setupCompareImageHandlers(this.leftMedia, leftFile, 'left');
         } else if (leftFile.type.startsWith('video/')) {
             this.leftMedia = document.createElement('video');
@@ -2883,7 +3150,29 @@ class MediaViewer {
         const rightFileUrl = this.pathToFileURL(rightFile.path);
         if (rightFile.type.startsWith('image/')) {
             this.rightMedia = document.createElement('img');
-            this.rightMedia.src = rightFileUrl;
+            if (this.isJxl(rightFile.path)) {
+                try {
+                    const decoded = await this.decodeJxl(rightFile.path);
+                    if (!decoded.frames || decoded.frames.length === 0) {
+                        throw new Error('JXL decoded with no frames');
+                    }
+                    // Compare mode shows frame 0 only (no animation in compare for v1).
+                    this.rightMedia.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                } catch (err) {
+                    // Undecodable JXL: purge it and retry the pair. The retry re-enters
+                    // showCompareMedia, whose start-cleanup revokes the already-set left object URL.
+                    window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
+                    this.showNotification('Skipping undecodable JXL file', 'warning');
+                    this.rightMedia = null; // detached <img>, never appended
+                    this.removeFileFromList(rightFile.path);
+                    this.isLoading = false;
+                    this.mediaNavigationInProgress = false;
+                    this.hideLoadingSpinner();
+                    return this._retryCompareAfterRemoval(retryCount);
+                }
+            } else {
+                this.rightMedia.src = rightFileUrl;
+            }
             this.setupCompareImageHandlers(this.rightMedia, rightFile, 'right');
         } else if (rightFile.type.startsWith('video/')) {
             this.rightMedia = document.createElement('video');
@@ -3138,6 +3427,31 @@ class MediaViewer {
         this.currentMedia.addEventListener('error', onError);
     }
 
+    // Post-display work for an animated-JXL <canvas>. Mirrors the onLoad path of
+    // setupImageHandlers, but runs synchronously because a canvas has no 'load'
+    // event and its dimensions are known the moment it is created.
+    finishJxlCanvasDisplay(_file) {
+        const canvas = this.currentMedia;
+        if (!canvas || canvas.tagName !== 'CANVAS' || this.isBeingCleaned) return;
+        this.hideLoadingSpinner();
+        // Size the canvas to fit the screen (fitMediaToScreen only handles IMG/VIDEO).
+        // object-fit is IGNORED on <canvas>, so we compute explicit aspect-preserving
+        // CSS pixel dimensions instead. Mirror fitMediaToScreen, which never upscales
+        // small media (it shows it at native size), so clamp the fit scale to <= 1.
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const scale = Math.min(vw / canvas.width, vh / canvas.height, 1);
+        canvas.style.width = Math.round(canvas.width * scale) + 'px';
+        canvas.style.height = Math.round(canvas.height * scale) + 'px';
+        canvas.style.maxWidth = 'none';
+        canvas.style.maxHeight = 'none';
+        canvas.style.display = 'block';
+        this.isLoading = false;
+        this.mediaNavigationInProgress = false;
+        this.setupZoomEvents(canvas, 'single');
+        this.updatePredictionBadges();
+    }
+
     setupVideoHandlers(file) {
         this.isVideoLoading = true;
 
@@ -3382,6 +3696,14 @@ class MediaViewer {
                     if (video.duration && !isNaN(video.duration)) {
                         detailsText += `\nDuration: ${this.formatDuration(video.duration)}`;
                     }
+                }
+            } else if (this.currentMedia.tagName === 'CANVAS') {
+                // Animated-JXL canvas: dimensions are the canvas's intrinsic size.
+                const canvas = this.currentMedia;
+                if (canvas.width && canvas.height) {
+                    const aspectRatio = (canvas.width / canvas.height).toFixed(2);
+                    detailsText += `\nDimensions: ${canvas.width} × ${canvas.height}`;
+                    detailsText += `\nAspect ratio: ${aspectRatio}:1`;
                 }
             }
         }
@@ -4814,6 +5136,9 @@ class MediaViewer {
         }
 
         this.isBeingCleaned = false;
+
+        // Release any object URLs created for decoded JXL frames
+        this.revokeJxlObjectURLs();
     }
 
     // Visual Similarity Sorting Functions
@@ -5210,7 +5535,31 @@ class MediaViewer {
                     reject(new Error(`Image load error: ${error.message || 'Unknown error'}`));
                 });
 
-                img.src = filePath;
+                if (this.isJxl(filePath)) {
+                    this.decodeJxl(filePath)
+                        .then((decoded) => {
+                            if (!decoded.frames || decoded.frames.length === 0) {
+                                cleanup();
+                                reject(new Error('JXL decoded with no frames'));
+                                return;
+                            }
+                            // Local, self-contained object URL: revoke as soon as the img loads/fails.
+                            // (Do NOT use jxlFrameToObjectURL here — that set is revoked on media-display
+                            //  cleanup and could revoke this in-flight extraction URL mid-load.)
+                            const url = URL.createObjectURL(
+                                new Blob([decoded.frames[0].pngBytes], { type: 'image/png' })
+                            );
+                            img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+                            img.addEventListener('error', () => URL.revokeObjectURL(url), { once: true });
+                            img.src = url;
+                        })
+                        .catch((err) => {
+                            cleanup();
+                            reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
+                        });
+                } else {
+                    img.src = filePath;
+                }
             }
         });
     }
@@ -6942,7 +7291,31 @@ class MediaViewer {
                     reject(new Error('Image load error'));
                 });
 
-                img.src = filePath;
+                if (this.isJxl(filePath)) {
+                    this.decodeJxl(filePath)
+                        .then((decoded) => {
+                            if (!decoded.frames || decoded.frames.length === 0) {
+                                cleanup();
+                                reject(new Error('JXL decoded with no frames'));
+                                return;
+                            }
+                            // Local, self-contained object URL: revoke as soon as the img loads/fails.
+                            // (Do NOT use jxlFrameToObjectURL here — that set is revoked on media-display
+                            //  cleanup and could revoke this in-flight extraction URL mid-load.)
+                            const url = URL.createObjectURL(
+                                new Blob([decoded.frames[0].pngBytes], { type: 'image/png' })
+                            );
+                            img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+                            img.addEventListener('error', () => URL.revokeObjectURL(url), { once: true });
+                            img.src = url;
+                        })
+                        .catch((err) => {
+                            cleanup();
+                            reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
+                        });
+                } else {
+                    img.src = filePath;
+                }
             }
         });
     }
@@ -7679,6 +8052,25 @@ class MediaViewer {
             return this.extractClipFromVideo(filePath);
         }
 
+        if (this.isJxl(filePath)) {
+            try {
+                const decoded = await this.decodeJxl(filePath);
+                if (!decoded.frames || decoded.frames.length === 0) {
+                    return null;
+                }
+                // Send a COPY of the cached frame-0 PNG bytes (no transfer — display still needs them).
+                const result = await window.electronAPI.extractClipEmbeddingFromBuffer(decoded.frames[0].pngBytes);
+                if (result.success) {
+                    return new Float32Array(result.embedding);
+                }
+                console.warn('CLIP extraction failed (jxl):', result.error);
+                return null;
+            } catch (err) {
+                console.warn('CLIP extraction error (jxl):', err.message);
+                return null;
+            }
+        }
+
         try {
             const result = await window.electronAPI.extractClipEmbedding(filePath);
             if (result.success) {
@@ -7987,7 +8379,31 @@ class MediaViewer {
                     reject(new Error('Image load error'));
                 });
 
-                img.src = filePath;
+                if (this.isJxl(filePath)) {
+                    this.decodeJxl(filePath)
+                        .then((decoded) => {
+                            if (!decoded.frames || decoded.frames.length === 0) {
+                                cleanup();
+                                reject(new Error('JXL decoded with no frames'));
+                                return;
+                            }
+                            // Local, self-contained object URL: revoke as soon as the img loads/fails.
+                            // (Do NOT use jxlFrameToObjectURL here — that set is revoked on media-display
+                            //  cleanup and could revoke this in-flight extraction URL mid-load.)
+                            const url = URL.createObjectURL(
+                                new Blob([decoded.frames[0].pngBytes], { type: 'image/png' })
+                            );
+                            img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+                            img.addEventListener('error', () => URL.revokeObjectURL(url), { once: true });
+                            img.src = url;
+                        })
+                        .catch((err) => {
+                            cleanup();
+                            reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
+                        });
+                } else {
+                    img.src = filePath;
+                }
             }
         });
     }
