@@ -29,10 +29,8 @@ Central index for all project documentation.
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
 | [Video Fullscreen Toggle][] | Exit fullscreen on second video click |
-| [JXL Viewer Support Plan][] | JXL + animated-JXL decode/render/feature-extraction (Group A) |
 
 [Video Fullscreen Toggle]: planning/plans/2025-12-29_video-fullscreen-toggle.md
-[JXL Viewer Support Plan]: superpowers/plans/2026-06-04-jxl-viewer-support.md
 
 ## Archived Plans
 
@@ -55,6 +53,7 @@ Central index for all project documentation.
 | [Planning Restructure Plan][]                | BACKLOG.md source-split (🔵 user / 🟡 ops / 🟤 auto) + pinned 📌 Process Rules + Vitest structural test + CLAUDE.md intake rules |
 | [Re-rate Compare Correction Plan][]          | "Both good / Both bad" corrective-training buttons in AI-sorted compare + per-folder `.bulk_rated.json` (Group 0 part 1) |
 | [Tournament Re-rate Plan][]                  | "Both Win / Both Lose" mark-as-equal draw buttons in tournament mode via `recordDraw` (reuses engine undo) (Group 0 part 2) |
+| [JXL Viewer Support Plan][]                  | JXL + animated-JXL viewing via `jxl-oxide-wasm` module worker → decode/render/animation/feature-extraction/CLIP (Group A) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -74,6 +73,7 @@ Central index for all project documentation.
 [Planning Restructure Plan]: archive/plans/2026-05-30-planning-restructure.md
 [Re-rate Compare Correction Plan]: archive/plans/2026-05-31-rerate-compare-correction.md
 [Tournament Re-rate Plan]: archive/plans/2026-06-03-tournament-rerate-correction.md
+[JXL Viewer Support Plan]: archive/plans/2026-06-04-jxl-viewer-support.md
 
 ## Design Specs
 

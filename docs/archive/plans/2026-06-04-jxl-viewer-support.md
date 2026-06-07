@@ -1,6 +1,8 @@
 # JXL + Animated-JXL Viewer Support Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status: Complete** — shipped on `feature/jxl-viewer-support` (commits `cb38175`…`84bf62b`, 2026-06-04 → 2026-06-07). All 10 tasks done via subagent-driven development with per-task + final whole-branch review. 289/289 unit tests; new E2E smoke (`jxl-rendering.test.js`) passes; static + animated JXL manually confirmed. One final-review finding (`ensureJxlWorker` hang on init failure) fixed in `84bf62b`. Deviations from plan: Task 8 used decoded-PNG-object-URL-into-`new Image()` instead of a `getExtractionImageData` helper (simpler, avoids `fetch(file://)`); animation uses per-frame just-in-time `createImageBitmap` (not pre-decode-all, which would cost ~1GB for a 270-frame loop); a `read-jxl-wasm` IPC was added for explicit-bytes worker init (spike §9). Progressive/streaming animated-decode latency deferred to BACKLOG.
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Let the viewer open `.jxl` files (including animated JXL converted from GIFs) produced by the sibling `media_compression` project, with full feature-extraction parity.
 
@@ -38,18 +40,18 @@
 **Files:**
 - Create (throwaway): `vendor/jxl-oxide-wasm/` (copied package assets), a scratch `scratch-jxl-spike.html` + worker.
 
-- [ ] **Step 1: Install the decoder**
+- [x] **Step 1: Install the decoder**
 
 Run: `npm install jxl-oxide-wasm`
 Expected: added to `package.json` dependencies, no peer-dep errors.
 
-- [ ] **Step 2: Locate and copy the wasm + glue**
+- [x] **Step 2: Locate and copy the wasm + glue**
 
 Run: `node -e "const p=require.resolve('jxl-oxide-wasm');console.log(p)"` and inspect the package dir (`node_modules/jxl-oxide-wasm/`). Copy the `.js` glue + `.wasm` into `vendor/jxl-oxide-wasm/` (no bundler in this project — assets must sit at a `file://`-loadable path next to the app).
 
 Expected: `vendor/jxl-oxide-wasm/` contains the ESM glue (`*.js`) and `*_bg.wasm`.
 
-- [ ] **Step 3: Minimal spike worker + page**
+- [x] **Step 3: Minimal spike worker + page**
 
 Create `scratch-jxl-spike.html` that spawns a module worker:
 
@@ -76,7 +78,7 @@ self.onmessage = async (e) => {
 const w = new Worker('scratch-jxl-spike-worker.js', { type: 'module' });
 ```
 
-- [ ] **Step 4: Run the spike against a real static and animated JXL**
+- [x] **Step 4: Run the spike against a real static and animated JXL**
 
 Load the scratch page in the running app's renderer (or a temporary `BrowserWindow`). Feed it (a) a `*.png.jxl` and (b) an animated `*.gif.jxl` produced by `media_compression`.
 
@@ -86,13 +88,13 @@ Record in the plan's outcome notes (Step 6):
 3. Does `RenderResult` expose a **raw-RGBA** accessor (e.g. `encodeToRgba8`/buffer) in addition to `encodeToPng()`? (Risk #2 — inspect the package `.d.ts`)
 4. Measured `.wasm` byte size. (Risk #3)
 
-- [ ] **Step 5: Decision gate**
+- [x] **Step 5: Decision gate**
 
 - If module worker + `init()` works → proceed with the plan as written.
 - If module workers misbehave under `file://` → fall back: classic worker + `importScripts` of a UMD glue, or manual `WebAssembly.instantiate` of the `_bg.wasm`. Update Task 5's worker code accordingly before continuing.
 - If no raw-RGBA accessor exists → keep the PNG-blob path everywhere (already the plan default); note it.
 
-- [ ] **Step 6: Write the outcome + clean up scratch files**
+- [x] **Step 6: Write the outcome + clean up scratch files**
 
 Append a short "Spike outcome" note to the spec file (`## 9. Spike outcome (2026-06-04)`) recording answers to Step 4. Delete `scratch-jxl-spike*.{html,js}`. Keep `vendor/jxl-oxide-wasm/`.
 
@@ -110,7 +112,7 @@ Run: `git add vendor/jxl-oxide-wasm package.json package-lock.json docs/superpow
 - Modify: `main.js:122-139` (replace inline helpers with a `require`)
 - Modify: `eslint.config.mjs` (add `media-formats.js` to the shared-libs block 3b file list)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/media-formats.test.js`:
 
@@ -147,12 +149,12 @@ describe('getMimeType', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/media-formats.test.js`
 Expected: FAIL — `Cannot find module '../media-formats'`.
 
-- [ ] **Step 3: Create the module**
+- [x] **Step 3: Create the module**
 
 Create `media-formats.js`:
 
@@ -183,12 +185,12 @@ function getMimeType(extension) {
 module.exports = { isMediaFile, getMimeType };
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/media-formats.test.js`
 Expected: PASS (8 assertions).
 
-- [ ] **Step 5: Replace the inline helpers in `main.js`**
+- [x] **Step 5: Replace the inline helpers in `main.js`**
 
 At the top of `main.js` (with the other `require`s) add:
 
@@ -198,16 +200,16 @@ const { isMediaFile, getMimeType } = require('./media-formats');
 
 Delete the inline `function isMediaFile(...) {...}` and `function getMimeType(...) {...}` (lines ~122–139). Leave all call sites unchanged (same names).
 
-- [ ] **Step 6: Add to ESLint shared-libs block**
+- [x] **Step 6: Add to ESLint shared-libs block**
 
 In `eslint.config.mjs`, find the block-3b file list (the one naming `feature-extractor.js`, `ml-model.js`) and add `'media-formats.js'` to its `files` array. Update the `// 3b. Shared libs ...` comment to include `media-formats.js`.
 
-- [ ] **Step 7: Verify lint + full unit suite**
+- [x] **Step 7: Verify lint + full unit suite**
 
 Run: `npm run lint && npx vitest run`
 Expected: lint clean; all prior tests + 8 new pass (275 → 283).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add media-formats.js tests/media-formats.test.js main.js eslint.config.mjs
@@ -222,7 +224,7 @@ git commit -m "feat(jxl): extract media-formats shared module + register .jxl as
 - Modify: `media-viewer.js` (add `isJxl` method on `MediaViewer`, near `pathToFileURL` ~L852)
 - Modify: `tests/media-viewer-utils.test.js` (new describe block)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/media-viewer-utils.test.js` (uses the existing `extractMethod` helper):
 
@@ -243,12 +245,12 @@ describe('isJxl', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t isJxl`
 Expected: FAIL — `isJxl` not found in source.
 
-- [ ] **Step 3: Implement the method**
+- [x] **Step 3: Implement the method**
 
 In `media-viewer.js`, add near `pathToFileURL`:
 
@@ -258,12 +260,12 @@ In `media-viewer.js`, add near `pathToFileURL`:
     }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t isJxl`
 Expected: PASS (7 assertions).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -280,7 +282,7 @@ Binary read for JXL bytes. `read-file` (main.js:392) reads `utf8` text — unusa
 - Modify: `main.js` (add handler after `read-file`, ~L400)
 - Modify: `preload.js` (expose `readFileBuffer`)
 
-- [ ] **Step 1: Add the main-process handler**
+- [x] **Step 1: Add the main-process handler**
 
 In `main.js`, immediately after the `read-file` handler (ends ~L400):
 
@@ -296,7 +298,7 @@ In `main.js`, immediately after the `read-file` handler (ends ~L400):
     });
 ```
 
-- [ ] **Step 2: Add the vendored-wasm reader (for the decode worker's explicit-bytes init, spec §9)**
+- [x] **Step 2: Add the vendored-wasm reader (for the decode worker's explicit-bytes init, spec §9)**
 
 In `main.js`, after the `read-file-buffer` handler (`__dirname` is the app root where `vendor/` lives):
 
@@ -315,7 +317,7 @@ In `main.js`, after the `read-file-buffer` handler (`__dirname` is the app root 
 
 (If `path` is already required at the top of `main.js`, do not re-require it — reuse the existing binding.)
 
-- [ ] **Step 3: Expose both in preload**
+- [x] **Step 3: Expose both in preload**
 
 In `preload.js`, next to `readFile` (line 12):
 
@@ -324,13 +326,13 @@ In `preload.js`, next to `readFile` (line 12):
     readJxlWasm: () => ipcRenderer.invoke('read-jxl-wasm'),
 ```
 
-- [ ] **Step 4: Manual smoke (no unit test — IPC needs the Electron runtime)**
+- [x] **Step 4: Manual smoke (no unit test — IPC needs the Electron runtime)**
 
 Run: `npm start`, then in DevTools console:
 `await window.electronAPI.readFileBuffer('<path to any file>')` → an `ArrayBuffer` of the right `byteLength`; a bad path returns `null`.
 `await window.electronAPI.readJxlWasm()` → an `ArrayBuffer` of ~1.62 MB (the vendored wasm).
 
-- [ ] **Step 5: Lint + commit**
+- [x] **Step 5: Lint + commit**
 
 ```bash
 git add main.js preload.js
@@ -360,7 +362,7 @@ git commit -m "feat(jxl): add read-file-buffer + read-jxl-wasm IPC (security-rev
 > If the module worker proves troublesome under Electron `file://`, fall back to main-process
 > decode via IPC (spec §9 contingency) — same `init({ module_or_path: bytes })` call.
 
-- [ ] **Step 1: Create the worker**
+- [x] **Step 1: Create the worker**
 
 Create `jxl-decode-worker.js`:
 
@@ -414,7 +416,7 @@ self.onmessage = async (e) => {
 };
 ```
 
-- [ ] **Step 2: Write the failing test for `decodeJxl` orchestration**
+- [x] **Step 2: Write the failing test for `decodeJxl` orchestration**
 
 `decodeJxl` is testable by mocking the worker + `readFileBuffer`. Add to `tests/media-viewer-utils.test.js` (uses `extractAsyncMethod`):
 
@@ -457,12 +459,12 @@ describe('decodeJxl', () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t decodeJxl`
 Expected: FAIL — `decodeJxl` not found.
 
-- [ ] **Step 4: Implement worker lifecycle + `decodeJxl`**
+- [x] **Step 4: Implement worker lifecycle + `decodeJxl`**
 
 In the `MediaViewer` constructor, beside the other worker/cache fields:
 
@@ -518,12 +520,12 @@ Add methods on `MediaViewer`:
 
 Apply that one-line guard at the top of `decodeJxl`.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t decodeJxl`
 Expected: PASS (3 assertions).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add jxl-decode-worker.js media-viewer.js tests/media-viewer-utils.test.js
@@ -539,7 +541,7 @@ Render frame 0 of a JXL as an `<img>` via an object URL, in both single and comp
 **Files:**
 - Modify: `media-viewer.js` — `showSingleMedia` (~2646), `showCompareMedia` left/right (~2867, 2885); add `jxlFrameToObjectURL` helper + object-URL cleanup.
 
-- [ ] **Step 1: Add a frame→object-URL helper**
+- [x] **Step 1: Add a frame→object-URL helper**
 
 ```js
     jxlFrameToObjectURL(frame) {
@@ -559,7 +561,7 @@ Render frame 0 of a JXL as an `<img>` via an object URL, in both single and comp
 
 Call `this.revokeJxlObjectURLs()` inside `cleanupCurrentMedia()` (and the compare cleanup) so URLs don't leak.
 
-- [ ] **Step 2: Branch `showSingleMedia` for JXL**
+- [x] **Step 2: Branch `showSingleMedia` for JXL**
 
 Replace the image branch at ~2646 so JXL decodes first:
 
@@ -590,15 +592,15 @@ Replace the image branch at ~2646 so JXL decodes first:
 
 > `startJxlAnimation` draws onto a `<canvas>`; for animated JXL replace the `img` element with a canvas — see Task 7 Step 3 which adjusts this branch to create a canvas instead of an img when `decoded.animated`.
 
-- [ ] **Step 3: Branch `showCompareMedia` left + right identically**
+- [x] **Step 3: Branch `showCompareMedia` left + right identically**
 
 At the left image branch (~2867) and right (~2885), apply the same `isJxl` → `decodeJxl` → object-URL (static) logic. Animated-in-compare may show frame 0 only for v1 simplicity — gate `startJxlAnimation` on single mode; in compare, always use frame 0 via `jxlFrameToObjectURL(decoded.frames[0])`. (Note this scope choice in the DONE.md entry.)
 
-- [ ] **Step 4: Manual smoke**
+- [x] **Step 4: Manual smoke**
 
 Run: `npm start`, open a folder containing a static `*.png.jxl`. Expected: it renders in single mode and in compare mode; navigating away and back works; no console errors; rating/move still works.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js
@@ -615,7 +617,7 @@ GIF-style auto-loop on a `<canvas>`. The frame-advance logic is a pure helper te
 - Modify: `media-viewer.js` — `computeJxlFrameSchedule()` (pure), `startJxlAnimation()` (driver), teardown in `cleanupCurrentMedia()`.
 - Modify: `tests/media-viewer-utils.test.js`.
 
-- [ ] **Step 1: Write the failing test for the schedule helper**
+- [x] **Step 1: Write the failing test for the schedule helper**
 
 ```js
 describe('computeJxlFrameSchedule', () => {
@@ -630,12 +632,12 @@ describe('computeJxlFrameSchedule', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t computeJxlFrameSchedule`
 Expected: FAIL — not defined.
 
-- [ ] **Step 3: Implement schedule helper + driver**
+- [x] **Step 3: Implement schedule helper + driver**
 
 ```js
     computeJxlFrameSchedule(frames) {
@@ -685,16 +687,16 @@ Call `this.stopJxlAnimation()` at the top of `cleanupCurrentMedia()`.
 
 > Because `startJxlAnimation` reassigns `this.currentMedia` to a canvas, adjust Task 6 Step 2: when `decoded.animated`, do **not** pre-create the `<img>`; call `await this.startJxlAnimation(null, decoded)` and let it set `this.currentMedia`. The static path keeps the `<img>`. Ensure the `this.mediaContainer.appendChild(this.currentMedia)` at ~2666 runs after this (it already does).
 
-- [ ] **Step 4: Run to verify it passes + full suite**
+- [x] **Step 4: Run to verify it passes + full suite**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t computeJxlFrameSchedule && npx vitest run`
 Expected: schedule tests PASS; whole suite green.
 
-- [ ] **Step 5: Manual smoke (animation)**
+- [x] **Step 5: Manual smoke (animation)**
 
 Run: `npm start`, open a folder with an animated `*.gif.jxl`. Expected: it loops smoothly; navigating away stops it (no runaway timers — check DevTools); returning replays.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -710,7 +712,7 @@ Hand-crafted features build `ImageData` from `new Image()` (3 sites: ~5188, ~692
 **Files:**
 - Modify: `media-viewer.js` — add `getExtractionImageData(filePath, fileUrl)` and route the three `new Image()` image-extraction sites through it.
 
-- [ ] **Step 1: Add a unified extraction-bitmap helper**
+- [x] **Step 1: Add a unified extraction-bitmap helper**
 
 ```js
     // Returns a 256x256 ImageData for feature extraction, decoding JXL frame 0 when needed.
@@ -733,7 +735,7 @@ Hand-crafted features build `ImageData` from `new Image()` (3 sites: ~5188, ~692
 
 > If `fetch(fileUrl)` of `file://` is blocked in the renderer, keep the existing `new Image()` path for non-JXL and only use the decode path for JXL — wrap the non-JXL branch in the current `new Image()`+`onload` logic instead of `fetch`. Verify during Step 3.
 
-- [ ] **Step 2: Route the JXL image-extraction sites**
+- [x] **Step 2: Route the JXL image-extraction sites**
 
 At each of the three image-extraction sites (~5188, ~6928, ~7979), before the `new Image()` block, add:
 
@@ -747,11 +749,11 @@ At each of the three image-extraction sites (~5188, ~6928, ~7979), before the `n
 
 Match each site's existing control flow (some are inside loops, some inside `prioritizeDisplayedFilesExtraction`). Keep the non-JXL `new Image()` path exactly as-is.
 
-- [ ] **Step 3: Manual smoke (hand-crafted features)**
+- [x] **Step 3: Manual smoke (hand-crafted features)**
 
 Run: `npm start`, open a folder of JXL files with CLIP **disabled** (Settings F1). Expected: similarity sort (VPTree) works on JXL files (proves 64-dim features extracted); no decode errors in console.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add media-viewer.js
@@ -769,7 +771,7 @@ CLIP (`extractClipEmbedding(filePath)`) does `RawImage.read(path)` in main — c
 - Modify: `preload.js` (expose it)
 - Modify: `media-viewer.js` (CLIP request path: when `isJxl`, send decoded PNG buffer instead of path)
 
-- [ ] **Step 1: Add the main handler**
+- [x] **Step 1: Add the main handler**
 
 Beside the existing `extractClipEmbedding` handler in `main.js`, mirroring its local-capture null-guard pattern:
 
@@ -795,13 +797,13 @@ Beside the existing `extractClipEmbedding` handler in `main.js`, mirroring its l
 
 > Match the exact post-processing (`image_embeds`, normalize, `tolist`) to whatever the existing `extractClipEmbedding` handler does — copy its body and only swap the image-acquisition lines (`RawImage.read(path)` → `RawImage.fromBlob(blob)`). Verify field names against the real handler before writing.
 
-- [ ] **Step 2: Expose in preload**
+- [x] **Step 2: Expose in preload**
 
 ```js
     extractClipEmbeddingFromBuffer: (pngBuffer) => ipcRenderer.invoke('extractClipEmbeddingFromBuffer', pngBuffer),
 ```
 
-- [ ] **Step 3: Route JXL CLIP requests in the renderer**
+- [x] **Step 3: Route JXL CLIP requests in the renderer**
 
 Find the renderer call to `window.electronAPI.extractClipEmbedding(file.path)` (in the CLIP extraction path). Wrap:
 
@@ -817,11 +819,11 @@ Find the renderer call to `window.electronAPI.extractClipEmbedding(file.path)` (
 
 (Adapt variable names to the actual call site.)
 
-- [ ] **Step 4: Manual smoke (CLIP on JXL)**
+- [x] **Step 4: Manual smoke (CLIP on JXL)**
 
 Run: `npm start`, CLIP **enabled**, open a JXL folder, wait for extraction, then CLIP-sort. Expected: JXL files get CLIP embeddings (semantic sort orders them); no `RawImage.read` 404s in the log.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add main.js preload.js media-viewer.js
@@ -836,7 +838,7 @@ git commit -m "feat(jxl): CLIP embeddings for JXL via extractClipEmbeddingFromBu
 - Modify: `media-viewer.js` (`removeFileFromList` — purge `jxlFrameCache`)
 - Create: `tests/e2e/jxl-rendering.test.js`, `tests/e2e/fixtures/static.jxl`
 
-- [ ] **Step 1: Purge JXL cache on file removal**
+- [x] **Step 1: Purge JXL cache on file removal**
 
 In `removeFileFromList(...)`, beside the existing `this.clipCache.delete(...)` etc.:
 
@@ -846,11 +848,11 @@ In `removeFileFromList(...)`, beside the existing `this.clipCache.delete(...)` e
 
 (Use whatever the method already calls the removed path/name.)
 
-- [ ] **Step 2: Create a static JXL fixture**
+- [x] **Step 2: Create a static JXL fixture**
 
 Generate a tiny static `.jxl` from an existing fixture PNG using the `media_compression` toolchain (`cjxl tests/e2e/fixtures/red-1x1.png tests/e2e/fixtures/static.jxl`), or copy a known-small `*.png.jxl`. Keep it 1x1/tiny.
 
-- [ ] **Step 3: Write the E2E smoke test**
+- [x] **Step 3: Write the E2E smoke test**
 
 Create `tests/e2e/jxl-rendering.test.js` following the project E2E patterns (`launchApp`, `seedLocalStorage`, `mockFolderDialog`, `createTempFixtureDir`, `closeApp`, `afterEach` null guards):
 
@@ -883,17 +885,17 @@ test.describe('JXL rendering', () => {
 
 > Confirm `createTempFixtureDir` copies non-PNG fixtures; if it filters by extension, extend it to include `.jxl`. Match the exact folder-open interaction used by other E2E tests.
 
-- [ ] **Step 4: Run E2E**
+- [x] **Step 4: Run E2E**
 
 Run: `npm run test:e2e -- jxl-rendering`
 Expected: PASS. Then full E2E: `npm run test:e2e` — no regressions.
 
-- [ ] **Step 5: Full verification**
+- [x] **Step 5: Full verification**
 
 Run: `npm run lint && npx vitest run && npm run test:e2e`
 Expected: lint clean; all unit tests green (≈286+); all E2E green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/e2e/jxl-rendering.test.js tests/e2e/fixtures/static.jxl
