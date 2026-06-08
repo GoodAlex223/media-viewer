@@ -5037,18 +5037,7 @@ class MediaViewer {
                 this.pendingCompareUpdates = 0;
                 this.previousScores = null;
 
-                // Clean up stale compare-mode wrapper DOM elements
-                if (this.leftMediaWrapper) {
-                    this.fullscreen.cleanup(this.leftMediaWrapper);
-                    this.leftMediaWrapper.remove();
-                    this.leftMediaWrapper = null;
-                }
-                if (this.rightMediaWrapper) {
-                    this.fullscreen.cleanup(this.rightMediaWrapper);
-                    this.rightMediaWrapper.remove();
-                    this.rightMediaWrapper = null;
-                }
-
+                // switchToSingleModeUI() tears down the stale compare wrappers.
                 this.switchToSingleModeUI();
                 this.updateFolderInfo();
 
