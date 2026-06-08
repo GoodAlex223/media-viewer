@@ -4122,6 +4122,17 @@ class MediaViewer {
         if (this.infoToggleBtn) {
             this.infoToggleBtn.style.display = 'flex';
         }
+        // Tear down stale compare wrappers so exit-to-single paths (mode switch, folder
+        // switch, <2-files fallback) never leave shrunken/shifted leftover nodes. Wrappers
+        // are recreated by showCompareMedia on the next compare entry, so removal is safe.
+        for (const key of ['leftMediaWrapper', 'rightMediaWrapper']) {
+            const wrapper = this[key];
+            if (wrapper) {
+                this.fullscreen.cleanup(wrapper);
+                wrapper.remove();
+                this[key] = null;
+            }
+        }
         this.hidePredictionBadges();
         this.closeAllZoomPopovers();
     }

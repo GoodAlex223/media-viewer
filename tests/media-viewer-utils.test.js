@@ -1455,3 +1455,57 @@ describe('decodeJxl', () => {
         await expect(decodeJxl.call(ctx, 'bad.png.jxl')).rejects.toThrow('bad jxl');
     });
 });
+
+describe('switchToSingleModeUI wrapper teardown', () => {
+    const switchToSingleModeUI = extractMethod('switchToSingleModeUI');
+
+    function makeCtx({ withWrappers }) {
+        const styleStub = () => ({ display: '' });
+        const classListStub = () => ({ remove: vi.fn(), add: vi.fn() });
+        const ctx = {
+            isCompareMode: true,
+            viewModeLabel: { textContent: '' },
+            controls: { style: styleStub() },
+            compareControls: { style: styleStub() },
+            mediaContainer: { classList: classListStub() },
+            videoControls: { style: styleStub() },
+            leftFileInfo: { classList: classListStub(), style: styleStub() },
+            rightFileInfo: { classList: classListStub(), style: styleStub() },
+            fileInfo: { style: styleStub() },
+            infoToggleBtn: { style: styleStub() },
+            hidePredictionBadges: vi.fn(),
+            closeAllZoomPopovers: vi.fn(),
+            fullscreen: { cleanup: vi.fn() },
+            leftMediaWrapper: null,
+            rightMediaWrapper: null,
+        };
+        if (withWrappers) {
+            ctx.leftMediaWrapper = { remove: vi.fn() };
+            ctx.rightMediaWrapper = { remove: vi.fn() };
+        }
+        return ctx;
+    }
+
+    it('removes and nulls both compare wrappers, cleaning up fullscreen', () => {
+        const ctx = makeCtx({ withWrappers: true });
+        const left = ctx.leftMediaWrapper;
+        const right = ctx.rightMediaWrapper;
+
+        switchToSingleModeUI.call(ctx);
+
+        expect(ctx.fullscreen.cleanup).toHaveBeenCalledWith(left);
+        expect(ctx.fullscreen.cleanup).toHaveBeenCalledWith(right);
+        expect(left.remove).toHaveBeenCalledTimes(1);
+        expect(right.remove).toHaveBeenCalledTimes(1);
+        expect(ctx.leftMediaWrapper).toBeNull();
+        expect(ctx.rightMediaWrapper).toBeNull();
+    });
+
+    it('is a no-op for wrapper teardown when wrappers are already null', () => {
+        const ctx = makeCtx({ withWrappers: false });
+        expect(() => switchToSingleModeUI.call(ctx)).not.toThrow();
+        expect(ctx.fullscreen.cleanup).not.toHaveBeenCalled();
+        expect(ctx.leftMediaWrapper).toBeNull();
+        expect(ctx.rightMediaWrapper).toBeNull();
+    });
+});
