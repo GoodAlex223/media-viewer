@@ -4167,9 +4167,14 @@ class MediaViewer {
 
         if (mode === 'single') {
             if (this.isTournamentMode) this.exitTournamentMode();
+            // Land single view on the file the user was actually viewing — the left file of
+            // the current compare pair (filesWithScores[mlComparePairIndex] when AI-sorted).
+            // Capture before switchToSingleModeUI runs. -1 (null / just-rated / removed) → 0.
+            const target = this.compareLeftFile;
             if (this.isCompareMode) this.switchToSingleModeUI();
             if (this.mediaFiles.length > 0) {
-                this.currentIndex = 0;
+                const idx = target ? this.mediaFiles.findIndex((f) => f.path === target.path) : -1;
+                this.currentIndex = idx >= 0 ? idx : 0;
                 this.showMedia();
             }
         } else if (mode === 'compare') {

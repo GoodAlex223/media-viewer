@@ -1456,6 +1456,55 @@ describe('decodeJxl', () => {
     });
 });
 
+describe('_applyModeSwitch single-branch landing index', () => {
+    const _applyModeSwitch = extractAsyncMethod('_applyModeSwitch');
+    let origDocument;
+
+    beforeEach(() => {
+        origDocument = globalThis.document;
+        globalThis.document = { querySelectorAll: () => [] };
+    });
+    afterEach(() => {
+        globalThis.document = origDocument;
+    });
+
+    function makeCtx(mediaFilePaths, compareLeftFile) {
+        return {
+            isTournamentMode: false,
+            isCompareMode: true,
+            mediaFiles: mediaFilePaths.map((p) => ({ path: p })),
+            compareLeftFile,
+            currentIndex: 0,
+            exitTournamentMode: vi.fn(),
+            switchToSingleModeUI: vi.fn(),
+            toggleViewMode: vi.fn(),
+            enterTournamentMode: vi.fn(),
+            updateCompareUndoButton: vi.fn(),
+            showMedia: vi.fn(),
+        };
+    }
+
+    it('lands on the compare-left file index', async () => {
+        const files = ['/a.jpg', '/b.jpg', '/c.jpg', '/d.jpg'];
+        const ctx = makeCtx(files, { path: '/c.jpg' });
+        await _applyModeSwitch.call(ctx, 'single');
+        expect(ctx.currentIndex).toBe(2);
+        expect(ctx.showMedia).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to 0 when compareLeftFile is null', async () => {
+        const ctx = makeCtx(['/a.jpg', '/b.jpg'], null);
+        await _applyModeSwitch.call(ctx, 'single');
+        expect(ctx.currentIndex).toBe(0);
+    });
+
+    it('falls back to 0 when compareLeftFile is absent from mediaFiles', async () => {
+        const ctx = makeCtx(['/a.jpg', '/b.jpg'], { path: '/gone.jpg' });
+        await _applyModeSwitch.call(ctx, 'single');
+        expect(ctx.currentIndex).toBe(0);
+    });
+});
+
 describe('switchToSingleModeUI wrapper teardown', () => {
     const switchToSingleModeUI = extractMethod('switchToSingleModeUI');
 
