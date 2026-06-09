@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-07 <!-- Group A: JXL + animated-JXL viewer support -->
+**Last Updated**: 2026-06-09 <!-- Group B: Mode-switch display bugs -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,46 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-09 — Group B: Mode-switch display bugs
+
+**Summary**: Fixed two related compare/single mode-switch display defects. **Bug 1
+(🔴 Critical):** after Sort-by-Prediction + navigating compare pairs, switching to single
+view jumped to the highest-scored file (`currentIndex = 0`) instead of the file the user was
+actually looking at. Root cause was two unreconciled indexing schemes (`mediaFiles` vs the
+score-sorted `filesWithScores` indexed by `mlComparePairIndex`). **Bug 2 (🟠 Important):**
+`switchToSingleModeUI()` reverted mode state but never removed the compare `.left-media-wrapper`
+/`.right-media-wrapper` DOM nodes, so a folder-switch from compare mode left shrunken/shifted
+leftover panes on screen.
+
+**Resolution**: Bug 1 resolves the landing index **at switch time** from
+`this.compareLeftFile` (the file already rendered on the compare left, maintained by
+`showCompareMedia` in every branch) — `_applyModeSwitch`'s `single` branch captures it before
+`switchToSingleModeUI()` runs, then `findIndex` with a `-1 → 0` fallback. This answered the
+plan's Open Question ("what is the *first* file?") as "the file the user was viewing" (fix
+path a), chosen over continuous dual-array syncing (path b) for minimal state and blast radius.
+Bug 2 folds wrapper teardown (`fullscreen.cleanup` + `.remove()` + null) into
+`switchToSingleModeUI()` so every exit-to-single path benefits; the redundant inline teardowns
+in `moveComparePair`'s and `showCompareMedia`'s `<2-files` branches were deleted (DRY).
+Single→compare reverse symmetry was explicitly deferred (BACKLOG 🟤 2026-06-09).
+
+**Key changes** ([media-viewer.js](../../media-viewer.js)): `switchToSingleModeUI()` wrapper-teardown loop;
+`_applyModeSwitch()` `single`-branch index resolution; deleted inline teardown in `moveComparePair`
++ `showCompareMedia`.
+
+**Tests**: +5 unit (2 `switchToSingleModeUI wrapper teardown`, 3 `_applyModeSwitch single-branch
+landing index`; 289 → 294) + 2 E2E in `compare-mode.test.js` (no stale wrappers after folder
+switch; compare→single lands on the on-screen left file). **294/294 unit pass; E2E 41/42** — the
+1 failure is the known pre-existing `app-launch.test.js` `#viewModeBtn` assertion (BACKLOG, unrelated).
+
+**Process**: superpowers brainstorm → spec → plan → subagent-driven-development (5 tasks, per-task
+spec+quality review, final whole-branch review). Plan archived at
+[docs/archive/plans/2026-06-08-mode-switch-display-bugs.md](../archive/plans/2026-06-08-mode-switch-display-bugs.md);
+spec at `docs/superpowers/specs/2026-06-08-mode-switch-display-bugs-design.md`. 2 BACKLOG
+follow-ups spawned (🟤: `leftMedia`/`rightMedia` nulling consistency; deferred single→compare
+symmetry).
+
+---
 
 ### 2026-06-07 — Group A: JXL + animated-JXL viewer support 🏆
 

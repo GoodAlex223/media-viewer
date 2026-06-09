@@ -1455,3 +1455,106 @@ describe('decodeJxl', () => {
         await expect(decodeJxl.call(ctx, 'bad.png.jxl')).rejects.toThrow('bad jxl');
     });
 });
+
+describe('_applyModeSwitch single-branch landing index', () => {
+    const _applyModeSwitch = extractAsyncMethod('_applyModeSwitch');
+    let origDocument;
+
+    beforeEach(() => {
+        origDocument = globalThis.document;
+        globalThis.document = { querySelectorAll: () => [] };
+    });
+    afterEach(() => {
+        globalThis.document = origDocument;
+    });
+
+    function makeCtx(mediaFilePaths, compareLeftFile) {
+        return {
+            isTournamentMode: false,
+            isCompareMode: true,
+            mediaFiles: mediaFilePaths.map((p) => ({ path: p })),
+            compareLeftFile,
+            currentIndex: 0,
+            exitTournamentMode: vi.fn(),
+            switchToSingleModeUI: vi.fn(),
+            toggleViewMode: vi.fn(),
+            enterTournamentMode: vi.fn(),
+            updateCompareUndoButton: vi.fn(),
+            showMedia: vi.fn(),
+        };
+    }
+
+    it('lands on the compare-left file index', async () => {
+        const files = ['/a.jpg', '/b.jpg', '/c.jpg', '/d.jpg'];
+        const ctx = makeCtx(files, { path: '/c.jpg' });
+        await _applyModeSwitch.call(ctx, 'single');
+        expect(ctx.currentIndex).toBe(2);
+        expect(ctx.showMedia).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to 0 when compareLeftFile is null', async () => {
+        const ctx = makeCtx(['/a.jpg', '/b.jpg'], null);
+        await _applyModeSwitch.call(ctx, 'single');
+        expect(ctx.currentIndex).toBe(0);
+    });
+
+    it('falls back to 0 when compareLeftFile is absent from mediaFiles', async () => {
+        const ctx = makeCtx(['/a.jpg', '/b.jpg'], { path: '/gone.jpg' });
+        await _applyModeSwitch.call(ctx, 'single');
+        expect(ctx.currentIndex).toBe(0);
+    });
+});
+
+describe('switchToSingleModeUI wrapper teardown', () => {
+    const switchToSingleModeUI = extractMethod('switchToSingleModeUI');
+
+    function makeCtx({ withWrappers }) {
+        const styleStub = () => ({ display: '' });
+        const classListStub = () => ({ remove: vi.fn(), add: vi.fn() });
+        const ctx = {
+            isCompareMode: true,
+            viewModeLabel: { textContent: '' },
+            controls: { style: styleStub() },
+            compareControls: { style: styleStub() },
+            mediaContainer: { classList: classListStub() },
+            videoControls: { style: styleStub() },
+            leftFileInfo: { classList: classListStub(), style: styleStub() },
+            rightFileInfo: { classList: classListStub(), style: styleStub() },
+            fileInfo: { style: styleStub() },
+            infoToggleBtn: { style: styleStub() },
+            hidePredictionBadges: vi.fn(),
+            closeAllZoomPopovers: vi.fn(),
+            fullscreen: { cleanup: vi.fn() },
+            leftMediaWrapper: null,
+            rightMediaWrapper: null,
+        };
+        if (withWrappers) {
+            ctx.leftMediaWrapper = { remove: vi.fn() };
+            ctx.rightMediaWrapper = { remove: vi.fn() };
+        }
+        return ctx;
+    }
+
+    it('removes and nulls both compare wrappers, cleaning up fullscreen', () => {
+        const ctx = makeCtx({ withWrappers: true });
+        const left = ctx.leftMediaWrapper;
+        const right = ctx.rightMediaWrapper;
+
+        switchToSingleModeUI.call(ctx);
+
+        expect(ctx.fullscreen.cleanup).toHaveBeenCalledWith(left);
+        expect(ctx.fullscreen.cleanup).toHaveBeenCalledWith(right);
+        expect(left.remove).toHaveBeenCalledTimes(1);
+        expect(right.remove).toHaveBeenCalledTimes(1);
+        expect(ctx.leftMediaWrapper).toBeNull();
+        expect(ctx.rightMediaWrapper).toBeNull();
+    });
+
+    it('is a no-op for wrapper teardown when wrappers are already null', () => {
+        const ctx = makeCtx({ withWrappers: false });
+        expect(() => switchToSingleModeUI.call(ctx)).not.toThrow();
+        expect(ctx.fullscreen.cleanup).not.toHaveBeenCalled();
+        expect(ctx.leftMediaWrapper).toBeNull();
+        expect(ctx.rightMediaWrapper).toBeNull();
+    });
+});

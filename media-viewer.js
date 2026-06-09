@@ -2957,17 +2957,7 @@ class MediaViewer {
             if (this.rightMedia) {
                 await this.cleanupCompareMedia('right');
             }
-            if (this.leftMediaWrapper) {
-                this.fullscreen.cleanup(this.leftMediaWrapper);
-                this.leftMediaWrapper.remove();
-                this.leftMediaWrapper = null;
-            }
-            if (this.rightMediaWrapper) {
-                this.fullscreen.cleanup(this.rightMediaWrapper);
-                this.rightMediaWrapper.remove();
-                this.rightMediaWrapper = null;
-            }
-
+            // switchToSingleModeUI() tears down the stale compare wrappers.
             this.switchToSingleModeUI();
 
             if (this.mediaFiles.length === 1) {
@@ -4122,6 +4112,17 @@ class MediaViewer {
         if (this.infoToggleBtn) {
             this.infoToggleBtn.style.display = 'flex';
         }
+        // Tear down stale compare wrappers so exit-to-single paths (mode switch, folder
+        // switch, <2-files fallback) never leave shrunken/shifted leftover nodes. Wrappers
+        // are recreated by showCompareMedia on the next compare entry, so removal is safe.
+        for (const key of ['leftMediaWrapper', 'rightMediaWrapper']) {
+            const wrapper = this[key];
+            if (wrapper) {
+                this.fullscreen.cleanup(wrapper);
+                wrapper.remove();
+                this[key] = null;
+            }
+        }
         this.hidePredictionBadges();
         this.closeAllZoomPopovers();
     }
@@ -4156,9 +4157,14 @@ class MediaViewer {
 
         if (mode === 'single') {
             if (this.isTournamentMode) this.exitTournamentMode();
+            // Land single view on the file the user was actually viewing — the left file of
+            // the current compare pair (filesWithScores[mlComparePairIndex] when AI-sorted).
+            // Capture before switchToSingleModeUI runs. -1 (null / just-rated / removed) → 0.
+            const target = this.compareLeftFile;
             if (this.isCompareMode) this.switchToSingleModeUI();
             if (this.mediaFiles.length > 0) {
-                this.currentIndex = 0;
+                const idx = target ? this.mediaFiles.findIndex((f) => f.path === target.path) : -1;
+                this.currentIndex = idx >= 0 ? idx : 0;
                 this.showMedia();
             }
         } else if (mode === 'compare') {
@@ -5026,18 +5032,7 @@ class MediaViewer {
                 this.pendingCompareUpdates = 0;
                 this.previousScores = null;
 
-                // Clean up stale compare-mode wrapper DOM elements
-                if (this.leftMediaWrapper) {
-                    this.fullscreen.cleanup(this.leftMediaWrapper);
-                    this.leftMediaWrapper.remove();
-                    this.leftMediaWrapper = null;
-                }
-                if (this.rightMediaWrapper) {
-                    this.fullscreen.cleanup(this.rightMediaWrapper);
-                    this.rightMediaWrapper.remove();
-                    this.rightMediaWrapper = null;
-                }
-
+                // switchToSingleModeUI() tears down the stale compare wrappers.
                 this.switchToSingleModeUI();
                 this.updateFolderInfo();
 

@@ -247,8 +247,46 @@ test.describe('Compare Mode', () => {
                 document.querySelector('.media-container').classList.contains('compare-mode')
             );
             expect(hasCompareClass).toBe(false);
+
+            // No stale compare wrapper nodes should remain after the folder switch.
+            const wrapperCount = await page.evaluate(
+                () => document.querySelectorAll('.left-media-wrapper, .right-media-wrapper').length
+            );
+            expect(wrapperCount).toBe(0);
         } finally {
             await secondFolder?.cleanup();
         }
+    });
+
+    test('compare->single lands on the on-screen compare-left file', async () => {
+        // Force an AI-sorted compare state with known scores, bypassing the ML pipeline.
+        await page.evaluate(() => {
+            const mv = window.mediaViewer;
+            mv.isSortedByPrediction = true;
+            mv.predictionScores = new Map(mv.mediaFiles.map((f, i) => [f.path, 1 - i * 0.1]));
+        });
+        await page.evaluate(() => window.mediaViewer.toggleViewMode());
+        await page.waitForTimeout(500);
+
+        // Advance one pair so the left file is NOT mediaFiles[0].
+        await page.evaluate(() => {
+            window.mediaViewer.mlComparePairIndex = 1;
+            return window.mediaViewer.showCompareMedia();
+        });
+        await page.waitForTimeout(500);
+
+        const leftName = await page.evaluate(() => window.mediaViewer.compareLeftFile?.name);
+        expect(leftName).toBeTruthy();
+
+        // Switch to single mode.
+        await page.evaluate(() => window.mediaViewer._applyModeSwitch('single'));
+        await waitForMedia(page);
+
+        // currentIndex must point at the former compare-left file.
+        const currentName = await page.evaluate(() => {
+            const mv = window.mediaViewer;
+            return mv.mediaFiles[mv.currentIndex]?.name;
+        });
+        expect(currentName).toBe(leftName);
     });
 });
