@@ -177,6 +177,12 @@ two tasks because they have different shapes (architectural vs. visual).
 
 ## 🟤 Auto-Generated Tech Debt
 
+### [2026-06-09] Group B (mode-switch display bugs) implementation-review follow-ups (1 item)
+
+**Origin**: Per-task code-quality review during subagent-driven implementation of `feature/mode-switch-display-bugs`. Both fixes were Approved with no threshold findings; the item below is a sub-threshold consistency note surfaced while reviewing Task 1.
+
+- [ ] **`switchToSingleModeUI()` nulls the wrappers but not `leftMedia`/`rightMedia`** — The new wrapper-teardown loop in `switchToSingleModeUI()` nulls `this.leftMediaWrapper`/`this.rightMediaWrapper` but leaves `this.leftMedia`/`this.rightMedia` pointing at now-detached DOM nodes. The pre-existing teardown at the `showCompareMedia` preamble nulls all four. Benign today (single-mode `showMedia()` never reads `leftMedia`/`rightMedia`, and `showCompareMedia` calls `cleanupCompareMedia` which nulls them before reuse), but a future path that reads `leftMedia` after a folder switch would see a stale ref. Fix: null `leftMedia`/`rightMedia` alongside the wrappers in the teardown loop. Effort: XS. Affected: [media-viewer.js](../../media-viewer.js) (`switchToSingleModeUI`).
+
 ### [2026-06-07] PR #42 post-merge review follow-ups (2 items)
 
 **Origin**: `/code-review` advisory pass on PR #42 (JXL viewer, merged in `934e683`). All six in-scope advisory findings (compare purge+retry, worker `.terminate()`, animated skip-bad-frame, explicit null-WASM guard, `_jxlResolveReady` null-on-ready, CLAUDE.md block count) were fixed by the author in `372ea10` and re-verified — the re-review posted "No remaining issues". The two items below are net-new follow-ups surfaced *while verifying* those fixes, not the original findings (those are closed; finding 4's `decodeJxl` timeout and finding 6's `_jxlObjectURLs` per-side hazard remain tracked under the Group A implementation-review section below).
