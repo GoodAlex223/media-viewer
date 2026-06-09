@@ -82,24 +82,13 @@ Active tasks and backlog.
        [ ] E2E test for full tournament flow — DEFERRED to follow-up (BACKLOG 2026-05-26 / plan Phase H)
      Tests: 241/241 unit. -->
 
-#### BUG: AI-sort + ratings + mode-switch shows different first media in single vs compare
-**Priority**: 🔴 Critical
-**Status**: 📋 Planned
-**Effort**: M
-
-**Description**: After Sort-by-Prediction, rating several pairs in compare mode, then switching to single mode, the first media displayed in single mode is a *different* file than the leftmost media that was being shown in compare mode just before the switch. The workaround — Restore Order, then re-apply Sort-by-Prediction — produces matching first media in both modes (as expected). (Я не понимаю почему после оценки нескольких пар после ИИ сортировки и при переключении в сингл мод первые в списке медиа в двух режимах отличаются. Если восстановить первый порядок (до ИИ сортировки), а потом снова использовать ИИ сортировку, то порядок в двух режимах становится одинаковым (как и ожидается).)
-
-**Acceptance Criteria**:
-- [ ] First media displayed after switching from AI-sorted compare → single mode matches the leftmost compare-mode file (or matches the user's expected definition of "first" — see Open Questions)
-- [ ] Repro from the user's report no longer reproduces
-- [ ] Unit or integration test covers the mode-switch path after compare-mode ratings in AI-sorted state
-- [ ] No regression on Similarity-sorted or unsorted mode switches
-
-**Context**:
-- **Current**: Compare-mode pair selection in AI-sorted state uses `mlComparePairIndex` as an offset into the separate `filesWithScores` array (see [media-viewer.js:2720-2744](../../media-viewer.js#L2720-L2744)). After each rated pair, [`moveComparePair()` at media-viewer.js:4614](../../media-viewer.js#L4614) resets `mlComparePairIndex = 0` but only conditionally adjusts `currentIndex` (only when `currentIndex >= mediaFiles.length - 1`, see [media-viewer.js:4659-4661](../../media-viewer.js#L4659-L4661)). The mode-switch path `_applyModeSwitch()` then unconditionally sets `currentIndex = 0` at [media-viewer.js:3779](../../media-viewer.js#L3779) and displays `mediaFiles[0]`. Two indexing schemes operate on different array orderings: `mediaFiles` vs `filesWithScores`. Nothing reconciles them before single mode displays its "first" file.
-- **Proposed**: Either (a) reconcile `currentIndex` to point at the file shown in the last compare pair when switching modes, or (b) keep both arrays in sync as ratings happen so `mediaFiles[0]` and `filesWithScores[mlComparePairIndex]` always agree, or (c) on entering single mode from AI-sorted compare, set `currentIndex` to the index of the last-displayed left file from `filesWithScores`. Decision depends on user intent — see Open Questions.
-- **Files Affected**: [media-viewer.js](../../media-viewer.js) (`_applyModeSwitch` ~L3779, `moveComparePair` ~L4614, `showCompareMedia` ML-sorted branch ~L2720-2744, possibly `currentIndex` semantics across the codebase)
-- **Open Questions**: When the user switches to single mode mid-rating, what should "first" mean — the file they were just looking at (left of last pair), the highest-predicted remaining file (`mediaFiles[0]` after AI sort), or the next-to-rate (the `filesWithScores[mlComparePairIndex]` they were headed toward)? The workaround behavior (restore + re-sort produces a consistent first) suggests the user expects mode-agnostic ordering — implies fix path (b) is closest to user intent.
+<!-- Group B Mode-switch display bugs (AI-sort→single first-media desync + compare-mode
+     folder-switch stale wrappers) completed 2026-06-09, moved to DONE.md.
+     Plan archived: docs/archive/plans/2026-06-08-mode-switch-display-bugs.md
+     Spec: docs/superpowers/specs/2026-06-08-mode-switch-display-bugs-design.md
+     Resolution: chose fix path (a) — compare→single resolves currentIndex from the
+     on-screen compareLeftFile at switch time (Open Question answered: "first" = the file
+     the user was looking at). 294/294 unit tests; E2E 41/42 (1 known pre-existing fail). -->
 
 ---
 

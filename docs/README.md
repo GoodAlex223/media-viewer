@@ -54,6 +54,7 @@ Central index for all project documentation.
 | [Re-rate Compare Correction Plan][]          | "Both good / Both bad" corrective-training buttons in AI-sorted compare + per-folder `.bulk_rated.json` (Group 0 part 1) |
 | [Tournament Re-rate Plan][]                  | "Both Win / Both Lose" mark-as-equal draw buttons in tournament mode via `recordDraw` (reuses engine undo) (Group 0 part 2) |
 | [JXL Viewer Support Plan][]                  | JXL + animated-JXL viewing via `jxl-oxide-wasm` module worker → decode/render/animation/feature-extraction/CLIP (Group A) |
+| [Mode-Switch Display Bugs Plan][]            | compare→single lands on the on-screen compare-left file + `switchToSingleModeUI` tears down stale compare wrappers (Group B) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -74,6 +75,7 @@ Central index for all project documentation.
 [Re-rate Compare Correction Plan]: archive/plans/2026-05-31-rerate-compare-correction.md
 [Tournament Re-rate Plan]: archive/plans/2026-06-03-tournament-rerate-correction.md
 [JXL Viewer Support Plan]: archive/plans/2026-06-04-jxl-viewer-support.md
+[Mode-Switch Display Bugs Plan]: archive/plans/2026-06-08-mode-switch-display-bugs.md
 
 ## Design Specs
 

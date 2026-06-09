@@ -1,6 +1,8 @@
 # Mode-Switch Display Bugs (Group B) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status: Complete** — shipped 2026-06-09 on branch `feature/mode-switch-display-bugs` (commits `8a2d932`…`0469636`). 294/294 unit tests pass; E2E 41/42 (1 known pre-existing `app-launch` failure unrelated to Group B). All 5 tasks + final whole-branch review done. See [DONE.md](../../planning/DONE.md#2026-06-09--group-b-mode-switch-display-bugs).
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix two compare/single mode-switch display bugs — (1) switching compare→single after AI-sort lands on the file the user was actually viewing (the compare-left file) instead of jumping to index 0, and (2) `switchToSingleModeUI()` tears down stale compare media wrappers so folder-switch no longer leaves shrunken/shifted leftover DOM.
 
@@ -31,7 +33,7 @@
 - Modify: `media-viewer.js` (method `switchToSingleModeUI`, ~L4110-4127)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add this block to `tests/media-viewer-utils.test.js` (after the existing `describe('removeFileFromList', …)` block, anywhere at top level). It extracts the real method source and runs it against a mock context.
 
@@ -91,12 +93,12 @@ describe('switchToSingleModeUI wrapper teardown', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "wrapper teardown"`
 Expected: FAIL — the first test fails because the current `switchToSingleModeUI` never calls `fullscreen.cleanup` / `wrapper.remove` / nulls the wrappers (`expect(ctx.fullscreen.cleanup).toHaveBeenCalledWith(left)` → received 0 calls).
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `media-viewer.js`, edit `switchToSingleModeUI()` to add the teardown loop just before the final `this.hidePredictionBadges();` line. The method currently ends:
 
@@ -133,12 +135,12 @@ Change it to:
     }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "wrapper teardown"`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -160,7 +162,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 The `<2 files remain` branch removes the wrappers manually and *then* calls `switchToSingleModeUI()`. After Task 1, `switchToSingleModeUI()` does the teardown itself, so the manual block is dead code. Remove it (DRY).
 
-- [ ] **Step 1: Remove the redundant block**
+- [x] **Step 1: Remove the redundant block**
 
 In `media-viewer.js`, inside `moveComparePair`'s `if (this.mediaFiles.length < 2) {` branch, the current code reads:
 
@@ -197,17 +199,17 @@ Replace it with (delete the wrapper block; `switchToSingleModeUI()` now handles 
                 this.updateFolderInfo();
 ```
 
-- [ ] **Step 2: Run the full unit suite to verify no regression**
+- [x] **Step 2: Run the full unit suite to verify no regression**
 
 Run: `npx vitest run`
 Expected: PASS — 291 tests (289 prior + 2 from Task 1). No test asserted on the deleted inline block, so nothing breaks.
 
-- [ ] **Step 3: Lint the changed file**
+- [x] **Step 3: Lint the changed file**
 
 Run: `npx eslint media-viewer.js`
 Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add media-viewer.js
@@ -227,7 +229,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `media-viewer.js` (method `_applyModeSwitch`, `single` branch, ~L4157-4163)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add this block to `tests/media-viewer-utils.test.js` at top level. `_applyModeSwitch` is `async` and calls `document.querySelectorAll('.mode-btn')`, so the test stubs `globalThis.document` and uses `extractAsyncMethod`.
 
@@ -282,12 +284,12 @@ describe('_applyModeSwitch single-branch landing index', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "single-branch landing index"`
 Expected: FAIL — the first test fails: current code hard-sets `currentIndex = 0`, so `expect(ctx.currentIndex).toBe(2)` receives `0`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `media-viewer.js`, edit the `single` branch of `_applyModeSwitch`. Current:
 
@@ -320,12 +322,12 @@ Change to (capture the on-screen compare-left file BEFORE switchToSingleModeUI, 
         } else if (mode === 'compare') {
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "single-branch landing index"`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -345,7 +347,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 **Files:**
 - Modify: `tests/e2e/compare-mode.test.js`
 
-- [ ] **Step 1: Extend the folder-switch test with a stale-wrapper assertion**
+- [x] **Step 1: Extend the folder-switch test with a stale-wrapper assertion**
 
 In `tests/e2e/compare-mode.test.js`, inside the existing test `'resets to single mode when switching folders in compare mode'`, add this assertion just before the closing `} finally {` (after the `compare-mode` class assertion at ~L249):
 
@@ -358,7 +360,7 @@ In `tests/e2e/compare-mode.test.js`, inside the existing test `'resets to single
             expect(wrapperCount).toBe(0);
 ```
 
-- [ ] **Step 2: Add a compare→single landing test**
+- [x] **Step 2: Add a compare→single landing test**
 
 Add this test inside the same top-level `describe(...)` block in `tests/e2e/compare-mode.test.js` (e.g. right after the folder-switch test, before the closing `});` at the end of the file). It enters compare while AI-sorted, navigates one pair, switches to single, and asserts the single media element shows the file that was the compare-left.
 
@@ -396,14 +398,14 @@ Add this test inside the same top-level `describe(...)` block in `tests/e2e/comp
     });
 ```
 
-- [ ] **Step 3: Run the E2E suite for compare-mode**
+- [x] **Step 3: Run the E2E suite for compare-mode**
 
 Run: `npx playwright test tests/e2e/compare-mode.test.js`
 Expected: PASS — all compare-mode tests, including the two additions. (If the harness needs the full E2E command, use `npm run test:e2e -- compare-mode`.)
 
 Note: this requires ≥3 fixtures so `mlComparePairIndex = 1` selects a distinct pair. The `beforeEach` in this file seeds the default fixture set (all 3 PNGs) — confirm the test's folder has ≥3 files; if the file's `beforeEach` loads a smaller set, load the default 3-PNG temp dir at the top of this test via `createTempFixtureDir()` + `loadFolder(page, dir)` inside a `try/finally` (mirror the folder-switch test's pattern) before the AI-sort setup.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/e2e/compare-mode.test.js
@@ -421,29 +423,29 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full unit suite**
+- [x] **Step 1: Run the full unit suite**
 
 Run: `npx vitest run`
 Expected: PASS — 294 tests (289 prior + 2 Task 1 + 3 Task 3).
 
-- [ ] **Step 2: Lint everything**
+- [x] **Step 2: Lint everything**
 
 Run: `npm run lint`
 Expected: no errors.
 
-- [ ] **Step 3: Run the full E2E suite**
+- [x] **Step 3: Run the full E2E suite**
 
 Run: `npm run test:e2e`
 Expected: PASS for compare-mode additions. Note: `app-launch.test.js` has one known pre-existing failure (asserts hidden legacy `#viewModeBtn`, unrelated to this work) — record the exact pass/fail counts; do not treat that single known failure as a regression, but confirm no *new* failures.
 
-- [ ] **Step 4: Manual smoke (hand to user)**
+- [x] **Step 4: Manual smoke (hand to user)**
 
 Manual scenarios for the user to confirm before merge:
 1. Load a folder, Sort by Prediction, enter Compare, press the next-pair key (A/S) once or twice, then switch to Single — Single shows the file that was on the compare **left**.
 2. In Compare mode, load a different folder — new media renders cleanly in Single with no shrunken/leftover panes on the left.
 3. Non-AI Compare (no sort), switch to Single — stays on the same (left) file; no visual artifacts.
 
-- [ ] **Step 5: Report results**
+- [x] **Step 5: Report results**
 
 Summarize: unit count (X/X), lint clean, E2E counts (X/Y, noting the known `app-launch` failure if present), and the manual smoke outcome. Do not claim complete until the user confirms the manual smoke.
 
