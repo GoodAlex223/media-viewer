@@ -44,10 +44,10 @@ _(No ongoing background tasks this week.)_
 **Source**: 🔵 User-Flagged
 **Total SP**: 7
 
-- [ ] **AI-sort + mode-switch shows different first media (single vs compare)** — 5 SP, 🔴 IMPORTANT
+- [x] **AI-sort + mode-switch shows different first media (single vs compare)** — 5 SP, 🔴 IMPORTANT — ✅ **shipped 2026-06-09** (branch `feature/mode-switch-display-bugs`, **PR #43** `54b70b6`; see [DONE.md](DONE.md)). Chose fix path (a) not (b): `_applyModeSwitch('single')` resolves `currentIndex` from the on-screen `compareLeftFile` at switch time (Open Question answered: "first" = the file the user was viewing). Post-merge review follow-ups fixed in **PR #44** (`7368de7`).
   - TODO.md BUG (🔴 Critical). After Sort-by-Prediction + rating pairs in compare, switching to single shows a different first file than the leftmost compare file. Two indexing schemes (`mediaFiles` vs `filesWithScores` via `mlComparePairIndex`) are never reconciled before `_applyModeSwitch()` sets `currentIndex = 0`. Likely fix path (b): keep both arrays in sync as ratings happen.
   - Affected: [media-viewer.js](../../media-viewer.js) (`_applyModeSwitch` ~L3779, `moveComparePair` ~L4614, `showCompareMedia` ML branch ~L2720-2744).
-- [ ] **Compare-mode → folder-switch leaves stale media wrappers visible** — 2 SP, 🟠 IMPORTANT
+- [x] **Compare-mode → folder-switch leaves stale media wrappers visible** — 2 SP, 🟠 IMPORTANT — ✅ **shipped 2026-06-09** (same branch / **PR #43**; see [DONE.md](DONE.md)). `switchToSingleModeUI()` now tears down `.left-media-wrapper`/`.right-media-wrapper` on every exit-to-single path; redundant inline teardowns removed from `moveComparePair` + `showCompareMedia`.
   - BACKLOG.md (2026-05-07). New folder loads in single mode but the old `.compare-wrapper` / `.media-wrapper-left/right` nodes remain shifted/shrunk on the left. Fix: `switchToSingleModeUI()` should `.remove()`/hide the compare wrappers before the new media renders.
   - Affected: [media-viewer.js](../../media-viewer.js) (`switchToSingleModeUI`), [styles.css](../../styles.css); extend `compare-mode.test.js` "resets to single mode when switching folders".
   - **Same domain as the desync bug** (both touch `switchToSingleModeUI` / `_applyModeSwitch`) → one branch, one PR, one review.
@@ -124,10 +124,10 @@ _(No ongoing background tasks this week.)_
 |-------|----|
 | **Group B: Mode-switch display bugs** [batch] | 7 |
 
-- [ ] AI-sort + mode-switch first-media desync (5 SP)
-- [ ] Compare-mode → folder-switch stale wrappers (2 SP)
+- [x] AI-sort + mode-switch first-media desync (5 SP) — ✅ shipped 2026-06-09 (PR #43 `54b70b6`; fix path (a) — land on on-screen `compareLeftFile`)
+- [x] Compare-mode → folder-switch stale wrappers (2 SP) — ✅ shipped 2026-06-09 (PR #43; `switchToSingleModeUI` wrapper teardown). Post-merge follow-ups in PR #44.
 
-**Daily total**: 7 SP
+**Daily total**: 7 SP — ✅ Group B complete
 
 ---
 
