@@ -2957,17 +2957,7 @@ class MediaViewer {
             if (this.rightMedia) {
                 await this.cleanupCompareMedia('right');
             }
-            if (this.leftMediaWrapper) {
-                this.fullscreen.cleanup(this.leftMediaWrapper);
-                this.leftMediaWrapper.remove();
-                this.leftMediaWrapper = null;
-            }
-            if (this.rightMediaWrapper) {
-                this.fullscreen.cleanup(this.rightMediaWrapper);
-                this.rightMediaWrapper.remove();
-                this.rightMediaWrapper = null;
-            }
-
+            // switchToSingleModeUI() tears down the stale compare wrappers.
             this.switchToSingleModeUI();
 
             if (this.mediaFiles.length === 1) {
