@@ -1503,6 +1503,18 @@ describe('_applyModeSwitch single-branch landing index', () => {
         await _applyModeSwitch.call(ctx, 'single');
         expect(ctx.currentIndex).toBe(0);
     });
+
+    it('ignores a stale compareLeftFile when not in compare mode (lands on 0)', async () => {
+        // Re-invoking single mode (e.g. clicking the already-active Single button, or
+        // tournament→single after an earlier compare session) must not jump to a stale
+        // compareLeftFile left over from a prior compare session.
+        const ctx = makeCtx(['/a.jpg', '/b.jpg', '/c.jpg', '/d.jpg'], { path: '/c.jpg' });
+        ctx.isCompareMode = false;
+        ctx.currentIndex = 1;
+        await _applyModeSwitch.call(ctx, 'single');
+        expect(ctx.currentIndex).toBe(0);
+        expect(ctx.switchToSingleModeUI).not.toHaveBeenCalled();
+    });
 });
 
 describe('switchToSingleModeUI wrapper teardown', () => {

@@ -4159,8 +4159,11 @@ class MediaViewer {
             if (this.isTournamentMode) this.exitTournamentMode();
             // Land single view on the file the user was actually viewing — the left file of
             // the current compare pair (filesWithScores[mlComparePairIndex] when AI-sorted).
-            // Capture before switchToSingleModeUI runs. -1 (null / just-rated / removed) → 0.
-            const target = this.compareLeftFile;
+            // Gate on isCompareMode: compareLeftFile is never cleared on compare exit, so an
+            // un-gated capture would hijack non-compare re-entry (re-clicking the active Single
+            // button, or tournament→single) with a stale value. Capture before
+            // switchToSingleModeUI runs. -1 (null / just-rated / removed / not-from-compare) → 0.
+            const target = this.isCompareMode ? this.compareLeftFile : null;
             if (this.isCompareMode) this.switchToSingleModeUI();
             if (this.mediaFiles.length > 0) {
                 const idx = target ? this.mediaFiles.findIndex((f) => f.path === target.path) : -1;

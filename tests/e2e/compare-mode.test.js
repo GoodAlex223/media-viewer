@@ -288,5 +288,14 @@ test.describe('Compare Mode', () => {
             return mv.mediaFiles[mv.currentIndex]?.name;
         });
         expect(currentName).toBe(leftName);
+
+        // Dual-sided UI assertion (CLAUDE.md mode-switch convention): single controls shown
+        // AND compare controls hidden — guards the UI-state class of regression too.
+        const controlsVisible = await page.evaluate(() => document.querySelector('.controls').style.display === 'flex');
+        expect(controlsVisible).toBe(true);
+        const compareControlsHidden = await page.evaluate(
+            () => document.querySelector('.compare-controls').style.display !== 'flex'
+        );
+        expect(compareControlsHidden).toBe(true);
     });
 });
