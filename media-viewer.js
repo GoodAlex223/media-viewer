@@ -2025,6 +2025,12 @@ class MediaViewer {
                         // Best-effort cleanup — deleteSortCache already shows a notification
                         // on failure. Explicit catch makes the contract obvious.
                     }
+                } else {
+                    // Toggle-on: start background extraction immediately, mirroring the
+                    // folder-load path (see loadFolder's kickoff call). Fire-and-forget.
+                    // kickoff no-ops when no folder is loaded (guards on mediaFiles.length),
+                    // so toggling CLIP on with nothing loaded won't trigger a model download.
+                    this.kickoffBackgroundExtractionIfEnabled();
                 }
             });
         }
@@ -8408,7 +8414,15 @@ class MediaViewer {
 
     async kickoffBackgroundExtractionIfEnabled() {
         if (!this.enableClipFeatures) return;
+        // No folder loaded → nothing to extract. Also makes the CLIP toggle-on path a
+        // no-op until a folder is open (avoids a surprise ~87 MB model download from a
+        // settings toggle with nothing on screen).
+        if (this.mediaFiles.length === 0) return;
         try {
+            // Fire immediately, before the awaited cache-load / model-load, so the
+            // otherwise-silent kickoff window (and the kickoff-never-fired failure
+            // class) is visible. Transient info toast (auto-dismisses in 2s).
+            this.showNotification('⏳ Starting feature extraction…', 'info');
             if (this.featureWorkers.length === 0) {
                 this.initializeFeaturePool();
             }

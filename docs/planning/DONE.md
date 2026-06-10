@@ -14,6 +14,45 @@ Completed tasks with implementation details and learnings.
 
 ## 2026-06 (June)
 
+### 2026-06-10 — Group C: CLIP extraction UX
+
+**Summary**: Two small UX improvements to the background feature-extraction pipeline (both
+🟢 NICE TO HAVE, 4 SP). **(1)** `kickoffBackgroundExtractionIfEnabled()` now fires a transient
+"⏳ Starting feature extraction…" `info` toast immediately — before its awaited
+`loadFeatureCache()` (stream-parse, up to ~259 MB) and `initClipModel()` (cold start ~87 MB
+download) — surfacing the previously-silent kickoff window (and the PR #34-class "kickoff
+silently never fired" failure). **(2)** The `#clipFeaturesToggle` settings change handler gained
+a toggle-on `else` branch that kicks off extraction immediately, so enabling CLIP mid-folder
+starts extraction instead of requiring a folder reload.
+
+**Resolution**: A single new `if (this.mediaFiles.length === 0) return;` guard at the top of
+`kickoffBackgroundExtractionIfEnabled()` does double duty — it suppresses a misleading toast when
+nothing is loaded AND makes the toggle-on path a no-op until a folder is open (no surprise ~87 MB
+model download from a settings toggle), so the toggle-handler change stays a bare fire-and-forget
+call mirroring `loadFolder`. Design decisions (brainstorm): toast fires "immediately, always"
+(accepting a brief "Starting… → All N cached" sequence in the all-cached case); toggle-on with no
+folder is a no-op.
+
+**Key changes** ([media-viewer.js](../../media-viewer.js)): `kickoffBackgroundExtractionIfEnabled()`
+empty-folder guard + starting toast; `#clipFeaturesToggle` change-handler toggle-on `else` branch.
+
+**Tests**: +2 unit (`kickoffBackgroundExtractionIfEnabled`: starting-toast fired, empty-folder
+no-op) + 1 hardening assertion (CLIP-disabled path fires no toast — locks guard order); `makeCtx`
+gains `mediaFiles` + `showNotification` (294 → 296). +1 E2E in `clip-graceful-degradation.test.js`
+(toggle-on wiring via kickoff-stub counter + bounded `waitForFunction`). **296/296 unit pass; E2E
+42/43** — the 1 failure is the known pre-existing `app-launch.test.js` `#viewModeBtn` assertion
+(BACKLOG, unrelated). Lint clean.
+
+**Process**: superpowers brainstorm → spec → plan → subagent-driven-development (2 implementation
+tasks + verification pass, per-task spec+quality review, final whole-branch review "Ready to
+merge"). Spec at `docs/superpowers/specs/2026-06-10-clip-extraction-ux-design.md`; plan archived at
+[docs/archive/plans/2026-06-10-clip-extraction-ux.md](../archive/plans/2026-06-10-clip-extraction-ux.md).
+2 BACKLOG follow-ups spawned (🟤: extract toggle handler to testable method; starting-toast
+info-throttle eviction). Branch `feature/clip-extraction-ux` (off `main`, independent of the
+still-open PR #44).
+
+---
+
 ### 2026-06-09 — Group B: Mode-switch display bugs
 
 **Summary**: Fixed two related compare/single mode-switch display defects. **Bug 1
