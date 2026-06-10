@@ -107,7 +107,11 @@ test.describe('CLIP graceful degradation', () => {
             toggle.checked = true;
             toggle.dispatchEvent(new Event('change'));
         });
-        await page.waitForTimeout(200);
+        // Wait until the toggle-on handler invokes the kickoff stub. Bounded so a
+        // regression fails fast on the explicit assertion below instead of hanging.
+        await page
+            .waitForFunction(() => window.mediaViewer.__kickoffCalls > 0, null, { timeout: 2000 })
+            .catch(() => {});
 
         const result = await page.evaluate(() => ({
             calls: window.mediaViewer.__kickoffCalls,
