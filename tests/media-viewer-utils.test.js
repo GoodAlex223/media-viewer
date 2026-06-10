@@ -562,6 +562,8 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
         expect(ctx.initClipModel).not.toHaveBeenCalled();
         expect(ctx.loadFeatureCache).not.toHaveBeenCalled();
         expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+        // Locks in the guard order: the CLIP-disabled return must precede the toast.
+        expect(ctx.showNotification).not.toHaveBeenCalled();
     });
 
     it('initializes feature pool, reloads cache, awaits CLIP model, and starts extraction on fresh state', async () => {
