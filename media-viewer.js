@@ -8408,7 +8408,15 @@ class MediaViewer {
 
     async kickoffBackgroundExtractionIfEnabled() {
         if (!this.enableClipFeatures) return;
+        // No folder loaded → nothing to extract. Also makes the CLIP toggle-on path a
+        // no-op until a folder is open (avoids a surprise ~87 MB model download from a
+        // settings toggle with nothing on screen).
+        if (this.mediaFiles.length === 0) return;
         try {
+            // Fire immediately, before the awaited cache-load / model-load, so the
+            // otherwise-silent kickoff window (and the kickoff-never-fired failure
+            // class) is visible. Transient info toast (auto-dismisses in 2s).
+            this.showNotification('⏳ Starting feature extraction…', 'info');
             if (this.featureWorkers.length === 0) {
                 this.initializeFeaturePool();
             }

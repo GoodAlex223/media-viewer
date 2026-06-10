@@ -542,6 +542,7 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
     function makeCtx(overrides = {}) {
         return {
             enableClipFeatures: true,
+            mediaFiles: [{ path: 'a' }],
             featureWorkers: [],
             clipWorkerReady: false,
             clipModelDownloading: false,
@@ -549,6 +550,7 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
             initClipModel: vi.fn(() => Promise.resolve()),
             loadFeatureCache: vi.fn(() => Promise.resolve()),
             startBackgroundFeatureExtraction: vi.fn(() => Promise.resolve()),
+            showNotification: vi.fn(),
             ...overrides,
         };
     }
@@ -651,6 +653,23 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
         });
         await kickoffBackgroundExtractionIfEnabled.call(ctx);
         expect(globalThis.window.electronAPI.logError).toHaveBeenCalledTimes(1);
+        expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+    });
+
+    it('shows a "starting" notification immediately when enabled with files loaded', async () => {
+        const ctx = makeCtx();
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification.mock.calls[0][0]).toContain('Starting feature extraction');
+    });
+
+    it('no-ops (no toast, no init) when no folder is loaded', async () => {
+        const ctx = makeCtx({ mediaFiles: [] });
+        await kickoffBackgroundExtractionIfEnabled.call(ctx);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.initializeFeaturePool).not.toHaveBeenCalled();
+        expect(ctx.loadFeatureCache).not.toHaveBeenCalled();
+        expect(ctx.initClipModel).not.toHaveBeenCalled();
         expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
     });
 });
