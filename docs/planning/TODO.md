@@ -90,6 +90,12 @@ Active tasks and backlog.
      on-screen compareLeftFile at switch time (Open Question answered: "first" = the file
      the user was looking at). 294/294 unit tests; E2E 41/42 (1 known pre-existing fail). -->
 
+<!-- Group C CLIP extraction UX (starting-extraction toast + CLIP toggle-on kickoff)
+     completed 2026-06-10, moved to DONE.md.
+     Plan archived: docs/archive/plans/2026-06-10-clip-extraction-ux.md
+     Spec: docs/superpowers/specs/2026-06-10-clip-extraction-ux-design.md
+     296/296 unit tests; E2E 42/43 (1 known pre-existing #viewModeBtn fail). -->
+
 ---
 
 ## ⏸️ Blocked

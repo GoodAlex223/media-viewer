@@ -57,9 +57,9 @@ _(No ongoing background tasks this week.)_
 **Source**: 🔵 User-Flagged
 **Total SP**: 4
 
-- [ ] **Add UX-visible "extraction starting" notification** — 2 SP, 🟢 NICE TO HAVE
+- [x] **Add UX-visible "extraction starting" notification** — 2 SP, 🟢 NICE TO HAVE — ✅ **shipped 2026-06-10** (branch `feature/clip-extraction-ux`; see [DONE.md](DONE.md)). `kickoffBackgroundExtractionIfEnabled()` fires a transient "⏳ Starting feature extraction…" toast immediately, before the awaited cache-load/model-load.
   - BACKLOG.md (2026-05-03). A "Starting feature extraction…" toast immediately on folder load (before per-file progress) surfaces failure modes faster and improves perceived responsiveness.
-- [ ] **Toggle-on kickoff for CLIP** — 2 SP, 🟢 NICE TO HAVE
+- [x] **Toggle-on kickoff for CLIP** — 2 SP, 🟢 NICE TO HAVE — ✅ **shipped 2026-06-10** (branch `feature/clip-extraction-ux`; see [DONE.md](DONE.md)). Toggle-on `else` branch in the `#clipFeaturesToggle` change handler calls `kickoffBackgroundExtractionIfEnabled()`; no-ops until a folder is loaded (empty-folder guard in kickoff).
   - BACKLOG.md (2026-05-03, deferred from Group A spec). Toggling CLIP **on** while a folder is loaded should trigger the same `kickoffBackgroundExtractionIfEnabled()` path as folder load. Affected: `#clipFeaturesToggle` change handler in [media-viewer.js](../../media-viewer.js).
 
 ### Group D: Security & privacy audit [batch] 🟡
