@@ -2025,6 +2025,12 @@ class MediaViewer {
                         // Best-effort cleanup — deleteSortCache already shows a notification
                         // on failure. Explicit catch makes the contract obvious.
                     }
+                } else {
+                    // Toggle-on: start background extraction immediately, mirroring the
+                    // folder-load path (see loadFolder's kickoff call). Fire-and-forget.
+                    // kickoff no-ops when no folder is loaded (guards on mediaFiles.length),
+                    // so toggling CLIP on with nothing loaded won't trigger a model download.
+                    this.kickoffBackgroundExtractionIfEnabled();
                 }
             });
         }

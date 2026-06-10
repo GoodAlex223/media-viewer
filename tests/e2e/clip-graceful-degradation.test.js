@@ -74,4 +74,46 @@ test.describe('CLIP graceful degradation', () => {
         const clipEnabled = await page.evaluate(() => window.mediaViewer?.enableClipFeatures);
         expect(clipEnabled).toBe(true);
     });
+
+    test('toggling CLIP on while a folder is loaded kicks off extraction', async () => {
+        tmpFixtures = await createTempFixtureDir();
+        ({ electronApp, page } = await launchApp());
+
+        // Start with CLIP disabled so we can observe the OFF→ON transition.
+        await seedLocalStorage(page, { enableClipFeatures: 'false' });
+        await page.evaluate(() => {
+            window.mediaViewer.enableClipFeatures = false;
+            const toggle = document.getElementById('clipFeaturesToggle');
+            if (toggle) toggle.checked = false;
+        });
+
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        // Stub kickoff with a counter so we assert the wiring (toggle-on → kickoff)
+        // without running the real, heavy, model-downloading extraction path.
+        await page.evaluate(() => {
+            const mv = window.mediaViewer;
+            mv.__kickoffCalls = 0;
+            mv.kickoffBackgroundExtractionIfEnabled = () => {
+                mv.__kickoffCalls++;
+                return Promise.resolve();
+            };
+        });
+
+        // Toggle CLIP on via the settings checkbox change event.
+        await page.evaluate(() => {
+            const toggle = document.getElementById('clipFeaturesToggle');
+            toggle.checked = true;
+            toggle.dispatchEvent(new Event('change'));
+        });
+        await page.waitForTimeout(200);
+
+        const result = await page.evaluate(() => ({
+            calls: window.mediaViewer.__kickoffCalls,
+            enabled: window.mediaViewer.enableClipFeatures,
+        }));
+        expect(result.enabled).toBe(true);
+        expect(result.calls).toBe(1);
+    });
 });
