@@ -141,6 +141,12 @@ two tasks because they have different shapes (architectural vs. visual).
 
 ## 🟡 Operational & Observation Items
 
+### [2026-06-11] Group D security-audit follow-up (preventive tooling)
+
+**Origin**: Referred out of the Group D security & privacy audit (the audit was explicitly scoped as one-time verification, no preventive tooling). The audit confirmed the repo is currently clean; this item is about keeping it that way as the project grows.
+
+- [ ] **Add a pre-commit secret guard (or gitleaks) so credentials can't be committed** — The 2026-06-11 audit was a manual point-in-time check; nothing prevents a future accidental commit of an API key / token / `.env` value. Two tiers: (a) low-effort — extend the existing Husky pre-commit hook with a regex scan of staged content for the high-signal markers used in the audit (`AKIA`, `ghp_`, `xox[baprs]-`, `AIza…`, `BEGIN …PRIVATE KEY`), no new dependency; (b) thorough — integrate [gitleaks](https://github.com/gitleaks/gitleaks) into pre-commit and/or CI with a config file. Re-run the audit's section-1/2 command blocks to validate. Effort: S (a) / M (b). Affected: `.husky/pre-commit`, `package.json` (lint-staged), possibly a new `.gitleaks.toml`.
+
 ### [2026-04-30] Process observations (PR #32 post-merge)
 
 **Origin**: Sub-threshold (scored 75/100) findings from the multi-agent code review of `feature/group-f-build-dx`. Three direct findings were fixed in commit `dcbbc26` before merge; these two remaining items are process-level patterns worth automating to prevent recurrence.

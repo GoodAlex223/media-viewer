@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-09 <!-- Group B: Mode-switch display bugs -->
+**Last Updated**: 2026-06-11 <!-- Group D: Security & privacy audit -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,40 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-11 — Group D: Security & privacy audit
+
+**Summary**: One-time, non-destructive security & privacy audit (3 SP, 🟡 Operational / 🟢 NICE
+TO HAVE) closing the two periodic BACKLOG items "Verify no secrets in git history" and "Anonymize
+author field in package.json". Audit result: **✅ PASS.** No credentials in git history (pickaxe
+`git log --all -S` for AWS/GitHub/Slack/Google keys + private-key blocks across all branches: zero
+hits; `.mcp.json`/`.env` never committed) or working tree (4 benign matches: a `YOUR_GITHUB_PAT`
+placeholder in `.mcp.json.example`, "token" in CLAUDE.md prose, `token`/`_jxlAnimToken` JS variable
+names, a commented-out `db-password:` Docker example). `package.json` author (`"goodalex223"`) is
+already a handle-only pseudonym — **no change made**.
+
+**Resolution**: Scope locked during brainstorm to **non-destructive only**. The one real PII
+exposure — the real name + email (`Alexey Minakov <alexminak32@gmail.com>`) baked into every commit
+— is **already public** on the GitHub remote; scrubbing it would require rewriting all commits
+(`git filter-repo` + force-push), breaking clones and merged-PR links. Recorded as **accepted risk**
+in the report rather than acted on. Deliverable is a dated, reproducible audit report — no production
+code changed (`package.json` untouched, 0 diff lines).
+
+**Key changes** (docs only): new audit report
+[docs/security/2026-06-11-security-privacy-audit.md](../security/2026-06-11-security-privacy-audit.md)
+(methodology + findings + accepted-risk note + reproducible re-run command blocks); `docs/README.md`
+gains a "Security Audits" section + spec/plan index entries.
+
+**Tests**: No code changed → no test changes. 297/297 unit tests pass throughout (pre-commit hook
+ran the suite on every commit). E2E: skipped (no JS changes).
+
+**Process**: superpowers brainstorm → spec → plan → executing-plans (inline, 3 tasks). Spec at
+`docs/superpowers/specs/2026-06-11-security-privacy-audit-design.md`; plan archived at
+[docs/archive/plans/2026-06-11-security-privacy-audit.md](../archive/plans/2026-06-11-security-privacy-audit.md).
+2 BACKLOG follow-ups spawned: 🟤 remove Docker scaffolding cruft (`Dockerfile`/`compose.yaml`/`.dockerignore`);
+🟡 add a pre-commit secret guard / gitleaks. Branch `feature/security-privacy-audit` (off `main`).
+
+---
 
 ### 2026-06-10 — Group C: CLIP extraction UX
 

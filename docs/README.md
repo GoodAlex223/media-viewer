@@ -56,6 +56,7 @@ Central index for all project documentation.
 | [JXL Viewer Support Plan][]                  | JXL + animated-JXL viewing via `jxl-oxide-wasm` module worker → decode/render/animation/feature-extraction/CLIP (Group A) |
 | [Mode-Switch Display Bugs Plan][]            | compare→single lands on the on-screen compare-left file + `switchToSingleModeUI` tears down stale compare wrappers (Group B) |
 | [CLIP Extraction UX Plan][]                  | "Starting feature extraction…" kickoff toast + CLIP toggle-on extraction kickoff + empty-folder no-op guard (Group C) |
+| [Security & Privacy Audit Plan][]            | One-time secrets scan (history + working tree) + identity/PII assessment → dated audit report (Group D) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -78,6 +79,7 @@ Central index for all project documentation.
 [JXL Viewer Support Plan]: archive/plans/2026-06-04-jxl-viewer-support.md
 [Mode-Switch Display Bugs Plan]: archive/plans/2026-06-08-mode-switch-display-bugs.md
 [CLIP Extraction UX Plan]: archive/plans/2026-06-10-clip-extraction-ux.md
+[Security & Privacy Audit Plan]: archive/plans/2026-06-11-security-privacy-audit.md
 
 ## Design Specs
 

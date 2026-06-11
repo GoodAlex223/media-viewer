@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-05-30 <!-- Manual testing batch: JXL viewer support (urgent) + AI-sort/single-mode first-media desync bug -->
+**Last Updated**: 2026-06-11 <!-- Group D: Security & privacy audit complete -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -95,6 +95,14 @@ Active tasks and backlog.
      Plan archived: docs/archive/plans/2026-06-10-clip-extraction-ux.md
      Spec: docs/superpowers/specs/2026-06-10-clip-extraction-ux-design.md
      296/296 unit tests; E2E 42/43 (1 known pre-existing #viewModeBtn fail). -->
+
+<!-- Group D Security & privacy audit (verify no secrets in git history + anonymize
+     package.json author) completed 2026-06-11, moved to DONE.md.
+     Result: ✅ PASS — no secrets; author already anonymized (no change).
+     Report: docs/security/2026-06-11-security-privacy-audit.md
+     Plan archived: docs/archive/plans/2026-06-11-security-privacy-audit.md
+     Spec: docs/superpowers/specs/2026-06-11-security-privacy-audit-design.md
+     297/297 unit tests; E2E skipped (no JS changes). -->
 
 ---
 

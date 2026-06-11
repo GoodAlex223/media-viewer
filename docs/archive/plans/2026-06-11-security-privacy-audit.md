@@ -1,6 +1,8 @@
 # Security & Privacy Audit Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status: Complete** — executed 2026-06-11 on branch `feature/security-privacy-audit` (inline execution). Audit result: ✅ PASS (no secrets in history or working tree; `package.json` author already anonymized; commit-author PII recorded as accepted risk). Report: [docs/security/2026-06-11-security-privacy-audit.md](../../security/2026-06-11-security-privacy-audit.md). 297/297 unit tests pass throughout (docs-only, no production code touched).
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Produce a dated, reproducible security & privacy audit report confirming no credentials live in the repo (history or working tree) and recording the identity/PII posture as a conscious decision.
 
@@ -32,7 +34,7 @@ The preliminary scan during brainstorming already came back **clean**. Your job 
 **Files:**
 - Create: `docs/security/2026-06-11-security-privacy-audit.md`
 
-- [ ] **Step 1: Run the git-history secrets scan and capture output**
+- [x] **Step 1: Run the git-history secrets scan and capture output**
 
 Run (PowerShell):
 
@@ -51,7 +53,7 @@ git log --all --oneline | Measure-Object -Line | Select-Object -ExpandProperty L
 
 Expected: every pattern prints `clean: '<pattern>'`; both per-path history lines are empty; commit count ~524. If any `HIT for` appears, STOP and report.
 
-- [ ] **Step 2: Create the report file with header + history-scan section**
+- [x] **Step 2: Create the report file with header + history-scan section**
 
 Create `docs/security/2026-06-11-security-privacy-audit.md` with the content below (paste the real commit count from Step 1 in place of `524`). The outer fence here is **four** backticks so the inner ` ```powershell ` fences are literal — write the file with normal three-backtick fences.
 
@@ -91,7 +93,7 @@ Result: **zero hits** for every credential marker across all 524 commits on all
 branches. `.mcp.json` and `.env`/`.env.*` were never committed on any branch.
 ````
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add docs/security/2026-06-11-security-privacy-audit.md
@@ -114,7 +116,7 @@ Expected: commit succeeds; lint-staged prints "No staged files match any configu
 **Files:**
 - Modify: `docs/security/2026-06-11-security-privacy-audit.md` (append sections 2–4)
 
-- [ ] **Step 1: Run the working-tree secrets scan and capture output**
+- [x] **Step 1: Run the working-tree secrets scan and capture output**
 
 Run (PowerShell):
 
@@ -140,7 +142,7 @@ if (Test-Path .mcp.json) { ".mcp.json exists locally (untracked)" }
 
 Expected: only the three known-benign matches appear (compose.yaml `db-password`, `.mcp.json.example` placeholder, CLAUDE.md prose); no tracked credential files; `git check-ignore` prints `.mcp.json`. Any other hit → STOP and report.
 
-- [ ] **Step 2: Append sections 2, 3, 4 to the report**
+- [x] **Step 2: Append sections 2, 3, 4 to the report**
 
 Append the content below to `docs/security/2026-06-11-security-privacy-audit.md` (four-backtick outer fence here is for nesting; write normal fences in the file):
 
@@ -199,7 +201,7 @@ Re-run the command blocks in sections 1 and 2 above. A passing audit prints
 benign working-tree matches.
 ````
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add docs/security/2026-06-11-security-privacy-audit.md
@@ -224,7 +226,7 @@ Expected: commit succeeds; vitest passes.
 - Modify: `docs/planning/BACKLOG.md` (🟤 Auto-Generated cleanup item)
 - Modify: `docs/planning/WEEKLY.md` (check off Group D items)
 
-- [ ] **Step 1: Index the report in `docs/README.md`**
+- [x] **Step 1: Index the report in `docs/README.md`**
 
 Read `docs/README.md`, find where audit/security or misc docs are listed (or the most appropriate existing section), and add a link:
 
@@ -238,18 +240,18 @@ If a "Design Specs" or similar section lists specs, also add the design spec row
 - [Security & Privacy Audit — Design](superpowers/specs/2026-06-11-security-privacy-audit-design.md)
 ```
 
-- [ ] **Step 2: File the Docker-cruft cleanup item in `docs/planning/BACKLOG.md`**
+- [x] **Step 2: File the Docker-cruft cleanup item in `docs/planning/BACKLOG.md`**
 
 Read `docs/planning/BACKLOG.md`, find the 🟤 Auto-Generated section, and add (under a `### [2026-06-11] From: Group D security audit` intake-date heading, per the BACKLOG Process Rules):
 
 ```markdown
-- [ ] **Remove Docker scaffolding cruft** — `Dockerfile`, `compose.yaml`, and
+- [x] **Remove Docker scaffolding cruft** — `Dockerfile`, `compose.yaml`, and
   `.dockerignore` are tracked `docker init` output with no relationship to this
   Electron desktop app (it is not containerized). Surfaced during the 2026-06-11
   security audit. Low effort; verify nothing references them before `git rm`.
 ```
 
-- [ ] **Step 3: Check off Group D items in `docs/planning/WEEKLY.md`**
+- [x] **Step 3: Check off Group D items in `docs/planning/WEEKLY.md`**
 
 In `docs/planning/WEEKLY.md`, flip the two Group D checkboxes:
 
@@ -260,7 +262,7 @@ In `docs/planning/WEEKLY.md`, flip the two Group D checkboxes:
 
 Also flip the corresponding lines in the "Friday, June 5" daily block (`Verify no secrets in git history (2 SP)` and `Anonymize package.json author field (1 SP)`).
 
-- [ ] **Step 4: Verify all docs are consistent and tests still pass**
+- [x] **Step 4: Verify all docs are consistent and tests still pass**
 
 Run:
 
@@ -271,7 +273,7 @@ npx vitest run
 Expected: 297/297 pass (no code changed). Then visually confirm the report renders
 (no broken nested code fences) by reading the file.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add docs/README.md docs/planning/BACKLOG.md docs/planning/WEEKLY.md
@@ -288,11 +290,11 @@ Expected: commit succeeds; vitest passes.
 
 ## Final verification (after all tasks)
 
-- [ ] Report exists at `docs/security/2026-06-11-security-privacy-audit.md`, renders cleanly, result = PASS
-- [ ] `docs/README.md` links the report
-- [ ] BACKLOG has the Docker-cruft 🟤 item under a `[2026-06-11]` intake heading
-- [ ] WEEKLY.md Group D both items checked
-- [ ] `package.json` unchanged (finding: already anonymized)
-- [ ] `npx vitest run` → 297/297 pass
-- [ ] No production source files modified (`git diff --name-only main` shows only docs)
+- [x] Report exists at `docs/security/2026-06-11-security-privacy-audit.md`, renders cleanly, result = PASS
+- [x] `docs/README.md` links the report
+- [x] BACKLOG has the Docker-cruft 🟤 item under a `[2026-06-11]` intake heading
+- [x] WEEKLY.md Group D both items checked
+- [x] `package.json` unchanged (finding: already anonymized)
+- [x] `npx vitest run` → 297/297 pass
+- [x] No production source files modified (`git diff --name-only main` shows only docs)
 ```
