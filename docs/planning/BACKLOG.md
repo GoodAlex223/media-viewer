@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-06-10 (PR #45 CLIP extraction UX merged in `ad4e488`; post-merge /code-review → no threshold findings, +2 🟤 sub-threshold follow-ups)
+**Last Updated**: 2026-06-11 (Group D security & privacy audit: 2 periodic items resolved — clean; +1 🟤 Docker-cruft cleanup follow-up)
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -141,6 +141,12 @@ two tasks because they have different shapes (architectural vs. visual).
 
 ## 🟡 Operational & Observation Items
 
+### [2026-06-11] Group D security-audit follow-up (preventive tooling)
+
+**Origin**: Referred out of the Group D security & privacy audit (the audit was explicitly scoped as one-time verification, no preventive tooling). The audit confirmed the repo is currently clean; this item is about keeping it that way as the project grows.
+
+- [ ] **Add a pre-commit secret guard (or gitleaks) so credentials can't be committed** — The 2026-06-11 audit was a manual point-in-time check; nothing prevents a future accidental commit of an API key / token / `.env` value. Two tiers: (a) low-effort — extend the existing Husky pre-commit hook with a regex scan of staged content for the high-signal markers used in the audit (`AKIA`, `ghp_`, `xox[baprs]-`, `AIza…`, `BEGIN …PRIVATE KEY`), no new dependency; (b) thorough — integrate [gitleaks](https://github.com/gitleaks/gitleaks) into pre-commit and/or CI with a config file. Re-run the audit's section-1/2 command blocks to validate. Effort: S (a) / M (b). Affected: `.husky/pre-commit`, `package.json` (lint-staged), possibly a new `.gitleaks.toml`.
+
 ### [2026-04-30] Process observations (PR #32 post-merge)
 
 **Origin**: Sub-threshold (scored 75/100) findings from the multi-agent code review of `feature/group-f-build-dx`. Three direct findings were fixed in commit `dcbbc26` before merge; these two remaining items are process-level patterns worth automating to prevent recurrence.
@@ -167,15 +173,21 @@ two tasks because they have different shapes (architectural vs. visual).
 
 ### [periodic] Anonymize author field in package.json
 
-- [ ] **Anonymize author field in package.json** — Security audit follow-up (2026-02-05). Check if author email/name in package.json should be anonymized for privacy. Low effort.
+- [x] ~~**Anonymize author field in package.json**~~ — ✅ Resolved 2026-06-11 (Group D security audit). Verdict: already anonymized — `"author": "goodalex223"` is the GitHub handle only, no real name or email. No change needed. See [docs/security/2026-06-11-security-privacy-audit.md](../security/2026-06-11-security-privacy-audit.md) §4.
 
 ### [periodic] Verify no secrets in git history
 
-- [ ] **Verify no secrets in git history** — Run `git log -p --all -S <pattern>` to confirm no credentials were accidentally committed. High impact, low effort. Added 2026-02-05.
+- [x] ~~**Verify no secrets in git history**~~ — ✅ Resolved 2026-06-11 (Group D security audit). Pickaxe (`git log --all -S`) scan for AWS/GitHub/Slack/Google keys + private-key blocks across all branches: zero hits. `.mcp.json`/`.env` never committed. See [docs/security/2026-06-11-security-privacy-audit.md](../security/2026-06-11-security-privacy-audit.md) §1.
 
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-06-11] Group D (security & privacy audit) cleanup follow-up (1 item)
+
+**Origin**: Surfaced during the Group D security & privacy audit (`feature/security-privacy-audit`; report at [docs/security/2026-06-11-security-privacy-audit.md](../security/2026-06-11-security-privacy-audit.md)). The audit itself came back clean (no secrets in history or working tree; `package.json` author already anonymized); this is the one non-security cleanup observation it turned up, referred out rather than acted on in the audit branch.
+
+- [ ] **Remove Docker scaffolding cruft** — `Dockerfile`, `compose.yaml`, and `.dockerignore` are tracked in the repo root but are unmodified `docker init` output with no relationship to this Electron desktop application (it is not containerized, has no server, and nothing in the codebase references them). They add noise to the repo root and produced the only working-tree "secret" match in the audit (a commented-out `db-password:` example line in `compose.yaml`). Low effort; `git grep` for any references first, then `git rm` all three. Effort: XS. Affected: `Dockerfile`, `compose.yaml`, `.dockerignore`.
 
 ### [2026-06-10] Group C (CLIP extraction UX) implementation-review follow-ups (2 items)
 

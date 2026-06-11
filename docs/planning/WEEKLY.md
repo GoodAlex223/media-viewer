@@ -67,9 +67,9 @@ _(No ongoing background tasks this week.)_
 **Source**: 🟡 Operational
 **Total SP**: 3
 
-- [ ] **Verify no secrets in git history** — 2 SP, 🟢 NICE TO HAVE (high impact, low effort)
+- [x] **Verify no secrets in git history** — 2 SP, 🟢 NICE TO HAVE (high impact, low effort) — ✅ **shipped 2026-06-11** (branch `feature/security-privacy-audit`; report at [docs/security/2026-06-11-security-privacy-audit.md](../security/2026-06-11-security-privacy-audit.md)). Pickaxe scan across all branches: zero hits; `.mcp.json`/`.env` never committed.
   - BACKLOG.md (periodic). Run `git log -p --all -S <pattern>` to confirm no credentials were ever committed.
-- [ ] **Anonymize author field in package.json** — 1 SP, 🟢 NICE TO HAVE
+- [x] **Anonymize author field in package.json** — 1 SP, 🟢 NICE TO HAVE — ✅ **shipped 2026-06-11**. Verdict: already anonymized (`"author": "goodalex223"`, handle only, no name/email) — no change needed.
   - BACKLOG.md (periodic). Check whether the author email/name in `package.json` should be anonymized for privacy.
 
 ---
@@ -141,8 +141,8 @@ _(No ongoing background tasks this week.)_
 
 - [ ] "Extraction starting" notification (2 SP)
 - [ ] CLIP toggle-on kickoff (2 SP)
-- [ ] Verify no secrets in git history (2 SP)
-- [ ] Anonymize package.json author field (1 SP)
+- [x] Verify no secrets in git history (2 SP) — ✅ 2026-06-11, clean
+- [x] Anonymize package.json author field (1 SP) — ✅ 2026-06-11, already anonymized
 
 **Daily total**: 7 SP
 
