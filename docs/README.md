@@ -108,6 +108,7 @@ Central index for all project documentation.
 | [JXL Viewer Support][] | JXL + animated-JXL viewing via `jxl-oxide-wasm` decode worker → Canvas; format audit + WASM eval + decode/render/feature-extraction design (Group A) |
 | [Mode-Switch Display Bugs][] | compare→single lands on the on-screen compare-left file (resolve index at switch time) + `switchToSingleModeUI` tears down stale compare wrappers (Group B) |
 | [CLIP Extraction UX][] | "Starting feature extraction…" toast on kickoff + CLIP toggle-on extraction kickoff; empty-folder no-op guard (Group C) |
+| [Security & Privacy Audit][] | One-time non-destructive secrets + identity/PII audit; methodology + report artifact (Group D) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -135,6 +136,13 @@ Central index for all project documentation.
 [JXL Viewer Support]: superpowers/specs/2026-06-04-jxl-viewer-support-design.md
 [Mode-Switch Display Bugs]: superpowers/specs/2026-06-08-mode-switch-display-bugs-design.md
 [CLIP Extraction UX]: superpowers/specs/2026-06-10-clip-extraction-ux-design.md
+[Security & Privacy Audit]: superpowers/specs/2026-06-11-security-privacy-audit-design.md
+
+## Security Audits
+
+| Document | Purpose |
+|----------|---------|
+| [Security & Privacy Audit (2026-06-11)](security/2026-06-11-security-privacy-audit.md) | One-time secrets scan (history + working tree) + identity/PII assessment; result: ✅ PASS (Group D) |
 
 ## Archives
 
@@ -144,4 +152,4 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-06-02*
+*Last Updated: 2026-06-11*
