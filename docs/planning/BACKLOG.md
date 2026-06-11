@@ -184,6 +184,12 @@ two tasks because they have different shapes (architectural vs. visual).
 
 ## 🟤 Auto-Generated Tech Debt
 
+### [2026-06-11] Weekly-planning intake (June 15–19 Cleanup Week prep)
+
+**Origin**: Surfaced while assembling the June 15–19 Cleanup Week plan ([WEEKLY.md](WEEKLY.md)). Cross-checking suspected-resolved entries against git history confirmed at least one cluster of provably-resolved-but-unchecked items (e.g. the [2026-05-25] PR #36 abort-string + spec-count items, fixed in `853e1ee` per `git show`), meaning the 🟤 pending-SP figure that drives Cleanup-Week cadence is overstated by an unknown amount.
+
+- [ ] **BACKLOG stale-checkbox verification sweep (all three source sections)** — Walk every unchecked entry in 🔵/🟡/🟤, verify suspected-resolved ones against git history (`git log -S`, `git show`, DONE.md), and flip them `[x]` with commit refs. Known candidates: PR #36 abort-string + spec-count items (`853e1ee`); 🔵 [2026-05-03] "extraction starting" toast + toggle-on kickoff (both shipped by PR #45); 🟡 [2026-03-23] "Pin Lucide CDN" (Group F, `@1.14.0`+SRI); [2026-03-26] "Double-init protection for logger.js" + [2026-04-08] "Unload CLIP model after extraction" (Group E); [2026-04-08] "CLIP-based similarity sorting" (Group D 2026-04-18); [2026-03-21] "Update regression-checker.md for FullscreenManager" (Group F). Recount 🟤 pending SP afterwards and record it in WEEKLY.md Notes — it calibrates the next Cleanup-Week trigger. Effort: S. Affected: [BACKLOG.md](BACKLOG.md). Scheduled: June 15–19 Cleanup Week, Group CW-3.
+
 ### [2026-06-11] Group D (security & privacy audit) cleanup follow-up (2 items)
 
 **Origin**: Surfaced during the Group D security & privacy audit (`feature/security-privacy-audit`; report at [docs/security/2026-06-11-security-privacy-audit.md](../security/2026-06-11-security-privacy-audit.md)). The audit itself came back clean (no secrets in history or working tree; `package.json` author already anonymized); these are the non-security cleanup observations it turned up, referred out rather than acted on in the audit branch.

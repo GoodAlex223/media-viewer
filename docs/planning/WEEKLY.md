@@ -1,158 +1,170 @@
 # Weekly Plan
 
-**Week**: Monday June 1 – Friday June 5, 2026
-**Created**: 2026-05-31
-**Sources**: MILESTONES.md, ROADMAP.md, GOALS.md, BACKLOG.md (📌 Process Rules), TODO.md, git log (last 2 weeks), previous WEEKLY.md (May 11–15, archived below)
-**Type**: 🟢 Normal week (user-priority). A Cleanup Week is **due** but deferred — see Quota Check.
+**Week**: Monday June 15 – Friday June 19, 2026
+**Created**: 2026-06-11
+**Sources**: MILESTONES.md, ROADMAP.md, GOALS.md, BACKLOG.md (📌 Process Rules), TODO.md, git log (last 2 weeks), previous WEEKLY.md (June 1–5, archived below)
+**Type**: 🧹 **CLEANUP WEEK** (active) — quota inverted: ≥50% SP from 🟤 Auto-Generated; the ≤1-🟤-group/week cap is lifted for this week only.
 
-**Context**: User-priority week led by two 🔴 Critical user-flagged items. The week leads off with a **re-rate / mode-correction** feature (compare + tournament) — pulled ahead of everything else at the user's request so the correction UX can be dogfooded as early as possible (compare correction testable EOD Mon, tournament correction Tue). **JXL + extended-format viewer support** follows immediately as the 🏆 Weekly Challenge (user flagged it urgent — it blocks opening files the user already has). Total raised to **30 SP** (above the 25 baseline) at the user's explicit direction so nothing is truncated; daily load stays within the 5–8 SP band. No formal carry-forward (May 11–15 fully closed; Groups C/D landed via PR #36 on 2026-05-24).
+**Context**: First-ever Cleanup Week. It was declared **due** in the June 1–5 plan (both triggers met: 🟤 section >20 SP pending, no Cleanup Week on record) and deferred to June 8–12 — but June 1–5's groups ran long (Groups B/C/D shipped June 9–11), so June 8–12 passed without one. This week concentrates the accumulated PR-review follow-ups, test backfill, and doc drift into focused batches, led off by the one fresh 🔵 user-flagged pain point (slow animated-JXL load) as the 🏆 challenge. Target lowered to **24 SP** based on observed velocity (the 30 SP June 1–5 plan took 9 working days including review/closeout cycles).
 
 ---
 
 ## Parallel Work
 
-_(No ongoing background tasks this week.)_
+- **Pending user verification**: manual smoke of Group C (CLIP extraction UX, PR #45) — the starting-extraction toast + toggle-on kickoff shipped 2026-06-10 with unit/E2E green, but the manual smoke noted in the session log is still open. No SP; user-side check.
 
 ---
 
 ## Task Groups
 
-### Group 0: Re-rate / mode-correction (compare + tournament) 🔵
-**Domain**: JS logic (rating correction + ML training)
+### Group CW-5: Progressive animated-JXL decode (frame-0-first) 🏆 🔵
+**Domain**: JS logic (decode worker protocol)
 **Source**: 🔵 User-Flagged
-**Total SP**: 8 — solo (large, multi-mode)
+**Total SP**: 5 — solo (worker-protocol redesign justifies its own run)
 
-- [x] **"Both good / Both bad" corrective-training buttons in AI-sorted compare** — 5 SP, 🟠 IMPORTANT — ✅ **shipped 2026-06-02** (branch `feature/re-rate-mode-correction`; see [DONE.md](DONE.md)). Deviations: suppression dropped (regular-post treatment), shortcuts KeyD/KeyF, buttons in `#compareActionBar`. Manual-testing fixes in `b32b718`.
-  - Per [BACKLOG.md:60](BACKLOG.md#L60) (2026-05-30). Two buttons grouped with `#cancelBtnCompare`; visible only when `isSortedByPrediction === true && isCompareMode === true`. Each click calls `updateMlModelAfterRating(file, ±1)` for **both** files at full strength; files **stay in the source folder** (no move). Persisted to per-folder `.bulk_rated.json` via new `readBulkRatedFile`/`writeBulkRatedFile` IPC; pair-selection soft-suppresses bulk-rated pairs with fall-through; undo (Ctrl+A) reverses both updates and removes both from `bulkRatedSet`; shortcuts `bothGood: 'KeyS'`, `bothBad: 'KeyD'`; integrated into `trainFromHistoricalRatingsAndWait()` so corrections survive model reset.
-  - Affected: [media-viewer.js](../../media-viewer.js), [index.html](../../index.html), [styles.css](../../styles.css), [main.js](../../main.js) + [preload.js](../../preload.js) (IPC), [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js), [tests/e2e/compare-mode.test.js](../../tests/e2e/compare-mode.test.js).
-- [x] **Re-rate / mark-as-equal in tournament mode** — 3 SP, 🟠 IMPORTANT — ✅ **shipped 2026-06-03** (branch `feature/tournament-re-rate`; see [DONE.md](DONE.md)). Design decision: **mark-as-equal** (not re-pick — undo already re-shows the last pair). Two draw buttons **Both Win** (both +1) / **Both Lose** (both +0) via `SwissStrategy.recordDraw` + `TournamentEngine.recordDraw` (reuses existing `undo()` + `strategyStateSnapshot`, zero new undo code); shortcuts `bothWin: 'KeyD'` / `bothLose: 'KeyF'`. No ML, no new IPC, no persistence-format change. 264→275 unit tests.
-  - Tournament picks only affect tier assignment (files move to `_Tier-N` at Apply), so "wrongly rated by mode" means a pick that mis-tiered a file. Add an affordance to redo/override the current or a recent pick (extends the existing "Undo last pick"); short design pass required since the BACKLOG entry explicitly scoped the correction buttons to compare-only. Decide: re-pick last pair vs. mark-as-equal (both advance / neither). Reuse the engine's existing `undo()` + `strategyStateSnapshot` machinery where possible.
-  - Affected: [tournament.js](../../tournament.js) (TournamentManager + engine interaction), [tournament-engine.js](../../tournament-engine.js) (override/re-pick path), [media-viewer.js](../../media-viewer.js) (tournament overlay control), [index.html](../../index.html)/[styles.css](../../styles.css) (button), [tests/tournament-manager.test.js](../../tests/tournament-manager.test.js).
+- [ ] **Progressive / streaming decode for large animated JXL** — 5 SP, 🟠 IMPORTANT
+  - Per BACKLOG 🔵 [2026-06-07] Group A manual-testing intake. A 270-frame, 27 MB `.gif.jxl` decodes ALL frames (~77 MB of PNGs) before `decodeJxl` resolves → several seconds of spinner before anything renders. Fix: worker posts frame 0 immediately (`{type:'frame', id, index, total, pngBytes, duration}` stream + terminal `{type:'decoded'}`), renderer displays frame 0 on arrival, accumulates the rest, starts the animation loop once buffered.
+  - Affected: [jxl-decode-worker.js](../../jxl-decode-worker.js), [media-viewer.js](../../media-viewer.js) (`decodeJxl`, `startJxlAnimation`, `_jxlPending` protocol).
 
-### Group A: JXL + extended-format viewer support 🏆 🔵
-**Domain**: JS logic (decode pipeline)
-**Source**: 🔵 User-Flagged
-**Total SP**: 8 — solo (🔴 Critical, urgent)
+### Group CW-1: Renderer correctness guards [batch] 🟤
+**Domain**: JS logic (defensive fixes + unit tests)
+**Source**: 🟤 Auto-Generated
+**Total SP**: 8 — one branch, one PR, one review
 
-- [x] **Add JXL + extended-format viewing (full commit)** — 8 SP, 🔴 IMPORTANT (URGENT, user-flagged) — ✅ **shipped 2026-06-07** (branch `feature/jxl-viewer-support`; see [DONE.md](DONE.md)). Scope narrowed to JXL-only (static + animated); 289 unit tests + 1 E2E smoke; plan archived. 5 BACKLOG follow-ups spawned.
-  - Per TODO.md "JXL + extended format viewer support" (🔴 Critical). User produces JXL (+ other formats from the sibling `media_compression` project) the viewer can't currently open. Chromium dropped native JPEG XL in 2022 → an in-app WASM decoder is required (`jxl-oxide-wasm` or official `libjxl` WASM build).
-  - Acceptance: audit `media_compression` extensions (which render natively vs need a decoder); WASM lib evaluation (licence / bundle size / perf / animated-JXL); expand `SUPPORTED_EXTENSIONS` / file-type detection in [main.js](../../main.js); decode→Canvas→blob branch in `showSingleMedia`/`showCompareMedia` (native vs WASM); feature-extraction (hand-crafted + CLIP) on decoded JXL via the existing ImageData path; loading state during decode; graceful fallback on decode failure; unit test (format detection) + E2E smoke (fixture JXL).
-  - Affected: [main.js](../../main.js), [media-viewer.js](../../media-viewer.js), [preload.js](../../preload.js), [package.json](../../package.json), [index.html](../../index.html).
+- [ ] **Clear `clipCache` in `loadFolder()`** — 1 SP, 🟠 IMPORTANT (real bug under path-identical filenames across folders)
+  - PR #34 follow-ups (BACKLOG 2026-05-10). `loadFolder()` clears featureCache/featureMetadata/perceptualHashes/predictionScores but never `clipCache` → stale 512-dim vectors can leak across folder switches. One-line fix + test.
+- [ ] **`isLoading` guard on `handleTournamentDraw` + `handleTournamentPick`** — 1 SP
+  - PR #41 follow-ups (~75/100, BACKLOG 2026-06-04). Button double-click mid-`showTournamentPair()` fires a second `recordDraw` after `roundQueue` shifted → unhandled `'No active pair to record'` rejection. Add `if (this.isLoading) return;` to both, try/catch belt-and-suspenders.
+- [ ] **`showCompareMedia()` `<2 files` branch exits tournament mode** — 1 SP
+  - PR #38 follow-ups (~62/100, BACKLOG 2026-05-28). Guard calls `switchToSingleModeUI()` but leaves `isTournamentMode = true` (tournament keymap + overlay live over single-mode UI). One-line `exitTournamentMode()` before the switch.
+- [ ] **`handleCancel` compare-pair entry-type guard + null `leftMedia`/`rightMedia` in `switchToSingleModeUI()`** — 1 SP
+  - PR #40 follow-up (~25) + Group B impl-review follow-up (BACKLOG 2026-06-02 / 2026-06-09). Add `&& lastMove.compareMode` to the compare-pair undo condition; null the two media refs alongside the wrapper teardown. Rider (forced by the guard change): tag the `handleCancel` compare-pair test fixtures with `compareMode: true` (PR #35 follow-up, BACKLOG 2026-05-16 — those fixtures currently omit the flag the new guard consults).
+- [ ] **Reset `clipWorkerReady = false` when `unloadClipModel` fires** — 1 SP
+  - PR #45 follow-up (BACKLOG 2026-06-10). Stale-true flag makes toggle-on-after-unload skip the eager `initClipModel()` (per-first-call ~1-2s reload latency instead). Reset after the `unloadClipModel()` IPC resolves — which also closes the PR #31 follow-up "`unloadClipModel` fired without await or error handling in timer callback" (BACKLOG 2026-04-28, same 3-line edit: await + `.catch()`/result check). Optional same-site riders if trivial: fire-time `enableClipFeatures` re-check (BACKLOG 2026-04-28) and `CLIP_UNLOAD_DELAY_MS` named constant (BACKLOG 2026-04-21).
+- [ ] **Local-capture pattern in `feature-cache-write-chunk` IPC handler** — 1 SP
+  - PR #38 follow-up (~75/100, BACKLOG 2026-05-28). `const writer = featureCacheWriter` + null-guard before the `'drain'` await — the documented required pattern for long-running IPC handlers sharing module-level state.
+- [ ] **JXL error-path hardening trio** — 2 SP
+  - Group A impl-review + PR #42 follow-ups (BACKLOG 2026-06-07). (a) `decodeJxl` per-request timeout (mirror `loadMediaAsImageData`'s 15s pattern; reject + delete `_jxlPending` entry); (b) try/catch around the worker `{type:'init'}` branch → structured `{type:'init-error'}`; (c) toast when an entire animation is undecodable (`consecutiveFailures >= frames.length` bail in `drawNext`).
+  - Affected: [media-viewer.js](../../media-viewer.js), [jxl-decode-worker.js](../../jxl-decode-worker.js).
 
-### Group B: Mode-switch display bugs [batch] 🔵
-**Domain**: JS logic (mode/compare UI state)
-**Source**: 🔵 User-Flagged
-**Total SP**: 7
-
-- [x] **AI-sort + mode-switch shows different first media (single vs compare)** — 5 SP, 🔴 IMPORTANT — ✅ **shipped 2026-06-09** (branch `feature/mode-switch-display-bugs`, **PR #43** `54b70b6`; see [DONE.md](DONE.md)). Chose fix path (a) not (b): `_applyModeSwitch('single')` resolves `currentIndex` from the on-screen `compareLeftFile` at switch time (Open Question answered: "first" = the file the user was viewing). Post-merge review follow-ups fixed in **PR #44** (`7368de7`).
-  - TODO.md BUG (🔴 Critical). After Sort-by-Prediction + rating pairs in compare, switching to single shows a different first file than the leftmost compare file. Two indexing schemes (`mediaFiles` vs `filesWithScores` via `mlComparePairIndex`) are never reconciled before `_applyModeSwitch()` sets `currentIndex = 0`. Likely fix path (b): keep both arrays in sync as ratings happen.
-  - Affected: [media-viewer.js](../../media-viewer.js) (`_applyModeSwitch` ~L3779, `moveComparePair` ~L4614, `showCompareMedia` ML branch ~L2720-2744).
-- [x] **Compare-mode → folder-switch leaves stale media wrappers visible** — 2 SP, 🟠 IMPORTANT — ✅ **shipped 2026-06-09** (same branch / **PR #43**; see [DONE.md](DONE.md)). `switchToSingleModeUI()` now tears down `.left-media-wrapper`/`.right-media-wrapper` on every exit-to-single path; redundant inline teardowns removed from `moveComparePair` + `showCompareMedia`.
-  - BACKLOG.md (2026-05-07). New folder loads in single mode but the old `.compare-wrapper` / `.media-wrapper-left/right` nodes remain shifted/shrunk on the left. Fix: `switchToSingleModeUI()` should `.remove()`/hide the compare wrappers before the new media renders.
-  - Affected: [media-viewer.js](../../media-viewer.js) (`switchToSingleModeUI`), [styles.css](../../styles.css); extend `compare-mode.test.js` "resets to single mode when switching folders".
-  - **Same domain as the desync bug** (both touch `switchToSingleModeUI` / `_applyModeSwitch`) → one branch, one PR, one review.
-
-### Group C: CLIP extraction UX [batch] 🔵
-**Domain**: JS logic (extraction UX)
-**Source**: 🔵 User-Flagged
+### Group CW-2: Test backfill [batch] 🟤
+**Domain**: Testing (E2E + unit)
+**Source**: 🟤 Auto-Generated
 **Total SP**: 4
 
-- [x] **Add UX-visible "extraction starting" notification** — 2 SP, 🟢 NICE TO HAVE — ✅ **shipped 2026-06-10** (branch `feature/clip-extraction-ux`; see [DONE.md](DONE.md)). `kickoffBackgroundExtractionIfEnabled()` fires a transient "⏳ Starting feature extraction…" toast immediately, before the awaited cache-load/model-load.
-  - BACKLOG.md (2026-05-03). A "Starting feature extraction…" toast immediately on folder load (before per-file progress) surfaces failure modes faster and improves perceived responsiveness.
-- [x] **Toggle-on kickoff for CLIP** — 2 SP, 🟢 NICE TO HAVE — ✅ **shipped 2026-06-10** (branch `feature/clip-extraction-ux`; see [DONE.md](DONE.md)). Toggle-on `else` branch in the `#clipFeaturesToggle` change handler calls `kickoffBackgroundExtractionIfEnabled()`; no-ops until a folder is loaded (empty-folder guard in kickoff).
-  - BACKLOG.md (2026-05-03, deferred from Group A spec). Toggling CLIP **on** while a folder is loaded should trigger the same `kickoffBackgroundExtractionIfEnabled()` path as folder load. Affected: `#clipFeaturesToggle` change handler in [media-viewer.js](../../media-viewer.js).
+- [ ] **Fix pre-existing red E2E: `app-launch.test.js` asserts hidden legacy `#viewModeBtn`** — 1 SP, 🟠 IMPORTANT (returns the E2E suite to green)
+  - BACKLOG 2026-06-07 (~70/100). Assertion targets the element hidden since the 3-way `#modeSelector` landed (commit `acfc3b6`); suite has been 1-red ever since (40/41 → 42/43). Re-point at `#modeSelector` / `.mode-btn`. Same-file rider: standardize the `afterEach` to the `if (electronApp)` guard pattern used by all other E2E files (BACKLOG 2026-04-11, XS).
+- [ ] **Tournament-mode E2E backfill** — 3 SP, 🟠 IMPORTANT (zero Playwright coverage for an entire mode)
+  - Merges two BACKLOG entries: 🟤 2026-06-03 ("No E2E coverage for tournament mode incl. draw buttons") + 🟤 2026-05-26 ("Phase H: E2E tests for tournament mode", deferred from the original tournament plan). Cover: enter tournament → picks → complete → Apply moves files to `_Tier-N/`; Both Win / Both Lose draw buttons; Ctrl+A undo restores the pair; leave-prompt Save/resume Continue path. Use existing helpers (`seedLocalStorage`, `mockFolderDialog`, `createTempFixtureDir`). While in there: strengthen the `TournamentEngine.recordDraw` history-shape unit assertions (`filesSnapshot` truthy + `pair.right` win-count after undo — BACKLOG 2026-06-03, XS).
+  - Affected: new `tests/e2e/tournament-mode.test.js`, [tests/tournament-engine.test.js](../../tests/tournament-engine.test.js).
 
-### Group D: Security & privacy audit [batch] 🟡
-**Domain**: Ops / security
+### Group CW-3: Docs & backlog hygiene [batch] 🟤
+**Domain**: Docs / planning data
+**Source**: 🟤 Auto-Generated
+**Total SP**: 4
+
+- [ ] **BACKLOG stale-checkbox verification sweep (all three source sections)** — 2 SP, 🟠 IMPORTANT (planning-data correctness — the 🟤 pending-SP figure drives Cleanup cadence)
+  - Filed as 🟤 BACKLOG intake [2026-06-11] (Cleanup Week planning). Entries across 🔵/🟡/🟤 are provably resolved but still unchecked; verify each against git history and flip with commit refs. Known candidates: PR #36 abort-string + spec-count items (fixed in `853e1ee` — confirmed via `git show`); the two 🔵 [2026-05-03] CLIP extraction-UX items shipped by PR #45 ("extraction starting" toast + toggle-on kickoff); "Pin Lucide CDN" (Group F pinned `@1.14.0`+SRI); "Double-init protection for logger.js" + "Unload CLIP model after extraction" (Group E); "CLIP-based similarity sorting" (Group D 2026-04-18); "Update regression-checker.md for FullscreenManager" (Group F). Recount 🟤 pending SP after the sweep and record it in Notes here.
+- [ ] **Doc one-liners bundle** — 1 SP
+  - PR #39: wrap CLAUDE.md `## Backlog Intake Rules` in `<!-- MANUAL -->` markers; add `backlog-structure` to the CLAUDE.md test inventory; retro `[possible-dup-of: ...]` tag on the kept `waitForTimeout` entry. PR #45: CLAUDE.md kickoff doc-drift (8→10 test cases, `makeCtx` defaults, empty-folder guard — the deferred `revise-claude-md` pass). docs/README.md Design Specs rows in one pass: CLIP silent-failure spec (PR #34), TASK-024 spec (PR #22 follow-up), TASK-026 spec/plan (PR #24 follow-up). Group D 2026-04-18: correct `.sort_cache_clip.json` → unified `.sort_cache.json` key `'clip'` in spec + CLAUDE.md. CLAUDE.md Git Insights tournament hash swap: UI integration is `acfc3b6` (not `6c73f9f`, which is the IPC/TournamentManager commit) — verified via `git show` 2026-06-11.
+- [ ] **Repo-root cruft removal** — 1 SP
+  - 🟤 2026-06-11 (Group D audit follow-ups): `git rm` the unused `docker init` scaffolding (`Dockerfile`, `compose.yaml`, `.dockerignore`) after a reference grep; delete the stray `nul` line at [.gitignore](../../.gitignore) line 2.
+
+### Group CW-4: Process & security guards [batch] 🟡
+**Domain**: Ops / build & process
 **Source**: 🟡 Operational
 **Total SP**: 3
 
-- [x] **Verify no secrets in git history** — 2 SP, 🟢 NICE TO HAVE (high impact, low effort) — ✅ **shipped 2026-06-11** (branch `feature/security-privacy-audit`; report at [docs/security/2026-06-11-security-privacy-audit.md](../security/2026-06-11-security-privacy-audit.md)). Pickaxe scan across all branches: zero hits; `.mcp.json`/`.env` never committed.
-  - BACKLOG.md (periodic). Run `git log -p --all -S <pattern>` to confirm no credentials were ever committed.
-- [x] **Anonymize author field in package.json** — 1 SP, 🟢 NICE TO HAVE — ✅ **shipped 2026-06-11**. Verdict: already anonymized (`"author": "goodalex223"`, handle only, no name/email) — no change needed.
-  - BACKLOG.md (periodic). Check whether the author email/name in `package.json` should be anonymized for privacy.
+- [ ] **Pre-commit secret guard (tier a — regex scan, no new dependency)** — 2 SP, 🟠 IMPORTANT
+  - 🟡 [2026-06-11] Group D audit referral. Extend the Husky pre-commit hook with a staged-content regex scan for the audit's high-signal markers (`AKIA`, `ghp_`, `xox[baprs]-`, `AIza…`, `BEGIN …PRIVATE KEY`). Re-run the audit §1/§2 command blocks to validate. Gitleaks (tier b) stays in BACKLOG.
+  - Affected: `.husky/pre-commit`, possibly [package.json](../../package.json) (lint-staged).
+- [ ] **Pre-archive checklist block + `.gitignore` duplicate-line fix** — 1 SP
+  - 🟡 2026-04-30: add the "before archive: flip checkboxes, add Status: Complete, index in docs/README.md (plans AND specs)" checklist block to the plan template in `TEMPLATES/` (option (i), lowest effort; extend to Design Specs per the PR #36 follow-up note). 🟡 2026-04-29: fix the duplicate `!.claude/agents/` line at `.gitignore` 138-139.
 
 ---
 
 ## Daily Schedule
 
-### Monday, June 1 — Re-rate: Compare Correction
-> Lead off with the user's top ask so the compare correction UX is testable by end of day. Highest-uncertainty piece of the re-rate work (new ML-corrective + persistence path) lands first.
+### Monday, June 15 — 🏆 JXL Streaming Decode
+> Front-load the week's only design-risky item: the worker-protocol change. If it overruns, the rest of the week is mechanical cleanup with absorption room.
 
 | Group | SP |
 |-------|----|
-| **Group 0: Re-rate / mode-correction** (part 1 — compare) | 6 |
+| **Group CW-5: Progressive animated-JXL decode** 🏆 | 5 |
 
-- [x] "Both good / Both bad" corrective buttons in AI-sorted compare (5 SP) — ✅ shipped 2026-06-02 (+ manual-testing fixes). Tournament override (part 2) deferred to its own branch.
+- [ ] Frame-0-first streaming worker protocol + incremental `decodeJxl`/`startJxlAnimation` consumption (5 SP)
 
-**Daily total**: 6 SP
+**Daily total**: 5 SP
 
 ---
 
-### Tuesday, June 2 — Re-rate: Tournament Correction → JXL Kickoff
-> Finish the tournament re-rate path (tournament correction testable today), then pivot to JXL with the highest-risk decision first: the WASM decoder evaluation.
+### Tuesday, June 16 — Correctness Guards
+> The heart of the cleanup: ~10 small, well-specified defensive fixes accumulated from PR reviews #34–#45. One branch, one PR.
 
 | Group | SP |
 |-------|----|
-| **Group 0: Re-rate / mode-correction** (part 2 — tournament) | 2 |
-| **Group A: JXL viewer support** (part 1 — audit + WASM eval) | 4 |
+| **Group CW-1: Renderer correctness guards** [batch] | 8 |
 
-- [x] Tournament re-rate / mark-as-equal (2 SP) — Group 0 completes — ✅ shipped 2026-06-03
-- [x] JXL: format audit of `media_compression` + WASM libjxl evaluation + extension-filter wiring (4 SP) — ✅ shipped 2026-06-07 (chose `jxl-oxide-wasm`; media-formats.js + isJxl + read-file-buffer/read-jxl-wasm IPC)
+- [ ] `clipCache` clear in `loadFolder()` (1 SP)
+- [ ] Tournament `isLoading` guards — draw + pick (1 SP)
+- [ ] `showCompareMedia` `<2 files` → `exitTournamentMode()` (1 SP)
+- [ ] `handleCancel` entry-type guard + `leftMedia`/`rightMedia` nulling (1 SP)
+- [ ] `clipWorkerReady` reset on unload (1 SP)
+- [ ] `feature-cache-write-chunk` local-capture (1 SP)
+- [ ] JXL error-path hardening trio: decode timeout, init try/catch, whole-animation-bail toast (2 SP)
 
-**Daily total**: 6 SP
+**Daily total**: 8 SP
 
 ---
 
-### Wednesday, June 3 — JXL: Decode + Render + Tests
-> Complete JXL end-to-end. Lighter SP day by design — it is the overrun buffer for the urgent, library-risk JXL work.
+### Wednesday, June 17 — Test Backfill
+> Return the E2E suite to green, then close the largest coverage hole (tournament mode).
 
 | Group | SP |
 |-------|----|
-| **Group A: JXL viewer support** (part 2 — decode/render/integration/tests) | 4 |
+| **Group CW-2: Test backfill** [batch] | 4 |
 
-- [x] JXL: decode→Canvas branch, render in `showSingleMedia`/`showCompareMedia`, feature-extraction integration, loading state, graceful fallback, unit + E2E smoke (4 SP) — Group A completes — ✅ shipped 2026-06-07 (+ animated-JXL canvas playback)
+- [ ] Fix `app-launch.test.js` `#viewModeBtn` assertion → suite green (1 SP)
+- [ ] Tournament-mode E2E backfill + `recordDraw` shape assertions (3 SP)
 
-**Daily total**: 4 SP | 🏆 Weekly Challenge complete
+**Daily total**: 4 SP
 
 ---
 
-### Thursday, June 4 — Mode-Switch Display Bugs
-> Both bugs share the mode-switch display path; batch into one branch/PR.
+### Thursday, June 18 — Docs & Backlog Hygiene
+> Make the planning data trustworthy again: verify-and-flip stale BACKLOG entries, clear accumulated doc drift, drop repo-root cruft.
 
 | Group | SP |
 |-------|----|
-| **Group B: Mode-switch display bugs** [batch] | 7 |
+| **Group CW-3: Docs & backlog hygiene** [batch] | 4 |
 
-- [x] AI-sort + mode-switch first-media desync (5 SP) — ✅ shipped 2026-06-09 (PR #43 `54b70b6`; fix path (a) — land on on-screen `compareLeftFile`)
-- [x] Compare-mode → folder-switch stale wrappers (2 SP) — ✅ shipped 2026-06-09 (PR #43; `switchToSingleModeUI` wrapper teardown). Post-merge follow-ups in PR #44.
+- [ ] BACKLOG stale-checkbox verification sweep + 🟤 pending-SP recount (2 SP)
+- [ ] Doc one-liners bundle — CLAUDE.md markers/inventory/kickoff-drift, README spec indexing, sort-cache doc fix, dup tag (1 SP)
+- [ ] Repo-root cruft: Docker scaffolding + `.gitignore` `nul` line (1 SP)
 
-**Daily total**: 7 SP — ✅ Group B complete
+**Daily total**: 4 SP
 
 ---
 
-### Friday, June 5 — Extraction UX + Security
-> Two small batches: user-facing CLIP extraction UX, then the periodic security/privacy audit.
+### Friday, June 19 — Process & Security Guards
+> Close the audit referral with a working secret guard; light day doubles as the week's overrun buffer.
 
 | Group | SP |
 |-------|----|
-| **Group C: CLIP extraction UX** [batch] | 4 |
-| **Group D: Security & privacy audit** [batch] | 3 |
+| **Group CW-4: Process & security guards** [batch] | 3 |
 
-- [ ] "Extraction starting" notification (2 SP)
-- [ ] CLIP toggle-on kickoff (2 SP)
-- [x] Verify no secrets in git history (2 SP) — ✅ 2026-06-11, clean
-- [x] Anonymize package.json author field (1 SP) — ✅ 2026-06-11, already anonymized
+- [ ] Pre-commit secret guard, tier (a) regex scan (2 SP)
+- [ ] Pre-archive checklist template block + `.gitignore` duplicate line (1 SP)
 
-**Daily total**: 7 SP
+**Daily total**: 3 SP
 
 ---
 
 ## Weekly Challenge 🏆
 
-**JXL + extended-format viewer support** (Group A, Tue–Wed, 8 SP) — the hardest, highest-value strategic item on the board.
+**Progressive animated-JXL decode (frame-0-first)** (Group CW-5, Mon, 5 SP).
 
-**Why this one**: The user flagged it as urgent ("необходимо срочно… чтобы я уже мог открывать их") — it blocks opening files they already produce. It is also the most technically demanding pick this week: it requires evaluating and integrating a WASM `libjxl` decoder, branching the render path by format, and threading decoded output through the existing feature-extraction pipeline — genuinely stretch scope. The re-rate work (Group 0) is the week's lead-off priority for early dogfooding, but JXL is the stretch challenge: bigger, riskier, and the one that unblocks a class of files entirely.
+**Why this one**: Even in a Cleanup Week the default rule holds — the challenge comes from 🔵 User-Flagged, and this is the freshest user-reported pain ("take very long time to load" on a real 270-frame file). It is also the week's only genuinely hard problem: extending the worker message protocol to a frame stream, making `decodeJxl` resolve on frame 0 while frames keep arriving, and keeping `startJxlAnimation`'s identity-token teardown correct against a still-filling buffer. Everything else this week is deliberately mechanical; this is the stretch.
 
 ---
 
@@ -160,35 +172,52 @@ _(No ongoing background tasks this week.)_
 
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
-| 0: Re-rate / mode-correction | JS logic (rating/ML) | 🔵 User | 2 | 8 | Mon–Tue | part 1 ✅ (2026-06-02) · part 2 (tournament) pending |
-| A: JXL viewer support 🏆 | JS logic (decode) | 🔵 User | 1 | 8 | Tue–Wed | Planned |
-| B: Mode-switch display bugs [batch] | JS logic (mode UI) | 🔵 User | 2 | 7 | Thu | Planned |
-| C: CLIP extraction UX [batch] | JS logic (extraction UX) | 🔵 User | 2 | 4 | Fri | Planned |
-| D: Security & privacy audit [batch] | Ops / security | 🟡 Ops | 2 | 3 | Fri | Planned |
-| **Total** | | | **9** | **30** | | |
+| CW-5: Progressive JXL decode 🏆 | JS logic (decode worker) | 🔵 User | 1 | 5 | Mon | Planned |
+| CW-1: Renderer correctness guards [batch] | JS logic (defensive) | 🟤 Auto | 7 | 8 | Tue | Planned |
+| CW-2: Test backfill [batch] | Testing | 🟤 Auto | 2 | 4 | Wed | Planned |
+| CW-3: Docs & backlog hygiene [batch] | Docs / planning | 🟤 Auto | 3 | 4 | Thu | Planned |
+| CW-4: Process & security guards [batch] | Ops / process | 🟡 Ops | 2 | 3 | Fri | Planned |
+| **Total** | | | **15** | **24** | | |
+
+_Tasks counts plan tasks; several bundle multiple BACKLOG entries (~20+ entries consumed in total). At closeout, check off each constituent BACKLOG entry individually — every bundle cites its entries._
 
 ---
 
 ## Notes
 
-- **Lead-off rationale (Group 0 before JXL)**: User explicitly asked to pull the re-rate / mode-correction work ahead of JXL to dogfood the correction UX as early as possible. Compare correction is testable EOD Mon; tournament correction EOD Tue.
-- **JXL risk buffer**: Group A carries an 8-SP tag but its load is exploratory (WASM decoder evaluation is the unknown). It gets the Tue-PM → Wed block with a deliberately light Wednesday (4 SP) so an overrun has room without bumping Thursday's critical bug work.
-- **Overrun bump order** (if any group slips): drop **Group D** (🟡, NICE) first, then **Group C** (🟢, NICE). Never bump **Group B** (🔴/🟠 critical user bugs) or **Group 0** (lead-off priority).
-- **Tournament re-rate is new design**: BACKLOG.md:60 scoped the correction buttons to compare-only. The tournament half of Group 0 needs a short design decision (re-pick last pair vs. mark-as-equal) — handle inline Mon/Tue; if it balloons, split the tournament half into a follow-up and ship compare correction this week.
-- **Roadmap drift flag**: MILESTONES.md / ROADMAP.md / GOALS.md were last updated 2026-02-05 and still list v1.1 tasks (video fullscreen toggle, visual scale controls) that have long since shipped. The actual work has diverged well past the documented roadmap. JXL is net-new, user-urgent format support and proceeds regardless — but a roadmap/milestones refresh is overdue and worth a planning conversation soon (candidate for the deferred Cleanup Week).
-- **No carry-forward**: Previous WEEKLY (May 11–15) fully complete; Groups C/D landed via PR #36 (2026-05-24).
+- **Velocity adjustment (30 → 24 SP)**: The June 1–5 plan (30 SP) was fully delivered but took **9 working days** (June 1–11) once PR review cycles, post-merge reviews, and closeouts are counted — effective throughput ≈ 17–20 SP per 5-day window. Cleanup items carry less design risk, so 24 SP with a light Friday is the realistic target, not a regression to 30. The daily 5–8 SP band is deliberately relaxed to ~3–8 SP this week: Wed/Thu/Fri run light so each batch's PR review/closeout overhead fits inside its day and Friday doubles as the overrun buffer.
+- **Quota inversion (this week only)**: Cleanup Week inverts the normal-week split — 🟤 takes the ≥50% majority and the ≤1-🟤-group cap is lifted; 🔵 and 🟡 are held to ≤25% each. Normal quotas resume June 22.
+- **Overrun drop order**: drop **CW-3** (docs hygiene) first, then **CW-4**. Never drop **CW-1** (real bug fixes — the point of the week) or **CW-5** (user-flagged lead item).
+- **Pull-in order if ahead** (Friday buffer): (1) JXL error-path **test backfill** for the `372ea10` hardening (M — BACKLOG 2026-06-07 PR #42 follow-up; CW-1 ships the remaining code hardening, this adds its automated coverage), (2) bulk-rate buttons computed-visibility assertion (S — BACKLOG 2026-06-02), (3) `handleCancel` Branch 3 unit test (XS — BACKLOG 2026-05-14).
+- **🔵 items considered and deferred** (quota headroom was 6 SP; JXL streaming took 5): the twice-raised **"Hash sort + AI sort mutual exclusion"** (🔵 2026-05-07, carries an explicit promote-priority note from 2026-05-30) was passed over because it is M-sized with an open design question (sort-source axis vs unified dropdown) — too big for the 1 SP of remaining 🔵 headroom and wrong-shaped for a cleanup week; it should be a **lead candidate for the June 22 normal week**, alongside the XS-S tournament pause/exit button (🔵 2026-06-03).
+- **Roadmap refresh needs a user conversation**: MILESTONES.md / ROADMAP.md / GOALS.md still date from 2026-02-05 and describe long-shipped v1.1 work; the June 1–5 plan nominated a refresh for "the deferred Cleanup Week". It is **not scheduled as SP** because it needs strategic input (is v1.1 closed? what is v2.0's actual scope given tournament mode/JXL/CLIP all shipped outside the roadmap?) — raise it with the user during the week; if the conversation happens, slot the doc edit into Thursday alongside CW-3.
+- **🟤 tail remains after this week**: CW batches burn ~16 SP of auto-generated debt, but the 🟤 section holds substantially more (plus older XS items from March–April). The stale-checkbox sweep (CW-3) will produce an accurate pending-SP recount; expect the next Cleanup Week around **early July 2026** (~3-week cadence) unless the recount says otherwise.
+- **Branch/PR shape**: 5 workflow runs — one per group (CW-1/2/3/4 each one branch+PR; CW-5 solo branch+PR). CW-3 is docs-only → per the PR #46 learning, `/code-review` will be a no-op for it; ship with a manual check instead.
 
 ### Quota Check
-- 🔵 **User-Flagged SP**: 27 / 30 (**90%**) — ✅ must be ≥50%
-- 🟡 **Operational SP**: 3 / 30 (**10%**) — ✅ must be ≤25%
-- 🟤 **Auto-Generated SP**: 0 / 30 (**0%**) — ✅ must be ≤25% AND ≤1 group (zero this week — see below)
-- **Cleanup Week status**: **due** (both triggers met) → **deferred to June 8–12**
-- **Last Cleanup Week**: never recorded
-- **Compliance**: ✅ all quotas met. ⚠️ **Deviation noted**: A Cleanup Week is overdue — the 🟤 Auto-Generated Tech Debt section holds well over 20 SP of pending PR-review follow-ups (PRs #39, #38, #36, #35, #34, #30, #28, #27, #24, #23, #22, #21, #19, #18 …) and no prior Cleanup Week is on record, so both cadence triggers ("every ~3 weeks" and ">20 SP pending") are satisfied. It is deferred this week — and zero auto-generated work is pulled in — because two 🔴 Critical user-flagged items (urgent JXL viewer, mode-switch bug) plus the user's explicitly-requested re-rate feature take precedence. Concentrating all auto-debt into a dedicated Cleanup Week (target **June 8–12**) is cleaner than dribbling it across this user-priority week. **Action**: declare June 8–12 a Cleanup Week (inverted quota) in next week's plan.
+- 🔵 **User-Flagged SP**: 5 / 24 (**20.8%**) — ✅ ≤25% under the **inverted** Cleanup-Week quota (normal-week ≥50% rule explicitly suspended; see 📌 Process Rules cleanup-cadence clause)
+- 🟡 **Operational SP**: 3 / 24 (**12.5%**) — ✅ must be ≤25%
+- 🟤 **Auto-Generated SP**: 16 / 24 (**66.7%**) — ✅ ≥50% per inversion; 3 🟤 groups scheduled — the ≤1-group cap is lifted for a declared Cleanup Week
+- **Cleanup Week status**: **ACTIVE** (first ever; was due since June 1–5, deferred past June 8–12)
+- **Last Cleanup Week**: never (this week becomes the baseline for the ~3-week cadence)
+- **Compliance**: ✅ all quotas met under the declared inversion. The inversion itself is the rule-sanctioned response to both cadence triggers having fired (🟤 >20 SP pending; no Cleanup Week on record).
 
 ---
 
 ## Previous Week Summary
+
+### Week: June 1 – June 5, 2026 — ✅ Complete (ran long: finished 2026-06-11)
+
+**Result**: All 5 groups delivered (30 SP planned — raised from the 25 baseline at user direction). Groups 0/A landed inside the Mon–Fri window; Groups B, C, D spilled into June 8–11. Seven PRs merged: #40 (compare bulk-rate), #41 (tournament draw), #42 (JXL viewer), #43 + #44 (mode-switch bugs + review follow-ups), #45 (CLIP extraction UX), #46 (security audit). Unit tests 244 → 297.
+
+**Key deliveries**:
+- Group 0 — Re-rate / mode-correction: "Both good/Both bad" bulk-rate in AI-sorted compare (PR #40) + tournament "Both Win/Both Lose" mark-as-equal draws (PR #41)
+- Group A 🏆 — JXL + animated-JXL viewer via vendored `jxl-oxide-wasm` module worker, CLIP-from-buffer IPC, LRU frame cache (PR #42)
+- Group B — Mode-switch display bugs: compare→single lands on the on-screen file; stale compare-wrapper teardown (PRs #43/#44)
+- Group C — CLIP extraction UX: starting-extraction toast + toggle-on kickoff (PR #45)
+- Group D — Security & privacy audit: ✅ PASS, no secrets in history/tree; author already anonymized; report at `docs/security/2026-06-11-security-privacy-audit.md` (PR #46)
+
+**Velocity learning**: 30 SP nominally complete but consumed 9 working days end-to-end (review + closeout overhead per PR is real). The June 15–19 Cleanup Week targets 24 SP accordingly.
 
 ### Week: May 11 – May 15, 2026 — ✅ Complete
 
@@ -202,7 +231,7 @@ _(No ongoing background tasks this week.)_
 - Group E — Tournament Mode spec (`docs/superpowers/specs/2026-05-25-tournament-mode-design.md`)
 - Group F — Tournament Mode prototype (Swiss strategy + engine + TournamentManager + UI integration; 241/241 unit tests)
 
-**Velocity learning**: 25 SP/week remained the validated cadence; this week (June 1–5) intentionally raises the target to 30 SP at user direction to absorb the added re-rate feature without truncating planned work.
+**Velocity learning**: 25 SP/week remained the validated cadence; June 1–5 intentionally raised the target to 30 SP at user direction to absorb the added re-rate feature without truncating planned work.
 
 ### Week: April 13 – April 17, 2026 — ✅ Complete
 
