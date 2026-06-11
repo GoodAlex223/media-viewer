@@ -136,9 +136,9 @@ now resolves at frame-0 time (faster for free). Static JXL: `meta` + 1 `frame` +
 
 ## 6. Testing
 
-- **Update** the 5 existing `decodeJxl` tests in `tests/media-viewer-utils.test.js` — mock
-  worker must speak the new `meta`/`frame`/`done` protocol (cache-hit, happy path, error
-  path, 2× LRU eviction).
+- **Update** the 4 existing `decodeJxl` tests in `tests/media-viewer-utils.test.js` — mock
+  worker must speak the new `meta`/`frame`/`done` protocol (cache-hit unchanged; happy path,
+  error path, and LRU eviction get the new mock).
 - **New unit tests** (target: 297 → ~302+):
   1. Early resolve: `decodeJxl` resolves after `meta` + first `frame` with
      `frames.length === 1` and `frameCount === N > 1`, before `done`.
