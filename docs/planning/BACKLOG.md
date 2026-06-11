@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-06-11 (Group D security & privacy audit: 2 periodic items resolved — clean; +1 🟤 Docker-cruft cleanup follow-up)
+**Last Updated**: 2026-06-11 (PR #46 merged + post-merge /code-review "No issues found" — docs-only; +1 🟤 `.gitignore` `nul`-entry cleanup, +1 🟡 commit-author PII accepted-risk tracker)
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -146,6 +146,7 @@ two tasks because they have different shapes (architectural vs. visual).
 **Origin**: Referred out of the Group D security & privacy audit (the audit was explicitly scoped as one-time verification, no preventive tooling). The audit confirmed the repo is currently clean; this item is about keeping it that way as the project grows.
 
 - [ ] **Add a pre-commit secret guard (or gitleaks) so credentials can't be committed** — The 2026-06-11 audit was a manual point-in-time check; nothing prevents a future accidental commit of an API key / token / `.env` value. Two tiers: (a) low-effort — extend the existing Husky pre-commit hook with a regex scan of staged content for the high-signal markers used in the audit (`AKIA`, `ghp_`, `xox[baprs]-`, `AIza…`, `BEGIN …PRIVATE KEY`), no new dependency; (b) thorough — integrate [gitleaks](https://github.com/gitleaks/gitleaks) into pre-commit and/or CI with a config file. Re-run the audit's section-1/2 command blocks to validate. Effort: S (a) / M (b). Affected: `.husky/pre-commit`, `package.json` (lint-staged), possibly a new `.gitleaks.toml`.
+- [ ] **Decide on commit-author PII (real name + email in every commit) — accepted risk, revisit before any public release** — The audit (§4) recorded that all commits are authored as `Alexey Minakov <alexminak32@gmail.com>` / `GoodAlex223 <alexminak32@gmail.com>`; this real name + email is baked into every commit SHA and is already public on the GitHub remote. Left as **accepted risk** in the non-destructive audit because remediation requires rewriting all history (`git filter-repo --mailmap` + force-push), which changes every SHA, breaks existing clones and merged-PR references, and is only meaningful paired with a GitHub-side scrub. Tracked here so the decision is revisited deliberately (e.g. before open-sourcing or a public release) rather than staying buried in the audit doc. No action unless the user opts into a history rewrite. Effort: M (if pursued). Affected: full git history, GitHub remote.
 
 ### [2026-04-30] Process observations (PR #32 post-merge)
 
@@ -183,11 +184,12 @@ two tasks because they have different shapes (architectural vs. visual).
 
 ## 🟤 Auto-Generated Tech Debt
 
-### [2026-06-11] Group D (security & privacy audit) cleanup follow-up (1 item)
+### [2026-06-11] Group D (security & privacy audit) cleanup follow-up (2 items)
 
-**Origin**: Surfaced during the Group D security & privacy audit (`feature/security-privacy-audit`; report at [docs/security/2026-06-11-security-privacy-audit.md](../security/2026-06-11-security-privacy-audit.md)). The audit itself came back clean (no secrets in history or working tree; `package.json` author already anonymized); this is the one non-security cleanup observation it turned up, referred out rather than acted on in the audit branch.
+**Origin**: Surfaced during the Group D security & privacy audit (`feature/security-privacy-audit`; report at [docs/security/2026-06-11-security-privacy-audit.md](../security/2026-06-11-security-privacy-audit.md)). The audit itself came back clean (no secrets in history or working tree; `package.json` author already anonymized); these are the non-security cleanup observations it turned up, referred out rather than acted on in the audit branch.
 
 - [ ] **Remove Docker scaffolding cruft** — `Dockerfile`, `compose.yaml`, and `.dockerignore` are tracked in the repo root but are unmodified `docker init` output with no relationship to this Electron desktop application (it is not containerized, has no server, and nothing in the codebase references them). They add noise to the repo root and produced the only working-tree "secret" match in the audit (a commented-out `db-password:` example line in `compose.yaml`). Low effort; `git grep` for any references first, then `git rm` all three. Effort: XS. Affected: `Dockerfile`, `compose.yaml`, `.dockerignore`.
+- [ ] **Remove stray `nul` entry from `.gitignore` line 2** — `.gitignore` line 2 is a bare `nul` (a Windows reserved device name, almost certainly an accidental shell-redirect artifact, e.g. `> nul` creating a literal file once). It ignores nothing useful and is noise at the very top of the file, above the `docker init` Node.gitignore block. Noted report-only in the audit (§3) alongside the already-tracked duplicate `!.claude/agents/` line. Trivial fix: delete the line. Effort: XS. Affected: [.gitignore](../../.gitignore).
 
 ### [2026-06-10] Group C (CLIP extraction UX) implementation-review follow-ups (2 items)
 
