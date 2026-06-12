@@ -1,5 +1,7 @@
 # Progressive Animated-JXL Decode (Frame-0-First) Implementation Plan
 
+**Status: Complete** (2026-06-12 — all 6 tasks executed via subagent-driven development; 310/310 unit, JXL E2E smoke pass, full E2E 42/43 with only the known pre-existing `#viewModeBtn` failure)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Animated JXL files display frame 0 within milliseconds of decode start instead of after the full ~77 MB all-frames encode; the animation loop starts once all frames are buffered.
@@ -21,7 +23,7 @@
 - Modify: `media-viewer.js` (new methods after `ensureJxlWorker`, ~L940; rewire listener + crash drain inside `ensureJxlWorker`, L883–940)
 - Test: `tests/media-viewer-utils.test.js` (new `describe('_handleJxlWorkerMessage', …)` block, after the existing `describe('decodeJxl', …)` which ends ~L1478)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/media-viewer-utils.test.js` (after the `decodeJxl` describe block):
 
@@ -114,12 +116,12 @@ describe('_handleJxlWorkerMessage', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t _handleJxlWorkerMessage`
 Expected: 5 FAIL — `extractMethod` throws `Method _handleJxlWorkerMessage not found` (the method does not exist yet).
 
-- [ ] **Step 3: Implement `_handleJxlWorkerMessage` + `_rejectJxlPending` in media-viewer.js**
+- [x] **Step 3: Implement `_handleJxlWorkerMessage` + `_rejectJxlPending` in media-viewer.js**
 
 Insert immediately after the closing brace of `ensureJxlWorker()` (~L940), before `async decodeJxl(filePath)`:
 
@@ -192,7 +194,7 @@ Insert immediately after the closing brace of `ensureJxlWorker()` (~L940), befor
     }
 ```
 
-- [ ] **Step 4: Rewire `ensureJxlWorker` to delegate to the new handler**
+- [x] **Step 4: Rewire `ensureJxlWorker` to delegate to the new handler**
 
 In `ensureJxlWorker()`, replace the inline `message` listener body (currently L893–906):
 
@@ -231,17 +233,17 @@ with:
             for (const pending of this._jxlPending.values()) this._rejectJxlPending(pending, new Error(msg));
 ```
 
-- [ ] **Step 5: Run the new tests to verify they pass**
+- [x] **Step 5: Run the new tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t _handleJxlWorkerMessage`
 Expected: 5 PASS.
 
-- [ ] **Step 6: Run the full unit suite (existing decodeJxl tests must still pass — they stub their own listener and don't touch the rewired production one yet)**
+- [x] **Step 6: Run the full unit suite (existing decodeJxl tests must still pass — they stub their own listener and don't touch the rewired production one yet)**
 
 Run: `npx vitest run`
 Expected: 302 passed (297 + 5).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -256,7 +258,7 @@ git commit -m "feat(jxl): extract streaming-aware worker message routing into _h
 - Modify: `media-viewer.js` (`decodeJxl`, ~L942–975)
 - Test: `tests/media-viewer-utils.test.js` (`describe('decodeJxl', …)`, L1298–1478 — update 3 mock workers, add 2 streaming tests, add a shared ctx helper)
 
-- [ ] **Step 1: Add a shared streaming-ctx helper and rewrite the mock workers**
+- [x] **Step 1: Add a shared streaming-ctx helper and rewrite the mock workers**
 
 Inside `describe('decodeJxl', …)`, add a helper right after `const decodeJxl = extractAsyncMethod('decodeJxl');` and use it in every non-cache-hit test (replacing the per-test inline `ensureJxlWorker` stubs that hand-mirrored the OLD production listener — they now bind the REAL routing extracted in Task 1):
 
@@ -355,7 +357,7 @@ Then update the three existing worker-using tests:
 
 The cache-hit test needs no changes (no worker interaction).
 
-- [ ] **Step 2: Add the two new streaming tests**
+- [x] **Step 2: Add the two new streaming tests**
 
 ```js
     it('resolves at frame 0 while later frames stream in; whenComplete delivers all frames', async () => {
@@ -420,12 +422,12 @@ The cache-hit test needs no changes (no worker interaction).
     });
 ```
 
-- [ ] **Step 3: Run the decodeJxl tests to verify they fail**
+- [x] **Step 3: Run the decodeJxl tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t decodeJxl`
 Expected: FAIL — `decodeJxl` still constructs its own entry from a single `decoded` message and sets `{resolve, reject}` pending records, so the real handler never finds `resolveFirst` (TypeError) / streaming assertions fail. Cache-hit test still passes.
 
-- [ ] **Step 4: Update `decodeJxl` implementation**
+- [x] **Step 4: Update `decodeJxl` implementation**
 
 Replace the body from `const id = ++this._jxlReqId;` through `return entry;` (~L953–974) with:
 
@@ -458,17 +460,17 @@ Replace the body from `const id = ++this._jxlReqId;` through `return entry;` (~L
 
 (The old `const decoded = await …; const entry = { frames: decoded.frames, … };` construction disappears — the handler builds the entry.)
 
-- [ ] **Step 5: Run the decodeJxl tests to verify they pass**
+- [x] **Step 5: Run the decodeJxl tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t decodeJxl`
 Expected: 6 PASS (4 updated/kept + 2 new).
 
-- [ ] **Step 6: Run the full unit suite**
+- [x] **Step 6: Run the full unit suite**
 
 Run: `npx vitest run`
 Expected: 304 passed (302 + 2).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -484,7 +486,7 @@ git commit -m "feat(jxl): decodeJxl resolves at frame 0 with mutable streaming c
 
 No unit test — the module worker imports wasm glue and is not loadable under Vitest; the E2E static smoke (Task 5) exercises it end-to-end under Electron.
 
-- [ ] **Step 1: Rewrite `jxl-decode-worker.js`**
+- [x] **Step 1: Rewrite `jxl-decode-worker.js`**
 
 Full new file content:
 
@@ -543,17 +545,17 @@ self.onmessage = async (e) => {
 };
 ```
 
-- [ ] **Step 2: Lint**
+- [x] **Step 2: Lint**
 
 Run: `npm run lint`
 Expected: clean (file stays in ESLint block 3a-jxl; no new globals).
 
-- [ ] **Step 3: Run the full unit suite (regression check — worker is not unit-covered, suite must stay green)**
+- [x] **Step 3: Run the full unit suite (regression check — worker is not unit-covered, suite must stay green)**
 
 Run: `npx vitest run`
 Expected: 304 passed.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add jxl-decode-worker.js
@@ -568,7 +570,7 @@ git commit -m "feat(jxl): worker streams meta/frame/done instead of monolithic d
 - Modify: `media-viewer.js` (`startJxlAnimation`, ~L1001–1051; `showMedia` animated gate, ~L2866)
 - Test: `tests/media-viewer-utils.test.js` (new `describe('startJxlAnimation frame-0-first', …)`)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add after the `_handleJxlWorkerMessage` describe block:
 
@@ -668,12 +670,12 @@ describe('startJxlAnimation frame-0-first', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "startJxlAnimation frame-0-first"`
 Expected: FAIL — current implementation computes `delays` from a 1-frame array and starts `drawNext` immediately (test 1: `_jxlAnimTimer` truthy after first draw; test 3: no `logError`).
 
-- [ ] **Step 3: Rewrite `startJxlAnimation`**
+- [x] **Step 3: Rewrite `startJxlAnimation`**
 
 Replace the whole method (~L1001–1051) with:
 
@@ -769,7 +771,7 @@ Replace the whole method (~L1001–1051) with:
 
 (The `advance`/`drawNext` loop is byte-for-byte today's code — only its enclosure moved inside `runWhenBuffered`, after the frame-0 draw and the `whenComplete` await.)
 
-- [ ] **Step 4: Update the `showMedia` animated gate**
+- [x] **Step 4: Update the `showMedia` animated gate**
 
 At ~L2866, change:
 
@@ -785,17 +787,17 @@ to:
 
 (At resolve time only frame 0 is buffered — `frames.length` is 1 even for a 270-frame animation. `frameCount` comes from the worker's `meta` message.)
 
-- [ ] **Step 5: Run the new tests to verify they pass**
+- [x] **Step 5: Run the new tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "startJxlAnimation frame-0-first"`
 Expected: 3 PASS.
 
-- [ ] **Step 6: Run the full unit suite + lint**
+- [x] **Step 6: Run the full unit suite + lint**
 
 Run: `npx vitest run && npm run lint`
 Expected: 307 passed (304 + 3); lint clean.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -808,17 +810,17 @@ git commit -m "feat(jxl): startJxlAnimation shows frame 0 immediately, loops onc
 
 **Files:** none modified (verification only)
 
-- [ ] **Step 1: JXL E2E smoke (full new protocol under Electron — worker's only automated coverage)**
+- [x] **Step 1: JXL E2E smoke (full new protocol under Electron — worker's only automated coverage)**
 
 Run: `npx playwright test tests/e2e/jxl-rendering.test.js`
 Expected: 1 passed ("renders a static .jxl file as a visible media element without errors").
 
-- [ ] **Step 2: Full E2E suite**
+- [x] **Step 2: Full E2E suite**
 
 Run: `npm run test:e2e`
 Expected: 42/43 passed — the single known pre-existing failure is `app-launch.test.js` (`#viewModeBtn` assertion, BACKLOG 2026-06-07, owned by Group CW-2). Any OTHER failure is a regression from this branch: stop and debug with superpowers:systematic-debugging before proceeding.
 
-- [ ] **Step 3: Manual animated smoke (user-side)**
+- [x] **Step 3: Manual animated smoke (user-side)**
 
 Ask the user to run `npm start`, open the folder containing the 270-frame `.gif.jxl` from the original BACKLOG intake, and confirm: (a) frame 0 appears near-instantly (no multi-second spinner), (b) animation starts after a short buffering pause, (c) navigation away/back mid-buffer doesn't wedge playback (identity-token teardown). Record the result in the plan's progress log.
 
@@ -829,7 +831,7 @@ Ask the user to run `npm start`, open the folder containing the 270-frame `.gif.
 **Files:**
 - Modify: `CLAUDE.md` (jxl-decode-worker.js line in the structure tree; `jxlFrameCache` line in Cache Management; `decodeJxl` test-count notes in Testing section)
 
-- [ ] **Step 1: Update the `jxl-decode-worker.js` structure-tree line**
+- [x] **Step 1: Update the `jxl-decode-worker.js` structure-tree line**
 
 Replace the OUT-protocol fragment in the `jxl-decode-worker.js` line of the Architecture tree:
 
@@ -839,7 +841,7 @@ with:
 
 `OUT: {type:'ready'} / {type:'meta',id,width,height,animated,numLoops,frameCount} / {type:'frame',id,index,pngBytes,duration} (streamed per frame, transferable) / {type:'done',id} / {type:'error',id,message} (may arrive mid-stream)`
 
-- [ ] **Step 2: Update the JXL frame cache entry in Cache Management**
+- [x] **Step 2: Update the JXL frame cache entry in Cache Management**
 
 In the "JXL frame cache (`jxlFrameCache` Map)" bullet, after the LRU description, append:
 
@@ -847,11 +849,11 @@ In the "JXL frame cache (`jxlFrameCache` Map)" bullet, after the LRU description
 
 Also update the constructor comment reference at media-viewer.js:388 if the entry-shape comment there still lists the old shape (`// filePath -> { frames, width, height, animated, numLoops }` → add `frameCount, complete, whenComplete`).
 
-- [ ] **Step 3: Update unit-test counts**
+- [x] **Step 3: Update unit-test counts**
 
 In the Testing section's running tally, append: `; streaming decode (spec 2026-06-12): describe('_handleJxlWorkerMessage') ×5 + decodeJxl streaming ×2 + describe('startJxlAnimation frame-0-first') ×3, existing decodeJxl mocks rewritten to meta/frame/done protocol → 307 unit tests`.
 
-- [ ] **Step 4: Run the unit suite one final time, then commit**
+- [x] **Step 4: Run the unit suite one final time, then commit**
 
 Run: `npx vitest run`
 Expected: 307 passed.

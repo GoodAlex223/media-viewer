@@ -387,7 +387,7 @@ class MediaViewer {
         this.jxlWorker = null;
         this.jxlFrameCache = new Map(); // filePath -> { frames (grows in place), width, height, animated, numLoops, frameCount, complete, whenComplete }
         this._jxlReqId = 0;
-        this._jxlPending = new Map(); // id -> { resolve, reject }
+        this._jxlPending = new Map(); // id -> { entry, resolveFirst, rejectFirst, resolveComplete, rejectComplete }
         this._jxlReady = null;
         this._jxlResolveReady = null;
         this._jxlRejectReady = null;
