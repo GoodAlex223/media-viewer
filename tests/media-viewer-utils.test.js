@@ -1326,21 +1326,18 @@ describe('decodeJxl', () => {
         };
     }
 
-    // Mock worker that streams the new protocol: meta -> frame(s) -> done.
-    function makeEchoWorker({ frameCount = 1, animated = false } = {}) {
+    // Mock worker that streams the new protocol for a 1-frame static image: meta -> frame -> done.
+    function makeEchoWorker() {
         const listeners = {};
         const fire = (data) => (listeners.message || []).forEach((f) => f({ data }));
         return {
             addEventListener: (ev, fn) => {
                 (listeners[ev] = listeners[ev] || []).push(fn);
             },
-            _fire: fire,
             postMessage: vi.fn((m) => {
                 queueMicrotask(() => {
-                    fire({ type: 'meta', id: m.id, width: 4, height: 4, animated, numLoops: 0, frameCount });
-                    for (let i = 0; i < frameCount; i++) {
-                        fire({ type: 'frame', id: m.id, index: i, pngBytes: new Uint8Array([i + 1]), duration: 0 });
-                    }
+                    fire({ type: 'meta', id: m.id, width: 4, height: 4, animated: false, numLoops: 0, frameCount: 1 });
+                    fire({ type: 'frame', id: m.id, index: 0, pngBytes: new Uint8Array([1]), duration: 0 });
                     fire({ type: 'done', id: m.id });
                 });
             }),
@@ -1671,6 +1668,30 @@ describe('startJxlAnimation frame-0-first', () => {
         await startJxlAnimation.call(ctx, decoded);
         await vi.waitFor(() => expect(globalThis.window.electronAPI.logError).toHaveBeenCalled());
         expect(drawCtx.drawImage).toHaveBeenCalledTimes(1); // frame 0 only, loop never ran
+        expect(ctx._jxlAnimTimer).toBeFalsy();
+    });
+
+    it('does not start the loop when superseded (navigation) during buffering', async () => {
+        const ctx = makeCtx();
+        let releaseBuffer;
+        const decoded = {
+            frames: [frame(0)],
+            width: 4,
+            height: 4,
+            animated: true,
+            numLoops: 0,
+            frameCount: 3,
+            complete: false,
+            whenComplete: new Promise((r) => (releaseBuffer = r)),
+        };
+        await startJxlAnimation.call(ctx, decoded);
+        await vi.waitFor(() => expect(drawCtx.drawImage).toHaveBeenCalledTimes(1)); // frame 0
+        ctx._jxlAnimToken = null; // stopJxlAnimation() during the buffering wait
+        decoded.frames.push(frame(1), frame(2));
+        decoded.complete = true;
+        releaseBuffer(decoded);
+        await new Promise((r) => setTimeout(r, 10)); // give a superseded loop time to (wrongly) start
+        expect(drawCtx.drawImage).toHaveBeenCalledTimes(1); // no further draws
         expect(ctx._jxlAnimTimer).toBeFalsy();
     });
 });

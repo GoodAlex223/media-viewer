@@ -1141,7 +1141,11 @@ class MediaViewer {
             };
             drawNext();
         };
-        runWhenBuffered();
+        // Fire-and-forget: a synchronous throw outside the inner try blocks must not
+        // become an unhandled rejection.
+        runWhenBuffered().catch((e) =>
+            window.electronAPI.logError('JXL animation startup failed: ' + (e && e.message ? e.message : e))
+        );
     }
 
     stopJxlAnimation() {
