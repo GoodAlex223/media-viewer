@@ -1477,6 +1477,93 @@ describe('decodeJxl', () => {
     });
 });
 
+describe('_handleJxlWorkerMessage', () => {
+    const handle = extractMethod('_handleJxlWorkerMessage');
+    const rejectPending = extractMethod('_rejectJxlPending');
+
+    function makePending() {
+        return {
+            entry: null,
+            resolveFirst: vi.fn(),
+            rejectFirst: vi.fn(),
+            resolveComplete: null,
+            rejectComplete: null,
+        };
+    }
+    function makeCtx(pending) {
+        return {
+            _jxlPending: new Map([[1, pending]]),
+            _rejectJxlPending: rejectPending,
+        };
+    }
+
+    it('meta builds the streaming entry with whenComplete, frameCount, and empty frames', () => {
+        const pending = makePending();
+        const ctx = makeCtx(pending);
+        handle.call(ctx, { type: 'meta', id: 1, width: 4, height: 2, animated: true, numLoops: 0, frameCount: 3 });
+        expect(pending.entry).toMatchObject({
+            width: 4,
+            height: 2,
+            animated: true,
+            numLoops: 0,
+            frameCount: 3,
+            complete: false,
+        });
+        expect(pending.entry.frames).toEqual([]);
+        expect(pending.entry.whenComplete).toBeInstanceOf(Promise);
+        expect(typeof pending.resolveComplete).toBe('function');
+        expect(typeof pending.rejectComplete).toBe('function');
+        expect(pending.resolveFirst).not.toHaveBeenCalled();
+    });
+
+    it('first frame resolves decodeJxl once; later frames only accumulate', () => {
+        const pending = makePending();
+        const ctx = makeCtx(pending);
+        handle.call(ctx, { type: 'meta', id: 1, width: 1, height: 1, animated: true, numLoops: 0, frameCount: 2 });
+        handle.call(ctx, { type: 'frame', id: 1, index: 0, pngBytes: new Uint8Array([0]), duration: 100 });
+        expect(pending.resolveFirst).toHaveBeenCalledTimes(1);
+        expect(pending.resolveFirst).toHaveBeenCalledWith(pending.entry);
+        handle.call(ctx, { type: 'frame', id: 1, index: 1, pngBytes: new Uint8Array([1]), duration: 50 });
+        expect(pending.resolveFirst).toHaveBeenCalledTimes(1); // not re-resolved
+        expect(pending.entry.frames).toHaveLength(2);
+        expect(pending.entry.frames[1]).toEqual({ pngBytes: new Uint8Array([1]), duration: 50 });
+    });
+
+    it('done marks complete, resolves whenComplete with the entry, deletes pending', async () => {
+        const pending = makePending();
+        const ctx = makeCtx(pending);
+        handle.call(ctx, { type: 'meta', id: 1, width: 1, height: 1, animated: true, numLoops: 0, frameCount: 1 });
+        handle.call(ctx, { type: 'frame', id: 1, index: 0, pngBytes: new Uint8Array([0]), duration: 0 });
+        handle.call(ctx, { type: 'done', id: 1 });
+        expect(pending.entry.complete).toBe(true);
+        expect(ctx._jxlPending.size).toBe(0);
+        await expect(pending.entry.whenComplete).resolves.toBe(pending.entry);
+    });
+
+    it('error before any frame rejects the decodeJxl promise and deletes pending', () => {
+        const pending = makePending();
+        const ctx = makeCtx(pending);
+        handle.call(ctx, { type: 'meta', id: 1, width: 1, height: 1, animated: true, numLoops: 0, frameCount: 3 });
+        handle.call(ctx, { type: 'error', id: 1, message: 'boom' });
+        expect(pending.rejectFirst).toHaveBeenCalledTimes(1);
+        expect(pending.rejectFirst.mock.calls[0][0].message).toBe('boom');
+        expect(ctx._jxlPending.size).toBe(0);
+    });
+
+    it('mid-stream error rejects whenComplete but not the already-resolved first promise', async () => {
+        const pending = makePending();
+        const ctx = makeCtx(pending);
+        handle.call(ctx, { type: 'meta', id: 1, width: 1, height: 1, animated: true, numLoops: 0, frameCount: 3 });
+        handle.call(ctx, { type: 'frame', id: 1, index: 0, pngBytes: new Uint8Array([0]), duration: 100 });
+        handle.call(ctx, { type: 'error', id: 1, message: 'truncated' });
+        expect(pending.rejectFirst).not.toHaveBeenCalled();
+        await expect(pending.entry.whenComplete).rejects.toThrow('truncated');
+        expect(pending.entry.complete).toBe(false);
+        expect(pending.entry.frames).toHaveLength(1); // frame 0 kept
+        expect(ctx._jxlPending.size).toBe(0);
+    });
+});
+
 describe('_applyModeSwitch single-branch landing index', () => {
     const _applyModeSwitch = extractAsyncMethod('_applyModeSwitch');
     let origDocument;

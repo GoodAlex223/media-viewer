@@ -890,23 +890,10 @@ class MediaViewer {
             worker.terminate(); // release the underlying thread (was leaked before)
             if (this.jxlWorker === worker) this.jxlWorker = null; // allow re-creation next decode
         };
-        worker.addEventListener('message', (e) => {
-            const m = e.data;
-            if (m.type === 'ready') {
-                if (this._jxlResolveReady) this._jxlResolveReady();
-                this._jxlResolveReady = null; // init settled — drop the resolver refs
-                this._jxlRejectReady = null;
-                return;
-            }
-            const pending = this._jxlPending.get(m.id);
-            if (!pending) return;
-            this._jxlPending.delete(m.id);
-            if (m.type === 'error') pending.reject(new Error(m.message));
-            else pending.resolve(m);
-        });
+        worker.addEventListener('message', (e) => this._handleJxlWorkerMessage(e.data));
         worker.addEventListener('error', (e) => {
             const msg = (e && e.message) || 'JXL decode worker crashed';
-            for (const { reject } of this._jxlPending.values()) reject(new Error(msg));
+            for (const pending of this._jxlPending.values()) this._rejectJxlPending(pending, new Error(msg));
             this._jxlPending.clear();
             if (this._jxlRejectReady) {
                 this._jxlRejectReady(new Error(msg));
@@ -937,6 +924,73 @@ class MediaViewer {
                 teardownWorker();
             });
         return this._jxlReady;
+    }
+
+    // Routes one streaming message from the JXL decode worker (spec 2026-06-12).
+    // Protocol: meta -> frame xN -> done, or error at any point. The pending record
+    // (keyed by request id) carries both promise layers: resolveFirst/rejectFirst settle
+    // decodeJxl() at frame-0 time; resolveComplete/rejectComplete settle entry.whenComplete.
+    _handleJxlWorkerMessage(m) {
+        if (m.type === 'ready') {
+            if (this._jxlResolveReady) this._jxlResolveReady();
+            this._jxlResolveReady = null; // init settled — drop the resolver refs
+            this._jxlRejectReady = null;
+            return;
+        }
+        const pending = this._jxlPending.get(m.id);
+        if (!pending) return;
+        if (m.type === 'meta') {
+            const entry = {
+                frames: [], // grows in place as 'frame' messages arrive
+                width: m.width,
+                height: m.height,
+                animated: m.animated,
+                numLoops: m.numLoops,
+                frameCount: m.frameCount, // total; gate animation on this, NOT frames.length
+                complete: false,
+                whenComplete: null,
+            };
+            entry.whenComplete = new Promise((res, rej) => {
+                pending.resolveComplete = res;
+                pending.rejectComplete = rej;
+            });
+            // Frame-0-only consumers never await whenComplete; swallow its rejection here
+            // so a mid-stream error doesn't surface as an unhandled rejection. Real
+            // consumers (startJxlAnimation) attach their own handlers.
+            entry.whenComplete.catch(() => {});
+            pending.entry = entry;
+            return;
+        }
+        if (m.type === 'frame') {
+            if (!pending.entry) return; // protocol violation: frame before meta — ignore
+            pending.entry.frames.push({ pngBytes: m.pngBytes, duration: m.duration });
+            if (pending.entry.frames.length === 1) pending.resolveFirst(pending.entry);
+            return;
+        }
+        if (m.type === 'done') {
+            this._jxlPending.delete(m.id);
+            if (pending.entry) {
+                pending.entry.complete = true;
+                if (pending.resolveComplete) pending.resolveComplete(pending.entry);
+            }
+            return;
+        }
+        if (m.type === 'error') {
+            this._jxlPending.delete(m.id);
+            this._rejectJxlPending(pending, new Error(m.message));
+        }
+    }
+
+    // Settles a pending JXL decode with an error at whichever layer is still open:
+    // after frame 0 only whenComplete is outstanding (static frame-0 fallback);
+    // before frame 0 both layers reject (decodeJxl callers handle it).
+    _rejectJxlPending(pending, err) {
+        if (pending.entry && pending.entry.frames.length > 0) {
+            if (pending.rejectComplete) pending.rejectComplete(err);
+        } else {
+            pending.rejectFirst(err);
+            if (pending.rejectComplete) pending.rejectComplete(err);
+        }
     }
 
     async decodeJxl(filePath) {
