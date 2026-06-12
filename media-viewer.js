@@ -969,10 +969,14 @@ class MediaViewer {
         }
         if (m.type === 'done') {
             this._jxlPending.delete(m.id);
-            if (pending.entry) {
-                pending.entry.complete = true;
-                if (pending.resolveComplete) pending.resolveComplete(pending.entry);
+            if (!pending.entry || pending.entry.frames.length === 0) {
+                // Defensive: a stream that "finishes" without delivering any frame must
+                // still settle decodeJxl's promise, or navigation hangs silently.
+                this._rejectJxlPending(pending, new Error('JXL decode finished without producing frames'));
+                return;
             }
+            pending.entry.complete = true;
+            if (pending.resolveComplete) pending.resolveComplete(pending.entry);
             return;
         }
         if (m.type === 'error') {

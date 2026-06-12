@@ -1548,6 +1548,7 @@ describe('_handleJxlWorkerMessage', () => {
         expect(pending.rejectFirst).toHaveBeenCalledTimes(1);
         expect(pending.rejectFirst.mock.calls[0][0].message).toBe('boom');
         expect(ctx._jxlPending.size).toBe(0);
+        return expect(pending.entry.whenComplete).rejects.toThrow('boom');
     });
 
     it('mid-stream error rejects whenComplete but not the already-resolved first promise', async () => {
@@ -1561,6 +1562,27 @@ describe('_handleJxlWorkerMessage', () => {
         expect(pending.entry.complete).toBe(false);
         expect(pending.entry.frames).toHaveLength(1); // frame 0 kept
         expect(ctx._jxlPending.size).toBe(0);
+    });
+
+    it('done without any frames rejects the decodeJxl promise instead of hanging', () => {
+        const pending = makePending();
+        const ctx = makeCtx(pending);
+        handle.call(ctx, { type: 'meta', id: 1, width: 1, height: 1, animated: true, numLoops: 0, frameCount: 3 });
+        handle.call(ctx, { type: 'done', id: 1 });
+        expect(pending.rejectFirst).toHaveBeenCalledTimes(1);
+        expect(pending.rejectFirst.mock.calls[0][0].message).toBe('JXL decode finished without producing frames');
+        expect(ctx._jxlPending.size).toBe(0);
+        // whenComplete settles too (rejected) — guard against a forever-pending promise
+        return expect(pending.entry.whenComplete).rejects.toThrow('JXL decode finished without producing frames');
+    });
+
+    it('unknown message types are ignored and leave the pending record in place', () => {
+        const pending = makePending();
+        const ctx = makeCtx(pending);
+        handle.call(ctx, { type: 'decoded', id: 1, frames: [] }); // legacy pre-streaming type
+        expect(pending.resolveFirst).not.toHaveBeenCalled();
+        expect(pending.rejectFirst).not.toHaveBeenCalled();
+        expect(ctx._jxlPending.size).toBe(1);
     });
 });
 
