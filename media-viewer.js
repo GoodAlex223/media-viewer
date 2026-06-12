@@ -1058,6 +1058,9 @@ class MediaViewer {
 
     // Animated JXL playback: decode ONE frame at a time to an ImageBitmap, draw, close it.
     // Never holds more than ~1 decoded frame in memory (270x720p as bitmaps would be ~1GB).
+    // Frame-0-first (spec 2026-06-12): draws frame 0 as soon as it exists, then waits for
+    // decoded.whenComplete before starting the loop. Returns after canvas setup — the
+    // buffering wait runs fire-and-forget so callers can append + finish display immediately.
     async startJxlAnimation(decoded) {
         const canvas = document.createElement('canvas');
         canvas.className = 'media-display';
@@ -1065,49 +1068,80 @@ class MediaViewer {
         canvas.height = decoded.height;
         this.currentMedia = canvas; // caller appends this.currentMedia after we return
         const ctx = canvas.getContext('2d');
-        const delays = this.computeJxlFrameSchedule(decoded.frames);
         const token = {}; // identity token for teardown
         this._jxlAnimToken = token;
-        let i = 0;
-        let loop = 0;
-        let consecutiveFailures = 0;
-        // Advance to the next frame, wrapping + counting loops. Returns false once a finite
-        // numLoops has completed (caller stops), true to keep playing.
-        const advance = () => {
-            i++;
-            if (i >= decoded.frames.length) {
-                i = 0;
-                loop++;
-                if (decoded.numLoops !== 0 && loop >= decoded.numLoops) return false; // finite loops done
-            }
-            return true;
-        };
-        const drawNext = async () => {
-            if (this._jxlAnimToken !== token) return; // superseded by navigation/cleanup
-            const delay = delays[i];
-            let bmp;
+        const runWhenBuffered = async () => {
+            // Show frame 0 immediately — the rest of the animation may still be streaming
+            // in from the decode worker.
             try {
-                bmp = await createImageBitmap(new Blob([decoded.frames[i].pngBytes], { type: 'image/png' }));
-                consecutiveFailures = 0;
+                const bmp0 = await createImageBitmap(new Blob([decoded.frames[0].pngBytes], { type: 'image/png' }));
+                if (this._jxlAnimToken !== token) {
+                    if (bmp0.close) bmp0.close();
+                    return;
+                }
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bmp0, 0, 0);
+                if (bmp0.close) bmp0.close();
             } catch (_e) {
-                // Skip a single corrupt frame and keep playing; bail only if an entire pass fails.
-                consecutiveFailures++;
-                if (consecutiveFailures >= decoded.frames.length) return; // whole animation undecodable
+                // Frame 0 undrawable — the loop below may still recover via its skip logic.
+            }
+            // Wait until every frame is buffered. Mid-stream decode errors reject
+            // whenComplete: leave frame 0 displayed as a static image (approved fallback).
+            if (decoded.whenComplete) {
+                try {
+                    await decoded.whenComplete;
+                } catch (err) {
+                    window.electronAPI.logError(
+                        'JXL streaming decode failed mid-animation (showing frame 0 static): ' +
+                            (err && err.message ? err.message : err)
+                    );
+                    return;
+                }
+                if (this._jxlAnimToken !== token) return; // superseded during buffering
+            }
+            const delays = this.computeJxlFrameSchedule(decoded.frames);
+            let i = 0;
+            let loop = 0;
+            let consecutiveFailures = 0;
+            // Advance to the next frame, wrapping + counting loops. Returns false once a finite
+            // numLoops has completed (caller stops), true to keep playing.
+            const advance = () => {
+                i++;
+                if (i >= decoded.frames.length) {
+                    i = 0;
+                    loop++;
+                    if (decoded.numLoops !== 0 && loop >= decoded.numLoops) return false; // finite loops done
+                }
+                return true;
+            };
+            const drawNext = async () => {
+                if (this._jxlAnimToken !== token) return; // superseded by navigation/cleanup
+                const delay = delays[i];
+                let bmp;
+                try {
+                    bmp = await createImageBitmap(new Blob([decoded.frames[i].pngBytes], { type: 'image/png' }));
+                    consecutiveFailures = 0;
+                } catch (_e) {
+                    // Skip a single corrupt frame and keep playing; bail only if an entire pass fails.
+                    consecutiveFailures++;
+                    if (consecutiveFailures >= decoded.frames.length) return; // whole animation undecodable
+                    if (!advance()) return;
+                    this._jxlAnimTimer = setTimeout(drawNext, delay);
+                    return;
+                }
+                if (this._jxlAnimToken !== token) {
+                    if (bmp.close) bmp.close();
+                    return;
+                }
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bmp, 0, 0);
+                if (bmp.close) bmp.close();
                 if (!advance()) return;
                 this._jxlAnimTimer = setTimeout(drawNext, delay);
-                return;
-            }
-            if (this._jxlAnimToken !== token) {
-                if (bmp.close) bmp.close();
-                return;
-            }
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(bmp, 0, 0);
-            if (bmp.close) bmp.close();
-            if (!advance()) return;
-            this._jxlAnimTimer = setTimeout(drawNext, delay);
+            };
+            drawNext();
         };
-        drawNext();
+        runWhenBuffered();
     }
 
     stopJxlAnimation() {
@@ -2923,7 +2957,7 @@ class MediaViewer {
                     if (!decoded.frames || decoded.frames.length === 0) {
                         throw new Error('JXL decoded with no frames');
                     }
-                    if (decoded.animated && decoded.frames.length > 1) {
+                    if (decoded.animated && decoded.frameCount > 1) {
                         // Animated JXL: drive a <canvas>, decoding one frame at a time.
                         // startJxlAnimation replaces this.currentMedia with the canvas.
                         jxlAnimated = true;

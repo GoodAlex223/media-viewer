@@ -1581,6 +1581,100 @@ describe('_handleJxlWorkerMessage', () => {
     });
 });
 
+describe('startJxlAnimation frame-0-first', () => {
+    const startJxlAnimation = extractAsyncMethod('startJxlAnimation');
+    let origWindow, origDocument, origCreateImageBitmap;
+    let drawCtx, canvas;
+
+    beforeEach(() => {
+        drawCtx = { clearRect: vi.fn(), drawImage: vi.fn() };
+        canvas = { className: '', width: 0, height: 0, style: {}, getContext: () => drawCtx };
+        origDocument = globalThis.document;
+        globalThis.document = { createElement: () => canvas };
+        origWindow = globalThis.window;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+        origCreateImageBitmap = globalThis.createImageBitmap;
+        globalThis.createImageBitmap = vi.fn(async () => ({ close: vi.fn() }));
+    });
+    afterEach(() => {
+        globalThis.document = origDocument;
+        globalThis.window = origWindow;
+        globalThis.createImageBitmap = origCreateImageBitmap;
+    });
+
+    function makeCtx() {
+        return {
+            _jxlAnimToken: null,
+            _jxlAnimTimer: null,
+            currentMedia: null,
+            computeJxlFrameSchedule: (frames) => frames.map(() => 20),
+        };
+    }
+    const frame = (n) => ({ pngBytes: new Uint8Array([n]), duration: 100 });
+
+    it('draws frame 0 immediately and does not start the loop while frames are still buffering', async () => {
+        const ctx = makeCtx();
+        const decoded = {
+            frames: [frame(0)], // only frame 0 buffered so far
+            width: 4,
+            height: 4,
+            animated: true,
+            numLoops: 0,
+            frameCount: 3,
+            complete: false,
+            whenComplete: new Promise(() => {}), // never settles
+        };
+        await startJxlAnimation.call(ctx, decoded);
+        await vi.waitFor(() => expect(drawCtx.drawImage).toHaveBeenCalledTimes(1));
+        expect(ctx.currentMedia).toBe(canvas);
+        expect(ctx._jxlAnimTimer).toBeFalsy(); // loop not scheduled — still buffering
+    });
+
+    it('starts the drawNext loop once whenComplete resolves', async () => {
+        const ctx = makeCtx();
+        let releaseBuffer;
+        const decoded = {
+            frames: [frame(0)],
+            width: 4,
+            height: 4,
+            animated: true,
+            numLoops: 0,
+            frameCount: 3,
+            complete: false,
+            whenComplete: new Promise((r) => (releaseBuffer = r)),
+        };
+        await startJxlAnimation.call(ctx, decoded);
+        await vi.waitFor(() => expect(drawCtx.drawImage).toHaveBeenCalledTimes(1)); // frame 0
+        decoded.frames.push(frame(1), frame(2));
+        decoded.complete = true;
+        releaseBuffer(decoded);
+        // Loop's first drawNext re-draws frame 0 (visual no-op) — a second drawImage
+        // call proves the loop started. Use >= 2: the 20ms frame timer may already have
+        // fired again by the first waitFor poll (exact-count would flake).
+        await vi.waitFor(() => expect(drawCtx.drawImage.mock.calls.length).toBeGreaterThanOrEqual(2));
+        ctx._jxlAnimToken = null; // teardown: stop further scheduling
+    });
+
+    it('whenComplete rejection logs and leaves frame 0 as a static image', async () => {
+        const ctx = makeCtx();
+        const decoded = {
+            frames: [frame(0)],
+            width: 4,
+            height: 4,
+            animated: true,
+            numLoops: 0,
+            frameCount: 3,
+            complete: false,
+            whenComplete: Promise.reject(new Error('truncated stream')),
+        };
+        decoded.whenComplete.catch(() => {}); // mirror production's no-op guard
+        await startJxlAnimation.call(ctx, decoded);
+        await vi.waitFor(() => expect(globalThis.window.electronAPI.logError).toHaveBeenCalled());
+        expect(drawCtx.drawImage).toHaveBeenCalledTimes(1); // frame 0 only, loop never ran
+        expect(ctx._jxlAnimTimer).toBeFalsy();
+    });
+});
+
 describe('_applyModeSwitch single-branch landing index', () => {
     const _applyModeSwitch = extractAsyncMethod('_applyModeSwitch');
     let origDocument;
