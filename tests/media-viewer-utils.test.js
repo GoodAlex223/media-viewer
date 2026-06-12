@@ -1306,6 +1306,47 @@ describe('decodeJxl', () => {
         globalThis.window = origWindow;
     });
 
+    // Binds the real production routing (Task 1) onto the test ctx, so these tests
+    // exercise actual message handling instead of a hand-mirrored stub.
+    function makeJxlCtx(worker, cache = new Map()) {
+        return {
+            jxlFrameCache: cache,
+            _jxlReqId: 0,
+            _jxlPending: new Map(),
+            jxlWorker: worker,
+            _handleJxlWorkerMessage: extractMethod('_handleJxlWorkerMessage'),
+            _rejectJxlPending: extractMethod('_rejectJxlPending'),
+            ensureJxlWorker() {
+                if (!this._attached) {
+                    worker.addEventListener('message', (e) => this._handleJxlWorkerMessage(e.data));
+                    this._attached = true;
+                }
+                return Promise.resolve();
+            },
+        };
+    }
+
+    // Mock worker that streams the new protocol: meta -> frame(s) -> done.
+    function makeEchoWorker({ frameCount = 1, animated = false } = {}) {
+        const listeners = {};
+        const fire = (data) => (listeners.message || []).forEach((f) => f({ data }));
+        return {
+            addEventListener: (ev, fn) => {
+                (listeners[ev] = listeners[ev] || []).push(fn);
+            },
+            _fire: fire,
+            postMessage: vi.fn((m) => {
+                queueMicrotask(() => {
+                    fire({ type: 'meta', id: m.id, width: 4, height: 4, animated, numLoops: 0, frameCount });
+                    for (let i = 0; i < frameCount; i++) {
+                        fire({ type: 'frame', id: m.id, index: i, pngBytes: new Uint8Array([i + 1]), duration: 0 });
+                    }
+                    fire({ type: 'done', id: m.id });
+                });
+            }),
+        };
+    }
+
     it('returns a cached entry without reading the file again', async () => {
         const cached = { frames: [], width: 1, height: 1, animated: false, numLoops: 0 };
         const ctx = {
@@ -1319,110 +1360,23 @@ describe('decodeJxl', () => {
     });
 
     it('reads bytes, posts to the worker, resolves + caches decoded frames', async () => {
-        // mock worker that echoes a 'decoded' reply keyed by the request id
-        const listeners = {};
-        const worker = {
-            addEventListener: (ev, fn) => {
-                (listeners[ev] = listeners[ev] || []).push(fn);
-            },
-            postMessage: vi.fn((m) => {
-                queueMicrotask(() =>
-                    (listeners.message || []).forEach((f) =>
-                        f({
-                            data: {
-                                type: 'decoded',
-                                id: m.id,
-                                frames: [{ pngBytes: new Uint8Array([1]), duration: 0 }],
-                                width: 4,
-                                height: 4,
-                                animated: false,
-                                numLoops: 0,
-                            },
-                        })
-                    )
-                );
-            }),
-        };
-        const ctx = {
-            jxlFrameCache: new Map(),
-            _jxlReqId: 0,
-            _jxlPending: new Map(),
-            jxlWorker: worker,
-            // Stub ensureJxlWorker: attach a production-mirroring listener, resolve immediately.
-            ensureJxlWorker() {
-                if (!this._attached) {
-                    worker.addEventListener('message', (e) => {
-                        const m = e.data;
-                        if (m.type === 'ready') return;
-                        const pending = this._jxlPending.get(m.id);
-                        if (!pending) return;
-                        this._jxlPending.delete(m.id);
-                        if (m.type === 'error') pending.reject(new Error(m.message));
-                        else pending.resolve(m);
-                    });
-                    this._attached = true;
-                }
-                return Promise.resolve();
-            },
-        };
+        const worker = makeEchoWorker();
+        const ctx = makeJxlCtx(worker);
         const result = await decodeJxl.call(ctx, 'a.png.jxl');
         expect(globalThis.window.electronAPI.readFileBuffer).toHaveBeenCalledWith('a.png.jxl');
         expect(result.animated).toBe(false);
+        expect(result.frameCount).toBe(1);
         expect(result.frames).toHaveLength(1);
         expect(ctx.jxlFrameCache.get('a.png.jxl')).toBe(result); // cached after decode
     });
 
     it('evicts the oldest entry beyond the LRU cap of 8 and keeps recently-used entries', async () => {
-        // Build an echoing mock worker (mirrors the happy-path test setup).
-        const listeners = {};
-        const worker = {
-            addEventListener: (ev, fn) => {
-                (listeners[ev] = listeners[ev] || []).push(fn);
-            },
-            postMessage: vi.fn((m) => {
-                queueMicrotask(() =>
-                    (listeners.message || []).forEach((f) =>
-                        f({
-                            data: {
-                                type: 'decoded',
-                                id: m.id,
-                                frames: [{ pngBytes: new Uint8Array([1]), duration: 0 }],
-                                width: 4,
-                                height: 4,
-                                animated: false,
-                                numLoops: 0,
-                            },
-                        })
-                    )
-                );
-            }),
-        };
-        // Pre-seed exactly 8 dummy entries (oldest -> newest by insertion order).
+        const worker = makeEchoWorker();
         const jxlFrameCache = new Map();
         for (let i = 0; i < 8; i++) {
             jxlFrameCache.set(`seed-${i}.jxl`, { frames: [], width: 1, height: 1, animated: false, numLoops: 0 });
         }
-        const ctx = {
-            jxlFrameCache,
-            _jxlReqId: 0,
-            _jxlPending: new Map(),
-            jxlWorker: worker,
-            ensureJxlWorker() {
-                if (!this._attached) {
-                    worker.addEventListener('message', (e) => {
-                        const m = e.data;
-                        if (m.type === 'ready') return;
-                        const pending = this._jxlPending.get(m.id);
-                        if (!pending) return;
-                        this._jxlPending.delete(m.id);
-                        if (m.type === 'error') pending.reject(new Error(m.message));
-                        else pending.resolve(m);
-                    });
-                    this._attached = true;
-                }
-                return Promise.resolve();
-            },
-        };
+        const ctx = makeJxlCtx(worker, jxlFrameCache);
 
         // Cache-hit on the oldest seed should move it to most-recently-used so it survives eviction.
         const survivor = await decodeJxl.call(ctx, 'seed-0.jxl');
@@ -1452,28 +1406,69 @@ describe('decodeJxl', () => {
                 );
             }),
         };
-        const ctx = {
-            jxlFrameCache: new Map(),
-            _jxlReqId: 0,
-            _jxlPending: new Map(),
-            jxlWorker: worker,
-            ensureJxlWorker() {
-                if (!this._attached) {
-                    worker.addEventListener('message', (e) => {
-                        const m = e.data;
-                        if (m.type === 'ready') return;
-                        const pending = this._jxlPending.get(m.id);
-                        if (!pending) return;
-                        this._jxlPending.delete(m.id);
-                        if (m.type === 'error') pending.reject(new Error(m.message));
-                        else pending.resolve(m);
-                    });
-                    this._attached = true;
-                }
-                return Promise.resolve();
-            },
-        };
+        const ctx = makeJxlCtx(worker);
         await expect(decodeJxl.call(ctx, 'bad.png.jxl')).rejects.toThrow('bad jxl');
+    });
+
+    it('resolves at frame 0 while later frames stream in; whenComplete delivers all frames', async () => {
+        let release;
+        const released = new Promise((r) => (release = r));
+        const listeners = {};
+        const fire = (data) => (listeners.message || []).forEach((f) => f({ data }));
+        const worker = {
+            addEventListener: (ev, fn) => {
+                (listeners[ev] = listeners[ev] || []).push(fn);
+            },
+            postMessage: vi.fn((m) => {
+                queueMicrotask(() => {
+                    fire({ type: 'meta', id: m.id, width: 4, height: 4, animated: true, numLoops: 0, frameCount: 3 });
+                    fire({ type: 'frame', id: m.id, index: 0, pngBytes: new Uint8Array([0]), duration: 100 });
+                    released.then(() => {
+                        fire({ type: 'frame', id: m.id, index: 1, pngBytes: new Uint8Array([1]), duration: 100 });
+                        fire({ type: 'frame', id: m.id, index: 2, pngBytes: new Uint8Array([2]), duration: 100 });
+                        fire({ type: 'done', id: m.id });
+                    });
+                });
+            }),
+        };
+        const ctx = makeJxlCtx(worker);
+        const entry = await decodeJxl.call(ctx, 'anim.gif.jxl');
+        // Early resolve: only frame 0 buffered, total known from meta, not complete yet.
+        expect(entry.frames).toHaveLength(1);
+        expect(entry.frameCount).toBe(3);
+        expect(entry.complete).toBe(false);
+        expect(ctx.jxlFrameCache.get('anim.gif.jxl')).toBe(entry); // cached at frame-0 time
+        release();
+        await expect(entry.whenComplete).resolves.toBe(entry);
+        expect(entry.frames).toHaveLength(3);
+        expect(entry.complete).toBe(true);
+    });
+
+    it('mid-stream error rejects whenComplete; the frame-0 entry stays cached and usable', async () => {
+        let release;
+        const released = new Promise((r) => (release = r));
+        const listeners = {};
+        const fire = (data) => (listeners.message || []).forEach((f) => f({ data }));
+        const worker = {
+            addEventListener: (ev, fn) => {
+                (listeners[ev] = listeners[ev] || []).push(fn);
+            },
+            postMessage: vi.fn((m) => {
+                queueMicrotask(() => {
+                    fire({ type: 'meta', id: m.id, width: 4, height: 4, animated: true, numLoops: 0, frameCount: 3 });
+                    fire({ type: 'frame', id: m.id, index: 0, pngBytes: new Uint8Array([0]), duration: 100 });
+                    released.then(() => fire({ type: 'error', id: m.id, message: 'truncated stream' }));
+                });
+            }),
+        };
+        const ctx = makeJxlCtx(worker);
+        const entry = await decodeJxl.call(ctx, 'anim.gif.jxl');
+        expect(entry.frames).toHaveLength(1);
+        release();
+        await expect(entry.whenComplete).rejects.toThrow('truncated stream');
+        expect(entry.complete).toBe(false);
+        expect(entry.frames).toHaveLength(1); // frame 0 kept — static fallback material
+        expect(ctx.jxlFrameCache.get('anim.gif.jxl')).toBe(entry); // entry NOT purged
     });
 });
 

@@ -1009,17 +1009,19 @@ class MediaViewer {
         const buffer = await window.electronAPI.readFileBuffer(filePath);
         if (!buffer) throw new Error('Could not read JXL file: ' + filePath);
         const id = ++this._jxlReqId;
-        const decoded = await new Promise((resolve, reject) => {
-            this._jxlPending.set(id, { resolve, reject });
+        // Resolves at frame-0 time: _handleJxlWorkerMessage settles resolveFirst as soon as
+        // meta + the first 'frame' message arrive. The entry's frames array keeps growing
+        // in place afterwards; entry.whenComplete settles when the stream finishes.
+        const entry = await new Promise((resolve, reject) => {
+            this._jxlPending.set(id, {
+                entry: null,
+                resolveFirst: resolve,
+                rejectFirst: reject,
+                resolveComplete: null,
+                rejectComplete: null,
+            });
             this.jxlWorker.postMessage({ type: 'decode', id, buffer }, [buffer]);
         });
-        const entry = {
-            frames: decoded.frames,
-            width: decoded.width,
-            height: decoded.height,
-            animated: decoded.animated,
-            numLoops: decoded.numLoops,
-        };
         this.jxlFrameCache.set(filePath, entry);
         // Bound the cache as a true-LRU. Animated JXL entries can be very large
         // (a 270-frame file holds ~77 MB of PNG bytes), so cap to a small number
