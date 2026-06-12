@@ -385,7 +385,7 @@ class MediaViewer {
 
         // JXL decode state (module Web Worker)
         this.jxlWorker = null;
-        this.jxlFrameCache = new Map(); // filePath -> { frames, width, height, animated, numLoops }
+        this.jxlFrameCache = new Map(); // filePath -> { frames (grows in place), width, height, animated, numLoops, frameCount, complete, whenComplete }
         this._jxlReqId = 0;
         this._jxlPending = new Map(); // id -> { resolve, reject }
         this._jxlReady = null;
