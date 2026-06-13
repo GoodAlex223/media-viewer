@@ -57,6 +57,7 @@ Central index for all project documentation.
 | [Mode-Switch Display Bugs Plan][]            | compare→single lands on the on-screen compare-left file + `switchToSingleModeUI` tears down stale compare wrappers (Group B) |
 | [CLIP Extraction UX Plan][]                  | "Starting feature extraction…" kickoff toast + CLIP toggle-on extraction kickoff + empty-folder no-op guard (Group C) |
 | [Security & Privacy Audit Plan][]            | One-time secrets scan (history + working tree) + identity/PII assessment → dated audit report (Group D) |
+| [JXL Progressive Decode Plan][]              | Frame-0-first streaming JXL decode (worker `meta`/`frame`/`done` protocol; `decodeJxl` resolves at frame 0; `whenComplete` gates animation) (Group CW-5) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -80,6 +81,7 @@ Central index for all project documentation.
 [Mode-Switch Display Bugs Plan]: archive/plans/2026-06-08-mode-switch-display-bugs.md
 [CLIP Extraction UX Plan]: archive/plans/2026-06-10-clip-extraction-ux.md
 [Security & Privacy Audit Plan]: archive/plans/2026-06-11-security-privacy-audit.md
+[JXL Progressive Decode Plan]: archive/plans/2026-06-12-jxl-progressive-decode.md
 
 ## Design Specs
 
@@ -111,6 +113,7 @@ Central index for all project documentation.
 | [Mode-Switch Display Bugs][] | compare→single lands on the on-screen compare-left file (resolve index at switch time) + `switchToSingleModeUI` tears down stale compare wrappers (Group B) |
 | [CLIP Extraction UX][] | "Starting feature extraction…" toast on kickoff + CLIP toggle-on extraction kickoff; empty-folder no-op guard (Group C) |
 | [Security & Privacy Audit][] | One-time non-destructive secrets + identity/PII audit; methodology + report artifact (Group D) |
+| [JXL Progressive Decode][] | Frame-0-first streaming animated-JXL decode; worker `meta`/`frame`/`done` protocol + mutable cache entry with `whenComplete`; static frame-0 fallback on mid-stream error (Group CW-5) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -139,6 +142,7 @@ Central index for all project documentation.
 [Mode-Switch Display Bugs]: superpowers/specs/2026-06-08-mode-switch-display-bugs-design.md
 [CLIP Extraction UX]: superpowers/specs/2026-06-10-clip-extraction-ux-design.md
 [Security & Privacy Audit]: superpowers/specs/2026-06-11-security-privacy-audit-design.md
+[JXL Progressive Decode]: superpowers/specs/2026-06-12-jxl-progressive-decode-design.md
 
 ## Security Audits
 
