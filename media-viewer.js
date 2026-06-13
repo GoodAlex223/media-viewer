@@ -2705,6 +2705,7 @@ class MediaViewer {
             this.originalMediaFiles = [];
             this.perceptualHashes.clear();
             this.featureCache.clear();
+            this.clipCache.clear();
             this.featureMetadata.clear();
             this.predictionScores.clear();
             // Cancel any ongoing background extraction

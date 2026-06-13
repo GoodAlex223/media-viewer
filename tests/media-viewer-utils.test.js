@@ -1810,3 +1810,25 @@ describe('switchToSingleModeUI wrapper teardown', () => {
         expect(ctx.rightMediaWrapper).toBeNull();
     });
 });
+
+describe('loadFolder cache reset (Fix 1)', () => {
+    it('clears clipCache alongside the other per-folder caches', () => {
+        // Slice the loadFolder reset block. Anchor the start INSIDE loadFolder — a
+        // folder-watch callback earlier in the file also calls perceptualHashes.clear(),
+        // and a bare indexOf would match that first and slice an ~820-line window.
+        const start = source.indexOf('this.perceptualHashes.clear();', source.indexOf('async loadFolder('));
+        const end = source.indexOf('this.cancelBackgroundExtraction();', start);
+        expect(start).toBeGreaterThan(-1);
+        expect(end).toBeGreaterThan(start);
+        const block = source.slice(start, end);
+        for (const cache of [
+            'this.perceptualHashes.clear();',
+            'this.featureCache.clear();',
+            'this.featureMetadata.clear();',
+            'this.predictionScores.clear();',
+            'this.clipCache.clear();',
+        ]) {
+            expect(block).toContain(cache);
+        }
+    });
+});
