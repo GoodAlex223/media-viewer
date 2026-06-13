@@ -385,9 +385,9 @@ class MediaViewer {
 
         // JXL decode state (module Web Worker)
         this.jxlWorker = null;
-        this.jxlFrameCache = new Map(); // filePath -> { frames, width, height, animated, numLoops }
+        this.jxlFrameCache = new Map(); // filePath -> { frames (grows in place), width, height, animated, numLoops, frameCount, complete, whenComplete }
         this._jxlReqId = 0;
-        this._jxlPending = new Map(); // id -> { resolve, reject }
+        this._jxlPending = new Map(); // id -> { entry, resolveFirst, rejectFirst, resolveComplete, rejectComplete }
         this._jxlReady = null;
         this._jxlResolveReady = null;
         this._jxlRejectReady = null;
@@ -890,23 +890,10 @@ class MediaViewer {
             worker.terminate(); // release the underlying thread (was leaked before)
             if (this.jxlWorker === worker) this.jxlWorker = null; // allow re-creation next decode
         };
-        worker.addEventListener('message', (e) => {
-            const m = e.data;
-            if (m.type === 'ready') {
-                if (this._jxlResolveReady) this._jxlResolveReady();
-                this._jxlResolveReady = null; // init settled — drop the resolver refs
-                this._jxlRejectReady = null;
-                return;
-            }
-            const pending = this._jxlPending.get(m.id);
-            if (!pending) return;
-            this._jxlPending.delete(m.id);
-            if (m.type === 'error') pending.reject(new Error(m.message));
-            else pending.resolve(m);
-        });
+        worker.addEventListener('message', (e) => this._handleJxlWorkerMessage(e.data));
         worker.addEventListener('error', (e) => {
             const msg = (e && e.message) || 'JXL decode worker crashed';
-            for (const { reject } of this._jxlPending.values()) reject(new Error(msg));
+            for (const pending of this._jxlPending.values()) this._rejectJxlPending(pending, new Error(msg));
             this._jxlPending.clear();
             if (this._jxlRejectReady) {
                 this._jxlRejectReady(new Error(msg));
@@ -939,6 +926,77 @@ class MediaViewer {
         return this._jxlReady;
     }
 
+    // Routes one streaming message from the JXL decode worker (spec 2026-06-12).
+    // Protocol: meta -> frame xN -> done, or error at any point. The pending record
+    // (keyed by request id) carries both promise layers: resolveFirst/rejectFirst settle
+    // decodeJxl() at frame-0 time; resolveComplete/rejectComplete settle entry.whenComplete.
+    _handleJxlWorkerMessage(m) {
+        if (m.type === 'ready') {
+            if (this._jxlResolveReady) this._jxlResolveReady();
+            this._jxlResolveReady = null; // init settled — drop the resolver refs
+            this._jxlRejectReady = null;
+            return;
+        }
+        const pending = this._jxlPending.get(m.id);
+        if (!pending) return;
+        if (m.type === 'meta') {
+            const entry = {
+                frames: [], // grows in place as 'frame' messages arrive
+                width: m.width,
+                height: m.height,
+                animated: m.animated,
+                numLoops: m.numLoops,
+                frameCount: m.frameCount, // total; gate animation on this, NOT frames.length
+                complete: false,
+                whenComplete: null,
+            };
+            entry.whenComplete = new Promise((res, rej) => {
+                pending.resolveComplete = res;
+                pending.rejectComplete = rej;
+            });
+            // Frame-0-only consumers never await whenComplete; swallow its rejection here
+            // so a mid-stream error doesn't surface as an unhandled rejection. Real
+            // consumers (startJxlAnimation) attach their own handlers.
+            entry.whenComplete.catch(() => {});
+            pending.entry = entry;
+            return;
+        }
+        if (m.type === 'frame') {
+            if (!pending.entry) return; // protocol violation: frame before meta — ignore
+            pending.entry.frames.push({ pngBytes: m.pngBytes, duration: m.duration });
+            if (pending.entry.frames.length === 1) pending.resolveFirst(pending.entry);
+            return;
+        }
+        if (m.type === 'done') {
+            this._jxlPending.delete(m.id);
+            if (!pending.entry || pending.entry.frames.length === 0) {
+                // Defensive: a stream that "finishes" without delivering any frame must
+                // still settle decodeJxl's promise, or navigation hangs silently.
+                this._rejectJxlPending(pending, new Error('JXL decode finished without producing frames'));
+                return;
+            }
+            pending.entry.complete = true;
+            if (pending.resolveComplete) pending.resolveComplete(pending.entry);
+            return;
+        }
+        if (m.type === 'error') {
+            this._jxlPending.delete(m.id);
+            this._rejectJxlPending(pending, new Error(m.message));
+        }
+    }
+
+    // Settles a pending JXL decode with an error at whichever layer is still open:
+    // after frame 0 only whenComplete is outstanding (static frame-0 fallback);
+    // before frame 0 both layers reject (decodeJxl callers handle it).
+    _rejectJxlPending(pending, err) {
+        if (pending.entry && pending.entry.frames.length > 0) {
+            if (pending.rejectComplete) pending.rejectComplete(err);
+        } else {
+            pending.rejectFirst(err);
+            if (pending.rejectComplete) pending.rejectComplete(err);
+        }
+    }
+
     async decodeJxl(filePath) {
         this._jxlPending = this._jxlPending || new Map();
         if (this.jxlFrameCache.has(filePath)) {
@@ -951,17 +1009,19 @@ class MediaViewer {
         const buffer = await window.electronAPI.readFileBuffer(filePath);
         if (!buffer) throw new Error('Could not read JXL file: ' + filePath);
         const id = ++this._jxlReqId;
-        const decoded = await new Promise((resolve, reject) => {
-            this._jxlPending.set(id, { resolve, reject });
+        // Resolves at frame-0 time: _handleJxlWorkerMessage settles resolveFirst as soon as
+        // meta + the first 'frame' message arrive. The entry's frames array keeps growing
+        // in place afterwards; entry.whenComplete settles when the stream finishes.
+        const entry = await new Promise((resolve, reject) => {
+            this._jxlPending.set(id, {
+                entry: null,
+                resolveFirst: resolve,
+                rejectFirst: reject,
+                resolveComplete: null,
+                rejectComplete: null,
+            });
             this.jxlWorker.postMessage({ type: 'decode', id, buffer }, [buffer]);
         });
-        const entry = {
-            frames: decoded.frames,
-            width: decoded.width,
-            height: decoded.height,
-            animated: decoded.animated,
-            numLoops: decoded.numLoops,
-        };
         this.jxlFrameCache.set(filePath, entry);
         // Bound the cache as a true-LRU. Animated JXL entries can be very large
         // (a 270-frame file holds ~77 MB of PNG bytes), so cap to a small number
@@ -998,6 +1058,9 @@ class MediaViewer {
 
     // Animated JXL playback: decode ONE frame at a time to an ImageBitmap, draw, close it.
     // Never holds more than ~1 decoded frame in memory (270x720p as bitmaps would be ~1GB).
+    // Frame-0-first (spec 2026-06-12): draws frame 0 as soon as it exists, then waits for
+    // decoded.whenComplete before starting the loop. Returns after canvas setup — the
+    // buffering wait runs fire-and-forget so callers can append + finish display immediately.
     async startJxlAnimation(decoded) {
         const canvas = document.createElement('canvas');
         canvas.className = 'media-display';
@@ -1005,49 +1068,84 @@ class MediaViewer {
         canvas.height = decoded.height;
         this.currentMedia = canvas; // caller appends this.currentMedia after we return
         const ctx = canvas.getContext('2d');
-        const delays = this.computeJxlFrameSchedule(decoded.frames);
         const token = {}; // identity token for teardown
         this._jxlAnimToken = token;
-        let i = 0;
-        let loop = 0;
-        let consecutiveFailures = 0;
-        // Advance to the next frame, wrapping + counting loops. Returns false once a finite
-        // numLoops has completed (caller stops), true to keep playing.
-        const advance = () => {
-            i++;
-            if (i >= decoded.frames.length) {
-                i = 0;
-                loop++;
-                if (decoded.numLoops !== 0 && loop >= decoded.numLoops) return false; // finite loops done
-            }
-            return true;
-        };
-        const drawNext = async () => {
-            if (this._jxlAnimToken !== token) return; // superseded by navigation/cleanup
-            const delay = delays[i];
-            let bmp;
+        const runWhenBuffered = async () => {
+            // Show frame 0 immediately — the rest of the animation may still be streaming
+            // in from the decode worker.
             try {
-                bmp = await createImageBitmap(new Blob([decoded.frames[i].pngBytes], { type: 'image/png' }));
-                consecutiveFailures = 0;
+                const bmp0 = await createImageBitmap(new Blob([decoded.frames[0].pngBytes], { type: 'image/png' }));
+                if (this._jxlAnimToken !== token) {
+                    if (bmp0.close) bmp0.close();
+                    return;
+                }
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bmp0, 0, 0);
+                if (bmp0.close) bmp0.close();
             } catch (_e) {
-                // Skip a single corrupt frame and keep playing; bail only if an entire pass fails.
-                consecutiveFailures++;
-                if (consecutiveFailures >= decoded.frames.length) return; // whole animation undecodable
+                // Frame 0 undrawable — the loop below may still recover via its skip logic.
+            }
+            // Wait until every frame is buffered. Mid-stream decode errors reject
+            // whenComplete: leave frame 0 displayed as a static image (approved fallback).
+            if (decoded.whenComplete) {
+                try {
+                    await decoded.whenComplete;
+                } catch (err) {
+                    window.electronAPI.logError(
+                        'JXL streaming decode failed mid-animation (showing frame 0 static): ' +
+                            (err && err.message ? err.message : err)
+                    );
+                    return;
+                }
+                if (this._jxlAnimToken !== token) return; // superseded during buffering
+            }
+            const delays = this.computeJxlFrameSchedule(decoded.frames);
+            let i = 0;
+            let loop = 0;
+            let consecutiveFailures = 0;
+            // Advance to the next frame, wrapping + counting loops. Returns false once a finite
+            // numLoops has completed (caller stops), true to keep playing.
+            const advance = () => {
+                i++;
+                if (i >= decoded.frames.length) {
+                    i = 0;
+                    loop++;
+                    if (decoded.numLoops !== 0 && loop >= decoded.numLoops) return false; // finite loops done
+                }
+                return true;
+            };
+            const drawNext = async () => {
+                if (this._jxlAnimToken !== token) return; // superseded by navigation/cleanup
+                const delay = delays[i];
+                let bmp;
+                try {
+                    bmp = await createImageBitmap(new Blob([decoded.frames[i].pngBytes], { type: 'image/png' }));
+                    consecutiveFailures = 0;
+                } catch (_e) {
+                    // Skip a single corrupt frame and keep playing; bail only if an entire pass fails.
+                    consecutiveFailures++;
+                    if (consecutiveFailures >= decoded.frames.length) return; // whole animation undecodable
+                    if (!advance()) return;
+                    this._jxlAnimTimer = setTimeout(drawNext, delay);
+                    return;
+                }
+                if (this._jxlAnimToken !== token) {
+                    if (bmp.close) bmp.close();
+                    return;
+                }
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bmp, 0, 0);
+                if (bmp.close) bmp.close();
                 if (!advance()) return;
                 this._jxlAnimTimer = setTimeout(drawNext, delay);
-                return;
-            }
-            if (this._jxlAnimToken !== token) {
-                if (bmp.close) bmp.close();
-                return;
-            }
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(bmp, 0, 0);
-            if (bmp.close) bmp.close();
-            if (!advance()) return;
-            this._jxlAnimTimer = setTimeout(drawNext, delay);
+            };
+            drawNext();
         };
-        drawNext();
+        // Fire-and-forget: a synchronous throw outside the inner try blocks must not
+        // become an unhandled rejection.
+        runWhenBuffered().catch((e) =>
+            window.electronAPI.logError('JXL animation startup failed: ' + (e && e.message ? e.message : e))
+        );
     }
 
     stopJxlAnimation() {
@@ -2863,7 +2961,7 @@ class MediaViewer {
                     if (!decoded.frames || decoded.frames.length === 0) {
                         throw new Error('JXL decoded with no frames');
                     }
-                    if (decoded.animated && decoded.frames.length > 1) {
+                    if (decoded.animated && decoded.frameCount > 1) {
                         // Animated JXL: drive a <canvas>, decoding one frame at a time.
                         // startJxlAnimation replaces this.currentMedia with the canvas.
                         jxlAnimated = true;

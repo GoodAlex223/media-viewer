@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-11 <!-- Group D: Security & privacy audit -->
+**Last Updated**: 2026-06-12 <!-- Group CW-5: Progressive animated-JXL decode -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,55 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-12 — Group CW-5: Progressive animated-JXL decode (frame-0-first)
+
+**Summary**: Cleanup-Week 🏆 challenge (5 SP, 🟠 IMPORTANT) closing the 🔵 [2026-06-07] Group A
+manual-testing intake "animated `.gif.jxl` takes a very long time to load". The JXL decode worker
+previously encoded **all** frames (~77 MB of PNGs for a 270-frame file) before posting a single
+`{type:'decoded'}` message, so `decodeJxl` — and therefore every consumer, including static display,
+compare mode, and feature/CLIP extraction (which all only need frame 0) — blocked on the full
+animation encode (multi-second spinner). The decode is now **streaming + frame-0-first**.
+
+**Resolution**: Worker streams `{type:'meta', …, frameCount}` (right after `tryInit`) →
+`{type:'frame', id, index, pngBytes, duration}` ×N (one transferable message per encoded frame) →
+`{type:'done'}`, with `{type:'error'}` possible mid-stream. Renderer routing was extracted from
+`ensureJxlWorker`'s inline listener into `_handleJxlWorkerMessage` + `_rejectJxlPending` (now
+`extractMethod`-testable). `decodeJxl` resolves a **mutable** cache entry as soon as frame 0 arrives
+(`frames` grows in place; `entry.whenComplete` settles on `done`, rejects on mid-stream error);
+cache insert + LRU eviction happen at frame-0 time. `startJxlAnimation` sets up the canvas
+synchronously and runs frame-0 draw + buffering wait + the `drawNext` loop in a fire-and-forget
+`runWhenBuffered()` — so the spinner clears at frame-0 time, not full-buffer time. **Mid-stream
+error policy (user-approved): static frame-0 fallback** — frame 0 stays displayed, the animation
+never starts, `logError` records it; the four frame-0-only call sites are untouched and resolve
+faster for free. `showMedia`'s animated gate switched from `frames.length > 1` to `frameCount > 1`
+(only frame 0 is buffered at resolve time).
+
+**Key changes**: [jxl-decode-worker.js](../../jxl-decode-worker.js) (monolithic `decoded` →
+streaming `meta`/`frame`/`done`); [media-viewer.js](../../media-viewer.js) (`_handleJxlWorkerMessage`
++ `_rejectJxlPending` routing; `decodeJxl` two-layer pending record `{entry, resolveFirst,
+rejectFirst, resolveComplete, rejectComplete}`; `startJxlAnimation` frame-0-first `runWhenBuffered`;
+`showMedia` `frameCount` gate; `_jxlPending` constructor comment + `jxlFrameCache` entry shape);
+[CLAUDE.md](../../CLAUDE.md) (worker protocol line + cache-entry shape + test tally).
+
+**Tests**: 297 → **310 unit** (`_handleJxlWorkerMessage` ×7, `decodeJxl` rewritten to the streaming
+protocol + 2 streaming tests, `startJxlAnimation frame-0-first` ×4); decodeJxl tests now bind the
+**real** extracted routing methods instead of hand-mirrored stubs. JXL E2E smoke (`jxl-rendering.test.js`)
+passes (exercises the full new protocol under Electron); full E2E **42/43** (1 known pre-existing
+`#viewModeBtn` failure, owned by Group CW-2). Manual animated smoke: handed to user (no automated
+multi-frame animated fixture, per spec §6). Pre-commit hook ran the unit suite green on every commit.
+
+**Process**: superpowers brainstorm → spec → plan → **subagent-driven development** (6 tasks, fresh
+implementer + spec review + quality review per task; controller committed per project convention).
+Spec at [docs/superpowers/specs/2026-06-12-jxl-progressive-decode-design.md](../superpowers/specs/2026-06-12-jxl-progressive-decode-design.md);
+plan archived at [docs/archive/plans/2026-06-12-jxl-progressive-decode.md](../archive/plans/2026-06-12-jxl-progressive-decode.md).
+Task-1 quality review caught a real hang (a `done` with zero frames left `decodeJxl` pending forever
+→ fixed in `9c5dfbd`); final whole-branch review verdict "Ready to merge: Yes". 2 BACKLOG
+follow-ups spawned (🟤 [2026-06-13]): evict partial JXL cache entries on worker *crash* (vs decode
+error); `img.free()` skipped on mid-loop worker error (pre-existing). Branch
+`feature/jxl-progressive-decode` (off `main`); commits `d45619d`..`285c4ac`.
+
+---
 
 ### 2026-06-11 — Group D: Security & privacy audit
 

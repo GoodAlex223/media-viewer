@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-06-13 (🔵 [2026-06-13] JXL animation smoothness intake filed — pipelined/look-ahead frame decode, follow-up to CW-5 frame-0-first streaming)
+**Last Updated**: 2026-06-13 (Group CW-5 JXL progressive decode shipped — 🔵 [2026-06-07] streaming-decode item checked off; +2 🟤 [2026-06-13] implementation-review follow-ups: partial-entry eviction on worker crash, worker `img.free()` on mid-loop error; 🔵 [2026-06-13] JXL animation smoothness intake filed — pipelined/look-ahead frame decode, follow-up to CW-5 frame-0-first streaming)
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -63,7 +63,7 @@ prompt had no source concept).
 
 **Origin**: Manual smoke test of the shipped JXL viewer (branch `feature/jxl-viewer-support`). Static `.png/.jpg/.jpeg.jxl` render correctly with a clean console; animated `.gif.jxl` shows the first frame, but the user observed it "take very long time to load".
 
-- [ ] **Progressive / streaming decode for large animated JXL (frame-0-first)** — A 270-frame, 27 MB animated `.gif.jxl` decodes ALL frames in the worker before `decodeJxl` resolves (each frame → `encodeToPng`, ~77 MB total), so the spinner shows for several seconds before anything appears. Fix: stream frames — the worker posts frame 0 as soon as it's decoded so the renderer displays it immediately, then continues decoding the rest in the background and starts the loop once enough frames are buffered. This requires extending the worker protocol (e.g. a `{type:'frame', id, index, total, pngBytes, duration}` stream + a terminal `{type:'decoded'}`) and making `decodeJxl`/`startJxlAnimation` consume frames incrementally (resolve display on frame 0, accumulate for animation). Deliberately deferred from Group A to keep the initial PR focused on correctness. Effort: M. Affected: [jxl-decode-worker.js](../../jxl-decode-worker.js), [media-viewer.js](../../media-viewer.js) (`decodeJxl`, `startJxlAnimation`).
+- [x] **Progressive / streaming decode for large animated JXL (frame-0-first)** — ✅ **Implemented 2026-06-12** (Group CW-5, branch `feature/jxl-progressive-decode`; see [DONE.md](DONE.md) + [archived plan](../archive/plans/2026-06-12-jxl-progressive-decode.md)). Worker now streams `{type:'meta'}` → `{type:'frame', id, index, pngBytes, duration}`×N → `{type:'done'}` (error possible mid-stream); `decodeJxl` resolves a mutable cache entry at frame-0 time (frames grow in place, `entry.whenComplete` settles at stream end); `startJxlAnimation` draws frame 0 immediately and starts the loop once buffered; mid-stream errors fall back to static frame 0. 297→310 unit tests. _Original entry:_ A 270-frame, 27 MB animated `.gif.jxl` decodes ALL frames in the worker before `decodeJxl` resolves (each frame → `encodeToPng`, ~77 MB total), so the spinner shows for several seconds before anything appears. Fix: stream frames — the worker posts frame 0 as soon as it's decoded so the renderer displays it immediately, then continues decoding the rest in the background and starts the loop once enough frames are buffered. This requires extending the worker protocol (e.g. a `{type:'frame', id, index, total, pngBytes, duration}` stream + a terminal `{type:'decoded'}`) and making `decodeJxl`/`startJxlAnimation` consume frames incrementally (resolve display on frame 0, accumulate for animation). Deliberately deferred from Group A to keep the initial PR focused on correctness. Effort: M. Affected: [jxl-decode-worker.js](../../jxl-decode-worker.js), [media-viewer.js](../../media-viewer.js) (`decodeJxl`, `startJxlAnimation`).
 
 ### [2026-06-03] Group 0 part 2 (tournament re-rate) manual-testing intake
 
@@ -189,6 +189,13 @@ two tasks because they have different shapes (architectural vs. visual).
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-06-13] Group CW-5 (JXL progressive decode) implementation-review follow-ups (2 items)
+
+**Origin**: Final whole-implementation code review of `feature/jxl-progressive-decode` (frame-0-first streaming decode; commits `d45619d`..`285c4ac`). Review verdict "Ready to merge: Yes" — these two carry-forward findings were filed rather than fixed in-branch (one is spec-conformant-as-written, one is pre-existing). See the prior-task review notes; both are minor.
+
+- [ ] **Evict partial JXL cache entries on worker *crash* (not just decode error)** — On a mid-stream worker crash (`error` event drain in `ensureJxlWorker`), the partial frame-0 entry stays in `jxlFrameCache` with `complete: false` and a rejected `whenComplete`. The spec deliberately keeps partial entries for *decode* errors (decode is deterministic — a re-visit would fail identically), but a worker *crash* (OOM, transient) is NOT deterministic, so a retry would likely succeed; instead every revisit cache-hits the dead entry, re-awaits the already-rejected `whenComplete`, re-runs `startJxlAnimation`, and re-logs the same `logError` line until LRU eviction. Fix: in the crash-drain path, `jxlFrameCache.delete(...)` for entries whose pending was rejected with `complete: false` (needs the id→path mapping, e.g. stash the path on the pending record). Effort: S. Affected: [media-viewer.js](../../media-viewer.js) (`ensureJxlWorker` crash drain, `_rejectJxlPending` / `_handleJxlWorkerMessage`).
+- [ ] **`img.free()` skipped on mid-loop decode error in jxl-decode-worker.js** — If `render()`/`encodeToPng()` throws partway through the frame loop, the `catch` posts `{type:'error'}` but never calls `img.free()`, so the wasm `JxlImage`'s native memory is held until the worker is torn down. **Pre-existing** (the old monolithic decode had the identical gap), but the streaming design now makes mid-loop errors a first-class, more-likely path. Fix: wrap the decode body so `img.free()` runs in a `finally` (guard against double-free — `encodeToPng` is terminal but `img.free()` is separate). Effort: XS. Affected: [jxl-decode-worker.js](../../jxl-decode-worker.js).
 
 ### [2026-06-11] Weekly-planning intake (June 15–19 Cleanup Week prep)
 

@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-06-11 <!-- Group D: Security & privacy audit complete -->
+**Last Updated**: 2026-06-12 <!-- Group CW-5: Progressive animated-JXL decode complete -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -103,6 +103,13 @@ Active tasks and backlog.
      Plan archived: docs/archive/plans/2026-06-11-security-privacy-audit.md
      Spec: docs/superpowers/specs/2026-06-11-security-privacy-audit-design.md
      297/297 unit tests; E2E skipped (no JS changes). -->
+
+<!-- Group CW-5 Progressive animated-JXL decode (frame-0-first) completed 2026-06-12,
+     moved to DONE.md. Worker streams meta/frame/done; decodeJxl resolves at frame 0;
+     startJxlAnimation loops once whenComplete buffers; static frame-0 fallback on
+     mid-stream error. Plan archived: docs/archive/plans/2026-06-12-jxl-progressive-decode.md
+     Spec: docs/superpowers/specs/2026-06-12-jxl-progressive-decode-design.md
+     297→310 unit tests; JXL E2E smoke pass; full E2E 42/43 (known #viewModeBtn fail). -->
 
 ---
 
