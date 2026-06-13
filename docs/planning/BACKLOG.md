@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-06-12 (Group CW-5 JXL progressive decode shipped — 🔵 [2026-06-07] streaming-decode item checked off; +2 🟤 [2026-06-13] implementation-review follow-ups: partial-entry eviction on worker crash, worker `img.free()` on mid-loop error)
+**Last Updated**: 2026-06-13 (Group CW-5 JXL progressive decode shipped — 🔵 [2026-06-07] streaming-decode item checked off; +2 🟤 [2026-06-13] implementation-review follow-ups: partial-entry eviction on worker crash, worker `img.free()` on mid-loop error; 🔵 [2026-06-13] JXL animation smoothness intake filed — pipelined/look-ahead frame decode, follow-up to CW-5 frame-0-first streaming)
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -52,6 +52,12 @@ prompt had no source concept).
 ---
 
 ## 🔵 User-Flagged Ideas
+
+### [2026-06-13] JXL animation smoothness intake
+
+**Origin**: Dogfooding the frame-0-first streaming decode (Group CW-5, PR #47). Frame 0 now appears fast, but the animation itself is not smooth — the user perceives it as playing "every n-th frame" (choppy/judders), and notes large source files (a 35 MB `.gif.jxl` plus other large gifs). Confirmed during the session that the playback loop is byte-for-byte identical to pre-CW-5 `main`, so this choppiness is **pre-existing**, not introduced by CW-5 — CW-5 only removed the long initial spinner that previously hid it.
+
+- [ ] **Smooth animated-JXL playback via pipelined / look-ahead frame decode** — Root cause: `startJxlAnimation`'s loop decodes one PNG frame at a time *in the critical path* (`await createImageBitmap(pngBlob)` → draw → `setTimeout(next, delay)`), so the real per-frame interval is `decode_time + delay` instead of `delay`. For high-FPS or high-resolution sources the decode latency exceeds the authored frame delay, dropping the achieved FPS well below the source rate → reads as stutter. The current design decodes on-demand deliberately (comment at [media-viewer.js](../../media-viewer.js) `startJxlAnimation`: holding all ~270 frames as raw bitmaps would be ~1 GB). **Fix**: decouple decode from display with a small bounded look-ahead — decode frame *i+1* (and maybe *i+2*) while frame *i* is on screen, holding a ring of 2-3 `ImageBitmap`s (~3 × raw-frame-size ≈ low tens of MB, not 1 GB). Optionally move `createImageBitmap` **into the worker** and transfer the `ImageBitmap` (transferable) so decode is fully off the main thread, and/or drive cadence with `requestAnimationFrame` + elapsed-time accounting for accurate timing. Smooth as long as average decode throughput ≥ playback rate; worst case (very large 4K/high-fps gifs) degrades to a *consistent* slower rate rather than judder. Needs a design pass (brainstorm → spec): ring-buffer sizing, worker-vs-renderer decode split, interaction with the streaming `whenComplete` buffering gate, and the per-animation resident-PNG footprint vs the `jxlFrameCache` LRU cap (8) for large gifs. Effort: M. Affected: [media-viewer.js](../../media-viewer.js) (`startJxlAnimation`, possibly `computeJxlFrameSchedule`), [jxl-decode-worker.js](../../jxl-decode-worker.js) (if decode moves worker-side). [related: [2026-06-07] frame-0-first streaming decode, shipped CW-5 / PR #47]
 
 ### [2026-06-07] Group A (JXL viewer) manual-testing intake
 
