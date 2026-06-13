@@ -22,7 +22,7 @@
 **Source**: 🔵 User-Flagged
 **Total SP**: 5 — solo (worker-protocol redesign justifies its own run)
 
-- [ ] **Progressive / streaming decode for large animated JXL** — 5 SP, 🟠 IMPORTANT
+- [x] **Progressive / streaming decode for large animated JXL** — 5 SP, 🟠 IMPORTANT
   - Per BACKLOG 🔵 [2026-06-07] Group A manual-testing intake. A 270-frame, 27 MB `.gif.jxl` decodes ALL frames (~77 MB of PNGs) before `decodeJxl` resolves → several seconds of spinner before anything renders. Fix: worker posts frame 0 immediately (`{type:'frame', id, index, total, pngBytes, duration}` stream + terminal `{type:'decoded'}`), renderer displays frame 0 on arrival, accumulates the rest, starts the animation loop once buffered.
   - Affected: [jxl-decode-worker.js](../../jxl-decode-worker.js), [media-viewer.js](../../media-viewer.js) (`decodeJxl`, `startJxlAnimation`, `_jxlPending` protocol).
 
@@ -92,7 +92,7 @@
 |-------|----|
 | **Group CW-5: Progressive animated-JXL decode** 🏆 | 5 |
 
-- [ ] Frame-0-first streaming worker protocol + incremental `decodeJxl`/`startJxlAnimation` consumption (5 SP)
+- [x] Frame-0-first streaming worker protocol + incremental `decodeJxl`/`startJxlAnimation` consumption (5 SP)
 
 **Daily total**: 5 SP
 
