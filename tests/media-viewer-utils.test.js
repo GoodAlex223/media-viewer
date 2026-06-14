@@ -1677,6 +1677,7 @@ describe('startJxlAnimation frame-0-first', () => {
             _jxlAnimToken: null,
             _jxlAnimTimer: null,
             currentMedia: null,
+            showNotification: vi.fn(),
             computeJxlFrameSchedule: (frames) => frames.map(() => 20),
         };
     }
@@ -1766,6 +1767,31 @@ describe('startJxlAnimation frame-0-first', () => {
         await new Promise((r) => setTimeout(r, 10)); // give a superseded loop time to (wrongly) start
         expect(drawCtx.drawImage).toHaveBeenCalledTimes(1); // no further draws
         expect(ctx._jxlAnimTimer).toBeFalsy();
+    });
+
+    it('toasts once when the entire animation is undecodable', async () => {
+        const ctx = makeCtx();
+        // Every frame fails to decode -> consecutiveFailures reaches frames.length -> bail.
+        globalThis.createImageBitmap = vi.fn(async () => {
+            throw new Error('decode fail');
+        });
+        const decoded = {
+            frames: [frame(0), frame(1)],
+            width: 4,
+            height: 4,
+            animated: true,
+            numLoops: 0,
+            frameCount: 2,
+            complete: true,
+        };
+        // Set after construction (the literal can't self-reference `decoded`); resolved so
+        // runWhenBuffered passes the buffering gate and the drawNext loop starts.
+        decoded.whenComplete = Promise.resolve(decoded);
+        await startJxlAnimation.call(ctx, decoded);
+        await vi.waitFor(() => expect(ctx.showNotification).toHaveBeenCalledTimes(1));
+        expect(ctx.showNotification.mock.calls[0][0]).toMatch(/first frame/i);
+        expect(ctx.showNotification.mock.calls[0][1]).toBe('warning');
+        ctx._jxlAnimToken = null; // teardown
     });
 });
 
