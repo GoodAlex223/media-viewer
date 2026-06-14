@@ -1989,3 +1989,69 @@ describe('<2-files fallback exits tournament mode (Fix 3)', () => {
         expect(ctx.switchToSingleModeUI).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('CLIP unload timer callback (Fix 5)', () => {
+    const handleClipUnloadTimer = extractAsyncMethod('_handleClipUnloadTimer');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function makeCtx(overrides = {}) {
+        return {
+            enableClipFeatures: true,
+            clipWorkerReady: true,
+            clipUnloadTimer: 123,
+            ...overrides,
+        };
+    }
+
+    it('resets clipWorkerReady on a successful unload', async () => {
+        globalThis.window = {
+            electronAPI: { unloadClipModel: vi.fn(async () => ({ success: true })), logError: vi.fn() },
+        };
+        const ctx = makeCtx();
+        await handleClipUnloadTimer.call(ctx);
+        expect(globalThis.window.electronAPI.unloadClipModel).toHaveBeenCalledTimes(1);
+        expect(ctx.clipWorkerReady).toBe(false);
+        expect(ctx.clipUnloadTimer).toBe(null);
+    });
+
+    it('keeps clipWorkerReady true when the IPC reports loading', async () => {
+        globalThis.window = {
+            electronAPI: {
+                unloadClipModel: vi.fn(async () => ({ success: false, reason: 'loading' })),
+                logError: vi.fn(),
+            },
+        };
+        const ctx = makeCtx();
+        await handleClipUnloadTimer.call(ctx);
+        expect(ctx.clipWorkerReady).toBe(true);
+    });
+
+    it('skips the unload when CLIP was disabled during the grace window', async () => {
+        globalThis.window = { electronAPI: { unloadClipModel: vi.fn(), logError: vi.fn() } };
+        const ctx = makeCtx({ enableClipFeatures: false });
+        await handleClipUnloadTimer.call(ctx);
+        expect(globalThis.window.electronAPI.unloadClipModel).not.toHaveBeenCalled();
+        expect(ctx.clipUnloadTimer).toBe(null);
+    });
+
+    it('logs and does not throw when the unload IPC rejects', async () => {
+        globalThis.window = {
+            electronAPI: {
+                unloadClipModel: vi.fn(async () => {
+                    throw new Error('ipc boom');
+                }),
+                logError: vi.fn(),
+            },
+        };
+        const ctx = makeCtx();
+        await handleClipUnloadTimer.call(ctx);
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalled();
+        expect(ctx.clipWorkerReady).toBe(true); // not reset on failure
+    });
+});

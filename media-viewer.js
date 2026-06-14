@@ -53,6 +53,8 @@ const ACTION_LABELS = {
     bothLose: 'Both lose (tie down)',
 };
 
+const CLIP_UNLOAD_DELAY_MS = 30000; // grace period before unloading the CLIP model after extraction
+
 // MinHeap (Priority Queue) for efficient MST construction
 class MinHeap {
     constructor(compareFunc = (a, b) => a.distance - b.distance) {
@@ -8714,10 +8716,25 @@ class MediaViewer {
         // at the start of startBackgroundFeatureExtraction(). The existing
         // loadClipModel() lazy path re-loads transparently on next CLIP IPC.
         if (this.enableClipFeatures) {
-            this.clipUnloadTimer = setTimeout(() => {
-                window.electronAPI.unloadClipModel();
-                this.clipUnloadTimer = null;
-            }, 30000);
+            this.clipUnloadTimer = setTimeout(() => this._handleClipUnloadTimer(), CLIP_UNLOAD_DELAY_MS);
+        }
+    }
+
+    // Timer callback: unload the CLIP model after the idle grace window. Re-checks
+    // enableClipFeatures at fire time (toggle-off during the window cancels the unload),
+    // awaits the IPC + handles errors, and only resets clipWorkerReady on a SUCCESSFUL
+    // unload — the IPC returns { success:false, reason:'loading' } when a load is in
+    // flight, in which case the model stays resident and the flag must stay true.
+    async _handleClipUnloadTimer() {
+        this.clipUnloadTimer = null;
+        if (!this.enableClipFeatures) return;
+        try {
+            const result = await window.electronAPI.unloadClipModel();
+            if (result && result.success) {
+                this.clipWorkerReady = false;
+            }
+        } catch (err) {
+            window.electronAPI.logError('CLIP model unload failed: ' + (err && err.message ? err.message : err));
         }
     }
 
