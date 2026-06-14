@@ -4023,7 +4023,7 @@ class MediaViewer {
                 this.showError(`Failed to undo move: ${error.message}`);
                 this.moveHistory.push(lastMove);
             }
-        } else if (this.isCompareMode && this.moveHistory.length >= 2) {
+        } else if (this.isCompareMode && lastMove.compareMode && this.moveHistory.length >= 2) {
             // In compare mode, restore both files (last two moves from like/dislike)
             const secondMove = this.moveHistory.pop();
             const firstMove = this.moveHistory.pop();
@@ -4230,6 +4230,10 @@ class MediaViewer {
                 this[key] = null;
             }
         }
+        // The media element refs are owned by the (now-removed) wrappers; null them
+        // too so stale compare elements can't be reused after exit-to-single.
+        this.leftMedia = null;
+        this.rightMedia = null;
         this.hidePredictionBadges();
         this.closeAllZoomPopovers();
     }

@@ -943,6 +943,7 @@ describe('handleCancel feature restore', () => {
                     fileSize: 100,
                     fileType: 'image/png',
                     actionType: 'like',
+                    compareMode: true,
                     mlFeatures: Array.from(make576()),
                 },
                 {
@@ -952,6 +953,7 @@ describe('handleCancel feature restore', () => {
                     fileSize: 200,
                     fileType: 'image/png',
                     actionType: 'dislike',
+                    compareMode: true,
                     mlFeatures: Array.from(make64()),
                 },
             ],
@@ -968,6 +970,45 @@ describe('handleCancel feature restore', () => {
         // Two reverseUpdate calls
         const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
         expect(reverseCalls.length).toBe(2);
+    });
+
+    it('does NOT take the compare-pair branch when the last move lacks compareMode (leftover single move)', async () => {
+        const ctx = commonMocks({
+            isCompareMode: true,
+            moveHistory: [
+                // An older compare-pair entry (compareMode set)…
+                {
+                    fileName: 'old.png',
+                    originalPath: '/folder/old.png',
+                    newPath: '/folder/like/old.png',
+                    fileSize: 50,
+                    fileType: 'image/png',
+                    actionType: 'like',
+                    compareMode: true,
+                    mlFeatures: Array.from(make64()),
+                },
+                // …and a leftover SINGLE-mode move on top (no compareMode flag).
+                {
+                    fileName: 'single.png',
+                    originalPath: '/folder/single.png',
+                    newPath: '/folder/dislike/single.png',
+                    fileSize: 60,
+                    fileType: 'image/png',
+                    actionType: 'dislike',
+                    mlFeatures: Array.from(make64()),
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        // The single-move (non-compare) branch pops exactly ONE entry, leaving the
+        // older compare-pair entry intact. The pre-fix two-entry pop would have
+        // drained the history to length 0 and restored 'old.png'.
+        expect(ctx.moveHistory.length).toBe(1);
+        expect(ctx.moveHistory[0].fileName).toBe('old.png');
+        expect(ctx.featureCache.has('/folder/old.png')).toBe(false);
+        expect(ctx.featureCache.has('/folder/single.png')).toBe(true);
     });
 
     it('special-move undo (compare mode) restores featureCache and calls requestPredictionScores when sorted-by-prediction', async () => {
