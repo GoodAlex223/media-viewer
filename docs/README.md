@@ -114,6 +114,7 @@ Central index for all project documentation.
 | [CLIP Extraction UX][] | "Starting feature extraction…" toast on kickoff + CLIP toggle-on extraction kickoff; empty-folder no-op guard (Group C) |
 | [Security & Privacy Audit][] | One-time non-destructive secrets + identity/PII audit; methodology + report artifact (Group D) |
 | [JXL Progressive Decode][] | Frame-0-first streaming animated-JXL decode; worker `meta`/`frame`/`done` protocol + mutable cache entry with `whenComplete`; static frame-0 fallback on mid-stream error (Group CW-5) |
+| [Renderer Correctness Guards][] | Batch of 7 defensive renderer fixes from PR reviews #34–#45: clipCache clear, tournament `isLoading` guards, `<2-files` exitTournamentMode, `handleCancel` entry-type guard, `clipWorkerReady` reset, feature-cache local-capture, JXL error-path trio (Group CW-1) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -143,6 +144,7 @@ Central index for all project documentation.
 [CLIP Extraction UX]: superpowers/specs/2026-06-10-clip-extraction-ux-design.md
 [Security & Privacy Audit]: superpowers/specs/2026-06-11-security-privacy-audit-design.md
 [JXL Progressive Decode]: superpowers/specs/2026-06-12-jxl-progressive-decode-design.md
+[Renderer Correctness Guards]: superpowers/specs/2026-06-13-cw-1-renderer-correctness-guards-design.md
 
 ## Security Audits
 
