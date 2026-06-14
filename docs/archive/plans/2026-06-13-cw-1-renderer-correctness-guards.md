@@ -1,5 +1,7 @@
 # Group CW-1: Renderer Correctness Guards — Implementation Plan
 
+**Status: Complete** — shipped 2026-06-14 on branch `cleanup/cw-1-renderer-correctness-guards`; all 7 fixes implemented via subagent-driven development (10 tasks), 310 → **326 unit tests**, lint clean, E2E 42/43 (known pre-existing `#viewModeBtn` failure owned by Group CW-2). Final whole-branch review: "Ready to merge: Yes". See [DONE.md](../../planning/DONE.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Land seven independent defensive renderer fixes (accumulated from PR reviews #34–#45) as one branch / one PR.
@@ -30,7 +32,7 @@
 - Modify: `media-viewer.js:2706-2709` (cache-reset block in `loadFolder`)
 - Test: `tests/media-viewer-utils.test.js` (new describe near the other source-structure tests)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add this describe block to `tests/media-viewer-utils.test.js` (the `source` constant is already defined at the top of the file):
 
@@ -58,12 +60,12 @@ describe('loadFolder cache reset (Fix 1)', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "clears clipCache alongside"`
 Expected: FAIL — `block` does not contain `this.clipCache.clear();`.
 
-- [ ] **Step 3: Add the clear call**
+- [x] **Step 3: Add the clear call**
 
 In `media-viewer.js`, change the block at lines 2706-2709 from:
 
@@ -84,12 +86,12 @@ to:
             this.predictionScores.clear();
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "clears clipCache alongside"`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -110,7 +112,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Modify: `media-viewer.js:4649-4654` (`handleTournamentPick`), `media-viewer.js:4656-4669` (`handleTournamentDraw`)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/media-viewer-utils.test.js`:
 
@@ -158,12 +160,12 @@ describe('tournament isLoading guards (Fix 2)', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "tournament isLoading guards"`
 Expected: FAIL — the two "no-ops while isLoading" tests fail because `handlePairDraw`/`handlePairResult` are still called.
 
-- [ ] **Step 3: Add the guards**
+- [x] **Step 3: Add the guards**
 
 In `media-viewer.js`, change `handleTournamentPick` (starts line 4649) from:
 
@@ -221,12 +223,12 @@ to:
 
 > Note: the try/catch references `window.electronAPI.logError`. The Fix 2 tests do not set `globalThis.window`, but they never enter the catch (the happy-path test's `handlePairDraw` resolves), so no window access occurs. Do not add a window mock here.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "tournament isLoading guards"`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -249,7 +251,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Modify: `media-viewer.js:3034-3035` (`_retryCompareAfterRemoval`), `media-viewer.js:3064-3065` (`showCompareMedia`)
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/media-viewer-utils.test.js`:
 
@@ -300,12 +302,12 @@ describe('<2-files fallback exits tournament mode (Fix 3)', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "fallback exits tournament mode"`
 Expected: FAIL — the two "exits tournament" tests fail (`exitTournamentMode` not called).
 
-- [ ] **Step 3: Add the guard at both sites**
+- [x] **Step 3: Add the guard at both sites**
 
 In `media-viewer.js`, in `_retryCompareAfterRemoval`, change:
 
@@ -339,12 +341,12 @@ to:
 
 > There are two `switchToSingleModeUI()` calls inside `showCompareMedia`'s `<2` block region; the one to edit is the one immediately preceded by the `// switchToSingleModeUI() tears down the stale compare wrappers.` comment (line 3064). Use that comment to disambiguate.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "fallback exits tournament mode"`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -366,7 +368,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Modify: `media-viewer.js:4023` (compare-pair branch condition), `media-viewer.js:4222-4229` (`switchToSingleModeUI` teardown loop)
 - Test: `tests/media-viewer-utils.test.js` — retag existing fixtures (lines ~938-957) + add a new regression test
 
-- [ ] **Step 1: Retag the existing compare-pair fixture + add the failing regression test**
+- [x] **Step 1: Retag the existing compare-pair fixture + add the failing regression test**
 
 First, in `tests/media-viewer-utils.test.js`, in the existing test `'compare-mode pair-undo restores caches for both files'` (~line 935), add `compareMode: true` to **both** history entries so they still reach the (now guarded) compare-pair branch. Change the two entries in its `moveHistory` from objects ending with `mlFeatures: Array.from(make576()),` / `mlFeatures: Array.from(make64()),` to include the flag:
 
@@ -438,12 +440,12 @@ Then add a new regression test inside the same `describe('handleCancel feature r
 
 > The new test relies on the single-move undo branch (`handleCancel`'s final `else`) restoring exactly one file. If that branch's exact restore assertions differ in the current source, keep the two structural assertions that matter: `ctx.moveHistory.length === 1` and `ctx.moveHistory[0].fileName === 'old.png'`.
 
-- [ ] **Step 2: Run tests to verify the new one fails (and retagged one still passes)**
+- [x] **Step 2: Run tests to verify the new one fails (and retagged one still passes)**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "handleCancel feature restore"`
 Expected: the retagged `'compare-mode pair-undo…'` test PASSES (still hits the branch — flag present); the new `'does NOT take the compare-pair branch…'` test FAILS (pre-fix, the `isCompareMode && moveHistory.length >= 2` branch pops two entries → `moveHistory.length === 0`).
 
-- [ ] **Step 3: Add the guard + null the media refs**
+- [x] **Step 3: Add the guard + null the media refs**
 
 In `media-viewer.js`, change the compare-pair branch condition at line 4023 from:
 
@@ -487,12 +489,12 @@ to:
         this.rightMedia = null;
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "handleCancel feature restore"`
 Expected: PASS (all tests in the block, including the new regression test)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -519,7 +521,7 @@ Extract the timer callback into a named `_handleClipUnloadTimer()` method so it 
 - Modify: `media-viewer.js` — add top-level `const CLIP_UNLOAD_DELAY_MS = 30000;` (after `ACTION_LABELS`, ~line 38), add `_handleClipUnloadTimer()` method, rewrite the `setTimeout` block at `media-viewer.js:8701-8706`
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/media-viewer-utils.test.js`:
 
@@ -581,12 +583,12 @@ describe('CLIP unload timer callback (Fix 5)', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "CLIP unload timer callback"`
 Expected: FAIL — `extractAsyncMethod('_handleClipUnloadTimer')` throws `Could not find async method: _handleClipUnloadTimer` (method does not exist yet).
 
-- [ ] **Step 3: Add the constant + method, rewrite the timer block**
+- [x] **Step 3: Add the constant + method, rewrite the timer block**
 
 In `media-viewer.js`, after the `ACTION_LABELS` const block (around line 38, before `class MediaViewer`), add:
 
@@ -635,12 +637,12 @@ to:
         }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "CLIP unload timer callback"`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -665,7 +667,7 @@ Main-process IPC handlers are outside the Vitest harness; this fix is verified b
 **Files:**
 - Modify: `main.js:506-525`
 
-- [ ] **Step 1: Apply the local-capture rewrite**
+- [x] **Step 1: Apply the local-capture rewrite**
 
 In `main.js`, change the handler (lines 506-525) from:
 
@@ -722,12 +724,12 @@ to:
     });
 ```
 
-- [ ] **Step 2: Lint + verify the trace**
+- [x] **Step 2: Lint + verify the trace**
 
 Run: `npm run lint`
 Expected: clean (no errors). Confirm by reading the diff that every former `featureCacheWriter.*` reference inside the handler now reads `writer.*`, and the close handler at `main.js:528` is unchanged (it already used this pattern).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add main.js
@@ -751,7 +753,7 @@ Wrap the resolve/reject passed into the `_jxlPending` record so they `clearTimeo
 - Modify: `media-viewer.js:1015-1024` (the frame-0 `await new Promise(...)` in `decodeJxl`)
 - Test: `tests/media-viewer-utils.test.js` — add a test to the existing `describe('decodeJxl', ...)` block
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add this test inside the existing `describe('decodeJxl', ...)` block in `tests/media-viewer-utils.test.js` (it reuses that block's `decodeJxl`, `makeJxlCtx`, and `window.electronAPI.readFileBuffer` mock from `beforeEach`):
 
@@ -774,12 +776,12 @@ Add this test inside the existing `describe('decodeJxl', ...)` block in `tests/m
     });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "rejects after 15s"`
 Expected: FAIL — without a timeout the promise never settles; the test times out / does not reject with `'JXL decode timeout'`.
 
-- [ ] **Step 3: Add the timeout**
+- [x] **Step 3: Add the timeout**
 
 In `media-viewer.js`, change the `decodeJxl` frame-0 promise (lines 1015-1024) from:
 
@@ -825,12 +827,12 @@ to:
         });
 ```
 
-- [ ] **Step 4: Run test to verify it passes (and the whole decodeJxl block stays green)**
+- [x] **Step 4: Run test to verify it passes (and the whole decodeJxl block stays green)**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "decodeJxl"`
 Expected: PASS (all decodeJxl tests, including the new timeout test and the existing streaming tests — the wrapped resolve/reject must not break them).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -853,7 +855,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Modify: `media-viewer.js:933-939` (`_handleJxlWorkerMessage` — handle `init-error`)
 - Test: `tests/media-viewer-utils.test.js` — add a test to the existing `describe('_handleJxlWorkerMessage', ...)` block (renderer side; the worker change is verified by the JXL E2E smoke + reasoned trace)
 
-- [ ] **Step 1: Write the failing test (renderer routing)**
+- [x] **Step 1: Write the failing test (renderer routing)**
 
 Add this test inside the existing `describe('_handleJxlWorkerMessage', ...)` block in `tests/media-viewer-utils.test.js`:
 
@@ -874,12 +876,12 @@ Add this test inside the existing `describe('_handleJxlWorkerMessage', ...)` blo
     });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "init-error rejects"`
 Expected: FAIL — `_handleJxlWorkerMessage` does not handle `init-error`; `_jxlRejectReady` is never called and the refs stay as the original mocks.
 
-- [ ] **Step 3: Handle `init-error` in the renderer router**
+- [x] **Step 3: Handle `init-error` in the renderer router**
 
 In `media-viewer.js`, in `_handleJxlWorkerMessage`, immediately after the `if (m.type === 'ready') { ... }` block (after line 939, before `const pending = this._jxlPending.get(m.id);`), add:
 
@@ -892,7 +894,7 @@ In `media-viewer.js`, in `_handleJxlWorkerMessage`, immediately after the `if (m
         }
 ```
 
-- [ ] **Step 4: Wrap the worker init branch**
+- [x] **Step 4: Wrap the worker init branch**
 
 In `jxl-decode-worker.js`, change the init branch (lines 16-21) from:
 
@@ -921,7 +923,7 @@ to:
     }
 ```
 
-- [ ] **Step 5: Run test + lint to verify**
+- [x] **Step 5: Run test + lint to verify**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "_handleJxlWorkerMessage"`
 Expected: PASS (all `_handleJxlWorkerMessage` tests including the new one).
@@ -929,7 +931,7 @@ Expected: PASS (all `_handleJxlWorkerMessage` tests including the new one).
 Run: `npm run lint`
 Expected: clean (the worker file is in ESLint block `3a-jxl`).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js jxl-decode-worker.js tests/media-viewer-utils.test.js
@@ -952,7 +954,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Modify: `media-viewer.js:1127` (the `consecutiveFailures >= decoded.frames.length` bail in `drawNext`)
 - Test: `tests/media-viewer-utils.test.js` — add `showNotification` to the `startJxlAnimation` describe's `makeCtx` + a new test
 
-- [ ] **Step 1: Add `showNotification` to the describe's makeCtx + write the failing test**
+- [x] **Step 1: Add `showNotification` to the describe's makeCtx + write the failing test**
 
 In `tests/media-viewer-utils.test.js`, in `describe('startJxlAnimation frame-0-first', ...)`, add `showNotification: vi.fn()` to the `makeCtx()` return object (alongside `computeJxlFrameSchedule`):
 
@@ -995,12 +997,12 @@ Then add this test inside the same describe block:
     });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "toasts once when the entire animation"`
 Expected: FAIL — the bail currently returns silently; `showNotification` is never called.
 
-- [ ] **Step 3: Add the toast at the bail**
+- [x] **Step 3: Add the toast at the bail**
 
 In `media-viewer.js`, change the bail in `drawNext` (line 1127) from:
 
@@ -1021,12 +1023,12 @@ to:
                     }
 ```
 
-- [ ] **Step 4: Run test to verify it passes (and the startJxlAnimation block stays green)**
+- [x] **Step 4: Run test to verify it passes (and the startJxlAnimation block stays green)**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "startJxlAnimation frame-0-first"`
 Expected: PASS (all tests in the block, including the new bail-toast test).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -1046,21 +1048,21 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 **Files:**
 - Modify: `docs/README.md` (index the design spec under Design Specs)
 
-- [ ] **Step 1: Run the full unit suite**
+- [x] **Step 1: Run the full unit suite**
 
 Run: `npm test`
 Expected: PASS. Baseline was 310; this plan adds ~14 tests (Task 1: 1, Task 2: 3, Task 3: 3, Task 4: 1 new, Task 5: 4, Task 7a: 1, Task 7b: 1, Task 7c: 1). Expected ~324 passing, 0 failing.
 
-- [ ] **Step 2: Run lint**
+- [x] **Step 2: Run lint**
 
 Run: `npm run lint`
 Expected: clean.
 
-- [ ] **Step 3: Index the design spec in docs/README.md**
+- [x] **Step 3: Index the design spec in docs/README.md**
 
 Open `docs/README.md`, find the Design Specs section/table, and add a row for `docs/superpowers/specs/2026-06-13-cw-1-renderer-correctness-guards-design.md` (match the existing row format used by the most recent spec entry). If the exact column layout is unclear, mirror the previous spec row verbatim and substitute the CW-1 title/date/path.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/README.md
@@ -1069,7 +1071,7 @@ git commit -m "docs(readme): index CW-1 renderer correctness guards design spec
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 5: (Closeout, performed by the controller after all tasks)**
+- [x] **Step 5: (Closeout, performed by the controller after all tasks)**
 
 Leave the branch ready for the `superpowers:finishing-a-development-branch` flow: push, open PR, then the project closeout (EXTRACT improvements → BACKLOG, check off the seven constituent BACKLOG entries cited in the spec, archive this plan + flip checkboxes + add `Status: Complete`, transition WEEKLY Group CW-1, update memory). E2E is unaffected by these changes; the suite remains at its known 42/43 state (the `#viewModeBtn` red belongs to CW-2, not CW-1).
 

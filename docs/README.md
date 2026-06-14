@@ -58,6 +58,7 @@ Central index for all project documentation.
 | [CLIP Extraction UX Plan][]                  | "Starting feature extraction…" kickoff toast + CLIP toggle-on extraction kickoff + empty-folder no-op guard (Group C) |
 | [Security & Privacy Audit Plan][]            | One-time secrets scan (history + working tree) + identity/PII assessment → dated audit report (Group D) |
 | [JXL Progressive Decode Plan][]              | Frame-0-first streaming JXL decode (worker `meta`/`frame`/`done` protocol; `decodeJxl` resolves at frame 0; `whenComplete` gates animation) (Group CW-5) |
+| [Renderer Correctness Guards Plan][]         | Batch of 7 defensive renderer fixes from PR reviews #34–#45 (clipCache clear, tournament `isLoading` guards, `<2-files` exitTournamentMode, `handleCancel` guard, `clipWorkerReady` reset, feature-cache local-capture, JXL error-path trio) (Group CW-1) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -82,6 +83,7 @@ Central index for all project documentation.
 [CLIP Extraction UX Plan]: archive/plans/2026-06-10-clip-extraction-ux.md
 [Security & Privacy Audit Plan]: archive/plans/2026-06-11-security-privacy-audit.md
 [JXL Progressive Decode Plan]: archive/plans/2026-06-12-jxl-progressive-decode.md
+[Renderer Correctness Guards Plan]: archive/plans/2026-06-13-cw-1-renderer-correctness-guards.md
 
 ## Design Specs
 

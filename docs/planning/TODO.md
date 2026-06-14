@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-06-12 <!-- Group CW-5: Progressive animated-JXL decode complete -->
+**Last Updated**: 2026-06-14 <!-- Group CW-1: Renderer correctness guards complete -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -110,6 +110,17 @@ Active tasks and backlog.
      mid-stream error. Plan archived: docs/archive/plans/2026-06-12-jxl-progressive-decode.md
      Spec: docs/superpowers/specs/2026-06-12-jxl-progressive-decode-design.md
      297→310 unit tests; JXL E2E smoke pass; full E2E 42/43 (known #viewModeBtn fail). -->
+
+<!-- Group CW-1 Renderer correctness guards (batch of 7 defensive fixes from PR reviews
+     #34/#38/#40/#41/#42/#45 + Group A/B impl-review + Group E) completed 2026-06-14,
+     moved to DONE.md. clipCache clear, tournament isLoading guards, <2-files
+     exitTournamentMode (both sites), handleCancel compareMode guard + null media refs,
+     clipWorkerReady reset (_handleClipUnloadTimer + CLIP_UNLOAD_DELAY_MS),
+     feature-cache-write-chunk local-capture, JXL error-path trio (decode timeout +
+     init-error + bail toast). 14 constituent BACKLOG entries checked off.
+     Plan archived: docs/archive/plans/2026-06-13-cw-1-renderer-correctness-guards.md
+     Spec: docs/superpowers/specs/2026-06-13-cw-1-renderer-correctness-guards-design.md
+     310→326 unit tests; lint clean; E2E 42/43 (known #viewModeBtn fail, owned by CW-2). -->
 
 ---
 
