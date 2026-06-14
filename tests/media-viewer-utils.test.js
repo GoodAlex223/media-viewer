@@ -1946,10 +1946,13 @@ describe('tournament isLoading guards (Fix 2)', () => {
         expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
     });
 
-    it('handleTournamentDraw still advances (showTournamentPair) when the record call throws', async () => {
+    it('handleTournamentDraw still advances (showTournamentPair) when the record call throws, with NO false success toast', async () => {
         // The central guarantee of the try/catch: a stale-pair throw is logged, not
         // left unhandled, and the UI still advances. (BACKLOG PR #41 root cause.)
-        const ctx = makeCtx();
+        // PR #48 review: the success toast must NOT fire on a thrown record — that
+        // would be a false confirmation. showRatingConfirmations is on here to prove
+        // the toast is suppressed precisely when the draw failed.
+        const ctx = makeCtx({ showRatingConfirmations: true });
         ctx.tournament.handlePairDraw = vi.fn(async () => {
             throw new Error('No active pair to record');
         });
@@ -1960,6 +1963,7 @@ describe('tournament isLoading guards (Fix 2)', () => {
             expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(
                 expect.stringContaining('Tournament draw failed')
             );
+            expect(ctx.showNotification).not.toHaveBeenCalled(); // no false "recorded" toast
             expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
         } finally {
             globalThis.window = origWindow;

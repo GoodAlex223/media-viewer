@@ -4699,14 +4699,18 @@ class MediaViewer {
         if (!pair) return;
         try {
             await this.tournament.handlePairDraw(pair.left, pair.right, outcome);
+            // Confirmation toast lives INSIDE the try: only show "recorded" after the
+            // draw actually persisted. A thrown record (e.g. stale pair) must NOT show a
+            // false success toast — it falls to the catch, and showTournamentPair below
+            // still advances the UI regardless.
+            if (this.showRatingConfirmations) {
+                this.showNotification(
+                    outcome === 'win' ? '🤝 Both advance (tie)' : '👎 Both stay (tie)',
+                    outcome === 'win' ? 'success' : 'info'
+                );
+            }
         } catch (err) {
             window.electronAPI.logError('Tournament draw failed: ' + (err && err.message ? err.message : err));
-        }
-        if (this.showRatingConfirmations) {
-            this.showNotification(
-                outcome === 'win' ? '🤝 Both advance (tie)' : '👎 Both stay (tie)',
-                outcome === 'win' ? 'success' : 'info'
-            );
         }
         await this.showTournamentPair();
     }
