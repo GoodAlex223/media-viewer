@@ -1015,10 +1015,24 @@ class MediaViewer {
         // meta + the first 'frame' message arrive. The entry's frames array keeps growing
         // in place afterwards; entry.whenComplete settles when the stream finishes.
         const entry = await new Promise((resolve, reject) => {
+            // Guard the frame-0 wait: if the worker never streams a first frame (hang),
+            // reject + drop the pending entry rather than wait forever. Mirrors
+            // loadMediaAsImageData's 15s pattern. whenComplete (later frames) stays
+            // unbounded — a stall there merely leaves frame 0 displayed static.
+            const timer = setTimeout(() => {
+                this._jxlPending.delete(id);
+                reject(new Error('JXL decode timeout'));
+            }, 15000);
             this._jxlPending.set(id, {
                 entry: null,
-                resolveFirst: resolve,
-                rejectFirst: reject,
+                resolveFirst: (val) => {
+                    clearTimeout(timer);
+                    resolve(val);
+                },
+                rejectFirst: (err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                },
                 resolveComplete: null,
                 rejectComplete: null,
             });

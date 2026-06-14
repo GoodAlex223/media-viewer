@@ -1508,6 +1508,23 @@ describe('decodeJxl', () => {
         expect(entry.frames).toHaveLength(1); // frame 0 kept — static fallback material
         expect(ctx.jxlFrameCache.get('anim.gif.jxl')).toBe(entry); // entry NOT purged
     });
+
+    it('rejects after 15s and deletes the pending entry if frame 0 never arrives', async () => {
+        vi.useFakeTimers();
+        try {
+            // Worker that accepts the decode message but never streams a reply.
+            const silentWorker = { addEventListener: () => {}, postMessage: vi.fn() };
+            const ctx = makeJxlCtx(silentWorker);
+            const p = decodeJxl.call(ctx, 'hang.jxl');
+            const assertion = expect(p).rejects.toThrow('JXL decode timeout');
+            // Flush the pre-timer awaits (ensureJxlWorker + readFileBuffer), then trip the timeout.
+            await vi.advanceTimersByTimeAsync(15000);
+            await assertion;
+            expect(ctx._jxlPending.size).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });
 
 describe('_handleJxlWorkerMessage', () => {
