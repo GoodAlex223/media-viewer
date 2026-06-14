@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-12 <!-- Group CW-5: Progressive animated-JXL decode -->
+**Last Updated**: 2026-06-14 <!-- Group CW-1: Renderer correctness guards (7-fix batch) -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,49 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-14 — Group CW-1: Renderer correctness guards (batch of 7 defensive fixes)
+
+**Summary**: Cleanup-Week batch (8 SP, 🟤 Auto-Generated) consolidating **14** accumulated BACKLOG
+follow-ups from PR reviews #34/#38/#40/#41/#42/#45 + Group A/B implementation reviews + Group E,
+into one branch / one PR. Seven independent defensive renderer fixes, each TDD'd and reviewed
+per-task via subagent-driven development.
+
+**The 7 fixes**:
+1. **`clipCache` cleared in `loadFolder()`** (PR #34) — the reset block cleared 4 of 5 per-file caches but omitted `clipCache`, leaking stale 512-dim CLIP vectors across folders with path-identical filenames. One-line add + source-structure regression test (anchored inside `loadFolder` to avoid the folder-watch callback's `perceptualHashes.clear()`).
+2. **`isLoading` guard on `handleTournamentDraw` + `handleTournamentPick`** (PR #41) — button double-click mid-`showTournamentPair()` fired a second `recordDraw`/`recordResult` after `roundQueue` shifted → unhandled `'No active pair to record'`. Added the guard (keyboard path was already gated) + try/catch belt-and-suspenders; tests cover no-op, happy path, and error-path advance-survivability.
+3. **`<2-files` compare fallback exits tournament mode** (PR #38) — `switchToSingleModeUI()` was called but `isTournamentMode` stayed `true` (tournament keymap + overlay live over single-mode UI). Fixed at **both** near-identical sites (`showCompareMedia` AND `_retryCompareAfterRemoval`); tests assert exit-before-switch ordering.
+4. **`handleCancel` compare-pair entry-type guard + null media refs** (PR #40 / Group B / PR #35) — gated the two-entry-pop branch on `lastMove.compareMode` (verified `moveComparePair` sets it on both entries, `moveCurrentFile` doesn't); nulled `leftMedia`/`rightMedia` in `switchToSingleModeUI` teardown; retagged the existing compare-pair fixtures + added a leftover-single-move regression test.
+5. **`clipWorkerReady` reset on CLIP unload + await/error-handle + riders** (PR #45 / PR #31 / Group E) — extracted the fire-and-forget timer callback into a unit-testable `_handleClipUnloadTimer()`: awaits the IPC, logs on failure, re-checks `enableClipFeatures` at fire time, resets `clipWorkerReady` only on a **successful** unload (the IPC returns `{success:false,reason:'loading'}` mid-load). Hoisted `CLIP_UNLOAD_DELAY_MS = 30000`. Single edit closed 4 BACKLOG entries.
+6. **Local-capture in `feature-cache-write-chunk` IPC handler** (PR #38) — `const writer = featureCacheWriter` before the `'drain'` await so a concurrent `write-open` can't leave the handler on stale module state; mirrors the close handler + the documented CLIP-IPC pattern (main-process; verified by lint + trace).
+7. **JXL error-path hardening trio** (Group A / PR #42) — (a) 15s frame-0 timeout in `decodeJxl` via wrapped `resolveFirst`/`rejectFirst` (whenComplete stays unbounded — benign); (b) worker `{type:'init'}` try/catch → structured `{type:'init-error'}` routed in `_handleJxlWorkerMessage` to reject `_jxlReady` (was: uncaught async rejection → renderer hangs forever); (c) one-time `'warning'` toast on the `drawNext` whole-animation-undecodable bail (was silent).
+
+**Key changes**: [media-viewer.js](../../media-viewer.js) (fixes 1–5, 7a, 7b-renderer, 7c + the
+`CLIP_UNLOAD_DELAY_MS` const + `_handleClipUnloadTimer` method), [main.js](../../main.js) (fix 6),
+[jxl-decode-worker.js](../../jxl-decode-worker.js) (fix 7b worker side + protocol comment),
+[tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) (+16 unit tests),
+[docs/README.md](../README.md) (spec + archived-plan indexing).
+
+**Tests**: 310 → **326 unit** (Fix 1 ×1 source-structure, Fix 2 ×4, Fix 3 ×3, Fix 4 ×1 new +
+fixture retag, Fix 5 ×4, Fix 7a ×1, Fix 7b ×1, Fix 7c ×1). Lint: 0 errors (1 pre-existing
+`no-shadow` warning, filed 🟤). E2E **42/43** (the 1 failure is the known pre-existing
+`#viewModeBtn` assertion in `app-launch.test.js`, owned by Group CW-2 — NOT a CW-1 regression;
+confirmed unchanged from baseline). Pre-commit hook ran the unit suite green on every commit.
+
+**Process**: superpowers brainstorm → spec → plan → **subagent-driven development** (10 tasks, fresh
+implementer + spec/quality review per task; controller committed per project convention). Two
+per-task reviews caught real improvements applied before commit: Task 1's source-structure test
+matched the wrong `perceptualHashes.clear()` occurrence (tightened the slice anchor); Task 2 lacked
+an error-path test for `showTournamentPair` survivability (added). Final whole-branch integration
+review verdict "Ready to merge: Yes" with one non-blocking nit applied (`_jxlAnimTimer = null` on
+bail for `stopJxlAnimation` parity). Spec at
+[docs/superpowers/specs/2026-06-13-cw-1-renderer-correctness-guards-design.md](../superpowers/specs/2026-06-13-cw-1-renderer-correctness-guards-design.md);
+plan archived at [docs/archive/plans/2026-06-13-cw-1-renderer-correctness-guards.md](../archive/plans/2026-06-13-cw-1-renderer-correctness-guards.md).
+2 BACKLOG follow-ups spawned (🟤 [2026-06-14]): `init-error` worker-teardown/retry gap (Task 8
+review); pre-existing `no-shadow` lint warning. Branch `cleanup/cw-1-renderer-correctness-guards`
+(off `main` `4eca99a`); commits `4845088`..`c1f88fd`.
+
+---
 
 ### 2026-06-12 — Group CW-5: Progressive animated-JXL decode (frame-0-first)
 

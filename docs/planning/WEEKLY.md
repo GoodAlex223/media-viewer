@@ -22,7 +22,7 @@
 **Source**: 🔵 User-Flagged
 **Total SP**: 5 — solo (worker-protocol redesign justifies its own run)
 
-- [ ] **Progressive / streaming decode for large animated JXL** — 5 SP, 🟠 IMPORTANT
+- [x] **Progressive / streaming decode for large animated JXL** — 5 SP, 🟠 IMPORTANT
   - Per BACKLOG 🔵 [2026-06-07] Group A manual-testing intake. A 270-frame, 27 MB `.gif.jxl` decodes ALL frames (~77 MB of PNGs) before `decodeJxl` resolves → several seconds of spinner before anything renders. Fix: worker posts frame 0 immediately (`{type:'frame', id, index, total, pngBytes, duration}` stream + terminal `{type:'decoded'}`), renderer displays frame 0 on arrival, accumulates the rest, starts the animation loop once buffered.
   - Affected: [jxl-decode-worker.js](../../jxl-decode-worker.js), [media-viewer.js](../../media-viewer.js) (`decodeJxl`, `startJxlAnimation`, `_jxlPending` protocol).
 
@@ -31,19 +31,19 @@
 **Source**: 🟤 Auto-Generated
 **Total SP**: 8 — one branch, one PR, one review
 
-- [ ] **Clear `clipCache` in `loadFolder()`** — 1 SP, 🟠 IMPORTANT (real bug under path-identical filenames across folders)
+- [x] **Clear `clipCache` in `loadFolder()`** — 1 SP, 🟠 IMPORTANT (real bug under path-identical filenames across folders)
   - PR #34 follow-ups (BACKLOG 2026-05-10). `loadFolder()` clears featureCache/featureMetadata/perceptualHashes/predictionScores but never `clipCache` → stale 512-dim vectors can leak across folder switches. One-line fix + test.
-- [ ] **`isLoading` guard on `handleTournamentDraw` + `handleTournamentPick`** — 1 SP
+- [x] **`isLoading` guard on `handleTournamentDraw` + `handleTournamentPick`** — 1 SP
   - PR #41 follow-ups (~75/100, BACKLOG 2026-06-04). Button double-click mid-`showTournamentPair()` fires a second `recordDraw` after `roundQueue` shifted → unhandled `'No active pair to record'` rejection. Add `if (this.isLoading) return;` to both, try/catch belt-and-suspenders.
-- [ ] **`showCompareMedia()` `<2 files` branch exits tournament mode** — 1 SP
+- [x] **`showCompareMedia()` `<2 files` branch exits tournament mode** — 1 SP
   - PR #38 follow-ups (~62/100, BACKLOG 2026-05-28). Guard calls `switchToSingleModeUI()` but leaves `isTournamentMode = true` (tournament keymap + overlay live over single-mode UI). One-line `exitTournamentMode()` before the switch.
-- [ ] **`handleCancel` compare-pair entry-type guard + null `leftMedia`/`rightMedia` in `switchToSingleModeUI()`** — 1 SP
+- [x] **`handleCancel` compare-pair entry-type guard + null `leftMedia`/`rightMedia` in `switchToSingleModeUI()`** — 1 SP
   - PR #40 follow-up (~25) + Group B impl-review follow-up (BACKLOG 2026-06-02 / 2026-06-09). Add `&& lastMove.compareMode` to the compare-pair undo condition; null the two media refs alongside the wrapper teardown. Rider (forced by the guard change): tag the `handleCancel` compare-pair test fixtures with `compareMode: true` (PR #35 follow-up, BACKLOG 2026-05-16 — those fixtures currently omit the flag the new guard consults).
-- [ ] **Reset `clipWorkerReady = false` when `unloadClipModel` fires** — 1 SP
+- [x] **Reset `clipWorkerReady = false` when `unloadClipModel` fires** — 1 SP
   - PR #45 follow-up (BACKLOG 2026-06-10). Stale-true flag makes toggle-on-after-unload skip the eager `initClipModel()` (per-first-call ~1-2s reload latency instead). Reset after the `unloadClipModel()` IPC resolves — which also closes the PR #31 follow-up "`unloadClipModel` fired without await or error handling in timer callback" (BACKLOG 2026-04-28, same 3-line edit: await + `.catch()`/result check). Optional same-site riders if trivial: fire-time `enableClipFeatures` re-check (BACKLOG 2026-04-28) and `CLIP_UNLOAD_DELAY_MS` named constant (BACKLOG 2026-04-21).
-- [ ] **Local-capture pattern in `feature-cache-write-chunk` IPC handler** — 1 SP
+- [x] **Local-capture pattern in `feature-cache-write-chunk` IPC handler** — 1 SP
   - PR #38 follow-up (~75/100, BACKLOG 2026-05-28). `const writer = featureCacheWriter` + null-guard before the `'drain'` await — the documented required pattern for long-running IPC handlers sharing module-level state.
-- [ ] **JXL error-path hardening trio** — 2 SP
+- [x] **JXL error-path hardening trio** — 2 SP
   - Group A impl-review + PR #42 follow-ups (BACKLOG 2026-06-07). (a) `decodeJxl` per-request timeout (mirror `loadMediaAsImageData`'s 15s pattern; reject + delete `_jxlPending` entry); (b) try/catch around the worker `{type:'init'}` branch → structured `{type:'init-error'}`; (c) toast when an entire animation is undecodable (`consecutiveFailures >= frames.length` bail in `drawNext`).
   - Affected: [media-viewer.js](../../media-viewer.js), [jxl-decode-worker.js](../../jxl-decode-worker.js).
 
@@ -92,7 +92,7 @@
 |-------|----|
 | **Group CW-5: Progressive animated-JXL decode** 🏆 | 5 |
 
-- [ ] Frame-0-first streaming worker protocol + incremental `decodeJxl`/`startJxlAnimation` consumption (5 SP)
+- [x] Frame-0-first streaming worker protocol + incremental `decodeJxl`/`startJxlAnimation` consumption (5 SP)
 
 **Daily total**: 5 SP
 
@@ -105,15 +105,15 @@
 |-------|----|
 | **Group CW-1: Renderer correctness guards** [batch] | 8 |
 
-- [ ] `clipCache` clear in `loadFolder()` (1 SP)
-- [ ] Tournament `isLoading` guards — draw + pick (1 SP)
-- [ ] `showCompareMedia` `<2 files` → `exitTournamentMode()` (1 SP)
-- [ ] `handleCancel` entry-type guard + `leftMedia`/`rightMedia` nulling (1 SP)
-- [ ] `clipWorkerReady` reset on unload (1 SP)
-- [ ] `feature-cache-write-chunk` local-capture (1 SP)
-- [ ] JXL error-path hardening trio: decode timeout, init try/catch, whole-animation-bail toast (2 SP)
+- [x] `clipCache` clear in `loadFolder()` (1 SP)
+- [x] Tournament `isLoading` guards — draw + pick (1 SP)
+- [x] `showCompareMedia` `<2 files` → `exitTournamentMode()` (1 SP) — fixed at both `showCompareMedia` AND `_retryCompareAfterRemoval`
+- [x] `handleCancel` entry-type guard + `leftMedia`/`rightMedia` nulling (1 SP)
+- [x] `clipWorkerReady` reset on unload (1 SP) — `_handleClipUnloadTimer` + `CLIP_UNLOAD_DELAY_MS`
+- [x] `feature-cache-write-chunk` local-capture (1 SP)
+- [x] JXL error-path hardening trio: decode timeout, init try/catch, whole-animation-bail toast (2 SP)
 
-**Daily total**: 8 SP
+**Daily total**: 8 SP — ✅ **Complete 2026-06-14** (PR pending; 310→326 unit, 42/43 E2E)
 
 ---
 
@@ -172,8 +172,8 @@
 
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
-| CW-5: Progressive JXL decode 🏆 | JS logic (decode worker) | 🔵 User | 1 | 5 | Mon | Planned |
-| CW-1: Renderer correctness guards [batch] | JS logic (defensive) | 🟤 Auto | 7 | 8 | Tue | Planned |
+| CW-5: Progressive JXL decode 🏆 | JS logic (decode worker) | 🔵 User | 1 | 5 | Mon | ✅ Complete (PR #47) |
+| CW-1: Renderer correctness guards [batch] | JS logic (defensive) | 🟤 Auto | 7 | 8 | Tue | ✅ Complete (2026-06-14) |
 | CW-2: Test backfill [batch] | Testing | 🟤 Auto | 2 | 4 | Wed | Planned |
 | CW-3: Docs & backlog hygiene [batch] | Docs / planning | 🟤 Auto | 3 | 4 | Thu | Planned |
 | CW-4: Process & security guards [batch] | Ops / process | 🟡 Ops | 2 | 3 | Fri | Planned |

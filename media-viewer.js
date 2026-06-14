@@ -53,6 +53,8 @@ const ACTION_LABELS = {
     bothLose: 'Both lose (tie down)',
 };
 
+const CLIP_UNLOAD_DELAY_MS = 30000; // grace period before unloading the CLIP model after extraction
+
 // MinHeap (Priority Queue) for efficient MST construction
 class MinHeap {
     constructor(compareFunc = (a, b) => a.distance - b.distance) {
@@ -937,6 +939,12 @@ class MediaViewer {
             this._jxlRejectReady = null;
             return;
         }
+        if (m.type === 'init-error') {
+            if (this._jxlRejectReady) this._jxlRejectReady(new Error(m.message));
+            this._jxlResolveReady = null; // init settled (failed) — drop the resolver refs
+            this._jxlRejectReady = null;
+            return;
+        }
         const pending = this._jxlPending.get(m.id);
         if (!pending) return;
         if (m.type === 'meta') {
@@ -1013,10 +1021,24 @@ class MediaViewer {
         // meta + the first 'frame' message arrive. The entry's frames array keeps growing
         // in place afterwards; entry.whenComplete settles when the stream finishes.
         const entry = await new Promise((resolve, reject) => {
+            // Guard the frame-0 wait: if the worker never streams a first frame (hang),
+            // reject + drop the pending entry rather than wait forever. Mirrors
+            // loadMediaAsImageData's 15s pattern. whenComplete (later frames) stays
+            // unbounded — a stall there merely leaves frame 0 displayed static.
+            const timer = setTimeout(() => {
+                this._jxlPending.delete(id);
+                reject(new Error('JXL decode timeout'));
+            }, 15000);
             this._jxlPending.set(id, {
                 entry: null,
-                resolveFirst: resolve,
-                rejectFirst: reject,
+                resolveFirst: (val) => {
+                    clearTimeout(timer);
+                    resolve(val);
+                },
+                rejectFirst: (err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                },
                 resolveComplete: null,
                 rejectComplete: null,
             });
@@ -1124,7 +1146,13 @@ class MediaViewer {
                 } catch (_e) {
                     // Skip a single corrupt frame and keep playing; bail only if an entire pass fails.
                     consecutiveFailures++;
-                    if (consecutiveFailures >= decoded.frames.length) return; // whole animation undecodable
+                    if (consecutiveFailures >= decoded.frames.length) {
+                        // Whole animation undecodable — surface it instead of freezing silently.
+                        // drawNext is not re-scheduled after this return, so it fires at most once.
+                        this._jxlAnimTimer = null; // loop is stopping; mirror stopJxlAnimation housekeeping
+                        this.showNotification('Could not play animation — showing first frame', 'warning');
+                        return;
+                    }
                     if (!advance()) return;
                     this._jxlAnimTimer = setTimeout(drawNext, delay);
                     return;
@@ -2705,6 +2733,7 @@ class MediaViewer {
             this.originalMediaFiles = [];
             this.perceptualHashes.clear();
             this.featureCache.clear();
+            this.clipCache.clear();
             this.featureMetadata.clear();
             this.predictionScores.clear();
             // Cancel any ongoing background extraction
@@ -3032,6 +3061,7 @@ class MediaViewer {
     // mediaNavigationInProgress / hidden the spinner before calling this.
     async _retryCompareAfterRemoval(retryCount) {
         if (this.mediaFiles.length < 2) {
+            if (this.isTournamentMode) this.exitTournamentMode();
             this.switchToSingleModeUI();
             if (this.mediaFiles.length === 1) {
                 this.showNotification('Not enough files for compare mode', 'info');
@@ -3062,6 +3092,7 @@ class MediaViewer {
                 await this.cleanupCompareMedia('right');
             }
             // switchToSingleModeUI() tears down the stale compare wrappers.
+            if (this.isTournamentMode) this.exitTournamentMode();
             this.switchToSingleModeUI();
 
             if (this.mediaFiles.length === 1) {
@@ -4020,7 +4051,7 @@ class MediaViewer {
                 this.showError(`Failed to undo move: ${error.message}`);
                 this.moveHistory.push(lastMove);
             }
-        } else if (this.isCompareMode && this.moveHistory.length >= 2) {
+        } else if (this.isCompareMode && lastMove.compareMode && this.moveHistory.length >= 2) {
             // In compare mode, restore both files (last two moves from like/dislike)
             const secondMove = this.moveHistory.pop();
             const firstMove = this.moveHistory.pop();
@@ -4227,6 +4258,10 @@ class MediaViewer {
                 this[key] = null;
             }
         }
+        // The media element refs are owned by the (now-removed) wrappers; null them
+        // too so stale compare elements can't be reused after exit-to-single.
+        this.leftMedia = null;
+        this.rightMedia = null;
         this.hidePredictionBadges();
         this.closeAllZoomPopovers();
     }
@@ -4647,23 +4682,35 @@ class MediaViewer {
     }
 
     async handleTournamentPick(winner, loser) {
-        if (!this.isTournamentMode) return;
+        if (!this.isTournamentMode || this.isLoading) return;
         this.signalUserActivity();
-        await this.tournament.handlePairResult(winner, loser);
+        try {
+            await this.tournament.handlePairResult(winner, loser);
+        } catch (err) {
+            window.electronAPI.logError('Tournament pick failed: ' + (err && err.message ? err.message : err));
+        }
         await this.showTournamentPair();
     }
 
     async handleTournamentDraw(outcome) {
-        if (!this.isTournamentMode || !this.tournament.engine) return;
+        if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
         this.signalUserActivity();
         const pair = this.tournament.engine.getCurrentPair();
         if (!pair) return;
-        await this.tournament.handlePairDraw(pair.left, pair.right, outcome);
-        if (this.showRatingConfirmations) {
-            this.showNotification(
-                outcome === 'win' ? '🤝 Both advance (tie)' : '👎 Both stay (tie)',
-                outcome === 'win' ? 'success' : 'info'
-            );
+        try {
+            await this.tournament.handlePairDraw(pair.left, pair.right, outcome);
+            // Confirmation toast lives INSIDE the try: only show "recorded" after the
+            // draw actually persisted. A thrown record (e.g. stale pair) must NOT show a
+            // false success toast — it falls to the catch, and showTournamentPair below
+            // still advances the UI regardless.
+            if (this.showRatingConfirmations) {
+                this.showNotification(
+                    outcome === 'win' ? '🤝 Both advance (tie)' : '👎 Both stay (tie)',
+                    outcome === 'win' ? 'success' : 'info'
+                );
+            }
+        } catch (err) {
+            window.electronAPI.logError('Tournament draw failed: ' + (err && err.message ? err.message : err));
         }
         await this.showTournamentPair();
     }
@@ -8699,10 +8746,25 @@ class MediaViewer {
         // at the start of startBackgroundFeatureExtraction(). The existing
         // loadClipModel() lazy path re-loads transparently on next CLIP IPC.
         if (this.enableClipFeatures) {
-            this.clipUnloadTimer = setTimeout(() => {
-                window.electronAPI.unloadClipModel();
-                this.clipUnloadTimer = null;
-            }, 30000);
+            this.clipUnloadTimer = setTimeout(() => this._handleClipUnloadTimer(), CLIP_UNLOAD_DELAY_MS);
+        }
+    }
+
+    // Timer callback: unload the CLIP model after the idle grace window. Re-checks
+    // enableClipFeatures at fire time (toggle-off during the window cancels the unload),
+    // awaits the IPC + handles errors, and only resets clipWorkerReady on a SUCCESSFUL
+    // unload — the IPC returns { success:false, reason:'loading' } when a load is in
+    // flight, in which case the model stays resident and the flag must stay true.
+    async _handleClipUnloadTimer() {
+        this.clipUnloadTimer = null;
+        if (!this.enableClipFeatures) return;
+        try {
+            const result = await window.electronAPI.unloadClipModel();
+            if (result && result.success) {
+                this.clipWorkerReady = false;
+            }
+        } catch (err) {
+            window.electronAPI.logError('CLIP model unload failed: ' + (err && err.message ? err.message : err));
         }
     }
 

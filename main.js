@@ -504,18 +504,23 @@ app.whenReady().then(() => {
         }
     });
     ipcMain.handle('feature-cache-write-chunk', async (_event, entries) => {
-        if (!featureCacheWriter) return { success: false, error: 'no open writer' };
+        // Capture the module-level writer into a local so a concurrent
+        // feature-cache-write-open swapping/destroying it during the 'drain'
+        // await cannot make us operate on stale state (documented required
+        // pattern for long-running IPC handlers; mirrors the close handler).
+        const writer = featureCacheWriter;
+        if (!writer) return { success: false, error: 'no open writer' };
         try {
             let buf = '';
             for (const [key, value] of entries) {
-                buf += (featureCacheWriter.first ? '' : ',') + JSON.stringify(key) + ':' + JSON.stringify(value);
-                featureCacheWriter.first = false;
+                buf += (writer.first ? '' : ',') + JSON.stringify(key) + ':' + JSON.stringify(value);
+                writer.first = false;
             }
             if (buf) {
                 // Respect backpressure so a slow disk can't balloon the write buffer.
-                const ok = featureCacheWriter.stream.write(buf);
+                const ok = writer.stream.write(buf);
                 if (!ok) {
-                    await new Promise((resolve) => featureCacheWriter.stream.once('drain', resolve));
+                    await new Promise((resolve) => writer.stream.once('drain', resolve));
                 }
             }
             return { success: true };

@@ -943,6 +943,7 @@ describe('handleCancel feature restore', () => {
                     fileSize: 100,
                     fileType: 'image/png',
                     actionType: 'like',
+                    compareMode: true,
                     mlFeatures: Array.from(make576()),
                 },
                 {
@@ -952,6 +953,7 @@ describe('handleCancel feature restore', () => {
                     fileSize: 200,
                     fileType: 'image/png',
                     actionType: 'dislike',
+                    compareMode: true,
                     mlFeatures: Array.from(make64()),
                 },
             ],
@@ -968,6 +970,45 @@ describe('handleCancel feature restore', () => {
         // Two reverseUpdate calls
         const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
         expect(reverseCalls.length).toBe(2);
+    });
+
+    it('does NOT take the compare-pair branch when the last move lacks compareMode (leftover single move)', async () => {
+        const ctx = commonMocks({
+            isCompareMode: true,
+            moveHistory: [
+                // An older compare-pair entry (compareMode set)…
+                {
+                    fileName: 'old.png',
+                    originalPath: '/folder/old.png',
+                    newPath: '/folder/like/old.png',
+                    fileSize: 50,
+                    fileType: 'image/png',
+                    actionType: 'like',
+                    compareMode: true,
+                    mlFeatures: Array.from(make64()),
+                },
+                // …and a leftover SINGLE-mode move on top (no compareMode flag).
+                {
+                    fileName: 'single.png',
+                    originalPath: '/folder/single.png',
+                    newPath: '/folder/dislike/single.png',
+                    fileSize: 60,
+                    fileType: 'image/png',
+                    actionType: 'dislike',
+                    mlFeatures: Array.from(make64()),
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        // The single-move (non-compare) branch pops exactly ONE entry, leaving the
+        // older compare-pair entry intact. The pre-fix two-entry pop would have
+        // drained the history to length 0 and restored 'old.png'.
+        expect(ctx.moveHistory.length).toBe(1);
+        expect(ctx.moveHistory[0].fileName).toBe('old.png');
+        expect(ctx.featureCache.has('/folder/old.png')).toBe(false);
+        expect(ctx.featureCache.has('/folder/single.png')).toBe(true);
     });
 
     it('special-move undo (compare mode) restores featureCache and calls requestPredictionScores when sorted-by-prediction', async () => {
@@ -1467,6 +1508,23 @@ describe('decodeJxl', () => {
         expect(entry.frames).toHaveLength(1); // frame 0 kept — static fallback material
         expect(ctx.jxlFrameCache.get('anim.gif.jxl')).toBe(entry); // entry NOT purged
     });
+
+    it('rejects after 15s and deletes the pending entry if frame 0 never arrives', async () => {
+        vi.useFakeTimers();
+        try {
+            // Worker that accepts the decode message but never streams a reply.
+            const silentWorker = { addEventListener: () => {}, postMessage: vi.fn() };
+            const ctx = makeJxlCtx(silentWorker);
+            const p = decodeJxl.call(ctx, 'hang.jxl');
+            const assertion = expect(p).rejects.toThrow('JXL decode timeout');
+            // Flush the pre-timer awaits (ensureJxlWorker + readFileBuffer), then trip the timeout.
+            await vi.advanceTimersByTimeAsync(15000);
+            await assertion;
+            expect(ctx._jxlPending.size).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });
 
 describe('_handleJxlWorkerMessage', () => {
@@ -1576,6 +1634,21 @@ describe('_handleJxlWorkerMessage', () => {
         expect(pending.rejectFirst).not.toHaveBeenCalled();
         expect(ctx._jxlPending.size).toBe(1);
     });
+
+    it('init-error rejects the _jxlReady init promise and nulls the resolver refs', () => {
+        const rejectReady = vi.fn();
+        const ctx = {
+            _jxlPending: new Map(),
+            _rejectJxlPending: rejectPending,
+            _jxlResolveReady: vi.fn(),
+            _jxlRejectReady: rejectReady,
+        };
+        handle.call(ctx, { type: 'init-error', message: 'wasm load failed' });
+        expect(rejectReady).toHaveBeenCalledTimes(1);
+        expect(rejectReady.mock.calls[0][0].message).toBe('wasm load failed');
+        expect(ctx._jxlRejectReady).toBe(null);
+        expect(ctx._jxlResolveReady).toBe(null);
+    });
 });
 
 describe('startJxlAnimation frame-0-first', () => {
@@ -1604,6 +1677,7 @@ describe('startJxlAnimation frame-0-first', () => {
             _jxlAnimToken: null,
             _jxlAnimTimer: null,
             currentMedia: null,
+            showNotification: vi.fn(),
             computeJxlFrameSchedule: (frames) => frames.map(() => 20),
         };
     }
@@ -1693,6 +1767,31 @@ describe('startJxlAnimation frame-0-first', () => {
         await new Promise((r) => setTimeout(r, 10)); // give a superseded loop time to (wrongly) start
         expect(drawCtx.drawImage).toHaveBeenCalledTimes(1); // no further draws
         expect(ctx._jxlAnimTimer).toBeFalsy();
+    });
+
+    it('toasts once when the entire animation is undecodable', async () => {
+        const ctx = makeCtx();
+        // Every frame fails to decode -> consecutiveFailures reaches frames.length -> bail.
+        globalThis.createImageBitmap = vi.fn(async () => {
+            throw new Error('decode fail');
+        });
+        const decoded = {
+            frames: [frame(0), frame(1)],
+            width: 4,
+            height: 4,
+            animated: true,
+            numLoops: 0,
+            frameCount: 2,
+            complete: true,
+        };
+        // Set after construction (the literal can't self-reference `decoded`); resolved so
+        // runWhenBuffered passes the buffering gate and the drawNext loop starts.
+        decoded.whenComplete = Promise.resolve(decoded);
+        await startJxlAnimation.call(ctx, decoded);
+        await vi.waitFor(() => expect(ctx.showNotification).toHaveBeenCalledTimes(1));
+        expect(ctx.showNotification.mock.calls[0][0]).toMatch(/first frame/i);
+        expect(ctx.showNotification.mock.calls[0][1]).toBe('warning');
+        ctx._jxlAnimToken = null; // teardown
     });
 });
 
@@ -1808,5 +1907,213 @@ describe('switchToSingleModeUI wrapper teardown', () => {
         expect(ctx.fullscreen.cleanup).not.toHaveBeenCalled();
         expect(ctx.leftMediaWrapper).toBeNull();
         expect(ctx.rightMediaWrapper).toBeNull();
+    });
+});
+
+describe('tournament isLoading guards (Fix 2)', () => {
+    const handleTournamentDraw = extractAsyncMethod('handleTournamentDraw');
+    const handleTournamentPick = extractAsyncMethod('handleTournamentPick');
+
+    function makeCtx(overrides = {}) {
+        return {
+            isTournamentMode: true,
+            isLoading: false,
+            showRatingConfirmations: false,
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            showTournamentPair: vi.fn(async () => {}),
+            tournament: {
+                engine: { getCurrentPair: () => ({ left: 'L', right: 'R' }) },
+                handlePairDraw: vi.fn(async () => {}),
+                handlePairResult: vi.fn(async () => {}),
+            },
+            ...overrides,
+        };
+    }
+
+    it('handleTournamentDraw no-ops while isLoading', async () => {
+        const ctx = makeCtx({ isLoading: true });
+        await handleTournamentDraw.call(ctx, 'win');
+        expect(ctx.tournament.handlePairDraw).not.toHaveBeenCalled();
+        expect(ctx.signalUserActivity).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled(); // guard runs BEFORE any UI advance
+    });
+
+    it('handleTournamentDraw records the draw when not loading', async () => {
+        const ctx = makeCtx();
+        await handleTournamentDraw.call(ctx, 'win');
+        expect(ctx.tournament.handlePairDraw).toHaveBeenCalledWith('L', 'R', 'win');
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+    });
+
+    it('handleTournamentDraw still advances (showTournamentPair) when the record call throws, with NO false success toast', async () => {
+        // The central guarantee of the try/catch: a stale-pair throw is logged, not
+        // left unhandled, and the UI still advances. (BACKLOG PR #41 root cause.)
+        // PR #48 review: the success toast must NOT fire on a thrown record — that
+        // would be a false confirmation. showRatingConfirmations is on here to prove
+        // the toast is suppressed precisely when the draw failed.
+        const ctx = makeCtx({ showRatingConfirmations: true });
+        ctx.tournament.handlePairDraw = vi.fn(async () => {
+            throw new Error('No active pair to record');
+        });
+        const origWindow = globalThis.window;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+        try {
+            await handleTournamentDraw.call(ctx, 'win');
+            expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(
+                expect.stringContaining('Tournament draw failed')
+            );
+            expect(ctx.showNotification).not.toHaveBeenCalled(); // no false "recorded" toast
+            expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+        } finally {
+            globalThis.window = origWindow;
+        }
+    });
+
+    it('handleTournamentPick no-ops while isLoading', async () => {
+        const ctx = makeCtx({ isLoading: true });
+        await handleTournamentPick.call(ctx, 'L', 'R');
+        expect(ctx.tournament.handlePairResult).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+});
+
+describe('loadFolder cache reset (Fix 1)', () => {
+    it('clears clipCache alongside the other per-folder caches', () => {
+        // Slice the loadFolder reset block. Anchor the start INSIDE loadFolder — a
+        // folder-watch callback earlier in the file also calls perceptualHashes.clear(),
+        // and a bare indexOf would match that first and slice an ~820-line window.
+        const start = source.indexOf('this.perceptualHashes.clear();', source.indexOf('async loadFolder('));
+        const end = source.indexOf('this.cancelBackgroundExtraction();', start);
+        expect(start).toBeGreaterThan(-1);
+        expect(end).toBeGreaterThan(start);
+        const block = source.slice(start, end);
+        for (const cache of [
+            'this.perceptualHashes.clear();',
+            'this.featureCache.clear();',
+            'this.featureMetadata.clear();',
+            'this.predictionScores.clear();',
+            'this.clipCache.clear();',
+        ]) {
+            expect(block).toContain(cache);
+        }
+    });
+});
+
+describe('<2-files fallback exits tournament mode (Fix 3)', () => {
+    const retryCompareAfterRemoval = extractAsyncMethod('_retryCompareAfterRemoval');
+    const showCompareMedia = extractAsyncMethod('showCompareMedia');
+
+    function baseCtx(overrides = {}) {
+        return {
+            isTournamentMode: true,
+            mediaFiles: [{ path: '/a.png' }], // length 1 -> triggers the <2 branch
+            moveHistory: [],
+            leftMedia: null,
+            rightMedia: null,
+            currentIndex: 0,
+            exitTournamentMode: vi.fn(),
+            switchToSingleModeUI: vi.fn(),
+            showNotification: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            showEmptyStateWithUndo: vi.fn(),
+            showDropZone: vi.fn(),
+            cleanupCompareMedia: vi.fn(async () => {}),
+            ...overrides,
+        };
+    }
+
+    it('_retryCompareAfterRemoval exits tournament before switching to single', async () => {
+        const ctx = baseCtx();
+        await retryCompareAfterRemoval.call(ctx, 0);
+        expect(ctx.exitTournamentMode).toHaveBeenCalledTimes(1);
+        expect(ctx.switchToSingleModeUI).toHaveBeenCalledTimes(1);
+        // Order matters: tournament state must be torn down before the UI switches.
+        expect(ctx.exitTournamentMode.mock.invocationCallOrder[0]).toBeLessThan(
+            ctx.switchToSingleModeUI.mock.invocationCallOrder[0]
+        );
+    });
+
+    it('showCompareMedia <2 branch exits tournament before switching to single', async () => {
+        const ctx = baseCtx();
+        await showCompareMedia.call(ctx, 0);
+        expect(ctx.exitTournamentMode).toHaveBeenCalledTimes(1);
+        expect(ctx.switchToSingleModeUI).toHaveBeenCalledTimes(1);
+        expect(ctx.exitTournamentMode.mock.invocationCallOrder[0]).toBeLessThan(
+            ctx.switchToSingleModeUI.mock.invocationCallOrder[0]
+        );
+    });
+
+    it('does not call exitTournamentMode when not in tournament mode', async () => {
+        const ctx = baseCtx({ isTournamentMode: false });
+        await retryCompareAfterRemoval.call(ctx, 0);
+        expect(ctx.exitTournamentMode).not.toHaveBeenCalled();
+        expect(ctx.switchToSingleModeUI).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('CLIP unload timer callback (Fix 5)', () => {
+    const handleClipUnloadTimer = extractAsyncMethod('_handleClipUnloadTimer');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function makeCtx(overrides = {}) {
+        return {
+            enableClipFeatures: true,
+            clipWorkerReady: true,
+            clipUnloadTimer: 123,
+            ...overrides,
+        };
+    }
+
+    it('resets clipWorkerReady on a successful unload', async () => {
+        globalThis.window = {
+            electronAPI: { unloadClipModel: vi.fn(async () => ({ success: true })), logError: vi.fn() },
+        };
+        const ctx = makeCtx();
+        await handleClipUnloadTimer.call(ctx);
+        expect(globalThis.window.electronAPI.unloadClipModel).toHaveBeenCalledTimes(1);
+        expect(ctx.clipWorkerReady).toBe(false);
+        expect(ctx.clipUnloadTimer).toBe(null);
+    });
+
+    it('keeps clipWorkerReady true when the IPC reports loading', async () => {
+        globalThis.window = {
+            electronAPI: {
+                unloadClipModel: vi.fn(async () => ({ success: false, reason: 'loading' })),
+                logError: vi.fn(),
+            },
+        };
+        const ctx = makeCtx();
+        await handleClipUnloadTimer.call(ctx);
+        expect(ctx.clipWorkerReady).toBe(true);
+    });
+
+    it('skips the unload when CLIP was disabled during the grace window', async () => {
+        globalThis.window = { electronAPI: { unloadClipModel: vi.fn(), logError: vi.fn() } };
+        const ctx = makeCtx({ enableClipFeatures: false });
+        await handleClipUnloadTimer.call(ctx);
+        expect(globalThis.window.electronAPI.unloadClipModel).not.toHaveBeenCalled();
+        expect(ctx.clipUnloadTimer).toBe(null);
+    });
+
+    it('logs and does not throw when the unload IPC rejects', async () => {
+        globalThis.window = {
+            electronAPI: {
+                unloadClipModel: vi.fn(async () => {
+                    throw new Error('ipc boom');
+                }),
+                logError: vi.fn(),
+            },
+        };
+        const ctx = makeCtx();
+        await handleClipUnloadTimer.call(ctx);
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalled();
+        expect(ctx.clipWorkerReady).toBe(true); // not reset on failure
     });
 });
