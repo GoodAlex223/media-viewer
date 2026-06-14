@@ -3033,6 +3033,7 @@ class MediaViewer {
     // mediaNavigationInProgress / hidden the spinner before calling this.
     async _retryCompareAfterRemoval(retryCount) {
         if (this.mediaFiles.length < 2) {
+            if (this.isTournamentMode) this.exitTournamentMode();
             this.switchToSingleModeUI();
             if (this.mediaFiles.length === 1) {
                 this.showNotification('Not enough files for compare mode', 'info');
@@ -3063,6 +3064,7 @@ class MediaViewer {
                 await this.cleanupCompareMedia('right');
             }
             // switchToSingleModeUI() tears down the stale compare wrappers.
+            if (this.isTournamentMode) this.exitTournamentMode();
             this.switchToSingleModeUI();
 
             if (this.mediaFiles.length === 1) {

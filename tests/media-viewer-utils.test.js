@@ -1896,3 +1896,55 @@ describe('loadFolder cache reset (Fix 1)', () => {
         }
     });
 });
+
+describe('<2-files fallback exits tournament mode (Fix 3)', () => {
+    const retryCompareAfterRemoval = extractAsyncMethod('_retryCompareAfterRemoval');
+    const showCompareMedia = extractAsyncMethod('showCompareMedia');
+
+    function baseCtx(overrides = {}) {
+        return {
+            isTournamentMode: true,
+            mediaFiles: [{ path: '/a.png' }], // length 1 -> triggers the <2 branch
+            moveHistory: [],
+            leftMedia: null,
+            rightMedia: null,
+            currentIndex: 0,
+            exitTournamentMode: vi.fn(),
+            switchToSingleModeUI: vi.fn(),
+            showNotification: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            showEmptyStateWithUndo: vi.fn(),
+            showDropZone: vi.fn(),
+            cleanupCompareMedia: vi.fn(async () => {}),
+            ...overrides,
+        };
+    }
+
+    it('_retryCompareAfterRemoval exits tournament before switching to single', async () => {
+        const ctx = baseCtx();
+        await retryCompareAfterRemoval.call(ctx, 0);
+        expect(ctx.exitTournamentMode).toHaveBeenCalledTimes(1);
+        expect(ctx.switchToSingleModeUI).toHaveBeenCalledTimes(1);
+        // Order matters: tournament state must be torn down before the UI switches.
+        expect(ctx.exitTournamentMode.mock.invocationCallOrder[0]).toBeLessThan(
+            ctx.switchToSingleModeUI.mock.invocationCallOrder[0]
+        );
+    });
+
+    it('showCompareMedia <2 branch exits tournament before switching to single', async () => {
+        const ctx = baseCtx();
+        await showCompareMedia.call(ctx, 0);
+        expect(ctx.exitTournamentMode).toHaveBeenCalledTimes(1);
+        expect(ctx.switchToSingleModeUI).toHaveBeenCalledTimes(1);
+        expect(ctx.exitTournamentMode.mock.invocationCallOrder[0]).toBeLessThan(
+            ctx.switchToSingleModeUI.mock.invocationCallOrder[0]
+        );
+    });
+
+    it('does not call exitTournamentMode when not in tournament mode', async () => {
+        const ctx = baseCtx({ isTournamentMode: false });
+        await retryCompareAfterRemoval.call(ctx, 0);
+        expect(ctx.exitTournamentMode).not.toHaveBeenCalled();
+        expect(ctx.switchToSingleModeUI).toHaveBeenCalledTimes(1);
+    });
+});
