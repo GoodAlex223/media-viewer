@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-06-14 (Group CW-1 renderer correctness guards shipped — **14** constituent 🟤 entries checked off across PR #34/#38/#40/#41/#42/#45 + Group A/B impl-review + Group E sections; +2 🟤 [2026-06-14] CW-1 implementation-review follow-ups: `init-error` worker-teardown/retry gap, pre-existing `no-shadow` lint warning)
+**Last Updated**: 2026-06-14 (PR #48 Group CW-1 renderer correctness guards **merged** into `main` in `5dbe3ce`; post-merge `/code-review` posted "No issues found" — the lone scored-75 finding (false draw-success toast) was folded into the PR pre-merge in `19f5a10`, not deferred; +2 🟤 [2026-06-14] PR #48 post-merge follow-ups: positive-path draw-toast test, narrow the tournament record try/catch. Earlier same day: Group CW-1 shipped — **14** constituent 🟤 entries checked off across PR #34/#38/#40/#41/#42/#45 + Group A/B impl-review + Group E sections; +2 🟤 [2026-06-14] CW-1 implementation-review follow-ups: `init-error` worker-teardown/retry gap, pre-existing `no-shadow` lint warning)
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -189,6 +189,13 @@ two tasks because they have different shapes (architectural vs. visual).
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-06-14] PR #48 post-merge review follow-ups (2 items)
+
+**Origin**: `/code-review` pass on PR #48 (Group CW-1 renderer correctness guards, merged into `main` in `5dbe3ce`). Five-agent review + per-issue confidence scoring surfaced two candidates: a false draw-success toast (scored 75) and the `init-error` worker-teardown gap (scored 25). The 75 finding was a regression *introduced by* CW-1's own Fix 2, so it was folded into the PR before merge in `19f5a10` (toast moved inside the `try`; error-path test strengthened) rather than deferred — re-reviewed and confirmed LGTM ([comment](https://github.com/GoodAlex223/media-viewer/pull/48#issuecomment-4702107951)). The 25 finding is already tracked as the first item under `[2026-06-14] Group CW-1 implementation-review follow-ups` (below) and is not re-filed. The two items below are net-new hygiene observations surfaced *while verifying* the `19f5a10` fix.
+
+- [ ] **No positive-path test that the draw confirmation toast fires on a successful draw** — `19f5a10` added a negative-path assertion (`handleTournamentDraw still advances ... with NO false success toast` runs with `showRatingConfirmations: true` and asserts `showNotification` is *not* called on a thrown record), but the success-path test (`handleTournamentDraw records the draw when not loading`) runs with the default `showRatingConfirmations: false`, so nothing asserts the `'🤝 Both advance (tie)'` / `'👎 Both stay (tie)'` toast actually fires on a *successful* draw when confirmations are on. The toast now lives inside the `try` after the `await`, so a future refactor could silently drop it with no test failing. Add a success-path case with `showRatingConfirmations: true` asserting `showNotification` is called once with the win/lose copy. Effort: XS. Affected: [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js) (`tournament isLoading guards (Fix 2)`).
+- [ ] **`handleTournamentDraw` / `handleTournamentPick` try/catch swallows *all* errors, not just the stale-pair race** — Fix 2 wraps the record call in `try { await … } catch (err) { logError(…) }` and then calls `showTournamentPair()` unconditionally outside the catch, so the UI always advances. This is intentional for the known stale-pair double-click error (`'No active pair to record'`), but the broad catch means a genuinely unexpected error (e.g. engine-state corruption) is also logged-and-swallowed while the UI advances as if the record succeeded — masking it. Consider narrowing the catch to the known stale-pair condition (rethrow others), or at least documenting that all record errors are intentionally treated as non-fatal. Effort: XS-S. Affected: [media-viewer.js](../../media-viewer.js) (`handleTournamentDraw`, `handleTournamentPick`).
 
 ### [2026-06-14] Group CW-1 (renderer correctness guards) implementation-review follow-ups (2 items)
 
