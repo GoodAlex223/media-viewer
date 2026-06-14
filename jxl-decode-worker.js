@@ -3,6 +3,7 @@
 // Protocol in:  { type: 'init', wasmBytes }   (sent once before first decode)
 //               { type: 'decode', id, buffer }
 // Protocol out: { type: 'ready' }
+//               { type: 'init-error', message }   (if wasm init throws; renderer rejects _jxlReady)
 //               { type: 'meta',  id, width, height, animated, numLoops, frameCount }
 //               { type: 'frame', id, index, pngBytes, duration }   (one per frame, transferable)
 //               { type: 'done',  id }
@@ -14,9 +15,14 @@ let ready = null;
 self.onmessage = async (e) => {
     const msg = e.data;
     if (msg.type === 'init') {
-        ready = init({ module_or_path: new Uint8Array(msg.wasmBytes) });
-        await ready;
-        self.postMessage({ type: 'ready' });
+        try {
+            ready = init({ module_or_path: new Uint8Array(msg.wasmBytes) });
+            await ready;
+            self.postMessage({ type: 'ready' });
+        } catch (err) {
+            ready = null; // allow a later re-init attempt
+            self.postMessage({ type: 'init-error', message: String(err && err.message ? err.message : err) });
+        }
         return;
     }
     if (msg.type !== 'decode') return;

@@ -939,6 +939,12 @@ class MediaViewer {
             this._jxlRejectReady = null;
             return;
         }
+        if (m.type === 'init-error') {
+            if (this._jxlRejectReady) this._jxlRejectReady(new Error(m.message));
+            this._jxlResolveReady = null; // init settled (failed) — drop the resolver refs
+            this._jxlRejectReady = null;
+            return;
+        }
         const pending = this._jxlPending.get(m.id);
         if (!pending) return;
         if (m.type === 'meta') {

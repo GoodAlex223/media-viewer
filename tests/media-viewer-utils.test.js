@@ -1634,6 +1634,21 @@ describe('_handleJxlWorkerMessage', () => {
         expect(pending.rejectFirst).not.toHaveBeenCalled();
         expect(ctx._jxlPending.size).toBe(1);
     });
+
+    it('init-error rejects the _jxlReady init promise and nulls the resolver refs', () => {
+        const rejectReady = vi.fn();
+        const ctx = {
+            _jxlPending: new Map(),
+            _rejectJxlPending: rejectPending,
+            _jxlResolveReady: vi.fn(),
+            _jxlRejectReady: rejectReady,
+        };
+        handle.call(ctx, { type: 'init-error', message: 'wasm load failed' });
+        expect(rejectReady).toHaveBeenCalledTimes(1);
+        expect(rejectReady.mock.calls[0][0].message).toBe('wasm load failed');
+        expect(ctx._jxlRejectReady).toBe(null);
+        expect(ctx._jxlResolveReady).toBe(null);
+    });
 });
 
 describe('startJxlAnimation frame-0-first', () => {
