@@ -1149,6 +1149,7 @@ class MediaViewer {
                     if (consecutiveFailures >= decoded.frames.length) {
                         // Whole animation undecodable — surface it instead of freezing silently.
                         // drawNext is not re-scheduled after this return, so it fires at most once.
+                        this._jxlAnimTimer = null; // loop is stopping; mirror stopJxlAnimation housekeeping
                         this.showNotification('Could not play animation — showing first frame', 'warning');
                         return;
                     }
