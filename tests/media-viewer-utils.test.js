@@ -1811,6 +1811,70 @@ describe('switchToSingleModeUI wrapper teardown', () => {
     });
 });
 
+describe('tournament isLoading guards (Fix 2)', () => {
+    const handleTournamentDraw = extractAsyncMethod('handleTournamentDraw');
+    const handleTournamentPick = extractAsyncMethod('handleTournamentPick');
+
+    function makeCtx(overrides = {}) {
+        return {
+            isTournamentMode: true,
+            isLoading: false,
+            showRatingConfirmations: false,
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            showTournamentPair: vi.fn(async () => {}),
+            tournament: {
+                engine: { getCurrentPair: () => ({ left: 'L', right: 'R' }) },
+                handlePairDraw: vi.fn(async () => {}),
+                handlePairResult: vi.fn(async () => {}),
+            },
+            ...overrides,
+        };
+    }
+
+    it('handleTournamentDraw no-ops while isLoading', async () => {
+        const ctx = makeCtx({ isLoading: true });
+        await handleTournamentDraw.call(ctx, 'win');
+        expect(ctx.tournament.handlePairDraw).not.toHaveBeenCalled();
+        expect(ctx.signalUserActivity).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled(); // guard runs BEFORE any UI advance
+    });
+
+    it('handleTournamentDraw records the draw when not loading', async () => {
+        const ctx = makeCtx();
+        await handleTournamentDraw.call(ctx, 'win');
+        expect(ctx.tournament.handlePairDraw).toHaveBeenCalledWith('L', 'R', 'win');
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+    });
+
+    it('handleTournamentDraw still advances (showTournamentPair) when the record call throws', async () => {
+        // The central guarantee of the try/catch: a stale-pair throw is logged, not
+        // left unhandled, and the UI still advances. (BACKLOG PR #41 root cause.)
+        const ctx = makeCtx();
+        ctx.tournament.handlePairDraw = vi.fn(async () => {
+            throw new Error('No active pair to record');
+        });
+        const origWindow = globalThis.window;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+        try {
+            await handleTournamentDraw.call(ctx, 'win');
+            expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(
+                expect.stringContaining('Tournament draw failed')
+            );
+            expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+        } finally {
+            globalThis.window = origWindow;
+        }
+    });
+
+    it('handleTournamentPick no-ops while isLoading', async () => {
+        const ctx = makeCtx({ isLoading: true });
+        await handleTournamentPick.call(ctx, 'L', 'R');
+        expect(ctx.tournament.handlePairResult).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+});
+
 describe('loadFolder cache reset (Fix 1)', () => {
     it('clears clipCache alongside the other per-folder caches', () => {
         // Slice the loadFolder reset block. Anchor the start INSIDE loadFolder — a

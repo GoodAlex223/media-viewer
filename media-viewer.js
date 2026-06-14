@@ -4648,18 +4648,26 @@ class MediaViewer {
     }
 
     async handleTournamentPick(winner, loser) {
-        if (!this.isTournamentMode) return;
+        if (!this.isTournamentMode || this.isLoading) return;
         this.signalUserActivity();
-        await this.tournament.handlePairResult(winner, loser);
+        try {
+            await this.tournament.handlePairResult(winner, loser);
+        } catch (err) {
+            window.electronAPI.logError('Tournament pick failed: ' + (err && err.message ? err.message : err));
+        }
         await this.showTournamentPair();
     }
 
     async handleTournamentDraw(outcome) {
-        if (!this.isTournamentMode || !this.tournament.engine) return;
+        if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
         this.signalUserActivity();
         const pair = this.tournament.engine.getCurrentPair();
         if (!pair) return;
-        await this.tournament.handlePairDraw(pair.left, pair.right, outcome);
+        try {
+            await this.tournament.handlePairDraw(pair.left, pair.right, outcome);
+        } catch (err) {
+            window.electronAPI.logError('Tournament draw failed: ' + (err && err.message ? err.message : err));
+        }
         if (this.showRatingConfirmations) {
             this.showNotification(
                 outcome === 'win' ? '🤝 Both advance (tie)' : '👎 Both stay (tie)',
