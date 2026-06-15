@@ -20,7 +20,10 @@ async function enterAndStartTournament(page, { rounds }) {
         () =>
             window.mediaViewer.isTournamentMode && window.mediaViewer.tournament.engine && !window.mediaViewer.isLoading
     );
-    await expect(page.locator('.left-media-wrapper')).toBeVisible();
+    // Confirm the compare layout rendered. Use toBeAttached (not toBeVisible): the
+    // !isLoading wait above is the real readiness gate, and a wrapper hosting a still-
+    // loading video side can be transiently visibility:hidden, which flakes toBeVisible.
+    await expect(page.locator('.left-media-wrapper')).toBeAttached();
 
     // The config modal focused #tournamentRoundsSelect; drop focus so subsequent
     // page.keyboard presses are not absorbed by the (now hidden) number input.
@@ -163,5 +166,52 @@ test.describe('Tournament Mode', () => {
 
         const stillTournament = await page.evaluate(() => window.mediaViewer.isTournamentMode);
         expect(stillTournament).toBe(true);
+    });
+
+    test('leave-prompt Save persists state; re-enter Continue resumes', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        await enterAndStartTournament(page, { rounds: 2 });
+
+        // Make one pick so there is progress worth saving.
+        await page.keyboard.press('q');
+        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 1);
+        await page.waitForFunction(() => !window.mediaViewer.isLoading);
+
+        // Switching to single while incomplete shows the leave prompt.
+        await page.evaluate(() => window.mediaViewer.switchMode('single'));
+        await expect(page.locator('#tournamentResumeModal')).toBeVisible();
+        expect(await page.locator('#tournamentResumeTitle').textContent()).toBe('Leave tournament?');
+
+        // Save & leave persists state to disk and exits tournament mode.
+        await page.locator('#tournamentResumeAccept').click();
+        await page.waitForFunction(() => !window.mediaViewer.isTournamentMode);
+
+        const saved = await page.evaluate(async () => {
+            const mv = window.mediaViewer;
+            const res = await window.electronAPI.readTournamentState(mv.baseFolderPath);
+            return { success: res.success, hasState: !!res.state, engineNull: mv.tournament.engine === null };
+        });
+        expect(saved.success).toBe(true);
+        expect(saved.hasState).toBe(true);
+        expect(saved.engineNull).toBe(true);
+
+        // Re-entering finds the saved state → Continue prompt.
+        await page.evaluate(() => window.mediaViewer.switchMode('tournament'));
+        await expect(page.locator('#tournamentResumeModal')).toBeVisible();
+        expect(await page.locator('#tournamentResumeTitle').textContent()).toBe('Resume tournament?');
+
+        // Continue rebuilds the engine with history preserved.
+        await page.locator('#tournamentResumeAccept').click();
+        await page.waitForFunction(
+            () =>
+                window.mediaViewer.isTournamentMode &&
+                window.mediaViewer.tournament.engine !== null &&
+                !window.mediaViewer.isLoading
+        );
+        const historyLen = await page.evaluate(() => window.mediaViewer.tournament.engine.history.length);
+        expect(historyLen).toBe(1);
     });
 });
