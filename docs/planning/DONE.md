@@ -56,7 +56,11 @@ tournament E2E coverage tail, vitest command doc note, `toBeAttached` audit). Sp
 [docs/superpowers/specs/2026-06-15-cw-2-test-backfill-design.md](../superpowers/specs/2026-06-15-cw-2-test-backfill-design.md);
 plan archived at [docs/archive/plans/2026-06-15-cw-2-test-backfill.md](../archive/plans/2026-06-15-cw-2-test-backfill.md).
 Branch `cleanup/cw-2-test-backfill` (off `main` `7c4ca6f`); commits `779c887`..`f62c54c` (+ spec `0fbd549`,
-plan `88b554e`).
+plan `88b554e`). **Merged**: PR [#49](https://github.com/GoodAlex223/media-viewer/pull/49) into `main`
+(`--merge`, branch deleted) — merge commit `972e6dd`; post-merge `/code-review` posted "No issues found"
+(no finding ≥80; top candidate the happy-path `!isLoading`-wait consistency nit, 50), +2 🟤 [2026-06-15]
+PR #49 post-merge follow-ups filed (`6532085`): happy-path test `!isLoading` consistency, stale CLAUDE.md
+`app-launch.test.js` `closeApp` note.
 
 ---
 
