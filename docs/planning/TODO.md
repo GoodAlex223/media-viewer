@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-06-14 <!-- Group CW-1: Renderer correctness guards complete -->
+**Last Updated**: 2026-06-15 <!-- Group CW-2: Test backfill complete -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -121,6 +121,17 @@ Active tasks and backlog.
      Plan archived: docs/archive/plans/2026-06-13-cw-1-renderer-correctness-guards.md
      Spec: docs/superpowers/specs/2026-06-13-cw-1-renderer-correctness-guards-design.md
      310→326 unit tests; lint clean; E2E 42/43 (known #viewModeBtn fail, owned by CW-2). -->
+
+<!-- Group CW-2 Test backfill (E2E suite green + first tournament-mode coverage)
+     completed 2026-06-15, moved to DONE.md. Test-only: no production code changed.
+     Part 1: app-launch.test.js #viewModeBtn→#modeSelector (fixes the 1 known-red) +
+     afterEach guard. Part 2: new tests/e2e/tournament-mode.test.js (5 hybrid-driven
+     tests: happy-path Apply→_Tier-N, Both Win, Both Lose, Ctrl+A undo, leave-Save/
+     Continue-resume). Part 3: recordDraw filesSnapshot + pre-undo pair.right assertions.
+     Plan archived: docs/archive/plans/2026-06-15-cw-2-test-backfill.md
+     Spec: docs/superpowers/specs/2026-06-15-cw-2-test-backfill-design.md
+     326 unit (unchanged case count); E2E 42/43→48/48 (suite green). 5 BACKLOG entries
+     checked off; 3 follow-ups filed (🟤 [2026-06-15]). -->
 
 ---
 

@@ -16,7 +16,9 @@ test.describe('App Launch', () => {
     });
 
     test.afterEach(async () => {
-        await closeApp(electronApp);
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
         if (tmpFixtures) {
             await tmpFixtures.cleanup();
             tmpFixtures = null;
@@ -30,7 +32,7 @@ test.describe('App Launch', () => {
         // Controls should be hidden before folder is loaded
         await expect(page.locator('#controls')).toBeHidden();
         await expect(page.locator('#changeFolderBtn')).toBeHidden();
-        await expect(page.locator('#viewModeBtn')).toBeHidden();
+        await expect(page.locator('#modeSelector')).toBeHidden();
         await expect(page.locator('#helpBtn')).toBeHidden();
     });
 
@@ -51,7 +53,7 @@ test.describe('App Launch', () => {
 
         await expect(page.locator('#dropZone')).toBeHidden();
         await expect(page.locator('#changeFolderBtn')).toBeVisible();
-        await expect(page.locator('#viewModeBtn')).toBeVisible();
+        await expect(page.locator('#modeSelector')).toBeVisible();
         await expect(page.locator('#helpBtn')).toBeVisible();
     });
 

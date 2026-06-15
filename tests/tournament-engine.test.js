@@ -211,6 +211,7 @@ describe('TournamentEngine.recordDraw', () => {
         expect(eng.history[0].a).toBe(pair.left);
         expect(eng.history[0].b).toBe(pair.right);
         expect(eng.history[0].strategyStateSnapshot).toBeTruthy();
+        expect(eng.history[0].filesSnapshot).toBeTruthy();
         expect(eng.strategy.winCounts.get(pair.left)).toBe(1);
         expect(eng.strategy.winCounts.get(pair.right)).toBe(1);
     });
@@ -220,6 +221,7 @@ describe('TournamentEngine.recordDraw', () => {
         const pair = eng.getCurrentPair();
         eng.recordDraw(pair.left, pair.right, 'win');
         expect(eng.strategy.winCounts.get(pair.left)).toBe(1);
+        expect(eng.strategy.winCounts.get(pair.right)).toBe(1);
         expect(eng.strategy.gamesPlayed).toBe(1);
 
         eng.undo();
