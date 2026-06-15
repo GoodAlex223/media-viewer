@@ -71,4 +71,66 @@ test.describe('Tournament Mode', () => {
         await expect(access(join(tmpFixtures.dir, '_Tier-1', winnerName))).resolves.toBeUndefined();
         await expect(access(join(tmpFixtures.dir, '_Tier-0', loserName))).resolves.toBeUndefined();
     });
+
+    test('Both Win button records a win-win draw', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        await enterAndStartTournament(page, { rounds: 1 });
+
+        const pair = await page.evaluate(() => {
+            const p = window.mediaViewer.tournament.engine.getCurrentPair();
+            return { left: p.left, right: p.right };
+        });
+
+        await page.locator('#tournamentBothWinBtn').click();
+        await page.waitForFunction(() => window.mediaViewer.tournament.engine?.history.length > 0);
+
+        const draw = await page.evaluate((pr) => {
+            const eng = window.mediaViewer.tournament.engine;
+            return {
+                isDraw: eng.history[0].draw,
+                outcome: eng.history[0].outcome,
+                leftWins: eng.strategy.winCounts.get(pr.left) ?? 0,
+                rightWins: eng.strategy.winCounts.get(pr.right) ?? 0,
+            };
+        }, pair);
+
+        expect(draw.isDraw).toBe(true);
+        expect(draw.outcome).toBe('win');
+        expect(draw.leftWins).toBe(1);
+        expect(draw.rightWins).toBe(1);
+    });
+
+    test('Both Lose via keyboard records a lose-lose draw', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        await enterAndStartTournament(page, { rounds: 1 });
+
+        const pair = await page.evaluate(() => {
+            const p = window.mediaViewer.tournament.engine.getCurrentPair();
+            return { left: p.left, right: p.right };
+        });
+
+        await page.keyboard.press('f');
+        await page.waitForFunction(() => window.mediaViewer.tournament.engine?.history.length > 0);
+
+        const draw = await page.evaluate((pr) => {
+            const eng = window.mediaViewer.tournament.engine;
+            return {
+                isDraw: eng.history[0].draw,
+                outcome: eng.history[0].outcome,
+                leftWins: eng.strategy.winCounts.get(pr.left) ?? 0,
+                rightWins: eng.strategy.winCounts.get(pr.right) ?? 0,
+            };
+        }, pair);
+
+        expect(draw.isDraw).toBe(true);
+        expect(draw.outcome).toBe('lose');
+        expect(draw.leftWins).toBe(0);
+        expect(draw.rightWins).toBe(0);
+    });
 });
