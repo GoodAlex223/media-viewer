@@ -133,4 +133,35 @@ test.describe('Tournament Mode', () => {
         expect(draw.leftWins).toBe(0);
         expect(draw.rightWins).toBe(0);
     });
+
+    test('Ctrl+A undo restores the previous pair after a pick', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        await enterAndStartTournament(page, { rounds: 2 });
+
+        const before = await page.evaluate(() => {
+            const p = window.mediaViewer.tournament.engine.getCurrentPair();
+            return [p.left, p.right].sort();
+        });
+
+        // Pick left winner → records one result and advances to the next pair.
+        await page.keyboard.press('q');
+        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 1);
+        await page.waitForFunction(() => !window.mediaViewer.isLoading);
+
+        // Undo → history empties and the original pair is current again.
+        await page.keyboard.press('Control+a');
+        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 0);
+
+        const after = await page.evaluate(() => {
+            const p = window.mediaViewer.tournament.engine.getCurrentPair();
+            return [p.left, p.right].sort();
+        });
+        expect(after).toEqual(before);
+
+        const stillTournament = await page.evaluate(() => window.mediaViewer.isTournamentMode);
+        expect(stillTournament).toBe(true);
+    });
 });
