@@ -1,5 +1,7 @@
 # Group CW-2: Test Backfill Implementation Plan
 
+**Status: Complete (2026-06-15)** — all 7 tasks shipped on branch `cleanup/cw-2-test-backfill`; 326 unit + 48 E2E green (suite returned from 42/43 to fully green). 5 constituent BACKLOG entries checked off; 3 follow-ups filed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Return the E2E suite to green (fix the stale `#viewModeBtn` assertion) and add the first Playwright coverage for tournament mode, plus strengthen two `recordDraw` unit assertions.
@@ -35,7 +37,7 @@ Verified facts the test code relies on (do not re-derive):
 **Files:**
 - Modify: `tests/tournament-engine.test.js` (inside `describe('TournamentEngine.recordDraw')`, ~lines 202–245)
 
-- [ ] **Step 1: Add `filesSnapshot` assertion to the history-shape test**
+- [x] **Step 1: Add `filesSnapshot` assertion to the history-shape test**
 
 In the test `it('pushes a draw history entry with outcome and a snapshot', …)`, find this line:
 
@@ -49,7 +51,7 @@ Add immediately after it:
         expect(eng.history[0].filesSnapshot).toBeTruthy();
 ```
 
-- [ ] **Step 2: Add symmetric pre-undo `pair.right` win-count assertion**
+- [x] **Step 2: Add symmetric pre-undo `pair.right` win-count assertion**
 
 In the test `it('undo() after a draw restores win counts and the round queue', …)`, find these two lines:
 
@@ -64,17 +66,17 @@ Add a third line directly after them (making the pre-undo check symmetric for bo
         expect(eng.strategy.winCounts.get(pair.right)).toBe(1);
 ```
 
-- [ ] **Step 3: Run the unit file to verify it passes**
+- [x] **Step 3: Run the unit file to verify it passes**
 
-Run: `npx vitest run tests/tournament-engine.test.js`
+Run: `npx vitest run tournament-engine` (substring filter — a full path like `tests/tournament-engine.test.js` is NOT a valid vitest v4 positional filter here and reports "No test suite found"; use the substring form or `npm test` for the whole suite)
 Expected: PASS — `17 tests` (assertions added to existing cases; no new `it()` blocks).
 
-- [ ] **Step 4: Run the full unit suite to confirm no regression**
+- [x] **Step 4: Run the full unit suite to confirm no regression**
 
 Run: `npm test`
 Expected: PASS — `326 passed (326)`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/tournament-engine.test.js
@@ -88,7 +90,7 @@ git commit -m "test(tournament-engine): strengthen recordDraw history-shape asse
 **Files:**
 - Modify: `tests/e2e/app-launch.test.js`
 
-- [ ] **Step 1: Guard the `afterEach` close call**
+- [x] **Step 1: Guard the `afterEach` close call**
 
 Replace this block:
 
@@ -116,7 +118,7 @@ with:
     });
 ```
 
-- [ ] **Step 2: Re-point the initial-launch assertion to `#modeSelector`**
+- [x] **Step 2: Re-point the initial-launch assertion to `#modeSelector`**
 
 In the test `'shows drop zone on initial launch'`, replace:
 
@@ -130,7 +132,7 @@ with:
         await expect(page.locator('#modeSelector')).toBeHidden();
 ```
 
-- [ ] **Step 3: Re-point the loaded-folder assertion to `#modeSelector`**
+- [x] **Step 3: Re-point the loaded-folder assertion to `#modeSelector`**
 
 In the test `'loads folder and hides drop zone'`, replace:
 
@@ -144,12 +146,12 @@ with:
         await expect(page.locator('#modeSelector')).toBeVisible();
 ```
 
-- [ ] **Step 4: Run the file to verify all its tests pass**
+- [x] **Step 4: Run the file to verify all its tests pass**
 
 Run: `npx playwright test app-launch.test.js`
 Expected: PASS — all 5 tests in the file green (previously 1 was red on the `#viewModeBtn` visible assertion).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/e2e/app-launch.test.js
@@ -163,7 +165,7 @@ git commit -m "test(e2e): re-point app-launch assertions from legacy #viewModeBt
 **Files:**
 - Create: `tests/e2e/tournament-mode.test.js`
 
-- [ ] **Step 1: Write the file with imports, suite scaffold, helper, and Test 1**
+- [x] **Step 1: Write the file with imports, suite scaffold, helper, and Test 1**
 
 Create `tests/e2e/tournament-mode.test.js` with exactly this content:
 
@@ -246,12 +248,12 @@ test.describe('Tournament Mode', () => {
 });
 ```
 
-- [ ] **Step 2: Run the new test to verify it passes**
+- [x] **Step 2: Run the new test to verify it passes**
 
 Run: `npx playwright test tournament-mode.test.js`
 Expected: PASS — 1 test. (If it fails on a selector/timing issue, fix the test. If it fails because files did NOT move to `_Tier-N/`, that is a product bug — STOP and surface it.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/tournament-mode.test.js
@@ -265,7 +267,7 @@ git commit -m "test(e2e): add tournament happy-path Apply -> _Tier-N coverage"
 **Files:**
 - Modify: `tests/e2e/tournament-mode.test.js`
 
-- [ ] **Step 1: Add both draw tests inside the `describe` block**
+- [x] **Step 1: Add both draw tests inside the `describe` block**
 
 Insert these two tests after the happy-path test (before the closing `});` of the `describe`):
 
@@ -333,12 +335,12 @@ Insert these two tests after the happy-path test (before the closing `});` of th
     });
 ```
 
-- [ ] **Step 2: Run the file to verify the new tests pass**
+- [x] **Step 2: Run the file to verify the new tests pass**
 
 Run: `npx playwright test tournament-mode.test.js`
 Expected: PASS — 3 tests.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/tournament-mode.test.js
@@ -352,7 +354,7 @@ git commit -m "test(e2e): cover tournament Both Win / Both Lose draw buttons"
 **Files:**
 - Modify: `tests/e2e/tournament-mode.test.js`
 
-- [ ] **Step 1: Add the undo test inside the `describe` block**
+- [x] **Step 1: Add the undo test inside the `describe` block**
 
 Insert after the draw tests:
 
@@ -389,12 +391,12 @@ Insert after the draw tests:
     });
 ```
 
-- [ ] **Step 2: Run the file to verify the new test passes**
+- [x] **Step 2: Run the file to verify the new test passes**
 
 Run: `npx playwright test tournament-mode.test.js`
 Expected: PASS — 4 tests.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/tournament-mode.test.js
@@ -408,7 +410,7 @@ git commit -m "test(e2e): cover tournament Ctrl+A undo restores the pair"
 **Files:**
 - Modify: `tests/e2e/tournament-mode.test.js`
 
-- [ ] **Step 1: Add the leave/resume test inside the `describe` block**
+- [x] **Step 1: Add the leave/resume test inside the `describe` block**
 
 Insert after the undo test:
 
@@ -458,12 +460,12 @@ Insert after the undo test:
     });
 ```
 
-- [ ] **Step 2: Run the file to verify all 5 tests pass**
+- [x] **Step 2: Run the file to verify all 5 tests pass**
 
 Run: `npx playwright test tournament-mode.test.js`
 Expected: PASS — 5 tests.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e/tournament-mode.test.js
@@ -476,22 +478,22 @@ git commit -m "test(e2e): cover tournament leave-prompt Save + Continue resume"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full unit suite**
+- [x] **Step 1: Run the full unit suite**
 
 Run: `npm test`
 Expected: PASS — `326 passed (326)`.
 
-- [ ] **Step 2: Run the full E2E suite**
+- [x] **Step 2: Run the full E2E suite**
 
 Run: `npm run test:e2e`
 Expected: PASS — entire suite green. The previously-known `#viewModeBtn` red (`app-launch.test.js`) is fixed and the 5 new `tournament-mode.test.js` tests pass. No remaining known failures.
 
-- [ ] **Step 3: Lint**
+- [x] **Step 3: Lint**
 
 Run: `npm run lint`
 Expected: clean (no errors). Reminder: in test code, reference `globalThis.window`/`window.electronAPI` as the project convention dictates inside `page.evaluate` callbacks — note these run in the browser context where `window` is defined, so no `no-undef` issue arises (unlike `extractMethod` unit tests).
 
-- [ ] **Step 4: Confirm no production files changed**
+- [x] **Step 4: Confirm no production files changed**
 
 Run: `git diff --stat main -- ':!tests' ':!docs'`
 Expected: empty output (only files under `tests/` and `docs/` changed).

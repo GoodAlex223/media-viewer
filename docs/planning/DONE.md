@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-14 <!-- Group CW-1: Renderer correctness guards (7-fix batch) -->
+**Last Updated**: 2026-06-15 <!-- Group CW-2: Test backfill (E2E green + tournament coverage) -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,52 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-15 — Group CW-2: Test backfill (E2E suite green + first tournament-mode coverage)
+
+**Summary**: Cleanup-Week batch (4 SP, 🟤 Auto-Generated) — return the E2E suite to green and close the
+largest coverage hole (tournament mode had zero Playwright coverage). One branch / one PR. **Test-only**:
+no production code changed (`git diff main -- ':!tests' ':!docs'` is empty).
+
+**The three parts**:
+1. **`app-launch.test.js` → `#modeSelector`** — the suite had been 1-red since the 3-way `#modeSelector`
+   replaced the now-`display:none` `#viewModeBtn`. Re-pointed both assertions (initial-launch `toBeHidden`,
+   post-load `toBeVisible`) to `#modeSelector`; standardized `afterEach` to the `if (electronApp)` guard.
+2. **New `tests/e2e/tournament-mode.test.js` (5 hybrid-driven tests)** — an `enterAndStartTournament` helper
+   enters via the real config modal; tests cover: (1) happy-path pick (keyboard `q`) → Apply → real
+   `_Tier-1`/`_Tier-0` disk moves; (2) Both Win button → win-win draw; (3) Both Lose keyboard `f` → lose-lose
+   draw; (4) Ctrl+A undo restores the pair; (5) leave-prompt Save → re-enter Continue resumes
+   (`writeTournamentState`/`readTournamentState` IPC round-trip). Exercises keyboard reverse-map dispatch +
+   `applyTournamentResults` IPC + state persistence end-to-end.
+3. **`recordDraw` unit assertions** — added `filesSnapshot` truthy to the history-shape test + a pre-undo
+   `pair.right` win-count to the undo test (symmetric with the existing `pair.left` check).
+
+**Key changes**: [tests/e2e/app-launch.test.js](../../tests/e2e/app-launch.test.js) (Part 1), new
+[tests/e2e/tournament-mode.test.js](../../tests/e2e/tournament-mode.test.js) (5 tests + helper, Part 2),
+[tests/tournament-engine.test.js](../../tests/tournament-engine.test.js) (+2 assertions, Part 3).
+
+**Tests**: **326 unit** (unchanged at the case level — 2 assertions added to existing cases, no new `it()`).
+E2E **42/43 → 48/48** (the 1 prior known-red `#viewModeBtn` assertion fixed in Part 1 + 5 new tournament
+tests). The new file passed a `--repeat-each=2` flake stress run (10/10). Lint: 0 errors (1 pre-existing
+`no-shadow` warning in an untouched file, already filed 🟤).
+
+**Process**: superpowers brainstorm → spec → plan → **subagent-driven development** (7 tasks; controller
+committed per project convention). The two substantive new tests (Tasks 3 & 6) got full spec+quality
+subagent reviews — both independently verified the `q`→left-win→`_Tier-1` mapping chain against source and
+confirmed the no-vacuous-pass / IPC-round-trip integrity. Task 6's review surfaced a real helper flake
+(`.left-media-wrapper` `toBeVisible` → `toBeAttached`, transient `visibility:hidden` on a still-loading
+video side); fixed + confirmed via the repeat-each stress run. Task 1's implementer mis-diagnosed a vitest
+single-file-path quirk (`npx vitest run tests/X.test.js` → "No test suite found"; the substring form works,
+full `npm test` was green throughout) as a broken environment — filed as a follow-up. Final whole-branch
+review verdict "Ready to finish/merge". 5 constituent BACKLOG entries checked off (`#viewModeBtn` assertion,
+`afterEach` standardization, tournament E2E ×2, `recordDraw` shape); 3 follow-ups filed (🟤 [2026-06-15]:
+tournament E2E coverage tail, vitest command doc note, `toBeAttached` audit). Spec at
+[docs/superpowers/specs/2026-06-15-cw-2-test-backfill-design.md](../superpowers/specs/2026-06-15-cw-2-test-backfill-design.md);
+plan archived at [docs/archive/plans/2026-06-15-cw-2-test-backfill.md](../archive/plans/2026-06-15-cw-2-test-backfill.md).
+Branch `cleanup/cw-2-test-backfill` (off `main` `7c4ca6f`); commits `779c887`..`f62c54c` (+ spec `0fbd549`,
+plan `88b554e`).
+
+---
 
 ### 2026-06-14 — Group CW-1: Renderer correctness guards (batch of 7 defensive fixes)
 

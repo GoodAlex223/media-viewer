@@ -52,9 +52,9 @@
 **Source**: 🟤 Auto-Generated
 **Total SP**: 4
 
-- [ ] **Fix pre-existing red E2E: `app-launch.test.js` asserts hidden legacy `#viewModeBtn`** — 1 SP, 🟠 IMPORTANT (returns the E2E suite to green)
+- [x] **Fix pre-existing red E2E: `app-launch.test.js` asserts hidden legacy `#viewModeBtn`** — 1 SP, 🟠 IMPORTANT (returns the E2E suite to green) — ✅ 2026-06-15: re-pointed both assertions to `#modeSelector` + `afterEach` guard; E2E 42/43→48/48
   - BACKLOG 2026-06-07 (~70/100). Assertion targets the element hidden since the 3-way `#modeSelector` landed (commit `acfc3b6`); suite has been 1-red ever since (40/41 → 42/43). Re-point at `#modeSelector` / `.mode-btn`. Same-file rider: standardize the `afterEach` to the `if (electronApp)` guard pattern used by all other E2E files (BACKLOG 2026-04-11, XS).
-- [ ] **Tournament-mode E2E backfill** — 3 SP, 🟠 IMPORTANT (zero Playwright coverage for an entire mode)
+- [x] **Tournament-mode E2E backfill** — 3 SP, 🟠 IMPORTANT (zero Playwright coverage for an entire mode) — ✅ 2026-06-15: new `tests/e2e/tournament-mode.test.js` (5 hybrid-driven tests) + `recordDraw` shape assertions
   - Merges two BACKLOG entries: 🟤 2026-06-03 ("No E2E coverage for tournament mode incl. draw buttons") + 🟤 2026-05-26 ("Phase H: E2E tests for tournament mode", deferred from the original tournament plan). Cover: enter tournament → picks → complete → Apply moves files to `_Tier-N/`; Both Win / Both Lose draw buttons; Ctrl+A undo restores the pair; leave-prompt Save/resume Continue path. Use existing helpers (`seedLocalStorage`, `mockFolderDialog`, `createTempFixtureDir`). While in there: strengthen the `TournamentEngine.recordDraw` history-shape unit assertions (`filesSnapshot` truthy + `pair.right` win-count after undo — BACKLOG 2026-06-03, XS).
   - Affected: new `tests/e2e/tournament-mode.test.js`, [tests/tournament-engine.test.js](../../tests/tournament-engine.test.js).
 
@@ -124,10 +124,10 @@
 |-------|----|
 | **Group CW-2: Test backfill** [batch] | 4 |
 
-- [ ] Fix `app-launch.test.js` `#viewModeBtn` assertion → suite green (1 SP)
-- [ ] Tournament-mode E2E backfill + `recordDraw` shape assertions (3 SP)
+- [x] Fix `app-launch.test.js` `#viewModeBtn` assertion → suite green (1 SP)
+- [x] Tournament-mode E2E backfill + `recordDraw` shape assertions (3 SP)
 
-**Daily total**: 4 SP
+**Daily total**: 4 SP — ✅ **Complete 2026-06-15** (326 unit; E2E 42/43→48/48; 5 BACKLOG entries closed, 3 follow-ups filed)
 
 ---
 
@@ -174,7 +174,7 @@
 |-------|--------|--------|-------|----------|-----|--------|
 | CW-5: Progressive JXL decode 🏆 | JS logic (decode worker) | 🔵 User | 1 | 5 | Mon | ✅ Complete (PR #47) |
 | CW-1: Renderer correctness guards [batch] | JS logic (defensive) | 🟤 Auto | 7 | 8 | Tue | ✅ Complete (2026-06-14) |
-| CW-2: Test backfill [batch] | Testing | 🟤 Auto | 2 | 4 | Wed | Planned |
+| CW-2: Test backfill [batch] | Testing | 🟤 Auto | 2 | 4 | Wed | ✅ Complete (2026-06-15) |
 | CW-3: Docs & backlog hygiene [batch] | Docs / planning | 🟤 Auto | 3 | 4 | Thu | Planned |
 | CW-4: Process & security guards [batch] | Ops / process | 🟡 Ops | 2 | 3 | Fri | Planned |
 | **Total** | | | **15** | **24** | | |
