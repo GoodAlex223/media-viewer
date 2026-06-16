@@ -24,7 +24,7 @@ Add a "CLIP (Semantic)" option to the existing sort algorithm dropdown. When sel
 | UI integration | New dropdown option (not separate button) | Fits existing UI pattern; explicit user control |
 | Internal algorithm | Always MST | Avoids 6-way combinatorial UI (3 algo x 2 metric); MST quality matters more for semantic grouping |
 | Partial extraction | Sort with-vectors, append rest at end | Matches existing blockhash pattern; predictable behavior |
-| Caching | Reuse feature cache for vectors; new sort order cache key | CLIP vectors already persist in `.feature_cache.json`; only need `.sort_cache_clip.json` for sort order |
+| Caching | Reuse feature cache for vectors; new sort order cache key | CLIP vectors already persist in `.feature_cache.json`; only need a new `'clip'` key in the unified `.sort_cache.json` for sort order |
 | Distance metric | Cosine distance: `1 - dot(a,b)` | Standard for normalized embeddings; simplifies since CLIP vectors are unit-normalized |
 
 ## Architecture
@@ -46,7 +46,7 @@ Worker: cosine distance + VPTree + Prim's MST + greedy traversal
     ↓
 Worker returns sorted paths → renderer reorders mediaFiles
     ↓
-Sort order cached as .sort_cache_clip.json
+Sort order cached under 'clip' key in unified .sort_cache.json
 ```
 
 ### Worker Changes (sorting-worker.js)
@@ -90,8 +90,8 @@ Sort order cached as .sort_cache_clip.json
 ### Caching
 
 - CLIP vectors: already cached in `.feature_cache.json` via feature cache v4 format (`clipVector` field per entry); loaded into `clipCache` Map on folder load
-- Sort order: new `.sort_cache_clip.json` created by existing `saveSortCache('clip', sortedPaths, startFile)` / `loadSortCache('clip')` infrastructure
-- Force re-sort (Shift+click): deletes `.sort_cache_clip.json` via existing `deleteSortCache('clip')`
+- Sort order: new `'clip'` key in the unified `.sort_cache.json` created by existing `saveSortCache('clip', sortedPaths, startFile)` / `loadSortCache('clip')` infrastructure
+- Force re-sort (Shift+click): deletes the `'clip'` key from `.sort_cache.json` via existing `deleteSortCache('clip')`
 
 ## Edge Cases
 
@@ -121,7 +121,7 @@ Sort order cached as .sort_cache_clip.json
 ### Manual Testing
 
 - Select "CLIP (Semantic)" from dropdown → click Sort → verify semantic grouping (photos of same subject cluster together)
-- Verify sort cache creates `.sort_cache_clip.json`
+- Verify sort cache creates the `'clip'` key in `.sort_cache.json`
 - Verify force re-sort (Shift+click) works
 - Verify restore original order works
 - Verify CLIP-disabled error notification

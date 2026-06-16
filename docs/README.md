@@ -50,6 +50,7 @@ Central index for all project documentation.
 | [CLIP Extraction Silent Failure Plan][] | Wire `startBackgroundFeatureExtraction()` into `loadFolder()` via `kickoffBackgroundExtractionIfEnabled()` helper |
 | [AI Prediction Display Bugs Plan][]    | Restore feature caches on undo + sortComplete propagates worker scores into predictionScores |
 | [PR #33 Hygiene + Integration Tests Plan][] | Three defensive CLIP toggle/sort fixes + 3-test integration suite catching call-graph wiring bugs |
+| [Tournament Mode Plan][]                     | Swiss-style tournament engine + TournamentManager + 3-way mode selector (Groups E + F) |
 | [Planning Restructure Plan][]                | BACKLOG.md source-split (🔵 user / 🟡 ops / 🟤 auto) + pinned 📌 Process Rules + Vitest structural test + CLAUDE.md intake rules |
 | [Re-rate Compare Correction Plan][]          | "Both good / Both bad" corrective-training buttons in AI-sorted compare + per-folder `.bulk_rated.json` (Group 0 part 1) |
 | [Tournament Re-rate Plan][]                  | "Both Win / Both Lose" mark-as-equal draw buttons in tournament mode via `recordDraw` (reuses engine undo) (Group 0 part 2) |
@@ -99,6 +100,7 @@ Central index for all project documentation.
 | [TASK-025 Application Logging][] | File-based application logging design |
 | [TASK-026 Keyboard Shortcuts][] | Keyboard shortcut customization design |
 | [TASK-027 Undo Empty State][] | Undo fix when no media remains in folder |
+| [TASK-028 CLIP Semantic Features][] | CLIP semantic embedding extraction via main-process IPC; 64→576-dim ML model |
 | [CLIP/ML Pipeline Cleanup][] | CLIP/ML pipeline cleanup (IPC listener, image decode, model cache, dead code) |
 | [Compare Mode Fix][] | Compare mode folder-switch fix + DRY toggleViewMode refactor |
 | [Test Quality][] | E2E afterEach null guards + misleading describe label rename |
