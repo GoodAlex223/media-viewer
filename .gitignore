@@ -1,4 +1,8 @@
 .mcp.json
+
+# Windows reserved device name. Git-for-Windows surfaces a phantom `nul` as an
+# untracked path in `git status` (the NUL device resolves as an existing path on
+# Windows); this line suppresses it. Harmless no-op on Linux/macOS. Do NOT remove.
 nul
 
 # https://github.com/github/gitignore/blob/main/Node.gitignore
@@ -135,7 +139,6 @@ test-results/
 
 # Claude Code configuration (per-developer, except shared agents)
 .claude/*
-!.claude/agents/
 !.claude/agents/
 
 # Superpowers brainstorm session artifacts

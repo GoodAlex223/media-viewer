@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-15 <!-- Group CW-2: Test backfill (E2E green + tournament coverage) -->
+**Last Updated**: 2026-06-16 <!-- Group CW-3: Docs & backlog hygiene (stale-checkbox sweep + doc drift + cruft) -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,69 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-16 — Group CW-3: Docs & backlog hygiene (stale-checkbox sweep + doc drift + cruft removal)
+
+**Summary**: Cleanup-Week batch (4 SP, 🟤 Auto-Generated) — make the planning data trustworthy again.
+One branch / one PR. **Docs-and-config-only**: no `*.js`/`index.html`/`styles.css` changed, so per the PR #46
+learning `/code-review` is a no-op; shipped with a manual review. The whole task's rigor lived in **git
+verification** — every checkbox flip cites a commit confirmed an ancestor of `main`.
+
+**The three tasks**:
+1. **BACKLOG stale-checkbox sweep (2 SP)** — flipped **7 git-verified resolved entries** with commit refs:
+   CLIP-extraction-UX toast + toggle-on (PR #45 `ad4e488`), Pin Lucide CDN (Group F `2a5597a`), CLIP
+   similarity sorting (Group D `e0d07dc`), CLIP unload (Group E `e7d84d0`), logger double-init (`b9f3b7e`),
+   regression-checker FullscreenManager (Group F `1efbdc1`). A targeted-light-scan confirmed no resolved-but-
+   unchecked items beyond the named set. Recount: **153 unchecked 🟤** remain (CW-3 cleared 11 🟤 total — 4
+   here + 7 at closeout), recorded in WEEKLY.md Notes.
+2. **Doc one-liners bundle (1 SP)** — verify-first; several spec-listed items were **already done** (no-ops):
+   CLAUDE.md `## Backlog Intake Rules` MANUAL markers, the `backlog-structure` test-inventory entry, the
+   `.sort_cache.json` key wording in CLAUDE.md, and 3 README Design-Spec rows. **Genuinely applied:** tournament
+   UI-integration hash `6c73f9f`→`acfc3b6` (Git Insights + a gotcha; `6c73f9f` is the IPC/TournamentManager
+   commit); kickoff test-count `8→11` cases + the 3 net-new Group C cases + `makeCtx` defaults; 2 README
+   orphan-ref rows (Tournament Mode plan, TASK-028 spec → `orphans: []`); retro `[possible-dup-of]` tag on the
+   kept `waitForTimeout` entry; corrected 5 `.sort_cache_clip.json` claims in the Group D spec → unified
+   `.sort_cache.json` key `'clip'`.
+3. **Repo-root cruft (1 SP)** — `git rm` of the unused `docker init` scaffolding (`Dockerfile`, `compose.yaml`,
+   `.dockerignore`, **+ `README.Docker.md`** — the unlisted 4th file), reference-grepped clean first; removed
+   the duplicate `!.claude/agents/` (pulled forward from CW-4).
+
+**Two notable findings (git-truth caught both)**:
+- **The PR #37 stale-SHA trap bit the spec itself.** Both WEEKLY.md and the BACKLOG driving note cited
+  `853e1ee` as the PR #36 abort-string fix — but `853e1ee` lives only on the dead `fix/pr-36-review-followups`
+  branch, **not `main`**. The real on-`main` fix is `52f2cbc`. The item *was* already correctly checked off
+  (2026-06-16), but its marker + both driving-note citations were corrected to `52f2cbc`.
+- **⚠️ Deviation — the `.gitignore` `nul` line was NOT removed.** The audit called it "noise that ignores
+  nothing useful," but it is **load-bearing on Windows**: it suppresses a phantom `?? nul` that Git-for-Windows
+  surfaces in `git status` (the reserved NUL device resolves as an existing path). Removing it regressed
+  `git status`. **Kept the line + added an explanatory comment** instead (user-approved). No real `nul` FILE
+  existed (PowerShell + `cmd dir` confirm). The BACKLOG entry is checked off as resolved-with-deviation.
+
+**Key changes**: [docs/planning/BACKLOG.md](BACKLOG.md) (7 sweep flips + 8 CW-3-task check-offs + driving-note
+SHA fix + `waitForTimeout` tag + header), [docs/planning/WEEKLY.md](WEEKLY.md) (CW-3 → Complete, 🟤 recount,
+CW-4 `.gitignore` boundary note), [CLAUDE.md](../../CLAUDE.md) (hash swap + kickoff drift),
+[docs/README.md](../README.md) (2 orphan-ref rows), the Group D spec
+[2026-04-16-clip-similarity-sorting-design.md](../superpowers/specs/2026-04-16-clip-similarity-sorting-design.md)
+(`sort_cache_clip` fix), [.gitignore](../../.gitignore) (docker-ignore removed via `git rm` of the file,
+duplicate `!.claude/agents/` removed, `nul` line documented), and `git rm` of the 4 docker files.
+
+**Tests**: **326/326 unit unchanged** (no JS touched; the pre-commit hook ran vitest green on every commit).
+**E2E: skipped (no JS changes)** per the reporting convention. ESLint: no JS to lint; Prettier ignores
+`docs/`/`*.md`.
+
+**Process**: superpowers brainstorm → spec → plan → **inline execution** (executing-plans). Inline was chosen
+over subagent-driven deliberately: the work is judgment-heavy git archaeology with tightly interdependent
+edits in shared files, where fragmenting context across agents would risk the exact inconsistent-verification
+failure the PR #37 trap embodies. **CW-4 boundary shift recorded**: the `.gitignore` duplicate-line fix moved
+into CW-3, so CW-4 (Fri) now owns only the pre-archive checklist template block and must not touch
+`.gitignore`. 8 constituent BACKLOG entries checked off (sweep task, docker cruft, nul line [deviation],
+`.claude/agents` dup, kickoff drift, MANUAL markers [no-op], backlog-structure inventory [no-op],
+`waitForTimeout` tag). Spec at
+[docs/superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md](../superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md);
+plan archived at [docs/archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md](../archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md).
+Branch `cleanup/cw-3-docs-backlog-hygiene` (off `main` `52f2cbc`); commits `a48385a` (spec), `49e5484` (plan),
+`5733507` (sweep), `18f1e6d` (doc bundle), `4f4995e` (cruft), + closeout. **PR pending** (docs-only → manual
+review, not `/code-review`).
 
 ### 2026-06-15 — Group CW-2: Test backfill (E2E suite green + first tournament-mode coverage)
 
