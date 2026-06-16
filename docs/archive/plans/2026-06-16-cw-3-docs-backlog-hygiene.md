@@ -10,6 +10,7 @@
 
 **Branch:** `cleanup/cw-3-docs-backlog-hygiene` (already created off `main` @ `52f2cbc`).
 **Spec:** `docs/superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md`.
+**Status: Complete** — executed inline 2026-06-16. Deviation: the `.gitignore` `nul` line was kept (verified load-bearing on Windows), not removed. See DONE.md 2026-06-16.
 
 ---
 
@@ -39,7 +40,7 @@
 - Modify: `docs/planning/BACKLOG.md`
 - Modify: `docs/planning/WEEKLY.md` (🟤 recount in Notes)
 
-- [ ] **Step 1.1: Flip the 7 genuinely-unchecked entries**
+- [x] **Step 1.1: Flip the 7 genuinely-unchecked entries**
 
 For each row in the table marked **flip**, change its `- [ ]` to `- [x]` and prepend a resolution marker immediately after the `**Title**` —, preserving all original text. Use this exact marker shape (matches the existing resolved-entry style, e.g. L356/L367):
 
@@ -58,16 +59,16 @@ For each row in the table marked **flip**, change its `- [ ]` to `- [x]` and pre
 - L612 "Update regression-checker.md for FullscreenManager":
   `- [x] **Update \`regression-checker.md\` for FullscreenManager** — ✅ Resolved 2026-04-29 (Group F, \`1efbdc1\`). <original text…>`
 
-- [ ] **Step 1.2: Fix the L356 marker SHA and confirm L357**
+- [x] **Step 1.2: Fix the L356 marker SHA and confirm L357**
 
 The L356 abort-string entry currently reads `- [x] ✅ 2026-06-16 (landed fresh on \`main\`; stale PR #37 closed) — **Abort error string inconsistency…**`. Append the real commit so the citation is git-true: change `(landed fresh on \`main\`; stale PR #37 closed)` → `(landed fresh on \`main\` in \`52f2cbc\`; stale PR #37 / \`853e1ee\` closed unmerged)`.
 L357 (spec-count) is already correctly `[x]` and the doc on `main` is genuinely fixed — **leave it**, no change.
 
-- [ ] **Step 1.3: Correct the sweep's own driving intake note (L238 + L240)**
+- [x] **Step 1.3: Correct the sweep's own driving intake note (L238 + L240)**
 
 The `### [2026-06-11] Weekly-planning intake` note cites the wrong SHA. In both the **Origin** paragraph (L238) and the entry body (L240), replace `fixed in \`853e1ee\` per \`git show\`` / `PR #36 abort-string + spec-count items (\`853e1ee\`)` with `fixed on \`main\` in \`52f2cbc\` (the \`853e1ee\` commit cited here lives only on the unmerged \`fix/pr-36-review-followups\` branch — the PR #37 stale-SHA trap)`. Do **not** check off L240 yet — it is the CW-3 task itself, checked at closeout (Task 4).
 
-- [ ] **Step 1.4: Verify the flips against git (confirming re-check)**
+- [x] **Step 1.4: Verify the flips against git (confirming re-check)**
 
 Run:
 ```bash
@@ -76,7 +77,7 @@ for c in ad4e488 2a5597a e0d07dc e7d84d0 b9f3b7e 1efbdc1 52f2cbc; do \
 ```
 Expected: all 7 print `ON-MAIN`. (If any prints `NOT-ON-MAIN`, STOP — do not flip that entry; re-investigate.)
 
-- [ ] **Step 1.5: Recount 🟤 pending SP and record in WEEKLY.md**
+- [x] **Step 1.5: Recount 🟤 pending SP and record in WEEKLY.md**
 
 Count remaining unchecked 🟤 items and sum their effort tags (XS≈0.25, S≈1, M≈2, L≈3 as a rough SP proxy — use the same scale the WEEKLY plan uses, or simply report the **count** of unchecked 🟤 entries if no clean SP sum exists). Run to get the unchecked-🟤 count:
 ```bash
@@ -84,7 +85,7 @@ awk '/^## 🟤 Auto-Generated/{f=1} /^## Rejected Ideas/{f=0} f && /^- \[ \]/{n+
 ```
 Then update `docs/planning/WEEKLY.md` Notes — the bullet beginning "**🟤 tail remains after this week**" — appending: `Post-CW-3 recount (2026-06-16): <N> unchecked 🟤 items remain after the sweep flipped 4 🟤 entries (CLIP sort, CLIP unload, logger double-init, regression-checker).` Also bump the BACKLOG.md `**Last Updated**` header line to note the CW-3 sweep.
 
-- [ ] **Step 1.6: Commit**
+- [x] **Step 1.6: Commit**
 
 ```bash
 git add docs/planning/BACKLOG.md docs/planning/WEEKLY.md
@@ -106,7 +107,7 @@ unchecked 🟤 items into WEEKLY.md Notes."
 **Files:**
 - Modify: `CLAUDE.md`, `docs/planning/BACKLOG.md`, `docs/README.md`, and one spec under `docs/superpowers/specs/`.
 
-- [ ] **Step 2.1: Record the already-done no-ops (no edit)**
+- [x] **Step 2.1: Record the already-done no-ops (no edit)**
 
 Confirmed during planning — make **no change** to these; they are already correct:
 - CLAUDE.md `## Backlog Intake Rules` already wrapped `<!-- MANUAL -->` (L172) … `<!-- END MANUAL -->` (L200).
@@ -114,13 +115,13 @@ Confirmed during planning — make **no change** to these; they are already corr
 - CLAUDE.md L314 already states the unified `.sort_cache.json` key `'clip'` correctly (negates the wrong filename).
 - docs/README.md already indexes CLIP-silent-failure, TASK-024, TASK-026 specs (Design Specs section).
 
-- [ ] **Step 2.2: Tournament hash swap in CLAUDE.md (UI-integration occurrences only)**
+- [x] **Step 2.2: Tournament hash swap in CLAUDE.md (UI-integration occurrences only)**
 
 Verified: `acfc3b6` = UI integration (`#modeSelector`, Phases F-G); `6c73f9f` = IPC + TournamentManager (Phases D-E). Run `grep -n "6c73f9f" CLAUDE.md` and for each hit:
 - If the surrounding text describes **UI integration / `#modeSelector` / "UI Integration"** → change `6c73f9f` → `acfc3b6`. Known sites: the Git Insights entry "Tournament Mode UI Integration (2026-05-25, commit `6c73f9f`)" and the gotcha at L335 "the tournament UI integration (6c73f9f)".
 - If the text describes **IPC / TournamentManager / Phases D-E** → leave `6c73f9f` unchanged.
 
-- [ ] **Step 2.3: Kickoff test-count drift in CLAUDE.md (L137)**
+- [x] **Step 2.3: Kickoff test-count drift in CLAUDE.md (L137)**
 
 First confirm the live case count:
 ```bash
@@ -129,7 +130,7 @@ node -e "const s=require('fs').readFileSync('tests/media-viewer-utils.test.js','
 ```
 Then update CLAUDE.md L137: change `(8 cases, ...)` to the verified count (expected **10** per BACKLOG L261), and append to that bullet the new context: the `makeCtx` defaults already listed are fine, but add mention of the **empty-folder guard** (`if (this.mediaFiles.length === 0) return;`) and the two new cases (9: empty-folder no-op; 10: toggle-on kickoff path) **using the actual case descriptions read from the test file** — do not invent them. If the live count is NOT 10, write whatever the file actually has.
 
-- [ ] **Step 2.4: docs/README.md orphan link-refs**
+- [x] **Step 2.4: docs/README.md orphan link-refs**
 
 Both link-refs are defined but unused (confirmed). Add the missing table rows so the refs resolve:
 - **Archived Plans** table — add a row for the Tournament Mode plan (link-ref `[Tournament Mode Plan]` is defined at L78 with no row):
@@ -142,11 +143,11 @@ node -e "const s=require('fs').readFileSync('docs/README.md','utf8');const defs=
 ```
 Expected after edit: `orphans: []` (or only intentional non-table refs).
 
-- [ ] **Step 2.5: BACKLOG `waitForTimeout` dup tag (L432)**
+- [x] **Step 2.5: BACKLOG `waitForTimeout` dup tag (L432)**
 
 Add the retroactive tag to the kept entry. On the L432 entry "Replace E2E `waitForTimeout` magic numbers…", append at the end of its body: ` [possible-dup-of: Standardize E2E waitForTimeout durations]`.
 
-- [ ] **Step 2.6: Spec-file `.sort_cache_clip.json` correction**
+- [x] **Step 2.6: Spec-file `.sort_cache_clip.json` correction**
 
 Find any spec still using the wrong filename and fix it (CLAUDE.md is already correct, Step 2.1):
 ```bash
@@ -154,7 +155,7 @@ grep -rln "sort_cache_clip" docs/superpowers/specs/
 ```
 For each hit (expected: `2026-04-16-clip-similarity-sorting-design.md`), correct `.sort_cache_clip.json` → "the unified `.sort_cache.json` under key `'clip'`" in context. If the grep returns nothing, skip and log "no spec drift".
 
-- [ ] **Step 2.7: Commit**
+- [x] **Step 2.7: Commit**
 
 ```bash
 git add CLAUDE.md docs/README.md docs/planning/BACKLOG.md docs/superpowers/specs/
@@ -177,7 +178,7 @@ filename correction where present. (MANUAL markers / backlog-structure inventory
 - Delete: `Dockerfile`, `compose.yaml`, `.dockerignore`, `README.Docker.md`, working-tree `nul`
 - Modify: `.gitignore` (remove L2 `nul`, remove duplicate `!.claude/agents/` at L139)
 
-- [ ] **Step 3.1: Reference-grep the docker scaffolding (gate)**
+- [x] **Step 3.1: Reference-grep the docker scaffolding (gate)**
 
 ```bash
 git grep -in "docker\|compose\.yaml\|dockerfile" -- ':!docs' ':!*.md' || echo "no code refs"
@@ -185,13 +186,13 @@ grep -nE "docker|compose" package.json || echo "no package.json refs"
 ```
 Expected: no source/script references (only possible doc mentions). If a real reference exists, STOP and surface it.
 
-- [ ] **Step 3.2: Remove the four docker files**
+- [x] **Step 3.2: Remove the four docker files**
 
 ```bash
 git rm Dockerfile compose.yaml .dockerignore README.Docker.md
 ```
 
-- [ ] **Step 3.3: Remove the `nul` file and its `.gitignore` line 2**
+- [x] **Step 3.3: Remove the `nul` file and its `.gitignore` line 2**
 
 The `nul` file is untracked (gitignored). Delete the reserved-name file via the Win32 device path, then remove the ignore line:
 ```powershell
@@ -202,14 +203,14 @@ If that fails, fallback in cmd: `cmd /c "del \\.\nul"`. Then edit `.gitignore`: 
 test -e nul && echo "STILL PRESENT — retry deletion" || echo "nul gone"
 ```
 
-- [ ] **Step 3.4: Remove the duplicate `!.claude/agents/` (pulled from CW-4)**
+- [x] **Step 3.4: Remove the duplicate `!.claude/agents/` (pulled from CW-4)**
 
 `.gitignore` lines 138–139 are identical `!.claude/agents/`. Delete line 139 (keep one). Confirm exactly one remains:
 ```bash
 grep -c '^!\.claude/agents/$' .gitignore   # expect: 1
 ```
 
-- [ ] **Step 3.5: Confirm clean tree + commit**
+- [x] **Step 3.5: Confirm clean tree + commit**
 
 ```bash
 git status --short   # expect: only the intended deletions + .gitignore modify; NO stray 'nul'
@@ -229,7 +230,7 @@ file)."
 
 **Files:** `docs/planning/BACKLOG.md`, `docs/planning/WEEKLY.md`, `docs/planning/DONE.md`, `docs/planning/TODO.md`, `docs/README.md`, the archived plan copy.
 
-- [ ] **Step 4.1: Check off the BACKLOG entries that CW-3 itself resolved**
+- [x] **Step 4.1: Check off the BACKLOG entries that CW-3 itself resolved**
 
 Flip these `- [ ]` → `- [x]` with a `✅ Resolved 2026-06-16 (Group CW-3)` marker (these are the entries the CW-3 *work* completed, distinct from the Task-1 sweep outputs):
 - L240 (🟤) BACKLOG stale-checkbox verification sweep — **the sweep task itself**
@@ -242,23 +243,23 @@ Flip these `- [ ]` → `- [x]` with a `✅ Resolved 2026-06-16 (Group CW-3)` mar
 
 *(L331 MANUAL-markers and L333 backlog-structure-inventory were already-done no-ops — flip them too with a `✅ already present (no-op, confirmed 2026-06-16)` note so the BACKLOG reflects reality.)*
 
-- [ ] **Step 4.2: WEEKLY.md — mark CW-3 complete + CW-4 boundary note**
+- [x] **Step 4.2: WEEKLY.md — mark CW-3 complete + CW-4 boundary note**
 
 - In the Daily Schedule (Thursday) and Summary Table, mark CW-3 ✅ Complete with the commit refs and the 🟤 recount.
 - Add a note under CW-4 (Friday) / its group block: **"`.gitignore` duplicate-line fix completed early in CW-3; CW-4 now owns only the pre-archive checklist template block and must NOT touch `.gitignore`."**
 
-- [ ] **Step 4.3: DONE.md entry**
+- [x] **Step 4.3: DONE.md entry**
 
 Add a CW-3 entry following the house format: date, group, branch, what shipped (sweep: 7 flips + 2 marker/note corrections; doc-bundle: hash swap + kickoff drift + 2 README rows + dup tag + spec fix, several no-ops; cruft: 4 docker files + nul + gitignore dup), and **"E2E: skipped (no JS changes); 326/326 unit unchanged"** per the reporting convention.
 
-- [ ] **Step 4.4: TODO.md comment + docs/README.md index the new spec & plan**
+- [x] **Step 4.4: TODO.md comment + docs/README.md index the new spec & plan**
 
 - Add a `<!-- Group CW-3 Docs & backlog hygiene completed 2026-06-16, moved to DONE.md … -->` comment block to TODO.md (mirror the CW-2 block).
 - Index the new spec and plan in docs/README.md: add `[CW-3 Docs & Backlog Hygiene]` rows to **Design Specs** (→ `superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md`) and **Archived Plans** (→ `archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md`).
 - Copy this plan to `docs/archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md`, flip its checkboxes to `[x]`, add `**Status: Complete**`, then `git rm` the original from `docs/superpowers/plans/` (per the archive-plans convention).
 - Bump docs/README.md `*Last Updated*`.
 
-- [ ] **Step 4.5: Final commit**
+- [x] **Step 4.5: Final commit**
 
 ```bash
 git add -A

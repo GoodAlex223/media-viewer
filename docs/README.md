@@ -61,6 +61,7 @@ Central index for all project documentation.
 | [JXL Progressive Decode Plan][]              | Frame-0-first streaming JXL decode (worker `meta`/`frame`/`done` protocol; `decodeJxl` resolves at frame 0; `whenComplete` gates animation) (Group CW-5) |
 | [Renderer Correctness Guards Plan][]         | Batch of 7 defensive renderer fixes from PR reviews #34–#45 (clipCache clear, tournament `isLoading` guards, `<2-files` exitTournamentMode, `handleCancel` guard, `clipWorkerReady` reset, feature-cache local-capture, JXL error-path trio) (Group CW-1) |
 | [Test Backfill Plan][]                       | E2E suite returned to green (`#viewModeBtn`→`#modeSelector`) + first tournament-mode Playwright coverage (5 hybrid-driven tests) + `recordDraw` assertion strengthening (Group CW-2) |
+| [CW-3 Docs & Backlog Hygiene Plan][]         | git-verified BACKLOG stale-checkbox sweep (7 flips) + doc-drift one-liners + repo-root cruft removal; docs-only (Group CW-3) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -87,6 +88,7 @@ Central index for all project documentation.
 [JXL Progressive Decode Plan]: archive/plans/2026-06-12-jxl-progressive-decode.md
 [Renderer Correctness Guards Plan]: archive/plans/2026-06-13-cw-1-renderer-correctness-guards.md
 [Test Backfill Plan]: archive/plans/2026-06-15-cw-2-test-backfill.md
+[CW-3 Docs & Backlog Hygiene Plan]: archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md
 
 ## Design Specs
 
@@ -122,6 +124,7 @@ Central index for all project documentation.
 | [JXL Progressive Decode][] | Frame-0-first streaming animated-JXL decode; worker `meta`/`frame`/`done` protocol + mutable cache entry with `whenComplete`; static frame-0 fallback on mid-stream error (Group CW-5) |
 | [Renderer Correctness Guards][] | Batch of 7 defensive renderer fixes from PR reviews #34–#45: clipCache clear, tournament `isLoading` guards, `<2-files` exitTournamentMode, `handleCancel` entry-type guard, `clipWorkerReady` reset, feature-cache local-capture, JXL error-path trio (Group CW-1) |
 | [Test Backfill][] | Return E2E suite to green + first tournament-mode Playwright coverage (hybrid driving) + `recordDraw` history-shape assertion strengthening (Group CW-2) |
+| [CW-3 Docs & Backlog Hygiene][] | git-truth-verified BACKLOG stale-checkbox sweep + doc-drift one-liners + repo-root cruft; targeted-not-exhaustive scope (Group CW-3) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -153,6 +156,7 @@ Central index for all project documentation.
 [JXL Progressive Decode]: superpowers/specs/2026-06-12-jxl-progressive-decode-design.md
 [Renderer Correctness Guards]: superpowers/specs/2026-06-13-cw-1-renderer-correctness-guards-design.md
 [Test Backfill]: superpowers/specs/2026-06-15-cw-2-test-backfill-design.md
+[CW-3 Docs & Backlog Hygiene]: superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md
 
 ## Security Audits
 
@@ -168,4 +172,4 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-06-11*
+*Last Updated: 2026-06-16*

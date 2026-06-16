@@ -63,11 +63,11 @@
 **Source**: 🟤 Auto-Generated
 **Total SP**: 4
 
-- [ ] **BACKLOG stale-checkbox verification sweep (all three source sections)** — 2 SP, 🟠 IMPORTANT (planning-data correctness — the 🟤 pending-SP figure drives Cleanup cadence)
+- [x] **BACKLOG stale-checkbox verification sweep (all three source sections)** — 2 SP, 🟠 IMPORTANT — ✅ Done 2026-06-16: 7 git-verified flips + corrected `853e1ee`→`52f2cbc`; recount **153 unchecked 🟤** (planning-data correctness — the 🟤 pending-SP figure drives Cleanup cadence)
   - Filed as 🟤 BACKLOG intake [2026-06-11] (Cleanup Week planning). Entries across 🔵/🟡/🟤 are provably resolved but still unchecked; verify each against git history and flip with commit refs. Known candidates: PR #36 abort-string + spec-count items (fixed in `853e1ee` — confirmed via `git show`); the two 🔵 [2026-05-03] CLIP extraction-UX items shipped by PR #45 ("extraction starting" toast + toggle-on kickoff); "Pin Lucide CDN" (Group F pinned `@1.14.0`+SRI); "Double-init protection for logger.js" + "Unload CLIP model after extraction" (Group E); "CLIP-based similarity sorting" (Group D 2026-04-18); "Update regression-checker.md for FullscreenManager" (Group F). Recount 🟤 pending SP after the sweep and record it in Notes here.
-- [ ] **Doc one-liners bundle** — 1 SP
+- [x] **Doc one-liners bundle** — 1 SP — ✅ Done 2026-06-16: tournament hash swap `6c73f9f`→`acfc3b6`, kickoff `8→11` cases, 2 README orphan-ref rows, `waitForTimeout` dup tag, Group D spec `sort_cache_clip`→`.sort_cache.json` ×5. (MANUAL markers / backlog-structure inventory / 3 README spec rows already correct — no-ops.)
   - PR #39: wrap CLAUDE.md `## Backlog Intake Rules` in `<!-- MANUAL -->` markers; add `backlog-structure` to the CLAUDE.md test inventory; retro `[possible-dup-of: ...]` tag on the kept `waitForTimeout` entry. PR #45: CLAUDE.md kickoff doc-drift (8→10 test cases, `makeCtx` defaults, empty-folder guard — the deferred `revise-claude-md` pass). docs/README.md Design Specs rows in one pass: CLIP silent-failure spec (PR #34), TASK-024 spec (PR #22 follow-up), TASK-026 spec/plan (PR #24 follow-up). Group D 2026-04-18: correct `.sort_cache_clip.json` → unified `.sort_cache.json` key `'clip'` in spec + CLAUDE.md. CLAUDE.md Git Insights tournament hash swap: UI integration is `acfc3b6` (not `6c73f9f`, which is the IPC/TournamentManager commit) — verified via `git show` 2026-06-11.
-- [ ] **Repo-root cruft removal** — 1 SP
+- [x] **Repo-root cruft removal** — 1 SP — ✅ Done 2026-06-16: `git rm` of `Dockerfile`/`compose.yaml`/`.dockerignore`/`README.Docker.md`; removed the duplicate `!.claude/agents/` (pulled from CW-4). ⚠️ **Deviation:** the `.gitignore` `nul` line was NOT removed — verified load-bearing (suppresses a Git-for-Windows phantom `?? nul`); kept it + added an explanatory comment (user-approved).
   - 🟤 2026-06-11 (Group D audit follow-ups): `git rm` the unused `docker init` scaffolding (`Dockerfile`, `compose.yaml`, `.dockerignore`) after a reference grep; delete the stray `nul` line at [.gitignore](../../.gitignore) line 2.
 
 ### Group CW-4: Process & security guards [batch] 🟡
@@ -78,8 +78,9 @@
 - [ ] **Pre-commit secret guard (tier a — regex scan, no new dependency)** — 2 SP, 🟠 IMPORTANT
   - 🟡 [2026-06-11] Group D audit referral. Extend the Husky pre-commit hook with a staged-content regex scan for the audit's high-signal markers (`AKIA`, `ghp_`, `xox[baprs]-`, `AIza…`, `BEGIN …PRIVATE KEY`). Re-run the audit §1/§2 command blocks to validate. Gitleaks (tier b) stays in BACKLOG.
   - Affected: `.husky/pre-commit`, possibly [package.json](../../package.json) (lint-staged).
-- [ ] **Pre-archive checklist block + `.gitignore` duplicate-line fix** — 1 SP
-  - 🟡 2026-04-30: add the "before archive: flip checkboxes, add Status: Complete, index in docs/README.md (plans AND specs)" checklist block to the plan template in `TEMPLATES/` (option (i), lowest effort; extend to Design Specs per the PR #36 follow-up note). 🟡 2026-04-29: fix the duplicate `!.claude/agents/` line at `.gitignore` 138-139.
+- [ ] **Pre-archive checklist block** (~~+ `.gitignore` duplicate-line fix~~) — 1 SP → effectively ~0.5 SP
+  - ⚠️ **Boundary shift (2026-06-16):** the `.gitignore` duplicate-`!.claude/agents/` fix was **pulled forward into CW-3** (CW-3 already edited `.gitignore`, so doing it there avoided a same-file collision). **CW-4 now owns only the pre-archive checklist template block, and CW-4's branch must NOT touch `.gitignore`.**
+  - 🟡 2026-04-30: add the "before archive: flip checkboxes, add Status: Complete, index in docs/README.md (plans AND specs)" checklist block to the plan template in `TEMPLATES/` (option (i), lowest effort; extend to Design Specs per the PR #36 follow-up note). ~~🟡 2026-04-29: fix the duplicate `!.claude/agents/` line at `.gitignore` 138-139~~ — ✅ done in CW-3.
 
 ---
 
@@ -138,11 +139,11 @@
 |-------|----|
 | **Group CW-3: Docs & backlog hygiene** [batch] | 4 |
 
-- [ ] BACKLOG stale-checkbox verification sweep + 🟤 pending-SP recount (2 SP)
-- [ ] Doc one-liners bundle — CLAUDE.md markers/inventory/kickoff-drift, README spec indexing, sort-cache doc fix, dup tag (1 SP)
-- [ ] Repo-root cruft: Docker scaffolding + `.gitignore` `nul` line (1 SP)
+- [x] BACKLOG stale-checkbox verification sweep + 🟤 pending-SP recount (2 SP) — 7 flips, 153 unchecked 🟤 remain
+- [x] Doc one-liners bundle — CLAUDE.md hash-swap/kickoff-drift, README orphan-ref rows, sort-cache spec fix, dup tag (1 SP)
+- [x] Repo-root cruft: Docker scaffolding ×4 + `.gitignore` dup line (1 SP) — ⚠️ `nul` line kept (load-bearing, documented)
 
-**Daily total**: 4 SP
+**Daily total**: 4 SP — ✅ **Complete 2026-06-16** (docs-only; 326/326 unit unchanged, E2E skipped — no JS)
 
 ---
 
@@ -154,7 +155,7 @@
 | **Group CW-4: Process & security guards** [batch] | 3 |
 
 - [ ] Pre-commit secret guard, tier (a) regex scan (2 SP)
-- [ ] Pre-archive checklist template block + `.gitignore` duplicate line (1 SP)
+- [ ] Pre-archive checklist template block (1 SP) — `.gitignore` duplicate line already done in CW-3; do NOT touch `.gitignore`
 
 **Daily total**: 3 SP
 
@@ -175,7 +176,7 @@
 | CW-5: Progressive JXL decode 🏆 | JS logic (decode worker) | 🔵 User | 1 | 5 | Mon | ✅ Complete (PR #47) |
 | CW-1: Renderer correctness guards [batch] | JS logic (defensive) | 🟤 Auto | 7 | 8 | Tue | ✅ Complete (2026-06-14) |
 | CW-2: Test backfill [batch] | Testing | 🟤 Auto | 2 | 4 | Wed | ✅ Complete (2026-06-15) |
-| CW-3: Docs & backlog hygiene [batch] | Docs / planning | 🟤 Auto | 3 | 4 | Thu | Planned |
+| CW-3: Docs & backlog hygiene [batch] | Docs / planning | 🟤 Auto | 3 | 4 | Thu | ✅ Complete (2026-06-16) |
 | CW-4: Process & security guards [batch] | Ops / process | 🟡 Ops | 2 | 3 | Fri | Planned |
 | **Total** | | | **15** | **24** | | |
 
@@ -191,7 +192,7 @@ _Tasks counts plan tasks; several bundle multiple BACKLOG entries (~20+ entries 
 - **Pull-in order if ahead** (Friday buffer): (1) JXL error-path **test backfill** for the `372ea10` hardening (M — BACKLOG 2026-06-07 PR #42 follow-up; CW-1 ships the remaining code hardening, this adds its automated coverage), (2) bulk-rate buttons computed-visibility assertion (S — BACKLOG 2026-06-02), (3) `handleCancel` Branch 3 unit test (XS — BACKLOG 2026-05-14).
 - **🔵 items considered and deferred** (quota headroom was 6 SP; JXL streaming took 5): the twice-raised **"Hash sort + AI sort mutual exclusion"** (🔵 2026-05-07, carries an explicit promote-priority note from 2026-05-30) was passed over because it is M-sized with an open design question (sort-source axis vs unified dropdown) — too big for the 1 SP of remaining 🔵 headroom and wrong-shaped for a cleanup week; it should be a **lead candidate for the June 22 normal week**, alongside the XS-S tournament pause/exit button (🔵 2026-06-03).
 - **Roadmap refresh needs a user conversation**: MILESTONES.md / ROADMAP.md / GOALS.md still date from 2026-02-05 and describe long-shipped v1.1 work; the June 1–5 plan nominated a refresh for "the deferred Cleanup Week". It is **not scheduled as SP** because it needs strategic input (is v1.1 closed? what is v2.0's actual scope given tournament mode/JXL/CLIP all shipped outside the roadmap?) — raise it with the user during the week; if the conversation happens, slot the doc edit into Thursday alongside CW-3.
-- **🟤 tail remains after this week**: CW batches burn ~16 SP of auto-generated debt, but the 🟤 section holds substantially more (plus older XS items from March–April). The stale-checkbox sweep (CW-3) will produce an accurate pending-SP recount; expect the next Cleanup Week around **early July 2026** (~3-week cadence) unless the recount says otherwise. **Post-CW-3 recount (2026-06-16):** **160 unchecked 🟤 checkbox items** remain after the sweep flipped 4 🟤 entries (CLIP similarity sorting, CLIP unload, logger double-init, regression-checker FullscreenManager). The tail is large → the ~3-week Cleanup cadence holds. (Count is checkbox lines in the 🟤 section, used as an SP proxy — the items are overwhelmingly XS.)
+- **🟤 tail remains after this week**: CW batches burn ~16 SP of auto-generated debt, but the 🟤 section holds substantially more (plus older XS items from March–April). The stale-checkbox sweep (CW-3) will produce an accurate pending-SP recount; expect the next Cleanup Week around **early July 2026** (~3-week cadence) unless the recount says otherwise. **Post-CW-3 recount (2026-06-16):** **153 unchecked 🟤 checkbox items** remain after CW-3 cleared **11 🟤 entries** total — 4 via the sweep (CLIP similarity sorting, CLIP unload, logger double-init, regression-checker FullscreenManager) + 7 at closeout (the CW-3 task entries: sweep, docker cruft, nul line, kickoff doc-drift, waitForTimeout dup-tag, + 2 already-done no-ops: MANUAL markers, backlog-structure inventory). The tail is still large → the ~3-week Cleanup cadence holds. (Count is checkbox lines in the 🟤 section, used as an SP proxy — the items are overwhelmingly XS.)
 - **Branch/PR shape**: 5 workflow runs — one per group (CW-1/2/3/4 each one branch+PR; CW-5 solo branch+PR). CW-3 is docs-only → per the PR #46 learning, `/code-review` will be a no-op for it; ship with a manual check instead.
 
 ### Quota Check

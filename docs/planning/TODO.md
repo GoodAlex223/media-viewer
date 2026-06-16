@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-06-15 <!-- Group CW-2: Test backfill complete -->
+**Last Updated**: 2026-06-16 <!-- Group CW-3: Docs & backlog hygiene complete -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -132,6 +132,21 @@ Active tasks and backlog.
      Spec: docs/superpowers/specs/2026-06-15-cw-2-test-backfill-design.md
      326 unit (unchanged case count); E2E 42/43→48/48 (suite green). 5 BACKLOG entries
      checked off; 3 follow-ups filed (🟤 [2026-06-15]). -->
+
+<!-- Group CW-3 Docs & backlog hygiene completed 2026-06-16, moved to DONE.md.
+     Docs-and-config-only: no JS changed; 326/326 unit unchanged; E2E skipped (no JS).
+     Task 1: BACKLOG stale-checkbox sweep — 7 git-verified flips (CLIP-extraction-UX PR #45,
+     Pin Lucide CDN Group F, CLIP similarity sort Group D, CLIP unload + logger double-init
+     Group E, regression-checker FullscreenManager Group F) + corrected the PR #37 stale-SHA
+     trap (853e1ee→52f2cbc); recount 153 unchecked 🟤. Task 2: doc bundle — tournament hash
+     6c73f9f→acfc3b6, kickoff 8→11 cases, 2 README orphan-ref rows, waitForTimeout dup tag,
+     Group D spec sort_cache_clip fix (several spec-listed items already done — no-ops).
+     Task 3: cruft — git rm 4 docker files + duplicate !.claude/agents/; ⚠️ .gitignore nul
+     line KEPT (load-bearing — suppresses Windows NUL-device phantom; documented, user-approved).
+     8 BACKLOG entries checked off; CW-4 .gitignore boundary recorded.
+     Plan archived: docs/archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md
+     Spec: docs/superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md
+     Branch cleanup/cw-3-docs-backlog-hygiene; PR pending (docs-only → manual review). -->
 
 ---
 
