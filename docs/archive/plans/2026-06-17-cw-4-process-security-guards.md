@@ -8,6 +8,8 @@
 
 **Tech Stack:** Node.js (CommonJS), Vitest, ESLint flat config, Husky v9.
 
+**Status:** Complete
+
 **Spec:** [docs/superpowers/specs/2026-06-17-cw-4-process-security-guards-design.md](../specs/2026-06-17-cw-4-process-security-guards-design.md)
 
 ## Global Constraints
@@ -46,7 +48,7 @@
 **Interfaces:**
 - Produces: `scanForSecrets(text: string) => Array<{ pattern: string, match: string }>` — one entry per *distinct* marker category found in `text` (empty array ⇒ none). Exported via `module.exports`.
 
-- [ ] **Step 1: Add the `scripts/` ESLint block**
+- [x] **Step 1: Add the `scripts/` ESLint block**
 
 In `eslint.config.mjs`, insert this block immediately **after** block `5b` (the E2E test files block ending at the `},` before `eslintConfigPrettier`) and before the `// Disable ESLint rules that conflict with Prettier` comment:
 
@@ -74,7 +76,7 @@ Also update the header comment block: change the count line `//   Ten file-group
 //   6.  Build / maintenance scripts — scripts/**/*.js (Node CJS)
 ```
 
-- [ ] **Step 2: Write the failing tests for `scanForSecrets`**
+- [x] **Step 2: Write the failing tests for `scanForSecrets`**
 
 Create `tests/check-secrets.test.js`. Note the concatenation in fixtures — no full-shape literal lives on disk:
 
@@ -146,12 +148,12 @@ describe('scanForSecrets — false positives (must NOT match)', () => {
 });
 ```
 
-- [ ] **Step 3: Run the tests — verify they fail**
+- [x] **Step 3: Run the tests — verify they fail**
 
 Run: `npx vitest run check-secrets`
 Expected: FAIL — `Cannot find module '../scripts/check-secrets.js'`.
 
-- [ ] **Step 4: Implement the detector**
+- [x] **Step 4: Implement the detector**
 
 Create `scripts/check-secrets.js`:
 
@@ -191,17 +193,17 @@ function scanForSecrets(text) {
 module.exports = { scanForSecrets, SECRET_PATTERNS };
 ```
 
-- [ ] **Step 5: Run the tests — verify they pass**
+- [x] **Step 5: Run the tests — verify they pass**
 
 Run: `npx vitest run check-secrets`
 Expected: PASS (12 tests).
 
-- [ ] **Step 6: Lint + format the new files**
+- [x] **Step 6: Lint + format the new files**
 
 Run: `npx eslint scripts/check-secrets.js tests/check-secrets.test.js eslint.config.mjs` → no errors.
 Run: `npx prettier --check scripts/check-secrets.js tests/check-secrets.test.js` → "All matched files use Prettier code style!" (run `npx prettier --write` on them first if needed).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/check-secrets.js tests/check-secrets.test.js eslint.config.mjs
@@ -221,7 +223,7 @@ git commit -m "feat(security): add scanForSecrets credential detector + scripts 
 - Consumes: `scanForSecrets` (Task 1).
 - Produces: `extractAddedLines(diffText: string) => Array<{ file: string|null, line: number, text: string }>` — added (`+`) lines only, with the new-file line number; skips binary hunks; ignores removed lines. Exported via `module.exports`.
 
-- [ ] **Step 1: Write the failing tests for `extractAddedLines`**
+- [x] **Step 1: Write the failing tests for `extractAddedLines`**
 
 Append to `tests/check-secrets.test.js`. First update the import line to also pull in `extractAddedLines`:
 
@@ -290,12 +292,12 @@ describe('extractAddedLines — unified=0 diff parsing', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests — verify they fail**
+- [x] **Step 2: Run the tests — verify they fail**
 
 Run: `npx vitest run check-secrets`
 Expected: FAIL — `extractAddedLines is not a function`.
 
-- [ ] **Step 3: Implement `extractAddedLines` + the CLI**
+- [x] **Step 3: Implement `extractAddedLines` + the CLI**
 
 In `scripts/check-secrets.js`, add `extractAddedLines` above the `module.exports` line:
 
@@ -392,22 +394,22 @@ if (require.main === module) {
 }
 ```
 
-- [ ] **Step 4: Run the tests — verify they pass**
+- [x] **Step 4: Run the tests — verify they pass**
 
 Run: `npx vitest run check-secrets`
 Expected: PASS (18 tests total).
 
-- [ ] **Step 5: Lint + format**
+- [x] **Step 5: Lint + format**
 
 Run: `npx eslint scripts/check-secrets.js tests/check-secrets.test.js` → no errors.
 Run: `npx prettier --check scripts/check-secrets.js tests/check-secrets.test.js` (run `--write` first if needed).
 
-- [ ] **Step 6: Manually verify the CLI runs clean on its own staged change**
+- [x] **Step 6: Manually verify the CLI runs clean on its own staged change**
 
 Run: `git add scripts/check-secrets.js tests/check-secrets.test.js && node scripts/check-secrets.js; echo "exit=$?"`
 Expected: no output, `exit=0` (the file's own regex sources do not self-match; the test fixtures use concatenation).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git commit -m "feat(security): add staged-diff parser + CLI to check-secrets"
@@ -423,7 +425,7 @@ git commit -m "feat(security): add staged-diff parser + CLI to check-secrets"
 **Interfaces:**
 - Consumes: `scripts/check-secrets.js` CLI (Task 2).
 
-- [ ] **Step 1: Prepend the secret scan to the hook**
+- [x] **Step 1: Prepend the secret scan to the hook**
 
 Edit `.husky/pre-commit` so it reads exactly:
 
@@ -435,7 +437,7 @@ npx vitest run
 
 (The scan runs first — a leaked secret blocks immediately, before formatting or the test suite.)
 
-- [ ] **Step 2: Verify the happy path (this commit exercises the hook)**
+- [x] **Step 2: Verify the happy path (this commit exercises the hook)**
 
 Stage and commit the hook change. The pre-commit hook now runs the secret scan over the staged diff (`.husky/pre-commit`, one added line — no secret), then lint-staged, then vitest.
 
@@ -445,7 +447,7 @@ git commit -m "build(husky): run secret scan in pre-commit before lint-staged/vi
 ```
 Expected: commit succeeds (scan clean → lint-staged → 18 new + existing tests pass).
 
-- [ ] **Step 3: Manually verify the guard BLOCKS a planted secret**
+- [x] **Step 3: Manually verify the guard BLOCKS a planted secret**
 
 ```bash
 printf 'const k = "AKIA%s";\n' "ABCDEFGHIJKLMNOP" > /tmp/secret-smoke.js
@@ -455,7 +457,7 @@ node scripts/check-secrets.js; echo "exit=$?"
 ```
 Expected: prints `secret-smoke.js:1 — AWS access key ID` and `exit=1`.
 
-- [ ] **Step 4: Clean up the smoke file**
+- [x] **Step 4: Clean up the smoke file**
 
 ```bash
 git restore --staged secret-smoke.js
@@ -474,7 +476,7 @@ Expected: clean working tree (no `secret-smoke.js`).
 
 **Interfaces:** none (documentation only).
 
-- [ ] **Step 1: Strengthen "Step 1: Verify Plan Completion" in `docs/archive/plans/README.md`**
+- [x] **Step 1: Strengthen "Step 1: Verify Plan Completion" in `docs/archive/plans/README.md`**
 
 Replace the existing checklist under `### Step 1: Verify Plan Completion` (the five `- [ ]` lines) with:
 
@@ -489,7 +491,7 @@ Replace the existing checklist under `### Step 1: Verify Plan Completion` (the f
 - [ ] **Verify every commit SHA cited in the plan / DONE.md / CLAUDE.md is an ancestor of `main`** — `git merge-base --is-ancestor <sha> main` (catches dead-branch citations like the recurring PR #37 stale-SHA trap)
 ```
 
-- [ ] **Step 2: Clarify "Step 5: Update Documentation Index" in `docs/archive/plans/README.md`**
+- [x] **Step 2: Clarify "Step 5: Update Documentation Index" in `docs/archive/plans/README.md`**
 
 Replace the two bullet lines under `### Step 5: Update Documentation Index` with:
 
@@ -499,7 +501,7 @@ Replace the two bullet lines under `### Step 5: Update Documentation Index` with
 - Update `../README.md` — add to "Archived Documents" table (if a non-plan doc)
 ```
 
-- [ ] **Step 3: Extend the "Quick Checklist" in `docs/archive/plans/README.md`**
+- [x] **Step 3: Extend the "Quick Checklist" in `docs/archive/plans/README.md`**
 
 Replace the `## Quick Checklist` list with:
 
@@ -517,7 +519,7 @@ Replace the `## Quick Checklist` list with:
 
 Also bump the `*Last Updated: 2026-04-29*` line at the bottom to `*Last Updated: 2026-06-17*`.
 
-- [ ] **Step 4: Mirror the items in `docs/planning/plans/README.md`**
+- [x] **Step 4: Mirror the items in `docs/planning/plans/README.md`**
 
 Replace the list under `## After Completion` (`Move to archive when ALL are true:`) with:
 
@@ -533,7 +535,7 @@ Replace the list under `## After Completion` (`Move to archive when ALL are true
 - [ ] **Indexed in `docs/README.md` — plan under Archived Plans AND spec under Design Specs**
 ```
 
-- [ ] **Step 5: Verify the docs render and commit**
+- [x] **Step 5: Verify the docs render and commit**
 
 Run: `git diff --stat docs/archive/plans/README.md docs/planning/plans/README.md` → both modified.
 (No Prettier on `docs/**` — it is in `.prettierignore`.)
@@ -549,22 +551,22 @@ git commit -m "docs(process): add flip-checkboxes/Status/spec-index/SHA-ancestor
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Full unit suite green**
+- [x] **Step 1: Full unit suite green**
 
 Run: `npx vitest run`
 Expected: all files pass; total = 326 + 18 = **344 tests** across 15 files.
 
-- [ ] **Step 2: Lint + format clean repo-wide**
+- [x] **Step 2: Lint + format clean repo-wide**
 
 Run: `npm run lint` → no errors (includes the new `scripts/` block).
 Run: `npm run format:check` → no errors.
 
-- [ ] **Step 3: Re-run the security audit §1/§2 command blocks**
+- [x] **Step 3: Re-run the security audit §1/§2 command blocks**
 
 From [docs/security/2026-06-11-security-privacy-audit.md](../../security/2026-06-11-security-privacy-audit.md), run the §1 git-history pickaxe loop and the §2 working-tree `git grep`, applying the audit-doc exclusions from the §1 caveat.
 Expected: clean — zero history hits; only the documented benign working-tree matches (now also the new spec/plan/script, which use bare prefixes / concatenation and contain no full-shape literal token).
 
-- [ ] **Step 4: Confirm scope guards held**
+- [x] **Step 4: Confirm scope guards held**
 
 Run: `git diff --name-only main...HEAD`
 Expected: exactly these six paths, and **no `.gitignore`**:

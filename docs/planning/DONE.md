@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-16 <!-- Group CW-3: Docs & backlog hygiene (stale-checkbox sweep + doc drift + cruft) -->
+**Last Updated**: 2026-06-17 <!-- Group CW-4: Process & security guards (pre-commit secret guard + pre-archive checklist) -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,51 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-17 — Group CW-4: Process & security guards (pre-commit secret guard + pre-archive checklist)
+
+**Summary**: Cleanup-Week batch (3 SP, 🟡 Operational) — two preventive guards in one branch / one PR.
+Closes the Group D security-audit **tier-(a)** referral and the 2026-04-30 pre-archive-checklist item.
+Built subagent-driven (5 tasks; controller commits per [[feedback_subagent_commits_vs_memory_hook]]);
+final whole-branch review (opus) → **"Ready to merge: Yes"** (no Critical/Important findings).
+
+**Plan**: [docs/archive/plans/2026-06-17-cw-4-process-security-guards.md](../archive/plans/2026-06-17-cw-4-process-security-guards.md)
+**Spec**: [docs/superpowers/specs/2026-06-17-cw-4-process-security-guards-design.md](../superpowers/specs/2026-06-17-cw-4-process-security-guards-design.md)
+
+**The two guards**:
+1. **Pre-commit secret guard (tier a, 2 SP)** — new `scripts/check-secrets.js`: pure `scanForSecrets(text)`
+   (5 markers — AWS `AKIA…`, GitHub `gh[opsru]_…`, Slack `xox[baprs]-…`, Google `AIza…`,
+   `-----BEGIN … PRIVATE KEY-----`) + pure `extractAddedLines(diffText)` (parses `git diff --cached
+   --unified=0`; added lines only; skips binary/removed) + a CLI behind `require.main === module` that
+   blocks the commit (exit 1) on a hit. Wired **first** into `.husky/pre-commit` (before lint-staged/vitest).
+   New `scripts/**/*.js` ESLint block (Node CJS). **No new runtime dependency.** Self-reference-safe:
+   patterns match full token *shape* (prose prefixes don't match) and test fixtures concatenate so no
+   full-shape literal sits on disk. 12 + 6 unit tests.
+2. **Pre-archive checklist (1 SP)** — strengthened the **tracked** archive READMEs (NOT the
+   uncommittable global `.claude/TEMPLATES/plan.md`): `docs/archive/plans/README.md` +
+   `docs/planning/plans/README.md` now require flipping in-plan `[ ]`→`[x]`, setting `Status: Complete`,
+   indexing BOTH plan AND spec in `docs/README.md`, and verifying cited SHAs are ancestors of `main`
+   (`git merge-base --is-ancestor`) — folding in the CW-3 / PR #50 stale-SHA convention.
+
+**Key decisions**:
+- Node script + vitest over inline shell — testable + cross-platform (Windows Git-Bash quoting is fragile).
+- Committable home = tracked archive READMEs; the BACKLOG-named global template is gitignored/outside-repo
+  (an edit there produces nothing in the PR).
+- Full token-*shape* patterns (not bare prefixes) → the guard never flags its own regex source or doc mentions.
+
+**Verification**: 326→**344 unit** (15 files); `npm run lint` 0 errors (1 pre-existing unrelated warning in
+`media-viewer-utils.test.js:1263`); Prettier clean; hook happy-path (commit) + block-path (planted AWS key →
+blocked, exit 1) both exercised; full-shape detector scan of **all 171 tracked files = zero real secrets**;
+audit §1/§2 re-run clean; scope = **exactly 8 paths, no `.gitignore`**. E2E not run (no renderer/main/worker changes).
+
+**Deviations** (both improvements, review-approved): null-guarded CLI output (`f.file ?? '<unknown>'`);
+header-comment correction (Task 1 referenced symbols added only in Task 2).
+
+**Follow-ups filed** (🟤 [2026-06-17]): Slack-regex intentional-over-match code comment; detector test-coverage
+(2nd `match`-field assertion + multi-file / binary-leak diff tests); tier-a false-negative note (fine-grained
+`github_pat_` + 40-char AWS secret keys) for the gitleaks entry; CLAUDE.md "eleven → twelve file-group blocks" drift.
+
+**Branch**: `cleanup/cw-4-process-security-guards`; PR pending.
 
 ### 2026-06-16 — Group CW-3: Docs & backlog hygiene (stale-checkbox sweep + doc drift + cruft removal)
 
