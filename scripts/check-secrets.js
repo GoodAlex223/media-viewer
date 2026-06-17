@@ -104,7 +104,7 @@ if (require.main === module) {
     if (findings.length > 0) {
         console.error('\n⛔ Potential secret(s) found in staged changes:\n');
         for (const f of findings) {
-            console.error(`  ${f.file}:${f.line} — ${f.pattern}`);
+            console.error(`  ${f.file ?? '<unknown>'}:${f.line} — ${f.pattern}`);
         }
         console.error(
             '\nRemove the secret(s) and re-stage. If this is a genuine false positive,' +
