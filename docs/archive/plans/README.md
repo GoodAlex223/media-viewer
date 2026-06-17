@@ -35,10 +35,13 @@ Plans are archived when:
 Before archiving, confirm ALL criteria above are met:
 
 - [ ] All implementation steps marked `[x]` complete
+- [ ] **Flip every remaining `- [ ]` inside the plan to `- [x]`** (Success Criteria, Implementation Steps, Test Plan, Review)
+- [ ] **Set the plan header `Status:` to `Complete`**
 - [ ] All tests passing
 - [ ] "Key Discoveries" section is filled in
 - [ ] "Future Improvements" section has **minimum 2 items**
 - [ ] Execution log contains "Sub-Item Complete" entries for all sub-items
+- [ ] **Verify every commit SHA cited in the plan / DONE.md / CLAUDE.md is an ancestor of `main`** — `git merge-base --is-ancestor <sha> main` (catches dead-branch citations like the recurring PR #37 stale-SHA trap)
 
 ### Step 2: Extract Improvements to BACKLOG.md
 
@@ -92,21 +95,24 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 
 ### Step 5: Update Documentation Index
 
-- Update `../../README.md` — move plan from "Active Plans" to "Archived Plans" table
-- Update `../README.md` — add to "Archived Documents" table (if non-plan doc)
+- Update `../../README.md` — move the plan from "Active Plans" to "Archived Plans"
+- Update `../../README.md` — add the **design spec** under "Design Specs" (specs are the commonly-missed half — index BOTH the plan AND its spec)
+- Update `../README.md` — add to "Archived Documents" table (if a non-plan doc)
 
 ---
 
 ## Quick Checklist
 
 - [ ] Plan completion verified (all steps done, tests pass)
+- [ ] All in-plan checkboxes flipped to `[x]` and header `Status: Complete`
+- [ ] Cited commit SHAs verified as ancestors of `main`
 - [ ] Improvements extracted to BACKLOG.md (categorized appropriately)
 - [ ] Summary added to DONE.md (with lessons learned)
 - [ ] Plan moved to docs/archive/plans/
 - [ ] .claude/plans/ copy deleted (if exists)
-- [ ] docs/README.md updated (Active Plans → Archived Plans)
+- [ ] docs/README.md updated — Active Plans → Archived Plans **and** spec added under Design Specs
 - [ ] docs/archive/README.md updated
 
 ---
 
-*Last Updated: 2026-04-29*
+*Last Updated: 2026-06-17*
