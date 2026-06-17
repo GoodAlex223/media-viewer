@@ -1,8 +1,7 @@
 // Pre-commit secret guard (tier a): regex scan of staged content for
 // high-signal credential markers. No runtime dependencies.
 //
-// `scanForSecrets` and `extractAddedLines` are pure and unit-tested; the
-// CLI section at the bottom is a thin git wrapper. Patterns match the full
+// `scanForSecrets` is pure and unit-tested. Patterns match the full
 // token SHAPE (not bare prefixes), so this file does not flag its own
 // regex sources and prose mentions of the markers do not match.
 
