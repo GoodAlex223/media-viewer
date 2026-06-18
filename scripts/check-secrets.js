@@ -34,8 +34,9 @@ function scanForSecrets(text) {
 
 /**
  * Parse a `git diff --cached --unified=0` text into added lines.
- * Header lines that appear before the first @@ are harmless: `newLineNo`
- * is reset by every hunk header, and no `+` content is collected until then.
+ * `newLineNo` is reset by every `@@` hunk header, so any stray increments from
+ * pre-hunk header lines (`diff --git`, `index`) never reach a reported line —
+ * git emits no `+` content before the first hunk header.
  * @param {string} diffText
  * @returns {Array<{file: string|null, line: number, text: string}>}
  */
@@ -64,6 +65,10 @@ function extractAddedLines(diffText) {
             continue;
         }
         if (inBinary) {
+            continue;
+        }
+        if (raw.startsWith('\\ ')) {
+            // "\ No newline at end of file" marker — not content, must not advance newLineNo
             continue;
         }
         if (raw.startsWith('+')) {

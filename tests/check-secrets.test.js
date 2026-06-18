@@ -119,4 +119,19 @@ describe('extractAddedLines — unified=0 diff parsing', () => {
         );
         expect(findings).toEqual([{ file: 'config.js', line: 1, pattern: 'GitHub token' }]);
     });
+
+    it('does not let a "\\ No newline at end of file" marker advance the line number', () => {
+        // Real `git diff --unified=0` emits this marker between the -old and +new
+        // lines of a no-trailing-newline replacement. It must not increment newLineNo,
+        // or the added line that follows is reported one line too high.
+        const noNewlineDiff = [
+            '+++ b/f.txt',
+            '@@ -1 +1 @@',
+            '-old secret line',
+            '\\ No newline at end of file',
+            '+new secret line',
+            '\\ No newline at end of file',
+        ].join('\n');
+        expect(extractAddedLines(noNewlineDiff)).toEqual([{ file: 'f.txt', line: 1, text: 'new secret line' }]);
+    });
 });
