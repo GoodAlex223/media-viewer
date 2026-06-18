@@ -2,7 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-<!-- AUTO-MANAGED: project-description -->
 ## Overview
 
 **Media Viewer** - Electron desktop application for browsing, rating, and managing media files (images and videos) with visual similarity sorting and ML-based prediction features.
@@ -14,9 +13,6 @@ Key capabilities:
 - ML-based prediction for user preferences
 - Face detection features
 
-<!-- END AUTO-MANAGED -->
-
-<!-- AUTO-MANAGED: build-commands -->
 ## Build & Development Commands
 
 ```bash
@@ -28,11 +24,8 @@ npm run lint           # Lint all JS (lint:fix to auto-fix)
 npm run format         # Prettier (format:check to verify only)
 ```
 
-Pre-commit hook (Husky + lint-staged + vitest): ESLint --fix + Prettier on staged `*.{js,cjs}`, Prettier on staged `*.{json,css,html}`, then `npx vitest run` (unit tests must pass). E2E is NOT run by the hook.
+Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret scan, fail-fast first step) → lint-staged (ESLint --fix + Prettier on staged `*.{js,cjs}`, Prettier on staged `*.{json,css,html}`) → `npx vitest run` (unit tests must pass). E2E is NOT run by the hook.
 
-<!-- END AUTO-MANAGED -->
-
-<!-- AUTO-MANAGED: architecture -->
 ## Architecture
 
 ```
@@ -56,6 +49,7 @@ media_viewer/
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
+├── scripts/             # Maintenance scripts (Node CJS): check-secrets.js (pre-commit secret guard — scanForSecrets + extractAddedLines + CLI)
 ├── tests/               # Unit (Vitest, tests/*.test.js) + E2E (Playwright, tests/e2e/)
 │   └── e2e/             # fixtures/ (1x1 PNGs, tiny.mp4, static.jxl) + helpers/ (electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs)
 ├── .claude/agents/      # Shared agent definitions tracked in git (other .claude/* gitignored)
@@ -68,9 +62,6 @@ media_viewer/
 3. Renderer (media-viewer.js) manages UI state; calls CLIP via `window.electronAPI`; TournamentManager delegates IPC
 4. CPU-intensive work → Web Workers (sorting, ML, feature extraction); CLIP is main-process IPC (npm packages can't resolve in Electron Web Workers)
 
-<!-- END AUTO-MANAGED -->
-
-<!-- AUTO-MANAGED: conventions -->
 ## Code Conventions
 
 **Naming**: Functions camelCase verb-first (`loadMedia`); Classes PascalCase (`MediaViewer`); Constants UPPER_SNAKE_CASE; DOM IDs kebab-case; CSS classes kebab-case.
@@ -85,7 +76,7 @@ media_viewer/
 
 **Formatting & Linting**:
 - Prettier: tabWidth=4, useTabs=false, singleQuote, semi, trailingComma=es5, printWidth=120, bracketSpacing, arrowParens=always, endOfLine="lf". `.gitattributes` enforces LF.
-- ESLint flat config (`eslint.config.mjs`): eleven file-group blocks (main, preload, renderer module/script, fullscreen+tournament, workers, jxl module worker, shared libs, unit tests, e2e helpers/tests); shared rules eqeqeq/curly/prefer-const/no-var/no-shadow(warn)/no-unused-vars(warn); `eslint-config-prettier` last.
+- ESLint flat config (`eslint.config.mjs`): twelve file-group blocks (main, preload, renderer module/script, fullscreen+tournament, workers, jxl module worker, shared libs, scripts, unit tests, e2e helpers/tests); shared rules eqeqeq/curly/prefer-const/no-var/no-shadow(warn)/no-unused-vars(warn); `eslint-config-prettier` last.
 - Prettier ignores `docs/`, `*.md`, `package-lock.json`.
 
 **Testing (Unit — Vitest)**:
@@ -104,9 +95,6 @@ media_viewer/
 - `afterEach` null guards: guard `if (electronApp)`/`if (tmpFixtures)`/`if (page)` before cleanup (`.catch()` only handles rejections, not a sync TypeError on undefined).
 - Before a method that guards on `isLoading` (e.g. `handleCancel` after `applyBulkRating`), `await page.waitForFunction(() => !window.mediaViewer.isLoading)`.
 
-<!-- END AUTO-MANAGED -->
-
-<!-- MANUAL -->
 ## Backlog Intake Rules
 
 BACKLOG.md is split into three source sections. Authoritative rules live in
@@ -134,9 +122,6 @@ BACKLOG.md is split into three source sections. Authoritative rules live in
 - When 🟤 grows beyond ~20 SP of pending items, surface this in the next planning
   conversation as a Cleanup Week trigger
 
-<!-- END MANUAL -->
-
-<!-- AUTO-MANAGED: patterns -->
 ## Detected Patterns
 
 **Error Handling**: user-facing errors via the notification system (bottom-right); renderer errors forwarded to the main-process file logger via `window.electronAPI.logError` (fire-and-forget); `showError()`, `window.onerror`, `unhandledrejection` all forward.
@@ -180,9 +165,6 @@ BACKLOG.md is split into three source sections. Authoritative rules live in
 - `DEFAULT_SHORTCUTS` defines `single`/`compare`/`tournament` bindings. Per-mode dispatch: `mode = isTournamentMode ? 'tournament' : isCompareMode ? 'compare' : 'single'`; `D`/`F` resolve to different handlers per mode (compare `bothGood`/`bothBad` = ML training; tournament `bothWin`/`bothLose` = `handleTournamentDraw`, no ML) — isolation comes from the mode-keyed reverse map, not action-name uniqueness.
 - `loadShortcuts()` merges sparse `customShortcuts` from global `localStorage` over defaults; `buildKeyString(e)` normalizes events; `buildReverseMap()` inverts `shortcuts[mode]` for O(1) dispatch; `executeAction(action)` dispatches to handlers; `checkShortcutConflict` checks within-mode; `saveShortcut`/`resetShortcuts` persist/clear the full object. Shortcut methods use global `localStorage` directly (tests mock `globalThis.localStorage`).
 
-<!-- END AUTO-MANAGED -->
-
-<!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
 Completed-task history, per-PR review notes, test-count deltas, and the forward roadmap live in `docs/planning/DONE.md`, `docs/planning/WEEKLY.md`, `docs/planning/BACKLOG.md`, archived plans under `docs/archive/plans/`, and `git log` — not here.
@@ -204,9 +186,6 @@ Completed-task history, per-PR review notes, test-count deltas, and the forward 
 - JXL rendering: `object-fit` is silently ignored on `<canvas>` — `finishJxlCanvasDisplay` computes explicit aspect-preserving CSS px (scale ≤1). `computeJxlFrameSchedule` floors 0/short frames to `MIN_MS=20` (else a zero-delay setTimeout pegs the loop). `stopJxlAnimation()` runs first in `cleanupCurrentMedia()` (before the `!currentMedia` return) or a timer draws on a detached canvas. `ensureJxlWorker()` rejects via the stored `_jxlRejectReady` — never replace `_jxlReady` with a fresh `Promise.reject` (awaiters hold the old reference). `_jxlObjectURLs` is shared across single + both compare sides (safe only because compare re-renders both sides atomically). For JXL feature extraction, `new Image()` can't load `.jxl` — decode via `decodeJxl()` + a local object URL revoked `{once:true}` after load (do NOT reuse `jxlFrameToObjectURL()` URLs — revoked on `cleanupCurrentMedia()`).
 - `jxl-oxide-wasm` constraints: only `encodeToPng()` exposes pixels (PNG→ImageBitmap round-trip); it is TERMINAL (read `r.duration` BEFORE it, call once, don't `r.free()` after); init with explicit `wasmBytes` (`read-jxl-wasm` IPC, avoids `fetch(file://)`); spawn the worker with `{type:'module'}`.
 
-<!-- END AUTO-MANAGED -->
-
-<!-- AUTO-MANAGED: best-practices -->
 ## Best Practices
 
 When modifying this codebase:
@@ -215,12 +194,3 @@ When modifying this codebase:
 - Worker changes may impact performance significantly
 - The renderer file is large — search before adding duplicates
 - Run `npm test` before committing (pre-commit hook enforces this); worker exports require the conditional CJS pattern so tests can import them
-
-<!-- END AUTO-MANAGED -->
-
-<!-- MANUAL -->
-## Custom Notes
-
-Add project-specific notes here. This section is never auto-modified.
-
-<!-- END MANUAL -->
