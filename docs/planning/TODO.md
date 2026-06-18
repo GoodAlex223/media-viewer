@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-06-16 <!-- Group CW-3: Docs & backlog hygiene complete -->
+**Last Updated**: 2026-06-17 <!-- Group CW-4: Process & security guards complete -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -147,6 +147,20 @@ Active tasks and backlog.
      Plan archived: docs/archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md
      Spec: docs/superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md
      Branch cleanup/cw-3-docs-backlog-hygiene; PR pending (docs-only → manual review). -->
+
+<!-- Group CW-4 Process & security guards completed 2026-06-17, moved to DONE.md.
+     Two preventive guards (3 SP, 🟡 Operational); subagent-driven (5 tasks, controller commits).
+     Guard 1: scripts/check-secrets.js — pure scanForSecrets (5 markers, full-shape) + extractAddedLines
+     (git diff --cached parser) + CLI behind require.main; wired first into .husky/pre-commit; new
+     scripts/**/*.js ESLint block; no new dependency; self-reference-safe (concatenated fixtures). 12+6 tests.
+     Guard 2: hardened tracked archive READMEs (docs/archive/plans + docs/planning/plans) — flip checkboxes,
+     Status: Complete, index plans AND specs, verify cited SHAs are ancestors of main. (Global TEMPLATES/
+     plan.md left untouched — gitignored/outside-repo.)
+     326→344 unit; lint 0-err; both hook paths exercised; full-tree scan = zero real secrets; scope = 8 paths,
+     no .gitignore. Final review (opus) "Ready to merge: Yes".
+     Plan archived: docs/archive/plans/2026-06-17-cw-4-process-security-guards.md
+     Spec: docs/superpowers/specs/2026-06-17-cw-4-process-security-guards-design.md
+     Branch cleanup/cw-4-process-security-guards; PR pending. -->
 
 ---
 

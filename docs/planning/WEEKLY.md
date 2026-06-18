@@ -75,10 +75,10 @@
 **Source**: 🟡 Operational
 **Total SP**: 3
 
-- [ ] **Pre-commit secret guard (tier a — regex scan, no new dependency)** — 2 SP, 🟠 IMPORTANT
+- [x] **Pre-commit secret guard (tier a — regex scan, no new dependency)** — 2 SP, 🟠 IMPORTANT — ✅ Done 2026-06-17: `scripts/check-secrets.js` (pure `scanForSecrets` 5 markers + `extractAddedLines` + CLI) wired first into `.husky/pre-commit`; new `scripts/**/*.js` ESLint block; 18 tests; no new dependency. Built as a Node script (not `package.json` lint-staged) — testable + cross-platform. Audit §1/§2 re-run clean; full-tree scan = zero real secrets.
   - 🟡 [2026-06-11] Group D audit referral. Extend the Husky pre-commit hook with a staged-content regex scan for the audit's high-signal markers (`AKIA`, `ghp_`, `xox[baprs]-`, `AIza…`, `BEGIN …PRIVATE KEY`). Re-run the audit §1/§2 command blocks to validate. Gitleaks (tier b) stays in BACKLOG.
   - Affected: `.husky/pre-commit`, possibly [package.json](../../package.json) (lint-staged).
-- [ ] **Pre-archive checklist block** (~~+ `.gitignore` duplicate-line fix~~) — 1 SP → effectively ~0.5 SP
+- [x] **Pre-archive checklist block** (~~+ `.gitignore` duplicate-line fix~~) — 1 SP → effectively ~0.5 SP — ✅ Done 2026-06-17: hardened the tracked archive READMEs (flip checkboxes, `Status: Complete`, index plans AND specs, SHA-ancestor check). Global `TEMPLATES/plan.md` left untouched (gitignored/outside-repo).
   - ⚠️ **Boundary shift (2026-06-16):** the `.gitignore` duplicate-`!.claude/agents/` fix was **pulled forward into CW-3** (CW-3 already edited `.gitignore`, so doing it there avoided a same-file collision). **CW-4 now owns only the pre-archive checklist template block, and CW-4's branch must NOT touch `.gitignore`.**
   - 🟡 2026-04-30: add the "before archive: flip checkboxes, add Status: Complete, index in docs/README.md (plans AND specs)" checklist block to the plan template in `TEMPLATES/` (option (i), lowest effort; extend to Design Specs per the PR #36 follow-up note). ~~🟡 2026-04-29: fix the duplicate `!.claude/agents/` line at `.gitignore` 138-139~~ — ✅ done in CW-3.
 
@@ -154,10 +154,10 @@
 |-------|----|
 | **Group CW-4: Process & security guards** [batch] | 3 |
 
-- [ ] Pre-commit secret guard, tier (a) regex scan (2 SP)
-- [ ] Pre-archive checklist template block (1 SP) — `.gitignore` duplicate line already done in CW-3; do NOT touch `.gitignore`
+- [x] Pre-commit secret guard, tier (a) regex scan (2 SP)
+- [x] Pre-archive checklist template block (1 SP) — `.gitignore` duplicate line already done in CW-3; do NOT touch `.gitignore`
 
-**Daily total**: 3 SP
+**Daily total**: 3 SP — ✅ **Complete 2026-06-17** (326→344 unit; both hook paths verified; zero real secrets; scope = 8 paths, no `.gitignore`)
 
 ---
 

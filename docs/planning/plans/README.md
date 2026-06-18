@@ -26,11 +26,14 @@ Implementation plans for tasks currently in progress.
 Move to archive when ALL are true:
 
 - [ ] All steps marked `[x]` complete
+- [ ] **All in-plan checkboxes flipped to `[x]`; plan header `Status: Complete`**
 - [ ] Tests passing
 - [ ] "Key Discoveries" filled in
 - [ ] "Future Improvements" has 2+ items
 - [ ] **Improvements extracted to BACKLOG.md** (categorized appropriately)
+- [ ] **Cited commit SHAs verified as ancestors of `main`** (`git merge-base --is-ancestor <sha> main`)
 - [ ] Summary added to `../DONE.md`
+- [ ] **Indexed in `docs/README.md` — plan under Archived Plans AND spec under Design Specs**
 
 **See [../../archive/plans/README.md](../../archive/plans/README.md) for complete step-by-step archive process.**
 

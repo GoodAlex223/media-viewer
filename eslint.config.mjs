@@ -1,6 +1,6 @@
 // ESLint flat configuration for Electron media_viewer project.
 //
-// Ten file-group blocks:
+// Twelve file-group blocks:
 //   1.  Node/Electron main           — main.js, logger.js
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
@@ -12,6 +12,7 @@
 //   4.  Unit tests (Vitest)          — tests/**/*.js (excl. e2e)
 //   5a. E2E helpers (CJS)            — tests/e2e/**/*.cjs
 //   5b. E2E tests (Playwright)       — tests/e2e/**/*.js, playwright.config.js
+//   6.  Build / maintenance scripts  — scripts/**/*.js (Node CJS)
 //
 // eslint-config-prettier applied last to suppress formatting rule conflicts.
 
@@ -227,6 +228,22 @@ export default [
             globals: {
                 ...globals.node,
                 ...globals.browser,
+            },
+        },
+        rules: {
+            ...sharedRules,
+            'no-undef': 'error',
+        },
+    },
+
+    // 6. Build / maintenance scripts (Node CJS — run via `node scripts/*.js`)
+    {
+        files: ['scripts/**/*.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'commonjs',
+            globals: {
+                ...globals.node,
             },
         },
         rules: {
