@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+<!-- Maintained manually. The AUTO-MANAGED / MANUAL section markers were intentionally removed 2026-06-18; do not re-add them or auto-rewrite sections. -->
+
 ## Overview
 
 **Media Viewer** - Electron desktop application for browsing, rating, and managing media files (images and videos) with visual similarity sorting and ML-based prediction features.
