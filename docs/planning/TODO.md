@@ -2,7 +2,7 @@
 
 Active tasks and backlog.
 
-**Last Updated**: 2026-06-17 <!-- Group CW-4: Process & security guards complete -->
+**Last Updated**: 2026-06-18 <!-- Manual-testing intake: +4 🔴 large-folder (24k) performance items + promoted 🟠 feature-extraction-timing item into Planned -->
 
 
 **Purpose**: Tracks PLANNED and IN-PROGRESS tasks only.
@@ -24,6 +24,17 @@ Active tasks and backlog.
 ## 📋 Planned
 
 <!-- Defined tasks ready to start. Ordered by priority: 🔴 → 🟠 → 🟡 → 🟢 -->
+
+<!-- [2026-06-18] Manual-testing intake — large-folder (24k+) performance, split from one user report (origin: manual testing). User priority: "speed these up first." -->
+
+- [ ] 🔴 **Speed up AI / similarity sorting on large folders (24k+ files)** — AI-prediction and visual-similarity sorts run very slowly and opaquely on 24000+ file folders: the neighbor-graph build is O(n·K) (K ≈ √n·10 neighbors per file) with an O(n²) MST/greedy fallback, and there is no progress/cancel affordance. Reduce complexity (cap neighbors, chunk + yield to the event loop, push more work into the worker) and add progress/cancel UX (русский оригинал: Очень медленно и не понятно работает с большими папками (24000+ файлов) ИИ сортировка. Сначала нам нужно постараться максимально ускорить эти функции.); affected: `sorting-worker.js:~596-752`, `media-viewer.js:~5992-6120` [possible-dup-of: Event-loop yielding in insertNewFilesInSortedOrder for pathological cases — BACKLOG 2026-05-24; Incremental feature-cache serving ~40s blocking load — BACKLOG 2026-05-26]
+- [ ] 🔴 **Speed up tournament launch & resume/continuation on large folders (24k+ files)** — Starting or continuing (resuming) a tournament over 24000+ files is very slow and confusing: full-state (de)serialization to `.tournament_state.json` plus O(n²) Swiss `_buildRoundPairings` at init/resume, and dual O(n) `findIndex` per pair display. Stream/defer the pairing build, memoize pairings, and replace path→index `findIndex` with a prebuilt Map (русский оригинал: Очень медленно и не понятно работает с большими папками (24000+ файлов) запуск Турнира (продолжение).); affected: `tournament-engine.js:~63-152`, `tournament.js:~120`, `media-viewer.js:~4426-4479` [possible-dup-of: Incremental feature-cache serving ~40s blocking load — BACKLOG 2026-05-26]
+- [ ] 🔴 **Speed up media rating (pick → next pair) in tournament mode** — Rating media in tournament mode is much slower than compare mode; every pick triggers a synchronous full-state disk write + O(n²) re-pairing + dual O(n) `findIndex` before the next pair renders, while compare mode does none of that. Make state persistence async/debounced and cache path→index lookups (русский оригинал: Также медленно работает оценка медиа в турнир моде (в compare mode работает намного быстрее).); affected: `media-viewer.js:~4684`, `tournament.js:~120`, `tournament-engine.js:~96-152`, `main.js:~238` [possible-dup-of: Speed up tournament-mode pair changing — BACKLOG 2026-06-18]
+- [ ] 🔴 **Speed up "Save & leave" in tournament mode** — The "Save & leave" action re-serializes and writes the entire tournament state to disk before exiting, which is slow on large tournaments and largely redundant since state is already persisted on every pick. Reuse the already-persisted state, or write incrementally/async (русский оригинал: «Save & leave» опция работает медленно; "Сначала нам нужно постараться максимально ускорить эти функции".); affected: `media-viewer.js:~4380-4422` (Save handler), `tournament.js:~120` (`_persistState`)
+
+<!-- [2026-06-18] Promoted from BACKLOG [2026-05-30] (re-reported during manual testing) -->
+
+- [ ] 🟠 **Smarter timing for background feature extraction (don't always start on folder open)** — *Promoted to TODO 2026-06-18 (re-reported during manual testing; provenance in BACKLOG [2026-06-18]).* Feature extraction produces the 64-dim hand-crafted + 512-dim CLIP vectors used by AI-prediction sort and visual-similarity sort, so it can't be removed — only deferred. Today `kickoffBackgroundExtractionIfEnabled()` fires unconditionally on every `loadFolder()`, heavily loading the CPU on large folders even when the user never uses AI sort. Distinct from the [2026-05-03] "extraction-starting notification" item (that surfaces visibility; this decides *when* to extract). Options: (a) lazy — extract only on first click of an AI-dependent feature (Sort by Prediction, CLIP sort); (b) threshold — auto-extract on folder open only if N < `EXTRACTION_AUTO_LIMIT` (e.g. 500), else wait for explicit trigger; (c) settings toggle "Auto-extract on folder open" (default off for new users); (d) idle-only — start only after a quiet period (e.g. 60s idle). Trade-off: lazy means AI sort is slow the first time it's clicked on a big folder, but the app stays responsive (русский оригинал: Экстракшн фьючерс в каких случаях лучше запускать? Потому что он запускается при открытии папки, что нагружает компьютер, если медиа много в папке. / Для чего нужно feature extraction? Он замедляет показ медиа при открытии медиа. Может лучше перенести feature extraction со старта приложения туда, где он нужен?); affected: `media-viewer.js` (`kickoffBackgroundExtractionIfEnabled`, `loadFolder` call site, new settings toggle), Settings panel F1 in `index.html` + `styles.css`
 
 <!-- Compare Mode Fix completed 2026-04-10, moved to DONE.md -->
 
