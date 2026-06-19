@@ -16,6 +16,7 @@ Central index for all project documentation.
 | [ARCHITECTURE.md](ARCHITECTURE.md)       | System architecture, component relationships |
 | [MANUAL_TESTING.md](MANUAL_TESTING.md)   | Manual testing scenarios and checklists      |
 | [WEEKLY.md](planning/WEEKLY.md)          | Weekly task schedule and daily breakdown      |
+| [REVIEW-QUEUE.md](planning/REVIEW-QUEUE.md) | Cross-week state for the recurring Weekly Reviews batch |
 
 ## Planning Index
 
