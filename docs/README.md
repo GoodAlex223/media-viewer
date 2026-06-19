@@ -129,6 +129,7 @@ Central index for all project documentation.
 | [Test Backfill][] | Return E2E suite to green + first tournament-mode Playwright coverage (hybrid driving) + `recordDraw` history-shape assertion strengthening (Group CW-2) |
 | [CW-3 Docs & Backlog Hygiene][] | git-truth-verified BACKLOG stale-checkbox sweep + doc-drift one-liners + repo-root cruft; targeted-not-exhaustive scope (Group CW-3) |
 | [Process & Security Guards][] | Dependency-free pre-commit regex secret guard (full-shape patterns, self-reference-safe via concatenated fixtures) + pre-archive checklist hardening (flip checkboxes, `Status: Complete`, index plans+specs, SHA-ancestor check) (Group CW-4) |
+| [Sort Responsiveness Core][] | Large-folder sort UX: determinate cancelable progress notification (Option C) + O(n²) MST-fallback → VP-tree `findNearest` (quality-preserving, accept tie diff) + `insertNewFilesInSortedOrder` event-loop yielding + dead renderer-sort-method removal; quality-locked, PR1 of 3 (Group P1) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -162,6 +163,7 @@ Central index for all project documentation.
 [Test Backfill]: superpowers/specs/2026-06-15-cw-2-test-backfill-design.md
 [CW-3 Docs & Backlog Hygiene]: superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md
 [Process & Security Guards]: superpowers/specs/2026-06-17-cw-4-process-security-guards-design.md
+[Sort Responsiveness Core]: superpowers/specs/2026-06-19-sort-responsiveness-core-design.md
 
 ## Security Audits
 
