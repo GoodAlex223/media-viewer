@@ -1135,6 +1135,19 @@ class MediaViewer {
         this.showNotification('File removed from list', 'info');
     }
 
+    // Pure view-model for the sort progress card. Locale-independent thousands
+    // grouping so the value is deterministic across environments (tests + CI).
+    computeSortProgressView({ phase, current, total }) {
+        const hasCount = typeof current === 'number' && typeof total === 'number' && total > 0;
+        const groupThousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return {
+            phase: phase || '',
+            determinate: hasCount,
+            percent: hasCount ? Math.min(100, Math.round((current / total) * 100)) : null,
+            countsText: hasCount ? `${groupThousands(current)} / ${groupThousands(total)}` : '',
+        };
+    }
+
     // Update or create a single progress notification instead of creating many
     updateProgressNotification(message) {
         if (!this.progressNotification || !this.progressNotification.parentNode) {
@@ -1165,6 +1178,45 @@ class MediaViewer {
         if (this.progressNotification && this.progressNotification.parentNode) {
             this.progressNotification.remove();
             this.progressNotification = null;
+        }
+    }
+
+    // Determinate, cancelable sort-progress card (design spec 2026-06-19 §1, Option C).
+    // Reuses the same reusable element as updateProgressNotification (glass, primary
+    // left-border, bottom-right container) but renders a phase label, a determinate bar,
+    // a counts/% line, and a Cancel button wired to the sort abort controller.
+    updateSortProgress({ phase, current, total }) {
+        const view = this.computeSortProgressView({ phase, current, total });
+
+        if (!this.progressNotification || !this.progressNotification.parentNode) {
+            this.progressNotification = document.createElement('div');
+            this.notificationContainer.appendChild(this.progressNotification);
+        }
+        const el = this.progressNotification;
+        el.className = 'notification info notification-progress';
+
+        if (!el.querySelector('.progress-phase')) {
+            el.innerHTML =
+                '<div class="progress-phase"></div>' +
+                '<div class="progress-track"><div class="progress-fill"></div></div>' +
+                '<div class="progress-meta"><span class="progress-counts"></span>' +
+                '<button type="button" class="notification-action progress-cancel">Cancel</button></div>';
+            el.querySelector('.progress-cancel').addEventListener('click', () => {
+                this.sortAbortController?.abort();
+            });
+        }
+
+        el.querySelector('.progress-phase').textContent = view.phase;
+        const fill = el.querySelector('.progress-fill');
+        const counts = el.querySelector('.progress-counts');
+        if (view.determinate) {
+            el.classList.remove('indeterminate');
+            fill.style.width = `${view.percent}%`;
+            counts.textContent = `${view.countsText} · ${view.percent}%`;
+        } else {
+            el.classList.add('indeterminate');
+            fill.style.width = '';
+            counts.textContent = '';
         }
     }
 

@@ -82,6 +82,7 @@ const formatEta = extractMethod('formatEta');
 const formatTimeAgo = extractMethod('formatTimeAgo');
 const removeFileFromList = extractMethod('removeFileFromList');
 const areFoldersConfigured = extractMethod('areFoldersConfigured');
+const computeSortProgressView = extractMethod('computeSortProgressView');
 const insertNewFilesInSortedOrder = extractAsyncMethod('insertNewFilesInSortedOrder');
 const applyCachedSortOrder = extractAsyncMethod('applyCachedSortOrder');
 
@@ -2148,5 +2149,30 @@ describe('CLIP unload timer callback (Fix 5)', () => {
         await handleClipUnloadTimer.call(ctx);
         expect(globalThis.window.electronAPI.logError).toHaveBeenCalled();
         expect(ctx.clipWorkerReady).toBe(true); // not reset on failure
+    });
+});
+
+describe('computeSortProgressView', () => {
+    it('determinate: phase, clamped percent, comma-grouped counts', () => {
+        const v = computeSortProgressView({ phase: 'Building graph', current: 12400, total: 24000 });
+        expect(v).toEqual({
+            phase: 'Building graph',
+            determinate: true,
+            percent: 52,
+            countsText: '12,400 / 24,000',
+        });
+    });
+
+    it('indeterminate when total is missing or zero', () => {
+        const a = computeSortProgressView({ phase: 'Loading…', current: null, total: null });
+        expect(a.determinate).toBe(false);
+        expect(a.percent).toBeNull();
+        expect(a.countsText).toBe('');
+        const b = computeSortProgressView({ phase: 'Loading…', current: 0, total: 0 });
+        expect(b.determinate).toBe(false);
+    });
+
+    it('clamps percent to 100 when current exceeds total', () => {
+        expect(computeSortProgressView({ phase: 'x', current: 30, total: 24 }).percent).toBe(100);
     });
 });
