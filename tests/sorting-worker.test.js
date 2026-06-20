@@ -313,8 +313,11 @@ describe('sortMediaBySimilarityMST (hash) — fallback characterization', () => 
         globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
     }
 
-    // Two clusters around 0000 and 1111 force the greedy MST traversal to get
-    // "stuck" at a cluster boundary and invoke the global nearest-unvisited fallback.
+    // Two clusters around 0000 and 1111 create a two-cluster structure that
+    // exercises the MST traversal path. This fixture pins the end-to-end sort
+    // output; the correctness of the exclusion-aware nearest-neighbor search
+    // used by the fallback is proven directly by the
+    // 'VPTree.findNearest equals brute-force exclusion-aware nearest' block below.
     const files = [{ path: '/a' }, { path: '/b' }, { path: '/c' }, { path: '/d' }, { path: '/e' }, { path: '/f' }];
     const hashes = {
         '/a': '0000',
@@ -347,6 +350,9 @@ describe('sortMediaBySimilarityClip — fallback characterization', () => {
         '/e': [0.2, 0.98, 0, 0],
         '/f': [0.31, 0.95, 0, 0],
     };
+    // This fixture pins the end-to-end sort output; the correctness of the
+    // exclusion-aware nearest-neighbor search is proven directly by the
+    // 'VPTree.findNearest equals brute-force exclusion-aware nearest' block below.
     it('produces a stable ordering (pins behavior across the fallback fix)', () => {
         resetAbort();
         const result = sortMediaBySimilarityClip(files, clipVectors, 0);
@@ -369,5 +375,103 @@ describe('sortMediaBySimilarityMST (hash) — tie behavior is a valid permutatio
         expect(result).toHaveLength(4);
         expect(new Set(result).size).toBe(4);
         ['/a', '/b', '/c', '/d'].forEach((p) => expect(result).toContain(p));
+    });
+});
+
+describe('VPTree.findNearest equals brute-force exclusion-aware nearest', () => {
+    // Helper: compute the minimum distance from target among all non-excluded items.
+    function bruteForceNearest(items, target, exclude, distFn) {
+        let minDist = Infinity;
+        let minItem = null;
+        for (const item of items) {
+            if (exclude && exclude.has(item)) continue;
+            const d = distFn(item, target);
+            if (d < minDist) {
+                minDist = d;
+                minItem = item;
+            }
+        }
+        return { item: minItem, distance: minDist };
+    }
+
+    const euclidean = (a, b) => Math.abs(a.value - b.value);
+
+    it('returns a node whose distance equals the brute-force minimum (generic numeric fixture)', () => {
+        const items = [{ value: 1 }, { value: 4 }, { value: 7 }, { value: 10 }, { value: 13 }, { value: 20 }];
+        const tree = new VPTree(items, euclidean);
+        const target = { value: 8 };
+        // Exclude the two closest items (value=7, distance 1 and value=10, distance 2).
+        const exclude = new Set([items[2], items[3]]);
+
+        const vpResult = tree.findNearest(target, exclude);
+        const bfResult = bruteForceNearest(items, target, exclude, euclidean);
+
+        expect(vpResult).not.toBeNull();
+        expect(euclidean(vpResult, target)).toBe(bfResult.distance);
+    });
+
+    it('returns a node whose distance equals the brute-force minimum with a larger exclude set', () => {
+        const items = [
+            { value: 2 },
+            { value: 5 },
+            { value: 9 },
+            { value: 14 },
+            { value: 18 },
+            { value: 25 },
+            { value: 30 },
+        ];
+        const tree = new VPTree(items, euclidean);
+        const target = { value: 16 };
+        // Exclude value=14 (closest) and value=18 (second closest).
+        const exclude = new Set([items[3], items[4]]);
+
+        const vpResult = tree.findNearest(target, exclude);
+        const bfResult = bruteForceNearest(items, target, exclude, euclidean);
+
+        expect(vpResult).not.toBeNull();
+        expect(euclidean(vpResult, target)).toBe(bfResult.distance);
+    });
+
+    it('distance equals brute-force minimum in a TIE case (does not assert which tied node)', () => {
+        // value=3 and value=7 are equidistant from target=5 (distance 2 each).
+        // value=5 itself (distance 0) is excluded, so the true minimum is 2.
+        const item3 = { value: 3 };
+        const item5 = { value: 5 };
+        const item7 = { value: 7 };
+        const item15 = { value: 15 };
+        const items = [item3, item5, item7, item15];
+        const tree = new VPTree(items, euclidean);
+        const target = { value: 5 };
+        const exclude = new Set([item5]); // exclude the exact match
+
+        const vpResult = tree.findNearest(target, exclude);
+        const bfResult = bruteForceNearest(items, target, exclude, euclidean);
+
+        // Both item3 and item7 are valid; assert only that the distance is correct.
+        expect(vpResult).not.toBeNull();
+        expect(euclidean(vpResult, target)).toBe(bfResult.distance); // must be 2
+        expect(bfResult.distance).toBe(2);
+    });
+
+    it('distance equals brute-force minimum using cosine distance', () => {
+        // Use unit-normalised 2D vectors so cosine distance = 1 - dot(a, b).
+        const cosine = (a, b) => calculateCosineDistance(a.vec, b.vec);
+        const mkItem = (vec) => ({ vec });
+        const items = [
+            mkItem([1, 0]),
+            mkItem([0.6, 0.8]), // cos-dist to [0,1]: 1 - 0.8 = 0.2  (closest non-excluded)
+            mkItem([0, 1]),
+            mkItem([-1, 0]),
+        ];
+        const tree = new VPTree(items, cosine);
+        const target = mkItem([0, 1]);
+        // Exclude the exact match (items[2]) so the nearest should be items[1].
+        const exclude = new Set([items[2]]);
+
+        const vpResult = tree.findNearest(target, exclude);
+        const bfResult = bruteForceNearest(items, target, exclude, cosine);
+
+        expect(vpResult).not.toBeNull();
+        expect(cosine(vpResult, target)).toBeCloseTo(bfResult.distance, 10);
     });
 });
