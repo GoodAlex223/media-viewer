@@ -11,6 +11,7 @@ const {
     calculateHammingDistance,
     calculateCosineDistance,
     sortMediaBySimilarityClip,
+    sortMediaBySimilarityMST,
 } = require('../sorting-worker');
 
 describe('MinHeap', () => {
@@ -304,5 +305,69 @@ describe('sortMediaBySimilarityClip', () => {
         expect(() => sortMediaBySimilarityClip(files, clipVectors, 0)).toThrow(
             'Only 1 files have CLIP embeddings. Need at least 2 to sort.'
         );
+    });
+});
+
+describe('sortMediaBySimilarityMST (hash) — fallback characterization', () => {
+    function resetAbort() {
+        globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
+    }
+
+    // Two clusters around 0000 and 1111 force the greedy MST traversal to get
+    // "stuck" at a cluster boundary and invoke the global nearest-unvisited fallback.
+    const files = [{ path: '/a' }, { path: '/b' }, { path: '/c' }, { path: '/d' }, { path: '/e' }, { path: '/f' }];
+    const hashes = {
+        '/a': '0000',
+        '/b': '0001',
+        '/c': '0010',
+        '/d': '1111',
+        '/e': '1110',
+        '/f': '1101',
+    };
+
+    it('produces a stable, tie-free ordering (pins behavior across the fallback fix)', () => {
+        resetAbort();
+        const result = sortMediaBySimilarityMST(files, hashes, 0);
+        // Capture baseline: run once, paste the printed array here, then re-run to lock.
+        const EXPECTED = ['/a', '/b', '/f', '/d', '/e', '/c'];
+        expect(result).toEqual(EXPECTED);
+    });
+});
+
+describe('sortMediaBySimilarityClip — fallback characterization', () => {
+    function resetAbort() {
+        globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
+    }
+    const files = [{ path: '/a' }, { path: '/b' }, { path: '/c' }, { path: '/d' }, { path: '/e' }, { path: '/f' }];
+    const clipVectors = {
+        '/a': [1, 0, 0, 0],
+        '/b': [0.98, 0.2, 0, 0],
+        '/c': [0.95, 0.31, 0, 0],
+        '/d': [0, 1, 0, 0],
+        '/e': [0.2, 0.98, 0, 0],
+        '/f': [0.31, 0.95, 0, 0],
+    };
+    it('produces a stable ordering (pins behavior across the fallback fix)', () => {
+        resetAbort();
+        const result = sortMediaBySimilarityClip(files, clipVectors, 0);
+        const EXPECTED = ['/a', '/b', '/c', '/f', '/e', '/d']; // captured baseline
+        expect(result).toEqual(EXPECTED);
+    });
+});
+
+describe('sortMediaBySimilarityMST (hash) — tie behavior is a valid permutation', () => {
+    function resetAbort() {
+        globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
+    }
+    it('returns every file exactly once with the start file first, even with distance ties', () => {
+        resetAbort();
+        // b, c, d are all Hamming-distance 1 from a (ties on the fallback choice).
+        const files = [{ path: '/a' }, { path: '/b' }, { path: '/c' }, { path: '/d' }];
+        const hashes = { '/a': '000', '/b': '100', '/c': '010', '/d': '001' };
+        const result = sortMediaBySimilarityMST(files, hashes, 0);
+        expect(result[0]).toBe('/a');
+        expect(result).toHaveLength(4);
+        expect(new Set(result).size).toBe(4);
+        ['/a', '/b', '/c', '/d'].forEach((p) => expect(result).toContain(p));
     });
 });
