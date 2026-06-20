@@ -5789,6 +5789,9 @@ class MediaViewer {
                 if ((i + 1) % 10 === 0 || i === newFiles.length - 1) {
                     this.updateProgressNotification(`🔄 Processing new files: ${i + 1}/${newFiles.length}`);
                 }
+                if ((i + 1) % 25 === 0) {
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                }
             }
         } else {
             // Hash path (vptree, mst, simple, or undefined): unchanged behavior.
@@ -5851,6 +5854,9 @@ class MediaViewer {
 
                 if ((i + 1) % 10 === 0 || i === newFiles.length - 1) {
                     this.updateProgressNotification(`🔄 Processing new files: ${i + 1}/${newFiles.length}`);
+                }
+                if ((i + 1) % 25 === 0) {
+                    await new Promise((resolve) => setTimeout(resolve, 0));
                 }
             }
         }
