@@ -25,8 +25,8 @@ quality. Subagent-driven (5 tasks; controller commits per [[feedback_subagent_co
 all per-task reviews Approved; final whole-branch review (opus) → **"Ready to merge: With fixes"** (the one
 Minor — CLIP-fallback test coverage — fixed in-branch in `d19d252`).
 
-⏳ **Status: implementation + automated tests complete; manual 24k-folder smoke + PR pending** (the
-`updateSortProgress` DOM render + Cancel are verified by that smoke, not by `node`-env unit tests). The
+✅ **Status: implementation + automated tests complete; manual 24k-folder smoke PASSED (2026-06-19); PR #54 open — review/merge pending.** (The
+`updateSortProgress` DOM render + Cancel are verified by that smoke, not by `node`-env unit tests.) The
 parent P1 TODO item stays **OPEN** (PR2 + PR3 remain).
 
 **Plan**: [docs/archive/plans/2026-06-19-sort-responsiveness-core.md](../archive/plans/2026-06-19-sort-responsiveness-core.md)
@@ -73,8 +73,8 @@ progress card deferred to the manual smoke (24k folders aren't E2E-fixturable).
 **Follow-ups filed** (🟤 [2026-06-19]): optional progress-card E2E smoke; deferred neighbor-graph
 parallelization (#7, measure-first trigger); CLAUDE.md/docs drift from the dead-code removal.
 
-**Branch**: `feature/sort-responsiveness-core`; PR + manual 24k smoke pending. PR2 (hash off-thread) + PR3
-(incremental cache-load) remain for the full P1 win.
+**Branch**: `feature/sort-responsiveness-core` → **PR #54 (open)**; manual 24k smoke **PASSED 2026-06-19** —
+review/merge pending. PR2 (hash off-thread) + PR3 (incremental cache-load) remain for the full P1 win.
 
 ### 2026-06-17 — Group CW-4: Process & security guards (pre-commit secret guard + pre-archive checklist)
 

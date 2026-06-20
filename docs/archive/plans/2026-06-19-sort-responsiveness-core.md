@@ -8,7 +8,7 @@
 
 **Tech Stack:** Electron renderer (browser globals, no bundler), Web Worker (CommonJS), Vitest (`node` env — no DOM), Playwright E2E. Design spec: [docs/superpowers/specs/2026-06-19-sort-responsiveness-core-design.md](../specs/2026-06-19-sort-responsiveness-core-design.md).
 
-**Status:** Complete (implementation + automated tests). ⏳ **Pending the manual 24k-folder smoke** (user hand-off — the `updateSortProgress` DOM render + Cancel are verified there, not by unit tests) and the PR. Subagent-driven (controller commits per [[feedback_subagent_commits_vs_memory_hook]]); per-task reviews all Approved; final whole-branch review (opus) → "Ready to merge: With fixes" (the one Minor — CLIP-fallback test coverage — was fixed in `d19d252`). Branch `feature/sort-responsiveness-core`; 357/357 unit.
+**Status:** Complete. Manual 24k-folder smoke **PASSED 2026-06-19** (user hand-off — verified the `updateSortProgress` DOM render + Cancel, which `node`-env unit tests can't cover). On **PR #54 (open)**, review/merge pending. Subagent-driven (controller commits per [[feedback_subagent_commits_vs_memory_hook]]); per-task reviews all Approved; final whole-branch review (opus) → "Ready to merge: With fixes" (the one Minor — CLIP-fallback test coverage — was fixed in `d19d252`). Branch `feature/sort-responsiveness-core`; 357/357 unit.
 
 ## Global Constraints
 
@@ -696,7 +696,7 @@ EOF
 - [x] §1: `computeSortProgressView` view-model unit-tested (determinate/indeterminate/clamp); progress card + Cancel wired (DOM render verified by manual smoke, not unit tests — `node` env has no DOM)
 - [x] §3: `insertNewFilesInSortedOrder` output unchanged with yielding (30-file regression test); abort still throws
 - [x] §4: dead methods + orphaned `MinHeap`/`VPTree` removed; no remaining references
-- [ ] Manual: 24k-folder smoke — no freeze on worker phases, bar advances, Cancel prompt, ordering matches pre-change ⏳ **PENDING (user hand-off)**
+- [x] Manual: 24k-folder smoke — no freeze on worker phases, bar advances, Cancel prompt, ordering matches pre-change ✅ **PASSED 2026-06-19 (user hand-off)**
 
 ---
 

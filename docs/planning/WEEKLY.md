@@ -23,7 +23,7 @@
 **Source**: 🔵 User-Flagged
 **Total SP**: 5 — solo (≥5 SP algorithmic work justifies its own run)
 
-- [ ] **Speed up AI / similarity sorting on large folders (24k+ files)** — 5 SP, 🔴 IMPORTANT — ⏳ **PR1 of 3 implementation complete 2026-06-19** (branch `feature/sort-responsiveness-core`; box stays unchecked pending the manual 24k smoke + PR, and PR2 hash-off-thread / PR3 cache-load; the broad-scope rescope is in DONE.md 2026-06-19)
+- [ ] **Speed up AI / similarity sorting on large folders (24k+ files)** — 5 SP, 🔴 IMPORTANT — ⏳ **PR1 of 3 complete; manual 24k smoke PASSED 2026-06-19** (PR #54 open, review/merge pending; branch `feature/sort-responsiveness-core`). Box stays unchecked because PR2 (hash off-thread) + PR3 (cache-load) remain; broad-scope rescope is in DONE.md 2026-06-19.
   - TODO.md Planned 🔴 (origin: BACKLOG 🔵 [2026-06-18] manual-testing intake; "speed these up first"). AI-prediction and visual-similarity sorts run very slowly and opaquely on 24 000+ files: the neighbor-graph build is O(n·K) (K ≈ √n·10 neighbors/file) with an O(n²) MST/greedy fallback, and there is **no progress/cancel affordance**. Reduce complexity (cap neighbors, chunk + yield to the event loop, push more work into the worker) and add progress/cancel UX.
   - Affected: `sorting-worker.js:~596-752` (neighbor graph + MST), `media-viewer.js:~5992-6120` (sort invocation, progress/cancel surface).
   - In scope to check/consolidate: the related 🟤 perf items this TODO entry tags — "Event-loop yielding in `insertNewFilesInSortedOrder` for pathological cases" (BACKLOG 2026-05-24) and "Incremental feature-cache serving (~40s blocking load)" (BACKLOG 2026-05-26). Close whichever the fix subsumes.
