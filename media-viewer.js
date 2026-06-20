@@ -1165,11 +1165,24 @@ class MediaViewer {
 
             this.notificationContainer.appendChild(this.progressNotification);
         } else {
-            // Update existing notification
-            const messageSpan = this.progressNotification.querySelector('.progress-message');
-            if (messageSpan) {
-                messageSpan.textContent = message;
+            // Update existing notification.
+            // Guard: if the element was taken over by updateSortProgress (which builds a
+            // different DOM structure without .progress-message), rebuild the simple text
+            // structure so we don't dereference null. This lets non-sort callers (ML
+            // scoring progress, historical-ratings loop) safely fire during a long sort
+            // without throwing a TypeError.
+            let messageSpan = this.progressNotification.querySelector('.progress-message');
+            if (!messageSpan) {
+                // Element was in sort-progress card form — reset to simple text form.
+                this.progressNotification.className = 'notification info';
+                this.progressNotification.innerHTML = '';
+                messageSpan = document.createElement('span');
+                messageSpan.className = 'progress-message';
+                this.progressNotification.appendChild(messageSpan);
+                this.progressNotification.style.display = 'flex';
+                this.progressNotification.style.alignItems = 'center';
             }
+            messageSpan.textContent = message;
         }
     }
 
@@ -5126,7 +5139,7 @@ class MediaViewer {
             // Check for cached sort order first (bypassed when force re-sorting)
             const cachedSortData = forceResort ? null : await this.loadSortCache(this.sortAlgorithm);
             if (cachedSortData && cachedSortData.sortedPaths.length > 0) {
-                this.updateProgressNotification('🔄 Loading cached sort order...');
+                this.updateSortProgress({ phase: 'Loading cached sort order…' });
 
                 // Load hash cache for inserting new files
                 await this.loadHashCache();
@@ -5199,7 +5212,7 @@ class MediaViewer {
                         'info'
                     );
 
-                    this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
+                    this.updateSortProgress({ phase: `Sorting with ${algorithmName}…` });
 
                     if (this.sortAbortController.signal.aborted) {
                         throw new Error('Sorting cancelled by user');
@@ -5223,7 +5236,7 @@ class MediaViewer {
                     this.showNotification(`💾 Cache: ${cacheFile} (${cachedCount} hashes loaded)`, 'info');
 
                     // Start progress notification
-                    this.updateProgressNotification('🔄 Starting hash computation...');
+                    this.updateSortProgress({ phase: 'Starting hash computation…' });
 
                     let processed = 0;
                     let newHashes = 0;
@@ -5246,18 +5259,22 @@ class MediaViewer {
 
                                 // Update progress every 5 files or at end
                                 if (processed % 5 === 0 || processed === total) {
-                                    this.updateProgressNotification(
-                                        `🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`
-                                    );
+                                    this.updateSortProgress({
+                                        phase: `Computing hashes (${newHashes} new, ${skipped} skipped)`,
+                                        current: processed,
+                                        total,
+                                    });
                                 }
                             } catch (error) {
                                 console.error(`Failed to compute hash for ${file.path}:`, error);
                                 skipped++;
                                 // Update progress notification instead of showing separate warning
                                 if (processed % 5 === 0 || processed === total) {
-                                    this.updateProgressNotification(
-                                        `🔄 Processing: ${processed}/${total} (${newHashes} new, ${skipped} skipped)`
-                                    );
+                                    this.updateSortProgress({
+                                        phase: `Computing hashes (${newHashes} new, ${skipped} skipped)`,
+                                        current: processed,
+                                        total,
+                                    });
                                 }
                             }
                         }
@@ -5283,7 +5300,7 @@ class MediaViewer {
                         this.showNotification(`🔢 Using K=${actualK} neighbors per file (max: ${maxK})`, 'info');
                     }
 
-                    this.updateProgressNotification(`🔄 Sorting with ${algorithmName}...`);
+                    this.updateSortProgress({ phase: `Sorting with ${algorithmName}…` });
 
                     // Get K value for simple algorithm
                     const savedK = localStorage.getItem('sortKValue');
@@ -5547,11 +5564,11 @@ class MediaViewer {
             }
 
             this.sortingWorker.onmessage = (e) => {
-                const { type, sortedPaths, message } = e.data;
+                const { type, sortedPaths, message, current, total } = e.data;
 
                 switch (type) {
                     case 'progress':
-                        this.updateProgressNotification(message);
+                        this.updateSortProgress({ phase: message, current, total });
                         break;
                     case 'complete':
                         this.sortingWorker.terminate();
@@ -5766,7 +5783,7 @@ class MediaViewer {
 
         // If we have new files, find best positions for them
         if (newFiles.length > 0 && cachedOrder.length > 0) {
-            this.updateProgressNotification(`🔄 Inserting ${newFiles.length} new files...`);
+            this.updateSortProgress({ phase: `Inserting ${newFiles.length} new files…` });
             // Prefer explicit algorithm from caller; fall back to the cache entry's algorithm
             // field (added in feature/clip-sort-followups). Old caches without either route
             // safely through the Hamming else-branch.
@@ -5839,7 +5856,7 @@ class MediaViewer {
                 insertions.push({ file: newFile, index: bestIndex, distance: bestScore });
 
                 if ((i + 1) % 10 === 0 || i === newFiles.length - 1) {
-                    this.updateProgressNotification(`🔄 Processing new files: ${i + 1}/${newFiles.length}`);
+                    this.updateSortProgress({ phase: 'Placing new files', current: i + 1, total: newFiles.length });
                 }
                 if ((i + 1) % 25 === 0) {
                     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -5905,7 +5922,7 @@ class MediaViewer {
                 insertions.push({ file: newFile, index: bestIndex, distance: bestScore });
 
                 if ((i + 1) % 10 === 0 || i === newFiles.length - 1) {
-                    this.updateProgressNotification(`🔄 Processing new files: ${i + 1}/${newFiles.length}`);
+                    this.updateSortProgress({ phase: 'Placing new files', current: i + 1, total: newFiles.length });
                 }
                 if ((i + 1) % 25 === 0) {
                     await new Promise((resolve) => setTimeout(resolve, 0));

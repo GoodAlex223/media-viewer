@@ -328,6 +328,7 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
                 throw new Error('computePerceptualHash should not be called in CLIP path');
             },
             updateProgressNotification() {},
+            updateSortProgress() {},
             ...overrides,
         };
     }
@@ -489,6 +490,7 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
             // Stub electronAPI.path.basename — uses last path segment
             // (real impl is async; just mirror the contract)
             updateProgressNotification() {},
+            updateSortProgress() {},
             async insertNewFilesInSortedOrder(_sortedFiles, _newFiles, algorithm) {
                 captured.algorithm = algorithm;
             },
