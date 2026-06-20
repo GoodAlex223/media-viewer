@@ -25,6 +25,7 @@ Plans are archived when:
 | [2026-01-02_compare-mode-ai-sort-bug.md](2026-01-02_compare-mode-ai-sort-bug.md) | Compare mode AI sort bug | 2026-01-10 |
 | [2026-04-20-group-e-resource-management.md](2026-04-20-group-e-resource-management.md) | Group E: Resource Management (CLIP unload + logger guard) | 2026-04-21 |
 | [2026-04-29-group-f-build-dx.md](2026-04-29-group-f-build-dx.md) | Group F: Build & DX (Lucide CDN pin + regression-checker update) | 2026-04-29 |
+| [2026-06-19-sort-responsiveness-core.md](2026-06-19-sort-responsiveness-core.md) | Group P1: Sort responsiveness core (progress/cancel card + O(n²) MST-fallback fix + yielding + dead-code removal), PR1 of 3 | 2026-06-19 |
 
 ---
 

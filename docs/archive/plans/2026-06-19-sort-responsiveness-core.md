@@ -8,6 +8,8 @@
 
 **Tech Stack:** Electron renderer (browser globals, no bundler), Web Worker (CommonJS), Vitest (`node` env — no DOM), Playwright E2E. Design spec: [docs/superpowers/specs/2026-06-19-sort-responsiveness-core-design.md](../specs/2026-06-19-sort-responsiveness-core-design.md).
 
+**Status:** Complete (implementation + automated tests). ⏳ **Pending the manual 24k-folder smoke** (user hand-off — the `updateSortProgress` DOM render + Cancel are verified there, not by unit tests) and the PR. Subagent-driven (controller commits per [[feedback_subagent_commits_vs_memory_hook]]); per-task reviews all Approved; final whole-branch review (opus) → "Ready to merge: With fixes" (the one Minor — CLIP-fallback test coverage — was fixed in `d19d252`). Branch `feature/sort-responsiveness-core`; 357/357 unit.
+
 ## Global Constraints
 
 - **Sort quality must not change.** No neighbor cap (no K-cap); same neighbor graph; same MST. The ONLY permitted output deviation is tie-break order among **exactly-equal-distance** files in the rare global-jump fallback (Task 3, hash path only; CLIP effectively bit-identical).
@@ -688,10 +690,28 @@ EOF
 
 ## Verification Checklist (from spec §10)
 
-- [ ] `npm test` green (incl. new §2/§3 tests) — expected 348+ unit
-- [ ] `npm run lint` + `npm run format:check` clean
-- [ ] §2: characterization tests prove identical output on tie-free fixtures; tie test documents hash behavior
-- [ ] §1: progress card shows phase + determinate bar + counts/% + working Cancel; indeterminate mode works
-- [ ] §3: `insertNewFilesInSortedOrder` output byte-identical with yielding; abort still throws
-- [ ] §4: dead methods removed; no remaining references
-- [ ] Manual: 24k-folder smoke — no freeze on worker phases, bar advances, Cancel prompt, ordering matches pre-change
+- [x] `npm test` green (incl. new §2/§3 tests) — **357/357 unit** (was 345)
+- [x] `npm run lint` + `npm run format:check` clean
+- [x] §2: characterization tests prove identical output on tie-free fixtures; tie test documents hash behavior; `findNearest`≡brute-force equivalence proven; CLIP fallback line exercised by a star-topology fixture (`d19d252`)
+- [x] §1: `computeSortProgressView` view-model unit-tested (determinate/indeterminate/clamp); progress card + Cancel wired (DOM render verified by manual smoke, not unit tests — `node` env has no DOM)
+- [x] §3: `insertNewFilesInSortedOrder` output unchanged with yielding (30-file regression test); abort still throws
+- [x] §4: dead methods + orphaned `MinHeap`/`VPTree` removed; no remaining references
+- [ ] Manual: 24k-folder smoke — no freeze on worker phases, bar advances, Cancel prompt, ordering matches pre-change ⏳ **PENDING (user hand-off)**
+
+---
+
+## Key Discoveries (closeout 2026-06-19)
+
+- The renderer (`media-viewer.js`) carried its **own** dead `MinHeap`/`VPTree` classes plus the three `sortMediaBySimilarity*` methods — all superseded by `sorting-worker.js`'s live copies. Deleting the methods orphaned the classes; removing both cut **631 lines** (Task 1).
+- The worker **already** posted `{current, total}` in its `progress` messages; `runSortingWorker` simply discarded them. The determinate bar needed no worker-protocol change — only the renderer side (Task 5).
+- `updateProgressNotification` and the new `updateSortProgress` **share** `this.progressNotification`. Rebuilding that element in one renderer without a defensive null-check in the other is a latent TypeError if a non-sort progress call (ML scoring / historical-ratings) fires during an active sort card — caught in the Task 4 review, hardened in Task 5.
+- Under the strict **quality-lock**, the O(n²) MST-fallback could only be replaced by `vpTree.findNearest(current, traversed)` (the existing exact-NN query). Proving "no quality change" needed three legs: capture-baseline pins **before** the swap (`723dc68`), the swap leaving those pins unchanged (`5159b0e`), and a direct `findNearest`≡brute-force equivalence test (`3d2968c`) — because a two-cluster fixture does not always *execute* the fallback line (the CLIP one didn't until a star fixture was added in `d19d252`).
+- The big algorithmic cost (the O(n·K) neighbor-graph build, K≈1,550 @ 24k) is **untouched** by PR1 (quality-locked, no K-cap) — it runs off-main-thread so it doesn't freeze, but PR1 makes it transparent + cancelable rather than faster. Real raw-speed wins live in PR2 (hash off-thread) / PR3 (cache-load) / deferred #7 (parallel build).
+
+## Future Improvements (→ BACKLOG 🟤 [2026-06-19])
+
+1. **PR2 — hash computation off the renderer main thread** (the biggest cold-cache freeze; a separate spec/plan). Continuation of the P1 TODO item.
+2. **PR3 — incremental feature-cache load** (~40s blocking → streamed batches; closes BACKLOG 🟤 [2026-05-26]). Continuation of the P1 TODO item.
+3. **Optional E2E smoke for the progress card** (appear → complete → clear + Cancel aborts on the tiny fixture) — `updateSortProgress` DOM is currently only manually verified.
+4. **Neighbor-graph build parallelization (workstream #7)** — the only raw-speed lever for the K-graph build under the no-quality-change rule; deferred pending measurement after PR1–PR3.
+5. **CLAUDE.md / docs drift from Task 1** — "Data Structures" pattern + affected-line refs still imply the renderer owns `MinHeap`/`VPTree`; update on the next `revise-claude-md` pass.
