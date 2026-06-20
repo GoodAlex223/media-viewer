@@ -350,13 +350,54 @@ describe('sortMediaBySimilarityClip — fallback characterization', () => {
         '/e': [0.2, 0.98, 0, 0],
         '/f': [0.31, 0.95, 0, 0],
     };
-    // This fixture pins the end-to-end sort output; the correctness of the
-    // exclusion-aware nearest-neighbor search is proven directly by the
+    // This fixture pins the end-to-end sort output for a two-cluster topology.
+    // The two-cluster structure does NOT strand the greedy traversal (the MST
+    // bridge between clusters is traversed directly), so the global-nearest-unvisited
+    // fallback inside the else-branch is NOT reached here. This test pins the
+    // end-to-end ordering only; the new star-topology describe block below
+    // exercises the fallback path. Correctness of the exclusion-aware
+    // nearest-neighbor search is proven in the
     // 'VPTree.findNearest equals brute-force exclusion-aware nearest' block below.
-    it('produces a stable ordering (pins behavior across the fallback fix)', () => {
+    it('produces a stable ordering (pins end-to-end behavior; see star-topology block for fallback path)', () => {
         resetAbort();
         const result = sortMediaBySimilarityClip(files, clipVectors, 0);
         const EXPECTED = ['/a', '/b', '/c', '/f', '/e', '/d']; // captured baseline
+        expect(result).toEqual(EXPECTED);
+    });
+});
+
+describe('sortMediaBySimilarityClip — reaches the global-nearest-unvisited fallback', () => {
+    // Star topology: one center (/c0) close to every leaf, leaves mutually farther
+    // than any center→leaf distance, with DISTINCT center→leaf distances (no ties).
+    //
+    // Cosine distances (1 − dot, vectors approx unit-normalized):
+    //   c0→l1 ≈ 0.0150   c0→l2 ≈ 0.0600   c0→l3 ≈ 0.1340
+    //   l1↔l2 ≈ 0.0741   l1↔l3 ≈ 0.1470   l2↔l3 ≈ 0.1860
+    //
+    // Each leaf's nearest neighbor is /c0 (leaf-leaf distances all exceed the leaf's
+    // distance to c0), so Prim's builds a star MST: c0─l1, c0─l2, c0─l3.
+    //
+    // Greedy traversal: start at c0 → MST neighbor l1 (nearest) → from l1, only
+    // MST neighbor is c0 (already visited) → global-nearest-unvisited fallback fires
+    // → picks l2 → from l2, same situation → fallback fires again → picks l3.
+    // The else-branch (vpTree.findNearest) executes at least twice, guaranteeing
+    // the fallback line runs. This is a regression pin: if the fallback is removed
+    // or broken the order would change.
+    function resetAbort() {
+        globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
+    }
+
+    it('executes the fallback and produces a stable star-traversal order', () => {
+        resetAbort();
+        const files = [{ path: '/c0' }, { path: '/l1' }, { path: '/l2' }, { path: '/l3' }];
+        const clipVectors = {
+            '/c0': [1, 0, 0, 0],
+            '/l1': [0.985, 0.174, 0, 0], // c0→l1 ≈ 0.0150
+            '/l2': [0.94, 0, 0.342, 0], // c0→l2 ≈ 0.0600
+            '/l3': [0.866, 0, 0, 0.5], //   c0→l3 ≈ 0.1340
+        };
+        const result = sortMediaBySimilarityClip(files, clipVectors, 0);
+        const EXPECTED = ['/c0', '/l1', '/l2', '/l3']; // captured baseline
         expect(result).toEqual(EXPECTED);
     });
 });

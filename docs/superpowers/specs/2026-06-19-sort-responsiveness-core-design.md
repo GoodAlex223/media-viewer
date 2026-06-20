@@ -180,9 +180,9 @@ are tested). Delete the contiguous block 5834–6167.
 
 ## 6. Error handling & edge cases
 
-- Progress card is removed via `clearProgressNotification()` in the `finally` of
-  `handleSortBySimilarity` on **every** exit (success / error / abort); worker `onerror` and
-  `{type:'error'}` paths still surface the existing bottom-right error toast.
+- Progress card is removed via `clearProgressNotification()` on every exit path (cache-hit
+  success, fresh-sort success, and the error/abort catch) of `handleSortBySimilarity`; worker
+  `onerror` and `{type:'error'}` paths still surface the existing bottom-right error toast.
 - `< 2` files, abort mid-phase, and worker crash behave as today (the abort throw message stays
   `'Sorting cancelled by user'` — consistent with the rest of the file).
 - Indeterminate→determinate transition: if `total` becomes known mid-operation, the next
