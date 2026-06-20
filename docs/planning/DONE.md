@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-17 <!-- Group CW-4: Process & security guards (pre-commit secret guard + pre-archive checklist) -->
+**Last Updated**: 2026-06-19 <!-- Group P1 PR1: Sort responsiveness core (progress/cancel card + O(n²) MST-fallback fix + yielding + dead-code removal), PR1 of 3; impl complete, manual 24k smoke + PR pending -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,68 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-19 — Group P1 PR1: Sort responsiveness core (large-folder perf, PR1 of 3)
+
+**Summary**: First of three staged PRs for the 🔴 user-top-priority "speed up 24k+ folder sorting" item.
+During brainstorming the scope widened (user choice) to **all three slowness sources** under a hard
+**quality-lock** ("quality must not change at all"), then decomposed into 3 PRs (Approach A — staged, no
+neighbor-graph parallelization). **PR1 = the responsiveness core**: make visual-similarity sorting
+non-freezing, transparent, and cancelable, and remove O(n²)/dead-code waste — *without* changing sort
+quality. Subagent-driven (5 tasks; controller commits per [[feedback_subagent_commits_vs_memory_hook]]);
+all per-task reviews Approved; final whole-branch review (opus) → **"Ready to merge: With fixes"** (the one
+Minor — CLIP-fallback test coverage — fixed in-branch in `d19d252`).
+
+✅ **Status: implementation + automated tests complete; manual 24k-folder smoke PASSED (2026-06-19); PR #54 open — review/merge pending.** (The
+`updateSortProgress` DOM render + Cancel are verified by that smoke, not by `node`-env unit tests.) The
+parent P1 TODO item stays **OPEN** (PR2 + PR3 remain).
+
+**Plan**: [docs/archive/plans/2026-06-19-sort-responsiveness-core.md](../archive/plans/2026-06-19-sort-responsiveness-core.md)
+**Spec**: [docs/superpowers/specs/2026-06-19-sort-responsiveness-core-design.md](../superpowers/specs/2026-06-19-sort-responsiveness-core-design.md)
+
+**What shipped (5 tasks)**:
+1. **Dead-code removal** (`e142c7d`) — deleted the three unused `sortMediaBySimilarity*` renderer methods +
+   their now-orphaned `MinHeap`/`VPTree` classes (worker keeps its own copies). **631 lines** gone, no behavior change.
+2. **`insertNewFilesInSortedOrder` yielding** (`d9050c5`) — `await new Promise(r=>setTimeout(r,0))` every 25
+   outer iterations in both branches; output byte-identical. **Closes BACKLOG 🟤 [2026-05-24].**
+3. **Worker O(n²) MST-fallback → `vpTree.findNearest(current, traversed)`** (`723dc68` pins → `5159b0e` swap →
+   `3d2968c` equivalence proof → `d19d252` CLIP-fallback fixture) — both worker sorts; identical output except
+   tie-break order among exactly-equal-distance files on the hash path (CLIP bit-identical).
+4. **Progress component** (`cf8334d`) — `computeSortProgressView` (pure, unit-tested view-model) +
+   `updateSortProgress` (determinate cancelable card, Option C: grows the existing bottom-right progress
+   notification) + CSS.
+5. **Wiring + hardening** (`d80350a`) — route all sort phases (worker `current`/`total`, hashing, cache-load,
+   insertion) through `updateSortProgress`; Cancel → `sortAbortController.abort()`; hardened
+   `updateProgressNotification` to rebuild the shared element when the sort card took it over (prevents a
+   TypeError if ML/historical progress fires mid-sort).
+
+**Key decisions**:
+- **Quality-lock ⇒ no K-cap** (user: "quality must not change at all"). The big O(n·K) neighbor-graph build
+  (K≈1,550 @ 24k) is untouched; PR1 makes it transparent + cancelable (off-main-thread already), not faster.
+  Raw-speed lives in PR2/PR3 + deferred #7.
+- **Progress UI = Option C** (chosen via visual-companion mockups over a centered modal / docked bar) — grow
+  the existing progress notification, for consistency with where sort progress already appears.
+- **Fallback proof needs 3 legs** — capture-baseline pins *before* the swap, the swap leaving them unchanged,
+  and a direct `findNearest`≡brute-force equivalence test (a two-cluster fixture does not always *execute* the
+  fallback line; the CLIP one needed a star-topology fixture to reach it).
+
+**Verification**: 345 → **357 unit** (15 files); `npm run lint` + `npm run format:check` clean (1 pre-existing
+unrelated warning); per-commit pre-commit hook (check-secrets → eslint → prettier → vitest) green. E2E for the
+progress card deferred to the manual smoke (24k folders aren't E2E-fixturable).
+
+**Lessons learned**:
+- A behavior-preserving refactor under a strict quality-lock is best proven by **capture-baseline pins +
+  a direct equivalence test**, not just end-to-end characterization — characterization fixtures can pass
+  without ever executing the changed line.
+- Two renderers sharing one DOM element (`updateProgressNotification` + `updateSortProgress`) is a latent
+  null-deref; the per-task review caught it as a cross-task ("⚠️ surfaces in Task 5") finding the task-scoped
+  gate alone would have missed.
+
+**Follow-ups filed** (🟤 [2026-06-19]): optional progress-card E2E smoke; deferred neighbor-graph
+parallelization (#7, measure-first trigger); CLAUDE.md/docs drift from the dead-code removal.
+
+**Branch**: `feature/sort-responsiveness-core` → **PR #54 (open)**; manual 24k smoke **PASSED 2026-06-19** —
+review/merge pending. PR2 (hash off-thread) + PR3 (incremental cache-load) remain for the full P1 win.
 
 ### 2026-06-17 — Group CW-4: Process & security guards (pre-commit secret guard + pre-archive checklist)
 

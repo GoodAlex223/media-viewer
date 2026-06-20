@@ -82,6 +82,7 @@ const formatEta = extractMethod('formatEta');
 const formatTimeAgo = extractMethod('formatTimeAgo');
 const removeFileFromList = extractMethod('removeFileFromList');
 const areFoldersConfigured = extractMethod('areFoldersConfigured');
+const computeSortProgressView = extractMethod('computeSortProgressView');
 const insertNewFilesInSortedOrder = extractAsyncMethod('insertNewFilesInSortedOrder');
 const applyCachedSortOrder = extractAsyncMethod('applyCachedSortOrder');
 
@@ -327,6 +328,7 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
                 throw new Error('computePerceptualHash should not be called in CLIP path');
             },
             updateProgressNotification() {},
+            updateSortProgress() {},
             ...overrides,
         };
     }
@@ -444,6 +446,35 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
         expect(ctx.mediaFiles).toBe(originalMediaFiles);
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png']);
     });
+
+    it('hash path: yields without changing output for a batch larger than the yield interval', async () => {
+        // 30 new files (> the 25-iteration yield boundary) inserted into a 2-file cached order.
+        // Pure scheduling change must not alter the result: all files present exactly once,
+        // cached anchors retained, and every new file placed.
+        const anchorA = { path: '/a.png' };
+        const anchorZ = { path: '/z.png' };
+        const hashes = new Map([
+            ['/a.png', '0000'],
+            ['/z.png', '1111'],
+        ]);
+        const newFiles = [];
+        for (let i = 0; i < 30; i++) {
+            const p = `/n${i}.png`;
+            newFiles.push({ path: p });
+            // Distinct-ish 4-bit hashes so each has a defined Hamming distance.
+            hashes.set(p, ((i % 16) + 16).toString(2).slice(1));
+        }
+        const ctx = makeCtx({ mediaFiles: [anchorA, anchorZ], perceptualHashes: hashes });
+
+        await insertNewFilesInSortedOrder.call(ctx, [anchorA, anchorZ], newFiles, 'vptree');
+
+        const paths = ctx.mediaFiles.map((f) => f.path);
+        expect(paths).toHaveLength(32);
+        expect(new Set(paths).size).toBe(32); // no duplicates
+        expect(paths).toContain('/a.png');
+        expect(paths).toContain('/z.png');
+        for (let i = 0; i < 30; i++) expect(paths).toContain(`/n${i}.png`);
+    });
 });
 
 describe('applyCachedSortOrder (algorithm threading)', () => {
@@ -459,6 +490,7 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
             // Stub electronAPI.path.basename — uses last path segment
             // (real impl is async; just mirror the contract)
             updateProgressNotification() {},
+            updateSortProgress() {},
             async insertNewFilesInSortedOrder(_sortedFiles, _newFiles, algorithm) {
                 captured.algorithm = algorithm;
             },
@@ -2119,5 +2151,30 @@ describe('CLIP unload timer callback (Fix 5)', () => {
         await handleClipUnloadTimer.call(ctx);
         expect(globalThis.window.electronAPI.logError).toHaveBeenCalled();
         expect(ctx.clipWorkerReady).toBe(true); // not reset on failure
+    });
+});
+
+describe('computeSortProgressView', () => {
+    it('determinate: phase, clamped percent, comma-grouped counts', () => {
+        const v = computeSortProgressView({ phase: 'Building graph', current: 12400, total: 24000 });
+        expect(v).toEqual({
+            phase: 'Building graph',
+            determinate: true,
+            percent: 52,
+            countsText: '12,400 / 24,000',
+        });
+    });
+
+    it('indeterminate when total is missing or zero', () => {
+        const a = computeSortProgressView({ phase: 'Loading…', current: null, total: null });
+        expect(a.determinate).toBe(false);
+        expect(a.percent).toBeNull();
+        expect(a.countsText).toBe('');
+        const b = computeSortProgressView({ phase: 'Loading…', current: 0, total: 0 });
+        expect(b.determinate).toBe(false);
+    });
+
+    it('clamps percent to 100 when current exceeds total', () => {
+        expect(computeSortProgressView({ phase: 'x', current: 30, total: 24 }).percent).toBe(100);
     });
 });

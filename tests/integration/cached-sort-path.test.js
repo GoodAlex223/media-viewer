@@ -87,6 +87,7 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
             // in tests below. A spy lets us assert that.
             computePerceptualHash: vi.fn(),
             updateProgressNotification: vi.fn(),
+            updateSortProgress: vi.fn(),
             ...overrides,
         };
     }

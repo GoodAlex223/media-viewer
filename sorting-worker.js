@@ -561,18 +561,11 @@ function sortMediaBySimilarityMST(mediaFiles, hashes, currentIndex) {
             sorted.push(nearestNeighbor);
             current = nearestNeighbor;
         } else {
-            let nearestNode = null;
-            let minDist = Infinity;
-
-            for (const file of filesWithHashes) {
-                if (!traversed.has(file)) {
-                    const dist = distanceFunc(current, file);
-                    if (dist < minDist) {
-                        minDist = dist;
-                        nearestNode = file;
-                    }
-                }
-            }
+            // Quality-preserving speedup: find the global nearest UNVISITED node via the
+            // already-built VP-tree (exact NN, same distanceFunc, excluding `traversed`)
+            // instead of an O(n) linear scan. Identical node except tie-breaks among
+            // exactly-equal-distance files (see design spec 2026-06-19 §2).
+            const nearestNode = vpTree.findNearest(current, traversed);
 
             if (nearestNode) {
                 traversed.add(nearestNode);
@@ -722,18 +715,11 @@ function sortMediaBySimilarityClip(mediaFiles, clipVectors, currentIndex) {
             sorted.push(nearestNeighbor);
             current = nearestNeighbor;
         } else {
-            let nearestNode = null;
-            let minDist = Infinity;
-
-            for (const file of filesWithVectors) {
-                if (!traversed.has(file)) {
-                    const dist = distanceFunc(current, file);
-                    if (dist < minDist) {
-                        minDist = dist;
-                        nearestNode = file;
-                    }
-                }
-            }
+            // Quality-preserving speedup: find the global nearest UNVISITED node via the
+            // already-built VP-tree (exact NN, same distanceFunc, excluding `traversed`)
+            // instead of an O(n) linear scan. Identical node except tie-breaks among
+            // exactly-equal-distance files (see design spec 2026-06-19 §2).
+            const nearestNode = vpTree.findNearest(current, traversed);
 
             if (nearestNode) {
                 traversed.add(nearestNode);

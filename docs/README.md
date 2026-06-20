@@ -16,6 +16,7 @@ Central index for all project documentation.
 | [ARCHITECTURE.md](ARCHITECTURE.md)       | System architecture, component relationships |
 | [MANUAL_TESTING.md](MANUAL_TESTING.md)   | Manual testing scenarios and checklists      |
 | [WEEKLY.md](planning/WEEKLY.md)          | Weekly task schedule and daily breakdown      |
+| [REVIEW-QUEUE.md](planning/REVIEW-QUEUE.md) | Cross-week state for the recurring Weekly Reviews batch |
 
 ## Planning Index
 
@@ -63,6 +64,7 @@ Central index for all project documentation.
 | [Test Backfill Plan][]                       | E2E suite returned to green (`#viewModeBtn`→`#modeSelector`) + first tournament-mode Playwright coverage (5 hybrid-driven tests) + `recordDraw` assertion strengthening (Group CW-2) |
 | [CW-3 Docs & Backlog Hygiene Plan][]         | git-verified BACKLOG stale-checkbox sweep (7 flips) + doc-drift one-liners + repo-root cruft removal; docs-only (Group CW-3) |
 | [Process & Security Guards Plan][]           | Dependency-free pre-commit secret guard (`scanForSecrets` detector + diff parser + CLI in `.husky/pre-commit`) + pre-archive checklist hardening in the tracked archive READMEs (Group CW-4) |
+| [Sort Responsiveness Core Plan][]            | Large-folder sort UX: determinate cancelable progress card (Option C) + O(n²) MST-fallback → VP-tree `findNearest` (quality-locked) + `insertNewFilesInSortedOrder` yielding + dead-code removal; PR1 of 3 (Group P1) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -91,6 +93,7 @@ Central index for all project documentation.
 [Test Backfill Plan]: archive/plans/2026-06-15-cw-2-test-backfill.md
 [CW-3 Docs & Backlog Hygiene Plan]: archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md
 [Process & Security Guards Plan]: archive/plans/2026-06-17-cw-4-process-security-guards.md
+[Sort Responsiveness Core Plan]: archive/plans/2026-06-19-sort-responsiveness-core.md
 
 ## Design Specs
 
@@ -128,6 +131,7 @@ Central index for all project documentation.
 | [Test Backfill][] | Return E2E suite to green + first tournament-mode Playwright coverage (hybrid driving) + `recordDraw` history-shape assertion strengthening (Group CW-2) |
 | [CW-3 Docs & Backlog Hygiene][] | git-truth-verified BACKLOG stale-checkbox sweep + doc-drift one-liners + repo-root cruft; targeted-not-exhaustive scope (Group CW-3) |
 | [Process & Security Guards][] | Dependency-free pre-commit regex secret guard (full-shape patterns, self-reference-safe via concatenated fixtures) + pre-archive checklist hardening (flip checkboxes, `Status: Complete`, index plans+specs, SHA-ancestor check) (Group CW-4) |
+| [Sort Responsiveness Core][] | Large-folder sort UX: determinate cancelable progress notification (Option C) + O(n²) MST-fallback → VP-tree `findNearest` (quality-preserving, accept tie diff) + `insertNewFilesInSortedOrder` event-loop yielding + dead renderer-sort-method removal; quality-locked, PR1 of 3 (Group P1) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -161,6 +165,7 @@ Central index for all project documentation.
 [Test Backfill]: superpowers/specs/2026-06-15-cw-2-test-backfill-design.md
 [CW-3 Docs & Backlog Hygiene]: superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md
 [Process & Security Guards]: superpowers/specs/2026-06-17-cw-4-process-security-guards-design.md
+[Sort Responsiveness Core]: superpowers/specs/2026-06-19-sort-responsiveness-core-design.md
 
 ## Security Audits
 

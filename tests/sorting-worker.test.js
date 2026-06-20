@@ -11,6 +11,7 @@ const {
     calculateHammingDistance,
     calculateCosineDistance,
     sortMediaBySimilarityClip,
+    sortMediaBySimilarityMST,
 } = require('../sorting-worker');
 
 describe('MinHeap', () => {
@@ -304,5 +305,214 @@ describe('sortMediaBySimilarityClip', () => {
         expect(() => sortMediaBySimilarityClip(files, clipVectors, 0)).toThrow(
             'Only 1 files have CLIP embeddings. Need at least 2 to sort.'
         );
+    });
+});
+
+describe('sortMediaBySimilarityMST (hash) — fallback characterization', () => {
+    function resetAbort() {
+        globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
+    }
+
+    // Two clusters around 0000 and 1111 create a two-cluster structure that
+    // exercises the MST traversal path. This fixture pins the end-to-end sort
+    // output; the correctness of the exclusion-aware nearest-neighbor search
+    // used by the fallback is proven directly by the
+    // 'VPTree.findNearest equals brute-force exclusion-aware nearest' block below.
+    const files = [{ path: '/a' }, { path: '/b' }, { path: '/c' }, { path: '/d' }, { path: '/e' }, { path: '/f' }];
+    const hashes = {
+        '/a': '0000',
+        '/b': '0001',
+        '/c': '0010',
+        '/d': '1111',
+        '/e': '1110',
+        '/f': '1101',
+    };
+
+    it('produces a stable, tie-free ordering (pins behavior across the fallback fix)', () => {
+        resetAbort();
+        const result = sortMediaBySimilarityMST(files, hashes, 0);
+        // Capture baseline: run once, paste the printed array here, then re-run to lock.
+        const EXPECTED = ['/a', '/b', '/f', '/d', '/e', '/c'];
+        expect(result).toEqual(EXPECTED);
+    });
+});
+
+describe('sortMediaBySimilarityClip — fallback characterization', () => {
+    function resetAbort() {
+        globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
+    }
+    const files = [{ path: '/a' }, { path: '/b' }, { path: '/c' }, { path: '/d' }, { path: '/e' }, { path: '/f' }];
+    const clipVectors = {
+        '/a': [1, 0, 0, 0],
+        '/b': [0.98, 0.2, 0, 0],
+        '/c': [0.95, 0.31, 0, 0],
+        '/d': [0, 1, 0, 0],
+        '/e': [0.2, 0.98, 0, 0],
+        '/f': [0.31, 0.95, 0, 0],
+    };
+    // This fixture pins the end-to-end sort output for a two-cluster topology.
+    // The two-cluster structure does NOT strand the greedy traversal (the MST
+    // bridge between clusters is traversed directly), so the global-nearest-unvisited
+    // fallback inside the else-branch is NOT reached here. This test pins the
+    // end-to-end ordering only; the new star-topology describe block below
+    // exercises the fallback path. Correctness of the exclusion-aware
+    // nearest-neighbor search is proven in the
+    // 'VPTree.findNearest equals brute-force exclusion-aware nearest' block below.
+    it('produces a stable ordering (pins end-to-end behavior; see star-topology block for fallback path)', () => {
+        resetAbort();
+        const result = sortMediaBySimilarityClip(files, clipVectors, 0);
+        const EXPECTED = ['/a', '/b', '/c', '/f', '/e', '/d']; // captured baseline
+        expect(result).toEqual(EXPECTED);
+    });
+});
+
+describe('sortMediaBySimilarityClip — reaches the global-nearest-unvisited fallback', () => {
+    // Star topology: one center (/c0) close to every leaf, leaves mutually farther
+    // than any center→leaf distance, with DISTINCT center→leaf distances (no ties).
+    //
+    // Cosine distances (1 − dot, vectors approx unit-normalized):
+    //   c0→l1 ≈ 0.0150   c0→l2 ≈ 0.0600   c0→l3 ≈ 0.1340
+    //   l1↔l2 ≈ 0.0741   l1↔l3 ≈ 0.1470   l2↔l3 ≈ 0.1860
+    //
+    // Each leaf's nearest neighbor is /c0 (leaf-leaf distances all exceed the leaf's
+    // distance to c0), so Prim's builds a star MST: c0─l1, c0─l2, c0─l3.
+    //
+    // Greedy traversal: start at c0 → MST neighbor l1 (nearest) → from l1, only
+    // MST neighbor is c0 (already visited) → global-nearest-unvisited fallback fires
+    // → picks l2 → from l2, same situation → fallback fires again → picks l3.
+    // The else-branch (vpTree.findNearest) executes at least twice, guaranteeing
+    // the fallback line runs. This is a regression pin: if the fallback is removed
+    // or broken the order would change.
+    function resetAbort() {
+        globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
+    }
+
+    it('executes the fallback and produces a stable star-traversal order', () => {
+        resetAbort();
+        const files = [{ path: '/c0' }, { path: '/l1' }, { path: '/l2' }, { path: '/l3' }];
+        const clipVectors = {
+            '/c0': [1, 0, 0, 0],
+            '/l1': [0.985, 0.174, 0, 0], // c0→l1 ≈ 0.0150
+            '/l2': [0.94, 0, 0.342, 0], // c0→l2 ≈ 0.0600
+            '/l3': [0.866, 0, 0, 0.5], //   c0→l3 ≈ 0.1340
+        };
+        const result = sortMediaBySimilarityClip(files, clipVectors, 0);
+        const EXPECTED = ['/c0', '/l1', '/l2', '/l3']; // captured baseline
+        expect(result).toEqual(EXPECTED);
+    });
+});
+
+describe('sortMediaBySimilarityMST (hash) — tie behavior is a valid permutation', () => {
+    function resetAbort() {
+        globalThis.self.onmessage({ data: { type: 'startSort', data: { algorithm: 'noop' } } });
+    }
+    it('returns every file exactly once with the start file first, even with distance ties', () => {
+        resetAbort();
+        // b, c, d are all Hamming-distance 1 from a (ties on the fallback choice).
+        const files = [{ path: '/a' }, { path: '/b' }, { path: '/c' }, { path: '/d' }];
+        const hashes = { '/a': '000', '/b': '100', '/c': '010', '/d': '001' };
+        const result = sortMediaBySimilarityMST(files, hashes, 0);
+        expect(result[0]).toBe('/a');
+        expect(result).toHaveLength(4);
+        expect(new Set(result).size).toBe(4);
+        ['/a', '/b', '/c', '/d'].forEach((p) => expect(result).toContain(p));
+    });
+});
+
+describe('VPTree.findNearest equals brute-force exclusion-aware nearest', () => {
+    // Helper: compute the minimum distance from target among all non-excluded items.
+    function bruteForceNearest(items, target, exclude, distFn) {
+        let minDist = Infinity;
+        let minItem = null;
+        for (const item of items) {
+            if (exclude && exclude.has(item)) continue;
+            const d = distFn(item, target);
+            if (d < minDist) {
+                minDist = d;
+                minItem = item;
+            }
+        }
+        return { item: minItem, distance: minDist };
+    }
+
+    const euclidean = (a, b) => Math.abs(a.value - b.value);
+
+    it('returns a node whose distance equals the brute-force minimum (generic numeric fixture)', () => {
+        const items = [{ value: 1 }, { value: 4 }, { value: 7 }, { value: 10 }, { value: 13 }, { value: 20 }];
+        const tree = new VPTree(items, euclidean);
+        const target = { value: 8 };
+        // Exclude the two closest items (value=7, distance 1 and value=10, distance 2).
+        const exclude = new Set([items[2], items[3]]);
+
+        const vpResult = tree.findNearest(target, exclude);
+        const bfResult = bruteForceNearest(items, target, exclude, euclidean);
+
+        expect(vpResult).not.toBeNull();
+        expect(euclidean(vpResult, target)).toBe(bfResult.distance);
+    });
+
+    it('returns a node whose distance equals the brute-force minimum with a larger exclude set', () => {
+        const items = [
+            { value: 2 },
+            { value: 5 },
+            { value: 9 },
+            { value: 14 },
+            { value: 18 },
+            { value: 25 },
+            { value: 30 },
+        ];
+        const tree = new VPTree(items, euclidean);
+        const target = { value: 16 };
+        // Exclude value=14 (closest) and value=18 (second closest).
+        const exclude = new Set([items[3], items[4]]);
+
+        const vpResult = tree.findNearest(target, exclude);
+        const bfResult = bruteForceNearest(items, target, exclude, euclidean);
+
+        expect(vpResult).not.toBeNull();
+        expect(euclidean(vpResult, target)).toBe(bfResult.distance);
+    });
+
+    it('distance equals brute-force minimum in a TIE case (does not assert which tied node)', () => {
+        // value=3 and value=7 are equidistant from target=5 (distance 2 each).
+        // value=5 itself (distance 0) is excluded, so the true minimum is 2.
+        const item3 = { value: 3 };
+        const item5 = { value: 5 };
+        const item7 = { value: 7 };
+        const item15 = { value: 15 };
+        const items = [item3, item5, item7, item15];
+        const tree = new VPTree(items, euclidean);
+        const target = { value: 5 };
+        const exclude = new Set([item5]); // exclude the exact match
+
+        const vpResult = tree.findNearest(target, exclude);
+        const bfResult = bruteForceNearest(items, target, exclude, euclidean);
+
+        // Both item3 and item7 are valid; assert only that the distance is correct.
+        expect(vpResult).not.toBeNull();
+        expect(euclidean(vpResult, target)).toBe(bfResult.distance); // must be 2
+        expect(bfResult.distance).toBe(2);
+    });
+
+    it('distance equals brute-force minimum using cosine distance', () => {
+        // Use unit-normalised 2D vectors so cosine distance = 1 - dot(a, b).
+        const cosine = (a, b) => calculateCosineDistance(a.vec, b.vec);
+        const mkItem = (vec) => ({ vec });
+        const items = [
+            mkItem([1, 0]),
+            mkItem([0.6, 0.8]), // cos-dist to [0,1]: 1 - 0.8 = 0.2  (closest non-excluded)
+            mkItem([0, 1]),
+            mkItem([-1, 0]),
+        ];
+        const tree = new VPTree(items, cosine);
+        const target = mkItem([0, 1]);
+        // Exclude the exact match (items[2]) so the nearest should be items[1].
+        const exclude = new Set([items[2]]);
+
+        const vpResult = tree.findNearest(target, exclude);
+        const bfResult = bruteForceNearest(items, target, exclude, cosine);
+
+        expect(vpResult).not.toBeNull();
+        expect(cosine(vpResult, target)).toBeCloseTo(bfResult.distance, 10);
     });
 });
