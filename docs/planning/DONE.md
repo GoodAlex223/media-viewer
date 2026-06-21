@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-19 <!-- Group P1 PR1: Sort responsiveness core (progress/cancel card + O(n²) MST-fallback fix + yielding + dead-code removal), PR1 of 3; impl complete, manual 24k smoke + PR pending -->
+**Last Updated**: 2026-06-20 <!-- Group P1 PR1: Sort responsiveness core (progress/cancel card + O(n²) MST-fallback fix + yielding + dead-code removal), PR1 of 3; MERGED via PR #54 (merge 7b78a56), manual 24k smoke PASSED, /code-review "No issues found" -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -25,7 +25,7 @@ quality. Subagent-driven (5 tasks; controller commits per [[feedback_subagent_co
 all per-task reviews Approved; final whole-branch review (opus) → **"Ready to merge: With fixes"** (the one
 Minor — CLIP-fallback test coverage — fixed in-branch in `d19d252`).
 
-✅ **Status: implementation + automated tests complete; manual 24k-folder smoke PASSED (2026-06-19); PR #54 open — review/merge pending.** (The
+✅ **Status: MERGED 2026-06-20 via PR #54 (merge `7b78a56`); manual 24k-folder smoke PASSED (2026-06-19); `/code-review` posted "No issues found" (no finding scored ≥80; +2 🟤 sub-threshold follow-ups filed).** (The
 `updateSortProgress` DOM render + Cancel are verified by that smoke, not by `node`-env unit tests.) The
 parent P1 TODO item stays **OPEN** (PR2 + PR3 remain).
 
@@ -73,8 +73,8 @@ progress card deferred to the manual smoke (24k folders aren't E2E-fixturable).
 **Follow-ups filed** (🟤 [2026-06-19]): optional progress-card E2E smoke; deferred neighbor-graph
 parallelization (#7, measure-first trigger); CLAUDE.md/docs drift from the dead-code removal.
 
-**Branch**: `feature/sort-responsiveness-core` → **PR #54 (open)**; manual 24k smoke **PASSED 2026-06-19** —
-review/merge pending. PR2 (hash off-thread) + PR3 (incremental cache-load) remain for the full P1 win.
+**Branch**: `feature/sort-responsiveness-core` → **PR #54 MERGED 2026-06-20** (merge `7b78a56`, branch deleted); manual 24k smoke **PASSED 2026-06-19**.
+PR2 (hash off-thread) + PR3 (incremental cache-load) remain for the full P1 win.
 
 ### 2026-06-17 — Group CW-4: Process & security guards (pre-commit secret guard + pre-archive checklist)
 
