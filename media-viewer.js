@@ -58,6 +58,9 @@ const CLIP_UNLOAD_DELAY_MS = 30000; // grace period before unloading the CLIP mo
 class MediaViewer {
     constructor() {
         this.mediaFiles = [];
+        // Cached path→index map for O(1) tournament pair lookup; rebuilt when mediaFiles changes.
+        this._mediaPathIndex = null;
+        this._mediaPathIndexSource = null;
         this.currentIndex = 0;
         this.currentMedia = null;
         this.currentFolderPath = '';
@@ -1065,6 +1068,7 @@ class MediaViewer {
 
         const removedName = this.mediaFiles[index].name;
         this.mediaFiles.splice(index, 1);
+        this._mediaPathIndex = null; // invalidate cached path→index map
 
         this.predictionScores.delete(filePath);
         this.featureCache.delete(filePath);
@@ -1081,6 +1085,18 @@ class MediaViewer {
         }
 
         return index;
+    }
+
+    getMediaIndex(path) {
+        if (
+            !this._mediaPathIndex ||
+            this._mediaPathIndexSource !== this.mediaFiles ||
+            this._mediaPathIndex.size !== this.mediaFiles.length
+        ) {
+            this._mediaPathIndex = new Map(this.mediaFiles.map((f, i) => [f.path, i]));
+            this._mediaPathIndexSource = this.mediaFiles;
+        }
+        return this._mediaPathIndex.has(path) ? this._mediaPathIndex.get(path) : -1;
     }
 
     restoreFeatureCachesFromHistory(entry) {
@@ -4414,8 +4430,8 @@ class MediaViewer {
         document.getElementById('tournamentProgress').textContent = this.tournament.getProgressText();
         document.getElementById('tournamentTiers').textContent = this.tournament.getTierBreakdownText();
 
-        const leftIdx = this.mediaFiles.findIndex((f) => f.path === pair.left);
-        const rightIdx = this.mediaFiles.findIndex((f) => f.path === pair.right);
+        const leftIdx = this.getMediaIndex(pair.left);
+        const rightIdx = this.getMediaIndex(pair.right);
 
         if (leftIdx === -1 || rightIdx === -1) {
             const missing = leftIdx === -1 ? pair.left : pair.right;
