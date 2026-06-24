@@ -223,6 +223,22 @@ describe('TournamentEngine serialize/deserialize', () => {
         const text = JSON.stringify(json);
         expect(() => JSON.parse(text)).not.toThrow();
     });
+
+    it('deserialize throws on an unsupported version', () => {
+        expect(() => TournamentEngine.deserialize({ version: 3, strategy: 'swiss' }, [])).toThrow(
+            'Unsupported tournament state version: 3'
+        );
+    });
+
+    it('serialize embeds gamesPlayed in strategyState (resume-prompt progress source)', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+        const pair = eng.getCurrentPair();
+        eng.recordResult(pair.left, pair.right);
+
+        const json = eng.serialize();
+        expect(json.gamesPlayed).toBe(1); // top-level (v2)
+        expect(json.strategyState.gamesPlayed).toBe(1); // fallback source for legacy v1 files
+    });
 });
 
 describe('TournamentEngine.recordDraw', () => {
