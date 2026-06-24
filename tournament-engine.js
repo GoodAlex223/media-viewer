@@ -80,50 +80,72 @@ export class SwissStrategy {
 
         for (const wins of sortedWinCounts) {
             const bucket = this._shuffle([...buckets.get(wins)]);
+            // consumed[i] marks bucket[i] as already placed; `head` is the lowest
+            // un-consumed index. Replaces O(n) array splices with O(1) marking so a
+            // single giant round-1 bucket builds in O(n) instead of O(n²).
+            const consumed = new Array(bucket.length).fill(false);
+            let remaining = bucket.length;
+            let head = 0;
 
             // Carry-over from previous bucket (cross-bucket pairing)
-            if (unmatched) {
-                let opponentIdx = bucket.findIndex((b) => !this.playedPairs.has(this._pairKey(unmatched, b)));
-                if (opponentIdx === -1) opponentIdx = 0;
-                if (bucket.length > 0) {
-                    const opponent = bucket[opponentIdx];
-                    bucket.splice(opponentIdx, 1);
-                    pairs.push([unmatched, opponent]);
+            if (unmatched !== null && remaining > 0) {
+                let oppIdx = -1;
+                for (let k = 0; k < bucket.length; k++) {
+                    if (consumed[k]) continue;
+                    if (!this.playedPairs.has(this._pairKey(unmatched, bucket[k]))) {
+                        oppIdx = k;
+                        break;
+                    }
+                }
+                if (oppIdx === -1) {
+                    for (let k = 0; k < bucket.length; k++) {
+                        if (!consumed[k]) {
+                            oppIdx = k;
+                            break;
+                        }
+                    }
+                }
+                if (oppIdx !== -1) {
+                    consumed[oppIdx] = true;
+                    remaining--;
+                    pairs.push([unmatched, bucket[oppIdx]]);
                 }
                 unmatched = null;
             }
 
             // Pair within the bucket — prefer un-played pairs, fall back to rematch only if forced
-            while (bucket.length >= 2) {
-                let aIdx = -1;
+            while (remaining >= 2) {
+                while (consumed[head]) head++;
+                const aIdx = head;
                 let bIdx = -1;
-                outer: for (let i = 0; i < bucket.length; i++) {
-                    for (let j = i + 1; j < bucket.length; j++) {
-                        if (!this.playedPairs.has(this._pairKey(bucket[i], bucket[j]))) {
-                            aIdx = i;
+                // Prefer the first un-consumed partner forming a not-yet-played pair.
+                for (let j = aIdx + 1; j < bucket.length; j++) {
+                    if (consumed[j]) continue;
+                    if (!this.playedPairs.has(this._pairKey(bucket[aIdx], bucket[j]))) {
+                        bIdx = j;
+                        break;
+                    }
+                }
+                if (bIdx === -1) {
+                    // All remaining partners have played aIdx — accept the next rematch.
+                    for (let j = aIdx + 1; j < bucket.length; j++) {
+                        if (!consumed[j]) {
                             bIdx = j;
-                            break outer;
+                            break;
                         }
                     }
                 }
-                if (aIdx === -1) {
-                    // All remaining bucket members have played each other — accept rematch
-                    aIdx = 0;
-                    bIdx = 1;
-                }
-                const a = bucket[aIdx];
-                const b = bucket[bIdx];
-                // Remove higher index first to keep lower index stable
-                bucket.splice(bIdx, 1);
-                bucket.splice(aIdx, 1);
-                pairs.push([a, b]);
+                consumed[aIdx] = true;
+                consumed[bIdx] = true;
+                remaining -= 2;
+                pairs.push([bucket[aIdx], bucket[bIdx]]);
             }
 
-            if (bucket.length === 1) {
+            if (remaining === 1) {
+                while (consumed[head]) head++;
+                const leftover = bucket[head];
                 // Prefer to keep an un-bye'd file as the carry-over (so the bye doesn't double up)
-                const leftover = bucket[0];
                 if (unmatched && this.byes.has(leftover) && !this.byes.has(unmatched)) {
-                    // Swap: pair the about-to-be-bye'd leftover with unmatched, leave nothing
                     pairs.push([unmatched, leftover]);
                     unmatched = null;
                 } else {
