@@ -287,3 +287,34 @@ describe('TournamentEngine.recordDraw', () => {
         expect(eng.history.length).toBe(0);
     });
 });
+
+describe('TournamentEngine undo-history cap', () => {
+    it('retains at most the most recent 100 picks', () => {
+        // 250 files, rounds high enough to keep games flowing past 100.
+        const files = Array.from({ length: 250 }, (_, i) => `f${i}.jpg`);
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+
+        let recorded = 0;
+        while (recorded < 101) {
+            const pair = eng.getCurrentPair();
+            if (!pair) break;
+            eng.recordResult(pair.left, pair.right);
+            recorded++;
+        }
+
+        expect(recorded).toBe(101);
+        expect(eng.history.length).toBe(100); // capped — oldest dropped
+    });
+
+    it('undo still works within the cap window', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+        const pair = eng.getCurrentPair();
+        eng.recordResult(pair.left, pair.right);
+        expect(eng.history.length).toBe(1);
+        eng.undo();
+        expect(eng.history.length).toBe(0);
+        // same pair is current again
+        const again = eng.getCurrentPair();
+        expect([again.left, again.right].sort()).toEqual([pair.left, pair.right].sort());
+    });
+});

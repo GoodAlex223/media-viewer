@@ -4,6 +4,10 @@
 // Unlike sorting-worker.js (loaded as a Web Worker), this file is consumed via
 // ES module import, so it does NOT use the conditional CJS export pattern.
 
+// Session-only undo is capped to bound RAM on long sessions over large folders.
+// Each history entry holds a full O(n) strategy snapshot; 100 × O(n) is the ceiling.
+const UNDO_HISTORY_CAP = 100;
+
 export class SwissStrategy {
     constructor() {
         this.files = [];
@@ -305,6 +309,7 @@ export class TournamentEngine {
             // and handleApply read engine.files, not strategy.files).
             filesSnapshot: [...this.files],
         });
+        if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
     }
 
     recordDraw(a, b, outcome) {
@@ -324,6 +329,7 @@ export class TournamentEngine {
             // that happened between picks.
             filesSnapshot: [...this.files],
         });
+        if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
     }
 
     undo() {
