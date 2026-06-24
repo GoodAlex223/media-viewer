@@ -301,14 +301,11 @@ describe('TournamentManager debounced persistence', () => {
         // write #2 (triggered by the re-drain in write #1's finally) is still in-flight when
         // the buggy flush() exits, exposing the quiescence gap.
         const releases = [];
-        const started = [];
         const writes = [];
         globalThis.window.electronAPI.writeTournamentState = vi.fn((folder, state) => {
             writes.push(state);
             return new Promise((resolve) => {
-                const idx = releases.length;
                 releases.push(() => resolve({ success: true }));
-                started.push(idx); // track that this write started
             });
         });
 
