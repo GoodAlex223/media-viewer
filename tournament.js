@@ -164,16 +164,23 @@ export class TournamentManager {
     }
 
     // Force the current engine state to disk now and await it. Used on must-be-durable
-    // paths (start, Save & leave). Awaits any in-flight write first, then writes once.
+    // paths (start, Save & leave). Loops until fully quiescent — no write in flight and
+    // nothing pending — so a pick that interleaved an in-flight write (which triggers a
+    // re-drain) is also awaited, guaranteeing the latest state is durable on return.
     async flush() {
         if (this._persistTimer) {
             clearTimeout(this._persistTimer);
             this._persistTimer = null;
         }
-        if (this._writeInFlight) await this._writeInFlight;
         if (!this.engine) return;
         this._persistPending = true;
-        await this._drain();
+        while (this._persistPending || this._writeInFlight) {
+            if (this._writeInFlight) {
+                await this._writeInFlight;
+            } else {
+                await this._drain();
+            }
+        }
     }
 
     // Drop a pending write without writing (used before delete/apply).

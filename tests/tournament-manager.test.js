@@ -291,6 +291,69 @@ describe('TournamentManager debounced persistence', () => {
         expect(maxConcurrent).toBe(1); // the single-flight guard held throughout
         expect(writeSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('flush() awaits a durable write of the latest state when a pick interleaves an in-flight write', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+
+        // Controlled write mock: ALL writes block until individually released. This ensures
+        // write #2 (triggered by the re-drain in write #1's finally) is still in-flight when
+        // the buggy flush() exits, exposing the quiescence gap.
+        const releases = [];
+        const started = [];
+        const writes = [];
+        globalThis.window.electronAPI.writeTournamentState = vi.fn((folder, state) => {
+            writes.push(state);
+            return new Promise((resolve) => {
+                const idx = releases.length;
+                releases.push(() => resolve({ success: true }));
+                started.push(idx); // track that this write started
+            });
+        });
+
+        // Begin write #1 (it will block).
+        tm._persistPending = true;
+        tm._persistFolder = '/test/folder';
+        tm._drain();
+        // Let the async _drain() run until write #1 blocks.
+        await new Promise((r) => setTimeout(r, 0));
+        expect(writes.length).toBe(1); // write #1 started
+
+        // A pick lands mid-write → pending becomes true.
+        tm._persistPending = true;
+        tm._persistFolder = '/test/folder';
+
+        // flush() must NOT resolve until the latest state is durably written.
+        let flushResolved = false;
+        const flushP = tm.flush().then(() => {
+            flushResolved = true;
+        });
+        // Give the event loop a turn — flush is blocked awaiting write #1.
+        await new Promise((r) => setTimeout(r, 0));
+        expect(flushResolved).toBe(false);
+
+        // Release write #1. This triggers write #2 (re-drain in write #1's finally).
+        // The bug: buggy flush() returns here before write #2 completes.
+        releases[0]();
+        // Yield once to let write #1's finally start write #2.
+        await new Promise((r) => setTimeout(r, 0));
+
+        // Write #2 must have started (the re-drain or flush's own drain should have triggered it).
+        expect(writes.length).toBeGreaterThanOrEqual(2);
+
+        // flush() must still be pending — it must not resolve until write #2 is durable.
+        expect(flushResolved).toBe(false);
+
+        // Release write #2. Now flush() can resolve.
+        releases[1]();
+        await flushP;
+
+        expect(flushResolved).toBe(true);
+        expect(tm._writeInFlight).toBeNull(); // fully quiescent
+        expect(tm._persistPending).toBe(false); // nothing left pending
+        expect(writes.length).toBeGreaterThanOrEqual(2); // latest state written after the pick
+    });
 });
 
 describe('TournamentManager progress + breakdown text', () => {
