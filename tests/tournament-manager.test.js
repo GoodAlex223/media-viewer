@@ -55,6 +55,7 @@ describe('TournamentManager.handlePairResult', () => {
         const ok = await tm.handlePairResult(pair.left, pair.right);
         expect(ok).toBe(true);
         expect(tm.engine.history.length).toBe(1);
+        await tm.flush(); // debounced write — force it for the assertion
         expect(globalThis.window.electronAPI.writeTournamentState).toHaveBeenCalledTimes(2);
     });
 });
@@ -115,6 +116,7 @@ describe('TournamentManager.handleResume', () => {
         await tm.handleStartClick('/test/folder', 3);
         const pair = tm.engine.getCurrentPair();
         await tm.handlePairResult(pair.left, pair.right);
+        tm.cancelPending(); // clear the debounce timer so it can't fire post-test
         const savedState = tm.engine.serialize();
 
         const tm2 = new TournamentManager(host);
@@ -160,6 +162,7 @@ describe('TournamentManager.handleResumeReconciled', () => {
         expect(tm2.engine.files.length).toBe(2);
         expect(tm2.engine.files).not.toContain('c.jpg');
         expect(tm2.engine.files).not.toContain('d.jpg');
+        await tm2.flush(); // reconcile schedules a debounced write — force it
         // Removed files trigger a re-persist
         expect(globalThis.window.electronAPI.writeTournamentState).toHaveBeenCalled();
     });
@@ -178,6 +181,7 @@ describe('TournamentManager.handlePairDraw', () => {
         expect(tm.engine.history.length).toBe(1);
         expect(tm.engine.history[0].draw).toBe(true);
         expect(tm.engine.history[0].outcome).toBe('win');
+        await tm.flush(); // debounced write — force it for the assertion
         // once on start, once on the draw
         expect(globalThis.window.electronAPI.writeTournamentState).toHaveBeenCalledTimes(2);
     });
@@ -187,6 +191,105 @@ describe('TournamentManager.handlePairDraw', () => {
         const tm = new TournamentManager(host);
         const ok = await tm.handlePairDraw('a.jpg', 'b.jpg', 'lose');
         expect(ok).toBe(false);
+    });
+});
+
+describe('TournamentManager debounced persistence', () => {
+    it('coalesces multiple scheduled persists within the debounce window into one write', async () => {
+        vi.useFakeTimers();
+        try {
+            const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+            const tm = new TournamentManager(host);
+            await tm.handleStartClick('/test/folder', 3); // 1 write (start flush)
+            const writeSpy = globalThis.window.electronAPI.writeTournamentState;
+            writeSpy.mockClear();
+
+            tm._schedulePersist('/test/folder');
+            tm._schedulePersist('/test/folder');
+            tm._schedulePersist('/test/folder');
+            expect(writeSpy).not.toHaveBeenCalled(); // nothing written before the timer fires
+
+            await vi.advanceTimersByTimeAsync(600);
+            expect(writeSpy).toHaveBeenCalledTimes(1); // three schedules → one write
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('flush() writes immediately and clears the pending timer', async () => {
+        vi.useFakeTimers();
+        try {
+            const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+            const tm = new TournamentManager(host);
+            await tm.handleStartClick('/test/folder', 3);
+            const writeSpy = globalThis.window.electronAPI.writeTournamentState;
+            writeSpy.mockClear();
+
+            tm._schedulePersist('/test/folder');
+            await tm.flush();
+            expect(writeSpy).toHaveBeenCalledTimes(1);
+
+            // the armed timer must not fire a second write afterwards
+            await vi.advanceTimersByTimeAsync(600);
+            expect(writeSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('cancelPending() drops a scheduled write (discard does not resurrect the file)', async () => {
+        vi.useFakeTimers();
+        try {
+            const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+            const tm = new TournamentManager(host);
+            await tm.handleStartClick('/test/folder', 3);
+            const writeSpy = globalThis.window.electronAPI.writeTournamentState;
+            writeSpy.mockClear();
+
+            tm._schedulePersist('/test/folder');
+            tm.cancelPending();
+            await vi.advanceTimersByTimeAsync(600);
+            expect(writeSpy).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('single-flight: concurrent flushes never run two writes at once', async () => {
+        // Real timers here (no fake-timer setup) so setTimeout(0) drains microtasks between writes.
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+
+        // Each write blocks until its resolver is called; resolvers are drained one at a time.
+        let concurrent = 0;
+        let maxConcurrent = 0;
+        const resolvers = [];
+        const writeSpy = vi.fn(() => {
+            concurrent++;
+            maxConcurrent = Math.max(maxConcurrent, concurrent);
+            return new Promise((resolve) => {
+                resolvers.push(() => {
+                    concurrent--;
+                    resolve({ success: true });
+                });
+            });
+        });
+        globalThis.window.electronAPI.writeTournamentState = writeSpy;
+
+        // Three overlapping flushes — the single-flight guard must serialize them.
+        const flushes = [tm.flush(), tm.flush(), tm.flush()];
+        await Promise.resolve();
+
+        // Drain blocked writes; resolving one may queue the next (latest-wins re-drain).
+        for (let guard = 0; guard < 50 && resolvers.length; guard++) {
+            resolvers.shift()();
+            await new Promise((res) => setTimeout(res, 0)); // let chained microtasks settle
+        }
+        await Promise.all(flushes);
+
+        expect(maxConcurrent).toBe(1); // the single-flight guard held throughout
+        expect(writeSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
     });
 });
 
