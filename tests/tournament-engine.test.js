@@ -173,7 +173,7 @@ describe('TournamentEngine delegation methods', () => {
 });
 
 describe('TournamentEngine serialize/deserialize', () => {
-    it('roundtrip preserves history and strategy state (with SwissStrategy)', () => {
+    it('roundtrip preserves strategy state; history is NOT persisted (session-only undo)', () => {
         const eng1 = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
 
         for (let i = 0; i < 2; i++) {
@@ -182,11 +182,37 @@ describe('TournamentEngine serialize/deserialize', () => {
         }
 
         const json = eng1.serialize();
+        expect(json.version).toBe(2);
+        expect(json.history).toBeUndefined();
+        expect(json.gamesPlayed).toBe(eng1.strategy.getProgress().gamesPlayed);
+
         const eng2 = TournamentEngine.deserialize(json, ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
 
         expect(eng2.files).toEqual(eng1.files);
-        expect(eng2.history.length).toBe(eng1.history.length);
+        expect(eng2.history).toEqual([]); // session-only undo: history is dropped on (de)serialize
         expect(eng2.strategy.gamesPlayed).toBe(eng1.strategy.gamesPlayed);
+    });
+
+    it('deserialize accepts a legacy version:1 payload (with history) and drops the history', () => {
+        const eng1 = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+        const pair = eng1.getCurrentPair();
+        eng1.recordResult(pair.left, pair.right);
+
+        // Hand-craft a v1 payload shaped like the pre-slim format.
+        const v1 = {
+            version: 1,
+            strategy: 'swiss',
+            files: [...eng1.files],
+            options: { rounds: 3 },
+            createdAt: eng1.createdAt,
+            lastUpdatedAt: 123,
+            history: [{ winner: pair.left, loser: pair.right, strategyStateSnapshot: eng1.strategy.serialize() }],
+            strategyState: eng1.strategy.serialize(),
+        };
+
+        const eng2 = TournamentEngine.deserialize(v1, ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        expect(eng2.history).toEqual([]);
+        expect(eng2.strategy.gamesPlayed).toBe(1);
     });
 
     it('serialize output is JSON-safe', () => {

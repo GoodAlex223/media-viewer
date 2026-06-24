@@ -4203,7 +4203,8 @@ class MediaViewer {
         title.textContent = 'Resume tournament?';
         const v = this.tournament.validateStateFile(state, currentFiles);
         const startedAgo = Math.round((Date.now() - state.createdAt) / 60000);
-        const progress = state.history.length;
+        // v2 payloads carry no history; read gamesPlayed (falls back to strategyState for legacy v1 files).
+        const progress = state.gamesPlayed ?? state.strategyState?.gamesPlayed ?? 0;
         const totalGames = Math.floor(state.files.length / 2) * (state.options?.rounds ?? 3);
         let deltaNote = '';
         if (!v.valid) {

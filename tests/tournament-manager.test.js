@@ -121,7 +121,7 @@ describe('TournamentManager.handleResume', () => {
         const ok = await tm2.handleResume(savedState, ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
         expect(ok).toBe(true);
         expect(tm2.engine).toBeTruthy();
-        expect(tm2.engine.history.length).toBe(1);
+        expect(tm2.engine.history.length).toBe(0); // resumed engine starts with empty undo history (session-only)
     });
 });
 

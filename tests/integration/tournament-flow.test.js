@@ -98,7 +98,7 @@ describe('Tournament integration — serialize and resume', () => {
         const reloaded = JSON.parse(text);
         const eng2 = TournamentEngine.deserialize(reloaded, files);
 
-        expect(eng2.history.length).toBe(eng1.history.length);
+        expect(eng2.history).toEqual([]); // session-only undo: history is not persisted across (de)serialize
         expect(eng2.strategy.gamesPlayed).toBe(eng1.strategy.gamesPlayed);
 
         safety = 30;

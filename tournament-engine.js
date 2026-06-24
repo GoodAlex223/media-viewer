@@ -366,19 +366,21 @@ export class TournamentEngine {
 
     serialize() {
         return {
-            version: 1,
+            version: 2,
             strategy: this.strategy.constructor.name === 'SwissStrategy' ? 'swiss' : 'unknown',
             files: [...this.files],
             options: { ...(this.strategy.options ?? {}) },
             createdAt: this.createdAt,
             lastUpdatedAt: Date.now(),
-            history: this.history.map((e) => ({ ...e })),
+            // Session-only undo (D1): history is NOT persisted. Expose gamesPlayed so the
+            // resume prompt can show progress without parsing strategyState.
+            gamesPlayed: this.strategy.getProgress().gamesPlayed,
             strategyState: this.strategy.serialize(),
         };
     }
 
     static deserialize(json, files) {
-        if (json.version !== 1) {
+        if (json.version !== 1 && json.version !== 2) {
             throw new Error(`Unsupported tournament state version: ${json.version}`);
         }
         let strategy;
@@ -390,7 +392,8 @@ export class TournamentEngine {
         const eng = Object.create(TournamentEngine.prototype);
         eng.files = [...files];
         eng.strategy = strategy;
-        eng.history = json.history.map((e) => ({ ...e }));
+        // Session-only undo (D1): any persisted history (v1) is intentionally dropped.
+        eng.history = [];
         eng.createdAt = json.createdAt;
         return eng;
     }
