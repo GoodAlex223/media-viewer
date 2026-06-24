@@ -113,21 +113,28 @@ export class SwissStrategy {
                 unmatched = null;
             }
 
-            // Pair within the bucket — prefer un-played pairs, fall back to rematch only if forced
+            // Pair within the bucket — scan all un-consumed index pairs in order and take the
+            // first un-played pair (mirrors the original double loop), falling back to a rematch
+            // of the first two un-consumed only when no un-played pair remains anywhere.
             while (remaining >= 2) {
                 while (consumed[head]) head++;
-                const aIdx = head;
+                let aIdx = -1;
                 let bIdx = -1;
-                // Prefer the first un-consumed partner forming a not-yet-played pair.
-                for (let j = aIdx + 1; j < bucket.length; j++) {
-                    if (consumed[j]) continue;
-                    if (!this.playedPairs.has(this._pairKey(bucket[aIdx], bucket[j]))) {
-                        bIdx = j;
-                        break;
+                outer: for (let i = head; i < bucket.length; i++) {
+                    if (consumed[i]) continue;
+                    for (let j = i + 1; j < bucket.length; j++) {
+                        if (consumed[j]) continue;
+                        if (!this.playedPairs.has(this._pairKey(bucket[i], bucket[j]))) {
+                            aIdx = i;
+                            bIdx = j;
+                            break outer;
+                        }
                     }
                 }
-                if (bIdx === -1) {
-                    // All remaining partners have played aIdx — accept the next rematch.
+                if (aIdx === -1) {
+                    // All remaining un-consumed members have played each other — accept a rematch
+                    // of the first two un-consumed (matches the original aIdx=0,bIdx=1 fallback).
+                    aIdx = head;
                     for (let j = aIdx + 1; j < bucket.length; j++) {
                         if (!consumed[j]) {
                             bIdx = j;

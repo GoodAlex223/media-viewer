@@ -377,4 +377,26 @@ describe('SwissStrategy._buildRoundPairings large-N correctness', () => {
         expect(s.winCounts.get(byeFile)).toBe(1);
         expect(seen.size).toBe(N - 1);
     });
+
+    it('avoids an avoidable rematch: pairs the un-played non-head pair and byes the head', () => {
+        const s = new SwissStrategy();
+        s.init(['a.jpg', 'b.jpg', 'c.jpg'], { rounds: 3 });
+        s._shuffle = (arr) => arr; // deterministic order
+        // Single win-0 bucket of 3 where a has already played b and c; only b-c is un-played.
+        // Correct Swiss build pairs [b,c] and byes a — it must NOT rematch a.
+        s.winCounts = new Map([
+            ['a.jpg', 0],
+            ['b.jpg', 0],
+            ['c.jpg', 0],
+        ]);
+        s.playedPairs = new Set([s._pairKey('a.jpg', 'b.jpg'), s._pairKey('a.jpg', 'c.jpg')]);
+        s.byes = new Set();
+
+        const pairs = s._buildRoundPairings();
+
+        expect(pairs.length).toBe(1);
+        const [x, y] = pairs[0];
+        expect(s._pairKey(x, y)).toBe(s._pairKey('b.jpg', 'c.jpg')); // the un-played pair
+        expect(s.byes.has('a.jpg')).toBe(true); // head is byed, not rematched
+    });
 });
