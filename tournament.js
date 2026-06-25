@@ -34,6 +34,10 @@ export class TournamentManager {
             engineOptions.round1Pairings = opts.seedingPairings;
         }
         this.engine = new TournamentEngine(files, new SwissStrategy(), engineOptions);
+        // flush()/_drain() write to this._persistFolder, which is otherwise only set by
+        // _schedulePersist() (never called on the start path) — set it so the initial state
+        // is persisted to the real folder, not null.
+        this._persistFolder = folderPath;
         await this.flush();
         return true;
     }

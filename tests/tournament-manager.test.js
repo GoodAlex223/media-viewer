@@ -43,6 +43,21 @@ describe('TournamentManager.handleStartClick', () => {
         expect(tm.engine.files.length).toBe(4);
         expect(globalThis.window.electronAPI.writeTournamentState).toHaveBeenCalled();
     });
+
+    it('persists the initial state to the given folder (not null) on start', async () => {
+        // Regression: handleStartClick must set _persistFolder before flush(), else _drain()
+        // writes to a null folder, path.join(null,…) throws in main, the error is swallowed,
+        // and the started tournament is not persisted until the first pick.
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+
+        const calls = globalThis.window.electronAPI.writeTournamentState.mock.calls;
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+        const [folderArg, stateArg] = calls[0];
+        expect(folderArg).toBe('/test/folder'); // null before the fix
+        expect(stateArg).toBeTruthy();
+    });
 });
 
 describe('TournamentManager.handlePairResult', () => {
