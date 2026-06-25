@@ -2533,8 +2533,9 @@ class MediaViewer {
             await this.showMedia();
             this.updateFolderInfo();
 
-            this.kickoffBackgroundExtractionIfEnabled();
-
+            // Lazy extraction (Group P3): feature/CLIP vectors are produced on first use of an
+            // AI feature (CLIP sort / Sort by Prediction), not on folder open — keeps large
+            // folders responsive. See docs/superpowers/specs/2026-06-25-extraction-timing-design.md.
             console.log(`Successfully loaded ${this.mediaFiles.length} media files`);
 
             // Update ML button state (actual initialization happens when user clicks the button)

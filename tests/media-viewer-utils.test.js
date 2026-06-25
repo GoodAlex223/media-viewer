@@ -76,6 +76,24 @@ function extractAsyncMethod(methodName) {
     return new AsyncFunction(params, methodBody);
 }
 
+// Returns the raw source text of a top-level MediaViewer method body (for regression
+// assertions that a call was added/removed). Handles both `name(` and `async name(`.
+function methodSource(methodName) {
+    const regex = new RegExp(`^\\s{4}(?:async\\s+)?${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
+    const match = source.match(regex);
+    if (!match) {
+        throw new Error(`Could not find method: ${methodName}`);
+    }
+    const searchStart = match.index + match[0].length - 1; // position of opening {
+    let braceCount = 0;
+    for (let i = searchStart; i < source.length; i++) {
+        if (source[i] === '{') braceCount++;
+        if (source[i] === '}') braceCount--;
+        if (braceCount === 0) return source.substring(searchStart + 1, i);
+    }
+    throw new Error(`Unbalanced braces for method: ${methodName}`);
+}
+
 const buildKeyString = extractMethod('buildKeyString');
 const formatElapsed = extractMethod('formatElapsed');
 const formatEta = extractMethod('formatEta');
@@ -2255,5 +2273,11 @@ describe('clipVectorsNeedExtraction', () => {
     it('returns false for an empty folder (nothing to extract)', () => {
         const ctx = { enableClipFeatures: true, mediaFiles: [], clipCache: new Map() };
         expect(clipVectorsNeedExtraction.call(ctx)).toBe(false);
+    });
+});
+
+describe('lazy extraction wiring (Group P3)', () => {
+    it('loadFolder no longer kicks off background extraction on folder open', () => {
+        expect(methodSource('loadFolder')).not.toContain('kickoffBackgroundExtractionIfEnabled');
     });
 });
