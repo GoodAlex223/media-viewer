@@ -26,8 +26,11 @@ whole-branch review (opus) → **"Ready to merge: Yes"** (no Critical/Important)
 ✅ **Status: branch `feature/tournament-large-folder-perf` complete, PR/merge PENDING** (user chooses
 integration). **Manual 24k-folder smoke PASSED 2026-06-24** (launch / pick→next with no degradation /
 Save & leave / resume / Apply — all ✅) — the real acceptance gate (synthetic fixtures can't represent 24k).
-**373 unit tests green** (357 → 373, +16). **Closes the canonical BACKLOG 🔵 [2026-06-18] "tournament-mode
-pair changing" entry.**
+**374 unit tests green** (357 → 374, +17). **Closes the canonical BACKLOG 🔵 [2026-06-18] "tournament-mode
+pair changing" entry.** Post-PR `/code-review` (PR #55) caught a third real bug — `handleStartClick` flushed
+to a null `_persistFolder` (set only by `_schedulePersist`, never on start) → the initial state silently
+failed to persist until the first pick — fixed in-branch (`8420a7c`) with a regression test asserting the
+start-path write gets a non-null folder.
 
 **Plan**: [docs/archive/plans/2026-06-24-tournament-large-folder-perf.md](../archive/plans/2026-06-24-tournament-large-folder-perf.md)
 **Spec**: [docs/superpowers/specs/2026-06-24-tournament-large-folder-perf-design.md](../superpowers/specs/2026-06-24-tournament-large-folder-perf-design.md)
@@ -64,11 +67,14 @@ pair changing" entry.**
 - **Out of scope**: the Alt+F4 window-close `< DEBOUNCE_MS` loss window → deferred to Group T1 (Fri).
 
 **Lessons learned**:
-- ⭐ **Two real bugs were latent in the plan's own code**, caught only by the adversarial per-task review
-  (opus). Both passed the full suite because no existing test exercised the triggering shape (a ≥3-member
-  bucket whose head has played everyone; a pick interleaving an in-flight write). **A green suite ≠ correct
-  when the tests predate the edge** — each fix shipped with a *deterministic* regression test that goes RED on
-  the bug.
+- ⭐ **Three real bugs were latent in the plan's own code** — two caught by the adversarial per-task review
+  (opus), the third by the post-PR `/code-review` (the null-folder start-write). All three passed the full
+  suite because no existing test exercised the triggering shape (a ≥3-member bucket whose head has played
+  everyone; a pick interleaving an in-flight write; a start before any pick + a mock that accepts any args).
+  **A green suite ≠ correct when the tests predate the edge** — each fix shipped with a *deterministic*
+  regression test that goes RED on the bug. The null-folder one underlines a refactor trap: moving from
+  `_persistState(folder)` (explicit arg) to `flush()` (reads instance state) silently dropped the start
+  path's folder, and an over-permissive mock hid it.
 - ⭐ "Characterization passes on the current impl" pins only what the *existing* tests cover — it does **not**
   prove selection-equivalence for an algorithm rewrite. The pairing fix needed a *new* test built around the
   exact divergent shape.
