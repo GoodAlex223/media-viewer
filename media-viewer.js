@@ -5207,6 +5207,15 @@ class MediaViewer {
                         throw new Error('CLIP features are disabled. Enable in Settings (F1) to use semantic sorting.');
                     }
 
+                    // Lazy extraction (Group P3): vectors are no longer pre-warmed on folder open.
+                    // If any current file lacks an in-memory CLIP vector, extract now and wait —
+                    // kickoff loads the cache + model and runs extraction to completion (cancelable
+                    // progress card). Gated so a repeat CLIP sort (vectors already cached) skips the
+                    // ~40s feature-cache reload.
+                    if (this.clipVectorsNeedExtraction()) {
+                        await this.kickoffBackgroundExtractionIfEnabled();
+                    }
+
                     // Collect CLIP vectors from clipCache (Float32Array → plain Array for postMessage serialization)
                     const clipVectors = {};
                     let vectorCount = 0;
