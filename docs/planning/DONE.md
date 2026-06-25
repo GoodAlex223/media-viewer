@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-20 <!-- Group P1 PR1: Sort responsiveness core (progress/cancel card + O(n²) MST-fallback fix + yielding + dead-code removal), PR1 of 3; MERGED via PR #54 (merge 7b78a56), manual 24k smoke PASSED, /code-review "No issues found" -->
+**Last Updated**: 2026-06-24 <!-- Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf complete, manual 24k smoke PASSED, PR/merge pending. Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,72 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-24 — Group P2: Tournament large-folder performance (batch)
+
+**Summary**: The three 🔴 user-top-priority tournament-mode slowness items on 24k+ folders — launch/resume,
+pick→next, and Save & leave — shared one root cause and one set of files, so they shipped as one batch. The
+fix: stop the **synchronous, ever-growing full-state disk write on every pick**, make the Swiss pairing
+**O(n)**, and replace the **dual O(n) path→index `findIndex`** with a cached `Map`. Subagent-driven (7 tasks;
+controller commits per [[feedback_subagent_commits_vs_memory_hook]]); every per-task review Approved; final
+whole-branch review (opus) → **"Ready to merge: Yes"** (no Critical/Important).
+
+✅ **Status: branch `feature/tournament-large-folder-perf` complete, PR/merge PENDING** (user chooses
+integration). **Manual 24k-folder smoke PASSED 2026-06-24** (launch / pick→next with no degradation /
+Save & leave / resume / Apply — all ✅) — the real acceptance gate (synthetic fixtures can't represent 24k).
+**373 unit tests green** (357 → 373, +16). **Closes the canonical BACKLOG 🔵 [2026-06-18] "tournament-mode
+pair changing" entry.**
+
+**Plan**: [docs/archive/plans/2026-06-24-tournament-large-folder-perf.md](../archive/plans/2026-06-24-tournament-large-folder-perf.md)
+**Spec**: [docs/superpowers/specs/2026-06-24-tournament-large-folder-perf-design.md](../superpowers/specs/2026-06-24-tournament-large-folder-perf-design.md)
+
+**What shipped (7 tasks)**:
+1. **Slim, versioned (v2) payload** (`abf8db0` + coverage `36f7a61`) — `serialize()` drops the O(n·games)
+   per-pick history snapshots and bumps to `version: 2` (+ top-level `gamesPlayed`); `deserialize` accepts v1
+   (legacy) **and** v2 → empty history. **Session-only undo (D1).** `.tournament_state.json` is now O(n) and
+   constant-size; launch/resume read+parse drops from O(n·games) to O(n).
+2. **Undo cap** (`92e576c`) — in-memory undo history capped at the last 100 picks (`UNDO_HISTORY_CAP`),
+   bounding RAM on long sessions (each snapshot is O(n)).
+3. **O(n) `_buildRoundPairings`** (`e581a74` → fix `f79f374`) — consumed-markers + head pointer replace the
+   per-pair O(n) `bucket.splice()` (round 1 was O(n²)). **Review caught a CRITICAL divergence**: the first
+   rewrite fixed `aIdx=head` and forced an avoidable rematch when the head had played everyone but a non-head
+   un-played pair existed; restored the full `(i,j)` scan + a deterministic rematch-avoidance test.
+4. **Debounced single-flight persistence** (`2cfc622` → fix `88ee45f`) — `TournamentManager` gains
+   `_schedulePersist`/`_drain`/`flush`/`cancelPending`; picks schedule a trailing-edge (500ms) write that
+   coalesces bursts and never overlaps (latest-wins), so the next pair renders without awaiting disk.
+   **Review caught an IMPORTANT durability bug**: `flush()` could return before the latest state was durable
+   when a pick interleaved an in-flight write; rewrote it to loop until quiescent + a regression test.
+5. **Renderer wiring** (`86e3c45`) — 5 `_persistState` call sites rerouted: Save & leave → `await flush()`
+   (durable before dropping the engine); pick/undo/special-move → `_schedulePersist` (non-blocking).
+6. **Cached path→index `Map`** (`128d391`) — `getMediaIndex` (rebuilt only on array-reassign or size change;
+   invalidated in `removeFileFromList`) replaces the dual O(n) `findIndex` in `showTournamentPair`.
+7. **Atomic state write** (`c52721b`) — `writeTournamentState` writes `.tmp` then `fs.rename`, so a crash
+   mid-write can't corrupt a resumable tournament.
+
+**Key decisions**:
+- **D1 session-only undo** (user choice): undo works within a session but not across Save & resume — this is
+  what lets the persisted payload drop to O(n) (the single biggest win). **D2**: cap undo at 100 picks (keep
+  the proven snapshot mechanism, bound RAM) over a delta-undo rewrite. **D3**: trailing-edge debounce +
+  single-flight (latest-wins) over per-pick fire-and-forget (which races on out-of-order write completion).
+- **Scope guardrail held**: no change to Swiss pairing *quality*, tier assignment, or the resume/leave UX.
+- **Out of scope**: the Alt+F4 window-close `< DEBOUNCE_MS` loss window → deferred to Group T1 (Fri).
+
+**Lessons learned**:
+- ⭐ **Two real bugs were latent in the plan's own code**, caught only by the adversarial per-task review
+  (opus). Both passed the full suite because no existing test exercised the triggering shape (a ≥3-member
+  bucket whose head has played everyone; a pick interleaving an in-flight write). **A green suite ≠ correct
+  when the tests predate the edge** — each fix shipped with a *deterministic* regression test that goes RED on
+  the bug.
+- ⭐ "Characterization passes on the current impl" pins only what the *existing* tests cover — it does **not**
+  prove selection-equivalence for an algorithm rewrite. The pairing fix needed a *new* test built around the
+  exact divergent shape.
+- ⭐ A subagent will (correctly) redesign a specified regression test if it doesn't actually fail on the bug —
+  the Task 4 fixer rebuilt the flush test when the original passed spuriously via microtask ordering. **Verify
+  a regression test is genuinely RED→GREEN; don't trust the green.**
+
+**Follow-up Tasks** (BACKLOG 🟤 [2026-06-24], 4 items): undo-cap test coverage (T2a/T2b); SwissStrategy
+carry-over/double-bye unit pin (T3); `getMediaIndex` double-lookup micro-opt (T6); document the new
+persistence model in CLAUDE.md (deferred to `revise-claude-md`).
 
 ### 2026-06-19 — Group P1 PR1: Sort responsiveness core (large-folder perf, PR1 of 3)
 

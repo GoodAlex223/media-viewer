@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** ✅ Complete — implemented 2026-06-24 on branch `feature/tournament-large-folder-perf` (10 commits `abf8db0`..`383a6de`; PR/merge pending). All 7 tasks done; **373 unit tests green**; final whole-branch review (opus) → "Ready to merge: Yes" (no Critical/Important). **Manual 24k-folder smoke PASSED** (launch / pick→next / Save & leave / resume / Apply — all ✅). Playwright E2E deferred to the manual smoke (E2E never runs remotely; synthetic fixtures can't represent 24k). **Two in-branch fixes supersede the task code below**: Task 3's within-bucket loop was corrected to a full `(i, j)` scan (avoidable-rematch bug, fix `f79f374`), and Task 4's `flush()` was rewritten to loop until quiescent (durability-on-return bug, fix `88ee45f`).
+
 **Goal:** Make tournament mode responsive on large (24 000+ file) folders by decoupling state persistence from the UI, slimming the persisted payload, and removing the O(n²)/O(n) hot-path costs.
 
 **Architecture:** Four engine/manager-layer changes plus two renderer changes and one main-process change. (1) The persisted `.tournament_state.json` payload drops the per-pick history snapshots (session-only undo) and bumps to `version: 2`; (2) in-memory undo history is capped at 100 picks; (3) `_buildRoundPairings` is rewritten to consume bucket entries with markers instead of O(n) array splices; (4) `TournamentManager` writes state on a trailing-edge debounce with a single-flight (latest-wins) guard, exposing `flush()`/`cancelPending()` for exit paths; (5) the renderer maps pair paths→indices through a cached `Map`; (6) the IPC write is made atomic (temp + rename).
@@ -41,7 +43,7 @@
 **Interfaces:**
 - Produces: `engine.serialize()` returns `{ version: 2, strategy, files, options, createdAt, lastUpdatedAt, gamesPlayed, strategyState }` — **no `history` key**. `TournamentEngine.deserialize(json, files)` accepts `json.version === 1 || 2`, and the resulting engine always has `history === []`.
 
-- [ ] **Step 1: Update the serialize/deserialize roundtrip test to the session-only-undo contract**
+- [x] **Step 1: Update the serialize/deserialize roundtrip test to the session-only-undo contract**
 
 In `tests/tournament-engine.test.js`, replace the test body at ~176-190 (`'roundtrip preserves history and strategy state (with SwissStrategy)'`) with:
 
@@ -89,12 +91,12 @@ In `tests/tournament-engine.test.js`, replace the test body at ~176-190 (`'round
     });
 ```
 
-- [ ] **Step 2: Run the engine test to verify the new assertions fail**
+- [x] **Step 2: Run the engine test to verify the new assertions fail**
 
 Run: `npx vitest run tournament-engine`
 Expected: FAIL — `json.version` is `1` (not `2`), `json.history` is defined, and `eng2.history` is non-empty.
 
-- [ ] **Step 3: Slim the serialize output and accept v1/v2 in deserialize**
+- [x] **Step 3: Slim the serialize output and accept v1/v2 in deserialize**
 
 In `tournament-engine.js`, replace `TournamentEngine.serialize()` (~367-378) with:
 
@@ -138,12 +140,12 @@ Replace `TournamentEngine.deserialize()` (~380-396) with:
     }
 ```
 
-- [ ] **Step 4: Run the engine test to verify it passes**
+- [x] **Step 4: Run the engine test to verify it passes**
 
 Run: `npx vitest run tournament-engine`
 Expected: PASS (the two updated/added tests green).
 
-- [ ] **Step 5: Fix the two collateral history-persistence assertions**
+- [x] **Step 5: Fix the two collateral history-persistence assertions**
 
 In `tests/integration/tournament-flow.test.js:101`, change:
 
@@ -165,7 +167,7 @@ to:
         expect(tm2.engine.history.length).toBe(0); // resumed engine starts with empty undo history (session-only)
 ```
 
-- [ ] **Step 6: Update the continue-prompt progress read**
+- [x] **Step 6: Update the continue-prompt progress read**
 
 In `media-viewer.js:4206` (`showTournamentContinuePrompt`), change:
 
@@ -178,7 +180,7 @@ to:
         const progress = state.gamesPlayed ?? state.strategyState?.gamesPlayed ?? 0;
 ```
 
-- [ ] **Step 7: Run the full suite and commit**
+- [x] **Step 7: Run the full suite and commit**
 
 Run: `npx vitest run`
 Expected: PASS (357 tests; the engine/integration/manager assertions reflect the slim payload).
@@ -209,7 +211,7 @@ EOF
 - Consumes: nothing new.
 - Produces: after any sequence of records, `engine.history.length <= UNDO_HISTORY_CAP` (100). The most recent 100 entries are retained (oldest dropped first).
 
-- [ ] **Step 1: Write the failing cap test**
+- [x] **Step 1: Write the failing cap test**
 
 Append to `tests/tournament-engine.test.js`:
 
@@ -246,12 +248,12 @@ describe('TournamentEngine undo-history cap', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tournament-engine`
 Expected: FAIL — `eng.history.length` is `101` (no cap yet).
 
-- [ ] **Step 3: Add the cap constant and trim after each push**
+- [x] **Step 3: Add the cap constant and trim after each push**
 
 Near the top of `tournament-engine.js` (after the file header comment, before `export class SwissStrategy`), add:
 
@@ -273,12 +275,12 @@ In `recordDraw` (~310-327), after its `this.history.push({ ... });` add the same
         if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `npx vitest run tournament-engine`
 Expected: PASS (cap holds at 100; undo still works).
 
-- [ ] **Step 5: Run the full suite and commit**
+- [x] **Step 5: Run the full suite and commit**
 
 Run: `npx vitest run`
 Expected: PASS.
@@ -309,7 +311,7 @@ EOF
 
 > **Risk note:** this is the highest-risk change. The rewrite preserves the exact bucket/carry-over/bye structure and the same "first un-played (i,j), else first available rematch" selection — it only changes *how entries are removed* (consumed-markers instead of `splice`). All existing `tests/swiss-strategy.test.js` and `tests/integration/tournament-flow.test.js` invariants must stay green; they are the behavioral guard. Performance at 24k is validated by the user's manual smoke (per spec), not a flaky timing assertion.
 
-- [ ] **Step 1: Write a large-N correctness test**
+- [x] **Step 1: Write a large-N correctness test**
 
 Append to `tests/swiss-strategy.test.js`:
 
@@ -357,12 +359,12 @@ describe('SwissStrategy._buildRoundPairings large-N correctness', () => {
 });
 ```
 
-- [ ] **Step 2: Run to confirm it passes against the CURRENT implementation (characterization)**
+- [x] **Step 2: Run to confirm it passes against the CURRENT implementation (characterization)**
 
 Run: `npx vitest run swiss-strategy`
 Expected: PASS — this captures the contract the rewrite must preserve. (If it fails now, stop and reconcile expectations before rewriting.)
 
-- [ ] **Step 3: Rewrite `_buildRoundPairings` with consumed-markers + head pointer**
+- [x] **Step 3: Rewrite `_buildRoundPairings` with consumed-markers + head pointer**
 
 In `tournament-engine.js`, replace the entire `_buildRoundPairings()` method (~63-138) with:
 
@@ -467,7 +469,7 @@ In `tournament-engine.js`, replace the entire `_buildRoundPairings()` method (~6
     }
 ```
 
-- [ ] **Step 4: Run the Swiss + integration tests to verify behavior is preserved**
+- [x] **Step 4: Run the Swiss + integration tests to verify behavior is preserved**
 
 Run: `npx vitest run swiss-strategy`
 Expected: PASS (all existing invariants + the new large-N tests).
@@ -475,7 +477,7 @@ Expected: PASS (all existing invariants + the new large-N tests).
 Run: `npx vitest run tournament`
 Expected: PASS (`swiss-strategy`, `tournament-engine`, `tournament-manager`, `tournament-flow` integration — byes, round 2 same-win-count pairing, removeFile re-pairing, completion all intact).
 
-- [ ] **Step 5: Run the full suite and commit**
+- [x] **Step 5: Run the full suite and commit**
 
 Run: `npx vitest run`
 Expected: PASS.
@@ -509,7 +511,7 @@ EOF
   - `cancelPending()` → void. Clears the timer and the dirty flag without writing.
 - Consumes: `this.engine.serialize()` (slim v2 payload from Task 1), `window.electronAPI.writeTournamentState(folder, state)`.
 
-- [ ] **Step 1: Write the failing debounce tests**
+- [x] **Step 1: Write the failing debounce tests**
 
 Append to `tests/tournament-manager.test.js`:
 
@@ -614,12 +616,12 @@ describe('TournamentManager debounced persistence', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify the new tests fail**
+- [x] **Step 2: Run to verify the new tests fail**
 
 Run: `npx vitest run tournament-manager`
 Expected: FAIL — `tm._schedulePersist`, `tm.flush`, `tm.cancelPending` are not functions.
 
-- [ ] **Step 3: Add the debounce constant, constructor state, and persistence methods**
+- [x] **Step 3: Add the debounce constant, constructor state, and persistence methods**
 
 In `tournament.js`, after the import line add the constant:
 
@@ -708,7 +710,7 @@ Add these four methods to the class (e.g. just above `_persistState`):
     }
 ```
 
-- [ ] **Step 4: Rewire the manager call sites to schedule/flush/cancel**
+- [x] **Step 4: Rewire the manager call sites to schedule/flush/cancel**
 
 In `tournament.js`, change `handleStartClick` (~27-29) — the persist after engine creation becomes a flush:
 
@@ -771,7 +773,7 @@ In `handleResumeReconciled` (~96-98), change the conditional re-persist to a sch
 
 (Leave `_persistState` itself unchanged — it remains the low-level write primitive, now called by `_drain()`. After Task 5 rewires the renderer, `_persistState` is internal-only to `TournamentManager`.)
 
-- [ ] **Step 5: Update the three existing timing assertions**
+- [x] **Step 5: Update the three existing timing assertions**
 
 In `tests/tournament-manager.test.js`:
 
@@ -818,7 +820,7 @@ right after the `handlePairResult` call:
         const savedState = tm.engine.serialize();
 ```
 
-- [ ] **Step 6: Run the manager tests, then the full suite, and commit**
+- [x] **Step 6: Run the manager tests, then the full suite, and commit**
 
 Run: `npx vitest run tournament-manager`
 Expected: PASS (debounce coalesce/flush/cancel/single-flight + updated timing assertions).
@@ -854,7 +856,7 @@ EOF
 
 > These are renderer DOM-context methods not covered by unit tests; their building blocks (`flush`/`_schedulePersist`) are unit-tested in Task 4. Verification here is: full unit suite green + a grep confirming every renderer persistence call now routes through `flush`/`_schedulePersist`, with the existing tournament E2E flow as the integration guard and the user's manual 24k smoke as the acceptance gate.
 
-- [ ] **Step 1: Save & leave — flush instead of `_persistState`**
+- [x] **Step 1: Save & leave — flush instead of `_persistState`**
 
 In `media-viewer.js` `showTournamentLeavePrompt` accept handler (~4173-4177), change:
 
@@ -874,7 +876,7 @@ to:
             this.tournament.engine = null;
 ```
 
-- [ ] **Step 2: `showTournamentPair` missing-file removal — schedule instead of await**
+- [x] **Step 2: `showTournamentPair` missing-file removal — schedule instead of await**
 
 In `media-viewer.js` (~4422-4424), change:
 
@@ -890,7 +892,7 @@ to:
             return this.showTournamentPair();
 ```
 
-- [ ] **Step 3: `moveToSpecialFolder` tournament removal — schedule instead of await**
+- [x] **Step 3: `moveToSpecialFolder` tournament removal — schedule instead of await**
 
 In `media-viewer.js` (~1540-1543), change:
 
@@ -908,7 +910,7 @@ to:
             }
 ```
 
-- [ ] **Step 4: `handleTournamentUndo` — schedule on both branches**
+- [x] **Step 4: `handleTournamentUndo` — schedule on both branches**
 
 In `media-viewer.js` (~4520), change:
 ```javascript
@@ -936,12 +938,12 @@ to:
         await this.showTournamentPair();
 ```
 
-- [ ] **Step 5: Verify no renderer code still calls `_persistState` directly**
+- [x] **Step 5: Verify no renderer code still calls `_persistState` directly**
 
 Run: `grep -n "_persistState" media-viewer.js`
 Expected: **no matches** (all renderer persistence now routes through `flush` / `_schedulePersist`). `_persistState` should now appear only in `tournament.js`.
 
-- [ ] **Step 6: Run lint + full suite and commit**
+- [x] **Step 6: Run lint + full suite and commit**
 
 Run: `npm run lint`
 Expected: clean (no errors).
@@ -973,7 +975,7 @@ EOF
 **Interfaces:**
 - Produces: `getMediaIndex(path)` → number — index of the file in `this.mediaFiles`, or `-1` if absent. Backed by a `Map` rebuilt only when `this.mediaFiles` is reassigned (reference change) or its length changes; explicitly invalidated in `removeFileFromList`.
 
-- [ ] **Step 1: Write the failing `getMediaIndex` unit test**
+- [x] **Step 1: Write the failing `getMediaIndex` unit test**
 
 In `tests/media-viewer-utils.test.js`, register the method near the other `extractMethod` declarations (~83):
 
@@ -1015,12 +1017,12 @@ describe('getMediaIndex (cached path→index map)', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run media-viewer-utils`
 Expected: FAIL — `Could not find method: getMediaIndex`.
 
-- [ ] **Step 3: Add the cache fields, the method, and invalidation**
+- [x] **Step 3: Add the cache fields, the method, and invalidation**
 
 In `media-viewer.js` constructor, just after `this.mediaFiles = [];` (~60), add:
 
@@ -1054,12 +1056,12 @@ In `removeFileFromList` (~1067, right after `this.mediaFiles.splice(index, 1);`)
         this._mediaPathIndex = null; // invalidate cached path→index map
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `npx vitest run media-viewer-utils`
 Expected: PASS (present/absent, reference-change rebuild, length-change rebuild).
 
-- [ ] **Step 5: Use the cache in `showTournamentPair`**
+- [x] **Step 5: Use the cache in `showTournamentPair`**
 
 In `media-viewer.js` (~4416-4417), change:
 
@@ -1073,7 +1075,7 @@ to:
         const rightIdx = this.getMediaIndex(pair.right);
 ```
 
-- [ ] **Step 6: Run lint + full suite and commit**
+- [x] **Step 6: Run lint + full suite and commit**
 
 Run: `npm run lint`
 Expected: clean.
@@ -1107,7 +1109,7 @@ EOF
 
 > No unit test — `main.js` IPC handlers are not unit-tested in this project (consistent with the existing codebase). Verified by reading + the existing tournament E2E flow (which writes and re-reads state) + manual smoke.
 
-- [ ] **Step 1: Make the write atomic (temp + rename)**
+- [x] **Step 1: Make the write atomic (temp + rename)**
 
 In `main.js`, replace the `writeTournamentState` handler (~238-247) with:
 
@@ -1127,7 +1129,7 @@ In `main.js`, replace the `writeTournamentState` handler (~238-247) with:
     });
 ```
 
-- [ ] **Step 2: Lint + full suite (no behavior regression) and commit**
+- [x] **Step 2: Lint + full suite (no behavior regression) and commit**
 
 Run: `npm run lint`
 Expected: clean.
@@ -1152,11 +1154,11 @@ EOF
 
 ## Final verification (after all tasks)
 
-- [ ] Run the full unit suite: `npx vitest run` → all green (357 baseline + new tests: ~2 v1/gamesPlayed engine + 2 undo-cap + 2 large-N swiss + 4 debounce manager + 3 getMediaIndex ≈ **370+**).
-- [ ] Run lint + format check: `npm run lint && npm run format:check` → clean.
-- [ ] (If feasible) Run the tournament E2E: `npx playwright test tournament-mode` → green (pick→Apply tier moves, Both Win/Lose draws, Ctrl+A undo, leave-Save→resume).
-- [ ] Confirm no stray direct `_persistState` calls in `media-viewer.js`: `grep -n "_persistState" media-viewer.js` → no matches.
-- [ ] **Hand off to user for the 24k-folder manual smoke** (the real acceptance gate, per spec): launch a tournament on the large folder (must not freeze), run a streak of picks (pick→next must feel instant and must NOT slow down as games accumulate), Save & leave (near-instant), resume (fast), Apply. Also verify a previously-saved (v1) tournament still resumes.
+- [x] Run the full unit suite: `npx vitest run` → all green (357 baseline + new tests: ~2 v1/gamesPlayed engine + 2 undo-cap + 2 large-N swiss + 4 debounce manager + 3 getMediaIndex ≈ **370+**).
+- [x] Run lint + format check: `npm run lint && npm run format:check` → clean.
+- [x] (If feasible) Run the tournament E2E: `npx playwright test tournament-mode` → green (pick→Apply tier moves, Both Win/Lose draws, Ctrl+A undo, leave-Save→resume).
+- [x] Confirm no stray direct `_persistState` calls in `media-viewer.js`: `grep -n "_persistState" media-viewer.js` → no matches.
+- [x] **Hand off to user for the 24k-folder manual smoke** (the real acceptance gate, per spec): launch a tournament on the large folder (must not freeze), run a streak of picks (pick→next must feel instant and must NOT slow down as games accumulate), Save & leave (near-instant), resume (fast), Apply. Also verify a previously-saved (v1) tournament still resumes.
 
 ## Acceptance criteria (from spec)
 
