@@ -173,7 +173,7 @@ describe('TournamentEngine delegation methods', () => {
 });
 
 describe('TournamentEngine serialize/deserialize', () => {
-    it('roundtrip preserves history and strategy state (with SwissStrategy)', () => {
+    it('roundtrip preserves strategy state; history is NOT persisted (session-only undo)', () => {
         const eng1 = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
 
         for (let i = 0; i < 2; i++) {
@@ -182,11 +182,37 @@ describe('TournamentEngine serialize/deserialize', () => {
         }
 
         const json = eng1.serialize();
+        expect(json.version).toBe(2);
+        expect(json.history).toBeUndefined();
+        expect(json.gamesPlayed).toBe(eng1.strategy.getProgress().gamesPlayed);
+
         const eng2 = TournamentEngine.deserialize(json, ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
 
         expect(eng2.files).toEqual(eng1.files);
-        expect(eng2.history.length).toBe(eng1.history.length);
+        expect(eng2.history).toEqual([]); // session-only undo: history is dropped on (de)serialize
         expect(eng2.strategy.gamesPlayed).toBe(eng1.strategy.gamesPlayed);
+    });
+
+    it('deserialize accepts a legacy version:1 payload (with history) and drops the history', () => {
+        const eng1 = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+        const pair = eng1.getCurrentPair();
+        eng1.recordResult(pair.left, pair.right);
+
+        // Hand-craft a v1 payload shaped like the pre-slim format.
+        const v1 = {
+            version: 1,
+            strategy: 'swiss',
+            files: [...eng1.files],
+            options: { rounds: 3 },
+            createdAt: eng1.createdAt,
+            lastUpdatedAt: 123,
+            history: [{ winner: pair.left, loser: pair.right, strategyStateSnapshot: eng1.strategy.serialize() }],
+            strategyState: eng1.strategy.serialize(),
+        };
+
+        const eng2 = TournamentEngine.deserialize(v1, ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        expect(eng2.history).toEqual([]);
+        expect(eng2.strategy.gamesPlayed).toBe(1);
     });
 
     it('serialize output is JSON-safe', () => {
@@ -196,6 +222,22 @@ describe('TournamentEngine serialize/deserialize', () => {
         const json = eng.serialize();
         const text = JSON.stringify(json);
         expect(() => JSON.parse(text)).not.toThrow();
+    });
+
+    it('deserialize throws on an unsupported version', () => {
+        expect(() => TournamentEngine.deserialize({ version: 3, strategy: 'swiss' }, [])).toThrow(
+            'Unsupported tournament state version: 3'
+        );
+    });
+
+    it('serialize embeds gamesPlayed in strategyState (resume-prompt progress source)', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+        const pair = eng.getCurrentPair();
+        eng.recordResult(pair.left, pair.right);
+
+        const json = eng.serialize();
+        expect(json.gamesPlayed).toBe(1); // top-level (v2)
+        expect(json.strategyState.gamesPlayed).toBe(1); // fallback source for legacy v1 files
     });
 });
 
@@ -243,5 +285,36 @@ describe('TournamentEngine.recordDraw', () => {
         eng.undo();
         expect(eng.strategy.winCounts.get(pair.left)).toBe(0);
         expect(eng.history.length).toBe(0);
+    });
+});
+
+describe('TournamentEngine undo-history cap', () => {
+    it('retains at most the most recent 100 picks', () => {
+        // 250 files, rounds high enough to keep games flowing past 100.
+        const files = Array.from({ length: 250 }, (_, i) => `f${i}.jpg`);
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+
+        let recorded = 0;
+        while (recorded < 101) {
+            const pair = eng.getCurrentPair();
+            if (!pair) break;
+            eng.recordResult(pair.left, pair.right);
+            recorded++;
+        }
+
+        expect(recorded).toBe(101);
+        expect(eng.history.length).toBe(100); // capped — oldest dropped
+    });
+
+    it('undo still works within the cap window', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+        const pair = eng.getCurrentPair();
+        eng.recordResult(pair.left, pair.right);
+        expect(eng.history.length).toBe(1);
+        eng.undo();
+        expect(eng.history.length).toBe(0);
+        // same pair is current again
+        const again = eng.getCurrentPair();
+        expect([again.left, again.right].sort()).toEqual([pair.left, pair.right].sort());
     });
 });

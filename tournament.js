@@ -6,12 +6,21 @@
 
 import { TournamentEngine, SwissStrategy } from './tournament-engine.js';
 
+// Trailing-edge debounce for state writes. Picks coalesce within this window into a
+// single write of the latest state; a hard crash can lose at most this much progress.
+const PERSIST_DEBOUNCE_MS = 500;
+
 export class TournamentManager {
     constructor(host, options = {}) {
         // host: MediaViewer instance — provides mediaFiles, currentFolder, showNotification, etc.
         this.host = host;
         this.engine = null;
         this.options = options;
+        // Debounced single-flight persistence state.
+        this._persistTimer = null;
+        this._persistPending = false;
+        this._persistFolder = null;
+        this._writeInFlight = null;
     }
 
     async handleStartClick(folderPath, rounds, opts = {}) {
@@ -25,21 +34,25 @@ export class TournamentManager {
             engineOptions.round1Pairings = opts.seedingPairings;
         }
         this.engine = new TournamentEngine(files, new SwissStrategy(), engineOptions);
-        await this._persistState(folderPath);
+        // flush()/_drain() write to this._persistFolder, which is otherwise only set by
+        // _schedulePersist() (never called on the start path) — set it so the initial state
+        // is persisted to the real folder, not null.
+        this._persistFolder = folderPath;
+        await this.flush();
         return true;
     }
 
     async handlePairResult(winner, loser) {
         if (!this.engine) return false;
         this.engine.recordResult(winner, loser);
-        await this._persistState(this.host.baseFolderPath);
+        this._schedulePersist(this.host.baseFolderPath);
         return true;
     }
 
     async handlePairDraw(a, b, outcome) {
         if (!this.engine) return false;
         this.engine.recordDraw(a, b, outcome);
-        await this._persistState(this.host.baseFolderPath);
+        this._schedulePersist(this.host.baseFolderPath);
         return true;
     }
 
@@ -47,6 +60,7 @@ export class TournamentManager {
         if (!this.engine || !this.engine.isComplete()) {
             return { success: false, error: 'Tournament not complete' };
         }
+        this.cancelPending(); // applied state is irrelevant; don't let a queued write recreate it
         const assignments = {};
         for (const file of this.engine.files) {
             assignments[file] = this.engine.getTier(file);
@@ -59,6 +73,7 @@ export class TournamentManager {
     }
 
     async handleDiscard() {
+        this.cancelPending(); // don't let a queued write recreate the file after delete
         this.engine = null;
         await window.electronAPI.deleteTournamentState(this.host.baseFolderPath);
     }
@@ -94,7 +109,7 @@ export class TournamentManager {
             this.engine.removeFile(f);
         }
         if (removed.length > 0) {
-            await this._persistState(this.host.baseFolderPath);
+            this._schedulePersist(this.host.baseFolderPath);
         }
         return { ok: true, removedCount: removed.length };
     }
@@ -115,6 +130,70 @@ export class TournamentManager {
             parts.push(String(bd[i] ?? 0));
         }
         return `Tiers: ${parts.join('·')}`;
+    }
+
+    // Mark state dirty and arm a single trailing-edge timer. Non-blocking — the next
+    // tournament pair renders without waiting for disk. Coalesces a burst of picks.
+    _schedulePersist(folderPath) {
+        this._persistFolder = folderPath;
+        this._persistPending = true;
+        if (this._persistTimer) return;
+        this._persistTimer = setTimeout(() => {
+            this._persistTimer = null;
+            this._drain();
+        }, PERSIST_DEBOUNCE_MS);
+    }
+
+    // Write the latest state if dirty, with a single-flight guard (no overlapping writes).
+    // _persistState (below) is the low-level write primitive; it serializes the CURRENT engine
+    // state at call time, so draining always persists the latest picks.
+    async _drain() {
+        if (this._writeInFlight) return; // a write is running; it re-drains on completion
+        if (!this._persistPending || !this.engine) return;
+        this._persistPending = false;
+        const folder = this._persistFolder;
+        this._writeInFlight = (async () => {
+            try {
+                await this._persistState(folder);
+            } catch (err) {
+                window.electronAPI?.logError?.(
+                    'Tournament persist failed: ' + (err && err.message ? err.message : err)
+                );
+            } finally {
+                this._writeInFlight = null;
+                if (this._persistPending) this._drain(); // a pick arrived during the write
+            }
+        })();
+        await this._writeInFlight;
+    }
+
+    // Force the current engine state to disk now and await it. Used on must-be-durable
+    // paths (start, Save & leave). Loops until fully quiescent — no write in flight and
+    // nothing pending — so a pick that interleaved an in-flight write (which triggers a
+    // re-drain) is also awaited, guaranteeing the latest state is durable on return.
+    async flush() {
+        if (this._persistTimer) {
+            clearTimeout(this._persistTimer);
+            this._persistTimer = null;
+        }
+        if (!this.engine) return;
+        this._persistPending = true;
+        while (this._persistPending || this._writeInFlight) {
+            if (this._writeInFlight) {
+                await this._writeInFlight;
+            } else {
+                await this._drain();
+            }
+        }
+    }
+
+    // Drop a pending write without writing (used before delete/apply).
+    cancelPending() {
+        if (this._persistTimer) {
+            clearTimeout(this._persistTimer);
+            this._persistTimer = null;
+        }
+        this._persistPending = false;
     }
 
     async _persistState(folderPath) {

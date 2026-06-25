@@ -236,12 +236,15 @@ app.whenReady().then(() => {
     });
 
     ipcMain.handle('writeTournamentState', async (_event, folderPath, state) => {
+        const statePath = path.join(folderPath, '.tournament_state.json');
+        const tmpPath = statePath + '.tmp';
         try {
-            const statePath = path.join(folderPath, '.tournament_state.json');
             const text = JSON.stringify(state, null, 2);
-            await fs.writeFile(statePath, text, 'utf-8');
+            await fs.writeFile(tmpPath, text, 'utf-8');
+            await fs.rename(tmpPath, statePath); // atomic replace — no torn file on crash mid-write
             return { success: true };
         } catch (err) {
+            await fs.unlink(tmpPath).catch(() => {}); // best-effort cleanup of the temp file
             return { success: false, error: err.message };
         }
     });

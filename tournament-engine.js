@@ -4,6 +4,10 @@
 // Unlike sorting-worker.js (loaded as a Web Worker), this file is consumed via
 // ES module import, so it does NOT use the conditional CJS export pattern.
 
+// Session-only undo is capped to bound RAM on long sessions over large folders.
+// Each history entry holds a full O(n) strategy snapshot; 100 × O(n) is the ceiling.
+const UNDO_HISTORY_CAP = 100;
+
 export class SwissStrategy {
     constructor() {
         this.files = [];
@@ -76,25 +80,50 @@ export class SwissStrategy {
 
         for (const wins of sortedWinCounts) {
             const bucket = this._shuffle([...buckets.get(wins)]);
+            // consumed[i] marks bucket[i] as already placed; `head` is the lowest
+            // un-consumed index. Replaces O(n) array splices with O(1) marking so a
+            // single giant round-1 bucket builds in O(n) instead of O(n²).
+            const consumed = new Array(bucket.length).fill(false);
+            let remaining = bucket.length;
+            let head = 0;
 
             // Carry-over from previous bucket (cross-bucket pairing)
-            if (unmatched) {
-                let opponentIdx = bucket.findIndex((b) => !this.playedPairs.has(this._pairKey(unmatched, b)));
-                if (opponentIdx === -1) opponentIdx = 0;
-                if (bucket.length > 0) {
-                    const opponent = bucket[opponentIdx];
-                    bucket.splice(opponentIdx, 1);
-                    pairs.push([unmatched, opponent]);
+            if (unmatched !== null && remaining > 0) {
+                let oppIdx = -1;
+                for (let k = 0; k < bucket.length; k++) {
+                    if (consumed[k]) continue;
+                    if (!this.playedPairs.has(this._pairKey(unmatched, bucket[k]))) {
+                        oppIdx = k;
+                        break;
+                    }
+                }
+                if (oppIdx === -1) {
+                    for (let k = 0; k < bucket.length; k++) {
+                        if (!consumed[k]) {
+                            oppIdx = k;
+                            break;
+                        }
+                    }
+                }
+                if (oppIdx !== -1) {
+                    consumed[oppIdx] = true;
+                    remaining--;
+                    pairs.push([unmatched, bucket[oppIdx]]);
                 }
                 unmatched = null;
             }
 
-            // Pair within the bucket — prefer un-played pairs, fall back to rematch only if forced
-            while (bucket.length >= 2) {
+            // Pair within the bucket — scan all un-consumed index pairs in order and take the
+            // first un-played pair (mirrors the original double loop), falling back to a rematch
+            // of the first two un-consumed only when no un-played pair remains anywhere.
+            while (remaining >= 2) {
+                while (consumed[head]) head++;
                 let aIdx = -1;
                 let bIdx = -1;
-                outer: for (let i = 0; i < bucket.length; i++) {
+                outer: for (let i = head; i < bucket.length; i++) {
+                    if (consumed[i]) continue;
                     for (let j = i + 1; j < bucket.length; j++) {
+                        if (consumed[j]) continue;
                         if (!this.playedPairs.has(this._pairKey(bucket[i], bucket[j]))) {
                             aIdx = i;
                             bIdx = j;
@@ -103,23 +132,27 @@ export class SwissStrategy {
                     }
                 }
                 if (aIdx === -1) {
-                    // All remaining bucket members have played each other — accept rematch
-                    aIdx = 0;
-                    bIdx = 1;
+                    // All remaining un-consumed members have played each other — accept a rematch
+                    // of the first two un-consumed (matches the original aIdx=0,bIdx=1 fallback).
+                    aIdx = head;
+                    for (let j = aIdx + 1; j < bucket.length; j++) {
+                        if (!consumed[j]) {
+                            bIdx = j;
+                            break;
+                        }
+                    }
                 }
-                const a = bucket[aIdx];
-                const b = bucket[bIdx];
-                // Remove higher index first to keep lower index stable
-                bucket.splice(bIdx, 1);
-                bucket.splice(aIdx, 1);
-                pairs.push([a, b]);
+                consumed[aIdx] = true;
+                consumed[bIdx] = true;
+                remaining -= 2;
+                pairs.push([bucket[aIdx], bucket[bIdx]]);
             }
 
-            if (bucket.length === 1) {
+            if (remaining === 1) {
+                while (consumed[head]) head++;
+                const leftover = bucket[head];
                 // Prefer to keep an un-bye'd file as the carry-over (so the bye doesn't double up)
-                const leftover = bucket[0];
                 if (unmatched && this.byes.has(leftover) && !this.byes.has(unmatched)) {
-                    // Swap: pair the about-to-be-bye'd leftover with unmatched, leave nothing
                     pairs.push([unmatched, leftover]);
                     unmatched = null;
                 } else {
@@ -305,6 +338,7 @@ export class TournamentEngine {
             // and handleApply read engine.files, not strategy.files).
             filesSnapshot: [...this.files],
         });
+        if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
     }
 
     recordDraw(a, b, outcome) {
@@ -324,6 +358,7 @@ export class TournamentEngine {
             // that happened between picks.
             filesSnapshot: [...this.files],
         });
+        if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
     }
 
     undo() {
@@ -366,19 +401,21 @@ export class TournamentEngine {
 
     serialize() {
         return {
-            version: 1,
+            version: 2,
             strategy: this.strategy.constructor.name === 'SwissStrategy' ? 'swiss' : 'unknown',
             files: [...this.files],
             options: { ...(this.strategy.options ?? {}) },
             createdAt: this.createdAt,
             lastUpdatedAt: Date.now(),
-            history: this.history.map((e) => ({ ...e })),
+            // Session-only undo (D1): history is NOT persisted. Expose gamesPlayed so the
+            // resume prompt can show progress without parsing strategyState.
+            gamesPlayed: this.strategy.getProgress().gamesPlayed,
             strategyState: this.strategy.serialize(),
         };
     }
 
     static deserialize(json, files) {
-        if (json.version !== 1) {
+        if (json.version !== 1 && json.version !== 2) {
             throw new Error(`Unsupported tournament state version: ${json.version}`);
         }
         let strategy;
@@ -390,7 +427,8 @@ export class TournamentEngine {
         const eng = Object.create(TournamentEngine.prototype);
         eng.files = [...files];
         eng.strategy = strategy;
-        eng.history = json.history.map((e) => ({ ...e }));
+        // Session-only undo (D1): any persisted history (v1) is intentionally dropped.
+        eng.history = [];
         eng.createdAt = json.createdAt;
         return eng;
     }

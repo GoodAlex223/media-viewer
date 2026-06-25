@@ -58,6 +58,9 @@ const CLIP_UNLOAD_DELAY_MS = 30000; // grace period before unloading the CLIP mo
 class MediaViewer {
     constructor() {
         this.mediaFiles = [];
+        // Cached path→index map for O(1) tournament pair lookup; rebuilt when mediaFiles changes.
+        this._mediaPathIndex = null;
+        this._mediaPathIndexSource = null;
         this.currentIndex = 0;
         this.currentMedia = null;
         this.currentFolderPath = '';
@@ -1065,6 +1068,7 @@ class MediaViewer {
 
         const removedName = this.mediaFiles[index].name;
         this.mediaFiles.splice(index, 1);
+        this._mediaPathIndex = null; // invalidate cached path→index map
 
         this.predictionScores.delete(filePath);
         this.featureCache.delete(filePath);
@@ -1081,6 +1085,18 @@ class MediaViewer {
         }
 
         return index;
+    }
+
+    getMediaIndex(path) {
+        if (
+            !this._mediaPathIndex ||
+            this._mediaPathIndexSource !== this.mediaFiles ||
+            this._mediaPathIndex.size !== this.mediaFiles.length
+        ) {
+            this._mediaPathIndex = new Map(this.mediaFiles.map((f, i) => [f.path, i]));
+            this._mediaPathIndexSource = this.mediaFiles;
+        }
+        return this._mediaPathIndex.has(path) ? this._mediaPathIndex.get(path) : -1;
     }
 
     restoreFeatureCachesFromHistory(entry) {
@@ -1539,7 +1555,7 @@ class MediaViewer {
             // Tournament mode: also remove from engine + persist before navigation
             if (this.isTournamentMode && this.tournament.engine) {
                 this.tournament.engine.removeFile(fileToMove.path);
-                await this.tournament._persistState(this.baseFolderPath);
+                this.tournament._schedulePersist(this.baseFolderPath);
             }
 
             // In compare mode, move the remaining file to the end of the list
@@ -4171,9 +4187,9 @@ class MediaViewer {
         };
 
         acceptBtn.onclick = async () => {
-            // State is persisted per-pick; write once more to be safe, then drop the in-memory
-            // engine so re-entering resumes from disk (single source of truth).
-            await this.tournament._persistState(this.baseFolderPath);
+            // State is persisted per-pick (debounced); flush any pending write so the latest
+            // picks are durable, then drop the in-memory engine (disk is the single source of truth).
+            await this.tournament.flush();
             this.tournament.engine = null;
             cleanup();
             await this._applyModeSwitch(targetMode);
@@ -4203,7 +4219,8 @@ class MediaViewer {
         title.textContent = 'Resume tournament?';
         const v = this.tournament.validateStateFile(state, currentFiles);
         const startedAgo = Math.round((Date.now() - state.createdAt) / 60000);
-        const progress = state.history.length;
+        // v2 payloads carry no history; read gamesPlayed (falls back to strategyState for legacy v1 files).
+        const progress = state.gamesPlayed ?? state.strategyState?.gamesPlayed ?? 0;
         const totalGames = Math.floor(state.files.length / 2) * (state.options?.rounds ?? 3);
         let deltaNote = '';
         if (!v.valid) {
@@ -4413,14 +4430,14 @@ class MediaViewer {
         document.getElementById('tournamentProgress').textContent = this.tournament.getProgressText();
         document.getElementById('tournamentTiers').textContent = this.tournament.getTierBreakdownText();
 
-        const leftIdx = this.mediaFiles.findIndex((f) => f.path === pair.left);
-        const rightIdx = this.mediaFiles.findIndex((f) => f.path === pair.right);
+        const leftIdx = this.getMediaIndex(pair.left);
+        const rightIdx = this.getMediaIndex(pair.right);
 
         if (leftIdx === -1 || rightIdx === -1) {
             const missing = leftIdx === -1 ? pair.left : pair.right;
             this.showNotification(`File missing — removed from tournament: ${missing}`, 'warning');
             this.tournament.engine.removeFile(missing);
-            await this.tournament._persistState(this.baseFolderPath);
+            this.tournament._schedulePersist(this.baseFolderPath);
             return this.showTournamentPair();
         }
 
@@ -4517,7 +4534,7 @@ class MediaViewer {
                 }
                 this.restoreFeatureCachesFromHistory(lastMove);
                 if (this.isSortedByPrediction) this.requestPredictionScores();
-                await this.tournament._persistState(this.baseFolderPath);
+                this.tournament._schedulePersist(this.baseFolderPath);
                 if (this.showRatingConfirmations) {
                     this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
                 }
@@ -4533,7 +4550,7 @@ class MediaViewer {
 
         // Default: undo the engine's last pair-pick (snapshot-restored strategy state).
         this.tournament.engine.undo();
-        await this.tournament._persistState(this.baseFolderPath);
+        this.tournament._schedulePersist(this.baseFolderPath);
         await this.showTournamentPair();
     }
 

@@ -336,3 +336,67 @@ describe('SwissStrategy.recordDraw', () => {
         expect(() => s.recordDraw('a.jpg', 'b.jpg', 'win')).toThrow('No active pair to record');
     });
 });
+
+describe('SwissStrategy._buildRoundPairings large-N correctness', () => {
+    it('even N: round 1 produces N/2 pairs covering every file exactly once, no bye', () => {
+        const N = 2000;
+        const files = Array.from({ length: N }, (_, i) => `f${i}.jpg`);
+        const s = new SwissStrategy();
+        s.init(files, { rounds: 3 });
+
+        expect(s.roundQueue.length).toBe(N / 2);
+        expect(s.byes.size).toBe(0);
+
+        const seen = new Set();
+        for (const [a, b] of s.roundQueue) {
+            expect(a).not.toBe(b);
+            expect(seen.has(a)).toBe(false);
+            expect(seen.has(b)).toBe(false);
+            seen.add(a);
+            seen.add(b);
+        }
+        expect(seen.size).toBe(N);
+    });
+
+    it('odd N: round 1 awards exactly one bye and covers the rest', () => {
+        const N = 1999;
+        const files = Array.from({ length: N }, (_, i) => `f${i}.jpg`);
+        const s = new SwissStrategy();
+        s.init(files, { rounds: 3 });
+
+        expect(s.roundQueue.length).toBe((N - 1) / 2);
+        expect(s.byes.size).toBe(1);
+
+        const seen = new Set();
+        for (const [a, b] of s.roundQueue) {
+            seen.add(a);
+            seen.add(b);
+        }
+        const byeFile = Array.from(s.byes)[0];
+        expect(seen.has(byeFile)).toBe(false);
+        expect(s.winCounts.get(byeFile)).toBe(1);
+        expect(seen.size).toBe(N - 1);
+    });
+
+    it('avoids an avoidable rematch: pairs the un-played non-head pair and byes the head', () => {
+        const s = new SwissStrategy();
+        s.init(['a.jpg', 'b.jpg', 'c.jpg'], { rounds: 3 });
+        s._shuffle = (arr) => arr; // deterministic order
+        // Single win-0 bucket of 3 where a has already played b and c; only b-c is un-played.
+        // Correct Swiss build pairs [b,c] and byes a — it must NOT rematch a.
+        s.winCounts = new Map([
+            ['a.jpg', 0],
+            ['b.jpg', 0],
+            ['c.jpg', 0],
+        ]);
+        s.playedPairs = new Set([s._pairKey('a.jpg', 'b.jpg'), s._pairKey('a.jpg', 'c.jpg')]);
+        s.byes = new Set();
+
+        const pairs = s._buildRoundPairings();
+
+        expect(pairs.length).toBe(1);
+        const [x, y] = pairs[0];
+        expect(s._pairKey(x, y)).toBe(s._pairKey('b.jpg', 'c.jpg')); // the un-played pair
+        expect(s.byes.has('a.jpg')).toBe(true); // head is byed, not rematched
+    });
+});

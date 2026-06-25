@@ -81,6 +81,7 @@ const formatElapsed = extractMethod('formatElapsed');
 const formatEta = extractMethod('formatEta');
 const formatTimeAgo = extractMethod('formatTimeAgo');
 const removeFileFromList = extractMethod('removeFileFromList');
+const getMediaIndex = extractMethod('getMediaIndex');
 const areFoldersConfigured = extractMethod('areFoldersConfigured');
 const computeSortProgressView = extractMethod('computeSortProgressView');
 const insertNewFilesInSortedOrder = extractAsyncMethod('insertNewFilesInSortedOrder');
@@ -2176,5 +2177,35 @@ describe('computeSortProgressView', () => {
 
     it('clamps percent to 100 when current exceeds total', () => {
         expect(computeSortProgressView({ phase: 'x', current: 30, total: 24 }).percent).toBe(100);
+    });
+});
+
+describe('getMediaIndex (cached path→index map)', () => {
+    function ctx(paths) {
+        return {
+            mediaFiles: paths.map((p) => ({ path: p })),
+            _mediaPathIndex: null,
+            _mediaPathIndexSource: null,
+        };
+    }
+
+    it('returns the index of a present path and -1 for an absent one', () => {
+        const c = ctx(['a.jpg', 'b.jpg', 'c.jpg']);
+        expect(getMediaIndex.call(c, 'b.jpg')).toBe(1);
+        expect(getMediaIndex.call(c, 'missing.jpg')).toBe(-1);
+    });
+
+    it('rebuilds when mediaFiles is reassigned (reference change)', () => {
+        const c = ctx(['a.jpg', 'b.jpg']);
+        expect(getMediaIndex.call(c, 'a.jpg')).toBe(0);
+        c.mediaFiles = [{ path: 'x.jpg' }, { path: 'a.jpg' }]; // new array (e.g. after a sort)
+        expect(getMediaIndex.call(c, 'a.jpg')).toBe(1);
+    });
+
+    it('rebuilds when the array length changes (in-place splice)', () => {
+        const c = ctx(['a.jpg', 'b.jpg', 'c.jpg']);
+        expect(getMediaIndex.call(c, 'c.jpg')).toBe(2);
+        c.mediaFiles.splice(0, 1); // remove a.jpg in place — same array reference
+        expect(getMediaIndex.call(c, 'c.jpg')).toBe(1);
     });
 });

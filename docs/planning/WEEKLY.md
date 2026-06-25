@@ -35,13 +35,13 @@
 
 > All three TODO 🔴 items share one root cause and one set of files: a **synchronous full-state write** to `.tournament_state.json` on every action + **O(n²) Swiss `_buildRoundPairings`** at init/resume + **dual O(n) `findIndex`** path→index lookup per pair. The shared fixes — async/debounced state persistence, memoized pairings, a prebuilt path→index `Map` — address all three at once, which is exactly why they batch. Closes the canonical BACKLOG 🔵 [2026-06-18] "Speed up tournament-mode pair changing" entry too.
 
-- [ ] **Speed up tournament launch & resume/continuation (24k+)** — 3 SP, 🔴 IMPORTANT
+- [x] **Speed up tournament launch & resume/continuation (24k+)** — 3 SP, 🔴 IMPORTANT — ✅ DONE 2026-06-24 (smoke PASSED)
   - TODO.md Planned 🔴. Full-state (de)serialization + O(n²) Swiss pairing at init/resume + dual O(n) `findIndex` per pair display. Stream/defer the pairing build, memoize pairings, replace path→index `findIndex` with a prebuilt Map.
   - Affected: `tournament-engine.js:~63-152`, `tournament.js:~120`, `media-viewer.js:~4426-4479`.
-- [ ] **Speed up media rating (pick → next pair) in tournament mode** — 3 SP, 🔴 IMPORTANT
+- [x] **Speed up media rating (pick → next pair) in tournament mode** — 3 SP, 🔴 IMPORTANT — ✅ DONE 2026-06-24 (smoke PASSED)
   - TODO.md Planned 🔴 (canonical BACKLOG entry [2026-06-18]). Every pick triggers a synchronous full-state disk write + O(n²) re-pairing + dual O(n) `findIndex` before the next pair renders; compare mode does none of that. Make persistence async/debounced; cache path→index lookups.
   - Affected: `media-viewer.js:~4684`, `tournament.js:~120`, `tournament-engine.js:~96-152`, `main.js:~238`.
-- [ ] **Speed up "Save & leave"** — 2 SP, 🔴 IMPORTANT
+- [x] **Speed up "Save & leave"** — 2 SP, 🔴 IMPORTANT — ✅ DONE 2026-06-24 (smoke PASSED)
   - TODO.md Planned 🔴. The Save handler re-serializes and writes the entire state before exiting — slow on large tournaments and largely redundant since state is already persisted on every pick. Reuse the already-persisted state, or write incrementally/async. (Naturally falls out of the debounced-persistence work above.)
   - Affected: `media-viewer.js:~4380-4422` (Save handler), `tournament.js:~120` (`_persistState`).
 
@@ -90,7 +90,7 @@
 |-------|----|
 | **Group P1: AI / similarity sort large-folder performance** 🏆 | 5 |
 
-- [ ] Reduce neighbor-graph / MST complexity (cap neighbors, chunk + yield, push work to worker) + progress/cancel UX (5 SP)
+- [x] Reduce neighbor-graph / MST complexity (cap neighbors, chunk + yield, push work to worker) + progress/cancel UX (5 SP)
 
 **Daily total**: 5 SP
 
@@ -103,8 +103,8 @@
 |-------|----|
 | **Group P2: Tournament large-folder performance** [batch] (day 1 of 2) | (8) |
 
-- [ ] Async/debounced state persistence in `_persistState` (foundation for rating + Save & leave)
-- [ ] Memoize Swiss `_buildRoundPairings`; replace dual `findIndex` with a prebuilt `Map`
+- [x] Async/debounced state persistence in `_persistState` (foundation for rating + Save & leave)
+- [x] Memoize Swiss `_buildRoundPairings`; replace dual `findIndex` with a prebuilt `Map`
 
 **Daily total**: ~4 SP (of the 8 SP batch)
 
@@ -117,9 +117,9 @@
 |-------|----|
 | **Group P2: Tournament large-folder performance** [batch] (day 2 of 2) | (8) |
 
-- [ ] Launch & resume speedup (stream/defer pairing build)
-- [ ] Rating pick→next speedup (consume debounced persist + Map lookup)
-- [ ] "Save & leave" reuse-already-persisted-state; large-N verification + unit tests; PR
+- [x] Launch & resume speedup (stream/defer pairing build)
+- [x] Rating pick→next speedup (consume debounced persist + Map lookup)
+- [x] "Save & leave" reuse-already-persisted-state; large-N verification + unit tests; PR — *all 7 tasks done day 1 (ahead of schedule); PR/merge pending*
 
 **Daily total**: ~4 SP (of the 8 SP batch)
 
@@ -168,7 +168,7 @@
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
 | P1: AI / similarity sort perf 🏆 | JS logic (sort worker) | 🔵 User | 1 | 5 | Mon | Planned |
-| P2: Tournament large-folder perf [batch] | JS logic (engine/manager/IPC) | 🔵 User | 3 | 8 | Tue–Wed | Planned |
+| P2: Tournament large-folder perf [batch] | JS logic (engine/manager/IPC) | 🔵 User | 3 | 8 | Tue–Wed | ✅ Done 2026-06-24 (branch; smoke PASSED; PR/merge pending) |
 | P3: Feature-extraction timing | JS logic + Settings UI | 🔵 User | 1 | 3 | Thu | Planned |
 | T1: Tournament exit affordances [batch] | UI/UX + main lifecycle | 🔵 User | 2 | 3 | Fri | Planned |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | Planned |
