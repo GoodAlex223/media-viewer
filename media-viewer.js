@@ -7083,6 +7083,15 @@ class MediaViewer {
         return Array.from(combined);
     }
 
+    // True when CLIP is enabled and at least one current file lacks an in-memory CLIP vector.
+    // Gates the lazy on-demand extraction trigger in handleSortBySimilarity's CLIP branch so a
+    // repeat CLIP sort (vectors already in memory) does not needlessly reload the ~40s feature
+    // cache. See docs/superpowers/specs/2026-06-25-extraction-timing-design.md (D3).
+    clipVectorsNeedExtraction() {
+        if (!this.enableClipFeatures) return false;
+        return this.mediaFiles.some((f) => !this.clipCache.has(f.path));
+    }
+
     async loadBulkRatedFile() {
         this.bulkRated = new Map();
         if (!this.baseFolderPath) return;

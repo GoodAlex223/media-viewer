@@ -2209,3 +2209,51 @@ describe('getMediaIndex (cached path→index map)', () => {
         expect(getMediaIndex.call(c, 'c.jpg')).toBe(1);
     });
 });
+
+describe('clipVectorsNeedExtraction', () => {
+    const clipVectorsNeedExtraction = extractMethod('clipVectorsNeedExtraction');
+
+    it('returns false when CLIP is disabled (even with uncached files)', () => {
+        const ctx = {
+            enableClipFeatures: false,
+            mediaFiles: [{ path: 'a' }, { path: 'b' }],
+            clipCache: new Map(),
+        };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(false);
+    });
+
+    it('returns true when CLIP enabled and clipCache is empty', () => {
+        const ctx = {
+            enableClipFeatures: true,
+            mediaFiles: [{ path: 'a' }, { path: 'b' }],
+            clipCache: new Map(),
+        };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(true);
+    });
+
+    it('returns true when at least one current file lacks a clip vector', () => {
+        const ctx = {
+            enableClipFeatures: true,
+            mediaFiles: [{ path: 'a' }, { path: 'b' }],
+            clipCache: new Map([['a', new Float32Array(512)]]),
+        };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(true);
+    });
+
+    it('returns false when every current file already has a clip vector in memory', () => {
+        const ctx = {
+            enableClipFeatures: true,
+            mediaFiles: [{ path: 'a' }, { path: 'b' }],
+            clipCache: new Map([
+                ['a', new Float32Array(512)],
+                ['b', new Float32Array(512)],
+            ]),
+        };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(false);
+    });
+
+    it('returns false for an empty folder (nothing to extract)', () => {
+        const ctx = { enableClipFeatures: true, mediaFiles: [], clipCache: new Map() };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(false);
+    });
+});
