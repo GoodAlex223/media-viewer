@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-24 <!-- Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf complete, manual 24k smoke PASSED, PR/merge pending. Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
+**Last Updated**: 2026-06-24 <!-- Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf MERGED 2026-06-25 via PR #55 (merge 51366cb), manual 24k smoke PASSED, re-review "No issues found". Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -23,8 +23,7 @@ fix: stop the **synchronous, ever-growing full-state disk write on every pick**,
 controller commits per [[feedback_subagent_commits_vs_memory_hook]]); every per-task review Approved; final
 whole-branch review (opus) → **"Ready to merge: Yes"** (no Critical/Important).
 
-✅ **Status: branch `feature/tournament-large-folder-perf` complete, PR/merge PENDING** (user chooses
-integration). **Manual 24k-folder smoke PASSED 2026-06-24** (launch / pick→next with no degradation /
+✅ **Status: MERGED 2026-06-25 via PR #55 (merge `51366cb`; branch deleted)** — pre-merge `/code-review` flagged 1 issue (scored 100: null-folder start write) fixed in-branch `8420a7c`; re-review posted "No issues found"; +3 🟤 [2026-06-25] post-merge follow-ups (debounce on three structural-mutation persistence points). **Manual 24k-folder smoke PASSED 2026-06-24** (launch / pick→next with no degradation /
 Save & leave / resume / Apply — all ✅) — the real acceptance gate (synthetic fixtures can't represent 24k).
 **374 unit tests green** (357 → 374, +17). **Closes the canonical BACKLOG 🔵 [2026-06-18] "tournament-mode
 pair changing" entry.** Post-PR `/code-review` (PR #55) caught a third real bug — `handleStartClick` flushed

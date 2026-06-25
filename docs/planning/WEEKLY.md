@@ -119,7 +119,7 @@
 
 - [x] Launch & resume speedup (stream/defer pairing build)
 - [x] Rating pick→next speedup (consume debounced persist + Map lookup)
-- [x] "Save & leave" reuse-already-persisted-state; large-N verification + unit tests; PR — *all 7 tasks done day 1 (ahead of schedule); PR/merge pending*
+- [x] "Save & leave" reuse-already-persisted-state; large-N verification + unit tests; PR — *all 7 tasks done day 1 (ahead of schedule); MERGED 2026-06-25 via PR #55 (`51366cb`)*
 
 **Daily total**: ~4 SP (of the 8 SP batch)
 
@@ -168,7 +168,7 @@
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
 | P1: AI / similarity sort perf 🏆 | JS logic (sort worker) | 🔵 User | 1 | 5 | Mon | Planned |
-| P2: Tournament large-folder perf [batch] | JS logic (engine/manager/IPC) | 🔵 User | 3 | 8 | Tue–Wed | ✅ Done 2026-06-24 (branch; smoke PASSED; PR/merge pending) |
+| P2: Tournament large-folder perf [batch] | JS logic (engine/manager/IPC) | 🔵 User | 3 | 8 | Tue–Wed | ✅ MERGED 2026-06-25 (PR #55 `51366cb`; smoke PASSED) |
 | P3: Feature-extraction timing | JS logic + Settings UI | 🔵 User | 1 | 3 | Thu | Planned |
 | T1: Tournament exit affordances [batch] | UI/UX + main lifecycle | 🔵 User | 2 | 3 | Fri | Planned |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | Planned |
