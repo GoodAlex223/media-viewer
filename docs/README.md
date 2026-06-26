@@ -66,6 +66,7 @@ Central index for all project documentation.
 | [Process & Security Guards Plan][]           | Dependency-free pre-commit secret guard (`scanForSecrets` detector + diff parser + CLI in `.husky/pre-commit`) + pre-archive checklist hardening in the tracked archive READMEs (Group CW-4) |
 | [Sort Responsiveness Core Plan][]            | Large-folder sort UX: determinate cancelable progress card (Option C) + O(n²) MST-fallback → VP-tree `findNearest` (quality-locked) + `insertNewFilesInSortedOrder` yielding + dead-code removal; PR1 of 3 (Group P1) |
 | [Tournament Large-Folder Perf Plan][]        | Tournament 24k+ responsiveness: debounced single-flight `.tournament_state.json` persistence + O(n) `_buildRoundPairings` (consumed-markers) + cached path→index `Map` + slim `version:2` history-free payload (session-only undo, cap 100) + atomic write (Group P2) |
+| [Extraction Timing Plan][]                   | Lazy / on-demand feature extraction: remove the folder-open + CLIP-toggle kickoffs; add a conditional on-demand CLIP-sort trigger gated by `clipVectorsNeedExtraction` (ML sort already lazy; hash sort needs no vectors) (Group P3) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -96,6 +97,7 @@ Central index for all project documentation.
 [Process & Security Guards Plan]: archive/plans/2026-06-17-cw-4-process-security-guards.md
 [Sort Responsiveness Core Plan]: archive/plans/2026-06-19-sort-responsiveness-core.md
 [Tournament Large-Folder Perf Plan]: archive/plans/2026-06-24-tournament-large-folder-perf.md
+[Extraction Timing Plan]: archive/plans/2026-06-25-extraction-timing.md
 
 ## Design Specs
 
@@ -135,6 +137,7 @@ Central index for all project documentation.
 | [Process & Security Guards][] | Dependency-free pre-commit regex secret guard (full-shape patterns, self-reference-safe via concatenated fixtures) + pre-archive checklist hardening (flip checkboxes, `Status: Complete`, index plans+specs, SHA-ancestor check) (Group CW-4) |
 | [Sort Responsiveness Core][] | Large-folder sort UX: determinate cancelable progress notification (Option C) + O(n²) MST-fallback → VP-tree `findNearest` (quality-preserving, accept tie diff) + `insertNewFilesInSortedOrder` event-loop yielding + dead renderer-sort-method removal; quality-locked, PR1 of 3 (Group P1) |
 | [Tournament Large-Folder Perf][] | Tournament 24k+ performance: session-only undo + slim `version:2` history-free payload (undo cap 100), debounced single-flight persistence (`_schedulePersist`/`_drain`/`flush`/`cancelPending`), O(n) consumed-marker `_buildRoundPairings`, cached path→index `Map`, atomic state write (Group P2) |
+| [Extraction Timing][] | Lazy / on-demand feature extraction (D1–D4): remove the unconditional `loadFolder` kickoff + the CLIP enable-toggle kickoff; add a conditional on-demand CLIP-sort trigger gated by `clipVectorsNeedExtraction` (skips the ~40s cache reload on repeat sorts); ML "Sort by Prediction" already lazy, hash sort needs no vectors (Group P3) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -170,6 +173,7 @@ Central index for all project documentation.
 [Process & Security Guards]: superpowers/specs/2026-06-17-cw-4-process-security-guards-design.md
 [Sort Responsiveness Core]: superpowers/specs/2026-06-19-sort-responsiveness-core-design.md
 [Tournament Large-Folder Perf]: superpowers/specs/2026-06-24-tournament-large-folder-perf-design.md
+[Extraction Timing]: superpowers/specs/2026-06-25-extraction-timing-design.md
 
 ## Security Audits
 
@@ -185,4 +189,4 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-06-16*
+*Last Updated: 2026-06-25*

@@ -1936,13 +1936,9 @@ class MediaViewer {
                         // Best-effort cleanup — deleteSortCache already shows a notification
                         // on failure. Explicit catch makes the contract obvious.
                     }
-                } else {
-                    // Toggle-on: start background extraction immediately, mirroring the
-                    // folder-load path (see loadFolder's kickoff call). Fire-and-forget.
-                    // kickoff no-ops when no folder is loaded (guards on mediaFiles.length),
-                    // so toggling CLIP on with nothing loaded won't trigger a model download.
-                    this.kickoffBackgroundExtractionIfEnabled();
                 }
+                // Toggle-on is intentionally lazy (Group P3): enabling CLIP only advertises the
+                // capability; vectors are produced on first use of an AI feature, not on toggle.
             });
         }
 
@@ -2533,8 +2529,9 @@ class MediaViewer {
             await this.showMedia();
             this.updateFolderInfo();
 
-            this.kickoffBackgroundExtractionIfEnabled();
-
+            // Lazy extraction (Group P3): feature/CLIP vectors are produced on first use of an
+            // AI feature (CLIP sort / Sort by Prediction), not on folder open — keeps large
+            // folders responsive. See docs/superpowers/specs/2026-06-25-extraction-timing-design.md.
             console.log(`Successfully loaded ${this.mediaFiles.length} media files`);
 
             // Update ML button state (actual initialization happens when user clicks the button)
@@ -5207,6 +5204,15 @@ class MediaViewer {
                         throw new Error('CLIP features are disabled. Enable in Settings (F1) to use semantic sorting.');
                     }
 
+                    // Lazy extraction (Group P3): vectors are no longer pre-warmed on folder open.
+                    // If any current file lacks an in-memory CLIP vector, extract now and wait —
+                    // kickoff loads the cache + model and runs extraction to completion (cancelable
+                    // progress card). Gated so a repeat CLIP sort (vectors already cached) skips the
+                    // ~40s feature-cache reload.
+                    if (this.clipVectorsNeedExtraction()) {
+                        await this.kickoffBackgroundExtractionIfEnabled();
+                    }
+
                     // Collect CLIP vectors from clipCache (Float32Array → plain Array for postMessage serialization)
                     const clipVectors = {};
                     let vectorCount = 0;
@@ -6519,7 +6525,7 @@ class MediaViewer {
     }
 
     async loadFeatureCache() {
-        // Single-flight: concurrent callers (folder-load kickoff + a "Sort by AI" click) must
+        // Single-flight: concurrent callers (a CLIP-sort's on-demand extraction + a "Sort by Prediction" click) must
         // not both drive the shared main-side streaming session, which would corrupt each
         // other's chunk offsets and close the session out from under the other — yielding an
         // empty/partial feature load. Coalesce concurrent calls into one in-flight load.
@@ -7081,6 +7087,15 @@ class MediaViewer {
         }
 
         return Array.from(combined);
+    }
+
+    // True when CLIP is enabled and at least one current file lacks an in-memory CLIP vector.
+    // Gates the lazy on-demand extraction trigger in handleSortBySimilarity's CLIP branch so a
+    // repeat CLIP sort (vectors already in memory) does not needlessly reload the ~40s feature
+    // cache. See docs/superpowers/specs/2026-06-25-extraction-timing-design.md (D3).
+    clipVectorsNeedExtraction() {
+        if (!this.enableClipFeatures) return false;
+        return this.mediaFiles.some((f) => !this.clipCache.has(f.path));
     }
 
     async loadBulkRatedFile() {
@@ -8020,9 +8035,9 @@ class MediaViewer {
 
     async kickoffBackgroundExtractionIfEnabled() {
         if (!this.enableClipFeatures) return;
-        // No folder loaded → nothing to extract. Also makes the CLIP toggle-on path a
-        // no-op until a folder is open (avoids a surprise ~87 MB model download from a
-        // settings toggle with nothing on screen).
+        // No folder loaded → nothing to extract. Defensive: the lazy CLIP-sort caller already
+        // gates on clipVectorsNeedExtraction() (false for an empty folder), so this guards any
+        // future caller and avoids a surprise ~87 MB model download with nothing on screen.
         if (this.mediaFiles.length === 0) return;
         try {
             // Fire immediately, before the awaited cache-load / model-load, so the

@@ -75,7 +75,7 @@ test.describe('CLIP graceful degradation', () => {
         expect(clipEnabled).toBe(true);
     });
 
-    test('toggling CLIP on while a folder is loaded kicks off extraction', async () => {
+    test('toggling CLIP on while a folder is loaded does NOT kick off extraction (lazy)', async () => {
         tmpFixtures = await createTempFixtureDir();
         ({ electronApp, page } = await launchApp());
 
@@ -90,8 +90,8 @@ test.describe('CLIP graceful degradation', () => {
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
 
-        // Stub kickoff with a counter so we assert the wiring (toggle-on → kickoff)
-        // without running the real, heavy, model-downloading extraction path.
+        // Stub kickoff with a counter so we assert the lazy contract (toggle-on must NOT kick
+        // off extraction) without running the real, heavy, model-downloading extraction path.
         await page.evaluate(() => {
             const mv = window.mediaViewer;
             mv.__kickoffCalls = 0;
@@ -107,17 +107,17 @@ test.describe('CLIP graceful degradation', () => {
             toggle.checked = true;
             toggle.dispatchEvent(new Event('change'));
         });
-        // Wait until the toggle-on handler invokes the kickoff stub. Bounded so a
-        // regression fails fast on the explicit assertion below instead of hanging.
-        await page
-            .waitForFunction(() => window.mediaViewer.__kickoffCalls > 0, null, { timeout: 2000 })
-            .catch(() => {});
+        // The change handler sets enableClipFeatures synchronously at entry; wait for that so
+        // the handler has demonstrably run before we assert it did NOT call the kickoff stub.
+        await page.waitForFunction(() => window.mediaViewer.enableClipFeatures === true, null, { timeout: 2000 });
 
         const result = await page.evaluate(() => ({
             calls: window.mediaViewer.__kickoffCalls,
             enabled: window.mediaViewer.enableClipFeatures,
         }));
         expect(result.enabled).toBe(true);
-        expect(result.calls).toBe(1);
+        // Lazy (Group P3): enabling CLIP only advertises the capability — vectors are produced
+        // on first use of an AI feature (CLIP sort / Sort by Prediction), not on toggle.
+        expect(result.calls).toBe(0);
     });
 });

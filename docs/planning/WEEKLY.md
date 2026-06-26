@@ -50,7 +50,7 @@
 **Source**: 🔵 User-Flagged
 **Total SP**: 3 — solo (3 SP; no cohesive small task shares its files)
 
-- [ ] **Smarter timing for background feature extraction (don't always start on folder open)** — 3 SP, 🟠 IMPORTANT
+- [x] **Smarter timing for background feature extraction (don't always start on folder open)** — 3 SP, 🟠 IMPORTANT — ✅ **DONE 2026-06-26** (branch `feature/extraction-timing`; chose **pure lazy**, no settings toggle; 4 tasks, reviews Approved, opus final "Ready to merge: Yes", 381 unit; **manual 24k smoke PASSED 2026-06-26**). Merge pending via PR against `main`. See [DONE.md](DONE.md) 2026-06-25.
   - TODO.md Planned 🟠 (promoted 2026-06-18; re-reported during manual testing). `kickoffBackgroundExtractionIfEnabled()` fires unconditionally on every `loadFolder()`, heavily loading the CPU on large folders even when the user never uses AI/similarity sort. Extraction produces the 64-dim + 512-dim CLIP vectors those sorts need, so it can't be removed — only deferred. Needs a short design pass (brainstorm → which option): (a) **lazy** — extract only on first click of an AI-dependent feature; (b) **threshold** — auto-extract on open only if N < `EXTRACTION_AUTO_LIMIT`; (c) **settings toggle** "Auto-extract on folder open" (default off for new users); (d) **idle-only** — start after a quiet period. User lean: "move it to where it's needed" (→ lazy/on-demand). Distinct from the [2026-05-03] extraction-starting-toast item (that surfaces *visibility*; this decides *when*).
   - Affected: `media-viewer.js` (`kickoffBackgroundExtractionIfEnabled`, `loadFolder` call site, new settings toggle), Settings panel F1 in `index.html` + `styles.css`.
 
@@ -133,7 +133,7 @@
 | **Group P3: Feature-extraction timing** | 3 |
 | **Group WR: Weekly Reviews** [batch] (start) | (4) |
 
-- [ ] Decide extraction-timing strategy (lazy / threshold / toggle / idle) + implement gate + settings toggle (3 SP)
+- [x] Decide extraction-timing strategy (lazy / threshold / toggle / idle) + implement gate (3 SP) — chose **pure lazy** (no settings toggle needed); implemented + reviewed on branch `feature/extraction-timing`; **24k smoke PASSED 2026-06-26**, merge pending via PR against `main`
 - [ ] Weekly Reviews: Claude + non-Claude best-practices rows (start) (1–2 SP of the 4 SP overhead)
 
 **Daily total**: 3 SP + reviews overhead

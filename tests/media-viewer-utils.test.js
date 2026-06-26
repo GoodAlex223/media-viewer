@@ -76,6 +76,24 @@ function extractAsyncMethod(methodName) {
     return new AsyncFunction(params, methodBody);
 }
 
+// Returns the raw source text of a top-level MediaViewer method body (for regression
+// assertions that a call was added/removed). Handles both `name(` and `async name(`.
+function methodSource(methodName) {
+    const regex = new RegExp(`^\\s{4}(?:async\\s+)?${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
+    const match = source.match(regex);
+    if (!match) {
+        throw new Error(`Could not find method: ${methodName}`);
+    }
+    const searchStart = match.index + match[0].length - 1; // position of opening {
+    let braceCount = 0;
+    for (let i = searchStart; i < source.length; i++) {
+        if (source[i] === '{') braceCount++;
+        if (source[i] === '}') braceCount--;
+        if (braceCount === 0) return source.substring(searchStart + 1, i);
+    }
+    throw new Error(`Unbalanced braces for method: ${methodName}`);
+}
+
 const buildKeyString = extractMethod('buildKeyString');
 const formatElapsed = extractMethod('formatElapsed');
 const formatEta = extractMethod('formatEta');
@@ -2207,5 +2225,83 @@ describe('getMediaIndex (cached path→index map)', () => {
         expect(getMediaIndex.call(c, 'c.jpg')).toBe(2);
         c.mediaFiles.splice(0, 1); // remove a.jpg in place — same array reference
         expect(getMediaIndex.call(c, 'c.jpg')).toBe(1);
+    });
+});
+
+describe('clipVectorsNeedExtraction', () => {
+    const clipVectorsNeedExtraction = extractMethod('clipVectorsNeedExtraction');
+
+    it('returns false when CLIP is disabled (even with uncached files)', () => {
+        const ctx = {
+            enableClipFeatures: false,
+            mediaFiles: [{ path: 'a' }, { path: 'b' }],
+            clipCache: new Map(),
+        };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(false);
+    });
+
+    it('returns true when CLIP enabled and clipCache is empty', () => {
+        const ctx = {
+            enableClipFeatures: true,
+            mediaFiles: [{ path: 'a' }, { path: 'b' }],
+            clipCache: new Map(),
+        };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(true);
+    });
+
+    it('returns true when at least one current file lacks a clip vector', () => {
+        const ctx = {
+            enableClipFeatures: true,
+            mediaFiles: [{ path: 'a' }, { path: 'b' }],
+            clipCache: new Map([['a', new Float32Array(512)]]),
+        };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(true);
+    });
+
+    it('returns false when every current file already has a clip vector in memory', () => {
+        const ctx = {
+            enableClipFeatures: true,
+            mediaFiles: [{ path: 'a' }, { path: 'b' }],
+            clipCache: new Map([
+                ['a', new Float32Array(512)],
+                ['b', new Float32Array(512)],
+            ]),
+        };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(false);
+    });
+
+    it('returns false for an empty folder (nothing to extract)', () => {
+        const ctx = { enableClipFeatures: true, mediaFiles: [], clipCache: new Map() };
+        expect(clipVectorsNeedExtraction.call(ctx)).toBe(false);
+    });
+});
+
+describe('lazy extraction wiring (Group P3)', () => {
+    it('loadFolder no longer kicks off background extraction on folder open', () => {
+        expect(methodSource('loadFolder')).not.toContain('kickoffBackgroundExtractionIfEnabled');
+    });
+
+    it('CLIP enable-toggle handler no longer kicks off extraction', () => {
+        // The only kickoff call inside setupEventListeners was the toggle-on branch (Group C);
+        // under lazy semantics toggling CLIP on just enables the capability. Extract only the
+        // handler body so the assertion does not depend on the whole 500-line method.
+        const anchor = "clipToggle.addEventListener('change'";
+        const start = source.indexOf(anchor);
+        expect(start).toBeGreaterThan(-1);
+        const open = source.indexOf('{', start);
+        let depth = 0;
+        let end = -1;
+        for (let i = open; i < source.length; i++) {
+            if (source[i] === '{') depth++;
+            else if (source[i] === '}') {
+                depth--;
+                if (depth === 0) {
+                    end = i;
+                    break;
+                }
+            }
+        }
+        const handlerBody = source.slice(open, end);
+        expect(handlerBody).not.toContain('kickoffBackgroundExtractionIfEnabled');
     });
 });
