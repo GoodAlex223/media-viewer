@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-25 <!-- Group P3: Feature-extraction timing (lazy / on-demand) — removed folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by clipVectorsNeedExtraction; ML sort already lazy, hash sort needs no vectors. Branch feature/extraction-timing: impl + all reviews complete (opus "Ready to merge: Yes"), 381 unit; ⏳ manual 24k smoke + merge PENDING. Prior: Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf MERGED 2026-06-25 via PR #55 (merge 51366cb), manual 24k smoke PASSED, re-review "No issues found". Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
+**Last Updated**: 2026-06-26 <!-- Group P3: Feature-extraction timing (lazy / on-demand) — removed folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by clipVectorsNeedExtraction; ML sort already lazy, hash sort needs no vectors. MERGED 2026-06-26 via PR #56 (merge 9d65500, branch deleted), manual 24k smoke PASSED, pre-merge /code-review fix cba5352 (stale E2E + 2 comments), re-review "no issues remaining", 381 unit. Prior: Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf MERGED 2026-06-25 via PR #55 (merge 51366cb), manual 24k smoke PASSED, re-review "No issues found". Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -27,11 +27,13 @@ conditional trigger on the CLIP-sort path. Subagent-driven (4 tasks; controller 
 [[feedback_subagent_commits_vs_memory_hook]]); every per-task review Approved; final whole-branch review (opus)
 → **"Ready to merge: Yes"** (no Critical/Important).
 
-✅ **Status: implemented + reviewed + manual 24k smoke PASSED 2026-06-26 on branch `feature/extraction-timing` — PR open against `main`, merge pending.**
-The real acceptance gate (per WEEKLY.md: large-folder behavior can't be represented by synthetic fixtures) was a
-6-step manual smoke on the user's real 24k folder — **all passed**, including the two unit-uncovered behaviors:
-step 3 ("repeat CLIP sort = instant, no ~40s reload") and step 6 ("toggle CLIP off→on = no kickoff"). **381 unit
-tests green** (374 → 381, +7). PR open; merge status reconciled here post-merge.
+✅ **Status: MERGED 2026-06-26 via PR #56 (merge `9d65500`; branch `feature/extraction-timing` deleted).** Manual 24k
+smoke PASSED (the real acceptance gate — per WEEKLY.md, large-folder behavior can't be represented by synthetic
+fixtures); the 6-step smoke on the user's real 24k folder **all passed**, including the two unit-uncovered behaviors:
+step 3 ("repeat CLIP sort = instant, no ~40s reload") and step 6 ("toggle CLIP off→on = no kickoff"). Pre-merge
+`/code-review` flagged 1 issue scored 100 (a stale E2E test asserting the removed toggle-on kickoff, plus 2 stale
+`media-viewer.js` comments — same root cause) → **fixed in-branch `cba5352`** (E2E flipped to the lazy `calls===0`
+contract; both comments reworded); re-review posted "Verified — no issues remaining". **381 unit + 3/3 E2E green** (374 → 381, +7).
 
 **Plan**: [docs/archive/plans/2026-06-25-extraction-timing.md](../archive/plans/2026-06-25-extraction-timing.md)
 **Spec**: [docs/superpowers/specs/2026-06-25-extraction-timing-design.md](../superpowers/specs/2026-06-25-extraction-timing-design.md)
@@ -53,7 +55,7 @@ tests green** (374 → 381, +7). PR open; merge status reconciled here post-merg
 - **A test-helper can have the same fragility class as production code.** `methodSource`'s naive brace-counting is safe only for `loadFolder`; Task 4 was deliberately scoped away from it. Hardening filed to BACKLOG.
 - **`loadFeatureCache()` single-flight ≠ cached** — it re-reads on each fresh call, which is why the trigger had to be gated (the whole point of the predicate).
 
-**Follow-up tasks**: BACKLOG 🟤 [2026-06-25] Group P3 closeout (2 items): `methodSource` brace-counting hardening; defer a shared lazy gate-and-extract helper until a 3rd AI consumer appears. **Smoke PASSED 2026-06-26**; merge pending via PR against `main`.
+**Follow-up tasks**: BACKLOG 🟤 [2026-06-25] Group P3 closeout (2 items: `methodSource` brace-counting hardening; defer a shared lazy gate-and-extract helper until a 3rd AI consumer appears) + BACKLOG 🟡 [2026-06-26] PR #56 process items (E2E not gated by any pre-commit/CI step → behaviour-change PRs can land silently-broken E2E tests; adopt a reference-sweep convention when removing a named call site). MERGED via PR #56 (`9d65500`).
 
 ### 2026-06-24 — Group P2: Tournament large-folder performance (batch)
 

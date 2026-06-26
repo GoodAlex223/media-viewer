@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vanilla JS (no bundler) ES-module renderer `media-viewer.js`; Vitest unit tests via the source-extraction harness in `tests/media-viewer-utils.test.js`.
 
-**Status:** Complete — all 4 tasks implemented on branch `feature/extraction-timing` (commits `2c57398`, `8ead5c6`, `f19431c`, `cb976ba`); every per-task review Approved; final whole-branch review (opus) "Ready to merge: Yes"; 381 unit tests green. ✅ **Manual 24k-folder smoke PASSED 2026-06-26** (the real acceptance gate — synthetic fixtures can't represent 24k). PR open against `main`; merge pending.
+**Status:** Complete — all 4 tasks implemented on branch `feature/extraction-timing` (commits `2c57398`, `8ead5c6`, `f19431c`, `cb976ba`); every per-task review Approved; final whole-branch review (opus) "Ready to merge: Yes"; 381 unit tests green. ✅ **Manual 24k-folder smoke PASSED 2026-06-26** (the real acceptance gate — synthetic fixtures can't represent 24k). **MERGED 2026-06-26 via PR #56 (merge `9d65500`; branch deleted)**; pre-merge `/code-review` fix `cba5352` (stale E2E test + 2 stale comments), re-review "no issues remaining".
 
 ## Global Constraints
 
@@ -428,4 +428,4 @@ Synthetic E2E fixtures cannot represent 24 000 files; the user verifies on a rea
 
 - ✅ 381 unit tests green (5 predicate cases + 2 regression guards added; +7 from 374).
 - ✅ All per-task reviews Approved; final whole-branch review (opus) "Ready to merge: Yes" (no Critical/Important).
-- ✅ **PASSED — manual 24k-folder smoke 2026-06-26** (plan's 6-step checklist; steps 3 "repeat CLIP sort = instant/no reload" and 6 "toggle off→on = no kickoff" — the unit-uncovered behaviors — both confirmed). This was the real acceptance gate; PR now open against `main`, merge pending.
+- ✅ **PASSED — manual 24k-folder smoke 2026-06-26** (plan's 6-step checklist; steps 3 "repeat CLIP sort = instant/no reload" and 6 "toggle off→on = no kickoff" — the unit-uncovered behaviors — both confirmed). This was the real acceptance gate; MERGED 2026-06-26 via PR #56 (merge `9d65500`).
