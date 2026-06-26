@@ -2280,4 +2280,28 @@ describe('lazy extraction wiring (Group P3)', () => {
     it('loadFolder no longer kicks off background extraction on folder open', () => {
         expect(methodSource('loadFolder')).not.toContain('kickoffBackgroundExtractionIfEnabled');
     });
+
+    it('CLIP enable-toggle handler no longer kicks off extraction', () => {
+        // The only kickoff call inside setupEventListeners was the toggle-on branch (Group C);
+        // under lazy semantics toggling CLIP on just enables the capability. Extract only the
+        // handler body so the assertion does not depend on the whole 500-line method.
+        const anchor = "clipToggle.addEventListener('change'";
+        const start = source.indexOf(anchor);
+        expect(start).toBeGreaterThan(-1);
+        const open = source.indexOf('{', start);
+        let depth = 0;
+        let end = -1;
+        for (let i = open; i < source.length; i++) {
+            if (source[i] === '{') depth++;
+            else if (source[i] === '}') {
+                depth--;
+                if (depth === 0) {
+                    end = i;
+                    break;
+                }
+            }
+        }
+        const handlerBody = source.slice(open, end);
+        expect(handlerBody).not.toContain('kickoffBackgroundExtractionIfEnabled');
+    });
 });
