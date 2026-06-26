@@ -8,6 +8,8 @@
 
 **Tech Stack:** Vanilla JS (no bundler) ES-module renderer `media-viewer.js`; Vitest unit tests via the source-extraction harness in `tests/media-viewer-utils.test.js`.
 
+**Status:** Complete — all 4 tasks implemented on branch `feature/extraction-timing` (commits `2c57398`, `8ead5c6`, `f19431c`, `cb976ba`); every per-task review Approved; final whole-branch review (opus) "Ready to merge: Yes"; 381 unit tests green. ⏳ **Manual 24k-folder smoke + merge PENDING** (the real acceptance gate — synthetic fixtures can't represent 24k; user parallel-work hand-off).
+
 ## Global Constraints
 
 - **Single production file:** all production edits are in `media-viewer.js`. No new files, no new dependencies, no HTML/CSS changes (pure lazy needs no settings UI).
@@ -28,7 +30,7 @@
 **Interfaces:**
 - Produces: `clipVectorsNeedExtraction(): boolean` — instance method on `MediaViewer`. Reads `this.enableClipFeatures` (boolean), `this.mediaFiles` (array of `{path}`), `this.clipCache` (Map keyed by `file.path`). Returns `true` iff CLIP is enabled AND at least one current file has no in-memory clip vector. Consumed by Task 2.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `tests/media-viewer-utils.test.js`, append a new describe block at the end of the file (after the last existing block):
 
@@ -82,12 +84,12 @@ describe('clipVectorsNeedExtraction', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js`
 Expected: FAIL — the file fails to collect with `Error: Could not find method: clipVectorsNeedExtraction` (the `extractMethod` call at the top of the new describe throws because the method does not exist yet).
 
-- [ ] **Step 3: Add the method to `media-viewer.js`**
+- [x] **Step 3: Add the method to `media-viewer.js`**
 
 Insert immediately after the end of `getCombinedFeatures()` (the `}` on line 7084), before `async loadBulkRatedFile()`:
 
@@ -124,12 +126,12 @@ becomes
 ```
 (include the doc comment shown above; omitted here for brevity of the anchor)
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js`
 Expected: PASS — all 5 new cases pass; existing 127 cases in the file still pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -149,7 +151,7 @@ git commit -m "feat(extraction): add clipVectorsNeedExtraction lazy gate (Group 
 
 Note: this branch is large and DOM/Electron-coupled, so it is verified by manual smoke (see Verification), not a unit test — the decision logic it calls (`clipVectorsNeedExtraction`) is already unit-tested in Task 1.
 
-- [ ] **Step 1: Add the on-demand trigger**
+- [x] **Step 1: Add the on-demand trigger**
 
 In the CLIP branch of `handleSortBySimilarity`, insert the trigger between the `enableClipFeatures` guard and the vector-collection loop. Replace:
 
@@ -182,12 +184,12 @@ with:
                     const clipVectors = {};
 ```
 
-- [ ] **Step 2: Verify lint + full unit suite stay green**
+- [x] **Step 2: Verify lint + full unit suite stay green**
 
 Run: `npm run lint && npx vitest run`
 Expected: lint 0 errors; all unit tests pass (no test count change — this edit is covered by manual smoke + Task 1's predicate tests).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add media-viewer.js
@@ -205,7 +207,7 @@ git commit -m "feat(extraction): trigger CLIP-vector extraction on demand in CLI
 **Interfaces:**
 - Produces (test helper): `methodSource(name: string): string` — returns the raw source text of a top-level `MediaViewer` method body (handles `async` and non-async). Used here and in Task 4.
 
-- [ ] **Step 1: Add the `methodSource` test helper**
+- [x] **Step 1: Add the `methodSource` test helper**
 
 In `tests/media-viewer-utils.test.js`, insert this function immediately after the `extractAsyncMethod` definition (after its closing `}` on line 77, before `const buildKeyString = ...` on line 79):
 
@@ -229,7 +231,7 @@ function methodSource(methodName) {
 }
 ```
 
-- [ ] **Step 2: Write the failing regression test**
+- [x] **Step 2: Write the failing regression test**
 
 Append a new describe block at the end of `tests/media-viewer-utils.test.js`:
 
@@ -241,12 +243,12 @@ describe('lazy extraction wiring (Group P3)', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "loadFolder no longer kicks off"`
 Expected: FAIL — `loadFolder` still contains `this.kickoffBackgroundExtractionIfEnabled();` at line 2536, so `.not.toContain` fails.
 
-- [ ] **Step 4: Remove the kickoff call from `loadFolder`**
+- [x] **Step 4: Remove the kickoff call from `loadFolder`**
 
 Replace:
 
@@ -269,17 +271,17 @@ with:
             console.log(`Successfully loaded ${this.mediaFiles.length} media files`);
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "loadFolder no longer kicks off"`
 Expected: PASS.
 
-- [ ] **Step 6: Run the full unit suite**
+- [x] **Step 6: Run the full unit suite**
 
 Run: `npx vitest run`
 Expected: all pass (the 11 `kickoffBackgroundExtractionIfEnabled` tests unaffected — the method body is unchanged).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -297,7 +299,7 @@ git commit -m "feat(extraction): stop kicking off extraction on folder open (Gro
 **Interfaces:**
 - Consumes: `methodSource` (Task 3).
 
-- [ ] **Step 1: Write the failing regression test**
+- [x] **Step 1: Write the failing regression test**
 
 In `tests/media-viewer-utils.test.js`, add a second `it` to the existing `describe('lazy extraction wiring (Group P3)', ...)` block. Scope the assertion to just the CLIP-toggle `change` handler (small, brace-safe) rather than brace-counting the ~500-line `setupEventListeners`:
 
@@ -327,12 +329,12 @@ In `tests/media-viewer-utils.test.js`, add a second `it` to the existing `descri
     });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "CLIP enable-toggle"`
 Expected: FAIL — the toggle handler still contains the toggle-on `this.kickoffBackgroundExtractionIfEnabled();` (line 1944).
 
-- [ ] **Step 3: Drop the toggle-on `else` branch**
+- [x] **Step 3: Drop the toggle-on `else` branch**
 
 `this.enableClipFeatures` and its `localStorage` write already happen above the `if/else` (lines 1910–1911), so the `else` body's only statement is the kickoff. Replace:
 
@@ -356,17 +358,17 @@ with:
 
 (The toggle-**off** `if` block above — revert `sortAlgorithm`, delete the `'clip'` sort cache — is unchanged.)
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "CLIP enable-toggle"`
 Expected: PASS.
 
-- [ ] **Step 5: Run lint + full unit suite**
+- [x] **Step 5: Run lint + full unit suite**
 
 Run: `npm run lint && npx vitest run`
 Expected: lint 0 errors (no empty block — the `else` is gone, not emptied); all unit tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -403,3 +405,27 @@ Synthetic E2E fixtures cannot represent 24 000 files; the user verifies on a rea
 **Type/name consistency:** `clipVectorsNeedExtraction()` (defined Task 1, called Task 2) — consistent. `methodSource()` (defined Task 3, reused Task 4) — consistent. `kickoffBackgroundExtractionIfEnabled()` spelled identically throughout.
 
 **Ordering safety:** Task 2 adds the on-demand CLIP trigger *before* Task 3 removes the folder-open kickoff, so CLIP sort is never broken between commits. Task 1 lands the predicate before Task 2 consumes it.
+
+---
+
+## Key Discoveries
+
+- **The ML "Sort by Prediction" path was already lazy.** [media-viewer.js handleSortByPrediction](../../../media-viewer.js) already calls `loadFeatureCache()` → checks `uncachedFiles` → `startBackgroundFeatureExtraction()` on demand and never depended on the folder-open kickoff. This narrowed the real work: only the **CLIP semantic-sort** path needed a new on-demand trigger; the folder-open kickoff was pure pre-warm overhead for the non-AI user.
+- **CLIP semantic sort vs. hash similarity sort have different vector needs.** CLIP sort reads `clipCache` (512-dim) and errored "wait for background extraction" when empty; hash sort (vptree/mst/simple) computes perceptual hashes in its own loop and needs **no** feature vectors at all. Only the CLIP branch of `handleSortBySimilarity` got the trigger.
+- **`loadFeatureCache()` is single-flight but not cached across calls** — it re-reads `.feature_cache.json` (~40s streaming parse on 24k) on every fresh call. This is why the trigger had to be **conditional** (`clipVectorsNeedExtraction()`): an unconditional ensure on every CLIP sort would reload the whole cache even when vectors are already in memory.
+- **The CLIP "restore cached order" path is a separate branch** that never reaches the full-sort code, so it stays instant (vector-less new files end-append, pre-existing behavior) — no trigger needed there.
+- **Two reused methods were left byte-for-byte unchanged** (`kickoffBackgroundExtractionIfEnabled`, `clipVectorsNeedExtraction`), so the kickoff's 11 existing unit tests stayed green and only callers changed.
+- **Test-helper fragility surfaced:** the new `methodSource()` source-extractor brace-counts naively (ignores braces inside string/template/regex literals). Harmless for its only caller (`loadFolder`, all-balanced `${...}`), which is why Task 4 deliberately used a *scoped* handler extractor instead — but a latent trap for any future brace-bearing caller.
+
+## Future Improvements
+
+(Extracted to BACKLOG.md 🟤 [2026-06-25] — see Group P3 closeout group.)
+
+1. **Harden or document `methodSource()` brace-counting** (`tests/media-viewer-utils.test.js`) — skip string/template/regex spans, or add a doc-comment warning, before a second brace-bearing caller is added. Latent silent-wrong-slice risk; currently safe for `loadFolder` only.
+2. **Extract the gate-and-extract lazy-trigger into a shared helper** if/when a third AI-dependent consumer appears, so the `if (needsExtraction) await kickoff` pattern lives in one place rather than alongside the ML path's inline `uncachedFiles` check.
+
+## Verification status
+
+- ✅ 381 unit tests green (5 predicate cases + 2 regression guards added; +7 from 374).
+- ✅ All per-task reviews Approved; final whole-branch review (opus) "Ready to merge: Yes" (no Critical/Important).
+- ⏳ **PENDING — manual 24k-folder smoke** (plan's 6-step checklist; steps 3 "repeat CLIP sort = instant/no reload" and 6 "toggle off→on = no kickoff" are the unit-uncovered behaviors). This is the real acceptance gate and the merge precondition.

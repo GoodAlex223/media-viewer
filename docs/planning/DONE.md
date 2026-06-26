@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-24 <!-- Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf MERGED 2026-06-25 via PR #55 (merge 51366cb), manual 24k smoke PASSED, re-review "No issues found". Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
+**Last Updated**: 2026-06-25 <!-- Group P3: Feature-extraction timing (lazy / on-demand) — removed folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by clipVectorsNeedExtraction; ML sort already lazy, hash sort needs no vectors. Branch feature/extraction-timing: impl + all reviews complete (opus "Ready to merge: Yes"), 381 unit; ⏳ manual 24k smoke + merge PENDING. Prior: Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf MERGED 2026-06-25 via PR #55 (merge 51366cb), manual 24k smoke PASSED, re-review "No issues found". Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,47 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-25 — Group P3: Feature-extraction timing (lazy / on-demand)
+
+**Summary**: Background feature extraction ran unconditionally on every `loadFolder()` — a ~40s feature-cache
+load + ~87 MB CLIP model download + CPU-heavy extraction of every file — even when the user only browsed and
+never used an AI feature. Group P3 makes it **lazy / on-demand**: vectors are produced only when an AI-dependent
+feature is actually used. The decisive finding (from exploring the code) reshaped the work: the ML **"Sort by
+Prediction"** path was *already* lazy (self-triggers extraction) and never depended on the folder-open kickoff,
+and **hash** similarity sort needs no vectors at all — so the only consumer that relied on the kickoff was
+**CLIP semantic sort**. The fix therefore is mostly *deletion* (two eager kickoff call sites) plus one new
+conditional trigger on the CLIP-sort path. Subagent-driven (4 tasks; controller commits per
+[[feedback_subagent_commits_vs_memory_hook]]); every per-task review Approved; final whole-branch review (opus)
+→ **"Ready to merge: Yes"** (no Critical/Important).
+
+⏳ **Status: implementation + full review chain complete on branch `feature/extraction-timing` — manual 24k smoke + merge PENDING.**
+The real acceptance gate (per WEEKLY.md: large-folder behavior can't be represented by synthetic fixtures) is a
+6-step manual smoke on the user's real 24k folder; steps 3 ("repeat CLIP sort = instant, no ~40s reload") and 6
+("toggle CLIP off→on = no kickoff") are the two unit-uncovered behaviors. **381 unit tests green** (374 → 381,
++7). Not yet merged; not yet checked off in TODO/WEEKLY.
+
+**Plan**: [docs/archive/plans/2026-06-25-extraction-timing.md](../archive/plans/2026-06-25-extraction-timing.md)
+**Spec**: [docs/superpowers/specs/2026-06-25-extraction-timing-design.md](../superpowers/specs/2026-06-25-extraction-timing-design.md)
+
+**What shipped (4 tasks)**:
+1. **`clipVectorsNeedExtraction()` predicate** (`2c57398`) — pure gate: `enableClipFeatures && mediaFiles.some(f => !clipCache.has(f.path))`; +5 unit tests (disabled / empty-cache / partial / full / empty-folder).
+2. **On-demand CLIP-sort trigger** (`8ead5c6`) — in `handleSortBySimilarity`'s `'clip'` branch, `if (clipVectorsNeedExtraction()) await kickoffBackgroundExtractionIfEnabled()` before vector collection. The gate makes a repeat CLIP sort (vectors already in memory) skip the ~40s cache reload.
+3. **Removed the folder-open kickoff** (`f19431c`) — deleted the unconditional `kickoffBackgroundExtractionIfEnabled()` from `loadFolder`; added a `methodSource` test helper + a regression test asserting the call is gone. The kickoff method body is unchanged → its 11 existing tests stay green.
+4. **Made the CLIP enable-toggle lazy** (`cb976ba`) — dropped the toggle-on `else` branch (its only statement was the kickoff); toggling CLIP on now just enables the capability. Scoped regression test on the handler body (not `methodSource`, to avoid brace-counting the 500-line `setupEventListeners`).
+
+**Key decisions** (spec D1–D4):
+- **D1 — pure lazy**, no threshold / settings-toggle / idle-delay (user lean: "move it to where it's needed").
+- **D2 — CLIP toggle-on is lazy too** (consistency over the Group C eager-kickoff behavior).
+- **D3 — the CLIP-sort trigger is conditional** because `loadFeatureCache()` re-reads the ~40s cache on every fresh call (single-flight only coalesces *concurrent* calls).
+- **D4 — reuse `kickoffBackgroundExtractionIfEnabled` unchanged**, keep its name (avoids churning 11 tests).
+
+**Lessons learned**:
+- **Read the consumers before deciding the fix.** The TODO framed this as "defer extraction"; the code showed two of three consumers (ML, hash) already didn't need the kickoff, collapsing the task to one new trigger + two deletions.
+- **A test-helper can have the same fragility class as production code.** `methodSource`'s naive brace-counting is safe only for `loadFolder`; Task 4 was deliberately scoped away from it. Hardening filed to BACKLOG.
+- **`loadFeatureCache()` single-flight ≠ cached** — it re-reads on each fresh call, which is why the trigger had to be gated (the whole point of the predicate).
+
+**Follow-up tasks**: BACKLOG 🟤 [2026-06-25] Group P3 closeout (2 items): `methodSource` brace-counting hardening; defer a shared lazy gate-and-extract helper until a 3rd AI consumer appears. **Open gate**: manual 24k smoke → then merge → then check off TODO/WEEKLY.
 
 ### 2026-06-24 — Group P2: Tournament large-folder performance (batch)
 
