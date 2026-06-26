@@ -6525,7 +6525,7 @@ class MediaViewer {
     }
 
     async loadFeatureCache() {
-        // Single-flight: concurrent callers (folder-load kickoff + a "Sort by AI" click) must
+        // Single-flight: concurrent callers (a CLIP-sort's on-demand extraction + a "Sort by Prediction" click) must
         // not both drive the shared main-side streaming session, which would corrupt each
         // other's chunk offsets and close the session out from under the other — yielding an
         // empty/partial feature load. Coalesce concurrent calls into one in-flight load.
@@ -8035,9 +8035,9 @@ class MediaViewer {
 
     async kickoffBackgroundExtractionIfEnabled() {
         if (!this.enableClipFeatures) return;
-        // No folder loaded → nothing to extract. Also makes the CLIP toggle-on path a
-        // no-op until a folder is open (avoids a surprise ~87 MB model download from a
-        // settings toggle with nothing on screen).
+        // No folder loaded → nothing to extract. Defensive: the lazy CLIP-sort caller already
+        // gates on clipVectorsNeedExtraction() (false for an empty folder), so this guards any
+        // future caller and avoids a surprise ~87 MB model download with nothing on screen.
         if (this.mediaFiles.length === 0) return;
         try {
             // Fire immediately, before the awaited cache-load / model-load, so the
