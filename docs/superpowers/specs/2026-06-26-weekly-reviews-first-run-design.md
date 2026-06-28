@@ -113,3 +113,19 @@ This is a docs/process change — verification is **review of the written rows**
 - WEEKLY.md: Group WR + Thu/Fri boxes checked.
 - `npm test` / lint are **not** affected (no code touched) but will run clean via the pre-commit
   hook on the docs commit.
+
+## First-run retro (2026-06-26) — methodology correction for future weeks
+
+D2 (deep-research harness per category) proved **wildly disproportionate** for a 4-SP overhead
+review: the four runs burned **~8M tokens** and the adversarial-verification phase **never completed
+once** (server-side rate limiting, then the actual session usage limit), so every run self-reported
+"inconclusive / all claims refuted (0-0)" despite gathering good raw data. The verdicts ended up
+resting on the raw (mostly primary-source) research, and the non-Claude category was finished with a
+cheap inline `WebSearch` pass — which is what should have been used throughout.
+
+**Correction for future Weekly Reviews (supersedes D2):** default to **lightweight inline research**
+(a few targeted `WebSearch` + 2-3 `WebFetch` per category in the main thread); reserve the
+deep-research harness for a rare, explicitly-requested deep dive on a single topic, and if used, run
+**one workflow at a time — never fan out multiple harnesses in parallel** (the parallel 80+-agent
+burst is what tripped the rate limiter). Tracked in BACKLOG 🟤 [2026-06-26] Weekly Reviews first-run
+process follow-ups.
