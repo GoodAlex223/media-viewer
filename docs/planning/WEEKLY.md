@@ -75,9 +75,9 @@
 
 > First run of the recurring Weekly Reviews batch. Read REVIEW-QUEUE.md (created this week) first; append a verdict row per category; on an `adopt`, file a 🟤 Auto-Generated BACKLOG entry.
 
-- [ ] **Plugins review (2 SP)** — two independent tops: best not-yet-reviewed plugin from the **official Claude plugin store**, and separately the best from the **wider internet**. Log each with its `source:`.
-- [ ] **Claude best-practices (1 SP)** — top not-yet-reviewed practice/experience for Claude / Claude Code / Claude Design / Claude Cowork.
-- [ ] **Non-Claude AI best-practices (1 SP)** — same, for AI models/tools other than Claude.
+- [x] **Plugins review (2 SP)** — ✅ DONE 2026-06-26. store → **pr-review-toolkit** (`adopt`, → BACKLOG); wider → test-writer-fixer (`defer`). See [REVIEW-QUEUE.md](REVIEW-QUEUE.md) §1.
+- [x] **Claude best-practices (1 SP)** — ✅ DONE 2026-06-26. TDD Guard (hook-enforced TDD) → `defer` (eval first). See [REVIEW-QUEUE.md](REVIEW-QUEUE.md) §2.
+- [x] **Non-Claude AI best-practices (1 SP)** — ✅ DONE 2026-06-26. Local-model code review (Continue.dev + Qwen via Ollama) → `defer` (GPU-gated). See [REVIEW-QUEUE.md](REVIEW-QUEUE.md) §3.
 
 ---
 
@@ -134,7 +134,7 @@
 | **Group WR: Weekly Reviews** [batch] (start) | (4) |
 
 - [x] Decide extraction-timing strategy (lazy / threshold / toggle / idle) + implement gate (3 SP) — chose **pure lazy** (no settings toggle needed); implemented + reviewed on branch `feature/extraction-timing`; **24k smoke PASSED 2026-06-26**; MERGED 2026-06-26 via PR #56 (merge `9d65500`)
-- [ ] Weekly Reviews: Claude + non-Claude best-practices rows (start) (1–2 SP of the 4 SP overhead)
+- [x] Weekly Reviews: Claude + non-Claude best-practices rows (start) (1–2 SP of the 4 SP overhead) — ✅ DONE 2026-06-26 (both rows logged; each `defer`)
 
 **Daily total**: 3 SP + reviews overhead
 
@@ -149,7 +149,7 @@
 | **Group WR: Weekly Reviews** [batch] (finish) | (4) |
 
 - [ ] Tournament pause/exit button (1 SP) + app-close tournament confirm (2 SP)
-- [ ] Weekly Reviews: plugins ×2 (store + wider internet) (2 SP of the 4 SP overhead); file 🟤 entries on any `adopt`
+- [x] Weekly Reviews: plugins ×2 (store + wider internet) (2 SP of the 4 SP overhead); file 🟤 entries on any `adopt` — ✅ DONE 2026-06-26 (pr-review-toolkit `adopt` → 🟤 BACKLOG filed; test-writer-fixer `defer`)
 
 **Daily total**: 3 SP + reviews overhead + perf spillover buffer
 
@@ -171,7 +171,7 @@
 | P2: Tournament large-folder perf [batch] | JS logic (engine/manager/IPC) | 🔵 User | 3 | 8 | Tue–Wed | ✅ MERGED 2026-06-25 (PR #55 `51366cb`; smoke PASSED) |
 | P3: Feature-extraction timing | JS logic + Settings UI | 🔵 User | 1 | 3 | Thu | Planned |
 | T1: Tournament exit affordances [batch] | UI/UX + main lifecycle | 🔵 User | 2 | 3 | Fri | Planned |
-| WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | Planned |
+| WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ DONE 2026-06-26 (4 verdicts: 1 adopt, 3 defer) |
 | **Total (quota-counted)** | | | **7** | **19** | | |
 | **Total (incl. ⚪ overhead)** | | | **10** | **23** | | |
 

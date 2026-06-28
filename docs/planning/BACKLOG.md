@@ -204,6 +204,12 @@ two tasks because they have different shapes (architectural vs. visual).
 
 ## 🟤 Auto-Generated Tech Debt
 
+### [2026-06-26] From: Weekly Reviews (week of June 22) — 1 adopt
+
+**Origin**: First run of the recurring Weekly Reviews batch (Group WR; see [REVIEW-QUEUE.md](REVIEW-QUEUE.md) + spec `2026-06-26-weekly-reviews-first-run-design.md`). One of four category picks was verdicted `adopt` under the hybrid project-fit lens; the other three were `defer` (parked under REVIEW-QUEUE *Next-up*, no BACKLOG entry). The adopt is a trial/integration candidate for this project's Claude-Code dev workflow, not yet evaluated in-repo. Caveat: the deep-research harness's adversarial-verification phase was rate/session-limited on every run this week, so the pick rests on official primary sources rather than completed 3-vote verification. Claude-surfaced.
+
+- [ ] **Trial the `pr-review-toolkit` official plugin (Plugins / store)** — Install `pr-review-toolkit@claude-plugins-official` and trial its specialized PR-review agents (comments, tests, error-handling/silent-failure-hunter, type-design, code-quality, simplification) on a real PR to see whether it adds signal beyond the `/code-review` skill already in use. Of particular fit: the test-reviewer and silent-failure-hunter agents, given this repo's Vitest/Playwright suite and error-handling discipline. Source: https://code.claude.com/docs/en/discover-plugins. Effort: S (evaluation only — install + one trial review; no code change). Affected: evaluation only (Claude Code plugin config; no repo files).
+
 ### [2026-06-25] Group P3 (feature-extraction timing) closeout follow-ups (2 items)
 
 **Origin**: Per-task + final whole-branch review (opus) of `feature/extraction-timing` (Group P3 — lazy / on-demand feature extraction; verdict "Ready to merge: Yes", no Critical/Important; merged 2026-06-26 via PR #56). Both items are sub-threshold review recommendations, not blockers. All Claude-surfaced.
