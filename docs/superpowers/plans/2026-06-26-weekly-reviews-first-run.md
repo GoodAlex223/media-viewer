@@ -19,7 +19,7 @@ Copied verbatim from the spec (`docs/superpowers/specs/2026-06-26-weekly-reviews
 - **Recency target = current as of June 2026.** Rely on live web fetch (assistant training cutoff is Jan 2026). Reviewed logs are empty (first run) → every candidate is eligible.
 - **`adopt` is hands-off:** an adopt files a 🟤 Auto-Generated BACKLOG entry to *trial/integrate later*. Do **not** install a plugin or change project behavior in this branch.
 - **"Plugin" = Claude Code plugin.** Category 1a = official Claude Code plugin marketplace; 1b = Claude Code plugins outside the official store.
-- **5 verdict rows total** this week (Plugins yields 2: store + wider).
+- **4 verdict rows total** this week (Plugins yields 2: store + wider; + 1 Claude-bp + 1 non-Claude-bp).
 - **Verdict rubric:** `adopt` = directly useful now → BACKLOG entry · `defer` = project-relevant but blocked (timing/dependency/needs eval) → park under *Next-up*, no BACKLOG entry · `pass` = not a fit / not better than current → logged in Reviewed log only.
 - **No-candidate fallback:** if a category genuinely has no strong not-yet-reviewed candidate, record a `pass` row with a "no strong candidate this week" note rather than forcing an adopt.
 - **Branch:** all edits on `chore/weekly-reviews-2026-06-26`. Single commit (Task 7).
@@ -136,7 +136,7 @@ Same check. No commit.
 
 **Interfaces:**
 - Consumes: the four `Finding`s from Tasks 1–4.
-- Produces: 5 verdict rows + parked runners-up + a header methodology pointer. Task 6 consumes the set of rows whose verdict is `adopt`.
+- Produces: 4 verdict rows + parked runners-up + a header methodology pointer. Task 6 consumes the set of rows whose verdict is `adopt`.
 
 - [ ] **Step 1: Decide each verdict under the hybrid rubric**
 
@@ -171,7 +171,7 @@ Same edit in **§3 Non-Claude AI best-practices**: one row, plus Next-up runners
 
 - [ ] **Step 6: Verify row shape**
 
-Re-read REVIEW-QUEUE.md. Confirm: exactly 5 data rows (2 + 1 + 1, plus the placeholder removed from each table that got a row), every row dated `2026-06-26`, every `Source` cell non-empty, every `Verdict` ∈ {adopt, pass, defer}, every `Notes` cell a one-liner. No commit yet (batched in Task 7).
+Re-read REVIEW-QUEUE.md. Confirm: exactly 4 data rows (2 + 1 + 1, plus the placeholder removed from each table that got a row), every row dated `2026-06-26`, every `Source` cell non-empty, every `Verdict` ∈ {adopt, pass, defer}, every `Notes` cell a one-liner. No commit yet (batched in Task 7).
 
 ---
 
@@ -263,7 +263,7 @@ Not plan tasks, but the project's task-completion ritual (CLAUDE.md) applies at 
 - D4 adopt hands-off → Global Constraints + Task 6 (BACKLOG entry, no install). ✅
 - Verdict rubric → Global Constraints + Task 5 Step 1. ✅
 - Outputs: REVIEW-QUEUE rows + Next-up + header pointer → Task 5; BACKLOG adopts → Task 6; WEEKLY boxes → Task 7; commit → Task 7. ✅
-- Scope guards (4 runs/5 rows, no installs, no-candidate fallback) → Global Constraints. ✅
+- Scope guards (4 runs/4 rows, no installs, no-candidate fallback) → Global Constraints. ✅
 - Verification (row-shape review) → Task 5 Step 6 / Task 6 Step 3 / Task 7 Step 4. ✅
 
 **Placeholder scan:** The `<pick name>`, `<URL>`, `<N>` tokens are intentional fill-slots for runtime-determined research results (the candidates aren't knowable until Tasks 1–4 run) — they are accompanied by exact format + location + decision rubric, which is the most concrete a research-driven doc edit can be. No vague "add error handling"-style gaps. ✅

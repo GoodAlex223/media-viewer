@@ -31,7 +31,7 @@ Per WEEKLY.md this is **process overhead, no code PR** — the deliverables are 
 | 2 | Claude best-practice | Top not-yet-reviewed practice/technique for Claude / Claude Code / Claude Design / Claude Cowork | 1 |
 | 3 | Non-Claude AI best-practice | Same, for AI models/tools **other than** Claude | 1 |
 
-**5 verdict rows total** (Plugins yields 2). "Plugin" is locked to **Claude Code plugin** — this
+**4 verdict rows total** (Plugins yields 2; + 1 Claude-bp + 1 non-Claude-bp). "Plugin" is locked to **Claude Code plugin** — this
 project is developed with Claude Code, so that is the project-relevant reading (confirmed in
 brainstorming).
 
@@ -93,7 +93,7 @@ delegated to the research run.
 
 ## Scope guards (YAGNI)
 
-- Exactly **4 deep-research runs / 5 verdict rows** this week — no more.
+- Exactly **4 deep-research runs / 4 verdict rows** this week — no more.
 - **No tooling, no automation, no plugin installs, no project-behavior changes.** Adopts become
   BACKLOG trial-items (D4).
 - The roadmap-refresh conversation (MILESTONES/ROADMAP/GOALS staleness, noted in WEEKLY.md) is
@@ -106,7 +106,7 @@ delegated to the research run.
 
 This is a docs/process change — verification is **review of the written rows**, not a test run:
 
-- REVIEW-QUEUE.md: 5 rows present (2 Plugins + 1 + 1), each dated `2026-06-26` with a `source:`,
+- REVIEW-QUEUE.md: 4 rows present (2 Plugins + 1 + 1), each dated `2026-06-26` with a `source:`,
   a verdict in `{adopt, pass, defer}`, and a one-line note; runners-up parked under *Next-up*.
 - BACKLOG.md: every `adopt` row has a matching 🟤 entry under the dated heading; every non-adopt
   has **no** stray BACKLOG entry.
