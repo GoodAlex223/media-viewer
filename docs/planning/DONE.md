@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-26 <!-- Group P3: Feature-extraction timing (lazy / on-demand) — removed folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by clipVectorsNeedExtraction; ML sort already lazy, hash sort needs no vectors. MERGED 2026-06-26 via PR #56 (merge 9d65500, branch deleted), manual 24k smoke PASSED, pre-merge /code-review fix cba5352 (stale E2E + 2 comments), re-review "no issues remaining", 381 unit. Prior: Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf MERGED 2026-06-25 via PR #55 (merge 51366cb), manual 24k smoke PASSED, re-review "No issues found". Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
+**Last Updated**: 2026-06-26 <!-- Group WR: Weekly Reviews first run (⚪ overhead, no code PR) — 4 verdicts (1 adopt: pr-review-toolkit → 🟤 BACKLOG; 3 defer); branch chore/weekly-reviews-2026-06-26; deep-research harness hit rate/session limits (~8M tokens, verification never completed) → methodology corrected to lightweight inline research for future weeks. Prior: Group P3: Feature-extraction timing (lazy / on-demand) — removed folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by clipVectorsNeedExtraction; ML sort already lazy, hash sort needs no vectors. MERGED 2026-06-26 via PR #56 (merge 9d65500, branch deleted), manual 24k smoke PASSED, pre-merge /code-review fix cba5352 (stale E2E + 2 comments), re-review "no issues remaining", 381 unit. Prior: Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf MERGED 2026-06-25 via PR #55 (merge 51366cb), manual 24k smoke PASSED, re-review "No issues found". Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,34 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-26 — Group WR: Weekly Reviews (first run) ⚪ Overhead
+
+**Summary**: First-ever run of the recurring **Weekly Reviews** batch (WEEKLY.md Group WR; REVIEW-QUEUE.md
+created 2026-06-19 with empty Reviewed logs). Reviewed the top not-yet-reviewed candidate in each of 4
+categories under a **hybrid relevance lens** (source broadly, judge by fit to this project's
+solo-dev-with-Claude-Code Electron workflow) and logged a verdict (`adopt | defer | pass`) per category.
+Process overhead — **no code PR**; deliverables are doc edits on branch `chore/weekly-reviews-2026-06-26`.
+The brainstorm spec doubles as the reusable Weekly Reviews methodology.
+
+✅ **Status: COMPLETE 2026-06-26** (branch `chore/weekly-reviews-2026-06-26`; 381 unit green throughout — docs-only). **4 verdicts, 1 adopt**:
+- **Plugins / official store** → **pr-review-toolkit** (`adopt`) → 🟤 BACKLOG trial entry. Granular PR-review agents (tests, silent-failure-hunter, type-design, simplification); not yet used here, complements `/code-review`.
+- **Plugins / wider internet** → test-writer-fixer via awesome-claude-plugins (`defer` — unvetted third-party; community Playwright skills have an Electron-support gap).
+- **Claude best-practice** → TDD Guard, hook-enforced TDD (`defer` — fits the project's TDD discipline but needs eval; surfaced unverified).
+- **Non-Claude best-practice** → local-model code review (Continue.dev + Qwen3-Coder-Next via Ollama) (`defer` — GPU-gated). Spec-Driven Development / GitHub Spec Kit parked as already-practiced-here (via superpowers).
+
+**Plan**: [docs/archive/plans/2026-06-26-weekly-reviews-first-run.md](../archive/plans/2026-06-26-weekly-reviews-first-run.md)
+**Spec / methodology**: [docs/superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md](../superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md)
+**Results**: [REVIEW-QUEUE.md](REVIEW-QUEUE.md) (4 rows + parked Next-up runners-up)
+
+**Key decisions** (spec D1–D4): D1 hybrid relevance lens · D2 deep-research harness per category (user choice) · D3 recency June 2026, empty logs → all eligible · D4 adopt is hands-off (BACKLOG trial item, no install).
+
+**Lessons learned**:
+- **The deep-research harness was wildly disproportionate for a 4-SP overhead review.** Four runs burned **~8M tokens** and the adversarial-verification phase **never completed once** — first server-side rate limiting (from launching all 4 harnesses in parallel = 80+ agents), then the actual session usage limit. Every run self-reported "inconclusive / all claims refuted (0-0)" while actually holding good raw data. Verdicts rest on the raw (mostly primary-source) research; the non-Claude category was finished with a cheap inline `WebSearch` pass.
+- **A harness "inconclusive / all-claims-refuted (0-0)" label is a false signal when verification is rate-limited** — the gathered claims are still usable; read the raw `refuted` list, don't trust the summary verdict.
+- **Never fan out multiple deep-research harnesses in parallel** — the parallel burst is what tripped the limiter; a single workflow caps at ~16 agents and is far gentler.
+
+**Follow-up tasks**: BACKLOG 🟤 [2026-06-26] Weekly Reviews first-run process follow-ups (2 items: default to lightweight inline research; never run harnesses in parallel) + the pr-review-toolkit `adopt` trial entry. Methodology correction recorded in the spec's "First-run retro" section (supersedes D2 for future weeks).
 
 ### 2026-06-25 — Group P3: Feature-extraction timing (lazy / on-demand)
 
