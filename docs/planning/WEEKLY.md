@@ -171,7 +171,7 @@
 | P2: Tournament large-folder perf [batch] | JS logic (engine/manager/IPC) | 🔵 User | 3 | 8 | Tue–Wed | ✅ MERGED 2026-06-25 (PR #55 `51366cb`; smoke PASSED) |
 | P3: Feature-extraction timing | JS logic + Settings UI | 🔵 User | 1 | 3 | Thu | Planned |
 | T1: Tournament exit affordances [batch] | UI/UX + main lifecycle | 🔵 User | 2 | 3 | Fri | Planned |
-| WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ DONE 2026-06-26 (4 verdicts: 1 adopt, 3 defer) |
+| WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ MERGED 2026-06-29 via PR #57 (`b42f5f5`); 4 verdicts: 1 adopt, 3 defer |
 | **Total (quota-counted)** | | | **7** | **19** | | |
 | **Total (incl. ⚪ overhead)** | | | **10** | **23** | | |
 
