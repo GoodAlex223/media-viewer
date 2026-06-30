@@ -2362,6 +2362,24 @@ describe('showTournamentLeavePrompt continuation', () => {
         expect(onAfterLeave).not.toHaveBeenCalled();
         expect(elements.tournamentResumeModal.style.display).toBe('none');
     });
+
+    it('still runs the continuation + hides the modal if Discard rejects (fail-safe)', async () => {
+        const ctx = makeCtx();
+        ctx.tournament.handleDiscard = vi.fn().mockRejectedValue(new Error('disk fail'));
+        const logError = vi.fn();
+        globalThis.window = { electronAPI: { logError } };
+        const onAfterLeave = vi.fn().mockResolvedValue(undefined);
+        try {
+            showTournamentLeavePrompt.call(ctx, onAfterLeave);
+            await elements.tournamentResumeDiscard.onclick();
+            expect(ctx.tournament.handleDiscard).toHaveBeenCalledTimes(1);
+            expect(logError).toHaveBeenCalled();
+            expect(onAfterLeave).toHaveBeenCalledTimes(1);
+            expect(elements.tournamentResumeModal.style.display).toBe('none');
+        } finally {
+            delete globalThis.window;
+        }
+    });
 });
 
 describe('handleAppCloseRequest', () => {

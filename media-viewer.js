@@ -4201,7 +4201,15 @@ class MediaViewer {
             await onAfterLeave();
         };
         discardBtn.onclick = async () => {
-            await this.tournament.handleDiscard();
+            // Best-effort discard: even if deleting the saved state fails (disk/IPC error),
+            // still tear down the modal and run the continuation. onAfterLeave may be the
+            // app-close fail-safe (allowAppClose) which must never be blocked by an IO error
+            // — mirrors the persist-error swallow on the Save path (tournament.js _drain).
+            try {
+                await this.tournament.handleDiscard();
+            } catch (err) {
+                window.electronAPI.logError?.('tournament discard failed: ' + err.message);
+            }
             cleanup();
             await onAfterLeave();
         };
