@@ -38,6 +38,17 @@ test.describe('Tournament Mode', () => {
     });
 
     test.afterEach(async () => {
+        // Drop any in-progress tournament so the main-process close confirm (which traps an
+        // incomplete tournament) doesn't hang graceful teardown → 5s timeout → SIGKILL.
+        if (page) {
+            await page
+                .evaluate(() => {
+                    if (window.mediaViewer && window.mediaViewer.tournament) {
+                        window.mediaViewer.tournament.engine = null;
+                    }
+                })
+                .catch(() => {});
+        }
         if (electronApp) {
             await closeApp(electronApp);
         }

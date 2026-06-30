@@ -93,6 +93,7 @@ async function loadClipModel(event) {
 }
 
 let mainWindow;
+let isQuitting = false; // set true once the user confirms, to let the re-issued close() through
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -115,6 +116,27 @@ function createWindow() {
     mainWindow.webContents.on('before-input-event', (event, input) => {
         if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
             mainWindow.webContents.toggleDevTools();
+        }
+    });
+
+    // Confirm before close when a tournament is in progress. Every close path — the window
+    // "X", app.quit() (via window-all-closed), and the Alt+F4 globalShortcut (which calls
+    // focusedWindow.close()) — fires this 'close' event, so one handler covers them all.
+    // preventDefault, ask the renderer (which owns tournament state), and proceed only when
+    // it replies via 'app-close-allow'.
+    mainWindow.on('close', (e) => {
+        if (isQuitting) return; // already confirmed → let the re-issued close() through
+        const wc = mainWindow.webContents;
+        if (wc.isDestroyed() || wc.isCrashed()) return; // dead renderer → never trap the app
+        e.preventDefault();
+        wc.send('app-close-requested');
+    });
+
+    // Renderer's verdict: no tournament, or the user chose Save & leave / Discard.
+    ipcMain.on('app-close-allow', () => {
+        if (mainWindow) {
+            isQuitting = true;
+            mainWindow.close();
         }
     });
 }
