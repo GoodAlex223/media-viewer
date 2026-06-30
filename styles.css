@@ -2296,6 +2296,21 @@ body {
 .tournament-tiers {
     font-family: monospace;
 }
+.tournament-pause {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.tournament-pause:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.35);
+}
 .tournament-controls {
     pointer-events: auto;
     position: absolute;

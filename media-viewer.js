@@ -1966,6 +1966,10 @@ class MediaViewer {
         if (tournamentBothLoseBtn) {
             tournamentBothLoseBtn.addEventListener('click', () => this.handleTournamentDraw('lose'));
         }
+        const tournamentExitBtn = document.getElementById('tournamentExitBtn');
+        if (tournamentExitBtn) {
+            tournamentExitBtn.addEventListener('click', () => this.switchMode('single'));
+        }
 
         // Compare-mode floating Undo button
         this.compareUndoBtn = document.getElementById('compareUndoBtn');

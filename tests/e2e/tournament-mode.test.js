@@ -168,6 +168,24 @@ test.describe('Tournament Mode', () => {
         expect(stillTournament).toBe(true);
     });
 
+    test('exit button in the tournament header opens the leave prompt', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        await enterAndStartTournament(page, { rounds: 1 });
+
+        // The exit affordance is visible in the tournament header.
+        await expect(page.locator('#tournamentExitBtn')).toBeVisible();
+
+        // Clicking it routes through switchMode('single') → the incomplete-tournament
+        // leave prompt (Save & leave / Discard / Cancel). force: the tournament overlay
+        // can intercept pointer events.
+        await page.locator('#tournamentExitBtn').click({ force: true });
+        await expect(page.locator('#tournamentResumeModal')).toBeVisible();
+        await expect(page.locator('#tournamentResumeTitle')).toHaveText('Leave tournament?');
+    });
+
     test('leave-prompt Save persists state; re-enter Continue resumes', async () => {
         tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
         await loadFolder(page, tmpFixtures.dir);
