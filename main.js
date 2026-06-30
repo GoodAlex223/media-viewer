@@ -96,6 +96,7 @@ let mainWindow;
 let isQuitting = false; // set true once the user confirms, to let the re-issued close() through
 
 function createWindow() {
+    isQuitting = false; // re-arm the close confirm for this window (macOS dock-activate re-creates it)
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
@@ -131,14 +132,6 @@ function createWindow() {
         e.preventDefault();
         wc.send('app-close-requested');
     });
-
-    // Renderer's verdict: no tournament, or the user chose Save & leave / Discard.
-    ipcMain.on('app-close-allow', () => {
-        if (mainWindow) {
-            isQuitting = true;
-            mainWindow.close();
-        }
-    });
 }
 
 // App lifecycle
@@ -165,6 +158,17 @@ app.whenReady().then(() => {
     };
 
     createWindow();
+
+    // Renderer's verdict on a close confirm (no tournament, or Save & leave / Discard chosen).
+    // Registered once here (not in createWindow) so it does not accumulate when a window is
+    // re-created via the macOS dock-activate path. It closes over the module-level mainWindow,
+    // which createWindow reassigns, so it always targets the current window.
+    ipcMain.on('app-close-allow', () => {
+        if (mainWindow) {
+            isQuitting = true;
+            mainWindow.close();
+        }
+    });
 
     // Register Alt+F4 to close the focused window (Windows compatibility)
     globalShortcut.register('Alt+F4', () => {
