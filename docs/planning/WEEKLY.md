@@ -148,7 +148,7 @@
 | **Group T1: Tournament exit affordances** [batch] | 3 |
 | **Group WR: Weekly Reviews** [batch] (finish) | (4) |
 
-- [x] Tournament pause/exit button (1 SP) + app-close tournament confirm (2 SP) — ✅ **DONE 2026-06-30** (branch `feature/tournament-exit-affordances`; 388 unit, E2E 48/1-preexisting, lint 0; all 5 manual close-confirm cases PASSED; PR pending)
+- [x] Tournament pause/exit button (1 SP) + app-close tournament confirm (2 SP) — ✅ **MERGED 2026-06-30 via PR #58 (`21668ac`)** (branch `feature/tournament-exit-affordances` deleted; 389 unit, E2E 48/1-preexisting, lint 0; all 5 manual close-confirm cases PASSED; post-merge /code-review "No issues found")
 - [x] Weekly Reviews: plugins ×2 (store + wider internet) (2 SP of the 4 SP overhead); file 🟤 entries on any `adopt` — ✅ DONE 2026-06-26 (pr-review-toolkit `adopt` → 🟤 BACKLOG filed; test-writer-fixer `defer`)
 
 **Daily total**: 3 SP + reviews overhead + perf spillover buffer
@@ -170,7 +170,7 @@
 | P1: AI / similarity sort perf 🏆 | JS logic (sort worker) | 🔵 User | 1 | 5 | Mon | Planned |
 | P2: Tournament large-folder perf [batch] | JS logic (engine/manager/IPC) | 🔵 User | 3 | 8 | Tue–Wed | ✅ MERGED 2026-06-25 (PR #55 `51366cb`; smoke PASSED) |
 | P3: Feature-extraction timing | JS logic + Settings UI | 🔵 User | 1 | 3 | Thu | Planned |
-| T1: Tournament exit affordances [batch] | UI/UX + main lifecycle | 🔵 User | 2 | 3 | Fri | ✅ Done 2026-06-30 (PR pending); final review "Ready to merge: Yes"; 5/5 manual cases PASSED |
+| T1: Tournament exit affordances [batch] | UI/UX + main lifecycle | 🔵 User | 2 | 3 | Fri | ✅ MERGED 2026-06-30 via PR #58 (`21668ac`); final review "Ready to merge: Yes"; 5/5 manual cases PASSED |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ MERGED 2026-06-29 via PR #57 (`b42f5f5`); 4 verdicts: 1 adopt, 3 defer |
 | **Total (quota-counted)** | | | **7** | **19** | | |
 | **Total (incl. ⚪ overhead)** | | | **10** | **23** | | |
