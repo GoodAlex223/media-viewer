@@ -61,10 +61,10 @@
 
 > Both items are tournament-mode exit/leave affordances from the same BACKLOG 🔵 [2026-06-03] intake, and both reuse the existing `showTournamentLeavePrompt` / `switchMode('single')` machinery — so the leave-UX work batches cleanly.
 
-- [ ] **Explicit pause/exit button in tournament mode** — 1 SP
+- [x] **Explicit pause/exit button in tournament mode** — 1 SP ✅ DONE 2026-06-30 (`#tournamentExitBtn` in `#tournamentHeader` center)
   - BACKLOG 🔵 [2026-06-03]. Add a visible control in `#tournamentControls` (next to Undo / Both Win / Both Lose) wired to the same `switchMode('single')` → leave-prompt path. Today the only exits are Escape and the mode-selector — pure affordance; machinery already exists. (Re-adds a discoverable affordance after the original pause button was removed in `c6914ef`.)
   - Affected: `index.html` (`#tournamentControls` button), `media-viewer.js` (click → `switchMode('single')`), `styles.css`.
-- [ ] **Confirm before app close when a tournament is in progress (Alt+F4 / window "X")** — 2 SP
+- [x] **Confirm before app close when a tournament is in progress (Alt+F4 / window "X")** — 2 SP ✅ DONE 2026-06-30 (main `close` interception → reuse leave prompt; 5/5 manual cases PASSED)
   - BACKLOG 🔵 [2026-06-03]. Intercept `BrowserWindow` `'close'` with `event.preventDefault()` + an IPC round-trip asking the renderer whether a tournament is active (or a native `dialog.showMessageBox`), mirroring the in-app Save/Discard/Cancel leave prompt — so an accidental Alt+F4 doesn't silently abandon a session. Care: the in-app prompt is renderer-side DOM; window-close fires main-process-side.
   - Affected: `main.js` (window `close` handler + IPC), `preload.js` (IPC channel), `media-viewer.js` (respond with tournament-active state / reuse `showTournamentLeavePrompt`).
 
@@ -148,7 +148,7 @@
 | **Group T1: Tournament exit affordances** [batch] | 3 |
 | **Group WR: Weekly Reviews** [batch] (finish) | (4) |
 
-- [ ] Tournament pause/exit button (1 SP) + app-close tournament confirm (2 SP)
+- [x] Tournament pause/exit button (1 SP) + app-close tournament confirm (2 SP) — ✅ **DONE 2026-06-30** (branch `feature/tournament-exit-affordances`; 388 unit, E2E 48/1-preexisting, lint 0; all 5 manual close-confirm cases PASSED; PR pending)
 - [x] Weekly Reviews: plugins ×2 (store + wider internet) (2 SP of the 4 SP overhead); file 🟤 entries on any `adopt` — ✅ DONE 2026-06-26 (pr-review-toolkit `adopt` → 🟤 BACKLOG filed; test-writer-fixer `defer`)
 
 **Daily total**: 3 SP + reviews overhead + perf spillover buffer
@@ -170,7 +170,7 @@
 | P1: AI / similarity sort perf 🏆 | JS logic (sort worker) | 🔵 User | 1 | 5 | Mon | Planned |
 | P2: Tournament large-folder perf [batch] | JS logic (engine/manager/IPC) | 🔵 User | 3 | 8 | Tue–Wed | ✅ MERGED 2026-06-25 (PR #55 `51366cb`; smoke PASSED) |
 | P3: Feature-extraction timing | JS logic + Settings UI | 🔵 User | 1 | 3 | Thu | Planned |
-| T1: Tournament exit affordances [batch] | UI/UX + main lifecycle | 🔵 User | 2 | 3 | Fri | Planned |
+| T1: Tournament exit affordances [batch] | UI/UX + main lifecycle | 🔵 User | 2 | 3 | Fri | ✅ Done 2026-06-30 (PR pending); final review "Ready to merge: Yes"; 5/5 manual cases PASSED |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ MERGED 2026-06-29 via PR #57 (`b42f5f5`); 4 verdicts: 1 adopt, 3 defer |
 | **Total (quota-counted)** | | | **7** | **19** | | |
 | **Total (incl. ⚪ overhead)** | | | **10** | **23** | | |

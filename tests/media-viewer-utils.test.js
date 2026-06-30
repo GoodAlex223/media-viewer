@@ -2305,3 +2305,138 @@ describe('lazy extraction wiring (Group P3)', () => {
         expect(handlerBody).not.toContain('kickoffBackgroundExtractionIfEnabled');
     });
 });
+
+describe('showTournamentLeavePrompt continuation', () => {
+    const showTournamentLeavePrompt = extractMethod('showTournamentLeavePrompt');
+
+    const makeEl = () => ({ textContent: '', innerHTML: '', style: {}, onclick: null });
+    let elements;
+
+    beforeEach(() => {
+        elements = {
+            tournamentResumeModal: makeEl(),
+            tournamentResumeTitle: makeEl(),
+            tournamentResumeBody: makeEl(),
+            tournamentResumeAccept: makeEl(),
+            tournamentResumeDiscard: makeEl(),
+            tournamentResumeCancel: makeEl(),
+        };
+        globalThis.document = { getElementById: (id) => elements[id] };
+    });
+    afterEach(() => {
+        delete globalThis.document;
+    });
+
+    const makeCtx = () => ({
+        tournament: {
+            engine: { getProgress: () => ({ gamesPlayed: 1, gamesTotal: 3 }) },
+            flush: vi.fn().mockResolvedValue(undefined),
+            handleDiscard: vi.fn().mockResolvedValue(undefined),
+        },
+    });
+
+    it('runs the continuation after Save & leave (flush + engine nulled)', async () => {
+        const ctx = makeCtx();
+        const onAfterLeave = vi.fn().mockResolvedValue(undefined);
+        showTournamentLeavePrompt.call(ctx, onAfterLeave);
+        await elements.tournamentResumeAccept.onclick();
+        expect(ctx.tournament.flush).toHaveBeenCalledTimes(1);
+        expect(ctx.tournament.engine).toBeNull();
+        expect(onAfterLeave).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs the continuation after Discard', async () => {
+        const ctx = makeCtx();
+        const onAfterLeave = vi.fn().mockResolvedValue(undefined);
+        showTournamentLeavePrompt.call(ctx, onAfterLeave);
+        await elements.tournamentResumeDiscard.onclick();
+        expect(ctx.tournament.handleDiscard).toHaveBeenCalledTimes(1);
+        expect(onAfterLeave).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT run the continuation on Cancel and hides the modal', () => {
+        const ctx = makeCtx();
+        const onAfterLeave = vi.fn();
+        showTournamentLeavePrompt.call(ctx, onAfterLeave);
+        elements.tournamentResumeCancel.onclick();
+        expect(onAfterLeave).not.toHaveBeenCalled();
+        expect(elements.tournamentResumeModal.style.display).toBe('none');
+    });
+
+    it('still runs the continuation + hides the modal if Discard rejects (fail-safe)', async () => {
+        const ctx = makeCtx();
+        ctx.tournament.handleDiscard = vi.fn().mockRejectedValue(new Error('disk fail'));
+        const logError = vi.fn();
+        globalThis.window = { electronAPI: { logError } };
+        const onAfterLeave = vi.fn().mockResolvedValue(undefined);
+        try {
+            showTournamentLeavePrompt.call(ctx, onAfterLeave);
+            await elements.tournamentResumeDiscard.onclick();
+            expect(ctx.tournament.handleDiscard).toHaveBeenCalledTimes(1);
+            expect(logError).toHaveBeenCalled();
+            expect(onAfterLeave).toHaveBeenCalledTimes(1);
+            expect(elements.tournamentResumeModal.style.display).toBe('none');
+        } finally {
+            delete globalThis.window;
+        }
+    });
+});
+
+describe('handleAppCloseRequest', () => {
+    const handleAppCloseRequest = extractMethod('handleAppCloseRequest');
+    let allowAppClose, logError;
+
+    beforeEach(() => {
+        allowAppClose = vi.fn();
+        logError = vi.fn();
+        globalThis.window = { electronAPI: { allowAppClose, logError } };
+    });
+    afterEach(() => {
+        delete globalThis.window;
+    });
+
+    it('allows close immediately when not in tournament mode', () => {
+        const ctx = { isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() };
+        handleAppCloseRequest.call(ctx);
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
+    });
+
+    it('allows close immediately when the tournament is complete', () => {
+        const ctx = {
+            isTournamentMode: true,
+            tournament: { engine: { isComplete: () => true } },
+            showTournamentLeavePrompt: vi.fn(),
+        };
+        handleAppCloseRequest.call(ctx);
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
+    });
+
+    it('shows the leave prompt for an incomplete tournament; its continuation allows close', () => {
+        const ctx = {
+            isTournamentMode: true,
+            tournament: { engine: { isComplete: () => false } },
+            showTournamentLeavePrompt: vi.fn(),
+        };
+        handleAppCloseRequest.call(ctx);
+        expect(ctx.showTournamentLeavePrompt).toHaveBeenCalledTimes(1);
+        expect(allowAppClose).not.toHaveBeenCalled();
+        const continuation = ctx.showTournamentLeavePrompt.mock.calls[0][0];
+        continuation();
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('still allows close if the handler throws (fail-safe)', () => {
+        const ctx = {
+            get isTournamentMode() {
+                throw new Error('boom');
+            },
+            tournament: {},
+            showTournamentLeavePrompt: vi.fn(),
+        };
+        handleAppCloseRequest.call(ctx);
+        expect(logError).toHaveBeenCalled();
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+    });
+});

@@ -38,6 +38,17 @@ test.describe('Tournament Mode', () => {
     });
 
     test.afterEach(async () => {
+        // Drop any in-progress tournament so the main-process close confirm (which traps an
+        // incomplete tournament) doesn't hang graceful teardown → 5s timeout → SIGKILL.
+        if (page) {
+            await page
+                .evaluate(() => {
+                    if (window.mediaViewer && window.mediaViewer.tournament) {
+                        window.mediaViewer.tournament.engine = null;
+                    }
+                })
+                .catch(() => {});
+        }
         if (electronApp) {
             await closeApp(electronApp);
         }
@@ -166,6 +177,28 @@ test.describe('Tournament Mode', () => {
 
         const stillTournament = await page.evaluate(() => window.mediaViewer.isTournamentMode);
         expect(stillTournament).toBe(true);
+    });
+
+    test('exit button in the tournament header opens the leave prompt', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        await enterAndStartTournament(page, { rounds: 1 });
+
+        // The fixed top-center pair-count banner is hidden in tournament mode so it doesn't
+        // cover the centered exit button (the header already shows the games count).
+        await expect(page.locator('#navInfo')).toBeHidden();
+
+        // The exit affordance is visible in the tournament header.
+        await expect(page.locator('#tournamentExitBtn')).toBeVisible();
+
+        // Clicking it routes through switchMode('single') → the incomplete-tournament
+        // leave prompt (Save & leave / Discard / Cancel). force: the tournament overlay
+        // can intercept pointer events.
+        await page.locator('#tournamentExitBtn').click({ force: true });
+        await expect(page.locator('#tournamentResumeModal')).toBeVisible();
+        await expect(page.locator('#tournamentResumeTitle')).toHaveText('Leave tournament?');
     });
 
     test('leave-prompt Save persists state; re-enter Continue resumes', async () => {

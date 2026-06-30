@@ -1966,6 +1966,15 @@ class MediaViewer {
         if (tournamentBothLoseBtn) {
             tournamentBothLoseBtn.addEventListener('click', () => this.handleTournamentDraw('lose'));
         }
+        const tournamentExitBtn = document.getElementById('tournamentExitBtn');
+        if (tournamentExitBtn) {
+            tournamentExitBtn.addEventListener('click', () => this.switchMode('single'));
+        }
+
+        // App-close confirm: main asks before quitting with a tournament in progress.
+        if (window.electronAPI.onAppCloseRequested) {
+            window.electronAPI.onAppCloseRequested(() => this.handleAppCloseRequest());
+        }
 
         // Compare-mode floating Undo button
         this.compareUndoBtn = document.getElementById('compareUndoBtn');
@@ -4065,7 +4074,7 @@ class MediaViewer {
             this.tournament.engine &&
             !this.tournament.engine.isComplete()
         ) {
-            this.showTournamentLeavePrompt(mode);
+            this.showTournamentLeavePrompt(() => this._applyModeSwitch(mode));
             return;
         }
         await this._applyModeSwitch(mode);
@@ -4158,8 +4167,8 @@ class MediaViewer {
     }
 
     // Prompt shown when leaving an active tournament: Save (keep state on disk to resume later)
-    // or Discard (delete state). Both then complete the pending mode switch.
-    showTournamentLeavePrompt(targetMode) {
+    // or Discard (delete state). Both then invoke onAfterLeave (e.g. complete a pending mode switch).
+    showTournamentLeavePrompt(onAfterLeave) {
         const modal = document.getElementById('tournamentResumeModal');
         const title = document.getElementById('tournamentResumeTitle');
         const body = document.getElementById('tournamentResumeBody');
@@ -4189,18 +4198,44 @@ class MediaViewer {
             await this.tournament.flush();
             this.tournament.engine = null;
             cleanup();
-            await this._applyModeSwitch(targetMode);
+            await onAfterLeave();
         };
         discardBtn.onclick = async () => {
-            await this.tournament.handleDiscard();
+            // Best-effort discard: even if deleting the saved state fails (disk/IPC error),
+            // still tear down the modal and run the continuation. onAfterLeave may be the
+            // app-close fail-safe (allowAppClose) which must never be blocked by an IO error
+            // — mirrors the persist-error swallow on the Save path (tournament.js _drain).
+            try {
+                await this.tournament.handleDiscard();
+            } catch (err) {
+                window.electronAPI.logError?.('tournament discard failed: ' + err.message);
+            }
             cleanup();
-            await this._applyModeSwitch(targetMode);
+            await onAfterLeave();
         };
         // Cancel: stay in tournament mode (nothing changed — we never left).
         if (cancelBtn) {
             cancelBtn.onclick = () => cleanup();
         }
         modal.style.display = 'flex';
+    }
+
+    // Main process intercepted a window-close (X / Alt+F4 / quit) and is asking whether it
+    // may proceed. For an incomplete tournament, show the same Save/Discard/Cancel leave
+    // prompt the user sees on Escape — Save/Discard then allow the close, Cancel keeps the
+    // app open. Otherwise allow immediately. Fail-safe: any error still allows the close, so
+    // a renderer bug can never make the app unclosable.
+    handleAppCloseRequest() {
+        try {
+            if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
+                this.showTournamentLeavePrompt(() => window.electronAPI.allowAppClose());
+            } else {
+                window.electronAPI.allowAppClose();
+            }
+        } catch (err) {
+            window.electronAPI.logError?.('app-close handler failed: ' + err.message);
+            window.electronAPI.allowAppClose();
+        }
     }
 
     // Prompt shown when entering tournament mode with a saved tournament on disk:

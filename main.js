@@ -93,8 +93,10 @@ async function loadClipModel(event) {
 }
 
 let mainWindow;
+let isQuitting = false; // set true once the user confirms, to let the re-issued close() through
 
 function createWindow() {
+    isQuitting = false; // re-arm the close confirm for this window (macOS dock-activate re-creates it)
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
@@ -116,6 +118,19 @@ function createWindow() {
         if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
             mainWindow.webContents.toggleDevTools();
         }
+    });
+
+    // Confirm before close when a tournament is in progress. Every close path — the window
+    // "X", app.quit() (via window-all-closed), and the Alt+F4 globalShortcut (which calls
+    // focusedWindow.close()) — fires this 'close' event, so one handler covers them all.
+    // preventDefault, ask the renderer (which owns tournament state), and proceed only when
+    // it replies via 'app-close-allow'.
+    mainWindow.on('close', (e) => {
+        if (isQuitting) return; // already confirmed → let the re-issued close() through
+        const wc = mainWindow.webContents;
+        if (wc.isDestroyed() || wc.isCrashed()) return; // dead renderer → never trap the app
+        e.preventDefault();
+        wc.send('app-close-requested');
     });
 }
 
@@ -143,6 +158,19 @@ app.whenReady().then(() => {
     };
 
     createWindow();
+
+    // Renderer's verdict on a close confirm (no tournament, or Save & leave / Discard chosen).
+    // Registered once here (not in createWindow) so it does not accumulate when a window is
+    // re-created via the macOS dock-activate path. It closes over the module-level mainWindow,
+    // which createWindow reassigns, so it always targets the current window.
+    ipcMain.on('app-close-allow', () => {
+        // mainWindow is never nulled, so guard on isDestroyed() (symmetric to the close
+        // handler's send-side guard) — calling close() on a destroyed window would throw.
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            isQuitting = true;
+            mainWindow.close();
+        }
+    });
 
     // Register Alt+F4 to close the focused window (Windows compatibility)
     globalShortcut.register('Alt+F4', () => {

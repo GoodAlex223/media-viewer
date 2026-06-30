@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-06-29 <!-- Group WR: Weekly Reviews first run — MERGED 2026-06-29 via PR #57 (b42f5f5, branch chore/weekly-reviews-2026-06-26 deleted remote + local); docs-only so /code-review was a no-op "No issues found" (+2 🟡 [2026-06-29] post-merge process observations). 4 verdicts (1 adopt: pr-review-toolkit → 🟤 BACKLOG; 3 defer); deep-research harness hit rate/session limits (~8M tokens, verification never completed) → methodology corrected to lightweight inline research for future weeks. Prior: Group P3: Feature-extraction timing (lazy / on-demand) — removed folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by clipVectorsNeedExtraction; ML sort already lazy, hash sort needs no vectors. MERGED 2026-06-26 via PR #56 (merge 9d65500, branch deleted), manual 24k smoke PASSED, pre-merge /code-review fix cba5352 (stale E2E + 2 comments), re-review "no issues remaining", 381 unit. Prior: Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf MERGED 2026-06-25 via PR #55 (merge 51366cb), manual 24k smoke PASSED, re-review "No issues found". Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
+**Last Updated**: 2026-06-30 <!-- Group T1: Tournament exit affordances (in-tournament exit button + confirm-before-app-close) — branch feature/tournament-exit-affordances, PR pending; subagent-driven (7 commits, controller commits), every per-task review Approved + final whole-branch review (opus) "Ready to merge: Yes" (1 Important + 1 Minor folded in: isDestroyed() guard, once-register ipcMain.on + isQuitting re-arm); 388 unit (+7), full E2E 48 pass / 1 pre-existing fail (PR #55 history-free v2 stale assertion, verified failing on main), lint 0; all 5 manual close-confirm cases PASSED; user-flagged #navInfo overlap fixed (cac3e79). Prior: Group WR: Weekly Reviews first run — MERGED 2026-06-29 via PR #57 (b42f5f5, branch chore/weekly-reviews-2026-06-26 deleted remote + local); docs-only so /code-review was a no-op "No issues found" (+2 🟡 [2026-06-29] post-merge process observations). 4 verdicts (1 adopt: pr-review-toolkit → 🟤 BACKLOG; 3 defer); deep-research harness hit rate/session limits (~8M tokens, verification never completed) → methodology corrected to lightweight inline research for future weeks. Prior: Group P3: Feature-extraction timing (lazy / on-demand) — removed folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by clipVectorsNeedExtraction; ML sort already lazy, hash sort needs no vectors. MERGED 2026-06-26 via PR #56 (merge 9d65500, branch deleted), manual 24k smoke PASSED, pre-merge /code-review fix cba5352 (stale E2E + 2 comments), re-review "no issues remaining", 381 unit. Prior: Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write); branch feature/tournament-large-folder-perf MERGED 2026-06-25 via PR #55 (merge 51366cb), manual 24k smoke PASSED, re-review "No issues found". Prior: Group P1 PR1 MERGED via PR #54 (7b78a56). -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +13,30 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-06 (June)
+
+### 2026-06-30 — Group T1: Tournament exit affordances
+
+**Summary**: Two batched tournament-mode exit affordances (one branch, one PR): (1) a pause-style **exit button** re-added to the center of `#tournamentHeader` (the slot of the button removed in `c6914ef`) wired to the existing `switchMode('single')` → Save/Discard/Cancel leave prompt; (2) **confirm-before-app-close** during an incomplete tournament — `mainWindow.on('close')` intercepts every close path and round-trips to the renderer, which reuses the same leave prompt before the app quits.
+
+✅ **Status: COMPLETE 2026-06-30 · branch `feature/tournament-exit-affordances` · PR pending** — subagent-driven (7 commits, controller commits), every per-task review Approved + final whole-branch review (opus) "Ready to merge: Yes" (no Critical/Important; 1 Important + 1 Minor folded in pre-merge); 388 unit (+7), full E2E 48 pass / 1 pre-existing fail (a stale assertion from PR #55's history-free v2 persistence, controller-verified failing on `main`), lint 0; **all 5 manual close-confirm cases PASSED**.
+
+**Key changes**:
+- **Exit button** ([index.html](../../index.html), [styles.css](../../styles.css), [media-viewer.js](../../media-viewer.js)) — `#tournamentExitBtn` (Lucide `pause`) centered in `#tournamentHeader` via the header's `justify-content:space-between`; `.tournament-pause` CSS re-added; click → `switchMode('single')`.
+- **Leave-prompt refactor** ([media-viewer.js](../../media-viewer.js)) — `showTournamentLeavePrompt(targetMode)` → `(onAfterLeave)` continuation so both the mode-switch path (`() => _applyModeSwitch(mode)`) and the app-close path (`() => allowAppClose()`) drive the same modal; Cancel never runs the continuation.
+- **App-close confirm** ([main.js](../../main.js), [preload.js](../../preload.js), [media-viewer.js](../../media-viewer.js)) — `mainWindow.on('close')` (covers X / `app.quit()` / Alt+F4 `globalShortcut`) → `preventDefault` + `app-close-requested` → renderer `handleAppCloseRequest()` (incomplete tournament → leave prompt; else immediate `allowAppClose()`; try/catch-always-allow fail-safe) → `app-close-allow` → quit. Dead-renderer `isDestroyed()/isCrashed()` guard; `ipcMain.on` registered once + `isQuitting` re-arm (macOS).
+- **navInfo overlap fix** ([styles.css](../../styles.css)) — hide the fixed top-center `#navInfo` pair-count banner in tournament mode (user-flagged: it covered the centered exit button; the count is already in `#tournamentProgress`).
+
+**Key decisions**: reuse the in-app DOM modal via IPC (chosen over a native `dialog.showMessageBox`) for UX consistency; **rejected** a cached `tournamentActive` flag pushed to main — the confirm condition `isTournamentMode && engine && !engine.isComplete()` flips mid-tournament (last pick / undo), so fresh evaluation at close time is always correct.
+
+**Plan**: [docs/archive/plans/2026-06-30-tournament-exit-affordances.md](../archive/plans/2026-06-30-tournament-exit-affordances.md)
+**Spec**: [docs/superpowers/specs/2026-06-30-tournament-exit-affordances-design.md](../superpowers/specs/2026-06-30-tournament-exit-affordances-design.md)
+
+**Lessons learned**:
+- **The close interception affects EVERY app teardown, not just tournament** — the Playwright `closeApp` helper (`electronApp.close()` → window `close`) would hang on any incomplete-tournament E2E test (renderer pops the modal, no user → 5s SIGKILL). Fixed by nulling `tournament.engine` in the tournament E2E `afterEach` before `closeApp` (test-teardown hygiene, not a production test-hook).
+- **A green pre-commit hook ≠ a green E2E suite** — the `Continue-resumes` test has failed silently since PR #55 (history-free v2) because E2E is run neither by the hook nor any CI. Re-running it on `main` is what attributed it correctly (pre-existing, not this branch).
+- **"Only macOS" is not a reason to skip a one-line correctness fix** — the final-review Important (`ipcMain.on` accumulation on dock-activate) and the `isDestroyed()` reply-handler guard were both folded in pre-merge rather than deferred.
+
+**Follow-up tasks**: BACKLOG 🟤 [2026-06-30] (4 items: pre-existing `Continue-resumes` E2E stale-assertion fix; close-confirm re-entrancy guard; exit-button `aria-label`; exit-button E2E precondition).
 
 ### 2026-06-26 — Group WR: Weekly Reviews (first run) ⚪ Overhead
 

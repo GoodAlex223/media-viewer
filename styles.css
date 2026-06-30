@@ -2296,6 +2296,21 @@ body {
 .tournament-tiers {
     font-family: monospace;
 }
+.tournament-pause {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.tournament-pause:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.35);
+}
 .tournament-controls {
     pointer-events: auto;
     position: absolute;
@@ -2334,11 +2349,14 @@ body {
    Dislike = "other side wins", Special = remove from tournament + move to special folder).
    Nav arrows + the compare action bar are hidden — manual prev/next would desync the display
    from the tournament engine's chosen pair (Swiss pairing controls progression, not currentIndex);
-   tournament has its own undo (#tournamentUndoBtn). */
+   tournament has its own undo (#tournamentUndoBtn). The fixed top-center navigation-info banner
+   (#navInfo, the media-index counter) is also hidden — it overlaps the centered #tournamentExitBtn,
+   and the pair/games count is already shown in the tournament header (#tournamentProgress). */
 .media-container.tournament-mode .left-media-controls,
 .media-container.tournament-mode .right-media-controls,
 .media-container.tournament-mode .nav-arrows,
-.media-container.tournament-mode .compare-action-bar {
+.media-container.tournament-mode .compare-action-bar,
+.media-container.tournament-mode .navigation-info {
     display: none !important;
 }
 

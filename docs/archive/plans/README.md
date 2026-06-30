@@ -29,6 +29,7 @@ Plans are archived when:
 | [2026-06-24-tournament-large-folder-perf.md](2026-06-24-tournament-large-folder-perf.md) | Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write) | 2026-06-24 |
 | [2026-06-25-extraction-timing.md](2026-06-25-extraction-timing.md) | Group P3: Feature-extraction timing — lazy / on-demand (remove folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by `clipVectorsNeedExtraction`) — MERGED 2026-06-26 via PR #56 (`9d65500`) | 2026-06-25 |
 | [2026-06-26-weekly-reviews-first-run.md](2026-06-26-weekly-reviews-first-run.md) | Group WR: Weekly Reviews first run (4 verdicts: pr-review-toolkit `adopt`; test-writer-fixer / TDD Guard / local-model review `defer`) — ⚪ Overhead, no code PR | 2026-06-26 |
+| [2026-06-30-tournament-exit-affordances.md](2026-06-30-tournament-exit-affordances.md) | Group T1: Tournament exit affordances (in-tournament exit button + confirm-before-app-close, both reusing `showTournamentLeavePrompt`) | 2026-06-30 |
 
 ---
 
@@ -119,4 +120,4 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 
 ---
 
-*Last Updated: 2026-06-26 (added Group WR Weekly Reviews first-run plan)*
+*Last Updated: 2026-06-30 (added Group T1 Tournament exit affordances plan)*
