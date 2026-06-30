@@ -2363,3 +2363,62 @@ describe('showTournamentLeavePrompt continuation', () => {
         expect(elements.tournamentResumeModal.style.display).toBe('none');
     });
 });
+
+describe('handleAppCloseRequest', () => {
+    const handleAppCloseRequest = extractMethod('handleAppCloseRequest');
+    let allowAppClose, logError;
+
+    beforeEach(() => {
+        allowAppClose = vi.fn();
+        logError = vi.fn();
+        globalThis.window = { electronAPI: { allowAppClose, logError } };
+    });
+    afterEach(() => {
+        delete globalThis.window;
+    });
+
+    it('allows close immediately when not in tournament mode', () => {
+        const ctx = { isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() };
+        handleAppCloseRequest.call(ctx);
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
+    });
+
+    it('allows close immediately when the tournament is complete', () => {
+        const ctx = {
+            isTournamentMode: true,
+            tournament: { engine: { isComplete: () => true } },
+            showTournamentLeavePrompt: vi.fn(),
+        };
+        handleAppCloseRequest.call(ctx);
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
+    });
+
+    it('shows the leave prompt for an incomplete tournament; its continuation allows close', () => {
+        const ctx = {
+            isTournamentMode: true,
+            tournament: { engine: { isComplete: () => false } },
+            showTournamentLeavePrompt: vi.fn(),
+        };
+        handleAppCloseRequest.call(ctx);
+        expect(ctx.showTournamentLeavePrompt).toHaveBeenCalledTimes(1);
+        expect(allowAppClose).not.toHaveBeenCalled();
+        const continuation = ctx.showTournamentLeavePrompt.mock.calls[0][0];
+        continuation();
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('still allows close if the handler throws (fail-safe)', () => {
+        const ctx = {
+            get isTournamentMode() {
+                throw new Error('boom');
+            },
+            tournament: {},
+            showTournamentLeavePrompt: vi.fn(),
+        };
+        handleAppCloseRequest.call(ctx);
+        expect(logError).toHaveBeenCalled();
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+    });
+});

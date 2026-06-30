@@ -59,6 +59,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Logging (fire-and-forget)
     logError: (data) => ipcRenderer.send('log-renderer-error', data),
 
+    // App-close confirm: main intercepts window close and asks the renderer (which owns
+    // tournament state) whether it may proceed. onAppCloseRequested returns an unsubscribe fn.
+    onAppCloseRequested: (callback) => {
+        const handler = () => callback();
+        ipcRenderer.on('app-close-requested', handler);
+        return () => ipcRenderer.removeListener('app-close-requested', handler);
+    },
+    allowAppClose: () => ipcRenderer.send('app-close-allow'),
+
     // IPC invoke wrapper for other operations
     invoke: (channel, data) => ipcRenderer.invoke(channel, data),
 

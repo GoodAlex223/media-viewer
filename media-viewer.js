@@ -1971,6 +1971,11 @@ class MediaViewer {
             tournamentExitBtn.addEventListener('click', () => this.switchMode('single'));
         }
 
+        // App-close confirm: main asks before quitting with a tournament in progress.
+        if (window.electronAPI.onAppCloseRequested) {
+            window.electronAPI.onAppCloseRequested(() => this.handleAppCloseRequest());
+        }
+
         // Compare-mode floating Undo button
         this.compareUndoBtn = document.getElementById('compareUndoBtn');
         if (this.compareUndoBtn) {
@@ -4205,6 +4210,24 @@ class MediaViewer {
             cancelBtn.onclick = () => cleanup();
         }
         modal.style.display = 'flex';
+    }
+
+    // Main process intercepted a window-close (X / Alt+F4 / quit) and is asking whether it
+    // may proceed. For an incomplete tournament, show the same Save/Discard/Cancel leave
+    // prompt the user sees on Escape — Save/Discard then allow the close, Cancel keeps the
+    // app open. Otherwise allow immediately. Fail-safe: any error still allows the close, so
+    // a renderer bug can never make the app unclosable.
+    handleAppCloseRequest() {
+        try {
+            if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
+                this.showTournamentLeavePrompt(() => window.electronAPI.allowAppClose());
+            } else {
+                window.electronAPI.allowAppClose();
+            }
+        } catch (err) {
+            window.electronAPI.logError?.('app-close handler failed: ' + err.message);
+            window.electronAPI.allowAppClose();
+        }
     }
 
     // Prompt shown when entering tournament mode with a saved tournament on disk:
