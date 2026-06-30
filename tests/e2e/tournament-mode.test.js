@@ -186,6 +186,10 @@ test.describe('Tournament Mode', () => {
 
         await enterAndStartTournament(page, { rounds: 1 });
 
+        // The fixed top-center pair-count banner is hidden in tournament mode so it doesn't
+        // cover the centered exit button (the header already shows the games count).
+        await expect(page.locator('#navInfo')).toBeHidden();
+
         // The exit affordance is visible in the tournament header.
         await expect(page.locator('#tournamentExitBtn')).toBeVisible();
 
