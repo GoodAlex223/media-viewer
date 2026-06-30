@@ -164,7 +164,9 @@ app.whenReady().then(() => {
     // re-created via the macOS dock-activate path. It closes over the module-level mainWindow,
     // which createWindow reassigns, so it always targets the current window.
     ipcMain.on('app-close-allow', () => {
-        if (mainWindow) {
+        // mainWindow is never nulled, so guard on isDestroyed() (symmetric to the close
+        // handler's send-side guard) — calling close() on a destroyed window would throw.
+        if (mainWindow && !mainWindow.isDestroyed()) {
             isQuitting = true;
             mainWindow.close();
         }
