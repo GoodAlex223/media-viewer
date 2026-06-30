@@ -4069,7 +4069,7 @@ class MediaViewer {
             this.tournament.engine &&
             !this.tournament.engine.isComplete()
         ) {
-            this.showTournamentLeavePrompt(mode);
+            this.showTournamentLeavePrompt(() => this._applyModeSwitch(mode));
             return;
         }
         await this._applyModeSwitch(mode);
@@ -4162,8 +4162,8 @@ class MediaViewer {
     }
 
     // Prompt shown when leaving an active tournament: Save (keep state on disk to resume later)
-    // or Discard (delete state). Both then complete the pending mode switch.
-    showTournamentLeavePrompt(targetMode) {
+    // or Discard (delete state). Both then invoke onAfterLeave (e.g. complete a pending mode switch).
+    showTournamentLeavePrompt(onAfterLeave) {
         const modal = document.getElementById('tournamentResumeModal');
         const title = document.getElementById('tournamentResumeTitle');
         const body = document.getElementById('tournamentResumeBody');
@@ -4193,12 +4193,12 @@ class MediaViewer {
             await this.tournament.flush();
             this.tournament.engine = null;
             cleanup();
-            await this._applyModeSwitch(targetMode);
+            await onAfterLeave();
         };
         discardBtn.onclick = async () => {
             await this.tournament.handleDiscard();
             cleanup();
-            await this._applyModeSwitch(targetMode);
+            await onAfterLeave();
         };
         // Cancel: stay in tournament mode (nothing changed — we never left).
         if (cancelBtn) {
