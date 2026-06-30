@@ -1,5 +1,7 @@
 # Tournament Exit Affordances Implementation Plan
 
+**Status: Complete** — executed 2026-06-30 via subagent-driven development (controller commits). All 5 tasks done; final whole-branch review (opus) "Ready to merge: Yes". Commits: `ef18b0b` (T1 exit button), `218b5d3` (T2 leave-prompt continuation), `728f479` (T3 renderer handler + preload), `9e397e8` + `c9361dc` (T4 main close interception + macOS fix), `0b88177` (final-review `isDestroyed()` guard), `cac3e79` (user-flagged `#navInfo` overlap fix). 388 unit, full E2E 48 pass / 1 pre-existing fail, lint 0; all 5 manual close-confirm cases PASSED. See [DONE.md](../../planning/DONE.md) 2026-06-30. (Step checkboxes below flipped to `[x]` at archival.)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add two tournament-mode exit affordances — a discoverable in-tournament exit button and a confirm-before-app-close guard for an in-progress tournament — both reusing the existing leave-prompt machinery.
@@ -36,7 +38,7 @@ Re-add the pause button (removed in `c6914ef`) to the center of `#tournamentHead
 - Consumes: existing `MediaViewer.switchMode(mode)` and the existing `#tournamentResumeModal` leave prompt.
 - Produces: DOM element `#tournamentExitBtn` (a `.tournament-pause` button) in `#tournamentHeader`.
 
-- [ ] **Step 1: Write the failing E2E test**
+- [x] **Step 1: Write the failing E2E test**
 
 Add inside `test.describe('Tournament Mode', () => { ... })` in `tests/e2e/tournament-mode.test.js`:
 
@@ -60,12 +62,12 @@ test('exit button in the tournament header opens the leave prompt', async () => 
 });
 ```
 
-- [ ] **Step 2: Run the E2E test to verify it fails**
+- [x] **Step 2: Run the E2E test to verify it fails**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js -g "exit button"`
 Expected: FAIL — `#tournamentExitBtn` not found (locator never visible / click times out).
 
-- [ ] **Step 3: Add the button markup**
+- [x] **Step 3: Add the button markup**
 
 In `index.html`, change `#tournamentHeader` (currently progress + tiers) to insert the button between them:
 
@@ -79,7 +81,7 @@ In `index.html`, change `#tournamentHeader` (currently progress + tiers) to inse
 </div>
 ```
 
-- [ ] **Step 4: Re-add the `.tournament-pause` CSS**
+- [x] **Step 4: Re-add the `.tournament-pause` CSS**
 
 In `styles.css`, immediately after the `.tournament-tiers { ... }` rule (~line 2298), add (a glass button matching `.tournament-controls .control-btn`, with a hover for discoverability — the original transparent style was too subtle):
 
@@ -101,7 +103,7 @@ In `styles.css`, immediately after the `.tournament-tiers { ... }` rule (~line 2
 }
 ```
 
-- [ ] **Step 5: Wire the click handler**
+- [x] **Step 5: Wire the click handler**
 
 In `media-viewer.js`, inside `setupEventListeners()` right after the `tournamentBothLoseBtn` block (~line 1968):
 
@@ -112,17 +114,17 @@ if (tournamentExitBtn) {
 }
 ```
 
-- [ ] **Step 6: Run the E2E test to verify it passes**
+- [x] **Step 6: Run the E2E test to verify it passes**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js -g "exit button"`
 Expected: PASS.
 
-- [ ] **Step 7: Run unit tests + lint (no regression)**
+- [x] **Step 7: Run unit tests + lint (no regression)**
 
 Run: `npm test && npm run lint`
 Expected: 381 unit tests pass; lint 0 errors.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add index.html styles.css media-viewer.js tests/e2e/tournament-mode.test.js
@@ -143,7 +145,7 @@ Make `showTournamentLeavePrompt` accept a continuation callback run after Save a
 - Consumes: `this.tournament.flush()`, `this.tournament.handleDiscard()`, `this.tournament.engine.getProgress()`.
 - Produces: `showTournamentLeavePrompt(onAfterLeave: () => Promise<void> | void)` — `onAfterLeave` is awaited after Save (post-`flush`, engine nulled) and after Discard (post-`handleDiscard`); not called on Cancel.
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 Add to `tests/media-viewer-utils.test.js` (near the other extracted-method describes):
 
@@ -207,12 +209,12 @@ describe('showTournamentLeavePrompt continuation', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "showTournamentLeavePrompt continuation"`
 Expected: FAIL — the current method calls `this._applyModeSwitch(targetMode)` (undefined on the mock ctx → throws) instead of `onAfterLeave`.
 
-- [ ] **Step 3: Refactor the method signature + body**
+- [x] **Step 3: Refactor the method signature + body**
 
 In `media-viewer.js`, change the method header at ~line 4162 from `showTournamentLeavePrompt(targetMode) {` to `showTournamentLeavePrompt(onAfterLeave) {`, and update the two continuation call sites inside it:
 
@@ -241,7 +243,7 @@ Replace the `discardBtn.onclick` body's last line `await this._applyModeSwitch(t
 
 (The `cancelBtn.onclick = () => cleanup();` line is unchanged.)
 
-- [ ] **Step 4: Update the caller in `switchMode`**
+- [x] **Step 4: Update the caller in `switchMode`**
 
 In `media-viewer.js` at ~line 4068, change:
 
@@ -255,22 +257,22 @@ to:
             this.showTournamentLeavePrompt(() => this._applyModeSwitch(mode));
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "showTournamentLeavePrompt continuation"`
 Expected: PASS (3 tests).
 
-- [ ] **Step 6: Confirm no other caller relied on the old signature**
+- [x] **Step 6: Confirm no other caller relied on the old signature**
 
 Run: `git grep -n "showTournamentLeavePrompt(" -- "*.js"`
 Expected: only the definition and the updated `switchMode` caller (the `_applyModeSwitch(mode)` continuation). No bare `showTournamentLeavePrompt(mode)` remains.
 
-- [ ] **Step 7: Run full unit suite + lint**
+- [x] **Step 7: Run full unit suite + lint**
 
 Run: `npm test && npm run lint`
 Expected: 384 unit tests pass (381 + 3 new); lint 0 errors.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -294,7 +296,7 @@ Add the renderer's decision logic (`handleAppCloseRequest`) and the preload IPC 
   - `preload`: `onAppCloseRequested(callback): () => void` (subscribes to `'app-close-requested'`, returns an unsubscribe fn) and `allowAppClose(): void` (sends `'app-close-allow'`).
   - `MediaViewer.handleAppCloseRequest(): void` — shows the leave prompt for an incomplete tournament (continuation = `allowAppClose`), else calls `allowAppClose()` immediately; always allows on error.
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 Add to `tests/media-viewer-utils.test.js`:
 
@@ -359,12 +361,12 @@ describe('handleAppCloseRequest', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "handleAppCloseRequest"`
 Expected: FAIL — `extractMethod('handleAppCloseRequest')` throws "Could not find method" (not implemented yet).
 
-- [ ] **Step 3: Implement `handleAppCloseRequest`**
+- [x] **Step 3: Implement `handleAppCloseRequest`**
 
 In `media-viewer.js`, add immediately after `showTournamentLeavePrompt` (after its closing brace ~line 4204):
 
@@ -388,7 +390,7 @@ In `media-viewer.js`, add immediately after `showTournamentLeavePrompt` (after i
     }
 ```
 
-- [ ] **Step 4: Add the preload IPC bridge**
+- [x] **Step 4: Add the preload IPC bridge**
 
 In `preload.js`, immediately after the `logError` line (~line 60), inside the `exposeInMainWorld` object:
 
@@ -403,7 +405,7 @@ In `preload.js`, immediately after the `logError` line (~line 60), inside the `e
     allowAppClose: () => ipcRenderer.send('app-close-allow'),
 ```
 
-- [ ] **Step 5: Register the renderer listener**
+- [x] **Step 5: Register the renderer listener**
 
 In `media-viewer.js`, inside `setupEventListeners()` after the `tournamentExitBtn` wiring from Task 1 (~line 1972):
 
@@ -414,17 +416,17 @@ if (window.electronAPI.onAppCloseRequested) {
 }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "handleAppCloseRequest"`
 Expected: PASS (4 tests).
 
-- [ ] **Step 7: Run full unit suite + lint**
+- [x] **Step 7: Run full unit suite + lint**
 
 Run: `npm test && npm run lint`
 Expected: 388 unit tests pass (384 + 4 new); lint 0 errors.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add preload.js media-viewer.js tests/media-viewer-utils.test.js
@@ -449,7 +451,7 @@ Intercept the window `close` event in the main process, round-trip to the render
 
 > **Why the E2E teardown change:** `closeApp` calls `electronApp.close()` (graceful — fires the window `close` event) racing a 5s timeout, then force-kills. Once this task intercepts `close`, any tournament E2E test that ends with an **incomplete** tournament would make the graceful close hang (renderer shows the leave modal, never replies) → 5s timeout → SIGKILL on every such test. Resetting the engine before close makes the handler see no active tournament and allow the close immediately. This is test-teardown hygiene — no test-only branch is added to production `main.js`.
 
-- [ ] **Step 1: Add the quit-confirmed flag**
+- [x] **Step 1: Add the quit-confirmed flag**
 
 In `main.js`, beside `let mainWindow;` (~line 95):
 
@@ -457,7 +459,7 @@ In `main.js`, beside `let mainWindow;` (~line 95):
 let isQuitting = false; // set true once the user confirms, to let the re-issued close() through
 ```
 
-- [ ] **Step 2: Intercept `close` and add the reply handler**
+- [x] **Step 2: Intercept `close` and add the reply handler**
 
 In `main.js`, inside `createWindow()` after the `before-input-event` DevTools handler (~line 119, before the function's closing `}`):
 
@@ -484,7 +486,7 @@ In `main.js`, inside `createWindow()` after the `before-input-event` DevTools ha
     });
 ```
 
-- [ ] **Step 3: Harden the tournament E2E teardown**
+- [x] **Step 3: Harden the tournament E2E teardown**
 
 In `tests/e2e/tournament-mode.test.js`, update the `afterEach` so it drops any in-progress engine before `closeApp` (preventing the new `close` interception from hanging teardown):
 
@@ -511,12 +513,12 @@ In `tests/e2e/tournament-mode.test.js`, update the `afterEach` so it drops any i
     });
 ```
 
-- [ ] **Step 4: Verify no unit/lint regression**
+- [x] **Step 4: Verify no unit/lint regression**
 
 Run: `npm test && npm run lint`
 Expected: 388 unit tests pass; lint 0 errors. (`ipcMain` is already imported in `main.js`.)
 
-- [ ] **Step 5: Manual test — the full close-confirm loop**
+- [x] **Step 5: Manual test — the full close-confirm loop**
 
 Run: `npm start`. Verify each case:
 
@@ -528,7 +530,7 @@ Run: `npm start`. Verify each case:
 
 Record the result of each case.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add main.js tests/e2e/tournament-mode.test.js
@@ -543,28 +545,28 @@ Run the whole automated suite and a consolidated manual smoke before handing the
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Full unit suite**
+- [x] **Step 1: Full unit suite**
 
 Run: `npm test`
 Expected: 388 tests pass.
 
-- [ ] **Step 2: Lint + format check**
+- [x] **Step 2: Lint + format check**
 
 Run: `npm run lint && npm run format:check`
 Expected: 0 lint errors; Prettier reports all matched files formatted.
 
-- [ ] **Step 3: E2E (tournament file)**
+- [x] **Step 3: E2E (tournament file)**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js`
 Expected: all tournament E2E tests pass, including the new "exit button" test.
 
-- [ ] **Step 4: Consolidated manual smoke**
+- [x] **Step 4: Consolidated manual smoke**
 
 Confirm both items in one `npm start` session:
 - Item 1: in tournament mode, the centered header exit button is visible; clicking it opens "Leave tournament?"; Save/Discard/Cancel each behave (Cancel returns to the tournament, Save/Discard return to single mode).
 - Item 2: re-confirm at least cases 1, 2, and 3 from Task 4 Step 5.
 
-- [ ] **Step 5: Report results**
+- [x] **Step 5: Report results**
 
 Summarize the unit/lint/E2E counts and the manual-case outcomes. Do NOT run the post-approval closeout (Extract → Archive → Transition → Commit → Capture learnings) until the user approves — that is the CLAUDE.md task-completion flow, performed after this plan's implementation is accepted.
 
