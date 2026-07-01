@@ -391,3 +391,45 @@ describe('TournamentManager progress + breakdown text', () => {
         expect(parts.reduce((a, b) => a + parseInt(b, 10), 0)).toBe(4);
     });
 });
+
+describe('TournamentManager.reconcileWithFiles', () => {
+    it('prunes engine files absent from currentFiles and returns the count', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        tm.cancelPending();
+
+        const removed = tm.reconcileWithFiles(['a.jpg', 'b.jpg']); // c,d gone from disk
+        expect(removed).toBe(2);
+        expect(tm.engine.files).toEqual(['a.jpg', 'b.jpg']);
+        tm.cancelPending();
+    });
+
+    it('ignores files added since start (returns 0, engine unchanged)', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        tm.cancelPending();
+
+        const removed = tm.reconcileWithFiles(['a.jpg', 'b.jpg', 'e.jpg', 'f.jpg']);
+        expect(removed).toBe(0);
+        expect(tm.engine.files).toEqual(['a.jpg', 'b.jpg']);
+    });
+
+    it('returns 0 when there is no engine', () => {
+        const tm = new TournamentManager(makeHost([]));
+        expect(tm.reconcileWithFiles(['a.jpg'])).toBe(0);
+    });
+
+    it('is idempotent — a second call removes nothing more', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        tm.cancelPending();
+
+        expect(tm.reconcileWithFiles(['a.jpg', 'b.jpg'])).toBe(2);
+        tm.cancelPending();
+        expect(tm.reconcileWithFiles(['a.jpg', 'b.jpg'])).toBe(0);
+        tm.cancelPending();
+    });
+});

@@ -97,21 +97,30 @@ export class TournamentManager {
         return true;
     }
 
-    // Resume despite a file-set delta (strict validation failed): rebuild from the tournament's
-    // ORIGINAL file set, then purge files that no longer exist on disk. Files added to the
-    // folder since the tournament started are simply ignored — they don't join an in-progress
-    // bracket. Returns { ok, removedCount }.
-    async handleResumeReconciled(state, currentFiles) {
-        this.engine = TournamentEngine.deserialize(state, state.files);
+    // Prune the live engine's file-set to only files still present in `currentFiles` (paths).
+    // Idempotent — safe to call on every tournament entry. Files added to the folder since the
+    // tournament started are ignored (they don't join an in-progress bracket). Schedules a
+    // debounced persist if anything changed. Returns the number of files removed.
+    reconcileWithFiles(currentFiles) {
+        if (!this.engine) return 0;
         const currentSet = new Set(currentFiles);
-        const removed = state.files.filter((f) => !currentSet.has(f));
+        const removed = this.engine.files.filter((f) => !currentSet.has(f));
         for (const f of removed) {
             this.engine.removeFile(f);
         }
         if (removed.length > 0) {
             this._schedulePersist(this.host.baseFolderPath);
         }
-        return { ok: true, removedCount: removed.length };
+        return removed.length;
+    }
+
+    // Resume despite a file-set delta (strict validation failed): rebuild from the tournament's
+    // ORIGINAL file set, then reconcile away files that no longer exist on disk. Files added to
+    // the folder since the tournament started are simply ignored. Returns { ok, removedCount }.
+    async handleResumeReconciled(state, currentFiles) {
+        this.engine = TournamentEngine.deserialize(state, state.files);
+        const removedCount = this.reconcileWithFiles(currentFiles);
+        return { ok: true, removedCount };
     }
 
     getProgressText() {

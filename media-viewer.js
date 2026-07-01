@@ -4445,7 +4445,7 @@ class MediaViewer {
         setTimeout(() => roundsSelect.focus(), 0);
     }
 
-    async showTournamentPair() {
+    async showTournamentPair(_pruneDepth = 0) {
         if (!this.isTournamentMode || !this.tournament.engine) return;
 
         if (this.tournament.engine.isComplete()) {
@@ -4467,10 +4467,27 @@ class MediaViewer {
 
         if (leftIdx === -1 || rightIdx === -1) {
             const missing = leftIdx === -1 ? pair.left : pair.right;
+            // Capture net: unreachable after reconcileWithFiles (see _enterResumedTournamentUI).
+            // If it still fires, the engine/mediaFiles diverged — log the shape so a real 24k
+            // repro is diagnosable in media-viewer.log, then prune + retry (bounded).
+            const absent = this.tournament.engine.files.filter((f) => this.getMediaIndex(f) === -1).length;
+            window.electronAPI.logError?.(
+                `Tournament divergence: pair file absent from mediaFiles. ` +
+                    `engineFiles=${this.tournament.engine.files.length} mediaFiles=${this.mediaFiles.length} ` +
+                    `absentEngineFiles=${absent} ` +
+                    `sorted=${this.isSortedByPrediction || this.isSortedBySimilarity} sample=${missing}`
+            );
             this.showNotification(`File missing — removed from tournament: ${missing}`, 'warning');
             this.tournament.engine.removeFile(missing);
             this.tournament._schedulePersist(this.baseFolderPath);
-            return this.showTournamentPair();
+            // Bound the retry: each retry removes exactly one engine file, so recursion is
+            // naturally bounded by the engine size; the depth cap is belt-and-suspenders against
+            // an engine that can never resolve a present pair (fall to the summary instead).
+            if (_pruneDepth > this.mediaFiles.length + 1) {
+                this.showTournamentSummaryModal();
+                return;
+            }
+            return this.showTournamentPair(_pruneDepth + 1);
         }
 
         // Reuse compare-mode rendering: temporarily activate compare layout w/o the binary toggle
@@ -4674,6 +4691,11 @@ class MediaViewer {
         document.querySelectorAll('.mode-btn').forEach((b) => {
             b.classList.toggle('active', b.dataset.mode === 'tournament');
         });
+        // Defensive reconciliation: guarantees every engine pair resolves to a present index.
+        // The disk-resume path already reconciled in handleResumeReconciled; this ALSO covers
+        // the live-engine fast-path (enterTournamentMode ~4149, which skips reconciliation) and
+        // is idempotent on the disk path. Root fix for "cannot enter after add-media + AI sort".
+        this.tournament.reconcileWithFiles(this.mediaFiles.map((f) => f.path));
         await this.showTournamentPair();
     }
 
