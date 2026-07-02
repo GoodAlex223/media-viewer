@@ -1,6 +1,8 @@
 # CW-T Tournament Correctness, Persistence & Hardening — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
+
+**Status:** ✅ **Complete** — implemented 2026-07-01→02 on branch `fix/cw-t-tournament-hardening` (8 code commits: `987d9e3` T1, `115539e` T2, `7040b75` T3, `5127dc9` T4, `a988caa` T5, `aa61cdb` T6, `8a472d9` final-review fix, `256726f` persistent perf log). Subagent-driven: every per-task review Approved; final whole-branch review (opus) "Ready to merge: Yes" after catching **2 cross-cutting fast-path bugs** (shared-JXL-URL revoke blanking a side; duplicate error handler) — both **fixed in-branch** (`8a472d9`) + re-reviewed clean. **Real-24k manual smoke PASSED** (both HIGH bugs confirmed fixed: resume no freeze, picks/Both-Win instant, add-media+AI-sort→enter renders a pair). 404→408 unit, lint 0, tournament E2E 6/6. **PR pending user go.** A persistent `media-viewer-perf.log` was added post-smoke so real-run `[perf]` timings survive quit. Two diagnoses deviated from the spec's stated hypotheses and were corrected during implementation: (1) bug #1's root cause was the live-engine fast-path skipping reconciliation (not the sort reorder); (2) the inverse-delta keeps `filesSnapshot` on every entry to preserve the tested `engine.files`-rewind-across-`removeFile` contract.
 
 **Goal:** Fix the 2 HIGH-severity tournament bugs (cannot-enter-after-add-media + 24k freeze) and sweep 6 adjacent tournament debt items on one branch (`fix/cw-t-tournament-hardening`).
 
@@ -44,7 +46,7 @@
 **Interfaces:**
 - Produces: `TournamentManager.reconcileWithFiles(currentFiles: string[]) → number` — prunes `engine.files` to `∩ currentFiles`, schedules a persist if anything changed, returns the removed count. `0` when there is no engine. Idempotent.
 
-- [ ] **Step 1: Write the failing `reconcileWithFiles` tests**
+- [x] **Step 1: Write the failing `reconcileWithFiles` tests**
 
 Append to `tests/tournament-manager.test.js`:
 
@@ -92,12 +94,12 @@ describe('TournamentManager.reconcileWithFiles', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tournament-manager`
 Expected: FAIL — `tm.reconcileWithFiles is not a function`.
 
-- [ ] **Step 3: Add `reconcileWithFiles` and refactor `handleResumeReconciled`**
+- [x] **Step 3: Add `reconcileWithFiles` and refactor `handleResumeReconciled`**
 
 In `tournament.js`, replace `handleResumeReconciled` (~104-115) with:
 
@@ -129,12 +131,12 @@ In `tournament.js`, replace `handleResumeReconciled` (~104-115) with:
     }
 ```
 
-- [ ] **Step 4: Run to verify it passes (incl. existing reconcile tests)**
+- [x] **Step 4: Run to verify it passes (incl. existing reconcile tests)**
 
 Run: `npx vitest run tournament-manager`
 Expected: PASS — new `reconcileWithFiles` tests + the existing `handleResumeReconciled` tests (unchanged behavior).
 
-- [ ] **Step 5: Reconcile on the resumed-UI path (covers the live-engine fast-path gap)**
+- [x] **Step 5: Reconcile on the resumed-UI path (covers the live-engine fast-path gap)**
 
 In `media-viewer.js`, replace `_enterResumedTournamentUI` (~4669-4678) with:
 
@@ -157,7 +159,7 @@ In `media-viewer.js`, replace `_enterResumedTournamentUI` (~4669-4678) with:
     }
 ```
 
-- [ ] **Step 6: Harden the `-1` branch with a bounded retry + divergence log**
+- [x] **Step 6: Harden the `-1` branch with a bounded retry + divergence log**
 
 In `media-viewer.js`, change the `showTournamentPair` signature (~4448) and replace the `-1` branch (~4468-4474):
 
@@ -194,7 +196,7 @@ Replace lines ~4468-4474:
         }
 ```
 
-- [ ] **Step 7: Run lint + full suite and commit**
+- [x] **Step 7: Run lint + full suite and commit**
 
 Run: `npm run lint && npx vitest run`
 Expected: clean lint; PASS (389 baseline + 4 new reconcile tests).
@@ -232,7 +234,7 @@ EOF
 - Produces: `SwissStrategy.captureUndo() → { kind: 'snapshot', strategyStateSnapshot } | { kind: 'delta', pair: [a,b] }` — a snapshot when the current pick empties the round (`roundQueue.length <= 1`), else a compact delta. `SwissStrategy.applyUndo(record)` reverses it (the engine augments a delta with `winner` for a result or `outcome` for a draw).
 - Engine `history` entries now carry `undo` (the augmented record) + `filesSnapshot` (unchanged); `engine.undo()` calls `strategy.applyUndo(entry.undo)`.
 
-- [ ] **Step 1: Update the mock strategy + the two snapshot-coupled tests**
+- [x] **Step 1: Update the mock strategy + the two snapshot-coupled tests**
 
 In `tests/tournament-engine.test.js`, inside `makeMockStrategy` (the returned `mock` object ~10-39), add two methods immediately after the `serialize` line (mind the trailing commas):
 
@@ -287,12 +289,12 @@ In the `recordDraw` block, the "pushes a draw history entry with outcome and a s
 ```
 (from `expect(eng.history[0].strategyStateSnapshot).toBeTruthy();` — this is a 2-file/rounds:1 draw, so the pick empties the round → `undo.kind === 'snapshot'`. The two behavioral draw-undo tests below it, ~261 and ~280, pass unchanged.)
 
-- [ ] **Step 2: Run to verify the two updated tests now fail against the old engine**
+- [x] **Step 2: Run to verify the two updated tests now fail against the old engine**
 
 Run: `npx vitest run tournament-engine`
 Expected: FAIL — the old `recordResult`/`undo` still write `strategyStateSnapshot` and call `StrategyCtor.deserialize`, so `eng.history[0].undo` is `undefined` and `mock.applyUndo` is never called (both new assertions fail). Engine is updated in Steps 3-4.
 
-- [ ] **Step 3: Add `captureUndo`/`applyUndo` to `SwissStrategy`**
+- [x] **Step 3: Add `captureUndo`/`applyUndo` to `SwissStrategy`**
 
 In `tournament-engine.js`, add these two methods to `SwissStrategy` (e.g. just after `serialize`/`deserialize`, ~307):
 
@@ -332,7 +334,7 @@ In `tournament-engine.js`, add these two methods to `SwissStrategy` (e.g. just a
     }
 ```
 
-- [ ] **Step 4: Rewrite engine `recordResult`, `recordDraw`, `undo`**
+- [x] **Step 4: Rewrite engine `recordResult`, `recordDraw`, `undo`**
 
 In `tournament-engine.js`, replace `recordResult` (~325-342), `recordDraw` (~344-362), and `undo` (~364-373) with:
 
@@ -385,12 +387,12 @@ In `tournament-engine.js`, replace `recordResult` (~325-342), `recordDraw` (~344
     }
 ```
 
-- [ ] **Step 5: Run to verify the updated mock tests pass**
+- [x] **Step 5: Run to verify the updated mock tests pass**
 
 Run: `npx vitest run tournament-engine`
 Expected: PASS — including the existing removeFile+undo `engine.files`-rewind test (~109-132), which must stay green.
 
-- [ ] **Step 6: Add real-strategy inverse-delta correctness tests**
+- [x] **Step 6: Add real-strategy inverse-delta correctness tests**
 
 Append to `tests/tournament-engine.test.js`:
 
@@ -466,7 +468,7 @@ describe('TournamentEngine inverse-delta undo (real SwissStrategy)', () => {
 });
 ```
 
-- [ ] **Step 7: Run the tournament suites, then lint + full suite, and commit**
+- [x] **Step 7: Run the tournament suites, then lint + full suite, and commit**
 
 Run: `npx vitest run tournament` (engine + swiss-strategy + manager + flow integration)
 Expected: PASS.
@@ -504,7 +506,7 @@ EOF
 - Consumes: existing `cleanupCompareMedia`, `setupCompareImageHandlers`, `setupCompareVideoHandlers`, `pathToFileURL`, `isJxl`, `decodeJxl`, `jxlFrameToObjectURL`, `resetZoom`, `updateBulkRateButtonsVisibility`, `updateCompareFileInfo`, `updateNavigationInfo`, `removeFileFromList`.
 - Produces: `showTournamentPairFast(leftFile, rightFile)`, `_swapTournamentSide(side, file)`, `_logSlowPhase(label, startMs)`.
 
-- [ ] **Step 1: Add the instrumentation helper**
+- [x] **Step 1: Add the instrumentation helper**
 
 In `media-viewer.js`, add near the other small helpers (e.g. just above `showTournamentPair`):
 
@@ -519,7 +521,7 @@ In `media-viewer.js`, add near the other small helpers (e.g. just above `showTou
     }
 ```
 
-- [ ] **Step 2: Add the fast-path render + per-side swap**
+- [x] **Step 2: Add the fast-path render + per-side swap**
 
 In `media-viewer.js`, add these two methods (e.g. just after `showTournamentPair`):
 
@@ -599,7 +601,7 @@ In `media-viewer.js`, add these two methods (e.g. just after `showTournamentPair
     }
 ```
 
-- [ ] **Step 3: Route `showTournamentPair` through the fast-path**
+- [x] **Step 3: Route `showTournamentPair` through the fast-path**
 
 In `media-viewer.js`, replace the tail of `showTournamentPair` (~4493-4499) with:
 
@@ -613,7 +615,7 @@ In `media-viewer.js`, replace the tail of `showTournamentPair` (~4493-4499) with
 
 (The `_restoredPairFiles` assignment moves into `showTournamentPairFast`'s fallback branch; remove the old `this._restoredPairFiles = {...}` + `showCompareMedia` lines here.)
 
-- [ ] **Step 4: Verify the missing-file error path in the fast-path**
+- [x] **Step 4: Verify the missing-file error path in the fast-path**
 
 Read `setupCompareImageHandlers` and `setupCompareVideoHandlers`. Confirm each attaches an `error` handler that removes the file / retries (so a mid-session external deletion — no longer caught by the skipped `checkFileExists` — is handled). If neither attaches an error→remove path, add one to the fast-path media element:
 
@@ -630,7 +632,7 @@ Read `setupCompareImageHandlers` and `setupCompareVideoHandlers`. Confirm each a
         );
 ```
 
-- [ ] **Step 5: Instrument the resume path**
+- [x] **Step 5: Instrument the resume path**
 
 In `media-viewer.js` `enterTournamentMode` (~4145), wrap the state read + prompt with timing. Change the `if (state)` block (~4161-4166):
 
@@ -662,7 +664,7 @@ to add a timing marker around the read (place `const _tResume = performance.now(
         }
 ```
 
-- [ ] **Step 6: Lint + full unit suite + tournament E2E**
+- [x] **Step 6: Lint + full unit suite + tournament E2E**
 
 Run: `npm run lint && npx vitest run`
 Expected: clean; PASS (no unit regressions — render methods aren't unit-tested).
@@ -670,7 +672,7 @@ Expected: clean; PASS (no unit regressions — render methods aren't unit-tested
 Run: `npx playwright test tournament-mode`
 Expected: PASS — pick→next-pair (fast-path), Both Win/Lose, Ctrl+A undo, leave-Save→resume all green. (If Playwright can't launch in this environment, note it and defer to the manual smoke.)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js
@@ -698,7 +700,7 @@ EOF
 - Modify: `tournament.js` — `handleDiscard` retry (~75-79)
 - Test: `tests/tournament-manager.test.js`
 
-- [ ] **Step 1: Write the failing `handleDiscard` retry test**
+- [x] **Step 1: Write the failing `handleDiscard` retry test**
 
 Append to the existing `describe('TournamentManager.handleDiscard', ...)` block in `tests/tournament-manager.test.js`:
 
@@ -717,12 +719,12 @@ Append to the existing `describe('TournamentManager.handleDiscard', ...)` block 
     });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tournament-manager`
 Expected: FAIL — `deleteTournamentState` called once (no retry yet).
 
-- [ ] **Step 3: Add the retry to `handleDiscard`**
+- [x] **Step 3: Add the retry to `handleDiscard`**
 
 In `tournament.js`, replace `handleDiscard` (~75-79):
 
@@ -744,12 +746,12 @@ In `tournament.js`, replace `handleDiscard` (~75-79):
     }
 ```
 
-- [ ] **Step 4: Run to verify it passes (incl. the existing discard test)**
+- [x] **Step 4: Run to verify it passes (incl. the existing discard test)**
 
 Run: `npx vitest run tournament-manager`
 Expected: PASS — new retry test + the existing "clears engine and deletes state file" (mock defaults to `{success:true}` → one call, no retry).
 
-- [ ] **Step 5: Fix the `moveToSpecialFolder` stale comment**
+- [x] **Step 5: Fix the `moveToSpecialFolder` stale comment**
 
 In `media-viewer.js` (~1555-1559), replace the comment:
 
@@ -763,7 +765,7 @@ In `media-viewer.js` (~1555-1559), replace the comment:
             }
 ```
 
-- [ ] **Step 6: Store the `onAppCloseRequested` unsubscribe fn**
+- [x] **Step 6: Store the `onAppCloseRequested` unsubscribe fn**
 
 In `media-viewer.js` (~1974-1977), replace:
 
@@ -778,7 +780,7 @@ In `media-viewer.js` (~1974-1977), replace:
         }
 ```
 
-- [ ] **Step 7: Add the close-confirm re-entrancy guard**
+- [x] **Step 7: Add the close-confirm re-entrancy guard**
 
 In `media-viewer.js`, replace `handleAppCloseRequest` (~4228-4239):
 
@@ -804,7 +806,7 @@ In `media-viewer.js`, replace `handleAppCloseRequest` (~4228-4239):
     }
 ```
 
-- [ ] **Step 8: Lint + full suite and commit**
+- [x] **Step 8: Lint + full suite and commit**
 
 Run: `npm run lint && npx vitest run`
 Expected: clean; PASS.
@@ -836,7 +838,7 @@ EOF
 - Modify: `media-viewer.js` — `getMediaIndex` (~1099)
 - Test: `tests/tournament-engine.test.js` (undo-cap pins), `tests/swiss-strategy.test.js` (pairing pins)
 
-- [ ] **Step 1: `getMediaIndex` single-lookup micro-opt**
+- [x] **Step 1: `getMediaIndex` single-lookup micro-opt**
 
 In `media-viewer.js`, replace the return (~1099):
 
@@ -848,7 +850,7 @@ In `media-viewer.js`, replace the return (~1099):
 Run: `npx vitest run media-viewer-utils`
 Expected: PASS — the existing `getMediaIndex` present/absent/rebuild tests still hold (`get()` returns `undefined` for absent, a number for present including `0`).
 
-- [ ] **Step 2: Add undo-cap boundary + recordDraw-cap pins**
+- [x] **Step 2: Add undo-cap boundary + recordDraw-cap pins**
 
 Append to `tests/tournament-engine.test.js`:
 
@@ -888,7 +890,7 @@ describe('TournamentEngine undo-history cap pins', () => {
 });
 ```
 
-- [ ] **Step 3: Add SwissStrategy round-2 pairing invariant pins**
+- [x] **Step 3: Add SwissStrategy round-2 pairing invariant pins**
 
 Append to `tests/swiss-strategy.test.js`:
 
@@ -933,7 +935,7 @@ describe('SwissStrategy round-2 pairing invariants', () => {
 });
 ```
 
-- [ ] **Step 4: Run the affected suites, then lint + full suite, and commit**
+- [x] **Step 4: Run the affected suites, then lint + full suite, and commit**
 
 Run: `npx vitest run tournament-engine && npx vitest run swiss-strategy && npx vitest run media-viewer-utils`
 Expected: PASS.
@@ -963,7 +965,7 @@ EOF
 - Modify: `tests/e2e/tournament-mode.test.js` — "Continue resumes" assertion (~248); exit-button precondition (~187-194)
 - Modify: `index.html` — `#tournamentExitBtn` aria-label
 
-- [ ] **Step 1: Fix the stale "Continue resumes" history assertion**
+- [x] **Step 1: Fix the stale "Continue resumes" history assertion**
 
 In `tests/e2e/tournament-mode.test.js` (~247-248), replace:
 
@@ -978,7 +980,7 @@ Also update the comment on the line above (~239) if it says "history preserved":
         // Continue rebuilds the engine; session-only undo means history starts empty.
 ```
 
-- [ ] **Step 2: Add the exit-button incomplete-tournament precondition**
+- [x] **Step 2: Add the exit-button incomplete-tournament precondition**
 
 In `tests/e2e/tournament-mode.test.js`, in the "exit button in the tournament header opens the leave prompt" test (~187), after `await enterAndStartTournament(page, { rounds: 1 });` add:
 
@@ -988,7 +990,7 @@ In `tests/e2e/tournament-mode.test.js`, in the "exit button in the tournament he
         expect(await page.evaluate(() => window.mediaViewer.isTournamentMode)).toBe(true);
 ```
 
-- [ ] **Step 3: Add the `#tournamentExitBtn` aria-label**
+- [x] **Step 3: Add the `#tournamentExitBtn` aria-label**
 
 In `index.html`, find the `#tournamentExitBtn` element and add `aria-label="Pause / leave tournament"`:
 
@@ -998,7 +1000,7 @@ In `index.html`, find the `#tournamentExitBtn` element and add `aria-label="Paus
 
 (Preserve the existing attributes/classes/icon markup; only add `aria-label` if absent. Read the current element first to match its exact shape.)
 
-- [ ] **Step 4: Run E2E (if the environment allows) + lint, and commit**
+- [x] **Step 4: Run E2E (if the environment allows) + lint, and commit**
 
 Run: `npx playwright test tournament-mode`
 Expected: PASS — "Continue resumes" now asserts `0`; exit-button test asserts the precondition. (If Playwright can't launch here, note it; the assertions are verified by reading + the next real E2E run.)
@@ -1025,13 +1027,13 @@ EOF
 
 ## Final verification (after all tasks)
 
-- [ ] Full unit suite: `npx vitest run` → all green (389 baseline + ~4 reconcile + ~5 inverse-delta + ~1 discard-retry + ~4 cap/swiss pins ≈ **403+**).
-- [ ] Lint + format: `npm run lint && npm run format:check` → clean.
-- [ ] Tournament E2E: `npx playwright test tournament-mode` → green (if runnable in the environment; else note deferral to the user's manual E2E).
-- [ ] Grep for regressions: `npx vitest run` covers `tournament-engine`, `swiss-strategy`, `tournament-manager`, `tournament-flow`, `media-viewer-utils`.
-- [ ] Regression-checker agent over `media-viewer.js` changes (zoom / fullscreen / compare / extraction state).
-- [ ] Open the PR.
-- [ ] **Hand off to the user for the real-24k manual smoke** (the acceptance gate):
+- [x] Full unit suite: `npx vitest run` → all green (389 baseline + ~4 reconcile + ~5 inverse-delta + ~1 discard-retry + ~4 cap/swiss pins ≈ **403+**).
+- [x] Lint + format: `npm run lint && npm run format:check` → clean.
+- [x] Tournament E2E: `npx playwright test tournament-mode` → green (if runnable in the environment; else note deferral to the user's manual E2E).
+- [x] Grep for regressions: `npx vitest run` covers `tournament-engine`, `swiss-strategy`, `tournament-manager`, `tournament-flow`, `media-viewer-utils`.
+- [x] Regression-checker agent over `media-viewer.js` changes (zoom / fullscreen / compare / extraction state).
+- [x] Open the PR.
+- [x] **Hand off to the user for the real-24k manual smoke** (the acceptance gate):
   - Resume a saved tournament on the 24k folder → Continue must not freeze.
   - Streak of picks + "Both Win" → each instant, no slowdown as games accumulate.
   - Add media + AI sort → enter tournament → renders a pair (no "file missing"); check `media-viewer.log` for any `Tournament divergence` capture + `[perf]` phase timings.
