@@ -4152,6 +4152,7 @@ class MediaViewer {
         }
         // Look for a saved tournament in this folder; offer Continue / Start over if found.
         let state = null;
+        const _tResume = performance.now();
         try {
             const result = await window.electronAPI.readTournamentState(this.baseFolderPath);
             if (result.success && result.state) state = result.state;
@@ -4159,6 +4160,7 @@ class MediaViewer {
             window.electronAPI.logError?.(`Tournament state read failed: ${err.message}`);
         }
         if (state) {
+            this._logSlowPhase('tournament state read+parse', _tResume);
             const currentFiles = this.mediaFiles.map((f) => f.path);
             this.showTournamentContinuePrompt(state, currentFiles);
         } else {
@@ -4445,6 +4447,15 @@ class MediaViewer {
         setTimeout(() => roundsSelect.focus(), 0);
     }
 
+    // Fire-and-forget phase timing for the 24k smoke. Logs only slow phases so the log isn't
+    // spammed on small folders. Reads the main-process log at app.getPath('logs')/media-viewer.log.
+    _logSlowPhase(label, startMs) {
+        const ms = performance.now() - startMs;
+        if (ms > 100) {
+            window.electronAPI.logError?.(`[perf] ${label}: ${Math.round(ms)}ms`);
+        }
+    }
+
     async showTournamentPair(_pruneDepth = 0) {
         if (!this.isTournamentMode || !this.tournament.engine) return;
 
@@ -4509,11 +4520,90 @@ class MediaViewer {
 
         this.leftFileIndex = leftIdx;
         this.rightFileIndex = rightIdx;
-        // Force showCompareMedia to display the engine-selected pair (overrides currentIndex-based selection)
-        this._restoredPairFiles = { left: this.mediaFiles[leftIdx], right: this.mediaFiles[rightIdx] };
-        if (typeof this.showCompareMedia === 'function') {
+        // Fast-path render reuses the compare wrappers (see showTournamentPairFast); the first
+        // pair (no wrappers yet) falls back to showCompareMedia via _restoredPairFiles.
+        await this.showTournamentPairFast(this.mediaFiles[leftIdx], this.mediaFiles[rightIdx]);
+    }
+
+    // Fast per-pair render for tournament mode: reuse the existing compare wrappers + overlay
+    // controls, swapping only the inner media element. Avoids showCompareMedia's full teardown
+    // (.remove() + 50ms reflow grace + 2× checkFileExists IPC + 2× lucide.createIcons), which
+    // makes pair changes sluggish at 24k. Falls back to showCompareMedia for the first pair
+    // (no wrappers yet). Both sides re-render atomically (shared-_jxlObjectURLs invariant).
+    async showTournamentPairFast(leftFile, rightFile) {
+        if (!this.leftMediaWrapper || !this.rightMediaWrapper) {
+            this._restoredPairFiles = { left: leftFile, right: rightFile };
             await this.showCompareMedia();
+            return;
         }
+        const t0 = performance.now();
+        this.resetZoom('left');
+        this.resetZoom('right');
+        this.compareLeftFile = leftFile;
+        this.compareRightFile = rightFile;
+        this.updateBulkRateButtonsVisibility();
+        await Promise.all([this._swapTournamentSide('left', leftFile), this._swapTournamentSide('right', rightFile)]);
+        this.updateCompareFileInfo(leftFile, rightFile);
+        this.updateNavigationInfo();
+        this._logSlowPhase('tournament pair render (fast)', t0);
+    }
+
+    // Swap one side's media element in place, keeping the wrapper + overlay controls. A missing
+    // or undecodable file is purged (mirrors showCompareMedia) and the engine pair re-rendered.
+    async _swapTournamentSide(side, file) {
+        const wrapper = side === 'left' ? this.leftMediaWrapper : this.rightMediaWrapper;
+        await this.cleanupCompareMedia(side); // revokes prior object URLs, pauses/detaches media
+        const prev = side === 'left' ? this.leftMedia : this.rightMedia;
+        if (prev && prev.parentNode) prev.remove();
+
+        let media;
+        const fileUrl = this.pathToFileURL(file.path);
+        if (file.type.startsWith('image/')) {
+            media = document.createElement('img');
+            if (this.isJxl(file.path)) {
+                try {
+                    const decoded = await this.decodeJxl(file.path);
+                    if (!decoded.frames || decoded.frames.length === 0) {
+                        throw new Error('JXL decoded with no frames');
+                    }
+                    media.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                } catch (err) {
+                    window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
+                    this.showNotification('Skipping undecodable JXL file', 'warning');
+                    this.removeFileFromList(file.path);
+                    return this.showTournamentPair(); // re-render the (now different) engine pair
+                }
+            } else {
+                media.src = fileUrl;
+            }
+            this.setupCompareImageHandlers(media, file, side);
+        } else if (file.type.startsWith('video/')) {
+            media = document.createElement('video');
+            media.src = fileUrl;
+            media.autoplay = true;
+            media.loop = true;
+            media.muted = false;
+            media.controls = true;
+            media.volume = parseFloat(this.volumeSlider.value);
+            media.preload = 'metadata';
+            this.setupCompareVideoHandlers(media, file, side);
+        }
+        media.className = 'media-display';
+        media.style.display = 'none';
+        // Insert as the FIRST child so it sits behind the persistent overlay controls.
+        wrapper.insertBefore(media, wrapper.firstChild);
+        media.addEventListener(
+            'error',
+            () => {
+                window.electronAPI.logError?.('Tournament media failed to load: ' + file.path);
+                this.showNotification('Skipping missing file', 'warning');
+                this.removeFileFromList(file.path);
+                this.showTournamentPair();
+            },
+            { once: true }
+        );
+        if (side === 'left') this.leftMedia = media;
+        else this.rightMedia = media;
     }
 
     async handleTournamentPick(winner, loser) {
