@@ -103,6 +103,19 @@ describe('TournamentManager.handleDiscard', () => {
         expect(tm.engine).toBeNull();
         expect(globalThis.window.electronAPI.deleteTournamentState).toHaveBeenCalledWith('/test/folder');
     });
+
+    it('retries the state delete once when the first delete fails', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 1);
+        const del = globalThis.window.electronAPI.deleteTournamentState;
+        del.mockReset();
+        del.mockResolvedValueOnce({ success: false, error: 'EBUSY' }).mockResolvedValueOnce({ success: true });
+
+        await tm.handleDiscard();
+        expect(del).toHaveBeenCalledTimes(2);
+        expect(tm.engine).toBeNull();
+    });
 });
 
 describe('TournamentManager.validateStateFile', () => {

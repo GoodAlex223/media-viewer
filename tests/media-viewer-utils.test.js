@@ -2390,9 +2390,13 @@ describe('handleAppCloseRequest', () => {
         allowAppClose = vi.fn();
         logError = vi.fn();
         globalThis.window = { electronAPI: { allowAppClose, logError } };
+        // Re-entrancy guard reads the leave/resume modal's display state; default it absent
+        // (no open modal) so pre-existing tests exercise the non-guarded path unchanged.
+        globalThis.document = { getElementById: () => null };
     });
     afterEach(() => {
         delete globalThis.window;
+        delete globalThis.document;
     });
 
     it('allows close immediately when not in tournament mode', () => {
@@ -2425,6 +2429,18 @@ describe('handleAppCloseRequest', () => {
         const continuation = ctx.showTournamentLeavePrompt.mock.calls[0][0];
         continuation();
         expect(allowAppClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-entrancy guard: no-ops when the leave/resume modal is already open', () => {
+        globalThis.document = { getElementById: () => ({ style: { display: 'flex' } }) };
+        const ctx = {
+            isTournamentMode: true,
+            tournament: { engine: { isComplete: () => false } },
+            showTournamentLeavePrompt: vi.fn(),
+        };
+        handleAppCloseRequest.call(ctx);
+        expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
+        expect(allowAppClose).not.toHaveBeenCalled();
     });
 
     it('still allows close if the handler throws (fail-safe)', () => {

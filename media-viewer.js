@@ -1552,7 +1552,9 @@ class MediaViewer {
             // Remove file from array and clean up caches
             this.removeFileFromList(fileToMove.path);
 
-            // Tournament mode: also remove from engine + persist before navigation
+            // Tournament mode: also drop the moved file from the engine. The state write is
+            // debounced (non-blocking) — a crash before it lands is self-healing, since the file
+            // is gone from disk and resume reconciliation prunes it anyway.
             if (this.isTournamentMode && this.tournament.engine) {
                 this.tournament.engine.removeFile(fileToMove.path);
                 this.tournament._schedulePersist(this.baseFolderPath);
@@ -1971,9 +1973,11 @@ class MediaViewer {
             tournamentExitBtn.addEventListener('click', () => this.switchMode('single'));
         }
 
-        // App-close confirm: main asks before quitting with a tournament in progress.
+        // App-close confirm: main asks before quitting with a tournament in progress. Store the
+        // unsubscribe fn (per the CLAUDE.md IPC-listener gotcha). The listener is app-lifetime,
+        // so this is for teardown symmetry / test cleanup rather than a live leak in normal use.
         if (window.electronAPI.onAppCloseRequested) {
-            window.electronAPI.onAppCloseRequested(() => this.handleAppCloseRequest());
+            this._removeAppCloseListener = window.electronAPI.onAppCloseRequested(() => this.handleAppCloseRequest());
         }
 
         // Compare-mode floating Undo button
@@ -4229,6 +4233,13 @@ class MediaViewer {
     // a renderer bug can never make the app unclosable.
     handleAppCloseRequest() {
         try {
+            // Re-entrancy guard: if a leave/resume prompt is already open, a 2nd close request
+            // must not re-bind its continuation. The modal's display state is the source of
+            // truth — cleanup() resets it to 'none' on every exit path (Save/Discard/Cancel).
+            const leaveModal = document.getElementById('tournamentResumeModal');
+            if (leaveModal && leaveModal.style.display === 'flex') {
+                return;
+            }
             if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
                 this.showTournamentLeavePrompt(() => window.electronAPI.allowAppClose());
             } else {
@@ -4687,7 +4698,7 @@ class MediaViewer {
             return;
         }
 
-        // Default: undo the engine's last pair-pick (snapshot-restored strategy state).
+        // Default: undo the engine's last pair-pick (inverse-delta, or snapshot at round boundaries).
         this.tournament.engine.undo();
         this.tournament._schedulePersist(this.baseFolderPath);
         await this.showTournamentPair();

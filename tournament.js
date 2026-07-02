@@ -75,7 +75,17 @@ export class TournamentManager {
     async handleDiscard() {
         this.cancelPending(); // don't let a queued write recreate the file after delete
         this.engine = null;
-        await window.electronAPI.deleteTournamentState(this.host.baseFolderPath);
+        const res = await window.electronAPI.deleteTournamentState(this.host.baseFolderPath);
+        if (res && res.success === false) {
+            // Retry once — a transient IO/lock failure shouldn't orphan .tournament_state.json
+            // and re-prompt resume next time. If it still fails, log (best-effort) and move on.
+            const retry = await window.electronAPI.deleteTournamentState(this.host.baseFolderPath);
+            if (retry && retry.success === false) {
+                window.electronAPI?.logError?.(
+                    'Tournament discard: state delete failed twice: ' + (retry.error ?? 'unknown')
+                );
+            }
+        }
     }
 
     validateStateFile(state, currentFiles) {
