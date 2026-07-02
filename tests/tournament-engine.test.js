@@ -390,3 +390,37 @@ describe('TournamentEngine inverse-delta undo (real SwissStrategy)', () => {
         for (const f of files) expect(eng.strategy.winCounts.get(f)).toBe(0);
     });
 });
+
+describe('TournamentEngine undo-history cap pins', () => {
+    it('undo still works at the cap boundary (most recent pick is reversible)', () => {
+        const files = Array.from({ length: 250 }, (_, i) => `f${i}.jpg`);
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        let recorded = 0;
+        while (recorded < 105) {
+            const pair = eng.getCurrentPair();
+            if (!pair) break;
+            eng.recordResult(pair.left, pair.right);
+            recorded++;
+        }
+        expect(eng.history.length).toBe(100); // capped
+        const lastWinner = eng.history[eng.history.length - 1].winner;
+        const winsBefore = eng.strategy.winCounts.get(lastWinner);
+        eng.undo();
+        expect(eng.history.length).toBe(99);
+        expect(eng.strategy.winCounts.get(lastWinner)).toBe(winsBefore - 1);
+    });
+
+    it('recordDraw is also capped at 100 entries', () => {
+        const files = Array.from({ length: 250 }, (_, i) => `f${i}.jpg`);
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        let recorded = 0;
+        while (recorded < 101) {
+            const pair = eng.getCurrentPair();
+            if (!pair) break;
+            eng.recordDraw(pair.left, pair.right, recorded % 2 === 0 ? 'win' : 'lose');
+            recorded++;
+        }
+        expect(recorded).toBe(101);
+        expect(eng.history.length).toBe(100);
+    });
+});

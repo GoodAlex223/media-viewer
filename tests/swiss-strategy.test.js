@@ -400,3 +400,42 @@ describe('SwissStrategy._buildRoundPairings large-N correctness', () => {
         expect(s.byes.has('a.jpg')).toBe(true); // head is byed, not rematched
     });
 });
+
+describe('SwissStrategy round-2 pairing invariants', () => {
+    function playOutRound(s) {
+        while (s.roundQueue.length > 0) {
+            const [x, y] = s.roundQueue[0];
+            s.recordResult(x, y); // left always wins → deterministic win buckets
+        }
+    }
+
+    it('round 2 cross-bucket carry-over: no self-pairs, every queued pair is distinct files', () => {
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const s = new SwissStrategy();
+        s.init(files, { rounds: 3 });
+        playOutRound(s);
+        const next = s.getNextPair(); // builds round 2
+        expect(next).not.toBeNull();
+        for (const [x, y] of s.roundQueue) {
+            expect(x).not.toBe(y);
+        }
+    });
+
+    it("don't-double-bye: a file byed in round 1 is not byed again in round 2 (5 files)", () => {
+        // 5 files → exactly one bye per round; the round-1 bye must rotate to a different file.
+        for (let trial = 0; trial < 20; trial++) {
+            const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg'];
+            const s = new SwissStrategy();
+            s.init(files, { rounds: 2 });
+            const round1Bye = [...s.byes][0];
+            expect(round1Bye).toBeTruthy();
+            playOutRound(s);
+            s.getNextPair(); // builds round 2 (awards the round-2 bye)
+            const round2Bye = [...s.byes].filter((f) => f !== round1Bye);
+            // A new (different) file received the round-2 bye — the round-1 bye was not doubled.
+            expect(s.byes.has(round1Bye)).toBe(true);
+            expect([...s.byes].length).toBeGreaterThanOrEqual(2);
+            expect(round2Bye.length).toBeGreaterThanOrEqual(1);
+        }
+    });
+});

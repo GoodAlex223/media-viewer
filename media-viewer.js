@@ -1096,7 +1096,8 @@ class MediaViewer {
             this._mediaPathIndex = new Map(this.mediaFiles.map((f, i) => [f.path, i]));
             this._mediaPathIndexSource = this.mediaFiles;
         }
-        return this._mediaPathIndex.has(path) ? this._mediaPathIndex.get(path) : -1;
+        const idx = this._mediaPathIndex.get(path);
+        return idx === undefined ? -1 : idx;
     }
 
     restoreFeatureCachesFromHistory(entry) {
