@@ -186,6 +186,10 @@ test.describe('Tournament Mode', () => {
 
         await enterAndStartTournament(page, { rounds: 1 });
 
+        // Precondition: an incomplete tournament is active (the exit button only makes sense
+        // mid-tournament — a rounds:1 2-file tournament is incomplete until the single pick).
+        expect(await page.evaluate(() => window.mediaViewer.isTournamentMode)).toBe(true);
+
         // The fixed top-center pair-count banner is hidden in tournament mode so it doesn't
         // cover the centered exit button (the header already shows the games count).
         await expect(page.locator('#navInfo')).toBeHidden();
@@ -236,7 +240,7 @@ test.describe('Tournament Mode', () => {
         await expect(page.locator('#tournamentResumeModal')).toBeVisible();
         expect(await page.locator('#tournamentResumeTitle').textContent()).toBe('Resume tournament?');
 
-        // Continue rebuilds the engine with history preserved.
+        // Continue rebuilds the engine; session-only undo means history starts empty.
         await page.locator('#tournamentResumeAccept').click();
         await page.waitForFunction(
             () =>
@@ -245,6 +249,6 @@ test.describe('Tournament Mode', () => {
                 !window.mediaViewer.isLoading
         );
         const historyLen = await page.evaluate(() => window.mediaViewer.tournament.engine.history.length);
-        expect(historyLen).toBe(1);
+        expect(historyLen).toBe(0); // session-only undo (v2): a resumed engine starts with empty history
     });
 });
