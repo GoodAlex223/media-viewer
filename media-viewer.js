@@ -3209,7 +3209,7 @@ class MediaViewer {
         this.createZoomPopover(side, zoomWrapper, zoomBtn);
     }
 
-    setupCompareImageHandlers(media, file, side) {
+    setupCompareImageHandlers(media, file, side, opts = {}) {
         const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
 
         const onLoad = () => {
@@ -3254,13 +3254,18 @@ class MediaViewer {
             }
         };
 
-        listeners.push({ event: 'load', handler: onLoad }, { event: 'error', handler: onError });
+        listeners.push({ event: 'load', handler: onLoad });
+        if (!opts.skipErrorHandler) {
+            listeners.push({ event: 'error', handler: onError });
+        }
 
         media.addEventListener('load', onLoad);
-        media.addEventListener('error', onError);
+        if (!opts.skipErrorHandler) {
+            media.addEventListener('error', onError);
+        }
     }
 
-    setupCompareVideoHandlers(media, file, side) {
+    setupCompareVideoHandlers(media, file, side, opts = {}) {
         const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
 
         const onLoadedMetadata = () => {
@@ -3305,10 +3310,15 @@ class MediaViewer {
             }
         };
 
-        listeners.push({ event: 'loadedmetadata', handler: onLoadedMetadata }, { event: 'error', handler: onError });
+        listeners.push({ event: 'loadedmetadata', handler: onLoadedMetadata });
+        if (!opts.skipErrorHandler) {
+            listeners.push({ event: 'error', handler: onError });
+        }
 
         media.addEventListener('loadedmetadata', onLoadedMetadata);
-        media.addEventListener('error', onError);
+        if (!opts.skipErrorHandler) {
+            media.addEventListener('error', onError);
+        }
     }
 
     setupImageHandlers(file) {
@@ -4554,19 +4564,24 @@ class MediaViewer {
         this.compareLeftFile = leftFile;
         this.compareRightFile = rightFile;
         this.updateBulkRateButtonsVisibility();
-        await Promise.all([this._swapTournamentSide('left', leftFile), this._swapTournamentSide('right', rightFile)]);
+        // Phase 1: revoke/teardown BOTH sides first (cleanupCompareMedia's revokeJxlObjectURLs()
+        // clears the shared _jxlObjectURLs set) and only THEN build both sides. Building
+        // concurrently is safe because building only ADDS object URLs; if cleanup and build were
+        // interleaved per-side (as in the old _swapTournamentSide), side B's cleanup could revoke
+        // the object URL side A just assigned, blanking it.
+        await Promise.all([this.cleanupCompareMedia('left'), this.cleanupCompareMedia('right')]);
+        await Promise.all([this._buildTournamentSide('left', leftFile), this._buildTournamentSide('right', rightFile)]);
         this.updateCompareFileInfo(leftFile, rightFile);
         this.updateNavigationInfo();
         this._logSlowPhase('tournament pair render (fast)', t0);
     }
 
-    // Swap one side's media element in place, keeping the wrapper + overlay controls. A missing
-    // or undecodable file is purged (mirrors showCompareMedia) and the engine pair re-rendered.
-    async _swapTournamentSide(side, file) {
+    // Build one side's media element in place, keeping the wrapper + overlay controls. Assumes
+    // cleanupCompareMedia(side) has already run for this side (see showTournamentPairFast's
+    // phase separation). A missing or undecodable file is purged (mirrors showCompareMedia) and
+    // the engine pair re-rendered.
+    async _buildTournamentSide(side, file) {
         const wrapper = side === 'left' ? this.leftMediaWrapper : this.rightMediaWrapper;
-        await this.cleanupCompareMedia(side); // revokes prior object URLs, pauses/detaches media
-        const prev = side === 'left' ? this.leftMedia : this.rightMedia;
-        if (prev && prev.parentNode) prev.remove();
 
         let media;
         const fileUrl = this.pathToFileURL(file.path);
@@ -4588,7 +4603,7 @@ class MediaViewer {
             } else {
                 media.src = fileUrl;
             }
-            this.setupCompareImageHandlers(media, file, side);
+            this.setupCompareImageHandlers(media, file, side, { skipErrorHandler: true });
         } else if (file.type.startsWith('video/')) {
             media = document.createElement('video');
             media.src = fileUrl;
@@ -4598,7 +4613,7 @@ class MediaViewer {
             media.controls = true;
             media.volume = parseFloat(this.volumeSlider.value);
             media.preload = 'metadata';
-            this.setupCompareVideoHandlers(media, file, side);
+            this.setupCompareVideoHandlers(media, file, side, { skipErrorHandler: true });
         }
         media.className = 'media-display';
         media.style.display = 'none';
