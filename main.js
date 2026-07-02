@@ -957,6 +957,11 @@ app.whenReady().then(() => {
         fn(source || 'renderer', message);
     });
 
+    // Receive renderer perf/diagnostics lines for the persistent perf log (fire-and-forget).
+    ipcMain.on('log-perf', (_event, message) => {
+        logger.logPerf(String(message ?? ''));
+    });
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();

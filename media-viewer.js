@@ -4175,7 +4175,7 @@ class MediaViewer {
             window.electronAPI.logError?.(`Tournament state read failed: ${err.message}`);
         }
         if (state) {
-            this._logSlowPhase('tournament state read+parse', _tResume);
+            this._logSlowPhase('tournament state read+parse', _tResume, 0); // always record resume timing
             const currentFiles = this.mediaFiles.map((f) => f.path);
             this.showTournamentContinuePrompt(state, currentFiles);
         } else {
@@ -4469,12 +4469,14 @@ class MediaViewer {
         setTimeout(() => roundsSelect.focus(), 0);
     }
 
-    // Fire-and-forget phase timing for the 24k smoke. Logs only slow phases so the log isn't
-    // spammed on small folders. Reads the main-process log at app.getPath('logs')/media-viewer.log.
-    _logSlowPhase(label, startMs) {
+    // Fire-and-forget phase timing → the persistent perf log (media-viewer-perf.log, survives
+    // quit) so real-run behavior can be reviewed after the fact. Logs when the phase takes at
+    // least `thresholdMs` (default 100 — only anomalies; pass 0 for a once-per-event phase like
+    // resume that should always be recorded without per-pick spam).
+    _logSlowPhase(label, startMs, thresholdMs = 100) {
         const ms = performance.now() - startMs;
-        if (ms > 100) {
-            window.electronAPI.logError?.(`[perf] ${label}: ${Math.round(ms)}ms`);
+        if (ms >= thresholdMs) {
+            window.electronAPI.logPerf?.(`${label}: ${Math.round(ms)}ms`);
         }
     }
 

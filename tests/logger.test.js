@@ -132,4 +132,38 @@ describe('logger', () => {
             expect(() => logger.cleanup()).not.toThrow();
         });
     });
+
+    describe('logPerf()', () => {
+        it('appends a [PERF] line to media-viewer-perf.log', () => {
+            logger.init(testLogDir);
+            logger.logPerf('resume: 42ms');
+            const perfPath = path.join(testLogDir, 'media-viewer-perf.log');
+            const content = fs.readFileSync(perfPath, 'utf-8');
+            expect(content).toContain('[PERF] resume: 42ms');
+        });
+
+        it('persists the perf log across cleanup (unlike the deleted main log)', () => {
+            logger.init(testLogDir);
+            logger.logPerf('x: 1ms');
+            const perfPath = path.join(testLogDir, 'media-viewer-perf.log');
+            logger.cleanup();
+            expect(fs.existsSync(perfPath)).toBe(true); // perf log survives quit
+            expect(fs.existsSync(path.join(testLogDir, 'media-viewer.log'))).toBe(false); // main log deleted
+        });
+
+        it('appends across sessions (init does not truncate the perf log)', () => {
+            logger.init(testLogDir);
+            logger.logPerf('session1');
+            logger.cleanup();
+            logger.init(testLogDir);
+            logger.logPerf('session2');
+            const content = fs.readFileSync(path.join(testLogDir, 'media-viewer-perf.log'), 'utf-8');
+            expect(content).toContain('session1');
+            expect(content).toContain('session2');
+        });
+
+        it('is a no-op before init (does not throw, writes nothing)', () => {
+            expect(() => logger.logPerf('x')).not.toThrow();
+        });
+    });
 });
