@@ -1096,7 +1096,8 @@ class MediaViewer {
             this._mediaPathIndex = new Map(this.mediaFiles.map((f, i) => [f.path, i]));
             this._mediaPathIndexSource = this.mediaFiles;
         }
-        return this._mediaPathIndex.has(path) ? this._mediaPathIndex.get(path) : -1;
+        const idx = this._mediaPathIndex.get(path);
+        return idx === undefined ? -1 : idx;
     }
 
     restoreFeatureCachesFromHistory(entry) {
@@ -1552,7 +1553,9 @@ class MediaViewer {
             // Remove file from array and clean up caches
             this.removeFileFromList(fileToMove.path);
 
-            // Tournament mode: also remove from engine + persist before navigation
+            // Tournament mode: also drop the moved file from the engine. The state write is
+            // debounced (non-blocking) — a crash before it lands is self-healing, since the file
+            // is gone from disk and resume reconciliation prunes it anyway.
             if (this.isTournamentMode && this.tournament.engine) {
                 this.tournament.engine.removeFile(fileToMove.path);
                 this.tournament._schedulePersist(this.baseFolderPath);
@@ -1971,9 +1974,11 @@ class MediaViewer {
             tournamentExitBtn.addEventListener('click', () => this.switchMode('single'));
         }
 
-        // App-close confirm: main asks before quitting with a tournament in progress.
+        // App-close confirm: main asks before quitting with a tournament in progress. Store the
+        // unsubscribe fn (per the CLAUDE.md IPC-listener gotcha). The listener is app-lifetime,
+        // so this is for teardown symmetry / test cleanup rather than a live leak in normal use.
         if (window.electronAPI.onAppCloseRequested) {
-            window.electronAPI.onAppCloseRequested(() => this.handleAppCloseRequest());
+            this._removeAppCloseListener = window.electronAPI.onAppCloseRequested(() => this.handleAppCloseRequest());
         }
 
         // Compare-mode floating Undo button
@@ -3204,7 +3209,7 @@ class MediaViewer {
         this.createZoomPopover(side, zoomWrapper, zoomBtn);
     }
 
-    setupCompareImageHandlers(media, file, side) {
+    setupCompareImageHandlers(media, file, side, opts = {}) {
         const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
 
         const onLoad = () => {
@@ -3249,13 +3254,18 @@ class MediaViewer {
             }
         };
 
-        listeners.push({ event: 'load', handler: onLoad }, { event: 'error', handler: onError });
+        listeners.push({ event: 'load', handler: onLoad });
+        if (!opts.skipErrorHandler) {
+            listeners.push({ event: 'error', handler: onError });
+        }
 
         media.addEventListener('load', onLoad);
-        media.addEventListener('error', onError);
+        if (!opts.skipErrorHandler) {
+            media.addEventListener('error', onError);
+        }
     }
 
-    setupCompareVideoHandlers(media, file, side) {
+    setupCompareVideoHandlers(media, file, side, opts = {}) {
         const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
 
         const onLoadedMetadata = () => {
@@ -3300,10 +3310,15 @@ class MediaViewer {
             }
         };
 
-        listeners.push({ event: 'loadedmetadata', handler: onLoadedMetadata }, { event: 'error', handler: onError });
+        listeners.push({ event: 'loadedmetadata', handler: onLoadedMetadata });
+        if (!opts.skipErrorHandler) {
+            listeners.push({ event: 'error', handler: onError });
+        }
 
         media.addEventListener('loadedmetadata', onLoadedMetadata);
-        media.addEventListener('error', onError);
+        if (!opts.skipErrorHandler) {
+            media.addEventListener('error', onError);
+        }
     }
 
     setupImageHandlers(file) {
@@ -4152,6 +4167,7 @@ class MediaViewer {
         }
         // Look for a saved tournament in this folder; offer Continue / Start over if found.
         let state = null;
+        const _tResume = performance.now();
         try {
             const result = await window.electronAPI.readTournamentState(this.baseFolderPath);
             if (result.success && result.state) state = result.state;
@@ -4159,6 +4175,7 @@ class MediaViewer {
             window.electronAPI.logError?.(`Tournament state read failed: ${err.message}`);
         }
         if (state) {
+            this._logSlowPhase('tournament state read+parse', _tResume, 0); // always record resume timing
             const currentFiles = this.mediaFiles.map((f) => f.path);
             this.showTournamentContinuePrompt(state, currentFiles);
         } else {
@@ -4227,6 +4244,22 @@ class MediaViewer {
     // a renderer bug can never make the app unclosable.
     handleAppCloseRequest() {
         try {
+            // Re-entrancy guard: suppress a 2nd close request ONLY while the *leave* prompt is
+            // open (title 'Leave tournament?'), so it can't re-bind the continuation. The same
+            // modal element is reused for the 'Resume tournament?' prompt (shown while
+            // isTournamentMode is still false, before entering) — clicking X during THAT must
+            // fall through to allowAppClose() below, not be swallowed here (else the window is
+            // unclosable during the resume prompt).
+            const leaveModal = document.getElementById('tournamentResumeModal');
+            const leaveTitle = document.getElementById('tournamentResumeTitle');
+            if (
+                leaveModal &&
+                leaveModal.style.display === 'flex' &&
+                leaveTitle &&
+                leaveTitle.textContent === 'Leave tournament?'
+            ) {
+                return;
+            }
             if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
                 this.showTournamentLeavePrompt(() => window.electronAPI.allowAppClose());
             } else {
@@ -4445,7 +4478,18 @@ class MediaViewer {
         setTimeout(() => roundsSelect.focus(), 0);
     }
 
-    async showTournamentPair() {
+    // Fire-and-forget phase timing → the persistent perf log (media-viewer-perf.log, survives
+    // quit) so real-run behavior can be reviewed after the fact. Logs when the phase takes at
+    // least `thresholdMs` (default 100 — only anomalies; pass 0 for a once-per-event phase like
+    // resume that should always be recorded without per-pick spam).
+    _logSlowPhase(label, startMs, thresholdMs = 100) {
+        const ms = performance.now() - startMs;
+        if (ms >= thresholdMs) {
+            window.electronAPI.logPerf?.(`${label}: ${Math.round(ms)}ms`);
+        }
+    }
+
+    async showTournamentPair(_pruneDepth = 0) {
         if (!this.isTournamentMode || !this.tournament.engine) return;
 
         if (this.tournament.engine.isComplete()) {
@@ -4467,10 +4511,30 @@ class MediaViewer {
 
         if (leftIdx === -1 || rightIdx === -1) {
             const missing = leftIdx === -1 ? pair.left : pair.right;
+            // Capture net: unreachable after reconcileWithFiles (see _enterResumedTournamentUI).
+            // If it still fires, the engine/mediaFiles diverged — log the shape so a real 24k
+            // repro is diagnosable in media-viewer.log, then prune + retry (bounded).
+            const absent = this.tournament.engine.files.filter((f) => this.getMediaIndex(f) === -1).length;
+            window.electronAPI.logError?.(
+                `Tournament divergence: pair file absent from mediaFiles. ` +
+                    `engineFiles=${this.tournament.engine.files.length} mediaFiles=${this.mediaFiles.length} ` +
+                    `absentEngineFiles=${absent} ` +
+                    `sorted=${this.isSortedByPrediction || this.isSortedBySimilarity} sample=${missing}`
+            );
             this.showNotification(`File missing — removed from tournament: ${missing}`, 'warning');
-            this.tournament.engine.removeFile(missing);
+            // trackUndo: record a snapshot-based undo entry so undoing back past this prune fully
+            // restores the strategy state (not just engine.files) — the picks' O(1) inverse-deltas
+            // can't resurrect a removed file's strategy state on their own.
+            this.tournament.engine.removeFile(missing, { trackUndo: true });
             this.tournament._schedulePersist(this.baseFolderPath);
-            return this.showTournamentPair();
+            // Bound the retry: each retry removes exactly one engine file, so recursion is
+            // naturally bounded by the engine size; the depth cap is belt-and-suspenders against
+            // an engine that can never resolve a present pair (fall to the summary instead).
+            if (_pruneDepth > this.mediaFiles.length + 1) {
+                this.showTournamentSummaryModal();
+                return;
+            }
+            return this.showTournamentPair(_pruneDepth + 1);
         }
 
         // Reuse compare-mode rendering: temporarily activate compare layout w/o the binary toggle
@@ -4492,11 +4556,95 @@ class MediaViewer {
 
         this.leftFileIndex = leftIdx;
         this.rightFileIndex = rightIdx;
-        // Force showCompareMedia to display the engine-selected pair (overrides currentIndex-based selection)
-        this._restoredPairFiles = { left: this.mediaFiles[leftIdx], right: this.mediaFiles[rightIdx] };
-        if (typeof this.showCompareMedia === 'function') {
+        // Fast-path render reuses the compare wrappers (see showTournamentPairFast); the first
+        // pair (no wrappers yet) falls back to showCompareMedia via _restoredPairFiles.
+        await this.showTournamentPairFast(this.mediaFiles[leftIdx], this.mediaFiles[rightIdx]);
+    }
+
+    // Fast per-pair render for tournament mode: reuse the existing compare wrappers + overlay
+    // controls, swapping only the inner media element. Avoids showCompareMedia's full teardown
+    // (.remove() + 50ms reflow grace + 2× checkFileExists IPC + 2× lucide.createIcons), which
+    // makes pair changes sluggish at 24k. Falls back to showCompareMedia for the first pair
+    // (no wrappers yet). Both sides re-render atomically (shared-_jxlObjectURLs invariant).
+    async showTournamentPairFast(leftFile, rightFile) {
+        if (!this.leftMediaWrapper || !this.rightMediaWrapper) {
+            this._restoredPairFiles = { left: leftFile, right: rightFile };
             await this.showCompareMedia();
+            return;
         }
+        const t0 = performance.now();
+        this.resetZoom('left');
+        this.resetZoom('right');
+        this.compareLeftFile = leftFile;
+        this.compareRightFile = rightFile;
+        this.updateBulkRateButtonsVisibility();
+        // Phase 1: revoke/teardown BOTH sides first (cleanupCompareMedia's revokeJxlObjectURLs()
+        // clears the shared _jxlObjectURLs set) and only THEN build both sides. Building
+        // concurrently is safe because building only ADDS object URLs; if cleanup and build were
+        // interleaved per-side (as in the old _swapTournamentSide), side B's cleanup could revoke
+        // the object URL side A just assigned, blanking it.
+        await Promise.all([this.cleanupCompareMedia('left'), this.cleanupCompareMedia('right')]);
+        await Promise.all([this._buildTournamentSide('left', leftFile), this._buildTournamentSide('right', rightFile)]);
+        this.updateCompareFileInfo(leftFile, rightFile);
+        this.updateNavigationInfo();
+        this._logSlowPhase('tournament pair render (fast)', t0);
+    }
+
+    // Build one side's media element in place, keeping the wrapper + overlay controls. Assumes
+    // cleanupCompareMedia(side) has already run for this side (see showTournamentPairFast's
+    // phase separation). A missing or undecodable file is purged (mirrors showCompareMedia) and
+    // the engine pair re-rendered.
+    async _buildTournamentSide(side, file) {
+        const wrapper = side === 'left' ? this.leftMediaWrapper : this.rightMediaWrapper;
+
+        let media;
+        const fileUrl = this.pathToFileURL(file.path);
+        if (file.type.startsWith('image/')) {
+            media = document.createElement('img');
+            if (this.isJxl(file.path)) {
+                try {
+                    const decoded = await this.decodeJxl(file.path);
+                    if (!decoded.frames || decoded.frames.length === 0) {
+                        throw new Error('JXL decoded with no frames');
+                    }
+                    media.src = this.jxlFrameToObjectURL(decoded.frames[0]);
+                } catch (err) {
+                    window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
+                    this.showNotification('Skipping undecodable JXL file', 'warning');
+                    this.removeFileFromList(file.path);
+                    return this.showTournamentPair(); // re-render the (now different) engine pair
+                }
+            } else {
+                media.src = fileUrl;
+            }
+            this.setupCompareImageHandlers(media, file, side, { skipErrorHandler: true });
+        } else if (file.type.startsWith('video/')) {
+            media = document.createElement('video');
+            media.src = fileUrl;
+            media.autoplay = true;
+            media.loop = true;
+            media.muted = false;
+            media.controls = true;
+            media.volume = parseFloat(this.volumeSlider.value);
+            media.preload = 'metadata';
+            this.setupCompareVideoHandlers(media, file, side, { skipErrorHandler: true });
+        }
+        media.className = 'media-display';
+        media.style.display = 'none';
+        // Insert as the FIRST child so it sits behind the persistent overlay controls.
+        wrapper.insertBefore(media, wrapper.firstChild);
+        media.addEventListener(
+            'error',
+            () => {
+                window.electronAPI.logError?.('Tournament media failed to load: ' + file.path);
+                this.showNotification('Skipping missing file', 'warning');
+                this.removeFileFromList(file.path);
+                this.showTournamentPair();
+            },
+            { once: true }
+        );
+        if (side === 'left') this.leftMedia = media;
+        else this.rightMedia = media;
     }
 
     async handleTournamentPick(winner, loser) {
@@ -4580,7 +4728,7 @@ class MediaViewer {
             return;
         }
 
-        // Default: undo the engine's last pair-pick (snapshot-restored strategy state).
+        // Default: undo the engine's last pair-pick (inverse-delta, or snapshot at round boundaries).
         this.tournament.engine.undo();
         this.tournament._schedulePersist(this.baseFolderPath);
         await this.showTournamentPair();
@@ -4674,6 +4822,11 @@ class MediaViewer {
         document.querySelectorAll('.mode-btn').forEach((b) => {
             b.classList.toggle('active', b.dataset.mode === 'tournament');
         });
+        // Defensive reconciliation: guarantees every engine pair resolves to a present index.
+        // The disk-resume path already reconciled in handleResumeReconciled; this ALSO covers
+        // the live-engine fast-path (enterTournamentMode ~4149, which skips reconciliation) and
+        // is idempotent on the disk path. Root fix for "cannot enter after add-media + AI sort".
+        this.tournament.reconcileWithFiles(this.mediaFiles.map((f) => f.path));
         await this.showTournamentPair();
     }
 

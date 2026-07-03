@@ -30,6 +30,7 @@ Plans are archived when:
 | [2026-06-25-extraction-timing.md](2026-06-25-extraction-timing.md) | Group P3: Feature-extraction timing — lazy / on-demand (remove folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by `clipVectorsNeedExtraction`) — MERGED 2026-06-26 via PR #56 (`9d65500`) | 2026-06-25 |
 | [2026-06-26-weekly-reviews-first-run.md](2026-06-26-weekly-reviews-first-run.md) | Group WR: Weekly Reviews first run (4 verdicts: pr-review-toolkit `adopt`; test-writer-fixer / TDD Guard / local-model review `defer`) — ⚪ Overhead, no code PR | 2026-06-26 |
 | [2026-06-30-tournament-exit-affordances.md](2026-06-30-tournament-exit-affordances.md) | Group T1: Tournament exit affordances (in-tournament exit button + confirm-before-app-close, both reusing `showTournamentLeavePrompt`) | 2026-06-30 |
+| [2026-07-01-cw-t-tournament-correctness-hardening.md](2026-07-01-cw-t-tournament-correctness-hardening.md) | Group CW-T: Tournament correctness, persistence & hardening (O(1) inverse-delta undo + `showTournamentPairFast` wrapper-reuse render + `reconcileWithFiles`-on-every-entry closing the live-engine gap + hardened `-1` divergence capture + persistent perf log + 6 debt items) — real-24k smoke PASSED; PR pending | 2026-07-02 |
 
 ---
 
@@ -120,4 +121,4 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 
 ---
 
-*Last Updated: 2026-06-30 (added Group T1 Tournament exit affordances plan)*
+*Last Updated: 2026-07-02 (added Group CW-T Tournament correctness & hardening plan)*

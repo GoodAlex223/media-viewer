@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Logging (fire-and-forget)
     logError: (data) => ipcRenderer.send('log-renderer-error', data),
+    // Persistent perf/diagnostics line (fire-and-forget) → media-viewer-perf.log (survives quit).
+    logPerf: (data) => ipcRenderer.send('log-perf', data),
 
     // App-close confirm: main intercepts window close and asks the renderer (which owns
     // tournament state) whether it may proceed. onAppCloseRequested returns an unsubscribe fn.

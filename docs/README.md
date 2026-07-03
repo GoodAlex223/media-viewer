@@ -102,6 +102,7 @@ Central index for all project documentation.
 [Extraction Timing Plan]: archive/plans/2026-06-25-extraction-timing.md
 [Weekly Reviews First Run Plan]: archive/plans/2026-06-26-weekly-reviews-first-run.md
 [Tournament Exit Affordances Plan]: archive/plans/2026-06-30-tournament-exit-affordances.md
+[CW-T Tournament Correctness & Hardening Plan]: archive/plans/2026-07-01-cw-t-tournament-correctness-hardening.md
 
 ## Design Specs
 
@@ -182,6 +183,7 @@ Central index for all project documentation.
 [Extraction Timing]: superpowers/specs/2026-06-25-extraction-timing-design.md
 [Weekly Reviews First Run]: superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md
 [Tournament Exit Affordances]: superpowers/specs/2026-06-30-tournament-exit-affordances-design.md
+[CW-T Tournament Correctness & Hardening]: superpowers/specs/2026-07-01-cw-t-tournament-correctness-hardening-design.md
 
 ## Security Audits
 

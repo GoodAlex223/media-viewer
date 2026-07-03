@@ -5,7 +5,8 @@
 // ES module import, so it does NOT use the conditional CJS export pattern.
 
 // Session-only undo is capped to bound RAM on long sessions over large folders.
-// Each history entry holds a full O(n) strategy snapshot; 100 × O(n) is the ceiling.
+// Most history entries hold a cheap O(1) inverse-delta; only a pick that empties a round
+// (round-boundary) captures a full O(n) strategy snapshot, so 100 × O(n) is the worst-case ceiling.
 const UNDO_HISTORY_CAP = 100;
 
 export class SwissStrategy {
@@ -305,6 +306,40 @@ export class SwissStrategy {
         s.gamesPlayed = json.gamesPlayed;
         return s;
     }
+
+    // Capture a cheap undo token for the pick ABOUT to be recorded (call before
+    // recordResult/recordDraw mutates). Returns a full snapshot when this pick empties the
+    // round (so undo can also rewind the subsequent non-deterministic round rebuild), else a
+    // compact inverse-delta holding just the current pair. The engine augments a delta with
+    // `winner` (result) or `outcome` (draw) before storing it.
+    captureUndo() {
+        if (this.roundQueue.length <= 1) {
+            return { kind: 'snapshot', strategyStateSnapshot: this.serialize() };
+        }
+        return { kind: 'delta', pair: [...this.roundQueue[0]] };
+    }
+
+    // Reverse a pick from a captureUndo() record (augmented by the engine).
+    applyUndo(record) {
+        if (record.kind === 'snapshot') {
+            const restored = SwissStrategy.deserialize(record.strategyStateSnapshot);
+            Object.assign(this, restored);
+            return;
+        }
+        const [a, b] = record.pair;
+        this.roundQueue.unshift([a, b]);
+        this.playedPairs.delete(this._pairKey(a, b));
+        this.gamesPlayed--;
+        if (record.winner !== undefined) {
+            // result: the winner gained one win
+            this.winCounts.set(record.winner, (this.winCounts.get(record.winner) ?? 0) - 1);
+        } else if (record.outcome === 'win') {
+            // draw 'win': both files gained a win
+            this.winCounts.set(a, (this.winCounts.get(a) ?? 0) - 1);
+            this.winCounts.set(b, (this.winCounts.get(b) ?? 0) - 1);
+        }
+        // draw 'lose': neither gained a win → nothing to decrement
+    }
 }
 
 export class TournamentEngine {
@@ -323,7 +358,8 @@ export class TournamentEngine {
     }
 
     recordResult(winner, loser) {
-        const snapshot = this.strategy.serialize();
+        const undo = this.strategy.captureUndo();
+        undo.winner = winner; // augment a delta; ignored by applyUndo for a snapshot
         const progressBefore = this.strategy.getProgress();
         this.strategy.recordResult(winner, loser);
         this.history.push({
@@ -332,17 +368,17 @@ export class TournamentEngine {
             round: progressBefore.round,
             gameIndex: progressBefore.gamesPlayed,
             timestamp: Date.now(),
-            strategyStateSnapshot: snapshot,
-            // Engine-level files list is captured separately from strategyStateSnapshot so
-            // undo() can rewind a removeFile() that happened between picks (getTierBreakdown
-            // and handleApply read engine.files, not strategy.files).
+            undo,
+            // Engine-level files list captured separately so undo() can rewind a removeFile()
+            // that happened between picks (getTierBreakdown/handleApply read engine.files).
             filesSnapshot: [...this.files],
         });
         if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
     }
 
     recordDraw(a, b, outcome) {
-        const snapshot = this.strategy.serialize();
+        const undo = this.strategy.captureUndo();
+        undo.outcome = outcome; // augment a delta; ignored by applyUndo for a snapshot
         const progressBefore = this.strategy.getProgress();
         this.strategy.recordDraw(a, b, outcome);
         this.history.push({
@@ -353,9 +389,7 @@ export class TournamentEngine {
             round: progressBefore.round,
             gameIndex: progressBefore.gamesPlayed,
             timestamp: Date.now(),
-            strategyStateSnapshot: snapshot,
-            // Mirror recordResult: capture engine.files so undo() can rewind a removeFile()
-            // that happened between picks.
+            undo,
             filesSnapshot: [...this.files],
         });
         if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
@@ -364,16 +398,34 @@ export class TournamentEngine {
     undo() {
         if (this.history.length === 0) return;
         const entry = this.history.pop();
-        const StrategyCtor = Object.getPrototypeOf(this.strategy).constructor;
-        const restored = StrategyCtor.deserialize(entry.strategyStateSnapshot);
-        Object.assign(this.strategy, restored);
+        this.strategy.applyUndo(entry.undo);
         if (entry.filesSnapshot) {
             this.files = [...entry.filesSnapshot];
         }
     }
 
-    removeFile(filePath) {
+    // `trackUndo: true` records a snapshot-based undo entry BEFORE removing, so a later undo()
+    // fully reverses a mid-tournament removal — restoring the strategy state (files/byes/
+    // winCounts/roundQueue), not just engine.files. Without it, the O(1) inverse-delta of the
+    // picks recorded before the removal cannot resurrect the removed file's strategy state,
+    // corrupting the tournament on undo-past-a-removal. Used by the renderer's -1 auto-prune
+    // (externally-missing file), which is reversed via engine.undo(). Left false (default) for
+    // the special-move path, whose undo is handled by the renderer's dedicated special branch
+    // (restores file/mediaFiles/caches), not engine.undo().
+    removeFile(filePath, { trackUndo = false } = {}) {
         if (!this.files.includes(filePath)) return;
+        if (trackUndo) {
+            // Same entry shape as a boundary-snapshot pick, so undo() reverses it with no extra
+            // dispatch: applyUndo restores the strategy from the snapshot, filesSnapshot restores
+            // engine.files. Snapshot is captured BEFORE the mutations below.
+            this.history.push({
+                kind: 'removeFile',
+                file: filePath,
+                undo: { kind: 'snapshot', strategyStateSnapshot: this.strategy.serialize() },
+                filesSnapshot: [...this.files],
+            });
+            if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
+        }
         this.files = this.files.filter((f) => f !== filePath);
         this.strategy.removeFile(filePath);
     }

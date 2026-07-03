@@ -36,6 +36,10 @@ function makeMockStrategy(pairSequence) {
             gamesTotal: pairSequence.length,
         })),
         serialize: vi.fn(() => ({ idx, removed: Array.from(removed) })),
+        captureUndo: vi.fn(() => ({ kind: 'delta', pair: pairSequence[idx] ? [...pairSequence[idx]] : [] })),
+        applyUndo: vi.fn(() => {
+            idx = Math.max(0, idx - 1);
+        }),
     };
 
     Object.setPrototypeOf(mock, { constructor: StrategyClass });
@@ -67,7 +71,7 @@ describe('TournamentEngine.getCurrentPair + recordResult', () => {
         expect(eng.getCurrentPair()).toBeNull();
     });
 
-    it('recordResult appends to history with a snapshot', () => {
+    it('recordResult appends to history with an undo record', () => {
         const mock = makeMockStrategy([['a.jpg', 'b.jpg']]);
         const eng = new TournamentEngine(['a.jpg', 'b.jpg'], mock);
         eng.getCurrentPair();
@@ -77,26 +81,24 @@ describe('TournamentEngine.getCurrentPair + recordResult', () => {
         expect(eng.history.length).toBe(1);
         expect(eng.history[0].winner).toBe('a.jpg');
         expect(eng.history[0].loser).toBe('b.jpg');
-        expect(eng.history[0].strategyStateSnapshot).toBeTruthy();
+        expect(eng.history[0].undo).toBeTruthy();
+        expect(eng.history[0].undo.winner).toBe('a.jpg');
     });
 });
 
 describe('TournamentEngine.undo', () => {
-    it('pops the last history entry and restores strategy state', () => {
+    it('pops the last history entry and calls the strategy applyUndo', () => {
         const mock = makeMockStrategy([['a.jpg', 'b.jpg']]);
-        const StrategyClass = Object.getPrototypeOf(mock).constructor;
-        StrategyClass.deserialize = vi.fn(() => ({}));
-
         const eng = new TournamentEngine(['a.jpg', 'b.jpg'], mock);
         eng.getCurrentPair();
         eng.recordResult('a.jpg', 'b.jpg');
         expect(eng.history.length).toBe(1);
 
-        const snapshot = eng.history[0].strategyStateSnapshot;
+        const entry = eng.history[0];
         eng.undo();
 
         expect(eng.history.length).toBe(0);
-        expect(StrategyClass.deserialize).toHaveBeenCalledWith(snapshot);
+        expect(mock.applyUndo).toHaveBeenCalledWith(entry.undo);
     });
 
     it('undo on empty history is a no-op', () => {
@@ -252,7 +254,7 @@ describe('TournamentEngine.recordDraw', () => {
         expect(eng.history[0].outcome).toBe('win');
         expect(eng.history[0].a).toBe(pair.left);
         expect(eng.history[0].b).toBe(pair.right);
-        expect(eng.history[0].strategyStateSnapshot).toBeTruthy();
+        expect(eng.history[0].undo).toBeTruthy();
         expect(eng.history[0].filesSnapshot).toBeTruthy();
         expect(eng.strategy.winCounts.get(pair.left)).toBe(1);
         expect(eng.strategy.winCounts.get(pair.right)).toBe(1);
@@ -316,5 +318,148 @@ describe('TournamentEngine undo-history cap', () => {
         // same pair is current again
         const again = eng.getCurrentPair();
         expect([again.left, again.right].sort()).toEqual([pair.left, pair.right].sort());
+    });
+});
+
+describe('TournamentEngine inverse-delta undo (real SwissStrategy)', () => {
+    it('a non-boundary pick is stored as a delta and undo restores the exact pair + win counts', () => {
+        // 6 files → round 1 has 3 pairs; the first pick leaves the queue non-empty (delta).
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        const p = eng.getCurrentPair();
+        eng.recordResult(p.left, p.right);
+        expect(eng.history[0].undo.kind).toBe('delta');
+        expect(eng.strategy.winCounts.get(p.left)).toBe(1);
+        expect(eng.strategy.gamesPlayed).toBe(1);
+
+        eng.undo();
+        const again = eng.getCurrentPair();
+        expect([again.left, again.right].sort()).toEqual([p.left, p.right].sort());
+        expect(eng.strategy.winCounts.get(p.left)).toBe(0);
+        expect(eng.strategy.gamesPlayed).toBe(0);
+        expect(eng.history.length).toBe(0);
+    });
+
+    it('the pick that empties a round is stored as a snapshot', () => {
+        // 2 files → round 1 has exactly 1 pair; the only pick empties the round (snapshot).
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg'], new SwissStrategy(), { rounds: 3 });
+        const p = eng.getCurrentPair();
+        eng.recordResult(p.left, p.right);
+        expect(eng.history[0].undo.kind).toBe('snapshot');
+    });
+
+    it('undoing a draw-win delta decrements both files', () => {
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        const p = eng.getCurrentPair();
+        eng.recordDraw(p.left, p.right, 'win');
+        expect(eng.strategy.winCounts.get(p.left)).toBe(1);
+        expect(eng.strategy.winCounts.get(p.right)).toBe(1);
+        eng.undo();
+        expect(eng.strategy.winCounts.get(p.left)).toBe(0);
+        expect(eng.strategy.winCounts.get(p.right)).toBe(0);
+        expect(eng.strategy.gamesPlayed).toBe(0);
+    });
+
+    it('undoing a draw-lose delta leaves win counts unchanged', () => {
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        const p = eng.getCurrentPair();
+        eng.recordDraw(p.left, p.right, 'lose');
+        expect(eng.strategy.winCounts.get(p.left)).toBe(0);
+        eng.undo();
+        expect(eng.strategy.winCounts.get(p.left)).toBe(0);
+        expect(eng.strategy.gamesPlayed).toBe(0);
+    });
+
+    it('a streak of picks undone in reverse returns to the initial state (delta ≡ snapshot)', () => {
+        const files = Array.from({ length: 8 }, (_, i) => `f${i}.jpg`);
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        const picks = [];
+        for (let i = 0; i < 3; i++) {
+            const p = eng.getCurrentPair();
+            picks.push([p.left, p.right].sort());
+            eng.recordResult(p.left, p.right);
+        }
+        for (let i = 2; i >= 0; i--) {
+            eng.undo();
+            const p = eng.getCurrentPair();
+            expect([p.left, p.right].sort()).toEqual(picks[i]);
+        }
+        expect(eng.strategy.gamesPlayed).toBe(0);
+        for (const f of files) expect(eng.strategy.winCounts.get(f)).toBe(0);
+    });
+});
+
+describe('TournamentEngine undo-history cap pins', () => {
+    it('undo still works at the cap boundary (most recent pick is reversible)', () => {
+        const files = Array.from({ length: 250 }, (_, i) => `f${i}.jpg`);
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        let recorded = 0;
+        while (recorded < 105) {
+            const pair = eng.getCurrentPair();
+            if (!pair) break;
+            eng.recordResult(pair.left, pair.right);
+            recorded++;
+        }
+        expect(eng.history.length).toBe(100); // capped
+        const lastWinner = eng.history[eng.history.length - 1].winner;
+        const winsBefore = eng.strategy.winCounts.get(lastWinner);
+        eng.undo();
+        expect(eng.history.length).toBe(99);
+        expect(eng.strategy.winCounts.get(lastWinner)).toBe(winsBefore - 1);
+    });
+
+    it('recordDraw is also capped at 100 entries', () => {
+        const files = Array.from({ length: 250 }, (_, i) => `f${i}.jpg`);
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        let recorded = 0;
+        while (recorded < 101) {
+            const pair = eng.getCurrentPair();
+            if (!pair) break;
+            eng.recordDraw(pair.left, pair.right, recorded % 2 === 0 ? 'win' : 'lose');
+            recorded++;
+        }
+        expect(recorded).toBe(101);
+        expect(eng.history.length).toBe(100);
+    });
+});
+
+describe('TournamentEngine removeFile trackUndo (undo across a mid-tournament removal)', () => {
+    it('undoing past a trackUndo removal restores full strategy state, not just engine.files', () => {
+        // 6 files → round-1 picks are non-boundary deltas (the case that cannot resurrect a
+        // removed file's strategy state without a snapshot). Mirrors the -1 auto-prune path.
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+
+        const p1 = eng.getCurrentPair();
+        eng.recordResult(p1.left, p1.right); // delta
+
+        eng.removeFile('c.jpg', { trackUndo: true }); // records a snapshot-based undo entry
+        expect(eng.files).not.toContain('c.jpg');
+        expect(eng.strategy.files).not.toContain('c.jpg');
+
+        const p2 = eng.getCurrentPair();
+        eng.recordResult(p2.left, p2.right); // delta
+
+        eng.undo(); // reverse pick 2 (delta)
+        eng.undo(); // reverse the removal (snapshot) — strategy AND files must have c.jpg back
+        expect(eng.files).toContain('c.jpg');
+        expect(eng.strategy.files).toContain('c.jpg'); // the regression this guards against
+        expect(eng.strategy.winCounts.has('c.jpg')).toBe(true);
+
+        eng.undo(); // reverse pick 1 (delta) → fully pristine
+        expect(eng.strategy.files.slice().sort()).toEqual([...files].sort());
+        expect(eng.strategy.gamesPlayed).toBe(0);
+        expect(eng.strategy.byes.size).toBe(0); // no phantom bye left by the removal
+        for (const f of files) expect(eng.strategy.winCounts.get(f)).toBe(0);
+    });
+
+    it('removeFile defaults to no undo tracking (special-move path handles its own undo)', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+        const before = eng.history.length;
+        eng.removeFile('c.jpg'); // no options → default { trackUndo: false }
+        expect(eng.history.length).toBe(before);
+        expect(eng.files).not.toContain('c.jpg');
     });
 });

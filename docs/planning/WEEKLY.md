@@ -26,16 +26,16 @@
 > Everything tournament lives on the same files (`media-viewer.js` tournament methods, `tournament.js`, `tournament-engine.js`) so it batches into one branch to avoid collisions. The 2 HIGH-severity 🔵 bugs are the risky core (🏆); the 🟤 items are mechanical debt cleaned on the same branch. **Several 🟤 items are the same code path as HIGH bug #2** — fixing the reconciliation/can't-enter bug naturally subsumes the [2026-06-25] persistence-durability trio, so they close as a side effect rather than as separate work.
 
 **🔵 HIGH-severity (mandatory user exception — BACKLOG 🔵 [2026-07-01]):**
-- [ ] **Cannot enter tournament mode after adding new media + AI sort** — 3 SP, 🔴 HIGH. AI sort reorders `mediaFiles` and newly-added files are absent from the engine's saved file-set, so resume reconciliation + path→index lookup mismatch → `showTournamentPair` resolves `getMediaIndex(pair.left/right)` to −1 and falls into the "file missing" branch instead of rendering a pair. **Subsumes** 🟤 [2026-06-25] `handleResumeReconciled` + `showTournamentPair`-missing-file durability items (same path). Affected: `media-viewer.js` (`enterTournamentMode` ~4145, `showTournamentPair`→`getMediaIndex` ~4448-4470, `getMediaIndex` ~1090), `tournament.js` (`handleResumeReconciled`).
-- [ ] **Tournament mode unusable / freezes on 24k+ after AI sort (Continue stuck, Both Win hangs)** — 5 SP, 🔴 HIGH. Residual after Group P2/PR #55: `TournamentEngine.deserialize`/SwissStrategy reconstruction on resume + a full `showCompareMedia` DOM teardown/reflow per pair remain on the critical path. Reduce per-pair DOM teardown/reflow + defer/stream the deserialize cost. Affected: `media-viewer.js` (`enterTournamentMode` resume ~4145, `showTournamentPair`→`showCompareMedia` ~4448-4496, `handleTournamentDraw` ~4513, compare DOM teardown ~2910-2940), `tournament-engine.js` (`deserialize`/SwissStrategy rebuild). **Gates on a real-24k manual smoke.**
+- [x] **Cannot enter tournament mode after adding new media + AI sort** — ✅ Done (Task 1; live-engine fast-path reconcile gap). 3 SP, 🔴 HIGH. AI sort reorders `mediaFiles` and newly-added files are absent from the engine's saved file-set, so resume reconciliation + path→index lookup mismatch → `showTournamentPair` resolves `getMediaIndex(pair.left/right)` to −1 and falls into the "file missing" branch instead of rendering a pair. **Subsumes** 🟤 [2026-06-25] `handleResumeReconciled` + `showTournamentPair`-missing-file durability items (same path). Affected: `media-viewer.js` (`enterTournamentMode` ~4145, `showTournamentPair`→`getMediaIndex` ~4448-4470, `getMediaIndex` ~1090), `tournament.js` (`handleResumeReconciled`).
+- [x] **Tournament mode unusable / freezes on 24k+ after AI sort (Continue stuck, Both Win hangs)** — ✅ Done (Tasks 2-3; O(1) inverse-delta undo + fast-path render). 5 SP, 🔴 HIGH. Residual after Group P2/PR #55: `TournamentEngine.deserialize`/SwissStrategy reconstruction on resume + a full `showCompareMedia` DOM teardown/reflow per pair remain on the critical path. Reduce per-pair DOM teardown/reflow + defer/stream the deserialize cost. Affected: `media-viewer.js` (`enterTournamentMode` resume ~4145, `showTournamentPair`→`showCompareMedia` ~4448-4496, `handleTournamentDraw` ~4513, compare DOM teardown ~2910-2940), `tournament-engine.js` (`deserialize`/SwissStrategy rebuild). **Gates on a real-24k manual smoke.**
 
 **🟤 Auto-Generated (adjacent tournament debt, same branch):**
-- [ ] **`moveToSpecialFolder` durable persist + stale comment** — 🟤 [2026-06-25] PR #55. Make the tournament special-move engine removal `await flush()` (or update the misleading "persist before navigation" comment). `media-viewer.js` (`moveToSpecialFolder` tournament branch).
-- [ ] **Best-effort discard can orphan `.tournament_state.json`** — 🟤 [2026-06-30] PR #58. Reconcile/retry the orphaned-state delete on next failed-delete or startup so a discarded tournament doesn't re-prompt resume. `tournament.js` (`handleDiscard`), `media-viewer.js` (resume-prompt entry).
-- [ ] **`onAppCloseRequested` unsubscribe fn discarded in `setupEventListeners`** — 🟤 [2026-06-30] PR #58. Store the returned `removeListener` cleanup (or document why it's unnecessary), per the CLAUDE.md IPC-listener gotcha. `media-viewer.js` (~1976).
-- [ ] **Close-confirm re-entrancy guard** — 🟤 [2026-06-30] T1. A 2nd close request re-binds the leave-prompt continuation; add an `isLeavePromptOpen` guard in `handleAppCloseRequest`. `media-viewer.js`.
-- [ ] **Fix stale `tournament-mode.test.js` "Continue resumes" E2E + add exit-button incomplete-tournament precondition + `#tournamentExitBtn` aria-label** — 🟤 [2026-06-30] T1 (3 XS items). Update the history-free-v2 assertion (expect `0`), assert `isTournamentMode===true` before the exit click, add `aria-label="Pause / leave tournament"`. `tests/e2e/tournament-mode.test.js`, `index.html`.
-- [ ] **`getMediaIndex` double-lookup micro-opt + undo-cap / SwissStrategy test pins** — 🟤 [2026-06-24] P2. `has`+`get`→single `get`; add at-cap-boundary undo + `recordDraw`-cap tests + SwissStrategy cross-bucket-carry-over / don't-double-bye unit pins. `media-viewer.js`, `tests/tournament-engine.test.js`, `tests/swiss-strategy.test.js`.
+- [x] **`moveToSpecialFolder` durable persist + stale comment** — ✅ Done (Task 4; comment corrected to the debounced design). 🟤 [2026-06-25] PR #55. Make the tournament special-move engine removal `await flush()` (or update the misleading "persist before navigation" comment). `media-viewer.js` (`moveToSpecialFolder` tournament branch).
+- [x] **Best-effort discard can orphan `.tournament_state.json`** — ✅ Done (Task 4; retry-once-then-log). 🟤 [2026-06-30] PR #58. Reconcile/retry the orphaned-state delete on next failed-delete or startup so a discarded tournament doesn't re-prompt resume. `tournament.js` (`handleDiscard`), `media-viewer.js` (resume-prompt entry).
+- [x] **`onAppCloseRequested` unsubscribe fn discarded in `setupEventListeners`** — ✅ Done (Task 4; stored in `this._removeAppCloseListener`). 🟤 [2026-06-30] PR #58. Store the returned `removeListener` cleanup (or document why it's unnecessary), per the CLAUDE.md IPC-listener gotcha. `media-viewer.js` (~1976).
+- [x] **Close-confirm re-entrancy guard** — ✅ Done (Task 4; guard on `#tournamentResumeModal` display). 🟤 [2026-06-30] T1. A 2nd close request re-binds the leave-prompt continuation; add an `isLeavePromptOpen` guard in `handleAppCloseRequest`. `media-viewer.js`.
+- [x] **Fix stale `tournament-mode.test.js` "Continue resumes" E2E + add exit-button incomplete-tournament precondition + `#tournamentExitBtn` aria-label** — ✅ Done (Task 6; E2E 6/6). 🟤 [2026-06-30] T1 (3 XS items). Update the history-free-v2 assertion (expect `0`), assert `isTournamentMode===true` before the exit click, add `aria-label="Pause / leave tournament"`. `tests/e2e/tournament-mode.test.js`, `index.html`.
+- [x] **`getMediaIndex` double-lookup micro-opt + undo-cap / SwissStrategy test pins** — ✅ Done (Task 5). 🟤 [2026-06-24] P2. `has`+`get`→single `get`; add at-cap-boundary undo + `recordDraw`-cap tests + SwissStrategy cross-bucket-carry-over / don't-double-bye unit pins. `media-viewer.js`, `tests/tournament-engine.test.js`, `tests/swiss-strategy.test.js`.
 
 ### Group CW-D: Docs & CLAUDE.md hygiene [batch] 🟤
 **Domain**: docs / CLAUDE.md (`revise-claude-md` consolidation pass)
@@ -95,7 +95,7 @@
 |-------|----|
 | **Group CW-T: Tournament correctness, persistence & hardening** [batch] 🏆 (day 1 of 3) | (10) |
 
-- [ ] Diagnose + fix "cannot enter tournament after new media + AI sort" (reconciliation / path→index; subsumes [2026-06-25] persistence-durability trio) (3 SP)
+- [x] Diagnose + fix "cannot enter tournament after new media + AI sort" (reconciliation / path→index; subsumes [2026-06-25] persistence-durability trio) (3 SP) — ✅ live-engine fast-path reconcile gap; `reconcileWithFiles` on every entry
 
 **Daily total**: ~3 SP (of the 10 SP batch)
 
@@ -108,7 +108,7 @@
 |-------|----|
 | **Group CW-T: Tournament correctness, persistence & hardening** [batch] 🏆 (day 2 of 3) | (10) |
 
-- [ ] Reduce `showCompareMedia` per-pair DOM teardown/reflow + defer/stream `deserialize` on resume (5 SP) — **gates on real-24k manual smoke**
+- [x] Reduce `showCompareMedia` per-pair DOM teardown/reflow + defer/stream `deserialize` on resume (5 SP) — ✅ `showTournamentPairFast` wrapper-reuse render + O(1) inverse-delta undo (the real per-pick O(n) cost was `strategy.serialize()`, not deserialize); **real-24k smoke PASSED**
 
 **Daily total**: ~5 SP (of the 10 SP batch)
 
@@ -122,7 +122,7 @@
 | **Group CW-T** [batch] 🏆 (day 3 of 3 — debt sweep + PR) | (10) |
 | **Group CW-D: Docs & CLAUDE.md hygiene** [batch] (start) | (4) |
 
-- [ ] Tournament leave-flow 🟤 (discard-orphan reconcile, `onAppCloseRequested` unsubscribe, re-entrancy guard, stale E2E fix + precondition + aria-label, `getMediaIndex` micro-opt, undo-cap / SwissStrategy test pins); unit tests; **CW-T PR** (2 SP)
+- [x] Tournament leave-flow 🟤 (discard-orphan retry, `onAppCloseRequested` unsubscribe, re-entrancy guard, stale E2E fix + precondition + aria-label, `getMediaIndex` micro-opt, undo-cap / SwissStrategy test pins); unit tests — ✅ all 6 🟤 done (Tasks 4-6); **CW-T PR pending user go**
 - [ ] Begin CLAUDE.md consolidation (fold 3 tournament gotchas + document post-fix debounced persistence / v2 payload)
 
 **Daily total**: ~2 SP CW-T + CW-D start
@@ -174,7 +174,7 @@
 
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
-| CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | Planned |
+| CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ Done (branch `fix/cw-t-tournament-hardening`, real-24k smoke PASSED; **PR pending**) |
 | CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | Planned |
 | CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | Planned |
 | CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
