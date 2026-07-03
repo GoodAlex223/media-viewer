@@ -2431,8 +2431,14 @@ describe('handleAppCloseRequest', () => {
         expect(allowAppClose).toHaveBeenCalledTimes(1);
     });
 
-    it('re-entrancy guard: no-ops when the leave/resume modal is already open', () => {
-        globalThis.document = { getElementById: () => ({ style: { display: 'flex' } }) };
+    it('re-entrancy guard: no-ops when the LEAVE prompt is already open', () => {
+        globalThis.document = {
+            getElementById: (id) => {
+                if (id === 'tournamentResumeModal') return { style: { display: 'flex' } };
+                if (id === 'tournamentResumeTitle') return { textContent: 'Leave tournament?' };
+                return null;
+            },
+        };
         const ctx = {
             isTournamentMode: true,
             tournament: { engine: { isComplete: () => false } },
@@ -2441,6 +2447,22 @@ describe('handleAppCloseRequest', () => {
         handleAppCloseRequest.call(ctx);
         expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
         expect(allowAppClose).not.toHaveBeenCalled();
+    });
+
+    it('does NOT guard when the RESUME prompt is open — window stays closable (allows close)', () => {
+        // The 'Resume tournament?' prompt reuses the SAME modal but shows while isTournamentMode
+        // is still false (before entering); clicking X during it must fall through to
+        // allowAppClose(), not be swallowed by the leave-prompt re-entrancy guard.
+        globalThis.document = {
+            getElementById: (id) => {
+                if (id === 'tournamentResumeModal') return { style: { display: 'flex' } };
+                if (id === 'tournamentResumeTitle') return { textContent: 'Resume tournament?' };
+                return null;
+            },
+        };
+        const ctx = { isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() };
+        handleAppCloseRequest.call(ctx);
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
     });
 
     it('still allows close if the handler throws (fail-safe)', () => {

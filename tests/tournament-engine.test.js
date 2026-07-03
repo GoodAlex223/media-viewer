@@ -424,3 +424,42 @@ describe('TournamentEngine undo-history cap pins', () => {
         expect(eng.history.length).toBe(100);
     });
 });
+
+describe('TournamentEngine removeFile trackUndo (undo across a mid-tournament removal)', () => {
+    it('undoing past a trackUndo removal restores full strategy state, not just engine.files', () => {
+        // 6 files → round-1 picks are non-boundary deltas (the case that cannot resurrect a
+        // removed file's strategy state without a snapshot). Mirrors the -1 auto-prune path.
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+
+        const p1 = eng.getCurrentPair();
+        eng.recordResult(p1.left, p1.right); // delta
+
+        eng.removeFile('c.jpg', { trackUndo: true }); // records a snapshot-based undo entry
+        expect(eng.files).not.toContain('c.jpg');
+        expect(eng.strategy.files).not.toContain('c.jpg');
+
+        const p2 = eng.getCurrentPair();
+        eng.recordResult(p2.left, p2.right); // delta
+
+        eng.undo(); // reverse pick 2 (delta)
+        eng.undo(); // reverse the removal (snapshot) — strategy AND files must have c.jpg back
+        expect(eng.files).toContain('c.jpg');
+        expect(eng.strategy.files).toContain('c.jpg'); // the regression this guards against
+        expect(eng.strategy.winCounts.has('c.jpg')).toBe(true);
+
+        eng.undo(); // reverse pick 1 (delta) → fully pristine
+        expect(eng.strategy.files.slice().sort()).toEqual([...files].sort());
+        expect(eng.strategy.gamesPlayed).toBe(0);
+        expect(eng.strategy.byes.size).toBe(0); // no phantom bye left by the removal
+        for (const f of files) expect(eng.strategy.winCounts.get(f)).toBe(0);
+    });
+
+    it('removeFile defaults to no undo tracking (special-move path handles its own undo)', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
+        const before = eng.history.length;
+        eng.removeFile('c.jpg'); // no options → default { trackUndo: false }
+        expect(eng.history.length).toBe(before);
+        expect(eng.files).not.toContain('c.jpg');
+    });
+});

@@ -404,8 +404,28 @@ export class TournamentEngine {
         }
     }
 
-    removeFile(filePath) {
+    // `trackUndo: true` records a snapshot-based undo entry BEFORE removing, so a later undo()
+    // fully reverses a mid-tournament removal — restoring the strategy state (files/byes/
+    // winCounts/roundQueue), not just engine.files. Without it, the O(1) inverse-delta of the
+    // picks recorded before the removal cannot resurrect the removed file's strategy state,
+    // corrupting the tournament on undo-past-a-removal. Used by the renderer's -1 auto-prune
+    // (externally-missing file), which is reversed via engine.undo(). Left false (default) for
+    // the special-move path, whose undo is handled by the renderer's dedicated special branch
+    // (restores file/mediaFiles/caches), not engine.undo().
+    removeFile(filePath, { trackUndo = false } = {}) {
         if (!this.files.includes(filePath)) return;
+        if (trackUndo) {
+            // Same entry shape as a boundary-snapshot pick, so undo() reverses it with no extra
+            // dispatch: applyUndo restores the strategy from the snapshot, filesSnapshot restores
+            // engine.files. Snapshot is captured BEFORE the mutations below.
+            this.history.push({
+                kind: 'removeFile',
+                file: filePath,
+                undo: { kind: 'snapshot', strategyStateSnapshot: this.strategy.serialize() },
+                filesSnapshot: [...this.files],
+            });
+            if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
+        }
         this.files = this.files.filter((f) => f !== filePath);
         this.strategy.removeFile(filePath);
     }

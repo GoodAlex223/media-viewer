@@ -4244,11 +4244,20 @@ class MediaViewer {
     // a renderer bug can never make the app unclosable.
     handleAppCloseRequest() {
         try {
-            // Re-entrancy guard: if a leave/resume prompt is already open, a 2nd close request
-            // must not re-bind its continuation. The modal's display state is the source of
-            // truth — cleanup() resets it to 'none' on every exit path (Save/Discard/Cancel).
+            // Re-entrancy guard: suppress a 2nd close request ONLY while the *leave* prompt is
+            // open (title 'Leave tournament?'), so it can't re-bind the continuation. The same
+            // modal element is reused for the 'Resume tournament?' prompt (shown while
+            // isTournamentMode is still false, before entering) — clicking X during THAT must
+            // fall through to allowAppClose() below, not be swallowed here (else the window is
+            // unclosable during the resume prompt).
             const leaveModal = document.getElementById('tournamentResumeModal');
-            if (leaveModal && leaveModal.style.display === 'flex') {
+            const leaveTitle = document.getElementById('tournamentResumeTitle');
+            if (
+                leaveModal &&
+                leaveModal.style.display === 'flex' &&
+                leaveTitle &&
+                leaveTitle.textContent === 'Leave tournament?'
+            ) {
                 return;
             }
             if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
@@ -4513,7 +4522,10 @@ class MediaViewer {
                     `sorted=${this.isSortedByPrediction || this.isSortedBySimilarity} sample=${missing}`
             );
             this.showNotification(`File missing — removed from tournament: ${missing}`, 'warning');
-            this.tournament.engine.removeFile(missing);
+            // trackUndo: record a snapshot-based undo entry so undoing back past this prune fully
+            // restores the strategy state (not just engine.files) — the picks' O(1) inverse-deltas
+            // can't resurrect a removed file's strategy state on their own.
+            this.tournament.engine.removeFile(missing, { trackUndo: true });
             this.tournament._schedulePersist(this.baseFolderPath);
             // Bound the retry: each retry removes exactly one engine file, so recursion is
             // naturally bounded by the engine size; the depth cap is belt-and-suspenders against
