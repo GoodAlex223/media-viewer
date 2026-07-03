@@ -239,7 +239,10 @@ parent P1 TODO item stays **OPEN** (PR2 + PR3 remain).
 **Key decisions**:
 - **Quality-lock ⇒ no K-cap** (user: "quality must not change at all"). The big O(n·K) neighbor-graph build
   (K≈1,550 @ 24k) is untouched; PR1 makes it transparent + cancelable (off-main-thread already), not faster.
-  Raw-speed lives in PR2/PR3 + deferred #7.
+  PR2 (hash off-thread) removes the cold-cache hashing wait (hash sorts only) and PR3 removes the ~40s
+  cache-load wait, but NEITHER touches the O(n·K) graph-build floor — that moves only via #7 (parallel build)
+  or relaxing the quality-lock (a bounded K-cap). The AI-prediction sort has no graph build and is fully
+  addressed by PR3 + PR1.
 - **Progress UI = Option C** (chosen via visual-companion mockups over a centered modal / docked bar) — grow
   the existing progress notification, for consistency with where sort progress already appears.
 - **Fallback proof needs 3 legs** — capture-baseline pins *before* the swap, the swap leaving them unchanged,
@@ -262,7 +265,9 @@ progress card deferred to the manual smoke (24k folders aren't E2E-fixturable).
 parallelization (#7, measure-first trigger); CLAUDE.md/docs drift from the dead-code removal.
 
 **Branch**: `feature/sort-responsiveness-core` → **PR #54 MERGED 2026-06-20** (merge `7b78a56`, branch deleted); manual 24k smoke **PASSED 2026-06-19**.
-PR2 (hash off-thread) + PR3 (incremental cache-load) remain for the full P1 win.
+PR2 (hash off-thread, hash sorts only) + PR3 (incremental cache-load, ~40s) remain — they remove the
+hashing + cache-load waits but NOT the O(n·K) neighbor-graph-build floor (that needs #7 or a K-cap); the
+AI-prediction sort has no graph build and is already fully addressed by PR3 + PR1.
 
 ### 2026-06-17 — Group CW-4: Process & security guards (pre-commit secret guard + pre-archive checklist)
 
