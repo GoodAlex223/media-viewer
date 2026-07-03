@@ -198,3 +198,7 @@ When modifying this codebase:
 - Worker changes may impact performance significantly
 - The renderer file is large — search before adding duplicates
 - Run `npm test` before committing (pre-commit hook enforces this); worker exports require the conditional CJS pattern so tests can import them
+
+## Maintenance
+
+Manual-only. This file carries no `AUTO-MANAGED` / `MANUAL` section markers (deliberately stripped in PR #52) — `revise-claude-md` / `claude-md-improver` edit the prose directly rather than keying on markers. Keep it durable-rules-only; audit quarterly or whenever it crosses ~200 lines / its tooling materially changes.
