@@ -122,7 +122,7 @@
 | **Group CW-T** [batch] 🏆 (day 3 of 3 — debt sweep + PR) | (10) |
 | **Group CW-D: Docs & CLAUDE.md hygiene** [batch] (start) | (4) |
 
-- [x] Tournament leave-flow 🟤 (discard-orphan retry, `onAppCloseRequested` unsubscribe, re-entrancy guard, stale E2E fix + precondition + aria-label, `getMediaIndex` micro-opt, undo-cap / SwissStrategy test pins); unit tests — ✅ all 6 🟤 done (Tasks 4-6); **CW-T PR pending user go**
+- [x] Tournament leave-flow 🟤 (discard-orphan retry, `onAppCloseRequested` unsubscribe, re-entrancy guard, stale E2E fix + precondition + aria-label, `getMediaIndex` micro-opt, undo-cap / SwissStrategy test pins); unit tests — ✅ all 6 🟤 done (Tasks 4-6); **CW-T MERGED 2026-07-03 via PR #59 (`ae9588d`)**
 - [ ] Begin CLAUDE.md consolidation (fold 3 tournament gotchas + document post-fix debounced persistence / v2 payload)
 
 **Daily total**: ~2 SP CW-T + CW-D start
@@ -174,7 +174,7 @@
 
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
-| CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ Done (branch `fix/cw-t-tournament-hardening`, real-24k smoke PASSED; **PR pending**) |
+| CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ **MERGED 2026-07-03 via PR #59** (merge `ae9588d`, branch deleted; real-24k smoke PASSED; post-merge `/code-review` 2 real findings both fixed pre-merge in `f4b7807`) |
 | CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | Planned |
 | CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | Planned |
 | CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
