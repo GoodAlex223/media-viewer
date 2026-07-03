@@ -307,7 +307,7 @@ header-comment correction (Task 1 referenced symbols added only in Task 2).
 (2nd `match`-field assertion + multi-file / binary-leak diff tests); tier-a false-negative note (fine-grained
 `github_pat_` + 40-char AWS secret keys) for the gitleaks entry; CLAUDE.md "eleven → twelve file-group blocks" drift.
 
-**Branch**: `cleanup/cw-4-process-security-guards`; PR pending.
+**Branch**: `cleanup/cw-4-process-security-guards`; MERGED 2026-06-18 via PR #51 (`ebc7d41`).
 
 ### 2026-06-16 — Group CW-3: Docs & backlog hygiene (stale-checkbox sweep + doc drift + cruft removal)
 
@@ -369,7 +369,7 @@ into CW-3, so CW-4 (Fri) now owns only the pre-archive checklist template block 
 [docs/superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md](../superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md);
 plan archived at [docs/archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md](../archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md).
 Branch `cleanup/cw-3-docs-backlog-hygiene` (off `main` `52f2cbc`); commits `a48385a` (spec), `49e5484` (plan),
-`5733507` (sweep), `18f1e6d` (doc bundle), `4f4995e` (cruft), + closeout. **PR pending** (docs-only → manual
+`5733507` (sweep), `18f1e6d` (doc bundle), `4f4995e` (cruft), + closeout. **MERGED 2026-06-16 via PR #50 (`7d4ffcd`)** (docs-only → manual
 review, not `/code-review`).
 
 ### 2026-06-15 — Group CW-2: Test backfill (E2E suite green + first tournament-mode coverage)

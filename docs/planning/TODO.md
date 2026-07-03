@@ -169,7 +169,7 @@ Active tasks and backlog.
      8 BACKLOG entries checked off; CW-4 .gitignore boundary recorded.
      Plan archived: docs/archive/plans/2026-06-16-cw-3-docs-backlog-hygiene.md
      Spec: docs/superpowers/specs/2026-06-16-cw-3-docs-backlog-hygiene-design.md
-     Branch cleanup/cw-3-docs-backlog-hygiene; PR pending (docs-only → manual review). -->
+     Branch cleanup/cw-3-docs-backlog-hygiene; MERGED 2026-06-16 via PR #50 (7d4ffcd, branch deleted; docs-only → manual review). -->
 
 <!-- Group CW-4 Process & security guards completed 2026-06-17, moved to DONE.md.
      Two preventive guards (3 SP, 🟡 Operational); subagent-driven (5 tasks, controller commits).
@@ -183,7 +183,7 @@ Active tasks and backlog.
      no .gitignore. Final review (opus) "Ready to merge: Yes".
      Plan archived: docs/archive/plans/2026-06-17-cw-4-process-security-guards.md
      Spec: docs/superpowers/specs/2026-06-17-cw-4-process-security-guards-design.md
-     Branch cleanup/cw-4-process-security-guards; PR pending. -->
+     Branch cleanup/cw-4-process-security-guards; MERGED 2026-06-18 via PR #51 (ebc7d41, branch deleted). -->
 
 ---
 
