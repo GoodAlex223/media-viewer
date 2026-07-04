@@ -50,14 +50,20 @@ not by a racy poll); direct-drive for the cancel-wiring assertion (no race).
 
 **Test A — appears then is removed during a real sort**:
 1. Launch app; `createTempFixtureDir([...pngs])`; `loadFolder(tmp)`.
-2. In-page, install a `MutationObserver` on `document.body` (childList+subtree) that sets
-   `window.__sawProgressCard = true` the instant a `.notification-progress` node exists. Install
-   **before** triggering the sort (the card can appear and vanish in <100ms on tiny fixtures — a poll
-   would miss it; the observer will not).
-3. Trigger `window.mediaViewer.handleSortBySimilarity()` (do not block the page on its promise).
-4. `await page.waitForFunction(() => window.__sawProgressCard)` — proves the card appeared.
-5. `await page.waitForFunction(() => !window.mediaViewer.isLoading)` — sort finished.
-6. `await expect(page.locator('.notification-progress')).not.toBeAttached()` — proves removal.
+2. In-page, install a `MutationObserver` on `document.body` (childList + subtree + `attributes`/`class`
+   filter) that sets `window.__sawProgressCard = true` the instant `document.querySelector('.notification-progress')`
+   is truthy. Install **before** triggering the sort (the card can appear and vanish in <100ms on tiny
+   fixtures — a poll would miss it; the observer will not). The `attributes` filter also catches the case
+   where an existing reused `progressNotification` node merely gains the `notification-progress` class.
+3. `await page.evaluate(() => window.mediaViewer.handleSortBySimilarity())`. **Note**: `page.evaluate`
+   awaits a returned promise, so this resolves only after the whole sort finishes — by which point the
+   card has appeared (captured by the observer) and been removed. Default sort algorithm is `vptree`
+   (perceptual hashing, no CLIP), so a tiny 3-file folder completes in well under the test timeout.
+4. `expect(await page.evaluate(() => window.__sawProgressCard)).toBe(true)` — proves it appeared.
+5. `await expect(page.locator('.notification-progress')).not.toBeAttached()` — proves removal
+   (the sort's completion path called `clearProgressNotification()`).
+   *(No `isLoading` wait — the sort tracks `isComputingHashes`, and awaiting the evaluate already
+   guarantees completion.)*
 
 **Test B — Cancel button aborts (deterministic, no race)**:
 1. In-page: `window.mediaViewer.sortAbortController = new AbortController()`.
@@ -142,18 +148,28 @@ parses `git diff --cached --unified=0` into added lines. Current tests
 - `togglePlayPause()` — [media-viewer.js:3549](../../../media-viewer.js).
 
 **Why the backlog frames this as "Lucide API drift / DOM-ref bugs"**: a rename of the icon IDs (DOM-ref
-drift) or a Lucide `createIcons()` change that stops rendering `<i data-lucide>` into `<svg>` (API drift)
-would silently break the visible toggle. The test asserts both the refs and the rendered SVG.
+drift) or a change to the `data-lucide` icon names (icon drift) would silently break the visible toggle.
+
+**E2E-harness constraint (important)**: `launchApp()` stubs the Lucide CDN with a **no-op**
+`createIcons` ([tests/e2e/helpers/electron-app.js:56-57](../../../tests/e2e/helpers/electron-app.js)), so
+`<i data-lucide>` elements are **never** rendered into `<svg>` under E2E. The test therefore does **not**
+assert on rendered SVG (impossible here); it asserts on the two `<i>` elements, their `data-lucide`
+attributes, and their `display` swap — which is exactly what catches DOM-ref/ID/icon-name drift and the
+`onPlay`/`onPause` handler logic. (Real Lucide `createIcons` rendering is out of E2E scope; the
+`{root: element}` gotcha is documented in CLAUDE.md.)
 
 **Test — play/pause swaps the icons**:
-1. Load a folder containing `tiny.mp4`; navigate to it; wait `!isVideoLoading` and
-   `currentMedia.tagName === 'VIDEO'`.
-2. Assert DOM refs resolve: `mediaViewer.playIcon` and `mediaViewer.pauseIcon` are non-null.
-3. Assert Lucide rendered: each icon element (or its button) contains a rendered `<svg>` (catches Lucide
-   API drift).
-4. Drive `togglePlayPause()` to play; `await expect(pauseIcon).toHaveCSS('display', 'block')` and
-   `expect(playIcon).toHaveCSS('display', 'none')` (retrying assertions absorb the async `play` event).
-5. Drive `togglePlayPause()` to pause; assert the reverse.
+1. Load a folder containing `tiny.mp4`; navigate to it; wait until
+   `currentMedia?.tagName === 'VIDEO' && !isVideoLoading`.
+2. Assert DOM refs resolve: `mediaViewer.playIcon` and `mediaViewer.pauseIcon` are non-null, and
+   `playIcon.getAttribute('data-lucide') === 'play'` / `pauseIcon` `=== 'pause'` (catches ID/icon-name drift).
+3. Deterministically pause via `mediaViewer.currentMedia.pause()` (bypasses the autoplay-initial-state
+   ambiguity); assert `pauseIcon`→`display: none`, `playIcon`→`display: block` (the `onPause` handler).
+4. Play via `mediaViewer.currentMedia` `muted=true` then `.play()` (await the promise); assert
+   `pauseIcon`→`display: block`, `playIcon`→`display: none` (the `onPlay` handler). Assertions use
+   retrying `toHaveCSS` to absorb the async `play`/`pause` events.
+5. Also exercise the button path once via `togglePlayPause()` and assert the swap, so the
+   `#playPauseBtn` click handler is covered end-to-end.
 6. **`play()` / autoplay handling** (there is no existing video-play E2E test to copy): drive the swap by
    toggling the real video element and let its native `play`/`pause` events fire the handlers. If Electron's
    autoplay policy rejects `.play()` in this context, mute the element first (`currentMedia.muted = true`)
