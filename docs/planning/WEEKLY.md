@@ -138,7 +138,7 @@
 | **Group CW-V: Test & tooling backfill** [batch] | 4 |
 | **Group WR: Weekly Reviews** [batch] (start) | (4) |
 
-- [x] Finish CW-D (PR2/PR3 raw-speed framing correction, dead-code doc drift, CLAUDE.md maintenance-mode decision); **CW-D PR #60** (docs-only → manual review) — ✅ all 5 items done + PR #60 open (pending merge)
+- [x] Finish CW-D (PR2/PR3 raw-speed framing correction, dead-code doc drift, CLAUDE.md maintenance-mode decision); **CW-D PR #60** (docs-only → manual review) — ✅ all 5 items done; **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`)
 - [ ] CW-V: sort-progress E2E smoke, `methodSource` hardening, real-git-diff `extractAddedLines` fixtures, play/pause icon regression test (4 SP)
 - [ ] Weekly Reviews: Claude + non-Claude best-practices rows (start)
 
@@ -175,7 +175,7 @@
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
 | CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ **MERGED 2026-07-03 via PR #59** (merge `ae9588d`, branch deleted; real-24k smoke PASSED; post-merge `/code-review` 2 real findings both fixed pre-merge in `f4b7807`) |
-| CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | 🔄 PR #60 (open — pending merge; flip to ✅ PR #60 on merge) |
+| CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
 | CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | Planned |
 | CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | Planned |
