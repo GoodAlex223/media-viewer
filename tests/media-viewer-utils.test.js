@@ -76,20 +76,110 @@ function extractAsyncMethod(methodName) {
     return new AsyncFunction(params, methodBody);
 }
 
+// Guard for methodSource's naive brace counter (below). The counter is corrupted
+// only by an *unbalanced* brace inside a string/template literal (e.g. `"{"`, a bare
+// `}` in template text). A balanced literal (`${x}`, `"{}"`) nets to zero and is safe.
+// Line/block comments ARE skipped, so an apostrophe or brace inside a comment can't
+// corrupt the scan (loadFolder has a `folder's` line comment). Regex literals are the
+// SOLE untracked residual — a brace inside a regex would be miscounted; no caller hits
+// it, and the doc-warning covers it. Throws if any string/template span's brace balance
+// is nonzero, or a string/template span is left unterminated.
+function assertLiteralBracesBalanced(methodName, body) {
+    let state = 'CODE'; // CODE | SQ | DQ | TMPL | LINE_CMT | BLOCK_CMT
+    let escaped = false;
+    let spanBalance = 0;
+    for (let i = 0; i < body.length; i++) {
+        const c = body[i];
+        const next = body[i + 1];
+        if (state === 'CODE') {
+            if (c === "'") {
+                state = 'SQ';
+                spanBalance = 0;
+            } else if (c === '"') {
+                state = 'DQ';
+                spanBalance = 0;
+            } else if (c === '`') {
+                state = 'TMPL';
+                spanBalance = 0;
+            } else if (c === '/' && next === '/') {
+                state = 'LINE_CMT';
+                i++; // consume the second '/'
+            } else if (c === '/' && next === '*') {
+                state = 'BLOCK_CMT';
+                i++; // consume the '*'
+            }
+            // A lone `/` (division or a regex literal) stays in CODE — regex spans are
+            // the documented residual; a brace inside one would be miscounted.
+            continue;
+        }
+        if (state === 'LINE_CMT') {
+            if (c === '\n') state = 'CODE';
+            continue;
+        }
+        if (state === 'BLOCK_CMT') {
+            if (c === '*' && next === '/') {
+                state = 'CODE';
+                i++; // consume the '/'
+            }
+            continue;
+        }
+        // Inside a string/template span (SQ | DQ | TMPL).
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (c === '\\') {
+            escaped = true;
+            continue;
+        }
+        const closer = state === 'SQ' ? "'" : state === 'DQ' ? '"' : '`';
+        if (c === closer) {
+            if (spanBalance !== 0) {
+                throw new Error(
+                    `methodSource(${methodName}): unbalanced brace inside a string/template literal — ` +
+                        `naive brace-counting is unsafe for this method; extend the extractor.`
+                );
+            }
+            state = 'CODE';
+        } else if (c === '{') {
+            spanBalance++;
+        } else if (c === '}') {
+            spanBalance--;
+        }
+    }
+    if (state === 'SQ' || state === 'DQ' || state === 'TMPL') {
+        throw new Error(
+            `methodSource(${methodName}): body ends inside an unterminated string/template literal — ` +
+                `naive brace-counting truncated the method; extend the extractor.`
+        );
+    }
+}
+
 // Returns the raw source text of a top-level MediaViewer method body (for regression
 // assertions that a call was added/removed). Handles both `name(` and `async name(`.
-function methodSource(methodName) {
+//
+// WARNING: brace-counting is NAIVE — it counts every `{`/`}` regardless of context.
+// It is only correct for method bodies whose literals contain no *unbalanced* brace.
+// `assertLiteralBracesBalanced` (which skips comments and checks string/template spans)
+// throws on a violating body rather than returning a silently-wrong slice; a brace
+// inside a regex literal is the one unguarded residual. Only caller today: `loadFolder`.
+// The `src` override lets the guard be unit-tested against synthetic source.
+function methodSource(methodName, src = source) {
     const regex = new RegExp(`^\\s{4}(?:async\\s+)?${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
-    const match = source.match(regex);
+    const match = src.match(regex);
     if (!match) {
         throw new Error(`Could not find method: ${methodName}`);
     }
     const searchStart = match.index + match[0].length - 1; // position of opening {
     let braceCount = 0;
-    for (let i = searchStart; i < source.length; i++) {
-        if (source[i] === '{') braceCount++;
-        if (source[i] === '}') braceCount--;
-        if (braceCount === 0) return source.substring(searchStart + 1, i);
+    for (let i = searchStart; i < src.length; i++) {
+        if (src[i] === '{') braceCount++;
+        if (src[i] === '}') braceCount--;
+        if (braceCount === 0) {
+            const body = src.substring(searchStart + 1, i);
+            assertLiteralBracesBalanced(methodName, body);
+            return body;
+        }
     }
     throw new Error(`Unbalanced braces for method: ${methodName}`);
 }
@@ -2303,6 +2393,46 @@ describe('lazy extraction wiring (Group P3)', () => {
         }
         const handlerBody = source.slice(open, end);
         expect(handlerBody).not.toContain('kickoffBackgroundExtractionIfEnabled');
+    });
+});
+
+describe('methodSource — literal-brace guard', () => {
+    // Wrap body lines into a minimal 4-space-indented class method so the
+    // class-method regex (`^\s{4}(?:async\s+)?name\(`) matches, then feed it
+    // through methodSource via the `src` override — no media-viewer.js edit needed.
+    const wrap = (bodyLines) =>
+        ['class X {', '    sample() {', ...bodyLines.map((l) => '        ' + l), '    }', '}'].join('\n');
+
+    it('extracts the real loadFolder body without throwing (guard passes on live code)', () => {
+        expect(() => methodSource('loadFolder')).not.toThrow();
+        expect(methodSource('loadFolder')).not.toContain('kickoffBackgroundExtractionIfEnabled');
+    });
+
+    it('does not throw on a balanced template interpolation (`${x}` nets to zero)', () => {
+        const src = wrap(['const s = `value ${x} end`;', 'return s;']);
+        expect(() => methodSource('sample', src)).not.toThrow();
+    });
+
+    it('does not throw on a balanced brace pair inside a string ("{}" nets to zero)', () => {
+        const src = wrap(['const s = "{}";', 'return s;']);
+        expect(() => methodSource('sample', src)).not.toThrow();
+    });
+
+    it('throws on an unbalanced open brace inside a string ("{")', () => {
+        const src = wrap(['const s = "oops {";', 'return s;']);
+        expect(() => methodSource('sample', src)).toThrow(/string\/template literal/);
+    });
+
+    it('throws on an unbalanced close brace in template text (`}`)', () => {
+        const src = wrap(['const s = `oops }`;', 'return s;']);
+        expect(() => methodSource('sample', src)).toThrow(/string\/template literal/);
+    });
+
+    it('does not throw on an apostrophe inside a line comment (the loadFolder failure mode)', () => {
+        // Without comment-skipping, the apostrophe in `folder's` would open a phantom
+        // single-quote span that swallows code and false-throws. Comment is skipped now.
+        const src = wrap(["// refresh the folder's view", 'const s = `${x}`;', 'return s;']);
+        expect(() => methodSource('sample', src)).not.toThrow();
     });
 });
 

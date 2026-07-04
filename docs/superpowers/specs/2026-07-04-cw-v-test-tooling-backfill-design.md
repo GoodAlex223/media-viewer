@@ -83,16 +83,21 @@ literal). Today it has exactly **one** caller: `methodSource('loadFolder')`
 provably correct for it.
 
 **Changes**:
-1. **Doc-comment warning** on `methodSource`: state that it brace-counts naively and is only safe for
-   method bodies whose string/template/regex literals contain no unbalanced `{`/`}`.
+1. **Doc-comment warning** on `methodSource`: state that it brace-counts naively (every `{`/`}`
+   regardless of context) and that the guard skips comments + checks string/template spans, leaving a
+   brace inside a regex literal as the one unguarded residual.
 2. **Guard — one precise rule**: the naive counter only miscounts when a `{` or `}` sits **inside** a
-   string/template/regex literal (a balanced literal like `` `${x}` `` is harmless; `` `}` `` is not).
-   So: after locating the body, scan it detecting string (`'…'`, `"…"`), template (`` `…` ``), and
-   regex (`/…/`) spans; if a `{` or `}` appears **inside** any such span, **throw**
-   `methodSource(<name>): brace inside a string/template/regex literal — naive brace-counting is unsafe; extend the extractor`.
-   Otherwise proceed with the existing count. This catches a future dangerous caller **without**
-   rejecting today's safe `loadFolder` (whose template literals — e.g. notification strings — hold no
-   unbalanced brace). Validate against the real `loadFolder` body during impl before finalizing.
+   string/template literal *unbalanced within its own span* (a balanced literal like `` `${x}` `` or
+   `"{}"` is harmless; `"{"` or `` `}` `` is not). After locating the body, scan it tracking
+   string (`'…'`, `"…"`), template (`` `…` ``) spans; throw if any span's internal brace balance is
+   nonzero or a span is left unterminated:
+   `methodSource(<name>): unbalanced brace inside a string/template literal — naive brace-counting is unsafe; extend the extractor`.
+   **Comments must be skipped.** `loadFolder` has a `//` comment containing `folder's` — a scanner that
+   only tracked strings would read that apostrophe as a string open and false-throw. So the scanner also
+   tracks and skips **line (`//`) and block (`/* */`) comments** (apostrophes/braces inside them ignored).
+   **Regex literals (`/…/`) are the one untracked residual** — a brace inside a regex would be miscounted;
+   no product caller hits it, and the doc-warning covers it. *(Discovered during implementation: the
+   comment-skipping is required, not optional — the original "strings only" guard false-threw on `loadFolder`.)*
 3. **Testability seam**: give `methodSource` an optional second param `methodSource(methodName, src = source)`
    so a test can pass a **synthetic source string** through the exact same extraction+guard path. This is
    a test-file-only change (no `media-viewer.js` edit) and lets the guard be tested against a crafted

@@ -33,7 +33,9 @@
 
 ### Background (why this guard, and why it's correct)
 
-The existing `methodSource` brace-counts **naively** — it counts every `{`/`}` regardless of context. That is corrupted only when a brace inside a string/template literal is **unbalanced within its own literal span** (e.g. `"{"`, or a bare `}` in template text). A *balanced* literal (`` `${x}` ``, `"{}"`) nets to zero and is harmless — which is why the sole current caller, `loadFolder`, works. The guard scans each string/template span and throws if any span's internal brace balance is nonzero (or a span is unterminated). This exactly mirrors the naive counter's failure mode: both count all braces uniformly, so a per-span imbalance is precisely what breaks extraction. Regex literals and line/block comments are **not** tracked — a brace there is a documented residual gap (no current caller hits it; the doc-warning covers it).
+The existing `methodSource` brace-counts **naively** — it counts every `{`/`}` regardless of context. That is corrupted only when a brace inside a string/template literal is **unbalanced within its own literal span** (e.g. `"{"`, or a bare `}` in template text). A *balanced* literal (`` `${x}` ``, `"{}"`) nets to zero and is harmless. The guard scans each string/template span and throws if any span's internal brace balance is nonzero (or a span is unterminated).
+
+**Comments must be skipped.** The sole current caller, `loadFolder`, has a `//` comment containing `folder's` (an apostrophe). A scanner that only tracks string/template spans would treat that apostrophe as opening a single-quote span, swallow real code, and false-throw — so the guard **skips line (`//`) and block (`/* */`) comments** (an apostrophe or brace inside a comment is ignored). This keeps the guard from false-positiving on live code while still catching a brace-in-string/template caller. **Regex literals (`/…/`) are the one untracked residual** — a brace inside a regex would be miscounted; no product caller hits it, and the doc-warning covers it.
 
 - [ ] **Step 1: Write the failing guard tests**
 
@@ -71,6 +73,13 @@ describe('methodSource — literal-brace guard', () => {
         const src = wrap(['const s = `oops }`;', 'return s;']);
         expect(() => methodSource('sample', src)).toThrow(/string\/template literal/);
     });
+
+    it("does not throw on an apostrophe inside a line comment (the loadFolder failure mode)", () => {
+        // Without comment-skipping, the apostrophe in `folder's` would open a phantom
+        // single-quote span that swallows code and false-throws. Comment is skipped now.
+        const src = wrap(["// refresh the folder's view", 'const s = `${x}`;', 'return s;']);
+        expect(() => methodSource('sample', src)).not.toThrow();
+    });
 });
 ```
 
@@ -87,19 +96,18 @@ In `tests/media-viewer-utils.test.js`, **replace** the current `methodSource` fu
 // Guard for methodSource's naive brace counter (below). The counter is corrupted
 // only by an *unbalanced* brace inside a string/template literal (e.g. `"{"`, a bare
 // `}` in template text). A balanced literal (`${x}`, `"{}"`) nets to zero and is safe.
-// Scans each string/template span; throws if any span's internal brace balance is
-// nonzero, or a span is unterminated at body end. Regex literals and comments are NOT
-// tracked — a brace there is a documented residual gap (no current caller hits it).
+// Line/block comments ARE skipped, so an apostrophe or brace inside a comment can't
+// corrupt the scan (loadFolder has a `folder's` line comment). Regex literals are the
+// SOLE untracked residual — a brace inside a regex would be miscounted; no caller hits
+// it, and the doc-warning covers it. Throws if any string/template span's brace balance
+// is nonzero, or a string/template span is left unterminated.
 function assertLiteralBracesBalanced(methodName, body) {
-    let state = 'CODE'; // CODE | SQ | DQ | TMPL
+    let state = 'CODE'; // CODE | SQ | DQ | TMPL | LINE_CMT | BLOCK_CMT
     let escaped = false;
     let spanBalance = 0;
     for (let i = 0; i < body.length; i++) {
         const c = body[i];
-        if (escaped) {
-            escaped = false;
-            continue;
-        }
+        const next = body[i + 1];
         if (state === 'CODE') {
             if (c === "'") {
                 state = 'SQ';
@@ -110,29 +118,53 @@ function assertLiteralBracesBalanced(methodName, body) {
             } else if (c === '`') {
                 state = 'TMPL';
                 spanBalance = 0;
+            } else if (c === '/' && next === '/') {
+                state = 'LINE_CMT';
+                i++; // consume the second '/'
+            } else if (c === '/' && next === '*') {
+                state = 'BLOCK_CMT';
+                i++; // consume the '*'
             }
-        } else {
-            if (c === '\\') {
-                escaped = true;
-                continue;
-            }
-            const closer = state === 'SQ' ? "'" : state === 'DQ' ? '"' : '`';
-            if (c === closer) {
-                if (spanBalance !== 0) {
-                    throw new Error(
-                        `methodSource(${methodName}): unbalanced brace inside a string/template literal — ` +
-                            `naive brace-counting is unsafe for this method; extend the extractor.`
-                    );
-                }
+            // A lone `/` (division or a regex literal) stays in CODE — regex spans are
+            // the documented residual; a brace inside one would be miscounted.
+            continue;
+        }
+        if (state === 'LINE_CMT') {
+            if (c === '\n') state = 'CODE';
+            continue;
+        }
+        if (state === 'BLOCK_CMT') {
+            if (c === '*' && next === '/') {
                 state = 'CODE';
-            } else if (c === '{') {
-                spanBalance++;
-            } else if (c === '}') {
-                spanBalance--;
+                i++; // consume the '/'
             }
+            continue;
+        }
+        // Inside a string/template span (SQ | DQ | TMPL).
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (c === '\\') {
+            escaped = true;
+            continue;
+        }
+        const closer = state === 'SQ' ? "'" : state === 'DQ' ? '"' : '`';
+        if (c === closer) {
+            if (spanBalance !== 0) {
+                throw new Error(
+                    `methodSource(${methodName}): unbalanced brace inside a string/template literal — ` +
+                        `naive brace-counting is unsafe for this method; extend the extractor.`
+                );
+            }
+            state = 'CODE';
+        } else if (c === '{') {
+            spanBalance++;
+        } else if (c === '}') {
+            spanBalance--;
         }
     }
-    if (state !== 'CODE') {
+    if (state === 'SQ' || state === 'DQ' || state === 'TMPL') {
         throw new Error(
             `methodSource(${methodName}): body ends inside an unterminated string/template literal — ` +
                 `naive brace-counting truncated the method; extend the extractor.`
@@ -144,9 +176,10 @@ function assertLiteralBracesBalanced(methodName, body) {
 // assertions that a call was added/removed). Handles both `name(` and `async name(`.
 //
 // WARNING: brace-counting is NAIVE — it counts every `{`/`}` regardless of context.
-// It is only correct for method bodies whose string/template/regex literals contain no
-// *unbalanced* brace. `assertLiteralBracesBalanced` throws on a violating body rather
-// than returning a silently-wrong slice. Only caller today: `loadFolder` (brace-safe).
+// It is only correct for method bodies whose literals contain no *unbalanced* brace.
+// `assertLiteralBracesBalanced` (which skips comments and checks string/template spans)
+// throws on a violating body rather than returning a silently-wrong slice; a brace
+// inside a regex literal is the one unguarded residual. Only caller today: `loadFolder`.
 // The `src` override lets the guard be unit-tested against synthetic source.
 function methodSource(methodName, src = source) {
     const regex = new RegExp(`^\\s{4}(?:async\\s+)?${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
