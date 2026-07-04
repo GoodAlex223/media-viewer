@@ -175,7 +175,7 @@
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
 | CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ **MERGED 2026-07-03 via PR #59** (merge `ae9588d`, branch deleted; real-24k smoke PASSED; post-merge `/code-review` 2 real findings both fixed pre-merge in `f4b7807`) |
-| CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
+| CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`, branch deleted; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
 | CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | Planned |
 | CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | Planned |
