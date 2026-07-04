@@ -32,14 +32,14 @@
 - Consumes: nothing (first task).
 - Produces: 3 new gotcha bullets. Later tasks must not contradict them.
 
-- [ ] **Step 1: Verify each gotcha against current code.** Read these sites and confirm the claim holds post-CW-T:
+- [x] **Step 1: Verify each gotcha against current code.** Read these sites and confirm the claim holds post-CW-T:
   - `grep -n "loadFolder" media-viewer.js` → confirm tournament mode is exited (nulls `tournament.engine`) on both the empty and non-empty branches.
   - `grep -n "handleTournamentUndo" media-viewer.js` → confirm two paths: default `engine.undo()` vs `lastMove.actionType === 'special'` (special branch does manual disk restore via `moveFile` IPC + re-add to `mediaFiles`/`engine.files` + `restoreFeatureCachesFromHistory` + re-persist + re-render; pushes `lastMove` back on error).
   - In `tournament-engine.js`, read `undo()` + `removeFile(file, opts)` → confirm `filesSnapshot` is captured on undo entries and that `removeFile` is called with `{trackUndo:true}` **only** at the auto-prune `-1` site (special-move removal stays untracked to keep the renderer special-undo stack and `engine.undo()` stack from desyncing).
 
   Expected: all three hold. If any differs, adjust that bullet's wording to match the code before Step 2.
 
-- [ ] **Step 2: Add the 3 bullets** to the end of the **Active gotchas** list in `CLAUDE.md` (Read the file first to match the exact list indentation). Draft text (adjust only if Step 1 found a discrepancy):
+- [x] **Step 2: Add the 3 bullets** to the end of the **Active gotchas** list in `CLAUDE.md` (Read the file first to match the exact list indentation). Draft text (adjust only if Step 1 found a discrepancy):
 
 ```markdown
 - Tournament mode is **folder-scoped** — `loadFolder()` exits tournament mode (nulls `tournament.engine`) on both its empty and non-empty branches, so switching folders always drops back to single mode (mirrors the compare-mode reset).
@@ -47,9 +47,9 @@
 - `engine.files` vs `strategy.files` **diverge after `removeFile()`** — `engine.files` is authoritative for `getTierBreakdown()`/`handleApply()`. Undo entries carry `filesSnapshot` (recorded via `removeFile(file, {trackUndo:true})` ONLY at the `engine.undo()`-reversed auto-prune `-1` site) so tier counts survive a removeFile→undo; `strategy.serialize()` alone does not capture engine-level files removed between picks. The special-move removal is deliberately left untracked so the two undo stacks stay in sync.
 ```
 
-- [ ] **Step 3: Consistency re-read.** Re-read the edited **Active gotchas** section top to bottom. Confirm the 3 new bullets do not duplicate or contradict the existing tournament gotcha ("Tournament Escape + mode-selector clicks both route through `switchMode('single')`…"). No overlap expected (that one is about the leave-prompt; these are about folder-scope, undo paths, and file divergence).
+- [x] **Step 3: Consistency re-read.** Re-read the edited **Active gotchas** section top to bottom. Confirm the 3 new bullets do not duplicate or contradict the existing tournament gotcha ("Tournament Escape + mode-selector clicks both route through `switchMode('single')`…"). No overlap expected (that one is about the leave-prompt; these are about folder-scope, undo paths, and file divergence).
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add CLAUDE.md
@@ -73,7 +73,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Consumes: Task 1's gotchas (must stay consistent — same undo/removeFile mechanics).
 - Produces: a tournament-persistence sub-note under Cache Management.
 
-- [ ] **Step 1: Verify persistence mechanics against current code.** Confirm:
+- [x] **Step 1: Verify persistence mechanics against current code.** Confirm:
   - `grep -n "_schedulePersist\|_drain\|flush\|cancelPending" tournament.js media-viewer.js` → trailing-edge debounced single-flight write exists; `flush()` forces a durable write; `cancelPending()` drops a queued write.
   - `grep -n "version" tournament.js tournament-engine.js` and read `deserialize` → `.tournament_state.json` is `version: 2`, O(n), history-free; a v1 payload still resumes.
   - Confirm undo is session-only (history no longer persisted) and capped at 100 (`grep -n "UNDO_HISTORY_CAP\|100" tournament-engine.js`).
@@ -83,15 +83,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
   Expected: all hold. Correct any drifted detail before Step 2.
 
-- [ ] **Step 2: Add a tournament-persistence bullet** to the **Cache Management** list in `CLAUDE.md` (Read first; match the existing sub-bullet style — a bold lead-in then prose). Draft text (adjust per Step 1):
+- [x] **Step 2: Add a tournament-persistence bullet** to the **Cache Management** list in `CLAUDE.md` (Read first; match the existing sub-bullet style — a bold lead-in then prose). Draft text (adjust per Step 1):
 
 ```markdown
 - Tournament persistence: `.tournament_state.json` per source folder, now `version: 2` — O(n), **history-free** (undo is session-only, in-memory, capped at 100 picks; v1 payloads still resume). Writes are trailing-edge **debounced single-flight** (`_schedulePersist` → `_drain`; `flush()` forces a durable write e.g. Save & leave; `cancelPending()` drops a queued write e.g. Discard) and **atomic** (temp + rename). Structural-mutation writes (reconcile prune, missing-file removal, special-move removal) are debounced by design — a crash inside the debounce window self-heals because `reconcileWithFiles` runs on **every** tournament entry (idempotent, via `_enterResumedTournamentUI`). Per-pick render uses `showTournamentPairFast` (reuses the compare wrappers) instead of a full `showCompareMedia` teardown.
 ```
 
-- [ ] **Step 3: Consistency re-read.** Re-read the Cache Management list. Confirm the new bullet does not contradict the existing bulk-rated / sort-cache / JXL bullets and that the undo/removeFile mechanics agree with Task 1.
+- [x] **Step 3: Consistency re-read.** Re-read the Cache Management list. Confirm the new bullet does not contradict the existing bulk-rated / sort-cache / JXL bullets and that the undo/removeFile mechanics agree with Task 1.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add CLAUDE.md
@@ -115,21 +115,21 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Consumes: nothing.
 - Produces: corrected Data-Structures note.
 
-- [ ] **Step 1: Verify the renderer no longer defines them.** Run:
+- [x] **Step 1: Verify the renderer no longer defines them.** Run:
   - `grep -n "class MinHeap\|class VPTree" media-viewer.js sorting-worker.js` → expect matches ONLY in `sorting-worker.js` (renderer copies deleted in PR #54/PR1).
   - `grep -n "calculateCosineDistance" media-viewer.js sorting-worker.js` → confirm it still exists in BOTH (the dual-location note stays true).
 
   Expected: MinHeap/VPTree worker-only; `calculateCosineDistance` still dual. If a MinHeap/VPTree class is still in the renderer, STOP and report (the premise is false).
 
-- [ ] **Step 2: Edit the Data Structures note.** Read `CLAUDE.md` ~line 129, then update the sentence so it states MinHeap/VPTree now live only in `sorting-worker.js`. Draft replacement for the opening of that note (keep the rest of the sentence about `calculateCosineDistance` and cosine distance intact):
+- [x] **Step 2: Edit the Data Structures note.** Read `CLAUDE.md` ~line 129, then update the sentence so it states MinHeap/VPTree now live only in `sorting-worker.js`. Draft replacement for the opening of that note (keep the rest of the sentence about `calculateCosineDistance` and cosine distance intact):
 
 ```markdown
 **Data Structures**: MinHeap (priority queue) and VPTree (nearest neighbor) now live ONLY in `sorting-worker.js` (the renderer's own copies + the `sortMediaBySimilarity*` renderer methods were deleted in PR #54/PR1 — sorting is worker-only). Perceptual hashing (image similarity), cosine distance for CLIP (`1 - dot(a,b)` on unit-normalized 512-dim). `calculateCosineDistance` exists in both `sorting-worker.js` and the `MediaViewer` class — the renderer copy returns `1` (not `Infinity`) on null/mismatched input (cosine is bounded [0,2]; 1 = "no signal"). Shared-utility extraction tracked in BACKLOG.
 ```
 
-- [ ] **Step 3: Cross-check the Architecture tree.** Read the `sorting-worker.js` line in the Architecture file-tree (~line 39). It already says the worker "exports MinHeap, VPTree, …" — that is still correct (no edit needed). Confirm no other CLAUDE.md line claims the renderer has MinHeap/VPTree.
+- [x] **Step 3: Cross-check the Architecture tree.** Read the `sorting-worker.js` line in the Architecture file-tree (~line 39). It already says the worker "exports MinHeap, VPTree, …" — that is still correct (no edit needed). Confirm no other CLAUDE.md line claims the renderer has MinHeap/VPTree.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add CLAUDE.md
@@ -154,9 +154,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Consumes: nothing (planning-doc framing only — no code claim to verify beyond the cost map, which is documented in BACKLOG [2026-06-21]).
 - Produces: precise per-phase cost map wording.
 
-- [ ] **Step 1: Confirm the cost map** from BACKLOG [2026-06-21] (already read): PR2 = cold-cache hashing wait (hash sorts only); PR3 = ~40s feature-cache-load wait; NEITHER touches the O(n·K) neighbor-graph build (K≈1,550 @ 24k), which is the visual-similarity floor moved only by #7 (parallel build) or a relaxed quality-lock (K-cap); AI-prediction sort has no graph build (fully addressed by PR3 + PR1). No code grep needed — this is a framing correction.
+- [x] **Step 1: Confirm the cost map** from BACKLOG [2026-06-21] (already read): PR2 = cold-cache hashing wait (hash sorts only); PR3 = ~40s feature-cache-load wait; NEITHER touches the O(n·K) neighbor-graph build (K≈1,550 @ 24k), which is the visual-similarity floor moved only by #7 (parallel build) or a relaxed quality-lock (K-cap); AI-prediction sort has no graph build (fully addressed by PR3 + PR1). No code grep needed — this is a framing correction.
 
-- [ ] **Step 2: Edit DONE.md line ~242.** Read the file, then replace:
+- [x] **Step 2: Edit DONE.md line ~242.** Read the file, then replace:
 
 ```
   Raw-speed lives in PR2/PR3 + deferred #7.
@@ -171,7 +171,7 @@ with:
   addressed by PR3 + PR1.
 ```
 
-- [ ] **Step 3: Edit DONE.md line ~265.** Replace:
+- [x] **Step 3: Edit DONE.md line ~265.** Replace:
 
 ```
 PR2 (hash off-thread) + PR3 (incremental cache-load) remain for the full P1 win.
@@ -185,7 +185,7 @@ hashing + cache-load waits but NOT the O(n·K) neighbor-graph-build floor (that 
 the AI-prediction sort has no graph build and is already fully addressed by PR3 + PR1.
 ```
 
-- [ ] **Step 4: Edit TODO.md line ~36.** Read the file, then within the NOTE comment replace the fragment:
+- [x] **Step 4: Edit TODO.md line ~36.** Read the file, then within the NOTE comment replace the fragment:
 
 ```
 raw-speed wins are PR2/PR3 (+ deferred #7 parallel build)
@@ -197,9 +197,9 @@ with:
 PR2/PR3 remove the hashing + cache-load waits but NOT the O(n·K) neighbor-graph-build floor (moved only by #7 parallel build or a relaxed quality-lock K-cap); the AI-prediction sort has no graph build and is fully addressed by PR3 + PR1
 ```
 
-- [ ] **Step 5: Consistency re-read.** Re-read all three edited spots. Confirm they now tell the same per-phase story and none still calls PR2/PR3 the "raw-speed continuation/win" without the graph-build caveat.
+- [x] **Step 5: Consistency re-read.** Re-read all three edited spots. Confirm they now tell the same per-phase story and none still calls PR2/PR3 the "raw-speed continuation/win" without the graph-build caveat.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add docs/planning/DONE.md docs/planning/TODO.md
@@ -222,9 +222,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Consumes: D1.
 - Produces: a one-line maintenance-mode statement.
 
-- [ ] **Step 1: Confirm no markers exist.** `grep -n "AUTO-MANAGED\|<!-- MANUAL\|END " CLAUDE.md` → expect 0 hits (already stripped in PR #52). If any marker remains, STOP and report.
+- [x] **Step 1: Confirm no markers exist.** `grep -n "AUTO-MANAGED\|<!-- MANUAL\|END " CLAUDE.md` → expect 0 hits (already stripped in PR #52). If any marker remains, STOP and report.
 
-- [ ] **Step 2: Add a short Maintenance note** at the very end of `CLAUDE.md` (Read the file to confirm it ends with the `## Best Practices` section, then append after it). Keep it to a single line to avoid meta-clutter in a durable-rules file:
+- [x] **Step 2: Add a short Maintenance note** at the very end of `CLAUDE.md` (Read the file to confirm it ends with the `## Best Practices` section, then append after it). Keep it to a single line to avoid meta-clutter in a durable-rules file:
 
 ```markdown
 
@@ -233,7 +233,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 Manual-only. This file carries no `AUTO-MANAGED` / `MANUAL` section markers (deliberately stripped in PR #52) — `revise-claude-md` / `claude-md-improver` edit the prose directly rather than keying on markers. Keep it durable-rules-only; audit quarterly or when it crosses ~200 lines.
 ```
 
-- [ ] **Step 3: Commit.**
+- [x] **Step 3: Commit.**
 
 ```bash
 git add CLAUDE.md
@@ -260,20 +260,20 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Consumes: Tasks 1–5 complete.
 - Produces: closed-out planning state. (This task runs at merge/approval time, not before the PR — see note.)
 
-- [ ] **Step 1: Check off the 5 BACKLOG items.** In `docs/planning/BACKLOG.md`, flip each of the 5 CW-D source entries `- [ ]` → `- [x]` with a `✅ Resolved 2026-07-03 (Group CW-D)` note:
+- [x] **Step 1: Check off the 5 BACKLOG items.** In `docs/planning/BACKLOG.md`, flip each of the 5 CW-D source entries `- [ ]` → `- [x]` with a `✅ Resolved 2026-07-03 (Group CW-D)` note:
   - [2026-06-25] "Fold 3 still-accurate tournament gotchas into CLAUDE.md" (line ~301)
   - [2026-06-24] "Document tournament debounced single-flight persistence … in CLAUDE.md" (line ~310)
   - [2026-06-19] "CLAUDE.md / docs drift from PR1 dead-code removal" (line ~332)
   - [2026-06-21] "Correct the 'PR2/PR3 = raw-speed continuation' framing" (line ~317)
   - [2026-06-18] "Decide CLAUDE.md maintenance mode now that all AUTO-MANAGED / MANUAL markers are stripped" (line ~338) — annotate the decision: **manual-only** (D1).
 
-- [ ] **Step 2: Update WEEKLY.md.** Check off the 5 Group CW-D task checkboxes (lines ~47–51), the Wed/Thu Daily-Schedule CW-D entries (lines ~126, ~141), and set the Summary-Table CW-D **Status** (line ~178) to `✅ PR #N` (the real PR number once opened/merged).
+- [x] **Step 2: Update WEEKLY.md.** Check off the 5 Group CW-D task checkboxes (lines ~47–51), the Wed/Thu Daily-Schedule CW-D entries (lines ~126, ~141), and set the Summary-Table CW-D **Status** (line ~178) to `✅ PR #N` (the real PR number once opened/merged).
 
-- [ ] **Step 3: Add a DONE.md entry** summarizing CW-D (the 5 items, the 2 decisions, files touched, PR link, plan-archive link).
+- [x] **Step 3: Add a DONE.md entry** summarizing CW-D (the 5 items, the 2 decisions, files touched, PR link, plan-archive link).
 
-- [ ] **Step 4: Archive the plan.** `git mv docs/superpowers/plans/2026-07-03-cw-d-docs-claude-md-hygiene.md docs/archive/plans/` and mark it complete at the top.
+- [x] **Step 4: Archive the plan.** `git mv docs/superpowers/plans/2026-07-03-cw-d-docs-claude-md-hygiene.md docs/archive/plans/` and mark it complete at the top.
 
-- [ ] **Step 5: Commit the doc/planning changes.**
+- [x] **Step 5: Commit the doc/planning changes.**
 
 ```bash
 git add docs/planning/ docs/archive/plans/ docs/superpowers/
