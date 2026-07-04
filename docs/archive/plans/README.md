@@ -31,6 +31,7 @@ Plans are archived when:
 | [2026-06-26-weekly-reviews-first-run.md](2026-06-26-weekly-reviews-first-run.md) | Group WR: Weekly Reviews first run (4 verdicts: pr-review-toolkit `adopt`; test-writer-fixer / TDD Guard / local-model review `defer`) — ⚪ Overhead, no code PR | 2026-06-26 |
 | [2026-06-30-tournament-exit-affordances.md](2026-06-30-tournament-exit-affordances.md) | Group T1: Tournament exit affordances (in-tournament exit button + confirm-before-app-close, both reusing `showTournamentLeavePrompt`) | 2026-06-30 |
 | [2026-07-01-cw-t-tournament-correctness-hardening.md](2026-07-01-cw-t-tournament-correctness-hardening.md) | Group CW-T: Tournament correctness, persistence & hardening (O(1) inverse-delta undo + `showTournamentPairFast` wrapper-reuse render + `reconcileWithFiles`-on-every-entry closing the live-engine gap + hardened `-1` divergence capture + persistent perf log + 6 debt items) — real-24k smoke PASSED; PR pending | 2026-07-02 |
+| [2026-07-03-cw-d-docs-claude-md-hygiene.md](2026-07-03-cw-d-docs-claude-md-hygiene.md) | Group CW-D: Docs & CLAUDE.md hygiene (5 deferred `revise-claude-md`/doc-drift items — 3 tournament gotchas + debounced-persistence/`v2` note + MinHeap/VPTree worker-only note into CLAUDE.md; PR2/PR3 per-phase framing into DONE/TODO; manual-only maintenance decision D1) — docs-only; PR #60 pending merge | 2026-07-03 |
 
 ---
 
@@ -121,4 +122,4 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 
 ---
 
-*Last Updated: 2026-07-02 (added Group CW-T Tournament correctness & hardening plan)*
+*Last Updated: 2026-07-03 (added Group CW-D Docs & CLAUDE.md hygiene plan)*

@@ -1,5 +1,7 @@
 # Group CW-D: Docs & CLAUDE.md Hygiene Implementation Plan
 
+> ✅ **COMPLETE 2026-07-03** — All 5 edit tasks (Tasks 1–5) implemented, verified against current post-CW-T code, and committed on branch `docs/cw-d-claude-md-hygiene` (`1dee056`, `c622338`, `4d15c39`, `318ab27`, `46ebec3`). Shipped via **PR #60** (docs-only, manual review). 411 unit tests green throughout. Task 6 (closeout) executed on the same branch per user choice. Spec: [../specs/2026-07-03-cw-d-docs-claude-md-hygiene-design.md](../specs/2026-07-03-cw-d-docs-claude-md-hygiene-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Clear five deferred `revise-claude-md` / doc-drift backlog items by updating CLAUDE.md, DONE.md, and TODO.md to reflect current post-CW-T behavior — documentation only, no code change.
