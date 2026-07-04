@@ -69,6 +69,8 @@ Central index for all project documentation.
 | [Extraction Timing Plan][]                   | Lazy / on-demand feature extraction: remove the folder-open + CLIP-toggle kickoffs; add a conditional on-demand CLIP-sort trigger gated by `clipVectorsNeedExtraction` (ML sort already lazy; hash sort needs no vectors) (Group P3) |
 | [Weekly Reviews First Run Plan][]            | First run of the recurring Weekly Reviews batch: 4 deep-research/inline category reviews → verdict rows in REVIEW-QUEUE.md + 🟤 BACKLOG adopt; ⚪ overhead, no code PR (Group WR) |
 | [Tournament Exit Affordances Plan][]         | Two tournament exit affordances: re-add the in-header exit button (→ `switchMode('single')`) + confirm-before-app-close during an incomplete tournament (main `close` interception → reuse `showTournamentLeavePrompt(onAfterLeave)`) (Group T1) |
+| [CW-T Tournament Correctness & Hardening Plan][] | Tournament correctness, persistence & hardening: O(1) inverse-delta undo + `showTournamentPairFast` wrapper-reuse render + `reconcileWithFiles`-on-every-entry (live-engine gap) + hardened `-1` divergence capture + 6 debt items; MERGED via PR #59 (Group CW-T) |
+| [Docs & CLAUDE.md Hygiene Plan][]            | Docs-only consolidation clearing 5 deferred `revise-claude-md`/doc-drift items: 3 tournament gotchas + debounced-persistence/`v2` note + MinHeap/VPTree worker-only note into CLAUDE.md; PR2/PR3 per-phase framing into DONE/TODO; manual-only maintenance decision D1; PR #60 (Group CW-D) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -103,6 +105,7 @@ Central index for all project documentation.
 [Weekly Reviews First Run Plan]: archive/plans/2026-06-26-weekly-reviews-first-run.md
 [Tournament Exit Affordances Plan]: archive/plans/2026-06-30-tournament-exit-affordances.md
 [CW-T Tournament Correctness & Hardening Plan]: archive/plans/2026-07-01-cw-t-tournament-correctness-hardening.md
+[Docs & CLAUDE.md Hygiene Plan]: archive/plans/2026-07-03-cw-d-docs-claude-md-hygiene.md
 
 ## Design Specs
 
@@ -145,6 +148,8 @@ Central index for all project documentation.
 | [Extraction Timing][] | Lazy / on-demand feature extraction (D1–D4): remove the unconditional `loadFolder` kickoff + the CLIP enable-toggle kickoff; add a conditional on-demand CLIP-sort trigger gated by `clipVectorsNeedExtraction` (skips the ~40s cache reload on repeat sorts); ML "Sort by Prediction" already lazy, hash sort needs no vectors (Group P3) |
 | [Weekly Reviews First Run][] | Reusable Weekly Reviews methodology + first run (D1–D4: hybrid relevance lens, deep-research-per-category, recency, hands-off adopt); includes a First-run retro correcting the default to lightweight inline research after the harness hit rate/session limits (Group WR) |
 | [Tournament Exit Affordances][] | Two tournament exit affordances (in-header exit button + confirm-before-app-close via main `close` interception reusing the `onAfterLeave` leave prompt); reuse-the-DOM-modal-via-IPC over a native dialog, rejected a cached `tournamentActive` flag (Group T1) |
+| [CW-T Tournament Correctness & Hardening][] | Tournament correctness/persistence/hardening design: O(1) inverse-delta undo, `showTournamentPairFast` fast-path render, `reconcileWithFiles`-on-every-entry, `-1` divergence capture, persistent perf log, 6 debt items (Group CW-T) |
+| [Docs & CLAUDE.md Hygiene][] | Docs-only consolidation design — verify-then-edit the 5 deferred `revise-claude-md`/doc-drift items; decisions D1 manual-only maintenance (no markers), D2 no historical line-ref sweep (Group CW-D) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -184,6 +189,7 @@ Central index for all project documentation.
 [Weekly Reviews First Run]: superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md
 [Tournament Exit Affordances]: superpowers/specs/2026-06-30-tournament-exit-affordances-design.md
 [CW-T Tournament Correctness & Hardening]: superpowers/specs/2026-07-01-cw-t-tournament-correctness-hardening-design.md
+[Docs & CLAUDE.md Hygiene]: superpowers/specs/2026-07-03-cw-d-docs-claude-md-hygiene-design.md
 
 ## Security Audits
 

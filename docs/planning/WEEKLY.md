@@ -44,11 +44,11 @@
 
 > A single consolidation pass clearing the large backlog of deferred `revise-claude-md` / doc-drift items accumulated across the June sprint. Mirrors CW-3 from the first Cleanup Week.
 
-- [ ] **Fold 3 still-accurate tournament gotchas into CLAUDE.md** — 🟤 [2026-06-25] branch-salvage (folder-scoped exit; two-path `handleTournamentUndo`; `engine.files` vs `strategy.files` divergence). Verify against current code first.
-- [ ] **Document tournament debounced single-flight persistence + session-only undo + v2 payload** — 🟤 [2026-06-24] P2. (`_schedulePersist`/`_drain`/`flush`/`cancelPending`, `version:2` history-free state, undo cap 100, atomic temp+rename write.)
-- [ ] **CLAUDE.md / docs drift from PR1 dead-code removal** — 🟤 [2026-06-19]. MinHeap/VPTree now worker-only; several affected-line refs shifted ~925 lines.
-- [ ] **Correct the "PR2/PR3 = raw-speed continuation" framing** — 🟤 [2026-06-21]. Tighten to the precise per-phase cost map (PR2/PR3 remove hashing + cache-load waits but NOT the O(n·K) graph build). `DONE.md`, `TODO.md`.
-- [ ] **Decide CLAUDE.md maintenance mode (markers stripped)** — 🟤 [2026-06-18] PR #52. Confirm manual-only maintenance vs re-introducing AUTO-MANAGED markers; document the decision.
+- [x] **Fold 3 still-accurate tournament gotchas into CLAUDE.md** — 🟤 [2026-06-25] branch-salvage (folder-scoped exit; two-path `handleTournamentUndo`; `engine.files` vs `strategy.files` divergence). Verify against current code first.
+- [x] **Document tournament debounced single-flight persistence + session-only undo + v2 payload** — 🟤 [2026-06-24] P2. (`_schedulePersist`/`_drain`/`flush`/`cancelPending`, `version:2` history-free state, undo cap 100, atomic temp+rename write.)
+- [x] **CLAUDE.md / docs drift from PR1 dead-code removal** — 🟤 [2026-06-19]. MinHeap/VPTree now worker-only; several affected-line refs shifted ~925 lines.
+- [x] **Correct the "PR2/PR3 = raw-speed continuation" framing** — 🟤 [2026-06-21]. Tighten to the precise per-phase cost map (PR2/PR3 remove hashing + cache-load waits but NOT the O(n·K) graph build). `DONE.md`, `TODO.md`.
+- [x] **Decide CLAUDE.md maintenance mode (markers stripped)** — 🟤 [2026-06-18] PR #52. Confirm manual-only maintenance vs re-introducing AUTO-MANAGED markers; document the decision.
 
 ### Group CW-V: Test & tooling backfill [batch] 🟤
 **Domain**: tests (non-tournament) + test tooling
@@ -123,7 +123,7 @@
 | **Group CW-D: Docs & CLAUDE.md hygiene** [batch] (start) | (4) |
 
 - [x] Tournament leave-flow 🟤 (discard-orphan retry, `onAppCloseRequested` unsubscribe, re-entrancy guard, stale E2E fix + precondition + aria-label, `getMediaIndex` micro-opt, undo-cap / SwissStrategy test pins); unit tests — ✅ all 6 🟤 done (Tasks 4-6); **CW-T MERGED 2026-07-03 via PR #59 (`ae9588d`)**
-- [ ] Begin CLAUDE.md consolidation (fold 3 tournament gotchas + document post-fix debounced persistence / v2 payload)
+- [x] Begin CLAUDE.md consolidation (fold 3 tournament gotchas + document post-fix debounced persistence / v2 payload) — ✅ done in the single CW-D pass (PR #60)
 
 **Daily total**: ~2 SP CW-T + CW-D start
 
@@ -138,7 +138,7 @@
 | **Group CW-V: Test & tooling backfill** [batch] | 4 |
 | **Group WR: Weekly Reviews** [batch] (start) | (4) |
 
-- [ ] Finish CW-D (PR1/PR2 raw-speed framing correction, dead-code doc drift, CLAUDE.md maintenance-mode decision); **CW-D PR** (docs-only → manual review)
+- [x] Finish CW-D (PR2/PR3 raw-speed framing correction, dead-code doc drift, CLAUDE.md maintenance-mode decision); **CW-D PR #60** (docs-only → manual review) — ✅ all 5 items done + PR #60 open (pending merge)
 - [ ] CW-V: sort-progress E2E smoke, `methodSource` hardening, real-git-diff `extractAddedLines` fixtures, play/pause icon regression test (4 SP)
 - [ ] Weekly Reviews: Claude + non-Claude best-practices rows (start)
 
@@ -175,7 +175,7 @@
 | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |-------|--------|--------|-------|----------|-----|--------|
 | CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ **MERGED 2026-07-03 via PR #59** (merge `ae9588d`, branch deleted; real-24k smoke PASSED; post-merge `/code-review` 2 real findings both fixed pre-merge in `f4b7807`) |
-| CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | Planned |
+| CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | 🔄 PR #60 (open — pending merge; flip to ✅ PR #60 on merge) |
 | CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | Planned |
 | CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | Planned |
