@@ -139,7 +139,7 @@
 | **Group WR: Weekly Reviews** [batch] (start) | (4) |
 
 - [x] Finish CW-D (PR2/PR3 raw-speed framing correction, dead-code doc drift, CLAUDE.md maintenance-mode decision); **CW-D PR #60** (docs-only → manual review) — ✅ all 5 items done; **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`)
-- [x] CW-V: sort-progress E2E smoke, `methodSource` hardening, real-git-diff `extractAddedLines` fixtures, play/pause icon regression test (4 SP) — ✅ all 4 done on branch `tests/cw-v-test-tooling-backfill` (test-only; 423 unit / full E2E 52/52; final review opus merge-cleared; **PR pending**)
+- [x] CW-V: sort-progress E2E smoke, `methodSource` hardening, real-git-diff `extractAddedLines` fixtures, play/pause icon regression test (4 SP) — ✅ all 4 done (test-only; 423 unit / full E2E 52/52; final review opus merge-cleared; pre-merge `/code-review` "No issues found", 4 sub-threshold nits folded in `e737589`); **MERGED 2026-07-05 via PR #61** (merge `85f1f29`)
 - [ ] Weekly Reviews: Claude + non-Claude best-practices rows (start)
 
 **Daily total**: ~4 SP + CW-D finish + reviews overhead
@@ -176,7 +176,7 @@
 |-------|--------|--------|-------|----------|-----|--------|
 | CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ **MERGED 2026-07-03 via PR #59** (merge `ae9588d`, branch deleted; real-24k smoke PASSED; post-merge `/code-review` 2 real findings both fixed pre-merge in `f4b7807`) |
 | CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`, branch deleted; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
-| CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | ✅ **complete on branch `tests/cw-v-test-tooling-backfill` — PR pending** (test-only; 8 commits; every per-task review Approved + final whole-branch review opus "Ready to merge: Yes"; 423 unit / full E2E 52/52 / lint 0-err / format clean) |
+| CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | ✅ **MERGED 2026-07-05 via PR #61** (merge `85f1f29`, branch deleted; test-only; 9 commits; every per-task review Approved + final whole-branch review opus "Ready to merge: Yes"; pre-merge `/code-review` "No issues found", 4 sub-threshold nits folded pre-merge in `e737589`; 423 unit / full E2E 52/52 / lint 0-err / format clean) |
 | CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | Planned |
 | **Total (quota-counted)** | | | **20** | **21** | | |
