@@ -71,6 +71,7 @@ Central index for all project documentation.
 | [Tournament Exit Affordances Plan][]         | Two tournament exit affordances: re-add the in-header exit button (→ `switchMode('single')`) + confirm-before-app-close during an incomplete tournament (main `close` interception → reuse `showTournamentLeavePrompt(onAfterLeave)`) (Group T1) |
 | [CW-T Tournament Correctness & Hardening Plan][] | Tournament correctness, persistence & hardening: O(1) inverse-delta undo + `showTournamentPairFast` wrapper-reuse render + `reconcileWithFiles`-on-every-entry (live-engine gap) + hardened `-1` divergence capture + 6 debt items; MERGED via PR #59 (Group CW-T) |
 | [Docs & CLAUDE.md Hygiene Plan][]            | Docs-only consolidation clearing 5 deferred `revise-claude-md`/doc-drift items: 3 tournament gotchas + debounced-persistence/`v2` note + MinHeap/VPTree worker-only note into CLAUDE.md; PR2/PR3 per-phase framing into DONE/TODO; manual-only maintenance decision D1; PR #60 (Group CW-D) |
+| [Test & Tooling Backfill Plan][]             | Test-only backfill: comment-aware `methodSource` brace guard + `src` seam; `extractAddedLines` real-git-diff fixtures; sort-progress card E2E (observer-capture + cancel wiring); play/pause icon toggle E2E via synthetic events (Group CW-V) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -106,6 +107,7 @@ Central index for all project documentation.
 [Tournament Exit Affordances Plan]: archive/plans/2026-06-30-tournament-exit-affordances.md
 [CW-T Tournament Correctness & Hardening Plan]: archive/plans/2026-07-01-cw-t-tournament-correctness-hardening.md
 [Docs & CLAUDE.md Hygiene Plan]: archive/plans/2026-07-03-cw-d-docs-claude-md-hygiene.md
+[Test & Tooling Backfill Plan]: archive/plans/2026-07-04-cw-v-test-tooling-backfill.md
 
 ## Design Specs
 
