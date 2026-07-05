@@ -86,7 +86,10 @@ function extractAsyncMethod(methodName) {
 // (and, obscurely, an escaped `\{` in a string) — these residuals can still corrupt the
 // outer count; no product caller hits any of them, and the
 // doc-warning covers them. Throws if any string/template span's brace balance is nonzero,
-// or a string/template span is left unterminated.
+// or a string/template span is left unterminated. It can also FALSE-throw (loud, never a
+// silent mis-slice) on constructs it doesn't model — a nested template `${`…`}` or a regex
+// char-class holding a quote (`/['"]/`) — which is acceptable: no product caller hits them,
+// and a loud throw prompts extending the guard rather than silently slicing wrong.
 function assertLiteralBracesBalanced(methodName, body) {
     let state = 'CODE'; // CODE | SQ | DQ | TMPL | LINE_CMT | BLOCK_CMT
     let escaped = false;
@@ -2424,12 +2427,14 @@ describe('methodSource — literal-brace guard', () => {
 
     it('throws on an unbalanced open brace inside a string ("{")', () => {
         const src = wrap(['const s = "oops {";', 'return s;']);
-        expect(() => methodSource('sample', src)).toThrow(/string\/template literal/);
+        expect(() => methodSource('sample', src)).toThrow('unbalanced brace inside a string/template literal');
     });
 
     it('throws on an unbalanced close brace in template text (`}`)', () => {
         const src = wrap(['const s = `oops }`;', 'return s;']);
-        expect(() => methodSource('sample', src)).toThrow(/string\/template literal/);
+        // The naive extractor stops at the `}` inside the template, truncating the body
+        // mid-template → the guard throws the "unterminated" (not the "unbalanced-span") path.
+        expect(() => methodSource('sample', src)).toThrow('body ends inside an unterminated string/template literal');
     });
 
     it('does not throw on an apostrophe inside a line comment (the loadFolder failure mode)', () => {
@@ -2447,8 +2452,8 @@ describe('methodSource — literal-brace guard', () => {
     it('ACCEPTED RESIDUAL: an unbalanced brace inside a comment is not detected', () => {
         // By the approved design the guard skips comment CONTENTS, so a lone brace in a
         // comment is invisible to it even though methodSource's naive outer counter
-        // miscounts it. Documented, not fixed — comment-brace-imbalance and regex
-        // literals are the two accepted residuals. This pins current behavior so a
+        // miscounts it. Documented, not fixed — a comment brace is among the guard's
+        // accepted residuals (see its doc-comment above). This pins current behavior so a
         // future fix (or regression) is visible.
         const src = wrap(['// legacy config { was removed', 'const x = 1;', 'return x;']);
         expect(() => methodSource('sample', src)).not.toThrow();

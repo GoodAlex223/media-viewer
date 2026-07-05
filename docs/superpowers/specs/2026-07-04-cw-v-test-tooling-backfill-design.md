@@ -85,7 +85,8 @@ provably correct for it.
 **Changes**:
 1. **Doc-comment warning** on `methodSource`: state that it brace-counts naively (every `{`/`}`
    regardless of context) and that the guard skips comment contents + checks string/template spans,
-   leaving an unbalanced brace inside a comment OR a regex literal as the two unguarded residuals.
+   leaving an unbalanced brace inside a comment, a regex literal, or an escaped `\{` in a string among
+   the unguarded residuals.
 2. **Guard — one precise rule**: the naive counter only miscounts when a `{` or `}` sits **inside** a
    string/template literal *unbalanced within its own span* (a balanced literal like `` `${x}` `` or
    `"{}"` is harmless; `"{"` or `` `}` `` is not). After locating the body, scan it tracking
