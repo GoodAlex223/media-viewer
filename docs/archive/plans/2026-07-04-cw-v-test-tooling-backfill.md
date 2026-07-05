@@ -635,7 +635,7 @@ Not part of implementation. At closeout: check off each CW-V item in `WEEKLY.md`
 
 ## Outcome (closeout 2026-07-05)
 
-**Status: Complete.** All 4 items implemented test-only, each task subagent-reviewed Approved, final whole-branch review (opus) "Ready to merge: Yes" (4 Minor findings folded in). Verified: 423 unit, full E2E 52/52, lint 0 err (1 pre-existing `no-shadow` warning), format clean. Branch `tests/cw-v-test-tooling-backfill`, 8 commits above `main` (`0bb29b2`), PR pending. See [DONE.md](../../planning/DONE.md) 2026-07-05.
+**Status: Complete.** All 4 items implemented test-only, each task subagent-reviewed Approved, final whole-branch review (opus) "Ready to merge: Yes" (4 Minor findings folded in). Verified: 423 unit, full E2E 52/52, lint 0 err (1 pre-existing `no-shadow` warning), format clean. Branch `tests/cw-v-test-tooling-backfill` (deleted post-merge), **MERGED into `main` via PR #61** (merge `85f1f29`; +1 pre-merge commit `e737589` folding the review's 4 sub-threshold nits). See [DONE.md](../../planning/DONE.md) 2026-07-05.
 
 ### Key Discoveries
 - **The "document + guard" for `methodSource` had to become comment-aware.** The strings-only guard false-threw on the sole caller `loadFolder` (its `//` comment contains `folder's` — an apostrophe that opened a phantom single-quote span). Extended to skip line/block comments (user-approved mid-flight). A truly-correct guard needs nearly the full tokenizer the user had declined — so comment/regex/escaped-brace braces remain **accepted, documented residuals**; the guard is a tripwire for the common string/template case, not an exhaustive extractor.
