@@ -82,8 +82,9 @@ function extractAsyncMethod(methodName) {
 // Line/block comment CONTENTS are skipped entirely — apostrophes AND braces inside a
 // comment are ignored (loadFolder has a `folder's` line comment). Because comment braces
 // are skipped by the guard but still counted by methodSource's naive OUTER counter, an
-// unbalanced brace inside a comment is an accepted residual ALONGSIDE regex literals —
-// both can still corrupt the outer count; no product caller hits either, and the
+// unbalanced brace inside a comment is an accepted residual alongside regex literals
+// (and, obscurely, an escaped `\{` in a string) — these residuals can still corrupt the
+// outer count; no product caller hits any of them, and the
 // doc-warning covers them. Throws if any string/template span's brace balance is nonzero,
 // or a string/template span is left unterminated.
 function assertLiteralBracesBalanced(methodName, body) {
@@ -163,8 +164,8 @@ function assertLiteralBracesBalanced(methodName, body) {
 // WARNING: brace-counting is NAIVE — it counts every `{`/`}` regardless of context.
 // It is only correct for method bodies whose literals contain no *unbalanced* brace.
 // `assertLiteralBracesBalanced` (which skips comments and checks string/template spans)
-// throws on a violating body rather than returning a silently-wrong slice; an unbalanced
-// brace inside a comment or a regex literal are the two unguarded residuals. Only caller
+// throws on a violating body rather than returning a silently-wrong slice; unguarded
+// residuals include an unbalanced brace inside a comment or a regex literal. Only caller
 // today: `loadFolder`.
 // The `src` override lets the guard be unit-tested against synthetic source.
 function methodSource(methodName, src = source) {

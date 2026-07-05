@@ -95,10 +95,10 @@ provably correct for it.
    **Comments must be skipped.** `loadFolder` has a `//` comment containing `folder's` — a scanner that
    only tracked strings would read that apostrophe as a string open and false-throw. So the scanner also
    tracks and skips **line (`//`) and block (`/* */`) comments** (apostrophes/braces inside them ignored).
-   **Two accepted residuals remain:** an unbalanced brace inside a **comment** (the guard skips comment
-   contents, but `methodSource`'s naive OUTER counter still counts those braces) and one inside a
-   **regex literal** (`/…/`, not tracked). Neither is hit by a product caller; the doc-warning covers both,
-   and a test pins the comment-residual behavior. *(Discovered during implementation: comment-skipping is
+   **Accepted residuals remain** (non-exhaustive): an unbalanced brace inside a **comment** (the guard skips
+   comment contents, but `methodSource`'s naive OUTER counter still counts those braces), one inside a
+   **regex literal** (`/…/`, not tracked), and — obscurely — an escaped `\{` inside a string. None is hit by
+   a product caller; the doc-warning covers them, and a test pins the comment-residual behavior. *(Discovered during implementation: comment-skipping is
    required, not optional — the original "strings only" guard false-threw on `loadFolder`; a follow-up
    review then caught the inaccurate "regex is the sole residual" claim.)*
 3. **Testability seam**: give `methodSource` an optional second param `methodSource(methodName, src = source)`
@@ -185,6 +185,14 @@ attributes, and their `display` swap — which is exactly what catches DOM-ref/I
    handlers are wired to those events ([media-viewer.js:3447-3448](../../../media-viewer.js)), so the
    icon-swap assertion still exercises the real `onPlay`/`onPause` code. Pin the exact mechanism during impl
    after observing whether muted `.play()` resolves under the test harness.
+
+> **Implemented deviations (recorded at final review):** (a) the test uses synthetic
+> `dispatchEvent('play'/'pause')` as the *primary* mechanism (codec-independent), not real `.play()` — so the
+> autoplay handling of steps 4 & 6 turned out to be moot. (b) Step 5 (`togglePlayPause()` button-path
+> coverage) was **deliberately dropped**: routing through `togglePlayPause()` → `media.play()` reintroduces
+> the codec/autoplay-policy flake the synthetic approach exists to avoid, and the regression target
+> (`#playIcon`/`#pauseIcon` ID/icon-name drift + the `onPlay`/`onPause` display flip) is fully covered
+> without it. (c) The Lucide `<svg>`-render assertion was dropped — impossible under the E2E no-op stub.
 
 ---
 

@@ -143,7 +143,13 @@ describe('extractAddedLines — unified=0 diff parsing', () => {
 describe('extractAddedLines — real git diff output', () => {
     let repoDir;
 
-    const git = (args) => execFileSync('git', args, { cwd: repoDir, encoding: 'utf8' });
+    // These tests also run inside the pre-commit hook (a git-hook context). Git can export
+    // GIT_DIR / GIT_INDEX_FILE to hook subprocesses, which would redirect init/add/diff away
+    // from the temp repo despite `cwd`; strip them so git always resolves via the temp cwd.
+    const gitEnv = { ...process.env };
+    delete gitEnv.GIT_DIR;
+    delete gitEnv.GIT_INDEX_FILE;
+    const git = (args) => execFileSync('git', args, { cwd: repoDir, encoding: 'utf8', env: gitEnv });
 
     const initRepo = () => {
         repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-git-'));

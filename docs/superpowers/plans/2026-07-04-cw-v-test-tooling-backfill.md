@@ -35,7 +35,7 @@
 
 The existing `methodSource` brace-counts **naively** — it counts every `{`/`}` regardless of context. That is corrupted only when a brace inside a string/template literal is **unbalanced within its own literal span** (e.g. `"{"`, or a bare `}` in template text). A *balanced* literal (`` `${x}` ``, `"{}"`) nets to zero and is harmless. The guard scans each string/template span and throws if any span's internal brace balance is nonzero (or a span is unterminated).
 
-**Comments must be skipped.** The sole current caller, `loadFolder`, has a `//` comment containing `folder's` (an apostrophe). A scanner that only tracks string/template spans would treat that apostrophe as opening a single-quote span, swallow real code, and false-throw — so the guard **skips line (`//`) and block (`/* */`) comments** (an apostrophe or brace inside a comment is ignored). This keeps the guard from false-positiving on live code while still catching a brace-in-string/template caller. **Regex literals (`/…/`) are the one untracked residual** — a brace inside a regex would be miscounted; no product caller hits it, and the doc-warning covers it.
+**Comments must be skipped.** The sole current caller, `loadFolder`, has a `//` comment containing `folder's` (an apostrophe). A scanner that only tracks string/template spans would treat that apostrophe as opening a single-quote span, swallow real code, and false-throw — so the guard **skips line (`//`) and block (`/* */`) comments** (an apostrophe or brace inside a comment is ignored). This keeps the guard from false-positiving on live code while still catching a brace-in-string/template caller. **Unguarded residuals remain**: an unbalanced brace inside a comment (skipped by the guard but still counted by `methodSource`'s naive OUTER counter) or inside a regex literal (`/…/`) — plus, obscurely, an escaped `\{` in a string. None is hit by a product caller; the doc-warning covers them and a test pins the comment-residual behavior.
 
 - [ ] **Step 1: Write the failing guard tests**
 
@@ -99,8 +99,9 @@ In `tests/media-viewer-utils.test.js`, **replace** the current `methodSource` fu
 // Line/block comment CONTENTS are skipped entirely — apostrophes AND braces inside a
 // comment are ignored (loadFolder has a `folder's` line comment). Because comment braces
 // are skipped by the guard but still counted by methodSource's naive OUTER counter, an
-// unbalanced brace inside a comment is an accepted residual ALONGSIDE regex literals —
-// both can still corrupt the outer count; no product caller hits either, and the
+// unbalanced brace inside a comment is an accepted residual alongside regex literals
+// (and, obscurely, an escaped `\{` in a string) — these residuals can still corrupt the
+// outer count; no product caller hits any of them, and the
 // doc-warning covers them. Throws if any string/template span's brace balance is nonzero,
 // or a string/template span is left unterminated.
 function assertLiteralBracesBalanced(methodName, body) {
@@ -180,8 +181,9 @@ function assertLiteralBracesBalanced(methodName, body) {
 // WARNING: brace-counting is NAIVE — it counts every `{`/`}` regardless of context.
 // It is only correct for method bodies whose literals contain no *unbalanced* brace.
 // `assertLiteralBracesBalanced` (which skips comments and checks string/template spans)
-// throws on a violating body rather than returning a silently-wrong slice; a brace
-// inside a regex literal is the one unguarded residual. Only caller today: `loadFolder`.
+// throws on a violating body rather than returning a silently-wrong slice; unguarded
+// residuals include an unbalanced brace inside a comment or a regex literal. Only caller
+// today: `loadFolder`.
 // The `src` override lets the guard be unit-tested against synthetic source.
 function methodSource(methodName, src = source) {
     const regex = new RegExp(`^\\s{4}(?:async\\s+)?${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
