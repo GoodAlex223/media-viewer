@@ -84,8 +84,8 @@ provably correct for it.
 
 **Changes**:
 1. **Doc-comment warning** on `methodSource`: state that it brace-counts naively (every `{`/`}`
-   regardless of context) and that the guard skips comments + checks string/template spans, leaving a
-   brace inside a regex literal as the one unguarded residual.
+   regardless of context) and that the guard skips comment contents + checks string/template spans,
+   leaving an unbalanced brace inside a comment OR a regex literal as the two unguarded residuals.
 2. **Guard — one precise rule**: the naive counter only miscounts when a `{` or `}` sits **inside** a
    string/template literal *unbalanced within its own span* (a balanced literal like `` `${x}` `` or
    `"{}"` is harmless; `"{"` or `` `}` `` is not). After locating the body, scan it tracking
@@ -95,9 +95,12 @@ provably correct for it.
    **Comments must be skipped.** `loadFolder` has a `//` comment containing `folder's` — a scanner that
    only tracked strings would read that apostrophe as a string open and false-throw. So the scanner also
    tracks and skips **line (`//`) and block (`/* */`) comments** (apostrophes/braces inside them ignored).
-   **Regex literals (`/…/`) are the one untracked residual** — a brace inside a regex would be miscounted;
-   no product caller hits it, and the doc-warning covers it. *(Discovered during implementation: the
-   comment-skipping is required, not optional — the original "strings only" guard false-threw on `loadFolder`.)*
+   **Two accepted residuals remain:** an unbalanced brace inside a **comment** (the guard skips comment
+   contents, but `methodSource`'s naive OUTER counter still counts those braces) and one inside a
+   **regex literal** (`/…/`, not tracked). Neither is hit by a product caller; the doc-warning covers both,
+   and a test pins the comment-residual behavior. *(Discovered during implementation: comment-skipping is
+   required, not optional — the original "strings only" guard false-threw on `loadFolder`; a follow-up
+   review then caught the inaccurate "regex is the sole residual" claim.)*
 3. **Testability seam**: give `methodSource` an optional second param `methodSource(methodName, src = source)`
    so a test can pass a **synthetic source string** through the exact same extraction+guard path. This is
    a test-file-only change (no `media-viewer.js` edit) and lets the guard be tested against a crafted

@@ -79,11 +79,13 @@ function extractAsyncMethod(methodName) {
 // Guard for methodSource's naive brace counter (below). The counter is corrupted
 // only by an *unbalanced* brace inside a string/template literal (e.g. `"{"`, a bare
 // `}` in template text). A balanced literal (`${x}`, `"{}"`) nets to zero and is safe.
-// Line/block comments ARE skipped, so an apostrophe or brace inside a comment can't
-// corrupt the scan (loadFolder has a `folder's` line comment). Regex literals are the
-// SOLE untracked residual — a brace inside a regex would be miscounted; no caller hits
-// it, and the doc-warning covers it. Throws if any string/template span's brace balance
-// is nonzero, or a string/template span is left unterminated.
+// Line/block comment CONTENTS are skipped entirely — apostrophes AND braces inside a
+// comment are ignored (loadFolder has a `folder's` line comment). Because comment braces
+// are skipped by the guard but still counted by methodSource's naive OUTER counter, an
+// unbalanced brace inside a comment is an accepted residual ALONGSIDE regex literals —
+// both can still corrupt the outer count; no product caller hits either, and the
+// doc-warning covers them. Throws if any string/template span's brace balance is nonzero,
+// or a string/template span is left unterminated.
 function assertLiteralBracesBalanced(methodName, body) {
     let state = 'CODE'; // CODE | SQ | DQ | TMPL | LINE_CMT | BLOCK_CMT
     let escaped = false;
@@ -161,8 +163,9 @@ function assertLiteralBracesBalanced(methodName, body) {
 // WARNING: brace-counting is NAIVE — it counts every `{`/`}` regardless of context.
 // It is only correct for method bodies whose literals contain no *unbalanced* brace.
 // `assertLiteralBracesBalanced` (which skips comments and checks string/template spans)
-// throws on a violating body rather than returning a silently-wrong slice; a brace
-// inside a regex literal is the one unguarded residual. Only caller today: `loadFolder`.
+// throws on a violating body rather than returning a silently-wrong slice; an unbalanced
+// brace inside a comment or a regex literal are the two unguarded residuals. Only caller
+// today: `loadFolder`.
 // The `src` override lets the guard be unit-tested against synthetic source.
 function methodSource(methodName, src = source) {
     const regex = new RegExp(`^\\s{4}(?:async\\s+)?${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
@@ -2432,6 +2435,21 @@ describe('methodSource — literal-brace guard', () => {
         // Without comment-skipping, the apostrophe in `folder's` would open a phantom
         // single-quote span that swallows code and false-throws. Comment is skipped now.
         const src = wrap(["// refresh the folder's view", 'const s = `${x}`;', 'return s;']);
+        expect(() => methodSource('sample', src)).not.toThrow();
+    });
+
+    it('does not throw on a block comment (contents skipped like line comments)', () => {
+        const src = wrap(["/* reset the folder's state */", 'const s = `${x}`;', 'return s;']);
+        expect(() => methodSource('sample', src)).not.toThrow();
+    });
+
+    it('ACCEPTED RESIDUAL: an unbalanced brace inside a comment is not detected', () => {
+        // By the approved design the guard skips comment CONTENTS, so a lone brace in a
+        // comment is invisible to it even though methodSource's naive outer counter
+        // miscounts it. Documented, not fixed — comment-brace-imbalance and regex
+        // literals are the two accepted residuals. This pins current behavior so a
+        // future fix (or regression) is visible.
+        const src = wrap(['// legacy config { was removed', 'const x = 1;', 'return x;']);
         expect(() => methodSource('sample', src)).not.toThrow();
     });
 });

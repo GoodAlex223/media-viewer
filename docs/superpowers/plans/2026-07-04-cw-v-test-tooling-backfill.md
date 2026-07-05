@@ -96,11 +96,13 @@ In `tests/media-viewer-utils.test.js`, **replace** the current `methodSource` fu
 // Guard for methodSource's naive brace counter (below). The counter is corrupted
 // only by an *unbalanced* brace inside a string/template literal (e.g. `"{"`, a bare
 // `}` in template text). A balanced literal (`${x}`, `"{}"`) nets to zero and is safe.
-// Line/block comments ARE skipped, so an apostrophe or brace inside a comment can't
-// corrupt the scan (loadFolder has a `folder's` line comment). Regex literals are the
-// SOLE untracked residual — a brace inside a regex would be miscounted; no caller hits
-// it, and the doc-warning covers it. Throws if any string/template span's brace balance
-// is nonzero, or a string/template span is left unterminated.
+// Line/block comment CONTENTS are skipped entirely — apostrophes AND braces inside a
+// comment are ignored (loadFolder has a `folder's` line comment). Because comment braces
+// are skipped by the guard but still counted by methodSource's naive OUTER counter, an
+// unbalanced brace inside a comment is an accepted residual ALONGSIDE regex literals —
+// both can still corrupt the outer count; no product caller hits either, and the
+// doc-warning covers them. Throws if any string/template span's brace balance is nonzero,
+// or a string/template span is left unterminated.
 function assertLiteralBracesBalanced(methodName, body) {
     let state = 'CODE'; // CODE | SQ | DQ | TMPL | LINE_CMT | BLOCK_CMT
     let escaped = false;
