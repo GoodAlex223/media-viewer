@@ -57,10 +57,10 @@
 
 > Non-tournament test/tooling backfill (tournament tests live in CW-T). Mirrors CW-2 from the first Cleanup Week.
 
-- [ ] **E2E smoke for the sort-progress card** — 🟤 [2026-06-19] PR1 closeout. Trigger a sort → assert `.notification-progress` appears → completes → is removed; clicking `.progress-cancel` aborts. Use `toBeAttached()` + `!isLoading` wait.
-- [ ] **Harden or document `methodSource()` test-helper brace-counting** — 🟤 [2026-06-25] P3. Skip string/template/regex spans, or add a doc-warning + guard that throws on an unsafe caller. `tests/media-viewer-utils.test.js`.
-- [ ] **Generate `extractAddedLines` fixtures from real `git diff` output** — 🟤 [2026-06-18] PR #52. Drive actual git ops in a temp repo (no-trailing-newline, multi-file, binary-then-text) and assert on real `git diff --cached --unified=0`. `tests/check-secrets.test.js`.
-- [ ] **Add regression test for play/pause icon toggle** — 🟤 [2026-03-23] TASK-023. Catches Lucide API drift / DOM-ref bugs (the oldest actionable 🟤 test-coverage item).
+- [x] **E2E smoke for the sort-progress card** — ✅ done (`tests/e2e/sort-progress.test.js`; observer-capture appear/remove + deterministic cancel→abort). 🟤 [2026-06-19] PR1 closeout.
+- [x] **Harden or document `methodSource()` test-helper brace-counting** — ✅ done (comment-aware `assertLiteralBracesBalanced` + `src` seam; 8 guard tests). 🟤 [2026-06-25] P3. `tests/media-viewer-utils.test.js`.
+- [x] **Generate `extractAddedLines` fixtures from real `git diff` output** — ✅ done (temp-repo `describe`: no-newline / multi-file / binary-then-text / planted-key). 🟤 [2026-06-18] PR #52. `tests/check-secrets.test.js`.
+- [x] **Add regression test for play/pause icon toggle** — ✅ done (`tests/e2e/video-controls.test.js`; synthetic events → icon display-swap + `data-lucide` integrity). 🟤 [2026-03-23] TASK-023.
 
 ### Group CW-P: Process & DX guardrails [batch] 🟡
 **Domain**: process / CI / DX (Husky, WORKFLOW/checklist conventions, Weekly-Reviews methodology)
@@ -139,7 +139,7 @@
 | **Group WR: Weekly Reviews** [batch] (start) | (4) |
 
 - [x] Finish CW-D (PR2/PR3 raw-speed framing correction, dead-code doc drift, CLAUDE.md maintenance-mode decision); **CW-D PR #60** (docs-only → manual review) — ✅ all 5 items done; **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`)
-- [ ] CW-V: sort-progress E2E smoke, `methodSource` hardening, real-git-diff `extractAddedLines` fixtures, play/pause icon regression test (4 SP)
+- [x] CW-V: sort-progress E2E smoke, `methodSource` hardening, real-git-diff `extractAddedLines` fixtures, play/pause icon regression test (4 SP) — ✅ all 4 done on branch `tests/cw-v-test-tooling-backfill` (test-only; 423 unit / full E2E 52/52; final review opus merge-cleared; **PR pending**)
 - [ ] Weekly Reviews: Claude + non-Claude best-practices rows (start)
 
 **Daily total**: ~4 SP + CW-D finish + reviews overhead
@@ -176,7 +176,7 @@
 |-------|--------|--------|-------|----------|-----|--------|
 | CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ **MERGED 2026-07-03 via PR #59** (merge `ae9588d`, branch deleted; real-24k smoke PASSED; post-merge `/code-review` 2 real findings both fixed pre-merge in `f4b7807`) |
 | CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`, branch deleted; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
-| CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | Planned |
+| CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | ✅ **complete on branch `tests/cw-v-test-tooling-backfill` — PR pending** (test-only; 8 commits; every per-task review Approved + final whole-branch review opus "Ready to merge: Yes"; 423 unit / full E2E 52/52 / lint 0-err / format clean) |
 | CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | Planned |
 | **Total (quota-counted)** | | | **20** | **21** | | |

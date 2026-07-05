@@ -1,8 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const { scanForSecrets, extractAddedLines } = require('../scripts/check-secrets.js');
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 // Real-shape sample tokens, assembled at runtime so no literal secret
 // sits in this file (would otherwise be flagged by the guard scanning itself).
@@ -133,5 +137,85 @@ describe('extractAddedLines — unified=0 diff parsing', () => {
             '\\ No newline at end of file',
         ].join('\n');
         expect(extractAddedLines(noNewlineDiff)).toEqual([{ file: 'f.txt', line: 1, text: 'new secret line' }]);
+    });
+});
+
+describe('extractAddedLines — real git diff output', () => {
+    let repoDir;
+
+    // These tests also run inside the pre-commit hook (a git-hook context). Git can export
+    // GIT_DIR / GIT_INDEX_FILE to hook subprocesses, which would redirect init/add/diff away
+    // from the temp repo despite `cwd`; strip them so git always resolves via the temp cwd.
+    const gitEnv = { ...process.env };
+    delete gitEnv.GIT_DIR;
+    delete gitEnv.GIT_INDEX_FILE;
+    const git = (args) => execFileSync('git', args, { cwd: repoDir, encoding: 'utf8', env: gitEnv });
+
+    const initRepo = () => {
+        repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-git-'));
+        git(['init', '--quiet']);
+        git(['config', 'user.email', 'test@example.com']);
+        git(['config', 'user.name', 'CW-V Test']);
+        git(['config', 'core.autocrlf', 'false']); // stable LF line-shapes on Windows
+        git(['config', 'commit.gpgsign', 'false']);
+    };
+
+    const stagedDiff = () => git(['diff', '--cached', '--unified=0']);
+
+    afterEach(() => {
+        if (repoDir) {
+            try {
+                fs.rmSync(repoDir, { recursive: true, force: true });
+            } catch {
+                // Windows can briefly hold a .git pack handle; a leaked temp dir is harmless.
+            }
+            repoDir = undefined;
+        }
+    });
+
+    it('parses a no-trailing-newline replacement (the "\\ No newline" marker)', () => {
+        initRepo();
+        fs.writeFileSync(path.join(repoDir, 'f.txt'), 'old secret line'); // no trailing \n
+        git(['add', 'f.txt']);
+        git(['commit', '--quiet', '-m', 'init']);
+        fs.writeFileSync(path.join(repoDir, 'f.txt'), 'new secret line'); // no trailing \n
+        git(['add', 'f.txt']);
+
+        expect(extractAddedLines(stagedDiff())).toEqual([{ file: 'f.txt', line: 1, text: 'new secret line' }]);
+    });
+
+    it('attributes added lines to the correct file across a multi-file staged diff', () => {
+        initRepo();
+        fs.writeFileSync(path.join(repoDir, 'a.txt'), 'alpha one\nalpha two\n');
+        fs.writeFileSync(path.join(repoDir, 'b.txt'), 'beta one\n');
+        git(['add', 'a.txt', 'b.txt']);
+
+        expect(extractAddedLines(stagedDiff())).toEqual([
+            { file: 'a.txt', line: 1, text: 'alpha one' },
+            { file: 'a.txt', line: 2, text: 'alpha two' },
+            { file: 'b.txt', line: 1, text: 'beta one' },
+        ]);
+    });
+
+    it('skips a staged binary file but still collects the following text file', () => {
+        initRepo();
+        // NUL bytes make git treat this as binary ("Binary files ... differ").
+        fs.writeFileSync(path.join(repoDir, 'img.bin'), Buffer.from([0, 1, 2, 0, 3, 255]));
+        fs.writeFileSync(path.join(repoDir, 'note.txt'), 'text secret line\n');
+        git(['add', 'img.bin', 'note.txt']);
+
+        expect(extractAddedLines(stagedDiff())).toEqual([{ file: 'note.txt', line: 1, text: 'text secret line' }]);
+    });
+
+    it('flags a planted key from real diff output (end-to-end through git)', () => {
+        initRepo();
+        const token = 'ghp_' + 'a'.repeat(36); // assembled — never a literal on disk
+        fs.writeFileSync(path.join(repoDir, 'config.js'), `const t = "${token}";\n`);
+        git(['add', 'config.js']);
+
+        const findings = extractAddedLines(stagedDiff()).flatMap((a) =>
+            scanForSecrets(a.text).map((h) => ({ file: a.file, line: a.line, pattern: h.pattern }))
+        );
+        expect(findings).toEqual([{ file: 'config.js', line: 1, pattern: 'GitHub token' }]);
     });
 });
