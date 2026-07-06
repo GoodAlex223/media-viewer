@@ -3,7 +3,7 @@
 **Date**: 2026-07-05 (run ahead of the WEEKLY.md Thu/Fri slot for the week of July 6–10)
 **Branch**: `chore/wr-weekly-reviews`
 **Source**: ⚪ Overhead — WEEKLY.md Group WR (4 SP, exempt from the source-quota denominator).
-**Status**: Approved (brainstorm) → executing.
+**Status**: MERGED 2026-07-06 via PR #62 (`291879c`, branch deleted remote + local; docs-only → "No issues found").
 **Methodology reference**: [`2026-06-26-weekly-reviews-first-run-design.md`](2026-06-26-weekly-reviews-first-run-design.md) — the reusable "how we run Weekly Reviews" spec. This run-card is a lightweight per-week execution note, not a re-derivation of the methodology.
 
 ---
