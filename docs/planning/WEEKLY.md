@@ -80,9 +80,9 @@
 
 > Read [REVIEW-QUEUE.md](REVIEW-QUEUE.md) first. Per the [2026-06-26] methodology follow-up (which CW-P codifies this week), run **lightweight inline `WebSearch` + a few `WebFetch`** per category — do NOT invoke the deep-research harness. Append a verdict row per category; on an `adopt`, file a 🟤 BACKLOG entry.
 
-- [ ] **Plugins (2 SP)** — two independent tops: official store (Next-up parked: **commit-commands**) + wider internet (Next-up parked: **playwright-cli-agents**, Electron gap noted) — else the live top hit.
-- [ ] **Claude best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **`/clear` between unrelated tasks**, or **autonomous end-to-end verification**).
-- [ ] **Non-Claude AI best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **Addy Osmani's incremental LLM workflow**).
+- [x] **Plugins (2 SP)** — two independent tops: official store (Next-up parked: **commit-commands**) + wider internet (Next-up parked: **playwright-cli-agents**, Electron gap noted) — else the live top hit. — ✅ **done 2026-07-05**: `typescript-lsp` (official code-intelligence LSP) **adopt** → 🟤; Electron Developer Agent (wider) **pass**.
+- [x] **Claude best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **`/clear` between unrelated tasks**, or **autonomous end-to-end verification**). — ✅ **done**: autonomous end-to-end / visual verification before "done" **adopt** → 🟤.
+- [x] **Non-Claude AI best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **Addy Osmani's incremental LLM workflow**). — ✅ **done**: Addy Osmani workflow **pass** (validates current practice; nothing new to adopt).
 
 ---
 
@@ -140,7 +140,7 @@
 
 - [x] Finish CW-D (PR2/PR3 raw-speed framing correction, dead-code doc drift, CLAUDE.md maintenance-mode decision); **CW-D PR #60** (docs-only → manual review) — ✅ all 5 items done; **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`)
 - [x] CW-V: sort-progress E2E smoke, `methodSource` hardening, real-git-diff `extractAddedLines` fixtures, play/pause icon regression test (4 SP) — ✅ all 4 done (test-only; 423 unit / full E2E 52/52; final review opus merge-cleared; pre-merge `/code-review` "No issues found", 4 sub-threshold nits folded in `e737589`); **MERGED 2026-07-05 via PR #61** (merge `85f1f29`)
-- [ ] Weekly Reviews: Claude + non-Claude best-practices rows (start)
+- [x] Weekly Reviews: Claude + non-Claude best-practices rows — ✅ done (Claude BP: autonomous verification **adopt**; non-Claude: Addy Osmani **pass**)
 
 **Daily total**: ~4 SP + CW-D finish + reviews overhead
 
@@ -155,7 +155,7 @@
 | **Group WR: Weekly Reviews** [batch] (finish) | (4) |
 
 - [ ] CW-P: automated E2E gate (pre-push or checklist), Weekly-Reviews methodology fixes, call-site ref-sweep convention (3 SP)
-- [ ] Weekly Reviews: plugins ×2 (store + wider); file 🟤 on any `adopt`
+- [x] Weekly Reviews: plugins ×2 (store + wider); file 🟤 on any `adopt` — ✅ done (store: `typescript-lsp` **adopt** → 🟤; wider: Electron Developer Agent **pass**)
 - [ ] Buffer: CW-T spillover / real-24k smoke follow-up
 
 **Daily total**: 3 SP + reviews overhead + CW-T buffer
@@ -178,7 +178,7 @@
 | CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`, branch deleted; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
 | CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | ✅ **MERGED 2026-07-05 via PR #61** (merge `85f1f29`, branch deleted; test-only; 9 commits; every per-task review Approved + final whole-branch review opus "Ready to merge: Yes"; pre-merge `/code-review` "No issues found", 4 sub-threshold nits folded pre-merge in `e737589`; 423 unit / full E2E 52/52 / lint 0-err / format clean) |
 | CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
-| WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | Planned |
+| WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ **done 2026-07-05** (4 rows: 2 adopt — `typescript-lsp`, autonomous verification; 2 pass — Electron Developer Agent, Addy Osmani; 2 🟤 filed) |
 | **Total (quota-counted)** | | | **20** | **21** | | |
 | **Total (incl. ⚪ overhead)** | | | **23** | **25** | | |
 
