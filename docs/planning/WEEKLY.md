@@ -178,7 +178,7 @@
 | CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`, branch deleted; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
 | CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | ✅ **MERGED 2026-07-05 via PR #61** (merge `85f1f29`, branch deleted; test-only; 9 commits; every per-task review Approved + final whole-branch review opus "Ready to merge: Yes"; pre-merge `/code-review` "No issues found", 4 sub-threshold nits folded pre-merge in `e737589`; 423 unit / full E2E 52/52 / lint 0-err / format clean) |
 | CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
-| WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ **done 2026-07-05** (4 rows: 2 adopt — `typescript-lsp`, autonomous verification; 2 pass — Electron Developer Agent, Addy Osmani; 2 🟤 filed) |
+| WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ **done 2026-07-05** (4 rows: 2 adopt — `typescript-lsp`, autonomous verification; 2 pass — Electron Developer Agent, Addy Osmani; 2 🟤 filed) · closeout on-branch, PR/merge pending |
 | **Total (quota-counted)** | | | **20** | **21** | | |
 | **Total (incl. ⚪ overhead)** | | | **23** | **25** | | |
 

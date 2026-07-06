@@ -64,6 +64,42 @@ feature-dev, Context7).
   schedule lines, and flip the Summary-Table WR status `Planned → ✅`.
 - **Commit** the doc edits.
 
+---
+
+## Outcome (2026-07-05 run)
+
+**Executed** 2026-07-05 on branch `chore/wr-weekly-reviews` (commits `db09ffd` run-card, `ab74f1c`
+verdicts, + closeout). Lightweight inline research — **9 web calls total** (4 `WebSearch` + 5
+`WebFetch`), no harness, no rate-limit issues — validating the [2026-06-26] methodology correction
+(the first run's harness burned ~8M tokens and never completed verification). 4 verdict rows appended
+to REVIEW-QUEUE.md:
+
+| Category | Pick | Verdict |
+|----------|------|---------|
+| Plugins / official store | `typescript-lsp` (code-intelligence LSP, TS **and** JS) | **adopt** → 🟤 |
+| Plugins / wider internet | Electron Developer Agent (rohitg00 persona file) | pass |
+| Claude best-practice | autonomous e2e / visual verification before "done" | **adopt** → 🟤 |
+| Non-Claude best-practice | Addy Osmani incremental LLM workflow | pass |
+
+**Future improvements (extracted → BACKLOG 🟤 [2026-07-05]):** both adopts are hands-off trial entries
+(D4) — the `typescript-lsp` trial (untyped-JS + large-project-memory eval points); the
+autonomous/visual verification discipline (possible-dup-of CW-P's E2E-gate item — mechanism vs
+discipline).
+
+**Key discoveries:**
+- **Hybrid sourcing paid off.** Both parked plugin picks (`commit-commands`, `playwright-cli-agents`)
+  were pre-flagged weak; a rote parked-first pass would have surfaced nothing adoptable. Fresh search
+  found the two genuinely-useful adopts.
+- **`typescript-lsp` covers untyped JS too** (same `typescript-language-server` engine VS Code uses)
+  — symbol navigation is fully available; only full type-checking is reduced. So it's a real adopt
+  for the ~8400-line renderer, with the untyped/memory caveats as trial-eval notes, not blockers.
+- **The "give Claude a check it can run / verify UI visually" best-practice maps directly onto this
+  repo's recurring "passes tests but invisible/broken" pain** (the test-actual-visibility incident;
+  the "green hook ≠ green E2E" Continue-resume regression) — which is what tipped it to `adopt`.
+- **Lightweight inline research is the right tool** for a 4-SP overhead review: ~9 calls, minutes, no
+  rate limit. The [2026-06-26] correction holds; a codified-repeat process needs only a run-card, not
+  a fresh spec + implementation plan.
+
 ## Scope guards (YAGNI)
 
 - Exactly **4 verdict rows** this week — no more.
