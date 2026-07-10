@@ -129,3 +129,38 @@ deep-research harness for a rare, explicitly-requested deep dive on a single top
 **one workflow at a time — never fan out multiple harnesses in parallel** (the parallel 80+-agent
 burst is what tripped the rate limiter). Tracked in BACKLOG 🟤 [2026-06-26] Weekly Reviews first-run
 process follow-ups.
+
+---
+
+## Methodology (canonical — current practice)
+
+This section is the operative "how we run Weekly Reviews" reference, superseding **D2** in the
+Decisions block above. It consolidates every methodology fix surfaced across the first two runs.
+
+1. **Lightweight inline research is the default.** Use a few targeted `WebSearch` + 2–3 `WebFetch`
+   per category, in the main thread. Do **not** invoke the deep-research harness for a routine
+   review — the first run's 4 harness runs burned ~8M tokens and the adversarial-verification phase
+   never completed once. Reserve the harness for a rare, explicitly-requested single deep dive.
+   *(retro [2026-06-26])*
+2. **Never fan out multiple harnesses in parallel.** If the harness is used at all, run **one
+   workflow at a time** — the parallel multi-agent burst is what tripped server-side rate limiting.
+   *(retro [2026-06-26])*
+3. **Recognize docs-only PRs before the `/code-review` fan-out.** A Weekly-Reviews PR is
+   docs-only (Prettier already ignores `docs/`/`*.md`), so `/code-review` cannot surface a code
+   finding. Pre-check `gh pr view <N> --json files`; if every changed path is `*.md`/`docs/**` with
+   no code/config, treat it as docs-only and skip the agent fan-out (post a docs-only acknowledgment
+   instead of the standard "No issues found" template). *([2026-06-29])*
+4. **Merge or explicitly defer the docs-only PR in its originating session.** The recurring
+   Weekly-Reviews PR carries no code risk (the pre-commit hook already gates the docs). Close the
+   loop in-session: either merge it, or, if intentionally parking it, drop a dated
+   "merge pending — <reason>" note in WEEKLY.md so it isn't a silent stale branch. *([2026-06-29])*
+5. **Hybrid candidate sourcing is the default.** Each week, per category, fresh-check the live
+   landscape (a `WebSearch` for the current best) **and** consider the parked *Next-up* item, then
+   review whichever is strongest — do not rote-pick the parked item first. On 2026-07-05 a
+   parked-first pass would have surfaced only weak picks; the fresh check found the two real adopts
+   (`typescript-lsp`, autonomous verification). *([2026-07-06])*
+6. **Run-card, not a fresh spec + plan, for this codified-repeat task.** Because the methodology is
+   already codified here, a Weekly-Reviews run needs only brainstorm → a short run-card → execute;
+   the brainstorming design-gate is satisfied by approving the run-card. Recurring ⚪-overhead tasks
+   whose method is already codified do **not** need a fresh `writing-plans` cycle each time.
+   *([2026-07-06])*
