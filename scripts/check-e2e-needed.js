@@ -51,3 +51,62 @@ function classifyPaths(files) {
 }
 
 module.exports = { parsePushRefs, classifyPaths };
+
+// --- CLI: read git's pre-push stdin, print RUN/SKIP for the hook to consume ---
+if (require.main === module) {
+    const { execFileSync } = require('child_process');
+    const fs = require('fs');
+
+    // Changed files for one ref; returns null on any git failure (caller forces RUN).
+    const changedFilesForRef = (ref) => {
+        try {
+            let base;
+            if (ZERO_SHA.test(ref.remoteSha || '')) {
+                // New branch on remote → diff vs the merge-base with main.
+                base = execFileSync('git', ['merge-base', 'origin/main', ref.localSha], {
+                    encoding: 'utf8',
+                }).trim();
+            } else {
+                base = ref.remoteSha;
+            }
+            if (!base) return null;
+            return execFileSync('git', ['diff', '--name-only', base, ref.localSha], { encoding: 'utf8' })
+                .split('\n')
+                .map((s) => s.trim())
+                .filter(Boolean);
+        } catch (_err) {
+            return null;
+        }
+    };
+
+    const decide = () => {
+        let stdin = '';
+        try {
+            stdin = fs.readFileSync(0, 'utf8');
+        } catch (_err) {
+            stdin = '';
+        }
+        const refs = parsePushRefs(stdin);
+        if (refs.length === 0) {
+            process.stderr.write('pre-push: no pushable refs — skipping E2E.\n');
+            return 'SKIP';
+        }
+        const allFiles = [];
+        for (const ref of refs) {
+            const files = changedFilesForRef(ref);
+            if (files === null) {
+                process.stderr.write('pre-push: could not determine changed files — running E2E (fail-safe).\n');
+                return 'RUN';
+            }
+            allFiles.push(...files);
+        }
+        if (classifyPaths(allFiles)) {
+            process.stderr.write('pre-push: runtime code changed — running E2E.\n');
+            return 'RUN';
+        }
+        process.stderr.write('pre-push: docs-only push — skipping E2E.\n');
+        return 'SKIP';
+    };
+
+    process.stdout.write(decide());
+}
