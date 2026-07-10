@@ -197,6 +197,7 @@ When modifying this codebase:
 - Changes to preload.js require security review
 - Worker changes may impact performance significantly
 - The renderer file is large — search before adding duplicates
+- When removing or relocating a **named** function / handler / call site, grep the whole repo for the symbol across **tests and comments** — not just live callers — and update or delete each hit before committing. The unit-only pre-commit hook won't catch a stale E2E assertion or a stale code comment (root cause of the PR #56 follow-ups).
 - Run `npm test` before committing (pre-commit hook enforces this); worker exports require the conditional CJS pattern so tests can import them
 
 ## Maintenance
