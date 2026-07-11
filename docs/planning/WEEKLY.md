@@ -154,7 +154,7 @@
 | **Group CW-P: Process & DX guardrails** [batch] | 3 |
 | **Group WR: Weekly Reviews** [batch] (finish) | (4) |
 
-- [x] CW-P: automated E2E gate (pre-push or checklist), Weekly-Reviews methodology fixes, call-site ref-sweep convention (3 SP) — ✅ done 2026-07-10 (pre-push E2E gate + methodology consolidation + ref-sweep bullet); complete on-branch, PR/merge pending
+- [x] CW-P: automated E2E gate (pre-push or checklist), Weekly-Reviews methodology fixes, call-site ref-sweep convention (3 SP) — ✅ done 2026-07-10 (pre-push E2E gate + methodology consolidation + ref-sweep bullet); **MERGED 2026-07-11 via PR #63** (`f6c2c46`)
 - [x] Weekly Reviews: plugins ×2 (store + wider); file 🟤 on any `adopt` — ✅ done (store: `typescript-lsp` **adopt** → 🟤; wider: Electron Developer Agent **pass**)
 - [ ] Buffer: CW-T spillover / real-24k smoke follow-up
 
@@ -177,7 +177,7 @@
 | CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ **MERGED 2026-07-03 via PR #59** (merge `ae9588d`, branch deleted; real-24k smoke PASSED; post-merge `/code-review` 2 real findings both fixed pre-merge in `f4b7807`) |
 | CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`, branch deleted; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
 | CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | ✅ **MERGED 2026-07-05 via PR #61** (merge `85f1f29`, branch deleted; test-only; 9 commits; every per-task review Approved + final whole-branch review opus "Ready to merge: Yes"; pre-merge `/code-review` "No issues found", 4 sub-threshold nits folded pre-merge in `e737589`; 423 unit / full E2E 52/52 / lint 0-err / format clean) |
-| CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | ⏳ **complete on-branch `cleanup/cw-p-process-dx-guardrails` — PR/merge pending** (7 commits; final opus review "Ready to merge: Yes", 1 Minor folded `018f0d2`; 434 unit / E2E 52/52 / lint 0-err; not docs-only → `/code-review`-eligible) |
+| CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | ✅ **MERGED 2026-07-11 via PR #63** (merge `f6c2c46`, branch deleted remote + local; 7 commits; final opus review "Ready to merge: Yes", 1 Minor folded `018f0d2`; 434 unit / E2E 52/52 / lint 0-err; not docs-only → post-merge `/code-review` "No issues found" — 3 sub-threshold findings → 2 🟤 [2026-07-11] follow-ups) |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ **MERGED 2026-07-06 via PR #62** (`291879c`, branch deleted remote + local; docs-only → "No issues found", no `/code-review` fan-out; 4 rows: 2 adopt — `typescript-lsp`, autonomous verification; 2 pass — Electron Developer Agent, Addy Osmani; 2 🟤 + 2 🟤 [2026-07-06] post-merge follow-ups) |
 | **Total (quota-counted)** | | | **20** | **21** | | |
 | **Total (incl. ⚪ overhead)** | | | **23** | **25** | | |
