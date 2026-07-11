@@ -1,9 +1,9 @@
 # Review Queue
 
-Cross-week state for the recurring **Weekly Reviews** batch (see WEEKLY.md → Recurring Weekly Reviews / Group WR). Each week, per category: pick the top **not-yet-reviewed** candidate (a parked **Next-up** item first, else the current live top hit via web search, excluding the Reviewed log); do a short review; append a verdict row (`adopt | pass | defer`); park notable runners-up under **Next-up**. On an `adopt`, also file a 🟤 Auto-Generated entry in BACKLOG.md.
+Cross-week state for the recurring **Weekly Reviews** batch (see WEEKLY.md → Recurring Weekly Reviews / Group WR). Each week, per category, use **hybrid sourcing**: fresh-check the live landscape (a `WebSearch` for the current best, excluding the Reviewed log) **and** consider the parked **Next-up** item, then review whichever is strongest — do not rote-pick the parked item. Use **lightweight inline research** (a few `WebSearch` + 2–3 `WebFetch`; never the deep-research harness for a routine review). Append a verdict row (`adopt | pass | defer`); park notable runners-up under **Next-up**. On an `adopt`, also file a 🟤 Auto-Generated entry in BACKLOG.md.
 
 **Created**: 2026-06-19 (first run scheduled June 22–26, 2026 week — empty Reviewed logs to start).
-**Methodology**: see [`docs/superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md`](../superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md) — the reusable "how we run Weekly Reviews" reference (hybrid relevance lens, depth, verdict rubric).
+**Methodology**: see the **Methodology (canonical — current practice)** section of [`docs/superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md`](../superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md) — the reusable "how we run Weekly Reviews" reference (hybrid sourcing, lightweight inline research, docs-only-PR handling, run-card path, verdict rubric).
 
 ---
 

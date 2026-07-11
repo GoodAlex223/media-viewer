@@ -1,0 +1,5 @@
+decision=$(node scripts/check-e2e-needed.js || echo RUN)
+if [ "$decision" = "RUN" ]; then
+    echo "pre-push: running the E2E suite before push (bypass a WIP push with: git push --no-verify)…"
+    npx playwright test
+fi

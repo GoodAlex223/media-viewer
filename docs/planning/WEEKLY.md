@@ -69,9 +69,9 @@
 
 > The one non-🟤 cleanup group. Kept modest so 🟡 stays ≤25% even in an inverted week. Mirrors CW-4 from the first Cleanup Week.
 
-- [ ] **Add an automated E2E gate** — 🟡 [2026-06-26]. Pick the lowest-viable tier: a Husky **pre-push** hook running the E2E suite (or changed E2E files), or — if that proves too slow (Electron launch, `workers:1`) — a pre-merge-checklist WORKFLOW rule. Closes the "silently-broken E2E can land" gap (repo has no CI; hook runs unit only). `.husky/` (new `pre-push`) or checklist docs.
-- [ ] **Codify Weekly-Reviews methodology fixes** — 🟡 [2026-06-26] (2 items) + [2026-06-29] (2 items). Default to lightweight inline `WebSearch`/`WebFetch` (NOT the deep-research harness — it burned ~8M tokens / never verified); never fan out multiple harnesses in parallel; recognize docs-only PRs before the `/code-review` fan-out; merge/defer a docs-only Weekly-Reviews PR in-session. Update the methodology spec + REVIEW-QUEUE.md.
-- [ ] **Adopt "sweep references when removing a named call site" convention** — 🟤 [2026-06-26]. Add to the `receiving-code-review` / `verification-before-completion` checklist (grep tests + comments, not just live callers). *(One 🟤 item folded into this otherwise-🟡 process group.)*
+- [x] **Add an automated E2E gate** — ✅ done 2026-07-10 (CW-P): Husky **pre-push** hook + `scripts/check-e2e-needed.js` (pure `parsePushRefs`/`classifyPaths` + fail-safe git-wrapper CLI); runs the full E2E suite only when the outgoing push changes runtime code, docs-only pushes skip. Chose the pre-push tier over a checklist (only automatable local gate; no CI). 🟡 [2026-06-26]. Pick the lowest-viable tier: a Husky **pre-push** hook running the E2E suite (or changed E2E files), or — if that proves too slow (Electron launch, `workers:1`) — a pre-merge-checklist WORKFLOW rule. Closes the "silently-broken E2E can land" gap (repo has no CI; hook runs unit only). `.husky/` (new `pre-push`) or checklist docs.
+- [x] **Codify Weekly-Reviews methodology fixes** — ✅ done 2026-07-10 (CW-P): 6 fixes folded into a canonical `## Methodology (current practice)` section of the first-run spec + hybrid-sourcing REVIEW-QUEUE.md intro (also subsumes the [2026-07-06] hybrid-sourcing + run-card follow-ups). 🟡 [2026-06-26] (2 items) + [2026-06-29] (2 items). Default to lightweight inline `WebSearch`/`WebFetch` (NOT the deep-research harness — it burned ~8M tokens / never verified); never fan out multiple harnesses in parallel; recognize docs-only PRs before the `/code-review` fan-out; merge/defer a docs-only Weekly-Reviews PR in-session. Update the methodology spec + REVIEW-QUEUE.md.
+- [x] **Adopt "sweep references when removing a named call site" convention** — ✅ done 2026-07-10 (CW-P): one CLAUDE.md Best-Practices bullet (grep tests + comments, not just live callers). 🟤 [2026-06-26]. Add to the `receiving-code-review` / `verification-before-completion` checklist (grep tests + comments, not just live callers). *(One 🟤 item folded into this otherwise-🟡 process group.)*
 
 ### Group WR: Weekly Reviews [batch] ⚪ Overhead
 **Domain**: Research / process (exempt overhead — excluded from the source-quota denominator)
@@ -154,7 +154,7 @@
 | **Group CW-P: Process & DX guardrails** [batch] | 3 |
 | **Group WR: Weekly Reviews** [batch] (finish) | (4) |
 
-- [ ] CW-P: automated E2E gate (pre-push or checklist), Weekly-Reviews methodology fixes, call-site ref-sweep convention (3 SP)
+- [x] CW-P: automated E2E gate (pre-push or checklist), Weekly-Reviews methodology fixes, call-site ref-sweep convention (3 SP) — ✅ done 2026-07-10 (pre-push E2E gate + methodology consolidation + ref-sweep bullet); complete on-branch, PR/merge pending
 - [x] Weekly Reviews: plugins ×2 (store + wider); file 🟤 on any `adopt` — ✅ done (store: `typescript-lsp` **adopt** → 🟤; wider: Electron Developer Agent **pass**)
 - [ ] Buffer: CW-T spillover / real-24k smoke follow-up
 
@@ -177,7 +177,7 @@
 | CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ **MERGED 2026-07-03 via PR #59** (merge `ae9588d`, branch deleted; real-24k smoke PASSED; post-merge `/code-review` 2 real findings both fixed pre-merge in `f4b7807`) |
 | CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`, branch deleted; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
 | CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | ✅ **MERGED 2026-07-05 via PR #61** (merge `85f1f29`, branch deleted; test-only; 9 commits; every per-task review Approved + final whole-branch review opus "Ready to merge: Yes"; pre-merge `/code-review` "No issues found", 4 sub-threshold nits folded pre-merge in `e737589`; 423 unit / full E2E 52/52 / lint 0-err / format clean) |
-| CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | Planned |
+| CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | ⏳ **complete on-branch `cleanup/cw-p-process-dx-guardrails` — PR/merge pending** (7 commits; final opus review "Ready to merge: Yes", 1 Minor folded `018f0d2`; 434 unit / E2E 52/52 / lint 0-err; not docs-only → `/code-review`-eligible) |
 | WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ **MERGED 2026-07-06 via PR #62** (`291879c`, branch deleted remote + local; docs-only → "No issues found", no `/code-review` fan-out; 4 rows: 2 adopt — `typescript-lsp`, autonomous verification; 2 pass — Electron Developer Agent, Addy Osmani; 2 🟤 + 2 🟤 [2026-07-06] post-merge follow-ups) |
 | **Total (quota-counted)** | | | **20** | **21** | | |
 | **Total (incl. ⚪ overhead)** | | | **23** | **25** | | |
