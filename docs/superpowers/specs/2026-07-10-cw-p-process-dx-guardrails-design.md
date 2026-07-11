@@ -61,8 +61,8 @@ Only these two docs globs are treated as safe-to-skip; everything else forces a 
 
 ### 2.3 The CLI wrapper (git plumbing — thin, fail-safe)
 
-1. Read all of stdin; `parsePushRefs`.
-2. If no ref tuples → print `SKIP` (stderr: "no pushable refs"), exit 0.
+1. Read all of stdin; `parsePushRefs`. A failure to *read* stdin (not an empty read) is uncertainty → **fail-safe RUN**, not the empty-stdin SKIP of step 2.
+2. If stdin read cleanly but yielded no ref tuples → print `SKIP` (stderr: "no pushable refs"), exit 0.
 3. For each ref, compute the changed-file set for the outgoing range:
    - `remote_sha` all-zeros (**new branch** on remote) → `git diff --name-only $(git merge-base origin/main <local_sha>) <local_sha>` — i.e. what this branch changes vs `main`.
    - otherwise (**existing branch**, incremental push) → `git diff --name-only <remote_sha> <local_sha>`.
@@ -97,6 +97,7 @@ fi
 | Branch delete (`local_sha` all-zeros) | ref dropped by `parsePushRefs`; if no refs remain → `SKIP` |
 | Multiple refs in one push | changed files unioned across refs |
 | `git diff` / spawn error on a ref | that ref treated as runtime-changed → `RUN` |
+| stdin unreadable (`readFileSync(0)` throws) | fail-safe `RUN` (distinct from a clean empty read, which is `SKIP`) |
 | node script crashes entirely | hook `|| echo RUN` → `RUN` |
 | WIP push the dev knows is fine | `git push --no-verify` |
 | Pushing **this** branch (`.husky/` + `scripts/` changed) | `RUN` — dogfoods the gate on its own PR |

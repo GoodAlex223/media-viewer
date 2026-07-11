@@ -80,11 +80,14 @@ if (require.main === module) {
     };
 
     const decide = () => {
-        let stdin = '';
+        let stdin;
         try {
             stdin = fs.readFileSync(0, 'utf8');
         } catch (_err) {
-            stdin = '';
+            // Could not read stdin — that is uncertainty, not a legitimate no-op push.
+            // Fail safe toward running E2E rather than the empty-stdin SKIP branch below.
+            process.stderr.write('pre-push: could not read stdin — running E2E (fail-safe).\n');
+            return 'RUN';
         }
         const refs = parsePushRefs(stdin);
         if (refs.length === 0) {
