@@ -72,6 +72,7 @@ Central index for all project documentation.
 | [CW-T Tournament Correctness & Hardening Plan][] | Tournament correctness, persistence & hardening: O(1) inverse-delta undo + `showTournamentPairFast` wrapper-reuse render + `reconcileWithFiles`-on-every-entry (live-engine gap) + hardened `-1` divergence capture + 6 debt items; MERGED via PR #59 (Group CW-T) |
 | [Docs & CLAUDE.md Hygiene Plan][]            | Docs-only consolidation clearing 5 deferred `revise-claude-md`/doc-drift items: 3 tournament gotchas + debounced-persistence/`v2` note + MinHeap/VPTree worker-only note into CLAUDE.md; PR2/PR3 per-phase framing into DONE/TODO; manual-only maintenance decision D1; PR #60 (Group CW-D) |
 | [Test & Tooling Backfill Plan][]             | Test-only backfill: comment-aware `methodSource` brace guard + `src` seam; `extractAddedLines` real-git-diff fixtures; sort-progress card E2E (observer-capture + cancel wiring); play/pause icon toggle E2E via synthetic events (Group CW-V) |
+| [CW-P Process & DX Guardrails Plan][]         | Automated pre-push E2E gate (code-aware skip; pure `parsePushRefs`/`classifyPaths` + fail-safe git-wrapper CLI + Husky v9 hook) + Weekly-Reviews methodology consolidation (6 fixes) + CLAUDE.md ref-sweep bullet (Group CW-P) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -108,6 +109,7 @@ Central index for all project documentation.
 [CW-T Tournament Correctness & Hardening Plan]: archive/plans/2026-07-01-cw-t-tournament-correctness-hardening.md
 [Docs & CLAUDE.md Hygiene Plan]: archive/plans/2026-07-03-cw-d-docs-claude-md-hygiene.md
 [Test & Tooling Backfill Plan]: archive/plans/2026-07-04-cw-v-test-tooling-backfill.md
+[CW-P Process & DX Guardrails Plan]: archive/plans/2026-07-10-cw-p-process-dx-guardrails.md
 
 ## Design Specs
 
@@ -152,6 +154,7 @@ Central index for all project documentation.
 | [Tournament Exit Affordances][] | Two tournament exit affordances (in-header exit button + confirm-before-app-close via main `close` interception reusing the `onAfterLeave` leave prompt); reuse-the-DOM-modal-via-IPC over a native dialog, rejected a cached `tournamentActive` flag (Group T1) |
 | [CW-T Tournament Correctness & Hardening][] | Tournament correctness/persistence/hardening design: O(1) inverse-delta undo, `showTournamentPairFast` fast-path render, `reconcileWithFiles`-on-every-entry, `-1` divergence capture, persistent perf log, 6 debt items (Group CW-T) |
 | [Docs & CLAUDE.md Hygiene][] | Docs-only consolidation design — verify-then-edit the 5 deferred `revise-claude-md`/doc-drift items; decisions D1 manual-only maintenance (no markers), D2 no historical line-ref sweep (Group CW-D) |
+| [CW-P Process & DX Guardrails][] | Process/DX guardrails design: pre-push E2E gate (conservative code-aware classify, fail-safe CLI, dogfood-on-own-PR) + Weekly-Reviews methodology consolidation (6 fixes) + ref-sweep convention; decisions pre-push-code-aware-skip / consolidate-in-existing-spec / CLAUDE.md-home (Group CW-P) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -192,6 +195,7 @@ Central index for all project documentation.
 [Tournament Exit Affordances]: superpowers/specs/2026-06-30-tournament-exit-affordances-design.md
 [CW-T Tournament Correctness & Hardening]: superpowers/specs/2026-07-01-cw-t-tournament-correctness-hardening-design.md
 [Docs & CLAUDE.md Hygiene]: superpowers/specs/2026-07-03-cw-d-docs-claude-md-hygiene-design.md
+[CW-P Process & DX Guardrails]: superpowers/specs/2026-07-10-cw-p-process-dx-guardrails-design.md
 
 ## Security Audits
 
@@ -207,4 +211,4 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-06-25*
+*Last Updated: 2026-07-10*

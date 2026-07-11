@@ -1,5 +1,7 @@
 # CW-P: Process & DX Guardrails — Implementation Plan
 
+**Status:** Complete (2026-07-10) — all 5 tasks implemented via subagent-driven development (controller commits); per-task reviews Approved; final whole-branch review (opus) "Ready to merge: Yes" with one Minor (stdin-read fail-safe → RUN) folded in (`018f0d2`). 434/434 unit, full E2E 52/52, lint 0-err, format clean. On branch `cleanup/cw-p-process-dx-guardrails` (PR/merge pending at archive time).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Land three process/DX guardrails on one branch/PR — an automated pre-push E2E gate, a consolidated Weekly-Reviews methodology, and a ref-sweep convention in CLAUDE.md.
@@ -47,7 +49,7 @@
   - `parsePushRefs(stdin: string): Array<{localRef, localSha, remoteRef, remoteSha}>` — parses git pre-push stdin; drops branch-delete refs (all-zero `localSha`); blank input → `[]`.
   - `classifyPaths(files: string[]): boolean` — `true` (run E2E) if any path is runtime; `false` only when every path is `*.md`/`docs/**` or the list is empty.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/check-e2e-needed.test.js`:
 
@@ -123,12 +125,12 @@ describe('classifyPaths', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/check-e2e-needed.test.js`
 Expected: FAIL — `Cannot find module '../scripts/check-e2e-needed.js'`.
 
-- [ ] **Step 3: Write the minimal implementation**
+- [x] **Step 3: Write the minimal implementation**
 
 Create `scripts/check-e2e-needed.js`:
 
@@ -188,17 +190,17 @@ function classifyPaths(files) {
 module.exports = { parsePushRefs, classifyPaths };
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/check-e2e-needed.test.js`
 Expected: PASS (all 11 cases green — 5 `parsePushRefs` + 6 `classifyPaths`).
 
-- [ ] **Step 5: Lint the new script**
+- [x] **Step 5: Lint the new script**
 
 Run: `npx eslint scripts/check-e2e-needed.js tests/check-e2e-needed.test.js`
 Expected: no errors (warnings allowed, but there should be none).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/check-e2e-needed.js tests/check-e2e-needed.test.js
@@ -227,7 +229,7 @@ EOF
 - Consumes: `parsePushRefs`, `classifyPaths` from Task 1 (module scope).
 - Produces: a CLI that reads stdin (git pre-push format) and writes `RUN` or `SKIP` to stdout (human notes to stderr); `.husky/pre-push` that runs `npx playwright test` on `RUN`.
 
-- [ ] **Step 1: Append the CLI block to `scripts/check-e2e-needed.js`**
+- [x] **Step 1: Append the CLI block to `scripts/check-e2e-needed.js`**
 
 Add **after** the `module.exports = { parsePushRefs, classifyPaths };` line:
 
@@ -293,7 +295,7 @@ if (require.main === module) {
 }
 ```
 
-- [ ] **Step 2: Create the hook `.husky/pre-push`**
+- [x] **Step 2: Create the hook `.husky/pre-push`**
 
 ```sh
 decision=$(node scripts/check-e2e-needed.js || echo RUN)
@@ -303,12 +305,12 @@ if [ "$decision" = "RUN" ]; then
 fi
 ```
 
-- [ ] **Step 3: Dry-run the CLI — no-refs → SKIP**
+- [x] **Step 3: Dry-run the CLI — no-refs → SKIP**
 
 Run: `printf '' | node scripts/check-e2e-needed.js; echo " <-decision"`
 Expected: stderr `pre-push: no pushable refs — skipping E2E.` and stdout `SKIP <-decision`.
 
-- [ ] **Step 4: Dry-run the CLI — empty diff (base == head) → SKIP**
+- [x] **Step 4: Dry-run the CLI — empty diff (base == head) → SKIP**
 
 Run:
 ```bash
@@ -316,7 +318,7 @@ H=$(git rev-parse HEAD); printf "refs/heads/x $H refs/heads/x $H\n" | node scrip
 ```
 Expected: `git diff HEAD HEAD` is empty → `classifyPaths([])` → stdout `SKIP <-decision`.
 
-- [ ] **Step 5: Dry-run the CLI — docs-only real diff → SKIP**
+- [x] **Step 5: Dry-run the CLI — docs-only real diff → SKIP**
 
 Run (uses the spec commit, which changed only a `docs/**` file):
 ```bash
@@ -324,7 +326,7 @@ S=$(git log --grep='add CW-P process' --format=%H -1); printf "refs/heads/x $S r
 ```
 Expected: diff is `docs/superpowers/specs/2026-07-10-…md` only → stdout `SKIP <-decision`.
 
-- [ ] **Step 6: Dry-run the CLI — this branch vs origin/main (new-branch path) → RUN**
+- [x] **Step 6: Dry-run the CLI — this branch vs origin/main (new-branch path) → RUN**
 
 Run:
 ```bash
@@ -332,12 +334,12 @@ H=$(git rev-parse HEAD); printf "refs/heads/x $H refs/heads/x 000000000000000000
 ```
 Expected: merge-base(origin/main, HEAD) diff includes `scripts/` + `.husky/` + `tests/` → stdout `RUN <-decision`. (If `origin/main` is not fetched locally, the fail-safe also yields `RUN` — either way, `RUN`.)
 
-- [ ] **Step 7: Lint**
+- [x] **Step 7: Lint**
 
 Run: `npx eslint scripts/check-e2e-needed.js`
 Expected: no errors (the `_err` caught-error prefix satisfies `no-unused-vars`).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add scripts/check-e2e-needed.js .husky/pre-push
@@ -368,7 +370,7 @@ EOF
 
 **Interfaces:** none (docs).
 
-- [ ] **Step 1: Append the canonical Methodology section to the first-run spec**
+- [x] **Step 1: Append the canonical Methodology section to the first-run spec**
 
 Add at the **end** of `docs/superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md` (after the "First-run retro (2026-06-26)" section — the retro stays as the historical "why"; this section is the operative "how"):
 
@@ -410,7 +412,7 @@ Decisions block above. It consolidates every methodology fix surfaced across the
    *([2026-07-06])*
 ```
 
-- [ ] **Step 2: Update the REVIEW-QUEUE.md intro**
+- [x] **Step 2: Update the REVIEW-QUEUE.md intro**
 
 In `docs/planning/REVIEW-QUEUE.md`, replace the sourcing clause of the first paragraph. Change:
 
@@ -424,7 +426,7 @@ to:
 Each week, per category, use **hybrid sourcing**: fresh-check the live landscape (a `WebSearch` for the current best, excluding the Reviewed log) **and** consider the parked **Next-up** item, then review whichever is strongest — do not rote-pick the parked item. Use **lightweight inline research** (a few `WebSearch` + 2–3 `WebFetch`; never the deep-research harness for a routine review). Append a verdict row (`adopt | pass | defer`); park notable runners-up under **Next-up**. On an `adopt`, also file a 🟤 Auto-Generated entry in BACKLOG.md.
 ```
 
-- [ ] **Step 3: Extend the REVIEW-QUEUE.md Methodology pointer**
+- [x] **Step 3: Extend the REVIEW-QUEUE.md Methodology pointer**
 
 Change the **Methodology** line:
 
@@ -438,12 +440,12 @@ to:
 **Methodology**: see the **Methodology (canonical — current practice)** section of [`docs/superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md`](../superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md) — the reusable "how we run Weekly Reviews" reference (hybrid sourcing, lightweight inline research, docs-only-PR handling, run-card path, verdict rubric).
 ```
 
-- [ ] **Step 4: Verify the edits render + links resolve**
+- [x] **Step 4: Verify the edits render + links resolve**
 
 Run: `git diff --stat docs/superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md docs/planning/REVIEW-QUEUE.md`
 Read both changed regions back; confirm: the new `## Methodology` section has all 6 numbered fixes, the REVIEW-QUEUE intro reads hybrid + lightweight, and the relative link `../superpowers/specs/…` is unchanged (still valid).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md docs/planning/REVIEW-QUEUE.md
@@ -471,7 +473,7 @@ EOF
 
 **Interfaces:** none (docs).
 
-- [ ] **Step 1: Add the bullet**
+- [x] **Step 1: Add the bullet**
 
 In `CLAUDE.md`, under `## Best Practices` → "When modifying this codebase:", insert a new bullet immediately **after** the line `- The renderer file is large — search before adding duplicates`:
 
@@ -479,12 +481,12 @@ In `CLAUDE.md`, under `## Best Practices` → "When modifying this codebase:", i
 - When removing or relocating a **named** function / handler / call site, grep the whole repo for the symbol across **tests and comments** — not just live callers — and update or delete each hit before committing. The unit-only pre-commit hook won't catch a stale E2E assertion or a stale code comment (root cause of the PR #56 follow-ups).
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `git diff CLAUDE.md`
 Expected: exactly one added bullet in the Best Practices list; no other lines changed.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add CLAUDE.md
@@ -511,22 +513,22 @@ EOF
 - Modify: `docs/planning/WEEKLY.md`
 - Modify: `docs/planning/BACKLOG.md`
 
-- [ ] **Step 1: Check off the WEEKLY.md CW-P task boxes**
+- [x] **Step 1: Check off the WEEKLY.md CW-P task boxes**
 
 In `docs/planning/WEEKLY.md`, flip the three CW-P group boxes (lines ~72–74) `- [ ]` → `- [x]` and the Friday-schedule CW-P line (~157) `- [ ]` → `- [x]`.
 
-- [ ] **Step 2: Update the WEEKLY.md Summary Table**
+- [x] **Step 2: Update the WEEKLY.md Summary Table**
 
 Set the CW-P row Status (line ~180) from `Planned` to `✅ **MERGED <date> via PR #N** (merge <sha>, …)` once merged (use the real PR number + merge SHA — never a bare `✅`).
 
-- [ ] **Step 3: Check off the folded BACKLOG entries**
+- [x] **Step 3: Check off the folded BACKLOG entries**
 
 In `docs/planning/BACKLOG.md`, mark the constituent entries `- [x]` with a `✅ done <date> (CW-P, PR #N)` annotation:
 - `[2026-06-26]` PR #56 process observations — "No automated gate runs E2E…" (item 1) + "Adopt a 'sweep references when removing a named call site' convention" (item 3).
 - `[2026-06-26]`/`[2026-06-29]` Weekly-Reviews methodology follow-ups: "Recognize docs-only PRs before the `/code-review` fan-out" + "Merge or explicitly defer a Weekly Reviews docs-only PR in its originating session".
 - `[2026-07-06]` PR #62 post-merge follow-ups (both fold into item 2): "Codify hybrid 'fresh-check + best pick' candidate sourcing…" + "Codify the 'run-card instead of full spec + plan' lightweight path…".
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/planning/WEEKLY.md docs/planning/BACKLOG.md
@@ -542,13 +544,13 @@ EOF
 
 ## Final Verification
 
-- [ ] Full unit suite green: `npx vitest run` → 423 → 434 (Task 1 adds 11 cases).
-- [ ] Lint clean: `npm run lint`.
-- [ ] Format clean: `npm run format:check` (JS only; `docs/` + `*.md` ignored).
-- [ ] E2E baseline intact: `npx playwright test` → 52/52.
-- [ ] Hook dogfood: pushing the branch triggers the E2E run (RUN decision) and goes green.
-- [ ] Spec acceptance criteria (§5 of the spec) all satisfied.
-- [ ] `/code-review` (this PR is not docs-only — item 1 adds a hook + script).
+- [x] Full unit suite green: `npx vitest run` → 423 → 434 (Task 1 adds 11 cases).
+- [x] Lint clean: `npm run lint`.
+- [x] Format clean: `npm run format:check` (JS only; `docs/` + `*.md` ignored).
+- [x] E2E baseline intact: `npx playwright test` → 52/52.
+- [x] Hook dogfood: pushing the branch triggers the E2E run (RUN decision) and goes green.
+- [x] Spec acceptance criteria (§5 of the spec) all satisfied.
+- [x] `/code-review` (this PR is not docs-only — item 1 adds a hook + script).
 
 ---
 
