@@ -202,7 +202,7 @@ function scoreFiles(allFeatures) {
  * @param {Object} allFeatures - Map of filename to features
  * @returns {Object} Sorted result
  */
-function getSortedOrder(allFeatures) {
+function getSortedOrder(allFeatures, sortRunId) {
     const scoreResult = scoreFiles(allFeatures);
 
     if (!scoreResult.scores) {
@@ -210,6 +210,7 @@ function getSortedOrder(allFeatures) {
             type: 'sortComplete',
             sortedFilenames: null,
             reason: scoreResult.reason,
+            sortRunId,
         };
     }
 
@@ -223,6 +224,7 @@ function getSortedOrder(allFeatures) {
         sortedFilenames,
         scores: scoreResult.scores,
         stats: model.getStats(),
+        sortRunId,
     };
 }
 
@@ -321,7 +323,7 @@ self.onmessage = function (e) {
         case 'getSortedOrder':
             abortFlag = false;
             try {
-                const sortResult = getSortedOrder(data.allFeatures || {});
+                const sortResult = getSortedOrder(data.allFeatures || {}, data.sortRunId);
                 self.postMessage(sortResult);
             } catch (error) {
                 self.postMessage({

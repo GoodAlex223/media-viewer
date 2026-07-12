@@ -975,6 +975,60 @@ describe('applyPredictionSortResult', () => {
     });
 });
 
+describe('sortComplete stale-guard + runMlSort resolution', () => {
+    const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+
+    it('ignores a sortComplete whose sortRunId does not match the current run', () => {
+        let resolved = null;
+        const ctx = {
+            sortRunId: 5,
+            _mlSortResolve: (v) => (resolved = v),
+            _mlSortReject: null,
+            clearProgressNotification: () => {},
+        };
+        handleMlWorkerMessage.call(ctx, {
+            type: 'sortComplete',
+            sortRunId: 4, // stale
+            sortedFilenames: ['a.png'],
+        });
+        expect(resolved).toBeNull(); // resolver NOT called
+    });
+
+    it('resolves the pending promise when sortRunId matches', () => {
+        let resolved = null;
+        const ctx = {
+            sortRunId: 5,
+            _mlSortResolve: (v) => (resolved = v),
+            _mlSortReject: null,
+            clearProgressNotification: () => {},
+        };
+        handleMlWorkerMessage.call(ctx, {
+            type: 'sortComplete',
+            sortRunId: 5,
+            sortedFilenames: ['b.png', 'a.png'],
+            scores: { 'a.png': 0.1, 'b.png': 0.9 },
+        });
+        expect(resolved).toEqual({
+            sortedFilenames: ['b.png', 'a.png'],
+            scores: { 'a.png': 0.1, 'b.png': 0.9 },
+            reason: undefined,
+        });
+        expect(ctx._mlSortResolve).toBeNull(); // cleared after resolving
+    });
+
+    it('treats a sortComplete with no sortRunId (legacy) as matching', () => {
+        let resolved = null;
+        const ctx = {
+            sortRunId: 0,
+            _mlSortResolve: (v) => (resolved = v),
+            _mlSortReject: null,
+            clearProgressNotification: () => {},
+        };
+        handleMlWorkerMessage.call(ctx, { type: 'sortComplete', sortedFilenames: ['a.png'] });
+        expect(resolved).not.toBeNull();
+    });
+});
+
 describe('handleCancel feature restore', () => {
     const handleCancel = extractAsyncMethod('handleCancel');
 

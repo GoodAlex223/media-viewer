@@ -148,6 +148,11 @@ class MediaViewer {
         this.extractionStartTime = null; // Date.now() when extraction starts
         this.extractionCompletionTimes = []; // Rolling window of completion timestamps
         this.extractionRunId = 0; // Generation counter for cancel-then-restart safety
+        this.sortRunId = 0; // Generation counter — ignores a stale/cancelled ML sortComplete.
+        this._mlSortResolve = null;
+        this._mlSortReject = null;
+        this.isPredictionSorting = false; // re-entrancy guard for handleSortByPrediction
+        this.extractionProgressSink = null; // when set, extraction reports here instead of its own indicator
         this.extractionPaused = false; // True while user is navigating/rating
         this.extractionResumeResolve = null; // Resolves awaitExtractionGate() when paused
         this.extractionResumeTimer = null; // setTimeout handle for 2s idle resume
@@ -6592,14 +6597,26 @@ class MediaViewer {
                 }
                 break;
 
-            case 'sortComplete':
+            case 'sortComplete': {
+                // Ignore a completion from a superseded or cancelled run (guarded by the
+                // generation token). A legacy worker that doesn't echo sortRunId is treated
+                // as matching (undefined !== a number would wrongly drop it).
+                if (message.sortRunId !== undefined && message.sortRunId !== this.sortRunId) {
+                    break;
+                }
                 this.clearProgressNotification(); // Clear "Scoring" progress
-                this.applyPredictionSortResult({
-                    sortedFilenames: message.sortedFilenames,
-                    scores: message.scores,
-                    reason: message.reason,
-                });
+                const resolve = this._mlSortResolve;
+                this._mlSortResolve = null;
+                this._mlSortReject = null;
+                if (resolve) {
+                    resolve({
+                        sortedFilenames: message.sortedFilenames,
+                        scores: message.scores,
+                        reason: message.reason,
+                    });
+                }
                 break;
+            }
 
             case 'progress':
                 this.updateProgressNotification(message.message);
@@ -7325,6 +7342,20 @@ class MediaViewer {
         } catch (err) {
             console.warn('Failed to save .bulk_rated.json:', err.message);
         }
+    }
+
+    // Await one ML sort round-trip. Resolves when a sortComplete with a matching
+    // sortRunId arrives (see handleMlWorkerMessage). The persistent mlWorker means we
+    // can't use runSortingWorker's fresh-worker pattern — a pending resolver bridges it.
+    runMlSort(allFeatures, runId) {
+        return new Promise((resolve, reject) => {
+            this._mlSortResolve = resolve;
+            this._mlSortReject = reject;
+            this.mlWorker.postMessage({
+                type: 'getSortedOrder',
+                data: { allFeatures, sortRunId: runId },
+            });
+        });
     }
 
     async requestPredictionScores() {
