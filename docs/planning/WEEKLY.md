@@ -12,7 +12,7 @@
 ## Parallel Work
 
 - **User dogfooding / manual 24k+ smoke (no SP; user-side) — gating dependency for G1.** The AI-sort startup UX + incremental cache-load work targets real-24k-folder behavior that cannot be E2E-fixtured (Playwright fixtures top out at a handful of files). The G1 items stay unchecked until a manual smoke on the user's actual 24 000+ file folder confirms: the ~40s silent load is gone/visible, cached data is served (no redundant re-extract), a determinate progress card appears immediately, and cancel actually aborts. Same verification shape as the CW-T tournament work.
-- **Strategic-doc brainstorm with the user (gates G4's 🟡 refresh) — Thursday.** MILESTONES.md / ROADMAP.md / GOALS.md are frozen at **2026-02-05** and factually wrong (GOALS still says "No automated tests / Manual testing only" and "~6100-line" renderer vs. **434 unit tests + green E2E** and an ~8400-line renderer; Tournament/JXL/CLIP + v2.0 modularization all shipped outside the documented roadmap). The doc edits are ~S but **blocked on a ~15-min decision**: (a) is v1.1 closed/shipped? (b) what is v2.0's real scope now (modularization in progress; ZoomManager/CompareManager/SortingManager/MLManager planned)? (c) where do the big BACKLOG themes (24k-folder perf, add-on system) sit? If the brainstorm doesn't happen, G4's 🟡 refresh drops (the 🟤 CLAUDE.md doc-sync still ships).
+- ✅ **DONE EARLY (Sat 2026-07-12) — Strategic-doc brainstorm with the user (gates G4's 🟡 refresh).** The gate is SATISFIED: brainstorm held Jul 12; decisions D1–D5 + user-approved spec (`41d9233`) + mechanical 8-task plan (`a02c256`) live on branch `docs/g4-strategic-docs-refresh`. **Friday = execute `docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md`** (sized for a cheaper model; inline executing-plans is fine). Do NOT drop the 🟡 refresh as "brainstorm didn't happen". Original gate description follows for context: — MILESTONES.md / ROADMAP.md / GOALS.md are frozen at **2026-02-05** and factually wrong (GOALS still says "No automated tests / Manual testing only" and "~6100-line" renderer vs. **434 unit tests + green E2E** and an ~8400-line renderer; Tournament/JXL/CLIP + v2.0 modularization all shipped outside the documented roadmap). The doc edits are ~S but **blocked on a ~15-min decision**: (a) is v1.1 closed/shipped? (b) what is v2.0's real scope now (modularization in progress; ZoomManager/CompareManager/SortingManager/MLManager planned)? (c) where do the big BACKLOG themes (24k-folder perf, add-on system) sit? If the brainstorm doesn't happen, G4's 🟡 refresh drops (the 🟤 CLAUDE.md doc-sync still ships).
 
 ---
 
@@ -55,9 +55,9 @@
 ### G4. Strategic-doc refresh & CLAUDE.md hygiene [batch] 🟡 (+1 🟤 folded)
 **Domain**: docs (planning strategic docs + CLAUDE.md)
 **Source**: 🟡 Operational (strategic-doc refresh) **+** 🟤 Auto-Generated (1 CLAUDE.md doc-sync, folded)
-**Total SP**: 4 — one branch, one PR (docs-only → manual review, no `/code-review` fan-out per the [2026-06-29] convention). The 🟡 refresh is **gated on the Thursday brainstorm** (see Parallel Work); the 🟤 doc-sync ships regardless.
+**Total SP**: 4 — one branch, one PR (docs-only → manual review, no `/code-review` fan-out per the [2026-06-29] convention). ~~The 🟡 refresh is **gated on the Thursday brainstorm**~~ → **gate SATISFIED early (Sat 2026-07-12)**: spec `41d9233` + plan `a02c256` committed on branch `docs/g4-strategic-docs-refresh`; the 🟤 doc-sync is folded into that same plan (Task 5).
 
-> Mixed-source docs group (mirrors CW-P's "🟡 + 1 🟤 folded" shape). Scheduled Friday, after the strategic-direction discussion.
+> Mixed-source docs group (mirrors CW-P's "🟡 + 1 🟤 folded" shape). Scheduled Friday. **Friday's job is now purely mechanical: execute `docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md` (cheaper model OK) → docs-only PR → manual review.**
 
 - [ ] 🟡 **Refresh MILESTONES.md / ROADMAP.md / GOALS.md** — 🟡 [2026-07-01]. All three frozen at 2026-02-05 and factually wrong (GOALS "no automated tests" vs. 434 unit; "~6100-line" vs. ~8400-line renderer; v1.1 "On Track Q1 2026"; v2.0 "Not Started" though modularization is underway). After the brainstorm sets direction (v1.1 closed? v2.0 real scope? where do 24k-perf / add-on themes sit?), rewrite all three + bump each `Last Updated`. Effort: S (edits) after a ~M discussion.
 - [ ] 🟤 **Sync CLAUDE.md to the new pre-push E2E gate** — 🟤 [2026-07-11] PR #63 post-merge. The Architecture-tree `scripts/` bullet lists only `check-secrets.js` and the "Build & Development Commands" hook prose omits the new conditional pre-push E2E gate (`scripts/check-e2e-needed.js` + `.husky/pre-push`) + its `--no-verify` bypass. **Recurrence** of the [2026-06-18] PR #51 doc-drift class fixed in PR #52 — the same 2 lines drift on every script/hook addition. `CLAUDE.md` (Architecture tree; hook prose).
@@ -112,8 +112,8 @@
 
 ---
 
-### Thursday, July 16 — Tournament bugs finish + Bulk-rate + strategic discussion + Reviews start
-> Finish G2 (mouse-wheel guard, header auto-hide), do G3 (bulk-rate re-pair). Hold the **strategic-doc brainstorm** with the user (gates G4's 🟡 refresh). Begin Weekly Reviews late.
+### Thursday, July 16 — Tournament bugs finish + Bulk-rate + Reviews start
+> Finish G2 (mouse-wheel guard, header auto-hide), do G3 (bulk-rate re-pair). ~~Hold the strategic-doc brainstorm~~ ✅ already held Sat Jul 12 (see Parallel Work) — Thursday freed up. Begin Weekly Reviews late.
 
 | Group | SP |
 |-------|----|
@@ -121,12 +121,12 @@
 | [**G3. Bulk-rate re-pair avoidance**](#g3-bulk-rate-re-pair-avoidance-solo-) [solo] | 3 |
 | [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (start) | (5) |
 
-**Daily total**: ~9 SP + reviews overhead + strategic brainstorm (non-SP)
+**Daily total**: ~9 SP + reviews overhead (strategic brainstorm ✅ done Jul 12, off Thursday's plate)
 
 ---
 
 ### Friday, July 17 — Docs refresh + Reviews wrap + buffer
-> Light close: the strategic-doc refresh (if the Thu brainstorm happened) + the CLAUDE.md doc-sync, finish Weekly Reviews, absorb G1/G2 spillover and the user-side 24k smoke follow-up.
+> Light close: **execute the ready-made G4 plan** (`docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md` — brainstorm already held Sat Jul 12, spec+plan on branch `docs/g4-strategic-docs-refresh`; cheaper model OK), finish Weekly Reviews, absorb G1/G2 spillover and the user-side 24k smoke follow-up.
 
 | Group | SP |
 |-------|----|
@@ -166,10 +166,10 @@ _At closeout, check off each constituent BACKLOG/TODO entry individually. G1 lar
 - **Why a normal week (not cleanup).** The last Cleanup Week (July 6–10, 2nd ever) just shipped; cadence puts the next ~early August. The ≥50% 🔵 floor resumes, and last week's plan explicitly earmarked the deferred user work (AI-sort UX cluster, bulk-rate re-pair) as this week's lead.
 - **G1 is the risk.** ~8 SP of design-heavy perf/UX that can only be truly verified on the user's real 24k folder (not E2E-fixturable). Its checkoff may legitimately slip past Friday even if the code lands — the smoke is user-side/async (same pattern as CW-T). **Never drop G1** — it is the whole point of the week.
 - **What defers again.** **PR2 (hash computation off the renderer thread)** — the other half of the 🔴 sort-perf item — stays deferred: it speeds *hash/similarity* sorts, not the reported AI-sort pain, so it is lowest-priority. The 🔴 TODO item stays OPEN after G1. Also parked: image panning feature, single-mode media picker, recently-opened-folders, JXL animation smoothness, fullscreen-exit-regardless-of-zoom, ML retrain-on-source-folder-change investigation.
-- **G4's 🟡 refresh is gated on a discussion.** The strategic-doc edits need a ~15-min brainstorm (v1.1 closed? v2.0 scope? theme placement) — hold it Thursday. If it doesn't happen, drop the 🟡 refresh (defer a 3rd time, noted) but still ship the 🟤 CLAUDE.md doc-sync (no dependency).
-- **Overrun drop order**: drop **G4's 🟡 strategic refresh** first (discussion-gated, no user-facing effect), then trim **G2** to the two highest-value items (🔴 undo + 🟠 mouse-wheel; defer the header auto-hide), then **G3**. Never drop G1.
+- **G4's 🟡 refresh gate is SATISFIED (updated 2026-07-12).** The brainstorm was held early on Sat Jul 12 (not Thursday): decisions D1–D5 approved, spec (`41d9233`) + mechanical plan (`a02c256`) committed on branch `docs/g4-strategic-docs-refresh`. G4 no longer depends on any discussion — Friday just executes the plan. Do NOT defer the 🟡 refresh a 3rd time.
+- **Overrun drop order** (updated 2026-07-12 — G4 is no longer discussion-gated, it's cheap mechanical execution): trim **G2** to the two highest-value items first (🔴 undo + 🟠 mouse-wheel; defer the header auto-hide), then **G3**, then G4 slips to the following Monday at worst. Never drop G1.
 - **Docs-only PR handling**: G4 is docs-only — per the [2026-06-29] convention, recognize it before any `/code-review` fan-out and merge/defer in-session.
-- **Dependency ordering**: G1 merges before its docs would change; G2's 🔴 undo needs a repro before a fix; G4's 🟡 refresh follows the Thursday brainstorm; Weekly Reviews run late and must not displace G1.
+- **Dependency ordering**: G1 merges before its docs would change; G2's 🔴 undo needs a repro before a fix; G4's 🟡 refresh follows the strategic brainstorm (✅ held early, Sat Jul 12 — see Parallel Work); Weekly Reviews run late and must not displace G1.
 - **Branch/PR shape**: 4 workflow runs for the quota-counted groups — G1 (sort/cache), G2 (tournament), G3 (bulk-rate), G4 (docs). Weekly Reviews is process overhead (no code PR; appends to REVIEW-QUEUE.md + any `adopt` files a 🟤 entry, any `propagate` a TODO § Spawned Tasks row).
 - _Brainstorm sanity-checks: week dates confirmed Mon Jul 13 – Fri Jul 17 vs. today 2026-07-12 and vs. git/DONE (prev plan = July 6–10, all merged); velocity design-heavy ~14–16 SP (target 21 quota-counted is ambitious → G1 risk noted + overrun drop order set); Cleanup Week NOT due (last July 6–10); 🔵 quota abundantly satisfiable._
 
