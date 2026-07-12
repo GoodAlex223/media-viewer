@@ -6421,6 +6421,12 @@ class MediaViewer {
             this.mlWorker.onerror = (err) => {
                 console.error('[ML Debug] ML Worker error:', err);
                 this.isMlEnabled = false;
+                // A hard worker crash must settle any pending runMlSort() promise (reject),
+                // otherwise its awaiter (Task 3) hangs forever.
+                const reject = this._mlSortReject;
+                this._mlSortResolve = null;
+                this._mlSortReject = null;
+                if (reject) reject(new Error('ML worker crashed'));
             };
 
             // Initialize worker (will load saved model if exists)
@@ -7349,6 +7355,14 @@ class MediaViewer {
     // can't use runSortingWorker's fresh-worker pattern — a pending resolver bridges it.
     runMlSort(allFeatures, runId) {
         return new Promise((resolve, reject) => {
+            if (!this.mlWorker) {
+                reject(new Error('ML worker not available'));
+                return;
+            }
+            // Settle a superseded pending sort so its awaiter doesn't hang.
+            if (this._mlSortReject) {
+                this._mlSortReject(new Error('superseded'));
+            }
             this._mlSortResolve = resolve;
             this._mlSortReject = reject;
             this.mlWorker.postMessage({

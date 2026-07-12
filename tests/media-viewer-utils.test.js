@@ -1027,6 +1027,58 @@ describe('sortComplete stale-guard + runMlSort resolution', () => {
         handleMlWorkerMessage.call(ctx, { type: 'sortComplete', sortedFilenames: ['a.png'] });
         expect(resolved).not.toBeNull();
     });
+
+    it('resolves with {sortedFilenames:null, reason} on the worker-failure path (matching sortRunId)', () => {
+        let resolved = null;
+        const ctx = {
+            sortRunId: 3,
+            _mlSortResolve: (v) => (resolved = v),
+            _mlSortReject: null,
+            clearProgressNotification: () => {},
+        };
+        handleMlWorkerMessage.call(ctx, {
+            type: 'sortComplete',
+            sortRunId: 3,
+            sortedFilenames: null,
+            reason: 'Sorting failed: boom',
+        });
+        expect(resolved).toEqual({
+            sortedFilenames: null,
+            scores: undefined,
+            reason: 'Sorting failed: boom',
+        });
+    });
+});
+
+describe('runMlSort', () => {
+    const runMlSort = extractMethod('runMlSort');
+
+    it('posts getSortedOrder and stores the pending resolvers', () => {
+        const posted = [];
+        const ctx = {
+            mlWorker: { postMessage: (m) => posted.push(m) },
+            _mlSortResolve: null,
+            _mlSortReject: null,
+        };
+        const p = runMlSort.call(ctx, { 'a.png': [1, 2] }, 7);
+        p.catch(() => {}); // never settles in this test; avoid a dangling rejection
+        expect(posted).toEqual([{ type: 'getSortedOrder', data: { allFeatures: { 'a.png': [1, 2] }, sortRunId: 7 } }]);
+        expect(typeof ctx._mlSortResolve).toBe('function');
+        expect(typeof ctx._mlSortReject).toBe('function');
+    });
+
+    it('rejects with "ML worker not available" when this.mlWorker is null', async () => {
+        const ctx = { mlWorker: null, _mlSortResolve: null, _mlSortReject: null };
+        await expect(runMlSort.call(ctx, {}, 1)).rejects.toThrow('ML worker not available');
+    });
+
+    it('rejects a superseded prior sort when called again', async () => {
+        const ctx = { mlWorker: { postMessage: () => {} }, _mlSortResolve: null, _mlSortReject: null };
+        const first = runMlSort.call(ctx, {}, 1);
+        const second = runMlSort.call(ctx, {}, 2);
+        second.catch(() => {}); // still pending; avoid a dangling rejection
+        await expect(first).rejects.toThrow('superseded');
+    });
 });
 
 describe('handleCancel feature restore', () => {

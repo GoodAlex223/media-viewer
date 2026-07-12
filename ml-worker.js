@@ -325,10 +325,14 @@ self.onmessage = function (e) {
             try {
                 const sortResult = getSortedOrder(data.allFeatures || {}, data.sortRunId);
                 self.postMessage(sortResult);
-            } catch (error) {
+            } catch (err) {
+                // Post a resolvable sortComplete (not type:'error') so a pending runMlSort()
+                // promise settles instead of hanging forever.
                 self.postMessage({
-                    type: 'error',
-                    message: 'Sorting failed: ' + error.message,
+                    type: 'sortComplete',
+                    sortedFilenames: null,
+                    reason: err && err.message ? err.message : String(err),
+                    sortRunId: data.sortRunId,
                 });
             }
             break;
