@@ -1,232 +1,206 @@
 # Weekly Plan
 
-**Week**: Monday July 6 – Friday July 10, 2026
-**Created**: 2026-07-01
-**Sources**: MILESTONES.md, ROADMAP.md, GOALS.md, BACKLOG.md (📌 Process Rules + 🟤 Auto-Generated tail), TODO.md, git log (last 2 weeks), previous WEEKLY.md (June 22–26 normal perf week, archived below), REVIEW-QUEUE.md
-**Type**: 🧹 **CLEANUP WEEK (2nd ever)** — the quota **inverts**: 🟤 Auto-Generated Tech Debt is the majority and the normal ≥50% 🔵 User-Flagged floor is suspended. Per user direction, the **2 HIGH-severity tournament blockers** from the 2026-07-01 dogfooding intake are retained as the **mandatory 🔵 user exception** (and are this week's 🏆).
+**Week**: Monday July 13 – Friday July 17, 2026
+**Created**: 2026-07-12
+**Sources**: MILESTONES.md, ROADMAP.md, GOALS.md, BACKLOG.md (📌 Process Rules + 🔵 User-Flagged + 🟡 Operational + 🟤 tail), TODO.md, git log (last 2 weeks), previous WEEKLY.md (July 6–10 Cleanup Week, archived below), REVIEW-QUEUE.md
+**Cleanup Week?**: **No** — normal week; the ≥50% 🔵 User-Flagged floor resumes. (Last Cleanup Week was July 6–10, the 2nd ever; next expected ~early August, ~3-week cadence.)
 
-**Context**: A Cleanup Week is formally **due** — it has been ~3 weeks since the first one (June 15–19), and the 🟤 tail has grown to ≈155 unchecked items (well past the 20 SP trigger), overwhelmingly PR-post-merge review follow-ups, deferred `revise-claude-md` doc-drift, and test/process backfill from the June sprint (PRs #54–#58). The user chose to take the overdue cleanup now rather than defer it a third time. This week burns down the **freshest, highest-value slice** of that tail (the PR #54–#58 follow-ups, which sit on current code and are top-of-mind) while honoring the two HIGH-severity tournament bugs that cannot wait a week. The July-01 AI-sort-startup cluster (4 MEDIUM items), the bulk-rate re-pair fix (🟠 TODO), and the carry-forward 🔴 sort-perf PR2/PR3 all **defer to the July 13–17 normal week**, where the ≥50% 🔵 floor resumes and they become the lead work.
+**Context**: The user-flagged work deferred out of the July 6–10 Cleanup Week is now the lead. The throughline is **"fix the 24k AI-sort experience"** — the most-repeated dogfooding pain (Sort-by-Predicted shows nothing for a long time on a 24 000-file folder, re-extracts despite a valid cache, and can't be cancelled). That cluster (PR3 incremental cache-load + the [2026-07-01] AI-sort-startup UX items + "can't cancel AI sort") is front-loaded Mon–Wed as the 🏆. Paired with a **tournament-mode bug batch** (🔴 undo intermittently fails, 🟠 mouse-wheel still navigates pairs, 🔵 auto-hide header on hover), the **bulk-rate re-pair-avoidance** 🟠 fix, and — new this week — a **strategic-doc refresh** (🟡, gated on a short brainstorm; twice-deferred) that also folds in one 🟤 CLAUDE.md doc-sync. Weekly Reviews run late as exempt overhead.
 
 ---
 
 ## Parallel Work
 
-- **User dogfooding / manual 24k+ smoke (no SP; user-side).** The two HIGH-severity tournament fixes in **CW-T** target real-24k-folder behavior that cannot be E2E-fixtured (Playwright fixtures top out at a handful of files). Each needs a manual smoke on the user's actual 24 000+ file folder before its BACKLOG/TODO entry is checked off — unit tests on the reconciliation / persistence / pairing logic plus a hand-off for real-data verification. **This is the gating dependency for the tournament group.**
-- **Roadmap refresh still needs a user conversation (carry-forward, non-SP — now 2 weeks overdue).** MILESTONES.md / ROADMAP.md / GOALS.md all still date from **2026-02-05** and describe long-shipped v1.1 work — GOALS.md even lists "No automated tests / Manual testing only" and a "~6100-line" renderer, though the repo now has **389 unit tests + a green E2E suite** and an ~8400-line renderer, and Tournament/JXL/CLIP all shipped *outside* the documented roadmap. This was flagged in the June 22–26 plan and not actioned. A Cleanup Week is the natural home for a strategic-doc refresh, but the edits need user input first (is v1.1 closed? what is v2.0's real scope now that modularization is underway?). Raise it this week; if the conversation happens, the doc edits can slot into Thursday's hygiene block. Not scheduled as SP until then.
+- **User dogfooding / manual 24k+ smoke (no SP; user-side) — gating dependency for G1.** The AI-sort startup UX + incremental cache-load work targets real-24k-folder behavior that cannot be E2E-fixtured (Playwright fixtures top out at a handful of files). The G1 items stay unchecked until a manual smoke on the user's actual 24 000+ file folder confirms: the ~40s silent load is gone/visible, cached data is served (no redundant re-extract), a determinate progress card appears immediately, and cancel actually aborts. Same verification shape as the CW-T tournament work.
+- **Strategic-doc brainstorm with the user (gates G4's 🟡 refresh) — Thursday.** MILESTONES.md / ROADMAP.md / GOALS.md are frozen at **2026-02-05** and factually wrong (GOALS still says "No automated tests / Manual testing only" and "~6100-line" renderer vs. **434 unit tests + green E2E** and an ~8400-line renderer; Tournament/JXL/CLIP + v2.0 modularization all shipped outside the documented roadmap). The doc edits are ~S but **blocked on a ~15-min decision**: (a) is v1.1 closed/shipped? (b) what is v2.0's real scope now (modularization in progress; ZoomManager/CompareManager/SortingManager/MLManager planned)? (c) where do the big BACKLOG themes (24k-folder perf, add-on system) sit? If the brainstorm doesn't happen, G4's 🟡 refresh drops (the 🟤 CLAUDE.md doc-sync still ships).
 
 ---
 
 ## Task Groups
 
-### Group CW-T: Tournament correctness, persistence & hardening [batch] 🏆 🔵+🟤
-**Domain**: JS logic — tournament engine / manager / IPC + resume-reconciliation + leave-flow + tournament tests
-**Source**: 🔵 User-Flagged (2 HIGH-severity bugs — the mandatory user exception) **+** 🟤 Auto-Generated (adjacent same-file debt, subsumed into one branch)
-**Total SP**: 10 — one branch, one PR, one review (front-loaded Mon–Wed; the HIGH bugs are design-risky and gate on a real-24k smoke)
+### G1. AI-sort startup UX & incremental cache-load [batch] 🏆 🔵
+**Domain**: JS logic — `handleSortByPrediction` / `loadFeatureCache` / feature-extraction + sort-progress UX
+**Source**: 🔵 User-Flagged
+**Total SP**: 8 — one branch, one PR, one review (front-loaded Mon–Wed; design-heavy perf/UX, gates on a real-24k smoke)
 
-> Everything tournament lives on the same files (`media-viewer.js` tournament methods, `tournament.js`, `tournament-engine.js`) so it batches into one branch to avoid collisions. The 2 HIGH-severity 🔵 bugs are the risky core (🏆); the 🟤 items are mechanical debt cleaned on the same branch. **Several 🟤 items are the same code path as HIGH bug #2** — fixing the reconciliation/can't-enter bug naturally subsumes the [2026-06-25] persistence-durability trio, so they close as a side effect rather than as separate work.
+> The week's lead and 🏆. All items share the `handleSortByPrediction` → `loadFeatureCache` → extraction → sort critical path on a large folder, so they batch into one branch. This is the **PR3 slice** of the 🔴 TODO "Speed up AI / similarity sorting on large folders (24k+ files)" item plus the [2026-07-01] AI-sort-startup UX cluster it causes — PR3 (incremental/non-blocking cache-load) removes the ~40s silent wait, and the same fix subsumes the "re-extracts despite cache" bug (the in-memory `featureCache` Map is assigned only at the *end* of the streaming load, so the uncached-file check runs against an empty Map during the load window). The 🔴 sort-perf TODO item stays **OPEN** after this ships — PR2 (hash off the renderer thread) remains, but PR2 addresses *hash/similarity* sorts, not the reported AI-sort pain, so it stays deferred.
 
-**🔵 HIGH-severity (mandatory user exception — BACKLOG 🔵 [2026-07-01]):**
-- [x] **Cannot enter tournament mode after adding new media + AI sort** — ✅ Done (Task 1; live-engine fast-path reconcile gap). 3 SP, 🔴 HIGH. AI sort reorders `mediaFiles` and newly-added files are absent from the engine's saved file-set, so resume reconciliation + path→index lookup mismatch → `showTournamentPair` resolves `getMediaIndex(pair.left/right)` to −1 and falls into the "file missing" branch instead of rendering a pair. **Subsumes** 🟤 [2026-06-25] `handleResumeReconciled` + `showTournamentPair`-missing-file durability items (same path). Affected: `media-viewer.js` (`enterTournamentMode` ~4145, `showTournamentPair`→`getMediaIndex` ~4448-4470, `getMediaIndex` ~1090), `tournament.js` (`handleResumeReconciled`).
-- [x] **Tournament mode unusable / freezes on 24k+ after AI sort (Continue stuck, Both Win hangs)** — ✅ Done (Tasks 2-3; O(1) inverse-delta undo + fast-path render). 5 SP, 🔴 HIGH. Residual after Group P2/PR #55: `TournamentEngine.deserialize`/SwissStrategy reconstruction on resume + a full `showCompareMedia` DOM teardown/reflow per pair remain on the critical path. Reduce per-pair DOM teardown/reflow + defer/stream the deserialize cost. Affected: `media-viewer.js` (`enterTournamentMode` resume ~4145, `showTournamentPair`→`showCompareMedia` ~4448-4496, `handleTournamentDraw` ~4513, compare DOM teardown ~2910-2940), `tournament-engine.js` (`deserialize`/SwissStrategy rebuild). **Gates on a real-24k manual smoke.**
+- [ ] 🔴 **Incremental / non-blocking feature-cache load (PR3)** — serve `.feature_cache.json` incrementally instead of a ~40s silent blocking streaming load before the sort. Closes BACKLOG 🟤 [2026-05-26]. Root fix for 4 of the [2026-07-01] reports. `media-viewer.js:~6562-6683` (`loadFeatureCache` streaming load), `media-viewer.js:~7324/~7370` (`handleSortByPrediction`).
+- [ ] 🔵 **AI sort re-runs extraction despite valid cached data (bug)** — 🔵 [2026-07-01]. `featureCache` is assigned only at the END of the streaming load, so `!featureCache.has(path)` gates extraction against an empty/partial Map during the ~40s window → redundant re-extraction. Likely subsumed by PR3 (populate the Map incrementally). `media-viewer.js:~6644/~6675`, `~7370/~7392`.
+- [ ] 🔵 **AI sort gives zero feedback — add a determinate progress card** — 🔵 [2026-07-01]. `handleSortByPrediction` shows only transient toasts and no `updateSortProgress` card during load/extract/sort, unlike `handleSortBySimilarity` (which renders the card immediately). Render the card immediately. `media-viewer.js:~7324`, ref `~5191` (`handleSortBySimilarity`), `~1217` (`updateSortProgress`).
+- [ ] 🔵 **Long opaque wait after "loading CLIP model" before extraction/sort begins** — 🔵 [2026-07-01]. The ~40s silent `loadFeatureCache()` runs after the CLIP-load messages with no progress UI; the extraction bar appears only after it completes. Surface progress during the load (folds into PR3 + the progress-card item). `media-viewer.js:~7370`, `~8071` (2s toast then silence).
+- [ ] 🔵 **Exit tournament → click AI sort → long delay before anything happens** — 🔵 [2026-07-01]. Same lazy-extraction + silent-cache-load root as above; verify the fix covers the post-tournament entry path. `media-viewer.js:~7324-7420`.
+- [ ] 🟠 **Can't cancel the AI sort** — 🟠 TODO [2026-07-11]. The sort-progress card's cancel affordance calls `sortAbortController.abort()` but the AI-prediction path doesn't stop. Verify the cancel button is wired/visible for the AI-prediction path and every long-running stage checks `sortAbortController.signal.aborted` and bails. `media-viewer.js:~1214-1240`, `~5270-5567`.
 
-**🟤 Auto-Generated (adjacent tournament debt, same branch):**
-- [x] **`moveToSpecialFolder` durable persist + stale comment** — ✅ Done (Task 4; comment corrected to the debounced design). 🟤 [2026-06-25] PR #55. Make the tournament special-move engine removal `await flush()` (or update the misleading "persist before navigation" comment). `media-viewer.js` (`moveToSpecialFolder` tournament branch).
-- [x] **Best-effort discard can orphan `.tournament_state.json`** — ✅ Done (Task 4; retry-once-then-log). 🟤 [2026-06-30] PR #58. Reconcile/retry the orphaned-state delete on next failed-delete or startup so a discarded tournament doesn't re-prompt resume. `tournament.js` (`handleDiscard`), `media-viewer.js` (resume-prompt entry).
-- [x] **`onAppCloseRequested` unsubscribe fn discarded in `setupEventListeners`** — ✅ Done (Task 4; stored in `this._removeAppCloseListener`). 🟤 [2026-06-30] PR #58. Store the returned `removeListener` cleanup (or document why it's unnecessary), per the CLAUDE.md IPC-listener gotcha. `media-viewer.js` (~1976).
-- [x] **Close-confirm re-entrancy guard** — ✅ Done (Task 4; guard on `#tournamentResumeModal` display). 🟤 [2026-06-30] T1. A 2nd close request re-binds the leave-prompt continuation; add an `isLeavePromptOpen` guard in `handleAppCloseRequest`. `media-viewer.js`.
-- [x] **Fix stale `tournament-mode.test.js` "Continue resumes" E2E + add exit-button incomplete-tournament precondition + `#tournamentExitBtn` aria-label** — ✅ Done (Task 6; E2E 6/6). 🟤 [2026-06-30] T1 (3 XS items). Update the history-free-v2 assertion (expect `0`), assert `isTournamentMode===true` before the exit click, add `aria-label="Pause / leave tournament"`. `tests/e2e/tournament-mode.test.js`, `index.html`.
-- [x] **`getMediaIndex` double-lookup micro-opt + undo-cap / SwissStrategy test pins** — ✅ Done (Task 5). 🟤 [2026-06-24] P2. `has`+`get`→single `get`; add at-cap-boundary undo + `recordDraw`-cap tests + SwissStrategy cross-bucket-carry-over / don't-double-bye unit pins. `media-viewer.js`, `tests/tournament-engine.test.js`, `tests/swiss-strategy.test.js`.
+### G2. Tournament-mode bug fixes [batch] 🔵
+**Domain**: JS logic — tournament methods in `media-viewer.js` / `tournament-engine.js` + `styles.css`
+**Source**: 🔵 User-Flagged
+**Total SP**: 6 — one branch, one PR
 
-### Group CW-D: Docs & CLAUDE.md hygiene [batch] 🟤
-**Domain**: docs / CLAUDE.md (`revise-claude-md` consolidation pass)
-**Source**: 🟤 Auto-Generated
-**Total SP**: 4 — one branch, one PR (docs-only → manual review, no `/code-review` fan-out per the [2026-06-29] docs-only convention). Scheduled **after CW-T merges** so the tournament-persistence docs reflect post-fix behavior.
+> Three user-flagged tournament follow-ups on the same files. The 🔴 undo bug leads (needs a reliable repro first); the mouse-wheel guard and header auto-hide are scoped and mechanical.
 
-> A single consolidation pass clearing the large backlog of deferred `revise-claude-md` / doc-drift items accumulated across the June sprint. Mirrors CW-3 from the first Cleanup Week.
+- [ ] 🔴 **Tournament undo intermittently fails** — TODO 🔴 [2026-07-11]. `handleTournamentUndo` has two divergent paths (default `engine.undo()` O(1) inverse-delta vs. the special-move disk-restore branch); investigate which conditions (round boundaries, special-move interleaving, undo-stack desync, rapid presses during `isLoading`) drop an undo silently. **Needs a reliable repro first.** `media-viewer.js:~4684-4790`, `tournament-engine.js` (`engine.undo()`).
+- [ ] 🟠 **Mouse wheel still navigates pairs in tournament mode** — TODO 🟠 [2026-07-11]. The global `wheel` handler falls through to `nextMedia`/`previousMedia` with no `isTournamentMode` guard. Add the guard. `media-viewer.js:~2114-2155`.
+- [ ] 🔵 **Auto-hide tournament header bar + shared control buttons, reveal on hover** — 🔵 [2026-07-11]. Mirror the existing `.header` auto-hide (`.show`) pattern so the tournament header + shared buttons stay hidden and appear on hover, maximizing viewing area. `styles.css:~2279-2340`, `media-viewer.js:~2158` (`setupHeaderVisibility` pattern to mirror).
 
-- [x] **Fold 3 still-accurate tournament gotchas into CLAUDE.md** — 🟤 [2026-06-25] branch-salvage (folder-scoped exit; two-path `handleTournamentUndo`; `engine.files` vs `strategy.files` divergence). Verify against current code first.
-- [x] **Document tournament debounced single-flight persistence + session-only undo + v2 payload** — 🟤 [2026-06-24] P2. (`_schedulePersist`/`_drain`/`flush`/`cancelPending`, `version:2` history-free state, undo cap 100, atomic temp+rename write.)
-- [x] **CLAUDE.md / docs drift from PR1 dead-code removal** — 🟤 [2026-06-19]. MinHeap/VPTree now worker-only; several affected-line refs shifted ~925 lines.
-- [x] **Correct the "PR2/PR3 = raw-speed continuation" framing** — 🟤 [2026-06-21]. Tighten to the precise per-phase cost map (PR2/PR3 remove hashing + cache-load waits but NOT the O(n·K) graph build). `DONE.md`, `TODO.md`.
-- [x] **Decide CLAUDE.md maintenance mode (markers stripped)** — 🟤 [2026-06-18] PR #52. Confirm manual-only maintenance vs re-introducing AUTO-MANAGED markers; document the decision.
+### G3. Bulk-rate re-pair avoidance [solo] 🔵
+**Domain**: JS logic — compare-mode ML pair selection in `media-viewer.js`
+**Source**: 🔵 User-Flagged
+**Total SP**: 3 — one branch, one PR
 
-### Group CW-V: Test & tooling backfill [batch] 🟤
-**Domain**: tests (non-tournament) + test tooling
-**Source**: 🟤 Auto-Generated
-**Total SP**: 4 — one branch, one PR
+> **Solo 3-SP group (rule-4 judgment)**: kept standalone because it has no clean domain-mate among the selected work (G1 is the sort/cache path, G2 is tournament, this is compare-mode ML pairing) and it needs its own short design pass. Re-confirmed by 24k dogfooding.
 
-> Non-tournament test/tooling backfill (tournament tests live in CW-T). Mirrors CW-2 from the first Cleanup Week.
+- [ ] 🟠 **Don't pair two already-bulk-rated files together (with fall-through)** — TODO 🟠 (promoted from BACKLOG 🔵 [2026-06-02]; re-reported as BACKLOG 🔵 [2026-07-01] "'Both good/Both bad' reappear"). In AI-sorted compare, once both files of a pair are rated "Both good"/"Both bad", don't show them paired again; when no un-bulk-rated pair remains, disable the rule and fall back so the user can still re-rate. Short design pass on pair selection (`showCompareMedia` AI-sorted branch + `mlComparePairIndex`), membership test against `this.bulkRated`, and the fall-through condition. `media-viewer.js` (compare pair-selection), `tests/media-viewer-utils.test.js`.
 
-- [x] **E2E smoke for the sort-progress card** — ✅ done (`tests/e2e/sort-progress.test.js`; observer-capture appear/remove + deterministic cancel→abort). 🟤 [2026-06-19] PR1 closeout.
-- [x] **Harden or document `methodSource()` test-helper brace-counting** — ✅ done (comment-aware `assertLiteralBracesBalanced` + `src` seam; 8 guard tests). 🟤 [2026-06-25] P3. `tests/media-viewer-utils.test.js`.
-- [x] **Generate `extractAddedLines` fixtures from real `git diff` output** — ✅ done (temp-repo `describe`: no-newline / multi-file / binary-then-text / planted-key). 🟤 [2026-06-18] PR #52. `tests/check-secrets.test.js`.
-- [x] **Add regression test for play/pause icon toggle** — ✅ done (`tests/e2e/video-controls.test.js`; synthetic events → icon display-swap + `data-lucide` integrity). 🟤 [2026-03-23] TASK-023.
+### G4. Strategic-doc refresh & CLAUDE.md hygiene [batch] 🟡 (+1 🟤 folded)
+**Domain**: docs (planning strategic docs + CLAUDE.md)
+**Source**: 🟡 Operational (strategic-doc refresh) **+** 🟤 Auto-Generated (1 CLAUDE.md doc-sync, folded)
+**Total SP**: 4 — one branch, one PR (docs-only → manual review, no `/code-review` fan-out per the [2026-06-29] convention). The 🟡 refresh is **gated on the Thursday brainstorm** (see Parallel Work); the 🟤 doc-sync ships regardless.
 
-### Group CW-P: Process & DX guardrails [batch] 🟡
-**Domain**: process / CI / DX (Husky, WORKFLOW/checklist conventions, Weekly-Reviews methodology)
-**Source**: 🟡 Operational
-**Total SP**: 3 — one branch, one PR. First drop if the week runs long (CW-T's HIGH bugs take precedence).
+> Mixed-source docs group (mirrors CW-P's "🟡 + 1 🟤 folded" shape). Scheduled Friday, after the strategic-direction discussion.
 
-> The one non-🟤 cleanup group. Kept modest so 🟡 stays ≤25% even in an inverted week. Mirrors CW-4 from the first Cleanup Week.
+- [ ] 🟡 **Refresh MILESTONES.md / ROADMAP.md / GOALS.md** — 🟡 [2026-07-01]. All three frozen at 2026-02-05 and factually wrong (GOALS "no automated tests" vs. 434 unit; "~6100-line" vs. ~8400-line renderer; v1.1 "On Track Q1 2026"; v2.0 "Not Started" though modularization is underway). After the brainstorm sets direction (v1.1 closed? v2.0 real scope? where do 24k-perf / add-on themes sit?), rewrite all three + bump each `Last Updated`. Effort: S (edits) after a ~M discussion.
+- [ ] 🟤 **Sync CLAUDE.md to the new pre-push E2E gate** — 🟤 [2026-07-11] PR #63 post-merge. The Architecture-tree `scripts/` bullet lists only `check-secrets.js` and the "Build & Development Commands" hook prose omits the new conditional pre-push E2E gate (`scripts/check-e2e-needed.js` + `.husky/pre-push`) + its `--no-verify` bypass. **Recurrence** of the [2026-06-18] PR #51 doc-drift class fixed in PR #52 — the same 2 lines drift on every script/hook addition. `CLAUDE.md` (Architecture tree; hook prose).
 
-- [x] **Add an automated E2E gate** — ✅ done 2026-07-10 (CW-P): Husky **pre-push** hook + `scripts/check-e2e-needed.js` (pure `parsePushRefs`/`classifyPaths` + fail-safe git-wrapper CLI); runs the full E2E suite only when the outgoing push changes runtime code, docs-only pushes skip. Chose the pre-push tier over a checklist (only automatable local gate; no CI). 🟡 [2026-06-26]. Pick the lowest-viable tier: a Husky **pre-push** hook running the E2E suite (or changed E2E files), or — if that proves too slow (Electron launch, `workers:1`) — a pre-merge-checklist WORKFLOW rule. Closes the "silently-broken E2E can land" gap (repo has no CI; hook runs unit only). `.husky/` (new `pre-push`) or checklist docs.
-- [x] **Codify Weekly-Reviews methodology fixes** — ✅ done 2026-07-10 (CW-P): 6 fixes folded into a canonical `## Methodology (current practice)` section of the first-run spec + hybrid-sourcing REVIEW-QUEUE.md intro (also subsumes the [2026-07-06] hybrid-sourcing + run-card follow-ups). 🟡 [2026-06-26] (2 items) + [2026-06-29] (2 items). Default to lightweight inline `WebSearch`/`WebFetch` (NOT the deep-research harness — it burned ~8M tokens / never verified); never fan out multiple harnesses in parallel; recognize docs-only PRs before the `/code-review` fan-out; merge/defer a docs-only Weekly-Reviews PR in-session. Update the methodology spec + REVIEW-QUEUE.md.
-- [x] **Adopt "sweep references when removing a named call site" convention** — ✅ done 2026-07-10 (CW-P): one CLAUDE.md Best-Practices bullet (grep tests + comments, not just live callers). 🟤 [2026-06-26]. Add to the `receiving-code-review` / `verification-before-completion` checklist (grep tests + comments, not just live callers). *(One 🟤 item folded into this otherwise-🟡 process group.)*
-
-### Group WR: Weekly Reviews [batch] ⚪ Overhead
+### G5. Weekly Reviews [batch] ⚪ Overhead
 **Domain**: Research / process (exempt overhead — excluded from the source-quota denominator)
 **Source**: ⚪ Overhead
-**Total SP**: 4 — scheduled late (Thu/Fri), low-risk, must not displace CW-T
+**Total SP**: 5 — scheduled late (Thu/Fri), low-risk, must not displace G1
 
-> Read [REVIEW-QUEUE.md](REVIEW-QUEUE.md) first. Per the [2026-06-26] methodology follow-up (which CW-P codifies this week), run **lightweight inline `WebSearch` + a few `WebFetch`** per category — do NOT invoke the deep-research harness. Append a verdict row per category; on an `adopt`, file a 🟤 BACKLOG entry.
+> Read [REVIEW-QUEUE.md](REVIEW-QUEUE.md) first. Per the codified methodology (CW-P, PR #63): **hybrid sourcing** (fresh-check the live landscape AND the parked Next-up item, review whichever is strongest) using **lightweight inline `WebSearch` + a few `WebFetch`** — never the deep-research harness. Append a verdict row per category; on an `adopt`, file a 🟤 BACKLOG entry; on a `propagate` (category 4), file a TODO § Spawned Tasks row.
 
-- [x] **Plugins (2 SP)** — two independent tops: official store (Next-up parked: **commit-commands**) + wider internet (Next-up parked: **playwright-cli-agents**, Electron gap noted) — else the live top hit. — ✅ **done 2026-07-05**: `typescript-lsp` (official code-intelligence LSP) **adopt** → 🟤; Electron Developer Agent (wider) **pass**.
-- [x] **Claude best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **`/clear` between unrelated tasks**, or **autonomous end-to-end verification**). — ✅ **done**: autonomous end-to-end / visual verification before "done" **adopt** → 🟤.
-- [x] **Non-Claude AI best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **Addy Osmani's incremental LLM workflow**). — ✅ **done**: Addy Osmani workflow **pass** (validates current practice; nothing new to adopt).
+- [ ] **Plugins (2 SP)** — two independent tops: official store (Next-up parked: **commit-commands**, **security-guidance**) + wider internet (Next-up parked: **playwright-cli-agents**, Electron gap noted) — else the live top hit.
+- [ ] **Claude best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **`/clear` between unrelated tasks**).
+- [ ] **Non-Claude AI best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **GitHub Spec Kit** — already practiced).
+- [ ] **Cross-project propagation (1 SP)** — outbound scan of what shipped here since the last run (this week's DONE entries, merged PRs, changed memory/config); `propagate | pass | defer`.
 
 ---
 
 ## Daily Schedule
 
-### Monday, July 6 — 🏆 Tournament Fixes (day 1)
-> Front-load the week's hardest, highest-severity problem. Start with HIGH bug #2 (the correctness blocker — users literally cannot enter tournament mode) plus the subsumed persistence-durability trio on the same code path.
+### Monday, July 13 — 🏆 AI-sort UX (day 1)
+> Front-load the highest-value user pain. Start with the incremental cache-load core (PR3) + the "re-extracts despite cache" bug it subsumes — the root of the ~40s silent wait.
 
 | Group | SP |
 |-------|----|
-| **Group CW-T: Tournament correctness, persistence & hardening** [batch] 🏆 (day 1 of 3) | (10) |
+| [**G1. AI-sort startup UX & incremental cache-load**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 1 of 3) | (8) |
 
-- [x] Diagnose + fix "cannot enter tournament after new media + AI sort" (reconciliation / path→index; subsumes [2026-06-25] persistence-durability trio) (3 SP) — ✅ live-engine fast-path reconcile gap; `reconcileWithFiles` on every entry
-
-**Daily total**: ~3 SP (of the 10 SP batch)
+**Daily total**: ~4 SP (of the 8 SP batch)
 
 ---
 
-### Tuesday, July 7 — 🏆 Tournament Fixes (day 2)
-> The deep one: the 24k unusable/freeze residual. Reduce per-pair DOM teardown/reflow + defer the deserialize cost so Continue/Both-Win don't hang.
+### Tuesday, July 14 — 🏆 AI-sort UX (day 2)
+> The feedback + control layer: determinate progress card in `handleSortByPrediction`, cancel wiring for the AI-prediction path, and the long-opaque-wait / post-tournament-entry paths. Hand off for a real-24k smoke.
 
 | Group | SP |
 |-------|----|
-| **Group CW-T: Tournament correctness, persistence & hardening** [batch] 🏆 (day 2 of 3) | (10) |
+| [**G1. AI-sort startup UX & incremental cache-load**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 2 of 3) | (8) |
 
-- [x] Reduce `showCompareMedia` per-pair DOM teardown/reflow + defer/stream `deserialize` on resume (5 SP) — ✅ `showTournamentPairFast` wrapper-reuse render + O(1) inverse-delta undo (the real per-pick O(n) cost was `strategy.serialize()`, not deserialize); **real-24k smoke PASSED**
-
-**Daily total**: ~5 SP (of the 10 SP batch)
+**Daily total**: ~4 SP (of the 8 SP batch)
 
 ---
 
-### Wednesday, July 8 — Tournament debt sweep + PR → begin Docs hygiene
-> Clean the mechanical tournament 🟤 on the same branch, land unit tests, open the CW-T PR. Then begin CW-D (docs) — CLAUDE.md tournament-persistence docs must reflect the post-fix state, so docs follow the fix.
+### Wednesday, July 15 — G1 PR → begin Tournament bugs
+> Land G1 unit tests, open the G1 PR (checkoff gates on the user-side 24k smoke). Then begin G2 with the 🔴 undo bug — reproduce first, then fix.
 
 | Group | SP |
 |-------|----|
-| **Group CW-T** [batch] 🏆 (day 3 of 3 — debt sweep + PR) | (10) |
-| **Group CW-D: Docs & CLAUDE.md hygiene** [batch] (start) | (4) |
+| [**G1**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 3 — PR) | (8) |
+| [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (start — undo repro + fix) | (6) |
 
-- [x] Tournament leave-flow 🟤 (discard-orphan retry, `onAppCloseRequested` unsubscribe, re-entrancy guard, stale E2E fix + precondition + aria-label, `getMediaIndex` micro-opt, undo-cap / SwissStrategy test pins); unit tests — ✅ all 6 🟤 done (Tasks 4-6); **CW-T MERGED 2026-07-03 via PR #59 (`ae9588d`)**
-- [x] Begin CLAUDE.md consolidation (fold 3 tournament gotchas + document post-fix debounced persistence / v2 payload) — ✅ done in the single CW-D pass (PR #60)
-
-**Daily total**: ~2 SP CW-T + CW-D start
+**Daily total**: ~3 SP
 
 ---
 
-### Thursday, July 9 — Docs & Test hygiene + Reviews start
-> Finish the docs consolidation and the non-tournament test backfill. Begin the low-risk Weekly Reviews late in the day. (Optional: the roadmap-refresh conversation slots here if it happens with the user.)
+### Thursday, July 16 — Tournament bugs finish + Bulk-rate + strategic discussion + Reviews start
+> Finish G2 (mouse-wheel guard, header auto-hide), do G3 (bulk-rate re-pair). Hold the **strategic-doc brainstorm** with the user (gates G4's 🟡 refresh). Begin Weekly Reviews late.
 
 | Group | SP |
 |-------|----|
-| **Group CW-D: Docs & CLAUDE.md hygiene** [batch] (finish) | (4) |
-| **Group CW-V: Test & tooling backfill** [batch] | 4 |
-| **Group WR: Weekly Reviews** [batch] (start) | (4) |
+| [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (finish) | 6 |
+| [**G3. Bulk-rate re-pair avoidance**](#g3-bulk-rate-re-pair-avoidance-solo-) [solo] | 3 |
+| [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (start) | (5) |
 
-- [x] Finish CW-D (PR2/PR3 raw-speed framing correction, dead-code doc drift, CLAUDE.md maintenance-mode decision); **CW-D PR #60** (docs-only → manual review) — ✅ all 5 items done; **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`)
-- [x] CW-V: sort-progress E2E smoke, `methodSource` hardening, real-git-diff `extractAddedLines` fixtures, play/pause icon regression test (4 SP) — ✅ all 4 done (test-only; 423 unit / full E2E 52/52; final review opus merge-cleared; pre-merge `/code-review` "No issues found", 4 sub-threshold nits folded in `e737589`); **MERGED 2026-07-05 via PR #61** (merge `85f1f29`)
-- [x] Weekly Reviews: Claude + non-Claude best-practices rows — ✅ done (Claude BP: autonomous verification **adopt**; non-Claude: Addy Osmani **pass**)
-
-**Daily total**: ~4 SP + CW-D finish + reviews overhead
+**Daily total**: ~9 SP + reviews overhead + strategic brainstorm (non-SP)
 
 ---
 
-### Friday, July 10 — Process guardrails + Reviews wrap + buffer
-> Light, low-risk close: the process/DX guardrails, finish Weekly Reviews, absorb any CW-T spillover (the HIGH bugs carry real design risk + a user-side smoke dependency).
+### Friday, July 17 — Docs refresh + Reviews wrap + buffer
+> Light close: the strategic-doc refresh (if the Thu brainstorm happened) + the CLAUDE.md doc-sync, finish Weekly Reviews, absorb G1/G2 spillover and the user-side 24k smoke follow-up.
 
 | Group | SP |
 |-------|----|
-| **Group CW-P: Process & DX guardrails** [batch] | 3 |
-| **Group WR: Weekly Reviews** [batch] (finish) | (4) |
+| [**G4. Strategic-doc refresh & CLAUDE.md hygiene**](#g4-strategic-doc-refresh--claudemd-hygiene-batch--1--folded) [batch] | 4 |
+| [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (finish) | (5) |
 
-- [x] CW-P: automated E2E gate (pre-push or checklist), Weekly-Reviews methodology fixes, call-site ref-sweep convention (3 SP) — ✅ done 2026-07-10 (pre-push E2E gate + methodology consolidation + ref-sweep bullet); **MERGED 2026-07-11 via PR #63** (`f6c2c46`)
-- [x] Weekly Reviews: plugins ×2 (store + wider); file 🟤 on any `adopt` — ✅ done (store: `typescript-lsp` **adopt** → 🟤; wider: Electron Developer Agent **pass**)
-- [ ] Buffer: CW-T spillover / real-24k smoke follow-up
-
-**Daily total**: 3 SP + reviews overhead + CW-T buffer
+**Daily total**: 4 SP + reviews overhead + G1/G2 buffer
 
 ---
 
 ## Weekly Challenge 🏆
 
-**Tournament correctness, persistence & hardening — the 2 HIGH-severity fixes** (Group CW-T, Mon–Wed).
+**AI-sort startup UX & incremental cache-load** (Group G1, Mon–Wed).
 
-**Why this one**: In a Cleanup Week the challenge may be a correctness item, and these are the sanctioned 🔵 user exception — the highest-severity, highest-value work on the board. A core feature is currently **unusable** on the user's real 24 000-file folder (tournament mode freezes after AI sort; users cannot even enter it after adding media). The stretch is genuine: diagnose a resume-reconciliation / path→index mismatch that only manifests after an AI-sort reorder + new files, AND cut the per-pair `showCompareMedia` DOM teardown/reflow so Continue/Both-Win stop hanging at 24k — all verified against a real large folder that cannot be E2E-fixtured. It is design-risky (unlike the mechanical rest of the week), which is exactly why it is front-loaded Mon–Wed with a Friday buffer.
+**Why this one**: It is the highest-value 🔵 user-flagged work on the board — the single most-repeated dogfooding complaint. On the user's real 24 000-file folder, Sort-by-Predicted is opaque and broken-feeling: nothing happens for ~40s (a silent streaming cache load), it re-extracts features it already has cached, there's no progress indicator, and it can't be cancelled. The stretch is genuine and design-risky: make the ~40s cache load incremental/non-blocking (PR3), fix the "assigned only at end of load" Map bug so cached data is actually served, add a determinate progress card to a code path that has none, and wire real cancellation — all verified against a large folder that cannot be E2E-fixtured. That risk is why it is front-loaded Mon–Wed with a Friday buffer and a user-side smoke handoff.
 
 ---
 
 ## Summary Table
 
-| Group | Domain | Source | Tasks | Total SP | Day | Status |
-|-------|--------|--------|-------|----------|-----|--------|
-| CW-T: Tournament correctness, persistence & hardening [batch] 🏆 | JS logic (tournament engine/manager/IPC + tests) | 🔵 User (2 HIGH bugs) + 🟤 Auto | 2 🔵 + 6 🟤 | 10 | Mon–Wed | ✅ **MERGED 2026-07-03 via PR #59** (merge `ae9588d`, branch deleted; real-24k smoke PASSED; post-merge `/code-review` 2 real findings both fixed pre-merge in `f4b7807`) |
-| CW-D: Docs & CLAUDE.md hygiene [batch] | docs / CLAUDE.md | 🟤 Auto | 5 | 4 | Wed–Thu | ✅ **MERGED 2026-07-04 via PR #60** (merge `dba3ecf`, branch deleted; docs-only, manual review; post-merge `/code-review` 1 finding fixed pre-merge in `b8b31a4`, re-review clean) |
-| CW-V: Test & tooling backfill [batch] | tests (non-tournament) + tooling | 🟤 Auto | 4 | 4 | Thu | ✅ **MERGED 2026-07-05 via PR #61** (merge `85f1f29`, branch deleted; test-only; 9 commits; every per-task review Approved + final whole-branch review opus "Ready to merge: Yes"; pre-merge `/code-review` "No issues found", 4 sub-threshold nits folded pre-merge in `e737589`; 423 unit / full E2E 52/52 / lint 0-err / format clean) |
-| CW-P: Process & DX guardrails [batch] | process / CI / DX | 🟡 Ops (+1 🟤 folded) | 3 | 3 | Fri | ✅ **MERGED 2026-07-11 via PR #63** (merge `f6c2c46`, branch deleted remote + local; 7 commits; final opus review "Ready to merge: Yes", 1 Minor folded `018f0d2`; 434 unit / E2E 52/52 / lint 0-err; not docs-only → post-merge `/code-review` "No issues found" — 3 sub-threshold findings → 2 🟤 [2026-07-11] follow-ups) |
-| WR: Weekly Reviews [batch] | Research / process | ⚪ Overhead | 3 | 4 | Thu–Fri | ✅ **MERGED 2026-07-06 via PR #62** (`291879c`, branch deleted remote + local; docs-only → "No issues found", no `/code-review` fan-out; 4 rows: 2 adopt — `typescript-lsp`, autonomous verification; 2 pass — Electron Developer Agent, Addy Osmani; 2 🟤 + 2 🟤 [2026-07-06] post-merge follow-ups) |
-| **Total (quota-counted)** | | | **20** | **21** | | |
-| **Total (incl. ⚪ overhead)** | | | **23** | **25** | | |
+| ID | Group | Domain | Source | Tasks | Total SP | Day | Status |
+|----|-------|--------|--------|-------|----------|-----|--------|
+| G1 | AI-sort startup UX & incremental cache-load [batch] 🏆 | JS logic (sort / feature-cache / progress UX) | 🔵 User | 6 (1 🔴 + 4 🔵 + 1 🟠) | 8 | Mon–Wed | ⬜ Planned |
+| G2 | Tournament-mode bug fixes [batch] | JS logic (tournament) + CSS | 🔵 User | 3 (1 🔴 + 1 🟠 + 1 🔵) | 6 | Wed–Thu | ⬜ Planned |
+| G3 | Bulk-rate re-pair avoidance [solo] | JS logic (compare-mode ML pairing) | 🔵 User | 1 🟠 | 3 | Thu | ⬜ Planned |
+| G4 | Strategic-doc refresh & CLAUDE.md hygiene [batch] | docs (strategic + CLAUDE.md) | 🟡 Ops (+1 🟤 folded) | 2 | 4 | Fri | ⬜ Planned |
+| G5 | Weekly Reviews [batch] | Research / process | ⚪ Overhead | 4 | 5 | Thu–Fri | ⬜ Planned |
+| **Total (quota-counted)** | | | | **12** | **21** | | |
+| **Total (incl. ⚪ overhead)** | | | | **16** | **26** | | |
 
-_At closeout, check off each constituent BACKLOG/TODO entry individually. CW-T subsumes several [2026-06-25] tournament-persistence 🟤 items (same code path); close them as the HIGH-bug fix lands._
+_At closeout, check off each constituent BACKLOG/TODO entry individually. G1 largely closes the reported AI-sort pain but the 🔴 "Speed up AI / similarity sorting" TODO stays OPEN (PR2 hash-off-thread remains)._
 
 ---
 
 ## Notes
 
-- **Why a Cleanup Week now (user decision).** The Cleanup Week was formally due by both triggers — ~3-week cadence since June 15–19, and a ≈155-item 🟤 tail well past the 20 SP threshold — and the June 22–26 plan had already flagged it as "due ~early July." Rather than defer a *third* time, the user opted to take it now, on condition that the 2 HIGH-severity tournament blockers ride in as the mandatory 🔵 exception. This week therefore inverts the normal quota (🟤 majority) while still shipping the can't-wait user bugs.
-- **Cleanup target = the freshest debt, not the whole tail.** The ≈155-item 🟤 backlog reaches back to March; this week deliberately targets the **PR #54–#58 follow-ups** (June sprint) because they sit on current code, are top-of-mind, and cluster cleanly by domain (tournament / docs / tests / process). The older 🟤 tail (April–May PR follow-ups) remains for a future Cleanup Week — do not try to clear all 155 in one week.
-- **Velocity & target (21 SP quota-counted).** The first Cleanup Week hit 24 SP because it was fully mechanical. This one carries ~8 SP of **non-mechanical** design-risky work (the 2 HIGH tournament bugs, which also gate on a user-side real-24k smoke), so the target is trimmed to 21 SP + 4 overhead. The ~14 SP of mechanical 🟤 (docs/tests/process) moves at cleanup speed; the tournament core does not.
-- **What defers to July 13–17 (next, normal week).** The July-01 **AI-sort-startup cluster** (4 MEDIUM items — the ~40s silent `loadFeatureCache`, no progress UX, redundant-extraction-despite-cache bug, opaque waits), the **bulk-rate re-pair** fix (🟠 TODO), and the **carry-forward 🔴 sort-perf** PR2 (hash off-thread) + PR3 (incremental cache-load) all move to next week, where the ≥50% 🔵 floor resumes and they are the lead work. PR3 in particular is the real fix for 4 of the 8 July-01 reports; PR2 (hash cold-cache) addresses *hash* similarity sorts, not the reported AI-sort pain, so it stays lowest-priority.
-- **Dependency ordering within the week.** CW-T merges before CW-D (the CLAUDE.md tournament-persistence docs must describe post-fix behavior). CW-P codifies the "lightweight inline research" Weekly-Reviews methodology that WR then uses. CW-V and CW-P are independent and can float.
-- **Overrun drop order**: drop **CW-P** (process guardrails — pure convention, no user-facing effect) first, then trim **CW-V** to the two highest-value tests (sort-progress E2E + `methodSource` hardening). **Never drop CW-T** — the HIGH-severity bugs are the whole reason the user allowed the cleanup to proceed. CW-T's real-24k smoke is user-side/async, so its checkoff may legitimately slip past Friday even if the code lands.
-- **Testing reality**: the tournament HIGH bugs cannot be E2E-fixtured at 24k. Verification = unit tests on the reconciliation / path→index / persistence logic + the **manual real-folder smoke hand-off** (see Parallel Work). The CW-T entries stay unchecked until that smoke passes.
-- **Deferred decision (not this week)**: the [2026-06-21] "close the visual-similarity graph-build floor — #7 parallelization vs. relaxing the quality-lock (capped K)" is a **needs-user-decision** item that is explicitly *measure-first, post-PR3* — it does not belong in a Cleanup Week and is not scheduled.
-- **Docs-only PR handling**: CW-D is docs-only and CW-P is largely process/docs — per the [2026-06-29] convention (which CW-P itself formalizes), recognize these before any `/code-review` fan-out and merge/defer them in-session rather than leaving stale branches.
-- **Branch/PR shape**: 4 workflow runs for the quota-counted groups — CW-T (one branch, HIGH bugs + tournament 🟤), CW-D (docs-only), CW-V (tests), CW-P (process). Weekly Reviews is process overhead (no code PR; appends to REVIEW-QUEUE.md + any `adopt` files a 🟤 entry).
+- **Why a normal week (not cleanup).** The last Cleanup Week (July 6–10, 2nd ever) just shipped; cadence puts the next ~early August. The ≥50% 🔵 floor resumes, and last week's plan explicitly earmarked the deferred user work (AI-sort UX cluster, bulk-rate re-pair) as this week's lead.
+- **G1 is the risk.** ~8 SP of design-heavy perf/UX that can only be truly verified on the user's real 24k folder (not E2E-fixturable). Its checkoff may legitimately slip past Friday even if the code lands — the smoke is user-side/async (same pattern as CW-T). **Never drop G1** — it is the whole point of the week.
+- **What defers again.** **PR2 (hash computation off the renderer thread)** — the other half of the 🔴 sort-perf item — stays deferred: it speeds *hash/similarity* sorts, not the reported AI-sort pain, so it is lowest-priority. The 🔴 TODO item stays OPEN after G1. Also parked: image panning feature, single-mode media picker, recently-opened-folders, JXL animation smoothness, fullscreen-exit-regardless-of-zoom, ML retrain-on-source-folder-change investigation.
+- **G4's 🟡 refresh is gated on a discussion.** The strategic-doc edits need a ~15-min brainstorm (v1.1 closed? v2.0 scope? theme placement) — hold it Thursday. If it doesn't happen, drop the 🟡 refresh (defer a 3rd time, noted) but still ship the 🟤 CLAUDE.md doc-sync (no dependency).
+- **Overrun drop order**: drop **G4's 🟡 strategic refresh** first (discussion-gated, no user-facing effect), then trim **G2** to the two highest-value items (🔴 undo + 🟠 mouse-wheel; defer the header auto-hide), then **G3**. Never drop G1.
+- **Docs-only PR handling**: G4 is docs-only — per the [2026-06-29] convention, recognize it before any `/code-review` fan-out and merge/defer in-session.
+- **Dependency ordering**: G1 merges before its docs would change; G2's 🔴 undo needs a repro before a fix; G4's 🟡 refresh follows the Thursday brainstorm; Weekly Reviews run late and must not displace G1.
+- **Branch/PR shape**: 4 workflow runs for the quota-counted groups — G1 (sort/cache), G2 (tournament), G3 (bulk-rate), G4 (docs). Weekly Reviews is process overhead (no code PR; appends to REVIEW-QUEUE.md + any `adopt` files a 🟤 entry, any `propagate` a TODO § Spawned Tasks row).
+- _Brainstorm sanity-checks: week dates confirmed Mon Jul 13 – Fri Jul 17 vs. today 2026-07-12 and vs. git/DONE (prev plan = July 6–10, all merged); velocity design-heavy ~14–16 SP (target 21 quota-counted is ambitious → G1 risk noted + overrun drop order set); Cleanup Week NOT due (last July 6–10); 🔵 quota abundantly satisfiable._
 
 ### Quota Check
-- 🔵 **User-Flagged SP**: 8 / 21 (**38%**) — ⚠️ **below the normal ≥50% floor BY DESIGN** — this is an inverted-quota Cleanup Week; the 8 SP is the mandatory HIGH-severity tournament exception the user explicitly authorized.
-- 🟡 **Operational SP**: 3 / 21 (**14%**) — ✅ ≤25%
-- 🟤 **Auto-Generated SP**: 10 / 21 (**48%**), 4 groups (CW-D, CW-V, +6 items in CW-T, +1 item in CW-P) — **inverted**: multiple 🟤 groups are expected in a Cleanup Week (the ≤1-group / ≤25% caps are suspended). 🟤 is the plurality of scheduled work.
-- **Cleanup Week status**: **ACTIVE** (2nd ever; inverts the quota).
-- **Last Cleanup Week**: June 15–19, 2026 (the first ever). Next expected ~late July / early August 2026 (~3-week cadence).
-- **Compliance**: ✅ Cleanup-Week quotas met — 🟤 is the majority of quota-counted work, 🟡 ≤25%, 🔵 limited to the sanctioned HIGH-severity exception. ⚠️ Deviation from *normal-week* quotas (🔵 < 50%) is the intended, user-approved definition of a Cleanup Week, not a violation.
-- **Note**: denominator Y = total quota-counted SP (21) **minus** the exempt ⚪ Overhead Weekly Reviews batch (4) — i.e. the total incl. overhead is 25, percentages are over the 21 quota-counted SP.
+- 🔵 **User-Flagged SP**: 17 / 21 (**81%**) — ✅ ≥50% (G1 8 + G2 6 + G3 3)
+- 🟡 **Operational SP**: 3 / 21 (**14%**) — ✅ ≤25% (G4 strategic-doc refresh)
+- 🟤 **Auto-Generated SP**: 1 / 21 (**5%**), 1 group (folded into G4) — ✅ ≤25% AND ≤1 group
+- **Cleanup Week status**: normal
+- **Last Cleanup Week**: July 6–10, 2026 (the 2nd ever). Next expected ~early August 2026 (~3-week cadence).
+- **Compliance**: ✅ all quotas met — 🔵 well above the 50% floor, 🟡 ≤25%, 🟤 ≤25% and a single folded group.
+- **Note**: denominator Y = total quota-counted SP (21) **minus** the exempt ⚪ Overhead Weekly Reviews batch (5) — i.e. the total incl. overhead is 26; percentages are over the 21 quota-counted SP.
 
 ---
 
 ## Previous Week Summary
 
+### Week: July 6 – July 10, 2026 — 🧹 Cleanup Week (2nd ever) — ✅ Complete (all 5 groups merged)
+
+**Result**: The 2nd Cleanup Week (inverted quota; 21 SP quota-counted + 4 overhead). All five groups shipped, merging across PRs #59–#63. **CW-T** tournament correctness & hardening — the 2 HIGH-severity 🔵 blockers (24k freeze / Both-Win hang → O(1) inverse-delta undo + `showTournamentPairFast`; cannot-enter-after-add-media+AI-sort → `reconcileWithFiles` on every entry) + 6 🟤; **real-24k smoke PASSED**; PR #59 (`ae9588d`), post-merge review found 2 real bugs both fixed pre-merge (`f4b7807`). **CW-D** docs & CLAUDE.md hygiene (5 items; PR #60 `dba3ecf`). **CW-V** test & tooling backfill (4 test-only items; PR #61 `85f1f29`). **CW-P** process & DX guardrails — automated pre-push E2E gate + Weekly-Reviews methodology consolidation + ref-sweep bullet (PR #63 `f6c2c46`). **WR** Weekly Reviews 2nd run (2 adopt: `typescript-lsp`, autonomous verification; 2 pass; PR #62 `291879c`). Unit tests 411 → **434**; E2E 52/52 green. The freshest 🟤 slice (PR #54–#58 follow-ups) burned down; the older April–May 🟤 tail remains for a future Cleanup Week.
+
+**Velocity learning**: the ~8 SP non-mechanical tournament core (design + PR-review + real-24k smoke) ran below its nominal, while the ~13 SP mechanical 🟤 (docs/tests/process) moved at cleanup speed — informs this week's caution on the design-heavy G1 target.
+
 ### Week: June 22 – June 26, 2026 — 🟢 Normal perf week — ✅ Mostly complete (spilled to June 30)
 
-**Result**: A 19 SP (quota-counted) performance push. Four of five groups shipped, spilling ~4 days past Friday: **P2** tournament large-folder perf (PR #55, June 25), **P3** feature-extraction timing → pure-lazy (PR #56, June 26), **WR** Weekly Reviews first run (PR #57, June 29), **T1** tournament exit affordances (PR #58, June 30). Unit tests 381 → **389**; E2E green. **Group P1 (sort-perf PR2 hash-off-thread + PR3 cache-load) did NOT ship** — only its PR1 had merged (June 20, PR #54) — so the 🔴 "Speed up AI/similarity sorting" item stays OPEN and is the carry-forward into the July 13–17 window (deferred from this Cleanup Week).
+**Result**: A 19 SP (quota-counted) performance push. Four of five groups shipped, spilling ~4 days past Friday: **P2** tournament large-folder perf (PR #55, June 25), **P3** feature-extraction timing → pure-lazy (PR #56, June 26), **WR** Weekly Reviews first run (PR #57, June 29), **T1** tournament exit affordances (PR #58, June 30). Unit tests 381 → **389**; E2E green. **Group P1 (sort-perf PR2 hash-off-thread + PR3 cache-load) did NOT ship** — only its PR1 had merged (June 20, PR #54) — so the 🔴 "Speed up AI/similarity sorting" item stays OPEN; its PR3 slice + the AI-sort UX cluster are this week's (July 13–17) lead.
 
-**Key deliveries**:
-- P2 — Tournament 24k perf: slim v2 history-free state (O(n) read) + O(n) consumed-marker pairing + prebuilt path→index Map + debounced single-flight atomic persist — PR #55
-- P3 — Feature extraction made pure lazy/on-demand (removed both eager kickoffs; CLIP sort self-extracts via `clipVectorsNeedExtraction` gate) — PR #56
-- T1 🏆-adjacent — Tournament exit affordances: in-header `#tournamentExitBtn` + confirm-before-app-close (main-process `close` interception → reuse leave prompt); 5/5 manual close cases PASSED — PR #58
-- WR — First Weekly Reviews run: 4 verdicts, 1 adopt (`pr-review-toolkit` → 🟤 BACKLOG); harness proved wildly over-budget (~8M tokens, verification never completed) → methodology fix filed (now CW-P this week) — PR #57
-
-**Velocity learning**: ~14 SP quota-counted actually shipped in-window (P2 8 + P3 3 + T1 3), with P1 (5 SP) carried — design-heavy work runs below the 19 SP nominal once diagnosis + PR-review + real-folder-smoke overhead is counted. Directly informs this Cleanup Week's trimmed 21 SP target (the ~8 SP tournament-bug core is the same non-mechanical shape).
+**Velocity learning**: ~14 SP quota-counted actually shipped in-window (P2 8 + P3 3 + T1 3), with P1 (5 SP) carried — design-heavy work runs below the nominal once diagnosis + PR-review + real-folder-smoke overhead is counted.
 
 ### Week: June 15 – June 19, 2026 — 🧹 Cleanup Week (1st ever) — ✅ Complete (shipped on time)
 
-**Result**: The first-ever Cleanup Week. All five groups (CW-1…CW-5) delivered at the 24 SP target, on schedule. Six PRs merged (#47–#52). Unit 310 → **345**; E2E returned to green (42/43 → 48/48). The inverted quota (🟤 majority) burned ~16 SP of accumulated auto-generated debt. Key: CW-5 🏆 frame-0-first streaming animated-JXL decode (PR #47); CW-1 7 defensive renderer guards consolidating 14 PR-review follow-ups (PR #48); CW-2 E2E green + first tournament Playwright coverage (PR #49); CW-3 docs & backlog hygiene (PR #50); CW-4 dependency-free pre-commit secret guard + pre-archive checklist (PR #51/#52).
+**Result**: The first-ever Cleanup Week. All five groups (CW-1…CW-5) delivered at the 24 SP target, on schedule. Six PRs merged (#47–#52). Unit 310 → **345**; E2E returned to green (42/43 → 48/48). Key: CW-5 🏆 frame-0-first streaming animated-JXL decode (PR #47); CW-1 7 defensive renderer guards consolidating 14 PR-review follow-ups (PR #48); CW-2 E2E green + first tournament Playwright coverage (PR #49); CW-3 docs & backlog hygiene (PR #50); CW-4 dependency-free pre-commit secret guard + pre-archive checklist (PR #51/#52).
 
 ### Week: June 1 – June 5, 2026 — ✅ Complete (ran long: finished 2026-06-11)
 
@@ -234,8 +208,8 @@ All 5 groups delivered (30 SP planned; consumed 9 working days). Seven PRs merge
 
 ### Week: May 11 – May 15, 2026 — ✅ Complete
 
-All 6 groups delivered (25 SP). Tournament Mode (Groups E + F) shipped 2026-05-25 with a deterministic-UX + feature-cache-streaming polish pass 2026-05-26. (CLIP extraction silent-failure fix, AI-prediction display bugs, PR #33 defensive follow-ups, integration-test pattern, Tournament Mode spec + prototype.)
+All 6 groups delivered (25 SP). Tournament Mode (Groups E + F) shipped 2026-05-25 with a deterministic-UX + feature-cache-streaming polish pass 2026-05-26.
 
 ### Week: April 13 – April 17, 2026 — ✅ Complete
 
-All 6 groups delivered, 25 SP. See `docs/archive/plans/` and `docs/planning/DONE.md`. (Compare-mode folder-switch fix, CLIP/ML pipeline cleanup, test-quality hardening, CLIP similarity sorting, resource management, build & DX.)
+All 6 groups delivered, 25 SP. See `docs/archive/plans/` and `docs/planning/DONE.md`.
