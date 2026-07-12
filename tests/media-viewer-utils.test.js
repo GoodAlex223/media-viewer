@@ -926,61 +926,52 @@ describe('computeJxlFrameSchedule', () => {
     });
 });
 
-describe('handleMlWorkerMessage sortComplete', () => {
-    const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+describe('applyPredictionSortResult', () => {
+    const applyPredictionSortResult = extractMethod('applyPredictionSortResult');
 
-    it('populates predictionScores from message.scores before reordering mediaFiles', () => {
-        const mediaFiles = [
-            { name: 'a.png', path: '/d/a.png' },
-            { name: 'b.png', path: '/d/b.png' },
-            { name: 'c.png', path: '/d/c.png' },
-        ];
-        const ctx = {
-            mediaFiles,
+    function baseCtx() {
+        return {
+            mediaFiles: [
+                { name: 'a.png', path: '/d/a.png' },
+                { name: 'b.png', path: '/d/b.png' },
+                { name: 'c.png', path: '/d/c.png' },
+            ],
             predictionScores: new Map(),
             currentIndex: 2,
             isSortedByPrediction: false,
-            clearProgressNotification: () => {},
             showMedia: () => {},
             updateSortPredictionButton: () => {},
             showNotification: () => {},
         };
+    }
 
-        handleMlWorkerMessage.call(ctx, {
-            type: 'sortComplete',
+    it('reorders mediaFiles and syncs predictionScores from scores', () => {
+        const ctx = baseCtx();
+        const applied = applyPredictionSortResult.call(ctx, {
             sortedFilenames: ['b.png', 'a.png', 'c.png'],
             scores: { 'a.png': 0.3, 'b.png': 0.95, 'c.png': 0.1 },
         });
-
-        expect(ctx.predictionScores.get('/d/a.png')).toBe(0.3);
-        expect(ctx.predictionScores.get('/d/b.png')).toBe(0.95);
-        expect(ctx.predictionScores.get('/d/c.png')).toBe(0.1);
+        expect(applied).toBe(true);
         expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['b.png', 'a.png', 'c.png']);
+        expect(ctx.predictionScores.get('/d/b.png')).toBe(0.95);
         expect(ctx.isSortedByPrediction).toBe(true);
         expect(ctx.currentIndex).toBe(0);
     });
 
-    it('does not crash when message.scores is absent (defensive)', () => {
-        const ctx = {
-            mediaFiles: [{ name: 'a.png', path: '/a' }],
-            predictionScores: new Map(),
-            currentIndex: 0,
-            isSortedByPrediction: false,
-            clearProgressNotification: () => {},
-            showMedia: () => {},
-            updateSortPredictionButton: () => {},
-            showNotification: () => {},
-        };
-
-        expect(() => {
-            handleMlWorkerMessage.call(ctx, {
-                type: 'sortComplete',
-                sortedFilenames: ['a.png'],
-                // scores intentionally omitted
-            });
-        }).not.toThrow();
-        expect(ctx.predictionScores.size).toBe(0);
+    it('does not throw when scores is absent', () => {
+        const ctx = baseCtx();
+        expect(() =>
+            applyPredictionSortResult.call(ctx, { sortedFilenames: ['a.png', 'b.png', 'c.png'] })
+        ).not.toThrow();
         expect(ctx.isSortedByPrediction).toBe(true);
+    });
+
+    it('returns false and leaves state unsorted when sortedFilenames is null', () => {
+        const ctx = baseCtx();
+        const applied = applyPredictionSortResult.call(ctx, { sortedFilenames: null, reason: 'not enough ratings' });
+        expect(applied).toBe(false);
+        expect(ctx.isSortedByPrediction).toBe(false);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a.png', 'b.png', 'c.png']);
     });
 });
 

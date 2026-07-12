@@ -6594,34 +6594,11 @@ class MediaViewer {
 
             case 'sortComplete':
                 this.clearProgressNotification(); // Clear "Scoring" progress
-                if (message.sortedFilenames) {
-                    // Apply sort order
-                    const filenameToFile = new Map(this.mediaFiles.map((f) => [f.name, f]));
-                    const sorted = message.sortedFilenames.map((name) => filenameToFile.get(name)).filter((f) => f);
-
-                    if (sorted.length > 0) {
-                        // Sync prediction scores from worker so badges align with the re-ordered files.
-                        // Without this, badges show stale per-path values from prior scoreComplete events.
-                        if (message.scores) {
-                            for (const [filename, score] of Object.entries(message.scores)) {
-                                const file = filenameToFile.get(filename);
-                                if (file) this.predictionScores.set(file.path, score);
-                            }
-                        }
-
-                        this.mediaFiles = sorted;
-                        this.currentIndex = 0;
-                        this.isSortedByPrediction = true;
-                        this.showMedia();
-                        this.updateSortPredictionButton();
-                        this.showNotification('Sorted by predicted preference', 'success');
-                    } else {
-                        this.showNotification('No files to sort', 'warning');
-                    }
-                } else {
-                    // Sorting failed - show reason
-                    this.showNotification(message.reason || 'Could not sort files', 'warning');
-                }
+                this.applyPredictionSortResult({
+                    sortedFilenames: message.sortedFilenames,
+                    scores: message.scores,
+                    reason: message.reason,
+                });
                 break;
 
             case 'progress':
@@ -6632,6 +6609,34 @@ class MediaViewer {
                 console.error('ML Worker error:', message.message);
                 break;
         }
+    }
+
+    // Apply a completed ML sort result to the file list. Returns true if an order was applied.
+    applyPredictionSortResult(result) {
+        if (!result || !result.sortedFilenames) {
+            this.showNotification(result?.reason || 'Could not sort files', 'warning');
+            return false;
+        }
+        const filenameToFile = new Map(this.mediaFiles.map((f) => [f.name, f]));
+        const sorted = result.sortedFilenames.map((name) => filenameToFile.get(name)).filter((f) => f);
+        if (sorted.length === 0) {
+            this.showNotification('No files to sort', 'warning');
+            return false;
+        }
+        // Sync prediction scores so badges align with the re-ordered files.
+        if (result.scores) {
+            for (const [filename, score] of Object.entries(result.scores)) {
+                const file = filenameToFile.get(filename);
+                if (file) this.predictionScores.set(file.path, score);
+            }
+        }
+        this.mediaFiles = sorted;
+        this.currentIndex = 0;
+        this.isSortedByPrediction = true;
+        this.showMedia();
+        this.updateSortPredictionButton();
+        this.showNotification('Sorted by predicted preference', 'success');
+        return true;
     }
 
     async loadMlModel() {
