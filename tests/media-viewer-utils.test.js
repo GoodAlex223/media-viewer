@@ -1081,6 +1081,92 @@ describe('runMlSort', () => {
     });
 });
 
+describe('handleSortByPrediction lifecycle', () => {
+    const handleSortByPrediction = extractAsyncMethod('handleSortByPrediction');
+
+    function makeCtx(overrides = {}) {
+        const phases = [];
+        const ctx = {
+            isTournamentMode: false,
+            isMlEnabled: true,
+            isSortedByPrediction: false,
+            mlWorker: {},
+            featureWorkers: [{}],
+            mlStats: { isReady: true },
+            mediaFiles: [
+                { name: 'a.png', path: '/d/a.png' },
+                { name: 'b.png', path: '/d/b.png' },
+            ],
+            originalMediaFiles: [],
+            featureCache: new Map([
+                ['/d/a.png', new Float32Array(64)],
+                ['/d/b.png', new Float32Array(64)],
+            ]),
+            sortAbortController: null,
+            sortRunId: 0,
+            isPredictionSorting: false,
+            extractionProgressSink: null,
+            enableClipFeatures: false,
+            // spies / stubs:
+            showNotification: () => {},
+            updateSortPredictionButton: () => {},
+            updateSortProgress: (p) => phases.push(p.phase),
+            clearProgressNotification: () => {},
+            loadFeatureCache: () => Promise.resolve(),
+            startBackgroundFeatureExtraction: () => Promise.resolve(),
+            cancelBackgroundExtraction: () => {},
+            getCombinedFeatures: (_p) => new Float32Array(576),
+            trainFromHistoricalRatingsAndWait: () => Promise.resolve(),
+            loadMlModel: () => Promise.resolve(),
+            initializeMlWorker: () => {},
+            initializeFeaturePool: () => {},
+            initClipModel: () => {},
+            runMlSort: () => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} }),
+            applyPredictionSortResult: function (r) {
+                this.mediaFiles = r.sortedFilenames.map((n) => this.mediaFiles.find((f) => f.name === n));
+                this.isSortedByPrediction = true;
+                return true;
+            },
+            showMedia: () => {},
+            ...overrides,
+        };
+        ctx._phases = phases;
+        return ctx;
+    }
+
+    it('renders a progress card before the first await and applies the sort', async () => {
+        const ctx = makeCtx();
+        await handleSortByPrediction.call(ctx);
+        expect(ctx._phases[0]).toMatch(/Preparing|Loading/);
+        expect(ctx.isSortedByPrediction).toBe(true);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['b.png', 'a.png']);
+        expect(ctx.sortAbortController).toBeNull(); // finally cleaned up
+        expect(ctx.isPredictionSorting).toBe(false);
+    });
+
+    it('bails unsorted when aborted during the load phase', async () => {
+        const ctx = makeCtx({
+            loadFeatureCache: function () {
+                this.sortAbortController.abort(); // user cancels mid-load
+                return Promise.resolve();
+            },
+            runMlSort: () => {
+                throw new Error('runMlSort must not be reached after cancel');
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(ctx.isSortedByPrediction).toBe(false);
+        expect(ctx.sortAbortController).toBeNull();
+        expect(ctx.isPredictionSorting).toBe(false);
+    });
+
+    it('is a no-op re-entrant call while a sort is already running', async () => {
+        const ctx = makeCtx({ isPredictionSorting: true });
+        await handleSortByPrediction.call(ctx);
+        expect(ctx._phases.length).toBe(0); // returned immediately
+    });
+});
+
 describe('handleCancel feature restore', () => {
     const handleCancel = extractAsyncMethod('handleCancel');
 

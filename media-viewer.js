@@ -7525,23 +7525,21 @@ class MediaViewer {
     }
 
     async handleSortByPrediction() {
-        // Sorting is disabled in tournament mode (strict/deterministic) — exit first to sort.
         if (this.isTournamentMode) return;
+        if (this.isPredictionSorting) return; // re-entrancy guard; Cancel is the abort affordance
         if (!this.isMlEnabled) {
             this.showNotification('ML prediction is disabled', 'warning');
             return;
         }
 
-        // Toggle sorting - restore original order
+        // Toggle off — restore original order (unchanged behavior).
         if (this.isSortedByPrediction) {
-            // Restore original order, but only for files that still exist
             if (this.originalMediaFiles.length > 0) {
-                // Filter to only files that are still in the current list (not moved/rated)
                 const currentPaths = new Set(this.mediaFiles.map((f) => f.path));
                 this.mediaFiles = this.originalMediaFiles.filter((f) => currentPaths.has(f.path));
             }
             this.isSortedByPrediction = false;
-            this.mlComparePairIndex = 0; // Reset ML pair index
+            this.mlComparePairIndex = 0;
             this.currentIndex = 0;
             await this.showMedia();
             this.updateSortPredictionButton();
@@ -7549,77 +7547,90 @@ class MediaViewer {
             return;
         }
 
-        // Lazy initialization: Initialize ML system on first use
-        if (!this.mlWorker || this.featureWorkers.length === 0) {
-            this.showNotification('Initializing ML system...', 'info');
-            console.log('[ML Debug] Lazy initialization of ML system');
+        this.isPredictionSorting = true;
+        this.sortAbortController = new AbortController();
+        const runId = ++this.sortRunId;
+        const signal = this.sortAbortController.signal;
+        // Cancel must also stop an in-progress background extraction (frees CPU).
+        signal.addEventListener('abort', () => this.cancelBackgroundExtraction(), { once: true });
+        this.updateSortProgress({ phase: 'Preparing…' }); // card visible before any await
 
-            // Initialize workers
-            this.initializeMlWorker();
-            this.initializeFeaturePool();
-
-            if (this.enableClipFeatures) {
-                this.initClipModel();
+        try {
+            // Lazy ML init on first use.
+            if (!this.mlWorker || this.featureWorkers.length === 0) {
+                this.initializeMlWorker();
+                this.initializeFeaturePool();
+                if (this.enableClipFeatures) this.initClipModel();
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                await this.loadMlModel();
             }
 
-            // Wait for ML worker to be ready
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            // Phase 1 — load cached features (incremental + determinate + cancelable).
+            await this.loadFeatureCache({
+                signal,
+                onProgress: (current, total) =>
+                    this.updateSortProgress({ phase: 'Loading cached features…', current, total }),
+            });
+            if (signal.aborted) throw new Error('cancelled');
 
-            // Load cached model
-            await this.loadMlModel();
-        }
-
-        // Always reload feature cache (cleared by loadFolder() on folder switch)
-        await this.loadFeatureCache();
-
-        // Train from historical ratings if not already trained
-        if (!this.mlStats?.isReady) {
-            this.showNotification('Training model from historical ratings...', 'info');
-            await this.trainFromHistoricalRatingsAndWait();
-            this.updateSortPredictionButton();
-        }
-
-        // Check if model is ready after training
-        if (!this.mlStats?.isReady) {
-            this.showNotification(
-                `Need more ratings (${this.mlStats?.positiveCount || 0} likes, ${this.mlStats?.negativeCount || 0} dislikes)`,
-                'warning'
-            );
-            return;
-        }
-
-        // Save original order
-        this.originalMediaFiles = [...this.mediaFiles];
-
-        // Check how many files need feature extraction
-        const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
-
-        if (uncachedFiles.length > 0) {
-            // Start background extraction and wait for completion
-            this.showNotification(`Extracting features for ${uncachedFiles.length} files...`, 'info');
-            await this.startBackgroundFeatureExtraction();
-        }
-
-        // Collect all features from cache
-        const allFeatures = {};
-        for (const file of this.mediaFiles) {
-            const combined = this.getCombinedFeatures(file.path);
-            if (combined) {
-                allFeatures[file.name] = combined;
+            // Train from historical ratings if needed.
+            if (!this.mlStats?.isReady) {
+                this.updateSortProgress({ phase: 'Training model…' });
+                await this.trainFromHistoricalRatingsAndWait();
+                this.updateSortPredictionButton();
             }
+            if (!this.mlStats?.isReady) {
+                this.showNotification(
+                    `Need more ratings (${this.mlStats?.positiveCount || 0} likes, ${this.mlStats?.negativeCount || 0} dislikes)`,
+                    'warning'
+                );
+                return;
+            }
+
+            this.originalMediaFiles = [...this.mediaFiles];
+
+            // Phase 2 — extract any missing features (drives the SAME card via the sink).
+            const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
+            if (uncachedFiles.length > 0) {
+                this.extractionProgressSink = (current, total) =>
+                    this.updateSortProgress({ phase: 'Extracting features…', current, total });
+                try {
+                    await this.startBackgroundFeatureExtraction();
+                } finally {
+                    this.extractionProgressSink = null;
+                }
+            }
+            if (signal.aborted) throw new Error('cancelled');
+
+            // Collect features.
+            const allFeatures = {};
+            for (const file of this.mediaFiles) {
+                const combined = this.getCombinedFeatures(file.path);
+                if (combined) allFeatures[file.name] = combined;
+            }
+            if (Object.keys(allFeatures).length === 0) {
+                this.showNotification('Could not extract features from any files', 'error');
+                return;
+            }
+
+            // Phase 3 — sort (awaitable, stale-guarded).
+            this.updateSortProgress({ phase: 'Sorting…' });
+            const result = await this.runMlSort(allFeatures, runId);
+            if (signal.aborted || runId !== this.sortRunId) throw new Error('cancelled');
+            this.applyPredictionSortResult(result);
+        } catch (err) {
+            if (signal.aborted || err.message === 'cancelled') {
+                this.showNotification('Sorting cancelled', 'info');
+            } else {
+                console.error('Error sorting by prediction:', err);
+                this.showNotification(`Could not sort: ${err.message}`, 'warning');
+            }
+        } finally {
+            this.clearProgressNotification();
+            this.sortAbortController = null;
+            this.isPredictionSorting = false;
+            this.extractionProgressSink = null;
         }
-
-        if (Object.keys(allFeatures).length === 0) {
-            this.showNotification('Could not extract features from any files', 'error');
-            return;
-        }
-
-        console.log(`Sending ${Object.keys(allFeatures).length} files for ML sorting`);
-
-        this.mlWorker.postMessage({
-            type: 'getSortedOrder',
-            data: { allFeatures },
-        });
     }
 
     async updateMlModelAfterRating(filePath, actionType) {
