@@ -2827,6 +2827,7 @@ describe('loadFeatureCache incremental + signal', () => {
         // resolves free identifiers against the global object, so the real class (never
         // imported here — this file drives extracted method bodies, not the live class) must be
         // stood in for with a stub carrying the same value.
+        // NOTE: keep in sync with MediaViewer.FEATURE_CACHE_VERSION in media-viewer.js.
         globalThis.MediaViewer = { FEATURE_CACHE_VERSION: 4 };
     });
     afterEach(() => {
@@ -2910,5 +2911,66 @@ describe('loadFeatureCache incremental + signal', () => {
         };
         await loadFeatureCacheLocked.call(ctx, {});
         expect(ctx.featureCache).toBe(existing); // same reference, not replaced
+    });
+
+    it('keeps the first chunk (partial-but-valid) when aborted mid-stream', async () => {
+        // 1500 files → the CHUNK=1000 loop iterates twice (offset 0, offset 1000).
+        // Abort AFTER the first chunk's onProgress fires; the loop's top-of-iteration
+        // signal check then breaks before fetching chunk 2. Result: a partial cache of the
+        // first chunk's 1000 entries — NOT 0 (adopted, not left empty) and NOT 1500 (never
+        // fully loaded).
+        const files = Array.from({ length: 1500 }, (_, i) => mkFile(`f${i}.png`, i, i));
+        installApi([files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)])], { count: 1500 });
+        const controller = new AbortController();
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: files,
+            featureCache: new Map(),
+            featureMetadata: new Map(),
+            clipCache: new Map(),
+        };
+        await loadFeatureCacheLocked.call(ctx, {
+            signal: controller.signal,
+            onProgress: (loaded) => {
+                if (loaded >= 1) controller.abort();
+            },
+        });
+        expect(ctx.featureCache.size).toBe(1000); // first chunk only
+    });
+
+    it('returns the partial cache (no legacy reset) when a chunk fetch throws mid-stream', async () => {
+        // Once a fresh cache is adopted and the first chunk ingested, a throw on the SECOND
+        // chunk must NOT fall through to the legacy read-and-reset path (which would discard
+        // the partial). readFile below returns a full valid cache; if the legacy path were
+        // (wrongly) taken, size would be 1500 — the assertion pins it to the partial 1000.
+        const files = Array.from({ length: 1500 }, (_, i) => mkFile(`f${i}.png`, i, i));
+        const all = files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)]);
+        let readFileCalled = false;
+        globalThis.window = {
+            electronAPI: {
+                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
+                featureCacheOpen: () => Promise.resolve({ success: true, version: 4, count: 1500 }),
+                featureCacheChunk: (offset) => {
+                    if (offset === 0) return Promise.resolve({ entries: all.slice(0, 1000) });
+                    return Promise.reject(new Error('IPC hiccup on chunk 2'));
+                },
+                featureCacheClose: () => Promise.resolve({ success: true }),
+                readFile: () => {
+                    readFileCalled = true;
+                    return Promise.resolve(JSON.stringify({ version: 4, features: Object.fromEntries(all) }));
+                },
+            },
+        };
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: files,
+            featureCache: new Map(),
+            featureMetadata: new Map(),
+            clipCache: new Map(),
+        };
+        const size = await loadFeatureCacheLocked.call(ctx, {});
+        expect(size).toBe(1000); // partial from chunk 1
+        expect(ctx.featureCache.size).toBe(1000);
+        expect(readFileCalled).toBe(false); // legacy path NOT taken after adopt
     });
 });

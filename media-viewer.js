@@ -6781,7 +6781,8 @@ class MediaViewer {
         // Precompute the path prefix ONCE (path.join is sync in preload, but ~24k awaits in
         // the hot loop is needless churn — string-concat instead).
         const sep = this.baseFolderPath.includes('\\') ? '\\' : '/';
-        const makePath = (filename) => this.baseFolderPath + sep + filename;
+        const base = this.baseFolderPath.replace(/[\\/]+$/, ''); // strip trailing sep so a drive-root path doesn't double up
+        const makePath = (filename) => base + sep + filename;
 
         // Validate + ingest one entry directly into the live caches. `vector` is a Float32Array.
         const ingest = (filename, vector, clipVector, size, mtime) => {
@@ -6800,6 +6801,7 @@ class MediaViewer {
         // Preferred path: parse in the main process and pull entries in small batches.
         // Keeps the renderer from ever holding the full (potentially 250MB+) JSON string.
         if (window.electronAPI.featureCacheOpen) {
+            let adopted = false;
             try {
                 const opened = await window.electronAPI.featureCacheOpen(cacheFile);
                 if (!opened.success) {
@@ -6817,6 +6819,7 @@ class MediaViewer {
                 // Confirmed valid — adopt a fresh cache and populate it incrementally.
                 this.featureCache = new Map();
                 this.featureMetadata = new Map();
+                adopted = true;
                 const total = opened.count;
                 const CHUNK = 1000;
                 let loaded = 0;
@@ -6844,7 +6847,13 @@ class MediaViewer {
                 } catch (_e) {
                     // ignore
                 }
-                // fall through to legacy path
+                if (adopted) {
+                    // We already replaced the cache and ingested some entries; a mid-load
+                    // failure leaves a partial-but-valid cache (same shape as a user cancel).
+                    // Do NOT fall through to the legacy reset-and-retry.
+                    return this.featureCache.size;
+                }
+                // The open itself failed before we touched the cache → try the legacy path.
             }
         }
 
