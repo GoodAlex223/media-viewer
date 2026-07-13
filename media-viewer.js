@@ -6740,7 +6740,7 @@ class MediaViewer {
         return release;
     }
 
-    async loadFeatureCache() {
+    async loadFeatureCache(options = {}) {
         // Single-flight: concurrent callers (a CLIP-sort's on-demand extraction + a "Sort by Prediction" click) must
         // not both drive the shared main-side streaming session, which would corrupt each
         // other's chunk offsets and close the session out from under the other — yielding an
@@ -6748,7 +6748,7 @@ class MediaViewer {
         if (this._featureCacheLoadPromise) {
             return this._featureCacheLoadPromise;
         }
-        this._featureCacheLoadPromise = this._loadFeatureCacheImpl();
+        this._featureCacheLoadPromise = this._loadFeatureCacheImpl(options);
         try {
             return await this._featureCacheLoadPromise;
         } finally {
@@ -6756,17 +6756,17 @@ class MediaViewer {
         }
     }
 
-    async _loadFeatureCacheImpl() {
+    async _loadFeatureCacheImpl(options = {}) {
         if (!this.baseFolderPath) return 0;
         const releaseIoLock = await this._acquireCacheIoLock();
         try {
-            return await this._loadFeatureCacheLocked();
+            return await this._loadFeatureCacheLocked(options);
         } finally {
             releaseIoLock();
         }
     }
 
-    async _loadFeatureCacheLocked() {
+    async _loadFeatureCacheLocked({ signal, onProgress } = {}) {
         if (!this.baseFolderPath) return 0;
 
         const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
@@ -6777,21 +6777,23 @@ class MediaViewer {
             currentFiles.set(file.name, file);
         }
         const expectedDim = 64;
-        const freshFeatureCache = new Map();
-        const freshFeatureMetadata = new Map();
 
-        // Validate + populate one cache entry (shared by streaming + legacy paths).
-        const processEntry = async (filename, entry) => {
+        // Precompute the path prefix ONCE (path.join is sync in preload, but ~24k awaits in
+        // the hot loop is needless churn — string-concat instead).
+        const sep = this.baseFolderPath.includes('\\') ? '\\' : '/';
+        const makePath = (filename) => this.baseFolderPath + sep + filename;
+
+        // Validate + ingest one entry directly into the live caches. `vector` is a Float32Array.
+        const ingest = (filename, vector, clipVector, size, mtime) => {
             const currentFile = currentFiles.get(filename);
-            if (!currentFile) return; // file no longer in folder — prune
-            if (entry.vector?.length !== expectedDim) return; // wrong dimension
-            if (entry.size !== currentFile.size || entry.mtime !== currentFile.mtimeMs) return; // stale
-
-            const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
-            freshFeatureCache.set(fullPath, new Float32Array(entry.vector));
-            freshFeatureMetadata.set(fullPath, { size: entry.size, mtime: entry.mtime });
-            if (entry.clipVector && entry.clipVector.length === 512) {
-                this.clipCache.set(fullPath, new Float32Array(entry.clipVector));
+            if (!currentFile) return; // pruned — file no longer in folder
+            if (vector.length !== expectedDim) return; // wrong dimension
+            if (size !== currentFile.size || mtime !== currentFile.mtimeMs) return; // stale
+            const fullPath = makePath(filename);
+            this.featureCache.set(fullPath, vector);
+            this.featureMetadata.set(fullPath, { size, mtime });
+            if (clipVector && clipVector.length === 512) {
+                this.clipCache.set(fullPath, clipVector);
             }
         };
 
@@ -6801,8 +6803,7 @@ class MediaViewer {
             try {
                 const opened = await window.electronAPI.featureCacheOpen(cacheFile);
                 if (!opened.success) {
-                    // notFound or parse error → start with an empty cache (no crash, no data loss)
-                    return 0;
+                    return 0; // notFound/parse error — leave existing cache untouched
                 }
                 if (opened.version !== MediaViewer.FEATURE_CACHE_VERSION) {
                     console.warn(
@@ -6813,17 +6814,28 @@ class MediaViewer {
                     this.featureMetadata = new Map();
                     return 0;
                 }
-
+                // Confirmed valid — adopt a fresh cache and populate it incrementally.
+                this.featureCache = new Map();
+                this.featureMetadata = new Map();
+                const total = opened.count;
                 const CHUNK = 1000;
-                for (let offset = 0; offset < opened.count; offset += CHUNK) {
+                let loaded = 0;
+                for (let offset = 0; offset < total; offset += CHUNK) {
+                    if (signal?.aborted) break;
                     const { entries } = await window.electronAPI.featureCacheChunk(offset, CHUNK);
                     for (const [filename, entry] of entries) {
-                        await processEntry(filename, entry);
+                        ingest(
+                            filename,
+                            new Float32Array(entry.vector),
+                            entry.clipVector ? new Float32Array(entry.clipVector) : null,
+                            entry.size,
+                            entry.mtime
+                        );
                     }
+                    loaded += entries.length;
+                    if (onProgress) onProgress(loaded, total);
                 }
                 await window.electronAPI.featureCacheClose();
-                this.featureCache = freshFeatureCache;
-                this.featureMetadata = freshFeatureMetadata;
                 return this.featureCache.size;
             } catch (error) {
                 console.log('Feature cache streaming load failed, falling back to direct read:', error.message);
@@ -6850,11 +6862,17 @@ class MediaViewer {
                     this.featureMetadata = new Map();
                     return 0;
                 }
+                this.featureCache = new Map();
+                this.featureMetadata = new Map();
                 for (const [filename, entry] of Object.entries(parsed.features || {})) {
-                    await processEntry(filename, entry);
+                    ingest(
+                        filename,
+                        new Float32Array(entry.vector),
+                        entry.clipVector ? new Float32Array(entry.clipVector) : null,
+                        entry.size,
+                        entry.mtime
+                    );
                 }
-                this.featureCache = freshFeatureCache;
-                this.featureMetadata = freshFeatureMetadata;
                 return this.featureCache.size;
             }
         } catch (error) {

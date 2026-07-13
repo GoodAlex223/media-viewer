@@ -2815,3 +2815,100 @@ describe('handleAppCloseRequest', () => {
         expect(allowAppClose).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('loadFeatureCache incremental + signal', () => {
+    const loadFeatureCacheLocked = extractAsyncMethod('_loadFeatureCacheLocked');
+
+    const savedWindow = globalThis.window;
+    const savedMediaViewer = globalThis.MediaViewer;
+    beforeEach(() => {
+        // The extracted method body references the static class field
+        // `MediaViewer.FEATURE_CACHE_VERSION` directly (not `this.constructor...`); `new Function`
+        // resolves free identifiers against the global object, so the real class (never
+        // imported here — this file drives extracted method bodies, not the live class) must be
+        // stood in for with a stub carrying the same value.
+        globalThis.MediaViewer = { FEATURE_CACHE_VERSION: 4 };
+    });
+    afterEach(() => {
+        globalThis.window = savedWindow;
+        globalThis.MediaViewer = savedMediaViewer;
+    });
+
+    function mkFile(name, size, mtime) {
+        return { name, path: '/d/' + name, size, mtimeMs: mtime };
+    }
+    function mkEntry(size, mtime) {
+        return { vector: Array.from({ length: 64 }, () => 0.1), clipVector: null, size, mtime };
+    }
+
+    function installApi(chunks, { version = 4, count } = {}) {
+        globalThis.window = {
+            electronAPI: {
+                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
+                featureCacheOpen: () =>
+                    Promise.resolve({ success: true, version, count: count ?? chunks.flat().length }),
+                featureCacheChunk: (offset, limit) =>
+                    Promise.resolve({ entries: chunks.flat().slice(offset, offset + limit) }),
+                featureCacheClose: () => Promise.resolve({ success: true }),
+            },
+        };
+    }
+
+    it('populates this.featureCache incrementally and reports progress', async () => {
+        const files = [mkFile('a.png', 10, 100), mkFile('b.png', 20, 200)];
+        installApi([
+            [
+                ['a.png', mkEntry(10, 100)],
+                ['b.png', mkEntry(20, 200)],
+            ],
+        ]);
+        const seen = [];
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: files,
+            featureCache: new Map(),
+            featureMetadata: new Map(),
+            clipCache: new Map(),
+        };
+        await loadFeatureCacheLocked.call(ctx, { onProgress: (c, t) => seen.push([c, t]) });
+        expect(ctx.featureCache.size).toBe(2);
+        expect(seen[seen.length - 1][0]).toBe(2); // final progress reached total
+    });
+
+    it('stops on signal.aborted without loading everything', async () => {
+        const files = Array.from({ length: 5 }, (_, i) => mkFile(`f${i}.png`, i, i));
+        installApi([files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)])], { count: 5 });
+        const controller = new AbortController();
+        controller.abort(); // aborted before the first chunk
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: files,
+            featureCache: new Map(),
+            featureMetadata: new Map(),
+            clipCache: new Map(),
+        };
+        await loadFeatureCacheLocked.call(ctx, { signal: controller.signal });
+        expect(ctx.featureCache.size).toBe(0);
+    });
+
+    it('leaves an existing cache untouched when the file is not found', async () => {
+        globalThis.window = {
+            electronAPI: {
+                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
+                featureCacheOpen: () => Promise.resolve({ success: false, notFound: true }),
+                featureCacheClose: () => Promise.resolve({ success: true }),
+                readFile: () => Promise.resolve(null),
+            },
+        };
+        const existing = new Map([['/d/a.png', new Float32Array(64)]]);
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: [mkFile('a.png', 10, 100)],
+            featureCache: existing,
+            featureMetadata: new Map(),
+            clipCache: new Map(),
+        };
+        await loadFeatureCacheLocked.call(ctx, {});
+        expect(ctx.featureCache).toBe(existing); // same reference, not replaced
+    });
+});
