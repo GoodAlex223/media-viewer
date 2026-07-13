@@ -6825,17 +6825,30 @@ class MediaViewer {
                 let loaded = 0;
                 for (let offset = 0; offset < total; offset += CHUNK) {
                     if (signal?.aborted) break;
-                    const { entries } = await window.electronAPI.featureCacheChunk(offset, CHUNK);
-                    for (const [filename, entry] of entries) {
-                        ingest(
-                            filename,
-                            new Float32Array(entry.vector),
-                            entry.clipVector ? new Float32Array(entry.clipVector) : null,
-                            entry.size,
-                            entry.mtime
-                        );
+                    const chunk = await window.electronAPI.featureCacheChunk(offset, CHUNK);
+                    if (chunk.vecBuf) {
+                        // Binary shape: subarray views straight into the caches (no rebuild).
+                        const vecs = new Float32Array(chunk.vecBuf);
+                        const clips = chunk.clipBuf ? new Float32Array(chunk.clipBuf) : null;
+                        for (let i = 0; i < chunk.names.length; i++) {
+                            const vector = vecs.slice(i * 64, i * 64 + 64);
+                            const clipVector = clips && chunk.hasClip[i] ? clips.slice(i * 512, i * 512 + 512) : null;
+                            ingest(chunk.names[i], vector, clipVector, chunk.sizes[i], chunk.mtimes[i]);
+                        }
+                        loaded += chunk.names.length;
+                    } else {
+                        // Legacy JSON shape.
+                        for (const [filename, entry] of chunk.entries) {
+                            ingest(
+                                filename,
+                                new Float32Array(entry.vector),
+                                entry.clipVector ? new Float32Array(entry.clipVector) : null,
+                                entry.size,
+                                entry.mtime
+                            );
+                        }
+                        loaded += chunk.entries.length;
                     }
-                    loaded += entries.length;
                     if (onProgress) onProgress(loaded, total);
                 }
                 await window.electronAPI.featureCacheClose();

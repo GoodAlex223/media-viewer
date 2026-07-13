@@ -2973,4 +2973,36 @@ describe('loadFeatureCache incremental + signal', () => {
         expect(ctx.featureCache.size).toBe(1000);
         expect(readFileCalled).toBe(false); // legacy path NOT taken after adopt
     });
+
+    it('consumes the binary chunk shape (vecBuf/clipBuf) into the caches', async () => {
+        const files = [mkFile('a.png', 10, 100)];
+        const vecs = new Float32Array(64).fill(0.5);
+        const clips = new Float32Array(512).fill(0.25);
+        globalThis.window = {
+            electronAPI: {
+                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
+                featureCacheOpen: () => Promise.resolve({ success: true, version: 4, count: 1 }),
+                featureCacheChunk: () =>
+                    Promise.resolve({
+                        names: ['a.png'],
+                        sizes: [10],
+                        mtimes: [100],
+                        hasClip: [1],
+                        vecBuf: vecs.buffer,
+                        clipBuf: clips.buffer,
+                    }),
+                featureCacheClose: () => Promise.resolve({ success: true }),
+            },
+        };
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: files,
+            featureCache: new Map(),
+            featureMetadata: new Map(),
+            clipCache: new Map(),
+        };
+        await loadFeatureCacheLocked.call(ctx, {});
+        expect(ctx.featureCache.get('/d/a.png')[0]).toBeCloseTo(0.5);
+        expect(ctx.clipCache.get('/d/a.png')[0]).toBeCloseTo(0.25);
+    });
 });
