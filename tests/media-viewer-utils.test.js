@@ -3005,4 +3005,80 @@ describe('loadFeatureCache incremental + signal', () => {
         expect(ctx.featureCache.get('/d/a.png')[0]).toBeCloseTo(0.5);
         expect(ctx.clipCache.get('/d/a.png')[0]).toBeCloseTo(0.25);
     });
+
+    it('does NOT cache a clip vector for a binary entry with hasClip=0 (garbage clipBuf ignored)', async () => {
+        // The clipBuf carries a full-width 512 slot for EVERY entry; a no-clip entry's slot may
+        // hold arbitrary bytes. The hasClip mask — not the buffer contents — must gate caching,
+        // else zeroed/garbage clips silently leak in and corrupt CLIP sort.
+        const files = [mkFile('a.png', 10, 100)];
+        const vecs = new Float32Array(64).fill(0.5);
+        const clips = new Float32Array(512).fill(0.9); // deliberate non-zero garbage in the unused slot
+        globalThis.window = {
+            electronAPI: {
+                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
+                featureCacheOpen: () => Promise.resolve({ success: true, version: 4, count: 1 }),
+                featureCacheChunk: () =>
+                    Promise.resolve({
+                        names: ['a.png'],
+                        sizes: [10],
+                        mtimes: [100],
+                        hasClip: [0],
+                        vecBuf: vecs.buffer,
+                        clipBuf: clips.buffer,
+                    }),
+                featureCacheClose: () => Promise.resolve({ success: true }),
+            },
+        };
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: files,
+            featureCache: new Map(),
+            featureMetadata: new Map(),
+            clipCache: new Map(),
+        };
+        await loadFeatureCacheLocked.call(ctx, {});
+        expect(ctx.featureCache.get('/d/a.png')[0]).toBeCloseTo(0.5); // 64-dim vector still lands
+        expect(ctx.clipCache.has('/d/a.png')).toBe(false); // no garbage clip leaked in
+    });
+
+    it('round-trips distinct vectors for a multi-entry binary chunk (i*64 / i*512 offset math)', async () => {
+        // Two entries in one buffer: proves the per-entry offset arithmetic is correct for i>0.
+        // A silent off-by-64/off-by-512 regression would swap or corrupt entry 1's vectors with
+        // no other failing test.
+        const files = [mkFile('a.png', 10, 100), mkFile('b.png', 20, 200)];
+        const vecs = new Float32Array(2 * 64);
+        vecs.fill(0.25, 0, 64); // entry 0
+        vecs.fill(0.75, 64, 128); // entry 1
+        const clips = new Float32Array(2 * 512);
+        clips.fill(0.1, 0, 512); // entry 0
+        clips.fill(0.2, 512, 1024); // entry 1
+        globalThis.window = {
+            electronAPI: {
+                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
+                featureCacheOpen: () => Promise.resolve({ success: true, version: 4, count: 2 }),
+                featureCacheChunk: () =>
+                    Promise.resolve({
+                        names: ['a.png', 'b.png'],
+                        sizes: [10, 20],
+                        mtimes: [100, 200],
+                        hasClip: [1, 1],
+                        vecBuf: vecs.buffer,
+                        clipBuf: clips.buffer,
+                    }),
+                featureCacheClose: () => Promise.resolve({ success: true }),
+            },
+        };
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: files,
+            featureCache: new Map(),
+            featureMetadata: new Map(),
+            clipCache: new Map(),
+        };
+        await loadFeatureCacheLocked.call(ctx, {});
+        expect(ctx.featureCache.get('/d/a.png')[0]).toBeCloseTo(0.25);
+        expect(ctx.featureCache.get('/d/b.png')[0]).toBeCloseTo(0.75);
+        expect(ctx.clipCache.get('/d/a.png')[0]).toBeCloseTo(0.1);
+        expect(ctx.clipCache.get('/d/b.png')[0]).toBeCloseTo(0.2);
+    });
 });
