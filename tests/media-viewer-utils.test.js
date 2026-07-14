@@ -3082,3 +3082,24 @@ describe('loadFeatureCache incremental + signal', () => {
         expect(ctx.clipCache.get('/d/b.png')[0]).toBeCloseTo(0.2);
     });
 });
+
+describe('extraction progress sink', () => {
+    const showBackgroundExtractionProgress = extractMethod('showBackgroundExtractionProgress');
+
+    it('routes to the sink and skips the DOM element when a sink is set', () => {
+        const calls = [];
+        const ctx = {
+            extractionProgressSink: (c, t) => calls.push([c, t]),
+            _extractionCachedCount: 0,
+        };
+        // document is available in the vitest jsdom-free env only if configured; guard:
+        // (globalThis.document, not bare `document`, to satisfy no-undef under the node-only test globals)
+        const before =
+            typeof globalThis.document !== 'undefined'
+                ? globalThis.document.getElementById('featureExtractionProgress')
+                : null;
+        showBackgroundExtractionProgress.call(ctx, 8, 24);
+        expect(calls).toEqual([[8, 24]]);
+        expect(before).toBeNull();
+    });
+});

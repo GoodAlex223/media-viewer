@@ -8406,19 +8406,20 @@ class MediaViewer {
         // Process in batches to avoid memory pressure
         const BATCH_SIZE = 10;
         for (let i = 0; i < filesToProcess.length; i += BATCH_SIZE) {
-            if (this.backgroundExtractionAbort?.signal.aborted) {
+            if (!this.backgroundExtractionAbort || this.backgroundExtractionAbort.signal.aborted) {
                 break;
             }
 
             // Yield while user is navigating/rating
+            if (!this.backgroundExtractionAbort) break;
             await this.awaitExtractionGate(this.backgroundExtractionAbort.signal);
-            if (this.backgroundExtractionAbort?.signal.aborted) break;
+            if (!this.backgroundExtractionAbort || this.backgroundExtractionAbort.signal.aborted) break;
 
             const batch = filesToProcess.slice(i, i + BATCH_SIZE);
             const promises = [];
 
             for (const { file, index } of batch) {
-                if (this.backgroundExtractionAbort?.signal.aborted) {
+                if (!this.backgroundExtractionAbort || this.backgroundExtractionAbort.signal.aborted) {
                     break;
                 }
 
@@ -8662,6 +8663,13 @@ class MediaViewer {
         const displayCached = this._extractionCachedCount || 0;
         const displayCurrent = current ?? this._extractionLastCurrent ?? 0;
         const displayTotal = total ?? this._extractionLastTotal ?? 0;
+
+        // When a prediction sort owns the operation, report into its unified card instead of
+        // the standalone bottom-left indicator.
+        if (this.extractionProgressSink) {
+            this.extractionProgressSink(displayCurrent, displayTotal);
+            return;
+        }
 
         let indicator = document.getElementById('featureExtractionProgress');
 
