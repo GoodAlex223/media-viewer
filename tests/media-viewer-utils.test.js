@@ -3081,6 +3081,31 @@ describe('loadFeatureCache incremental + signal', () => {
         expect(ctx.clipCache.get('/d/a.png')[0]).toBeCloseTo(0.1);
         expect(ctx.clipCache.get('/d/b.png')[0]).toBeCloseTo(0.2);
     });
+
+    it('ingests an entry whose size/mtime EXACTLY match the current file as a cache HIT', async () => {
+        // G1 Task-7 defensive regression guard. The staleness gate in `ingest` compares
+        // size/mtime with strict `!==`, and BOTH sides derive from the same fs.stat() values:
+        // the on-disk entry (written full-precision — round6 touches only the vectors) and the
+        // live mediaFiles entry (main.js load-folder → stats.size / stats.mtimeMs). A realistic
+        // large size + sub-ms fractional mtimeMs must round-trip through JSON/IPC to an exact
+        // match and be INGESTED, not dropped as stale. Any future drift (float truncation,
+        // ms-vs-s, a Float32 downcast of size/mtime, string-vs-number) would fail this.
+        const size = 5368709123; // > 2^32 and past Float32 exact-integer range (2^24)
+        const mtime = 1673456789012.345; // sub-ms fractional mtimeMs
+        const files = [mkFile('a.png', size, mtime)];
+        installApi([[['a.png', mkEntry(size, mtime)]]]);
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: files,
+            featureCache: new Map(),
+            featureMetadata: new Map(),
+            clipCache: new Map(),
+        };
+        await loadFeatureCacheLocked.call(ctx, {});
+        expect(ctx.featureCache.size).toBe(1); // HIT — not dropped as stale
+        expect(ctx.featureCache.has('/d/a.png')).toBe(true);
+        expect(ctx.featureMetadata.get('/d/a.png')).toEqual({ size, mtime });
+    });
 });
 
 describe('extraction progress sink', () => {
