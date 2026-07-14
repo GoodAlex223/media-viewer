@@ -7606,11 +7606,16 @@ class MediaViewer {
             }
 
             // Phase 1 — load cached features (incremental + determinate + cancelable).
-            await this.loadFeatureCache({
-                signal,
-                onProgress: (current, total) =>
-                    this.updateSortProgress({ phase: 'Loading cached features…', current, total }),
-            });
+            // Skip the ~40s on-disk reload if the in-memory cache is already warm for every
+            // current file (mirrors the CLIP-sort path's clipVectorsNeedExtraction() gate —
+            // a repeat sort within the same folder session should not replay the full load).
+            if (this.mediaFiles.some((f) => !this.featureCache.has(f.path))) {
+                await this.loadFeatureCache({
+                    signal,
+                    onProgress: (current, total) =>
+                        this.updateSortProgress({ phase: 'Loading cached features…', current, total }),
+                });
+            }
             if (signal.aborted) throw new Error('cancelled');
 
             // Train from historical ratings if needed.

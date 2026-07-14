@@ -1146,6 +1146,9 @@ describe('handleSortByPrediction lifecycle', () => {
 
     it('bails unsorted when aborted during the load phase', async () => {
         const ctx = makeCtx({
+            // Cold cache so the warm-cache gate actually calls loadFeatureCache (where the
+            // abort fires) — a warm cache would skip the load and never reach the abort.
+            featureCache: new Map(),
             loadFeatureCache: function () {
                 this.sortAbortController.abort(); // user cancels mid-load
                 return Promise.resolve();
@@ -1158,6 +1161,27 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(ctx.sortAbortController).toBeNull();
         expect(ctx.isPredictionSorting).toBe(false);
+    });
+
+    it('skips the on-disk reload when the in-memory cache is already warm', async () => {
+        // Warm cache (makeCtx's default has both mediaFiles present) → the Phase-1 gate must
+        // NOT replay the ~40s load, yet the sort still applies from the in-memory features.
+        const loadFeatureCache = vi.fn(() => Promise.resolve());
+        const ctx = makeCtx({ loadFeatureCache });
+        await handleSortByPrediction.call(ctx);
+        expect(loadFeatureCache).not.toHaveBeenCalled();
+        expect(ctx.isSortedByPrediction).toBe(true);
+    });
+
+    it('reloads from disk when the in-memory cache is missing a current file', async () => {
+        // Cold/partial cache (only one of two mediaFiles present) → the gate must call the load.
+        const loadFeatureCache = vi.fn(() => Promise.resolve());
+        const ctx = makeCtx({
+            featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
+            loadFeatureCache,
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(loadFeatureCache).toHaveBeenCalledTimes(1);
     });
 
     it('is a no-op re-entrant call while a sort is already running', async () => {
