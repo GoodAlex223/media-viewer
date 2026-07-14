@@ -1163,6 +1163,48 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.isPredictionSorting).toBe(false);
     });
 
+    it('bails unsorted when aborted during the extraction phase', async () => {
+        const runMlSort = vi.fn(() => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} }));
+        const ctx = makeCtx({
+            // One file missing from the cache so the Phase-1 gate fires AND uncachedFiles
+            // stays non-empty after the (no-op) load — Phase 2 actually gets a chance to run.
+            featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
+            loadFeatureCache: () => Promise.resolve(), // resolves without populating the cache
+            startBackgroundFeatureExtraction: function () {
+                this.sortAbortController.abort(); // user cancels mid-extraction
+                return Promise.resolve();
+            },
+            runMlSort,
+        });
+        await handleSortByPrediction.call(ctx);
+        // Phase 3 has its own (separate) abort guard, so asserting only on the final flags
+        // would still pass even if the Phase-2 guard were deleted (the pipeline would just
+        // run one phase further before bailing). Asserting runMlSort was never invoked pins
+        // down THIS guard specifically.
+        expect(runMlSort).not.toHaveBeenCalled();
+        expect(ctx.isSortedByPrediction).toBe(false);
+        expect(ctx.sortAbortController).toBeNull();
+        expect(ctx.isPredictionSorting).toBe(false);
+    });
+
+    it('bails unsorted when aborted during the sort phase', async () => {
+        // Fully warm cache (makeCtx's default has both mediaFiles present) → the load and
+        // extraction phases are both skipped, so this reaches Phase 3 where the abort fires.
+        const ctx = makeCtx({
+            runMlSort: function () {
+                this.sortAbortController.abort(); // user cancels mid-sort
+                return Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} });
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        // applyPredictionSortResult (the default mock) is what flips isSortedByPrediction to
+        // true — if the post-runMlSort abort check were removed, it WOULD run and this would
+        // flip true, so this assertion genuinely exercises that guard.
+        expect(ctx.isSortedByPrediction).toBe(false);
+        expect(ctx.sortAbortController).toBeNull();
+        expect(ctx.isPredictionSorting).toBe(false);
+    });
+
     it('skips the on-disk reload when the in-memory cache is already warm', async () => {
         // Warm cache (makeCtx's default has both mediaFiles present) → the Phase-1 gate must
         // NOT replay the ~40s load, yet the sort still applies from the in-memory features.
