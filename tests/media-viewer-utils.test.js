@@ -2991,19 +2991,26 @@ describe('loadFeatureCache incremental + signal', () => {
         expect(ctx.featureCache).toBe(existing); // same reference, not replaced
     });
 
-    it('keeps the first chunk (partial-but-valid) when aborted mid-stream', async () => {
-        // 1500 files → the CHUNK=1000 loop iterates twice (offset 0, offset 1000).
-        // Abort AFTER the first chunk's onProgress fires; the loop's top-of-iteration
-        // signal check then breaks before fetching chunk 2. Result: a partial cache of the
-        // first chunk's 1000 entries — NOT 0 (adopted, not left empty) and NOT 1500 (never
-        // fully loaded).
+    it('a cancelled mid-load leaves the existing cache untouched (no truncation)', async () => {
+        // DATA-LOSS REGRESSION LOCK. Staging is local; a mid-stream cancel must NOT truncate a
+        // warm cache. If a partial live map survived a cancel, the 30s auto-save would later
+        // atomically overwrite the full on-disk .feature_cache.json with the truncated map,
+        // permanently destroying the un-loaded vectors.
+        // 1500 files → the CHUNK=1000 loop iterates twice (offset 0, offset 1000). Abort AFTER
+        // the first chunk's onProgress fires; the loop's top-of-iteration signal check breaks
+        // before committing. The prior cache (keys NOT in the reload set) must be preserved
+        // untouched — same reference, same entries, and none of the staged reload keys leaked in.
         const files = Array.from({ length: 1500 }, (_, i) => mkFile(`f${i}.png`, i, i));
         installApi([files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)])], { count: 1500 });
         const controller = new AbortController();
+        const prior = new Map([
+            ['/d/old1.png', new Float32Array(64)],
+            ['/d/old2.png', new Float32Array(64)],
+        ]);
         const ctx = {
             baseFolderPath: '/d',
             mediaFiles: files,
-            featureCache: new Map(),
+            featureCache: prior,
             featureMetadata: new Map(),
             clipCache: new Map(),
         };
@@ -3013,14 +3020,18 @@ describe('loadFeatureCache incremental + signal', () => {
                 if (loaded >= 1) controller.abort();
             },
         });
-        expect(ctx.featureCache.size).toBe(1000); // first chunk only
+        expect(ctx.featureCache).toBe(prior); // same reference — never replaced
+        expect(ctx.featureCache.size).toBe(2); // prior entries intact, not truncated
+        expect(ctx.featureCache.has('/d/old1.png')).toBe(true);
+        expect(ctx.featureCache.has('/d/f0.png')).toBe(false); // no staged reload key leaked in
     });
 
-    it('returns the partial cache (no legacy reset) when a chunk fetch throws mid-stream', async () => {
-        // Once a fresh cache is adopted and the first chunk ingested, a throw on the SECOND
-        // chunk must NOT fall through to the legacy read-and-reset path (which would discard
-        // the partial). readFile below returns a full valid cache; if the legacy path were
-        // (wrongly) taken, size would be 1500 — the assertion pins it to the partial 1000.
+    it('falls through to the legacy read when a chunk fetch throws mid-stream', async () => {
+        // Staging is local, so a mid-stream chunk throw commits NOTHING into this.* — the
+        // existing cache is intact and the streaming failure safely falls through to the legacy
+        // single-read path, which rebuilds from scratch. readFile returns a full valid cache;
+        // the assertions prove the legacy path ran AND produced the complete 1500-entry cache
+        // (the partial staged chunk 1 was cleared, never clobbering the on-disk cache mid-way).
         const files = Array.from({ length: 1500 }, (_, i) => mkFile(`f${i}.png`, i, i));
         const all = files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)]);
         let readFileCalled = false;
@@ -3047,9 +3058,9 @@ describe('loadFeatureCache incremental + signal', () => {
             clipCache: new Map(),
         };
         const size = await loadFeatureCacheLocked.call(ctx, {});
-        expect(size).toBe(1000); // partial from chunk 1
-        expect(ctx.featureCache.size).toBe(1000);
-        expect(readFileCalled).toBe(false); // legacy path NOT taken after adopt
+        expect(readFileCalled).toBe(true); // streaming failure fell through to legacy
+        expect(size).toBe(1500); // full legacy contents, not the partial chunk 1
+        expect(ctx.featureCache.size).toBe(1500);
     });
 
     it('consumes the binary chunk shape (vecBuf/clipBuf) into the caches', async () => {

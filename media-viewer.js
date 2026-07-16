@@ -6790,24 +6790,40 @@ class MediaViewer {
         const base = this.baseFolderPath.replace(/[\\/]+$/, ''); // strip trailing sep so a drive-root path doesn't double up
         const makePath = (filename) => base + sep + filename;
 
-        // Validate + ingest one entry directly into the live caches. `vector` is a Float32Array.
+        // Validate + STAGE one entry into LOCAL maps. They are committed into this.* only after a
+        // COMPLETE, un-aborted load — a partial load (user cancel or a mid-stream failure) must
+        // NEVER replace a good cache, in memory OR on disk: the 30s auto-save persists the live
+        // this.featureCache via an atomic rename, so a truncated live map would overwrite the
+        // full on-disk .feature_cache.json. `vector` is a Float32Array.
+        const freshFeatureCache = new Map();
+        const freshFeatureMetadata = new Map();
+        const freshClip = new Map();
         const ingest = (filename, vector, clipVector, size, mtime) => {
             const currentFile = currentFiles.get(filename);
             if (!currentFile) return; // pruned — file no longer in folder
             if (vector.length !== expectedDim) return; // wrong dimension
             if (size !== currentFile.size || mtime !== currentFile.mtimeMs) return; // stale
             const fullPath = makePath(filename);
-            this.featureCache.set(fullPath, vector);
-            this.featureMetadata.set(fullPath, { size, mtime });
+            freshFeatureCache.set(fullPath, vector);
+            freshFeatureMetadata.set(fullPath, { size, mtime });
             if (clipVector && clipVector.length === 512) {
-                this.clipCache.set(fullPath, clipVector);
+                freshClip.set(fullPath, clipVector);
             }
+        };
+
+        // Commit a fully-loaded set into the live caches. featureCache/featureMetadata are
+        // REPLACED (prunes removed/stale files); clip vectors are MERGED (additive — matches the
+        // pre-incremental behavior and preserves in-memory-only vectors added by extraction).
+        const commitFresh = () => {
+            this.featureCache = freshFeatureCache;
+            this.featureMetadata = freshFeatureMetadata;
+            for (const [k, v] of freshClip) this.clipCache.set(k, v);
+            return this.featureCache.size;
         };
 
         // Preferred path: parse in the main process and pull entries in small batches.
         // Keeps the renderer from ever holding the full (potentially 250MB+) JSON string.
         if (window.electronAPI.featureCacheOpen) {
-            let adopted = false;
             try {
                 const opened = await window.electronAPI.featureCacheOpen(cacheFile);
                 if (!opened.success) {
@@ -6822,18 +6838,19 @@ class MediaViewer {
                     this.featureMetadata = new Map();
                     return 0;
                 }
-                // Confirmed valid — adopt a fresh cache and populate it incrementally.
-                this.featureCache = new Map();
-                this.featureMetadata = new Map();
-                adopted = true;
                 const total = opened.count;
                 const CHUNK = 1000;
                 let loaded = 0;
+                let aborted = false;
                 for (let offset = 0; offset < total; offset += CHUNK) {
-                    if (signal?.aborted) break;
+                    if (signal?.aborted) {
+                        aborted = true;
+                        break;
+                    }
                     const chunk = await window.electronAPI.featureCacheChunk(offset, CHUNK);
                     if (chunk.vecBuf) {
-                        // Binary shape: subarray views straight into the caches (no rebuild).
+                        // Binary shape: .slice() gives each entry its own compact 64/512 copy —
+                        // NOT .subarray() (a view would pin the whole n*64 / n*512 chunk buffer).
                         const vecs = new Float32Array(chunk.vecBuf);
                         const clips = chunk.clipBuf ? new Float32Array(chunk.clipBuf) : null;
                         for (let i = 0; i < chunk.names.length; i++) {
@@ -6858,7 +6875,12 @@ class MediaViewer {
                     if (onProgress) onProgress(loaded, total);
                 }
                 await window.electronAPI.featureCacheClose();
-                return this.featureCache.size;
+                if (aborted) {
+                    // Cancelled mid-load — discard the staged partial and leave the existing
+                    // cache untouched (a truncated map would later clobber the on-disk cache).
+                    return this.featureCache.size;
+                }
+                return commitFresh();
             } catch (error) {
                 console.log('Feature cache streaming load failed, falling back to direct read:', error.message);
                 try {
@@ -6866,13 +6888,8 @@ class MediaViewer {
                 } catch (_e) {
                     // ignore
                 }
-                if (adopted) {
-                    // We already replaced the cache and ingested some entries; a mid-load
-                    // failure leaves a partial-but-valid cache (same shape as a user cancel).
-                    // Do NOT fall through to the legacy reset-and-retry.
-                    return this.featureCache.size;
-                }
-                // The open itself failed before we touched the cache → try the legacy path.
+                // Nothing was committed into this.* (staging is local) → existing cache intact →
+                // fall through to the legacy path, which rebuilds from a single read.
             }
         }
 
@@ -6890,8 +6907,10 @@ class MediaViewer {
                     this.featureMetadata = new Map();
                     return 0;
                 }
-                this.featureCache = new Map();
-                this.featureMetadata = new Map();
+                // Rebuild from scratch — clear any partial staging left by a failed streaming pass.
+                freshFeatureCache.clear();
+                freshFeatureMetadata.clear();
+                freshClip.clear();
                 for (const [filename, entry] of Object.entries(parsed.features || {})) {
                     ingest(
                         filename,
@@ -6901,7 +6920,7 @@ class MediaViewer {
                         entry.mtime
                     );
                 }
-                return this.featureCache.size;
+                return commitFresh();
             }
         } catch (error) {
             console.log('No feature cache found or error loading:', error.message);
