@@ -5271,6 +5271,12 @@ class MediaViewer {
     async handleSortBySimilarity(forceResort = false) {
         // Sorting is disabled in tournament mode (strict/deterministic) — exit first to sort.
         if (this.isTournamentMode) return;
+        // Mutual exclusion with the prediction sort — both share this.sortAbortController;
+        // starting one mid-run would clobber the other's controller and defeat its Cancel.
+        if (this.isPredictionSorting) {
+            this.showNotification('⏳ Prediction sort in progress', 'info');
+            return;
+        }
         // If currently computing, cancel the operation
         if (this.isComputingHashes && this.sortAbortController) {
             this.sortAbortController.abort();
@@ -7567,6 +7573,11 @@ class MediaViewer {
     async handleSortByPrediction() {
         if (this.isTournamentMode) return;
         if (this.isPredictionSorting) return; // re-entrancy guard; Cancel is the abort affordance
+        // Mutual exclusion with the similarity sort — both share this.sortAbortController.
+        if (this.isComputingHashes) {
+            this.showNotification('⏳ Similarity sort in progress', 'info');
+            return;
+        }
         if (!this.isMlEnabled) {
             this.showNotification('ML prediction is disabled', 'warning');
             return;

@@ -1105,6 +1105,7 @@ describe('handleSortByPrediction lifecycle', () => {
             sortAbortController: null,
             sortRunId: 0,
             isPredictionSorting: false,
+            isComputingHashes: false,
             extractionProgressSink: null,
             enableClipFeatures: false,
             // spies / stubs:
@@ -1230,6 +1231,17 @@ describe('handleSortByPrediction lifecycle', () => {
         const ctx = makeCtx({ isPredictionSorting: true });
         await handleSortByPrediction.call(ctx);
         expect(ctx._phases.length).toBe(0); // returned immediately
+    });
+
+    it('is mutually exclusive with an in-progress similarity sort', async () => {
+        // Both handlers share this.sortAbortController — if handleSortByPrediction started
+        // here, it would clobber the similarity sort's controller and defeat its Cancel button.
+        const ctx = makeCtx({ isComputingHashes: true });
+        await handleSortByPrediction.call(ctx);
+        expect(ctx._phases.length).toBe(0); // returned immediately, no progress card rendered
+        expect(ctx.sortAbortController).toBeNull(); // never created — similarity sort's is untouched
+        expect(ctx.isPredictionSorting).toBe(false);
+        expect(ctx.isSortedByPrediction).toBe(false); // sort never applied
     });
 });
 
