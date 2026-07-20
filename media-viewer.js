@@ -1559,11 +1559,18 @@ class MediaViewer {
             // Remove file from array and clean up caches
             this.removeFileFromList(fileToMove.path);
 
-            // Tournament mode: also drop the moved file from the engine. The state write is
-            // debounced (non-blocking) — a crash before it lands is self-healing, since the file
-            // is gone from disk and resume reconciliation prunes it anyway.
+            // Tournament mode: also drop the moved file from the engine. `trackUndo` records it
+            // on engine.history as a `special` entry, IN ORDER with the picks, so Ctrl+A reverses
+            // whichever action happened last; `meta` carries this moveHistory entry back to
+            // handleTournamentUndo (opaque to the engine). The state write is debounced
+            // (non-blocking) — a crash before it lands is self-healing, since the file is gone
+            // from disk and resume reconciliation prunes it anyway.
             if (this.isTournamentMode && this.tournament.engine) {
-                this.tournament.engine.removeFile(fileToMove.path);
+                this.tournament.engine.removeFile(fileToMove.path, {
+                    trackUndo: true,
+                    kind: 'special',
+                    meta: historyEntry,
+                });
                 this.tournament._schedulePersist(this.baseFolderPath);
             }
 
@@ -4698,54 +4705,59 @@ class MediaViewer {
     }
 
     async handleTournamentUndo() {
-        if (!this.isTournamentMode || !this.tournament.engine) return;
+        if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
 
-        // If the last action was a special-folder move (recorded by moveToSpecialFolder), the
-        // file was physically moved AND removed from the engine AND its caches were cleared by
-        // removeFileFromList. Engine.removeFile is not history-tracked, so a plain engine.undo()
-        // can't recover from it. Mirror handleCancel's special branch: restore the file on disk,
-        // re-add to engine.files, restore feature caches (PR #35 contract), pop moveHistory.
-        const lastMove = this.moveHistory[this.moveHistory.length - 1];
-        if (lastMove?.actionType === 'special') {
-            this.moveHistory.pop();
+        // engine.history is the single chronological undo stack: picks and tournament-mode
+        // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune
+        // in showTournamentPair) are absorbed by undoUserAction so they never cost a press.
+        const pending = this.tournament.engine.peekUndoEntry();
+        if (!pending) {
+            // Also the post-resume case: undo is session-only, so a resumed tournament starts
+            // with an empty stack (the version:2 payload is deliberately history-free).
+            this.showNotification('Nothing to undo', 'info');
+            return;
+        }
+
+        if ((pending.kind ?? 'pick') === 'special') {
+            // The file was physically moved off disk and dropped from mediaFiles + the feature
+            // caches. Restore it FIRST and only then advance the stack, so a failed move leaves
+            // engine.history and moveHistory exactly as they were.
+            const move = pending.meta;
             try {
                 const moveResult = await window.electronAPI.moveFile({
-                    sourcePath: lastMove.newPath,
+                    sourcePath: move.newPath,
                     targetFolder: this.baseFolderPath,
-                    fileName: lastMove.fileName,
+                    fileName: move.fileName,
                 });
                 if (!moveResult.success) {
                     throw new Error(moveResult.error);
                 }
-                const restoredFile = {
-                    name: lastMove.fileName,
-                    path: lastMove.originalPath,
-                    size: lastMove.fileSize,
-                    type: lastMove.fileType,
-                };
-                this.mediaFiles.push(restoredFile);
-                // Re-add to engine.files; engine.removeFile was not history-tracked.
-                if (!this.tournament.engine.files.includes(restoredFile.path)) {
-                    this.tournament.engine.files.push(restoredFile.path);
-                }
-                this.restoreFeatureCachesFromHistory(lastMove);
-                if (this.isSortedByPrediction) this.requestPredictionScores();
-                this.tournament._schedulePersist(this.baseFolderPath);
-                if (this.showRatingConfirmations) {
-                    this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
-                }
-                this.updateFolderInfo();
-                await this.showTournamentPair();
             } catch (error) {
                 console.error('Error undoing tournament special:', error);
                 this.showError(`Failed to undo move: ${error.message}`);
-                this.moveHistory.push(lastMove);
+                return;
             }
-            return;
+            // Disk restored — safe to advance. undoUserAction reverses any trailing prunes plus
+            // this removal, restoring strategy state (files/winCounts/byes/roundQueue) AND
+            // engine.files from the snapshot, so the file re-pairs and reports its real tier.
+            this.tournament.engine.undoUserAction();
+            this.mediaFiles.push({
+                name: move.fileName,
+                path: move.originalPath,
+                size: move.fileSize,
+                type: move.fileType,
+            });
+            this.restoreFeatureCachesFromHistory(move);
+            const moveIdx = this.moveHistory.lastIndexOf(move);
+            if (moveIdx !== -1) this.moveHistory.splice(moveIdx, 1);
+            if (this.showRatingConfirmations) {
+                this.showNotification(`✅ Restored ${move.fileName}`, 'success');
+            }
+            this.updateFolderInfo();
+        } else {
+            this.tournament.engine.undoUserAction();
         }
 
-        // Default: undo the engine's last pair-pick (inverse-delta, or snapshot at round boundaries).
-        this.tournament.engine.undo();
         this.tournament._schedulePersist(this.baseFolderPath);
         await this.showTournamentPair();
     }
