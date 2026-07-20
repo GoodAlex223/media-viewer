@@ -2307,7 +2307,6 @@ body {
     font-family: monospace;
 }
 .tournament-pause {
-    pointer-events: auto;
     display: flex;
     align-items: center;
     padding: 4px 8px;
