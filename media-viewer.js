@@ -4528,6 +4528,9 @@ class MediaViewer {
 
         document.getElementById('tournamentProgress').textContent = this.tournament.getProgressText();
         document.getElementById('tournamentTiers').textContent = this.tournament.getTierBreakdownText();
+        // Undo is available only when the stack holds a user action (system prunes don't count).
+        const undoBtn = document.getElementById('tournamentUndoBtn');
+        if (undoBtn) undoBtn.disabled = this.tournament.engine.peekUndoKind() === null;
 
         const leftIdx = this.getMediaIndex(pair.left);
         const rightIdx = this.getMediaIndex(pair.right);
@@ -4812,8 +4815,8 @@ class MediaViewer {
         };
 
         if (undoBtn) {
-            // Enable only if there's a pick to undo
-            undoBtn.disabled = (this.tournament.engine?.history?.length ?? 0) === 0;
+            // Enable only if there's a user action to undo (a prune-only stack is not one).
+            undoBtn.disabled = this.tournament.engine?.peekUndoKind() == null;
             undoBtn.onclick = async () => {
                 cleanup();
                 await this.handleTournamentUndo();

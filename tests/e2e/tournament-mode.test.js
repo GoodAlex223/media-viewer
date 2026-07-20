@@ -251,4 +251,24 @@ test.describe('Tournament Mode', () => {
         const historyLen = await page.evaluate(() => window.mediaViewer.tournament.engine.history.length);
         expect(historyLen).toBe(0); // session-only undo (v2): a resumed engine starts with empty history
     });
+
+    test('undo button is disabled with an empty stack and enabled after a pick', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        await enterAndStartTournament(page, { rounds: 2 });
+
+        // isDisabled() needs no visibility, so this holds once the chrome auto-hides.
+        await expect(page.locator('#tournamentUndoBtn')).toBeDisabled();
+
+        await page.keyboard.press('q');
+        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 1);
+        await page.waitForFunction(() => !window.mediaViewer.isLoading);
+        await expect(page.locator('#tournamentUndoBtn')).toBeEnabled();
+
+        await page.keyboard.press('Control+a');
+        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 0);
+        await expect(page.locator('#tournamentUndoBtn')).toBeDisabled();
+    });
 });
