@@ -271,4 +271,39 @@ test.describe('Tournament Mode', () => {
         await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 0);
         await expect(page.locator('#tournamentUndoBtn')).toBeDisabled();
     });
+
+    test('mouse wheel does not navigate pairs in tournament mode', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        await enterAndStartTournament(page, { rounds: 2 });
+
+        const before = await page.evaluate(() => ({
+            index: window.mediaViewer.currentIndex,
+            pair: (() => {
+                const p = window.mediaViewer.tournament.engine.getCurrentPair();
+                return [p.left, p.right].sort();
+            })(),
+        }));
+
+        // Wheel over the tournament header — empty space, not a .media-wrapper, so the handler
+        // would otherwise fall through to nextMedia()/previousMedia(). nextMedia mutates
+        // currentIndex synchronously (compare branch: currentIndex += 2), so no wait is needed.
+        await page.evaluate(() => {
+            const el = document.getElementById('tournamentHeader');
+            el.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }));
+        });
+
+        const after = await page.evaluate(() => ({
+            index: window.mediaViewer.currentIndex,
+            pair: (() => {
+                const p = window.mediaViewer.tournament.engine.getCurrentPair();
+                return [p.left, p.right].sort();
+            })(),
+        }));
+
+        expect(after).toEqual(before);
+        expect(await page.evaluate(() => window.mediaViewer.isTournamentMode)).toBe(true);
+    });
 });

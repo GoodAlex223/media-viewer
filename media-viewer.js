@@ -2132,6 +2132,14 @@ class MediaViewer {
                 const helpOverlayEl = document.getElementById('helpOverlay');
                 if (helpOverlayEl && helpOverlayEl.classList.contains('show')) return;
 
+                // Tournament mode drives pair progression through the Swiss engine — wheel
+                // navigation would advance currentIndex and desync the display from the
+                // engine's chosen pair. Return before preventDefault, matching the help-overlay
+                // guard above. Zoom over media is unaffected: the media elements' own wheel
+                // listeners fire in the bubble phase before this document-level handler, which
+                // never calls stopPropagation.
+                if (this.isTournamentMode) return;
+
                 if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
 
                 // Check if wheel event is over a media element - handle zoom instead of navigation
