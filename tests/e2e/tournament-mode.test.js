@@ -339,16 +339,21 @@ test.describe('Tournament Mode', () => {
         // 3s timer expire (the chrome is shown once on entry so the exit button is findable).
         const size = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
         await page.mouse.move(Math.round(size.width / 2), Math.round(size.height / 2));
+        // Wait on BOTH elements: each owns an independent setTimeout, armed in the same tick but
+        // fired by the event loop separately, so synchronising on only one of them races the other
+        // under load (observed as a pre-push failure right after a full suite run).
         await expect(page.locator('#tournamentHeader')).not.toHaveClass(/\bshow\b/, { timeout: 6000 });
+        await expect(page.locator('#tournamentControls')).not.toHaveClass(/\bshow\b/, { timeout: 6000 });
 
-        // Computed opacity, not just the class.
-        await expect.poll(() => chromeOpacity(page, '#tournamentHeader')).toBe(0);
-        await expect.poll(() => chromeOpacity(page, '#tournamentControls')).toBe(0);
+        // Computed opacity, not just the class. Explicit timeouts leave headroom for the CSS
+        // opacity transition on a loaded machine (the default 5s is not always enough).
+        await expect.poll(() => chromeOpacity(page, '#tournamentHeader'), { timeout: 6000 }).toBe(0);
+        await expect.poll(() => chromeOpacity(page, '#tournamentControls'), { timeout: 6000 }).toBe(0);
 
         await revealTournamentChrome(page, 'top');
-        await expect.poll(() => chromeOpacity(page, '#tournamentHeader')).toBe(1);
+        await expect.poll(() => chromeOpacity(page, '#tournamentHeader'), { timeout: 6000 }).toBe(1);
 
         await revealTournamentChrome(page, 'bottom');
-        await expect.poll(() => chromeOpacity(page, '#tournamentControls')).toBe(1);
+        await expect.poll(() => chromeOpacity(page, '#tournamentControls'), { timeout: 6000 }).toBe(1);
     });
 });
