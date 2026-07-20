@@ -363,6 +363,7 @@ export class TournamentEngine {
         const progressBefore = this.strategy.getProgress();
         this.strategy.recordResult(winner, loser);
         this.history.push({
+            kind: 'pick',
             winner,
             loser,
             round: progressBefore.round,
@@ -382,6 +383,7 @@ export class TournamentEngine {
         const progressBefore = this.strategy.getProgress();
         this.strategy.recordDraw(a, b, outcome);
         this.history.push({
+            kind: 'pick',
             draw: true,
             outcome,
             a,
@@ -395,32 +397,72 @@ export class TournamentEngine {
         if (this.history.length > UNDO_HISTORY_CAP) this.history.shift();
     }
 
+    // Reverse exactly one history entry, whatever its kind. Returns the popped entry (or null).
+    // Prefer undoUserAction() for user-facing undo — it also absorbs system `prune` entries.
     undo() {
-        if (this.history.length === 0) return;
+        if (this.history.length === 0) return null;
         const entry = this.history.pop();
         this.strategy.applyUndo(entry.undo);
         if (entry.filesSnapshot) {
             this.files = [...entry.filesSnapshot];
         }
+        return entry;
+    }
+
+    // A `prune` entry is system-initiated — the renderer's -1 auto-prune of a file that
+    // vanished from disk. It is reversed transparently as part of the following user undo, so
+    // it never costs the user a press. Everything else (`pick`, `special`) is a user action.
+    // Entries written before G2 carry no `kind`; they are picks.
+    _isUserEntry(entry) {
+        return (entry.kind ?? 'pick') !== 'prune';
+    }
+
+    // Newest user entry, looking past trailing system prunes. Does NOT mutate.
+    // Returns null when there is nothing the user can undo (empty, or prunes only).
+    peekUndoEntry() {
+        for (let i = this.history.length - 1; i >= 0; i--) {
+            if (this._isUserEntry(this.history[i])) return this.history[i];
+        }
+        return null;
+    }
+
+    peekUndoKind() {
+        const entry = this.peekUndoEntry();
+        return entry ? (entry.kind ?? 'pick') : null;
+    }
+
+    // Reverse trailing system prunes, then exactly one user entry; return that entry so the
+    // caller can read its `meta`. Mutates nothing when there is no user entry to reverse.
+    undoUserAction() {
+        if (this.peekUndoEntry() === null) return null;
+        let entry = this.undo();
+        while (entry && !this._isUserEntry(entry)) {
+            entry = this.undo();
+        }
+        return entry;
     }
 
     // `trackUndo: true` records a snapshot-based undo entry BEFORE removing, so a later undo()
     // fully reverses a mid-tournament removal — restoring the strategy state (files/byes/
     // winCounts/roundQueue), not just engine.files. Without it, the O(1) inverse-delta of the
     // picks recorded before the removal cannot resurrect the removed file's strategy state,
-    // corrupting the tournament on undo-past-a-removal. Used by the renderer's -1 auto-prune
-    // (externally-missing file), which is reversed via engine.undo(). Left false (default) for
-    // the special-move path, whose undo is handled by the renderer's dedicated special branch
-    // (restores file/mediaFiles/caches), not engine.undo().
-    removeFile(filePath, { trackUndo = false } = {}) {
+    // corrupting the tournament on undo-past-a-removal.
+    //
+    // `kind` places the entry on the unified undo stack (G2):
+    //   'prune'   (default) — system-initiated, absorbed transparently by undoUserAction()
+    //   'special' — the renderer's special-folder move, a user action worth one Undo press
+    // `meta` is an opaque renderer payload (the moveHistory entry) stored and handed back by
+    // peekUndoEntry()/undoUserAction(); the engine never inspects it.
+    removeFile(filePath, { trackUndo = false, kind = 'prune', meta = null } = {}) {
         if (!this.files.includes(filePath)) return;
         if (trackUndo) {
             // Same entry shape as a boundary-snapshot pick, so undo() reverses it with no extra
             // dispatch: applyUndo restores the strategy from the snapshot, filesSnapshot restores
             // engine.files. Snapshot is captured BEFORE the mutations below.
             this.history.push({
-                kind: 'removeFile',
+                kind,
                 file: filePath,
+                meta,
                 undo: { kind: 'snapshot', strategyStateSnapshot: this.strategy.serialize() },
                 filesSnapshot: [...this.files],
             });
