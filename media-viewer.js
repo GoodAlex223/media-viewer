@@ -144,10 +144,16 @@ class MediaViewer {
         this.isBackgroundExtracting = false;
         this.backgroundExtractionAbort = null; // AbortController for cancellation
         this.featureCacheDirty = false; // Flag for auto-save
+        this._featureCacheDiskCount = 0; // entries last seen in .feature_cache.json (shrink guard)
         this.featureCacheAutoSaveInterval = null;
         this.extractionStartTime = null; // Date.now() when extraction starts
         this.extractionCompletionTimes = []; // Rolling window of completion timestamps
         this.extractionRunId = 0; // Generation counter for cancel-then-restart safety
+        this.sortRunId = 0; // Generation counter — ignores a stale/cancelled ML sortComplete.
+        this._mlSortResolve = null;
+        this._mlSortReject = null;
+        this.isPredictionSorting = false; // re-entrancy guard for handleSortByPrediction
+        this.extractionProgressSink = null; // when set, extraction reports here instead of its own indicator
         this.extractionPaused = false; // True while user is navigating/rating
         this.extractionResumeResolve = null; // Resolves awaitExtractionGate() when paused
         this.extractionResumeTimer = null; // setTimeout handle for 2s idle resume
@@ -2500,6 +2506,18 @@ class MediaViewer {
             // so the empty-folder path also clears tournament UI state.
             if (this.isTournamentMode) this.exitTournamentMode();
 
+            // Same reasoning as exitTournamentMode above: must also run BEFORE both branches
+            // diverge, or switching to an EMPTY folder would skip all three — leaving an
+            // in-flight sort/extraction running against the folder that's about to disappear.
+            // A skipped _abortInFlightPredictionSort() in particular never settles the pending
+            // runMlSort promise, so isPredictionSorting stays true and (via the shared
+            // sortAbortController mutual-exclusion guard) wedges BOTH sort paths, not just the
+            // one that was running. A skipped _featureCacheDiskCount reset also leaves the old
+            // folder's baseline armed against whatever folder loads next.
+            this.cancelBackgroundExtraction();
+            this._abortInFlightPredictionSort();
+            this._featureCacheDiskCount = 0;
+
             if (result.files.length === 0) {
                 this.mediaFiles = [];
                 this.baseFolderPath = folderPath;
@@ -2531,8 +2549,6 @@ class MediaViewer {
             this.clipCache.clear();
             this.featureMetadata.clear();
             this.predictionScores.clear();
-            // Cancel any ongoing background extraction
-            this.cancelBackgroundExtraction();
             // Hydrate corrective-training records for this folder (prunes stale filenames)
             await this.loadBulkRatedFile();
             if (this.sortSimilarityBtn) {
@@ -5266,6 +5282,12 @@ class MediaViewer {
     async handleSortBySimilarity(forceResort = false) {
         // Sorting is disabled in tournament mode (strict/deterministic) — exit first to sort.
         if (this.isTournamentMode) return;
+        // Mutual exclusion with the prediction sort — both share this.sortAbortController;
+        // starting one mid-run would clobber the other's controller and defeat its Cancel.
+        if (this.isPredictionSorting) {
+            this.showNotification('⏳ Prediction sort in progress', 'info');
+            return;
+        }
         // If currently computing, cancel the operation
         if (this.isComputingHashes && this.sortAbortController) {
             this.sortAbortController.abort();
@@ -6416,6 +6438,12 @@ class MediaViewer {
             this.mlWorker.onerror = (err) => {
                 console.error('[ML Debug] ML Worker error:', err);
                 this.isMlEnabled = false;
+                // A hard worker crash must settle any pending runMlSort() promise (reject),
+                // otherwise its awaiter (Task 3) hangs forever.
+                const reject = this._mlSortReject;
+                this._mlSortResolve = null;
+                this._mlSortReject = null;
+                if (reject) reject(new Error('ML worker crashed'));
             };
 
             // Initialize worker (will load saved model if exists)
@@ -6592,37 +6620,26 @@ class MediaViewer {
                 }
                 break;
 
-            case 'sortComplete':
+            case 'sortComplete': {
+                // Ignore a completion from a superseded or cancelled run (guarded by the
+                // generation token). A legacy worker that doesn't echo sortRunId is treated
+                // as matching (undefined !== a number would wrongly drop it).
+                if (message.sortRunId !== undefined && message.sortRunId !== this.sortRunId) {
+                    break;
+                }
                 this.clearProgressNotification(); // Clear "Scoring" progress
-                if (message.sortedFilenames) {
-                    // Apply sort order
-                    const filenameToFile = new Map(this.mediaFiles.map((f) => [f.name, f]));
-                    const sorted = message.sortedFilenames.map((name) => filenameToFile.get(name)).filter((f) => f);
-
-                    if (sorted.length > 0) {
-                        // Sync prediction scores from worker so badges align with the re-ordered files.
-                        // Without this, badges show stale per-path values from prior scoreComplete events.
-                        if (message.scores) {
-                            for (const [filename, score] of Object.entries(message.scores)) {
-                                const file = filenameToFile.get(filename);
-                                if (file) this.predictionScores.set(file.path, score);
-                            }
-                        }
-
-                        this.mediaFiles = sorted;
-                        this.currentIndex = 0;
-                        this.isSortedByPrediction = true;
-                        this.showMedia();
-                        this.updateSortPredictionButton();
-                        this.showNotification('Sorted by predicted preference', 'success');
-                    } else {
-                        this.showNotification('No files to sort', 'warning');
-                    }
-                } else {
-                    // Sorting failed - show reason
-                    this.showNotification(message.reason || 'Could not sort files', 'warning');
+                const resolve = this._mlSortResolve;
+                this._mlSortResolve = null;
+                this._mlSortReject = null;
+                if (resolve) {
+                    resolve({
+                        sortedFilenames: message.sortedFilenames,
+                        scores: message.scores,
+                        reason: message.reason,
+                    });
                 }
                 break;
+            }
 
             case 'progress':
                 this.updateProgressNotification(message.message);
@@ -6632,6 +6649,34 @@ class MediaViewer {
                 console.error('ML Worker error:', message.message);
                 break;
         }
+    }
+
+    // Apply a completed ML sort result to the file list. Returns true if an order was applied.
+    applyPredictionSortResult(result) {
+        if (!result || !result.sortedFilenames) {
+            this.showNotification(result?.reason || 'Could not sort files', 'warning');
+            return false;
+        }
+        const filenameToFile = new Map(this.mediaFiles.map((f) => [f.name, f]));
+        const sorted = result.sortedFilenames.map((name) => filenameToFile.get(name)).filter((f) => f);
+        if (sorted.length === 0) {
+            this.showNotification('No files to sort', 'warning');
+            return false;
+        }
+        // Sync prediction scores so badges align with the re-ordered files.
+        if (result.scores) {
+            for (const [filename, score] of Object.entries(result.scores)) {
+                const file = filenameToFile.get(filename);
+                if (file) this.predictionScores.set(file.path, score);
+            }
+        }
+        this.mediaFiles = sorted;
+        this.currentIndex = 0;
+        this.isSortedByPrediction = true;
+        this.showMedia();
+        this.updateSortPredictionButton();
+        this.showNotification('Sorted by predicted preference', 'success');
+        return true;
     }
 
     async loadMlModel() {
@@ -6712,7 +6757,7 @@ class MediaViewer {
         return release;
     }
 
-    async loadFeatureCache() {
+    async loadFeatureCache(options = {}) {
         // Single-flight: concurrent callers (a CLIP-sort's on-demand extraction + a "Sort by Prediction" click) must
         // not both drive the shared main-side streaming session, which would corrupt each
         // other's chunk offsets and close the session out from under the other — yielding an
@@ -6720,7 +6765,7 @@ class MediaViewer {
         if (this._featureCacheLoadPromise) {
             return this._featureCacheLoadPromise;
         }
-        this._featureCacheLoadPromise = this._loadFeatureCacheImpl();
+        this._featureCacheLoadPromise = this._loadFeatureCacheImpl(options);
         try {
             return await this._featureCacheLoadPromise;
         } finally {
@@ -6728,17 +6773,17 @@ class MediaViewer {
         }
     }
 
-    async _loadFeatureCacheImpl() {
+    async _loadFeatureCacheImpl(options = {}) {
         if (!this.baseFolderPath) return 0;
         const releaseIoLock = await this._acquireCacheIoLock();
         try {
-            return await this._loadFeatureCacheLocked();
+            return await this._loadFeatureCacheLocked(options);
         } finally {
             releaseIoLock();
         }
     }
 
-    async _loadFeatureCacheLocked() {
+    async _loadFeatureCacheLocked({ signal, onProgress } = {}) {
         if (!this.baseFolderPath) return 0;
 
         const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
@@ -6749,22 +6794,42 @@ class MediaViewer {
             currentFiles.set(file.name, file);
         }
         const expectedDim = 64;
+
+        // Precompute the path prefix ONCE (path.join is sync in preload, but ~24k awaits in
+        // the hot loop is needless churn — string-concat instead).
+        const sep = this.baseFolderPath.includes('\\') ? '\\' : '/';
+        const base = this.baseFolderPath.replace(/[\\/]+$/, ''); // strip trailing sep so a drive-root path doesn't double up
+        const makePath = (filename) => base + sep + filename;
+
+        // Validate + STAGE one entry into LOCAL maps. They are committed into this.* only after a
+        // COMPLETE, un-aborted load — a partial load (user cancel or a mid-stream failure) must
+        // NEVER replace a good cache, in memory OR on disk: the 30s auto-save persists the live
+        // this.featureCache via an atomic rename, so a truncated live map would overwrite the
+        // full on-disk .feature_cache.json. `vector` is a Float32Array.
         const freshFeatureCache = new Map();
         const freshFeatureMetadata = new Map();
-
-        // Validate + populate one cache entry (shared by streaming + legacy paths).
-        const processEntry = async (filename, entry) => {
+        const freshClip = new Map();
+        const ingest = (filename, vector, clipVector, size, mtime) => {
             const currentFile = currentFiles.get(filename);
-            if (!currentFile) return; // file no longer in folder — prune
-            if (entry.vector?.length !== expectedDim) return; // wrong dimension
-            if (entry.size !== currentFile.size || entry.mtime !== currentFile.mtimeMs) return; // stale
-
-            const fullPath = await window.electronAPI.path.join(this.baseFolderPath, filename);
-            freshFeatureCache.set(fullPath, new Float32Array(entry.vector));
-            freshFeatureMetadata.set(fullPath, { size: entry.size, mtime: entry.mtime });
-            if (entry.clipVector && entry.clipVector.length === 512) {
-                this.clipCache.set(fullPath, new Float32Array(entry.clipVector));
+            if (!currentFile) return; // pruned — file no longer in folder
+            if (vector.length !== expectedDim) return; // wrong dimension
+            if (size !== currentFile.size || mtime !== currentFile.mtimeMs) return; // stale
+            const fullPath = makePath(filename);
+            freshFeatureCache.set(fullPath, vector);
+            freshFeatureMetadata.set(fullPath, { size, mtime });
+            if (clipVector && clipVector.length === 512) {
+                freshClip.set(fullPath, clipVector);
             }
+        };
+
+        // Commit a fully-loaded set into the live caches. featureCache/featureMetadata are
+        // REPLACED (prunes removed/stale files); clip vectors are MERGED (additive — matches the
+        // pre-incremental behavior and preserves in-memory-only vectors added by extraction).
+        const commitFresh = () => {
+            this.featureCache = freshFeatureCache;
+            this.featureMetadata = freshFeatureMetadata;
+            for (const [k, v] of freshClip) this.clipCache.set(k, v);
+            return this.featureCache.size;
         };
 
         // Preferred path: parse in the main process and pull entries in small batches.
@@ -6773,30 +6838,65 @@ class MediaViewer {
             try {
                 const opened = await window.electronAPI.featureCacheOpen(cacheFile);
                 if (!opened.success) {
-                    // notFound or parse error → start with an empty cache (no crash, no data loss)
-                    return 0;
+                    this._featureCacheDiskCount = 0; // nothing usable on disk
+                    return 0; // notFound/parse error — leave existing cache untouched
                 }
                 if (opened.version !== MediaViewer.FEATURE_CACHE_VERSION) {
                     console.warn(
                         `Feature cache version mismatch: found=${opened.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
                     );
                     await window.electronAPI.featureCacheClose();
+                    this._featureCacheDiskCount = 0; // the on-disk file is being discarded
                     this.featureCache = new Map();
                     this.featureMetadata = new Map();
                     return 0;
                 }
-
+                // Baseline for the save-path shrink guard. Recorded even if the load is later
+                // aborted — it reflects what is actually sitting on disk right now.
+                this._featureCacheDiskCount = opened.count;
+                const total = opened.count;
                 const CHUNK = 1000;
-                for (let offset = 0; offset < opened.count; offset += CHUNK) {
-                    const { entries } = await window.electronAPI.featureCacheChunk(offset, CHUNK);
-                    for (const [filename, entry] of entries) {
-                        await processEntry(filename, entry);
+                let loaded = 0;
+                let aborted = false;
+                for (let offset = 0; offset < total; offset += CHUNK) {
+                    if (signal?.aborted) {
+                        aborted = true;
+                        break;
                     }
+                    const chunk = await window.electronAPI.featureCacheChunk(offset, CHUNK);
+                    if (chunk.vecBuf) {
+                        // Binary shape: .slice() gives each entry its own compact 64/512 copy —
+                        // NOT .subarray() (a view would pin the whole n*64 / n*512 chunk buffer).
+                        const vecs = new Float32Array(chunk.vecBuf);
+                        const clips = chunk.clipBuf ? new Float32Array(chunk.clipBuf) : null;
+                        for (let i = 0; i < chunk.names.length; i++) {
+                            const vector = vecs.slice(i * 64, i * 64 + 64);
+                            const clipVector = clips && chunk.hasClip[i] ? clips.slice(i * 512, i * 512 + 512) : null;
+                            ingest(chunk.names[i], vector, clipVector, chunk.sizes[i], chunk.mtimes[i]);
+                        }
+                        loaded += chunk.names.length;
+                    } else {
+                        // Legacy JSON shape.
+                        for (const [filename, entry] of chunk.entries) {
+                            ingest(
+                                filename,
+                                new Float32Array(entry.vector),
+                                entry.clipVector ? new Float32Array(entry.clipVector) : null,
+                                entry.size,
+                                entry.mtime
+                            );
+                        }
+                        loaded += chunk.entries.length;
+                    }
+                    if (onProgress) onProgress(loaded, total);
                 }
                 await window.electronAPI.featureCacheClose();
-                this.featureCache = freshFeatureCache;
-                this.featureMetadata = freshFeatureMetadata;
-                return this.featureCache.size;
+                if (aborted) {
+                    // Cancelled mid-load — discard the staged partial and leave the existing
+                    // cache untouched (a truncated map would later clobber the on-disk cache).
+                    return this.featureCache.size;
+                }
+                return commitFresh();
             } catch (error) {
                 console.log('Feature cache streaming load failed, falling back to direct read:', error.message);
                 try {
@@ -6804,7 +6904,8 @@ class MediaViewer {
                 } catch (_e) {
                     // ignore
                 }
-                // fall through to legacy path
+                // Nothing was committed into this.* (staging is local) → existing cache intact →
+                // fall through to the legacy path, which rebuilds from a single read.
             }
         }
 
@@ -6818,16 +6919,27 @@ class MediaViewer {
                     console.warn(
                         `Feature cache version mismatch: found=${parsed.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
                     );
+                    this._featureCacheDiskCount = 0; // the on-disk file is being discarded
                     this.featureCache = new Map();
                     this.featureMetadata = new Map();
                     return 0;
                 }
+                // Baseline for the save-path shrink guard (see _saveFeatureCacheLocked).
+                this._featureCacheDiskCount = Object.keys(parsed.features || {}).length;
+                // Rebuild from scratch — clear any partial staging left by a failed streaming pass.
+                freshFeatureCache.clear();
+                freshFeatureMetadata.clear();
+                freshClip.clear();
                 for (const [filename, entry] of Object.entries(parsed.features || {})) {
-                    await processEntry(filename, entry);
+                    ingest(
+                        filename,
+                        new Float32Array(entry.vector),
+                        entry.clipVector ? new Float32Array(entry.clipVector) : null,
+                        entry.size,
+                        entry.mtime
+                    );
                 }
-                this.featureCache = freshFeatureCache;
-                this.featureMetadata = freshFeatureMetadata;
-                return this.featureCache.size;
+                return commitFresh();
             }
         } catch (error) {
             console.log('No feature cache found or error loading:', error.message);
@@ -6863,6 +6975,26 @@ class MediaViewer {
     async _saveFeatureCacheLocked() {
         if (!this.baseFolderPath || this.featureCache.size === 0) return;
 
+        // DATA-LOSS GUARD: never replace a substantially populated on-disk cache with a
+        // drastically smaller in-memory one. The in-memory map shrinks legitimately ONLY when
+        // files leave the folder (pruned at load time). A map covering far fewer entries than
+        // the disk cache WHILE the folder is still large means the load rejected entries
+        // (poisoned size:0/mtime:0 metadata, or an aborted/partial load) — persisting it would
+        // destroy the good cache. Real incident: a 20,929-file folder's 23,559-entry cache was
+        // overwritten by 32 entries.
+        if (
+            this._featureCacheDiskCount > 0 &&
+            this.featureCache.size < this._featureCacheDiskCount * 0.5 &&
+            this.mediaFiles.length > this.featureCache.size * 2
+        ) {
+            const msg =
+                `Feature-cache save SKIPPED (shrink guard): in-memory ${this.featureCache.size} entries vs ` +
+                `${this._featureCacheDiskCount} on disk for ${this.mediaFiles.length} files.`;
+            console.warn(msg);
+            if (window.electronAPI?.logError) window.electronAPI.logError(msg);
+            return;
+        }
+
         // Round to 6 decimals before serializing. Full-precision floats stringify to
         // ~17 chars each (e.g. "0.12345678901234567"); 6 decimals is well below the
         // noise floor for unit-normalized cosine similarity and ~halves the file size
@@ -6875,18 +7007,21 @@ class MediaViewer {
             return out;
         };
 
-        // Build the serializable entry for one cache item.
+        // Build the serializable entry for one cache item. Returns null when the entry's
+        // size/mtime cannot be resolved — writing size:0/mtime:0 would poison the cache
+        // (0 never matches a real stat, so the entry is rejected as stale forever).
         const buildEntry = (fullPath, featureArray) => {
             const meta = this.featureMetadata.get(fullPath);
             const clipVector = this.clipCache.get(fullPath);
             const fileInfo = meta ? null : this.mediaFiles.find((f) => f.path === fullPath);
+            const size = meta ? meta.size : fileInfo?.size;
+            const mtime = meta ? meta.mtime : fileInfo?.mtimeMs;
+            if (!size || !mtime) return null; // unresolvable — skip rather than poison
             return {
                 vector: round6(featureArray),
                 clipVector: clipVector ? round6(clipVector) : null,
-                // Fallback to live file stats (not zeros) so a missing meta doesn't cause a
-                // permanent cache miss on next load.
-                size: meta ? meta.size : fileInfo?.size || 0,
-                mtime: meta ? meta.mtime : fileInfo?.mtimeMs || 0,
+                size,
+                mtime,
             };
         };
 
@@ -6904,6 +7039,7 @@ class MediaViewer {
                 if (opened?.success) {
                     const BATCH = 1000;
                     let batch = [];
+                    let writtenCount = 0;
                     const flush = async () => {
                         if (batch.length === 0) return;
                         const res = await window.electronAPI.featureCacheWriteChunk(batch);
@@ -6911,13 +7047,18 @@ class MediaViewer {
                         batch = [];
                     };
                     for (const [fullPath, featureArray] of this.featureCache.entries()) {
+                        const entry = buildEntry(fullPath, featureArray);
+                        if (!entry) continue; // unresolvable metadata — never poison the cache
                         const filename = await window.electronAPI.path.basename(fullPath);
-                        batch.push([filename, buildEntry(fullPath, featureArray)]);
+                        batch.push([filename, entry]);
+                        writtenCount++;
                         if (batch.length >= BATCH) await flush();
                     }
                     await flush();
                     const closed = await window.electronAPI.featureCacheWriteClose();
                     if (!closed?.success) throw new Error(closed?.error || 'write-close failed');
+                    // Re-baseline the shrink guard to what is now actually on disk.
+                    this._featureCacheDiskCount = writtenCount;
                     return;
                 }
                 // If open failed, fall through to legacy single-write.
@@ -6925,9 +7066,13 @@ class MediaViewer {
 
             // Legacy fallback: build the whole object and write once (older preload / small caches).
             const features = {};
+            let legacyWrittenCount = 0;
             for (const [fullPath, featureArray] of this.featureCache.entries()) {
+                const entry = buildEntry(fullPath, featureArray);
+                if (!entry) continue; // unresolvable metadata — never poison the cache
                 const filename = await window.electronAPI.path.basename(fullPath);
-                features[filename] = buildEntry(fullPath, featureArray);
+                features[filename] = entry;
+                legacyWrittenCount++;
             }
             await window.electronAPI.writeFile(
                 cacheFile,
@@ -6938,6 +7083,8 @@ class MediaViewer {
                     features,
                 })
             );
+            // Re-baseline the shrink guard to what is now actually on disk.
+            this._featureCacheDiskCount = legacyWrittenCount;
         } catch (error) {
             console.error('Failed to save feature cache:', error);
         }
@@ -7124,10 +7271,11 @@ class MediaViewer {
         });
     }
 
-    async collectBulkRatedTrainingExamples() {
+    async collectBulkRatedTrainingExamples(signal) {
         const liked = [];
         const disliked = [];
         for (const [name, bucket] of this.bulkRated) {
+            if (signal?.aborted) break; // cancelled — stop processing ratings
             const file = this.mediaFiles.find((f) => f.name === name);
             if (!file) continue;
             let combined = this.getCombinedFeatures(file.path);
@@ -7149,14 +7297,17 @@ class MediaViewer {
         return { liked, disliked };
     }
 
-    async trainFromHistoricalRatings() {
+    async trainFromHistoricalRatings(signal) {
         if (!this.isMlEnabled || !this.mlWorker) return;
         if (!this.customLikeFolder || !this.customDislikeFolder) return;
+        if (signal?.aborted) return; // cancelled before training started
 
         try {
             // Load files from like folder
             const likedResult = await window.electronAPI.loadFolder(this.customLikeFolder);
             const dislikedResult = await window.electronAPI.loadFolder(this.customDislikeFolder);
+
+            if (signal?.aborted) return; // cancelled while loading historical folders
 
             if (!likedResult.success && !dislikedResult.success) {
                 console.log('No historical ratings found');
@@ -7178,6 +7329,7 @@ class MediaViewer {
 
             // Extract features from liked files
             for (let i = 0; i < likedFiles.length; i++) {
+                if (signal?.aborted) break; // cancelled — stop processing ratings
                 const file = likedFiles[i];
                 try {
                     const features = await this.computeFeatures(file.path);
@@ -7197,6 +7349,7 @@ class MediaViewer {
 
             // Extract features from disliked files
             for (let i = 0; i < dislikedFiles.length; i++) {
+                if (signal?.aborted) break; // cancelled — stop processing ratings
                 const file = dislikedFiles[i];
                 try {
                     const features = await this.computeFeatures(file.path);
@@ -7214,11 +7367,24 @@ class MediaViewer {
                 }
             }
 
+            if (signal?.aborted) {
+                // Cancelled mid-loop — do not send a partial-training message to the ML worker
+                // (it would train a misleadingly incomplete model on whatever was collected so
+                // far); clear the progress UI posted above so it doesn't linger after Cancel.
+                this.clearProgressNotification();
+                return;
+            }
+
             // Re-apply corrective bulk ratings (these files stay in the source folder and are
             // never in the like/dislike folders, so a from-scratch rebuild can't recover them).
-            const bulkExamples = await this.collectBulkRatedTrainingExamples();
+            const bulkExamples = await this.collectBulkRatedTrainingExamples(signal);
             likedFeatures.push(...bulkExamples.liked);
             dislikedFeatures.push(...bulkExamples.disliked);
+
+            if (signal?.aborted) {
+                this.clearProgressNotification();
+                return;
+            }
 
             // Send to ML worker for training
             if (likedFeatures.length > 0 || dislikedFeatures.length > 0) {
@@ -7239,15 +7405,18 @@ class MediaViewer {
      * Train from historical ratings and wait for completion
      * Returns a promise that resolves when training is complete
      */
-    async trainFromHistoricalRatingsAndWait() {
+    async trainFromHistoricalRatingsAndWait(signal) {
         return new Promise(async (resolve) => {
             // Store resolve callback to be called when trainReady is received
             this._trainingCompleteCallback = resolve;
 
-            await this.trainFromHistoricalRatings();
+            await this.trainFromHistoricalRatings(signal);
 
-            // If no training happened (no files), resolve immediately
-            if (!this.customLikeFolder || !this.customDislikeFolder) {
+            // If no training happened (no files) or the caller cancelled mid-flight, resolve
+            // immediately. A cancelled bail means no trainHistorical message was sent, so there
+            // is no trainComplete reply coming — without this the caller would otherwise wait
+            // out the full 30s fallback below even though the expensive work already stopped.
+            if (!this.customLikeFolder || !this.customDislikeFolder || signal?.aborted) {
                 this._trainingCompleteCallback = null;
                 resolve();
             }
@@ -7320,6 +7489,42 @@ class MediaViewer {
         } catch (err) {
             console.warn('Failed to save .bulk_rated.json:', err.message);
         }
+    }
+
+    // Await one ML sort round-trip. Resolves when a sortComplete with a matching
+    // sortRunId arrives (see handleMlWorkerMessage). The persistent mlWorker means we
+    // can't use runSortingWorker's fresh-worker pattern — a pending resolver bridges it.
+    runMlSort(allFeatures, runId) {
+        return new Promise((resolve, reject) => {
+            if (!this.mlWorker) {
+                reject(new Error('ML worker not available'));
+                return;
+            }
+            // Settle a superseded pending sort so its awaiter doesn't hang.
+            if (this._mlSortReject) {
+                this._mlSortReject(new Error('superseded'));
+            }
+            this._mlSortResolve = resolve;
+            this._mlSortReject = reject;
+            this.mlWorker.postMessage({
+                type: 'getSortedOrder',
+                data: { allFeatures, sortRunId: runId },
+            });
+        });
+    }
+
+    // Abort an in-flight prediction sort (folder change). The sort reads this.mediaFiles LIVE,
+    // so leaving it running after a folder switch drives work against the NEW folder.
+    // Bumping sortRunId alone is NOT enough: a stale sortComplete then `break`s without
+    // resolving, so `await runMlSort` would hang forever and wedge BOTH sort paths (the
+    // mutual-exclusion guard blocks similarity too). The pending promise must be settled.
+    _abortInFlightPredictionSort(reason = 'folder changed') {
+        this.sortRunId++;
+        this.sortAbortController?.abort();
+        const pendingReject = this._mlSortReject;
+        this._mlSortResolve = null;
+        this._mlSortReject = null;
+        if (pendingReject) pendingReject(new Error(reason));
     }
 
     async requestPredictionScores() {
@@ -7475,23 +7680,26 @@ class MediaViewer {
     }
 
     async handleSortByPrediction() {
-        // Sorting is disabled in tournament mode (strict/deterministic) — exit first to sort.
         if (this.isTournamentMode) return;
+        if (this.isPredictionSorting) return; // re-entrancy guard; Cancel is the abort affordance
+        // Mutual exclusion with the similarity sort — both share this.sortAbortController.
+        if (this.isComputingHashes) {
+            this.showNotification('⏳ Similarity sort in progress', 'info');
+            return;
+        }
         if (!this.isMlEnabled) {
             this.showNotification('ML prediction is disabled', 'warning');
             return;
         }
 
-        // Toggle sorting - restore original order
+        // Toggle off — restore original order (unchanged behavior).
         if (this.isSortedByPrediction) {
-            // Restore original order, but only for files that still exist
             if (this.originalMediaFiles.length > 0) {
-                // Filter to only files that are still in the current list (not moved/rated)
                 const currentPaths = new Set(this.mediaFiles.map((f) => f.path));
                 this.mediaFiles = this.originalMediaFiles.filter((f) => currentPaths.has(f.path));
             }
             this.isSortedByPrediction = false;
-            this.mlComparePairIndex = 0; // Reset ML pair index
+            this.mlComparePairIndex = 0;
             this.currentIndex = 0;
             await this.showMedia();
             this.updateSortPredictionButton();
@@ -7499,77 +7707,96 @@ class MediaViewer {
             return;
         }
 
-        // Lazy initialization: Initialize ML system on first use
-        if (!this.mlWorker || this.featureWorkers.length === 0) {
-            this.showNotification('Initializing ML system...', 'info');
-            console.log('[ML Debug] Lazy initialization of ML system');
+        this.isPredictionSorting = true;
+        this.sortAbortController = new AbortController();
+        const runId = ++this.sortRunId;
+        const signal = this.sortAbortController.signal;
+        // Cancel must also stop an in-progress background extraction (frees CPU).
+        signal.addEventListener('abort', () => this.cancelBackgroundExtraction(), { once: true });
+        this.updateSortProgress({ phase: 'Preparing…' }); // card visible before any await
 
-            // Initialize workers
-            this.initializeMlWorker();
-            this.initializeFeaturePool();
-
-            if (this.enableClipFeatures) {
-                this.initClipModel();
+        try {
+            // Lazy ML init on first use.
+            if (!this.mlWorker || this.featureWorkers.length === 0) {
+                this.initializeMlWorker();
+                this.initializeFeaturePool();
+                if (this.enableClipFeatures) this.initClipModel();
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                await this.loadMlModel();
             }
 
-            // Wait for ML worker to be ready
-            await new Promise((resolve) => setTimeout(resolve, 100));
-
-            // Load cached model
-            await this.loadMlModel();
-        }
-
-        // Always reload feature cache (cleared by loadFolder() on folder switch)
-        await this.loadFeatureCache();
-
-        // Train from historical ratings if not already trained
-        if (!this.mlStats?.isReady) {
-            this.showNotification('Training model from historical ratings...', 'info');
-            await this.trainFromHistoricalRatingsAndWait();
-            this.updateSortPredictionButton();
-        }
-
-        // Check if model is ready after training
-        if (!this.mlStats?.isReady) {
-            this.showNotification(
-                `Need more ratings (${this.mlStats?.positiveCount || 0} likes, ${this.mlStats?.negativeCount || 0} dislikes)`,
-                'warning'
-            );
-            return;
-        }
-
-        // Save original order
-        this.originalMediaFiles = [...this.mediaFiles];
-
-        // Check how many files need feature extraction
-        const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
-
-        if (uncachedFiles.length > 0) {
-            // Start background extraction and wait for completion
-            this.showNotification(`Extracting features for ${uncachedFiles.length} files...`, 'info');
-            await this.startBackgroundFeatureExtraction();
-        }
-
-        // Collect all features from cache
-        const allFeatures = {};
-        for (const file of this.mediaFiles) {
-            const combined = this.getCombinedFeatures(file.path);
-            if (combined) {
-                allFeatures[file.name] = combined;
+            // Phase 1 — load cached features (incremental + determinate + cancelable).
+            // Skip the ~40s on-disk reload if the in-memory cache is already warm for every
+            // current file (mirrors the CLIP-sort path's clipVectorsNeedExtraction() gate —
+            // a repeat sort within the same folder session should not replay the full load).
+            if (this.mediaFiles.some((f) => !this.featureCache.has(f.path))) {
+                await this.loadFeatureCache({
+                    signal,
+                    onProgress: (current, total) =>
+                        this.updateSortProgress({ phase: 'Loading cached features…', current, total }),
+                });
             }
+            if (signal.aborted) throw new Error('cancelled');
+
+            // Train from historical ratings if needed.
+            if (!this.mlStats?.isReady) {
+                this.updateSortProgress({ phase: 'Training model…' });
+                await this.trainFromHistoricalRatingsAndWait(signal);
+                this.updateSortPredictionButton();
+            }
+            if (signal.aborted) throw new Error('cancelled');
+            if (!this.mlStats?.isReady) {
+                this.showNotification(
+                    `Need more ratings (${this.mlStats?.positiveCount || 0} likes, ${this.mlStats?.negativeCount || 0} dislikes)`,
+                    'warning'
+                );
+                return;
+            }
+
+            this.originalMediaFiles = [...this.mediaFiles];
+
+            // Phase 2 — extract any missing features (drives the SAME card via the sink).
+            const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
+            if (uncachedFiles.length > 0) {
+                this.extractionProgressSink = (current, total) =>
+                    this.updateSortProgress({ phase: 'Extracting features…', current, total });
+                try {
+                    await this.startBackgroundFeatureExtraction();
+                } finally {
+                    this.extractionProgressSink = null;
+                }
+            }
+            if (signal.aborted) throw new Error('cancelled');
+
+            // Collect features.
+            const allFeatures = {};
+            for (const file of this.mediaFiles) {
+                const combined = this.getCombinedFeatures(file.path);
+                if (combined) allFeatures[file.name] = combined;
+            }
+            if (Object.keys(allFeatures).length === 0) {
+                this.showNotification('Could not extract features from any files', 'error');
+                return;
+            }
+
+            // Phase 3 — sort (awaitable, stale-guarded).
+            this.updateSortProgress({ phase: 'Sorting…' });
+            const result = await this.runMlSort(allFeatures, runId);
+            if (signal.aborted || runId !== this.sortRunId) throw new Error('cancelled');
+            this.applyPredictionSortResult(result);
+        } catch (err) {
+            if (signal.aborted || err.message === 'cancelled') {
+                this.showNotification('Sorting cancelled', 'info');
+            } else {
+                console.error('Error sorting by prediction:', err);
+                this.showNotification(`Could not sort: ${err.message}`, 'warning');
+            }
+        } finally {
+            this.clearProgressNotification();
+            this.sortAbortController = null;
+            this.isPredictionSorting = false;
+            this.extractionProgressSink = null;
         }
-
-        if (Object.keys(allFeatures).length === 0) {
-            this.showNotification('Could not extract features from any files', 'error');
-            return;
-        }
-
-        console.log(`Sending ${Object.keys(allFeatures).length} files for ML sorting`);
-
-        this.mlWorker.postMessage({
-            type: 'getSortedOrder',
-            data: { allFeatures },
-        });
     }
 
     async updateMlModelAfterRating(filePath, actionType) {
@@ -8305,19 +8532,20 @@ class MediaViewer {
         // Process in batches to avoid memory pressure
         const BATCH_SIZE = 10;
         for (let i = 0; i < filesToProcess.length; i += BATCH_SIZE) {
-            if (this.backgroundExtractionAbort?.signal.aborted) {
+            if (!this.backgroundExtractionAbort || this.backgroundExtractionAbort.signal.aborted) {
                 break;
             }
 
             // Yield while user is navigating/rating
+            if (!this.backgroundExtractionAbort) break;
             await this.awaitExtractionGate(this.backgroundExtractionAbort.signal);
-            if (this.backgroundExtractionAbort?.signal.aborted) break;
+            if (!this.backgroundExtractionAbort || this.backgroundExtractionAbort.signal.aborted) break;
 
             const batch = filesToProcess.slice(i, i + BATCH_SIZE);
             const promises = [];
 
             for (const { file, index } of batch) {
-                if (this.backgroundExtractionAbort?.signal.aborted) {
+                if (!this.backgroundExtractionAbort || this.backgroundExtractionAbort.signal.aborted) {
                     break;
                 }
 
@@ -8561,6 +8789,13 @@ class MediaViewer {
         const displayCached = this._extractionCachedCount || 0;
         const displayCurrent = current ?? this._extractionLastCurrent ?? 0;
         const displayTotal = total ?? this._extractionLastTotal ?? 0;
+
+        // When a prediction sort owns the operation, report into its unified card instead of
+        // the standalone bottom-left indicator.
+        if (this.extractionProgressSink) {
+            this.extractionProgressSink(displayCurrent, displayTotal);
+            return;
+        }
 
         let indicator = document.getElementById('featureExtractionProgress');
 

@@ -133,7 +133,7 @@ BACKLOG.md is split into three source sections. Authoritative rules live in
 - Empty state: `showEmptyStateWithUndo()` (preserves undo toolbar) vs `showDropZone()` (genuine empty) by `moveHistory.length`; empty-state keydown guard blocks all keys except undo (when `moveHistory.length > 0`).
 - Compare-pair undo: history entries tagged `compareMode:true`; `handleCancel()` checks bulk-rating undo FIRST (`lastMove.bothGood || lastMove.bothBad` → `undoBulkRating`), then compare-pair.
 - `resetMlModel()` on folder change / CLIP toggle nulls model state, resets `predictionScores`, posts `{type:'reset'}` to mlWorker — so stale training (or 576-vs-64-dim mismatch) doesn't persist. `initComplete` with `modelWasReset` clears the renderer cache + `deleteMlModelCache()`.
-- `predictionScores` sync: the `sortComplete` handler writes `message.scores` (filename→score) into `predictionScores` before reassigning `mediaFiles`, so badges match the sorted order (guarded `if (message.scores)`).
+- `predictionScores` sync: `applyPredictionSortResult(result)` — called from `handleSortByPrediction` Phase 3 (after `await runMlSort`), NOT from the `sortComplete` handler (that only resolves the pending promise) — writes `result.scores` (filename→score) into `predictionScores` before reassigning `mediaFiles`, so badges match the sorted order (guarded `if (result.scores)`).
 
 **Index Management**: `moveCurrentFile()` wraps to 0 on the last file; `removeFileFromList()` caps to length-1; folder loads / sorts / mode switches reset to 0.
 

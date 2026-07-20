@@ -6,6 +6,7 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const logger = require('./logger');
 const { isMediaFile, getMimeType } = require('./media-formats');
+const { packFeatureChunk } = require('./feature-cache-transport');
 
 // Streaming JSON reader for the feature cache (parse a 250MB+ file with a tiny memory
 // footprint instead of fs.readFile + JSON.parse, which peaks past ~1GB and kills the process).
@@ -497,7 +498,7 @@ app.whenReady().then(() => {
     });
     ipcMain.handle('feature-cache-chunk', async (_event, offset, limit) => {
         if (!featureCacheSession) return { entries: [] };
-        return { entries: featureCacheSession.slice(offset, offset + limit) };
+        return packFeatureChunk(featureCacheSession.slice(offset, offset + limit));
     });
     ipcMain.handle('feature-cache-close', async () => {
         featureCacheSession = null; // release the parsed array

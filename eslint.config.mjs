@@ -168,7 +168,7 @@ export default [
 
     // 3b. Shared libraries loaded via importScripts and browser <script> (have conditional CJS export pattern)
     {
-        files: ['feature-extractor.js', 'ml-model.js', 'media-formats.js'],
+        files: ['feature-extractor.js', 'ml-model.js', 'media-formats.js', 'feature-cache-transport.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script',
