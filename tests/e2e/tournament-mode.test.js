@@ -30,6 +30,24 @@ async function enterAndStartTournament(page, { rounds }) {
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
 }
 
+/**
+ * Tournament chrome auto-hides (G2). Reveal a band by moving the real mouse into it and wait
+ * for the `.show` class, so subsequent clicks pass Playwright's actionability checks. Hovering
+ * the element itself re-arms its 3s timer, so the click that follows keeps it open.
+ */
+async function revealTournamentChrome(page, which) {
+    const size = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+    const y = which === 'top' ? 30 : size.height - 30;
+    await page.mouse.move(Math.round(size.width / 2), Math.round(y));
+    const id = which === 'top' ? '#tournamentHeader' : '#tournamentControls';
+    await expect(page.locator(id)).toHaveClass(/\bshow\b/);
+}
+
+/** Computed opacity of an element, as a number. Class presence alone is not visibility. */
+function chromeOpacity(page, id) {
+    return page.evaluate((sel) => Number(getComputedStyle(document.querySelector(sel)).opacity), id);
+}
+
 test.describe('Tournament Mode', () => {
     let electronApp, page, tmpFixtures;
 
@@ -98,6 +116,7 @@ test.describe('Tournament Mode', () => {
             return { left: p.left, right: p.right };
         });
 
+        await revealTournamentChrome(page, 'bottom');
         await page.locator('#tournamentBothWinBtn').click();
         await page.waitForFunction(() => window.mediaViewer.tournament.engine?.history.length > 0);
 
@@ -194,13 +213,15 @@ test.describe('Tournament Mode', () => {
         // cover the centered exit button (the header already shows the games count).
         await expect(page.locator('#navInfo')).toBeHidden();
 
-        // The exit affordance is visible in the tournament header.
+        // The exit affordance lives in the auto-hiding tournament header: reveal it, then assert
+        // it is genuinely visible (computed opacity — Playwright's toBeVisible ignores opacity).
+        await revealTournamentChrome(page, 'top');
         await expect(page.locator('#tournamentExitBtn')).toBeVisible();
+        expect(await chromeOpacity(page, '#tournamentHeader')).toBe(1);
 
         // Clicking it routes through switchMode('single') → the incomplete-tournament
-        // leave prompt (Save & leave / Discard / Cancel). force: the tournament overlay
-        // can intercept pointer events.
-        await page.locator('#tournamentExitBtn').click({ force: true });
+        // leave prompt (Save & leave / Discard / Cancel).
+        await page.locator('#tournamentExitBtn').click();
         await expect(page.locator('#tournamentResumeModal')).toBeVisible();
         await expect(page.locator('#tournamentResumeTitle')).toHaveText('Leave tournament?');
     });
@@ -305,5 +326,29 @@ test.describe('Tournament Mode', () => {
 
         expect(after).toEqual(before);
         expect(await page.evaluate(() => window.mediaViewer.isTournamentMode)).toBe(true);
+    });
+
+    test('tournament chrome hides at rest and reveals on its edge band', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+
+        await enterAndStartTournament(page, { rounds: 2 });
+
+        // Park the pointer mid-screen so neither band is active, and let the entry reveal's
+        // 3s timer expire (the chrome is shown once on entry so the exit button is findable).
+        const size = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+        await page.mouse.move(Math.round(size.width / 2), Math.round(size.height / 2));
+        await expect(page.locator('#tournamentHeader')).not.toHaveClass(/\bshow\b/, { timeout: 6000 });
+
+        // Computed opacity, not just the class.
+        await expect.poll(() => chromeOpacity(page, '#tournamentHeader')).toBe(0);
+        await expect.poll(() => chromeOpacity(page, '#tournamentControls')).toBe(0);
+
+        await revealTournamentChrome(page, 'top');
+        await expect.poll(() => chromeOpacity(page, '#tournamentHeader')).toBe(1);
+
+        await revealTournamentChrome(page, 'bottom');
+        await expect.poll(() => chromeOpacity(page, '#tournamentControls')).toBe(1);
     });
 });

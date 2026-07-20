@@ -2176,30 +2176,48 @@ class MediaViewer {
         );
     }
 
-    setupHeaderVisibility() {
-        let headerTimeout;
-
-        const showHeader = () => {
-            this.header.classList.add('show');
-            clearTimeout(headerTimeout);
-            headerTimeout = setTimeout(() => {
-                this.header.classList.remove('show');
-            }, 3000);
+    // Shared auto-hide wiring. `el` is hidden by default (CSS opacity: 0) and revealed by the
+    // `show` class — while the pointer is inside `inZone(e)`, or while it is over `el` itself —
+    // then hidden `delay` ms after the pointer leaves. `enabled()` gates the zone check so
+    // tournament chrome ignores mouse movement outside tournament mode.
+    _setupAutoHide(el, inZone, { delay = 3000, enabled = () => true } = {}) {
+        if (!el) return null;
+        let timeout;
+        const show = () => {
+            el.classList.add('show');
+            clearTimeout(timeout);
+            timeout = setTimeout(() => el.classList.remove('show'), delay);
         };
-
-        const hideHeader = () => {
-            clearTimeout(headerTimeout);
-            this.header.classList.remove('show');
+        const hide = () => {
+            clearTimeout(timeout);
+            el.classList.remove('show');
         };
-
-        this.header.addEventListener('mouseenter', showHeader);
-        this.header.addEventListener('mouseleave', hideHeader);
-
+        el.addEventListener('mouseenter', show);
+        el.addEventListener('mouseleave', hide);
         document.addEventListener('mousemove', (e) => {
-            if (e.clientY < 50) {
-                showHeader();
-            }
+            if (enabled() && inZone(e)) show();
         });
+        return { show, hide };
+    }
+
+    setupHeaderVisibility() {
+        this._setupAutoHide(this.header, (e) => e.clientY < 50);
+
+        // Tournament chrome (G2): hidden at rest to maximise viewing area. The top band spans
+        // the main header AND the tournament bar (which sits at margin-top: 56px), so one
+        // upward motion reveals both; the bottom band reveals the shared Undo / Both Win /
+        // Both Lose row.
+        const inTournament = () => this.isTournamentMode;
+        this.tournamentChrome = [
+            this._setupAutoHide(document.getElementById('tournamentHeader'), (e) => e.clientY < 110, {
+                enabled: inTournament,
+            }),
+            this._setupAutoHide(
+                document.getElementById('tournamentControls'),
+                (e) => e.clientY > window.innerHeight - 110,
+                { enabled: inTournament }
+            ),
+        ].filter(Boolean);
     }
 
     setupFileInfoVisibility() {
@@ -4368,6 +4386,7 @@ class MediaViewer {
         this.isTournamentMode = false;
         const overlay = document.getElementById('tournamentOverlay');
         if (overlay) overlay.style.display = 'none';
+        this.tournamentChrome?.forEach((c) => c.hide()); // drop .show + clear pending timers
         this.mediaContainer.classList.remove('tournament-mode');
         // Restore sort controls (hidden on entry) when a folder is loaded.
         if (this.mediaFiles.length > 0) {
@@ -4493,6 +4512,9 @@ class MediaViewer {
                 this.mediaContainer.classList.add('tournament-mode');
                 this.setSortControlsVisible(false);
                 document.getElementById('tournamentOverlay').style.display = 'block';
+                // Reveal the chrome once on entry (the 3s timer then hides it) so the pause /
+                // exit affordance and the shared buttons announce themselves before hiding.
+                this.tournamentChrome?.forEach((c) => c.show());
                 await this.showTournamentPair();
             } else {
                 this.switchMode('single');
@@ -4866,6 +4888,7 @@ class MediaViewer {
         this.mediaContainer.classList.add('tournament-mode');
         this.setSortControlsVisible(false);
         document.getElementById('tournamentOverlay').style.display = 'block';
+        this.tournamentChrome?.forEach((c) => c.show());
         document.querySelectorAll('.mode-btn').forEach((b) => {
             b.classList.toggle('active', b.dataset.mode === 'tournament');
         });
