@@ -3217,3 +3217,148 @@ describe('extraction progress sink', () => {
         expect(before).toBeNull();
     });
 });
+
+describe('saveFeatureCache data-loss guards', () => {
+    // DATA-LOSS REGRESSION LOCKS. A real user lost a 23,559-entry / 126MB .feature_cache.json:
+    // extraction skipped featureMetadata for files whose mediaFiles lookup failed, buildEntry
+    // serialized those as size:0/mtime:0, the next load rejected all of them as stale (0 never
+    // matches a real stat), and the resulting 32-entry in-memory map was auto-saved over the
+    // full on-disk cache. Two independent guards below; both must stay armed.
+    const saveFeatureCacheLocked = extractAsyncMethod('_saveFeatureCacheLocked');
+
+    const savedWindow = globalThis.window;
+    const savedMediaViewer = globalThis.MediaViewer;
+    let api;
+    let written;
+    let warnSpy;
+
+    beforeEach(() => {
+        // The extracted method body references the static class field
+        // `MediaViewer.FEATURE_CACHE_VERSION` as a free identifier; `new AsyncFunction` resolves
+        // free identifiers against the global object, so the real class (never imported here)
+        // must be stood in for with a stub carrying the same value.
+        // NOTE: keep in sync with MediaViewer.FEATURE_CACHE_VERSION in media-viewer.js.
+        globalThis.MediaViewer = { FEATURE_CACHE_VERSION: 4 };
+        written = [];
+        api = {
+            path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
+            featureCacheWriteOpen: vi.fn(() => Promise.resolve({ success: true })),
+            featureCacheWriteChunk: vi.fn((batch) => {
+                written.push(...batch);
+                return Promise.resolve({ success: true });
+            }),
+            featureCacheWriteClose: vi.fn(() => Promise.resolve({ success: true })),
+            writeFile: vi.fn(() => Promise.resolve({ success: true })),
+            logError: vi.fn(),
+        };
+        globalThis.window = { electronAPI: api };
+        warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => {
+        warnSpy.mockRestore();
+        globalThis.window = savedWindow;
+        globalThis.MediaViewer = savedMediaViewer;
+    });
+
+    function mkCtx({ diskCount, cacheSize, fileCount }) {
+        const featureCache = new Map();
+        const featureMetadata = new Map();
+        for (let i = 0; i < cacheSize; i++) {
+            const p = `/d/f${i}.png`;
+            featureCache.set(p, new Float32Array(64).fill(0.5));
+            featureMetadata.set(p, { size: 100 + i, mtime: 1000 + i });
+        }
+        return {
+            baseFolderPath: '/d',
+            mediaFiles: Array.from({ length: fileCount }, (_, i) => ({
+                path: `/d/f${i}.png`,
+                size: 100 + i,
+                mtimeMs: 1000 + i,
+            })),
+            featureCache,
+            featureMetadata,
+            clipCache: new Map(),
+            _featureCacheDiskCount: diskCount,
+        };
+    }
+
+    it('blocks the catastrophe: 32 in-memory entries never replace a 23,559-entry disk cache', async () => {
+        const ctx = mkCtx({ diskCount: 23559, cacheSize: 32, fileCount: 20929 });
+        await saveFeatureCacheLocked.call(ctx);
+        // No write IPC of ANY kind may fire — not even the streaming open, which truncates the
+        // temp file and commits on close.
+        expect(api.featureCacheWriteOpen).not.toHaveBeenCalled();
+        expect(api.featureCacheWriteChunk).not.toHaveBeenCalled();
+        expect(api.featureCacheWriteClose).not.toHaveBeenCalled();
+        expect(api.writeFile).not.toHaveBeenCalled();
+        expect(api.logError).toHaveBeenCalledWith(expect.stringContaining('shrink guard'));
+        expect(ctx._featureCacheDiskCount).toBe(23559); // baseline untouched by the skipped save
+    });
+
+    it('allows a legitimate prune: the folder really shrank, so the smaller map must persist', async () => {
+        const ctx = mkCtx({ diskCount: 23559, cacheSize: 5000, fileCount: 5000 });
+        await saveFeatureCacheLocked.call(ctx);
+        expect(api.featureCacheWriteOpen).toHaveBeenCalledTimes(1);
+        expect(api.featureCacheWriteClose).toHaveBeenCalledTimes(1);
+        expect(written).toHaveLength(5000);
+        expect(ctx._featureCacheDiskCount).toBe(5000); // re-baselined to what was actually written
+    });
+
+    it('allows a fresh build-up when no on-disk cache is known (diskCount 0 → guard inactive)', async () => {
+        const ctx = mkCtx({ diskCount: 0, cacheSize: 500, fileCount: 20929 });
+        await saveFeatureCacheLocked.call(ctx);
+        expect(api.featureCacheWriteOpen).toHaveBeenCalledTimes(1);
+        expect(written).toHaveLength(500);
+        expect(ctx._featureCacheDiskCount).toBe(500);
+    });
+
+    it('skips unresolvable entries rather than poisoning them with size:0/mtime:0', async () => {
+        const ctx = {
+            baseFolderPath: '/d',
+            // `live.png` has no featureMetadata but IS in mediaFiles → resolvable from live stats.
+            // `orphan.png` has neither → unresolvable, must be skipped entirely.
+            mediaFiles: [{ path: '/d/live.png', size: 222, mtimeMs: 2222 }],
+            featureCache: new Map([
+                ['/d/meta.png', new Float32Array(64).fill(0.1)],
+                ['/d/live.png', new Float32Array(64).fill(0.2)],
+                ['/d/orphan.png', new Float32Array(64).fill(0.3)],
+            ]),
+            featureMetadata: new Map([['/d/meta.png', { size: 111, mtime: 1111 }]]),
+            clipCache: new Map(),
+            _featureCacheDiskCount: 0,
+        };
+        await saveFeatureCacheLocked.call(ctx);
+        const names = written.map(([name]) => name);
+        expect(names).toEqual(['meta.png', 'live.png']);
+        expect(names).not.toContain('orphan.png');
+        const byName = Object.fromEntries(written);
+        expect(byName['meta.png']).toMatchObject({ size: 111, mtime: 1111 });
+        expect(byName['live.png']).toMatchObject({ size: 222, mtime: 2222 });
+        // No entry may carry the poison stats that made the cache unloadable forever.
+        for (const [, entry] of written) {
+            expect(entry.size).not.toBe(0);
+            expect(entry.mtime).not.toBe(0);
+        }
+        expect(ctx._featureCacheDiskCount).toBe(2); // counts what was written, not map size (3)
+    });
+
+    it('skips unresolvable entries on the legacy single-write path too', async () => {
+        delete api.featureCacheWriteOpen; // force the legacy fallback
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: [],
+            featureCache: new Map([
+                ['/d/meta.png', new Float32Array(64).fill(0.1)],
+                ['/d/orphan.png', new Float32Array(64).fill(0.3)],
+            ]),
+            featureMetadata: new Map([['/d/meta.png', { size: 111, mtime: 1111 }]]),
+            clipCache: new Map(),
+            _featureCacheDiskCount: 0,
+        };
+        await saveFeatureCacheLocked.call(ctx);
+        expect(api.writeFile).toHaveBeenCalledTimes(1);
+        const payload = JSON.parse(api.writeFile.mock.calls[0][1]);
+        expect(Object.keys(payload.features)).toEqual(['meta.png']);
+        expect(ctx._featureCacheDiskCount).toBe(1);
+    });
+});

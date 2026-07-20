@@ -144,6 +144,7 @@ class MediaViewer {
         this.isBackgroundExtracting = false;
         this.backgroundExtractionAbort = null; // AbortController for cancellation
         this.featureCacheDirty = false; // Flag for auto-save
+        this._featureCacheDiskCount = 0; // entries last seen in .feature_cache.json (shrink guard)
         this.featureCacheAutoSaveInterval = null;
         this.extractionStartTime = null; // Date.now() when extraction starts
         this.extractionCompletionTimes = []; // Rolling window of completion timestamps
@@ -2538,6 +2539,9 @@ class MediaViewer {
             this.predictionScores.clear();
             // Cancel any ongoing background extraction
             this.cancelBackgroundExtraction();
+            // The new folder's on-disk cache size is unknown until its own load runs — carrying
+            // the previous folder's baseline would arm the shrink guard against this folder.
+            this._featureCacheDiskCount = 0;
             // Hydrate corrective-training records for this folder (prunes stale filenames)
             await this.loadBulkRatedFile();
             if (this.sortSimilarityBtn) {
@@ -6827,6 +6831,7 @@ class MediaViewer {
             try {
                 const opened = await window.electronAPI.featureCacheOpen(cacheFile);
                 if (!opened.success) {
+                    this._featureCacheDiskCount = 0; // nothing usable on disk
                     return 0; // notFound/parse error — leave existing cache untouched
                 }
                 if (opened.version !== MediaViewer.FEATURE_CACHE_VERSION) {
@@ -6834,10 +6839,14 @@ class MediaViewer {
                         `Feature cache version mismatch: found=${opened.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
                     );
                     await window.electronAPI.featureCacheClose();
+                    this._featureCacheDiskCount = 0; // the on-disk file is being discarded
                     this.featureCache = new Map();
                     this.featureMetadata = new Map();
                     return 0;
                 }
+                // Baseline for the save-path shrink guard. Recorded even if the load is later
+                // aborted — it reflects what is actually sitting on disk right now.
+                this._featureCacheDiskCount = opened.count;
                 const total = opened.count;
                 const CHUNK = 1000;
                 let loaded = 0;
@@ -6903,10 +6912,13 @@ class MediaViewer {
                     console.warn(
                         `Feature cache version mismatch: found=${parsed.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
                     );
+                    this._featureCacheDiskCount = 0; // the on-disk file is being discarded
                     this.featureCache = new Map();
                     this.featureMetadata = new Map();
                     return 0;
                 }
+                // Baseline for the save-path shrink guard (see _saveFeatureCacheLocked).
+                this._featureCacheDiskCount = Object.keys(parsed.features || {}).length;
                 // Rebuild from scratch — clear any partial staging left by a failed streaming pass.
                 freshFeatureCache.clear();
                 freshFeatureMetadata.clear();
@@ -6956,6 +6968,26 @@ class MediaViewer {
     async _saveFeatureCacheLocked() {
         if (!this.baseFolderPath || this.featureCache.size === 0) return;
 
+        // DATA-LOSS GUARD: never replace a substantially populated on-disk cache with a
+        // drastically smaller in-memory one. The in-memory map shrinks legitimately ONLY when
+        // files leave the folder (pruned at load time). A map covering far fewer entries than
+        // the disk cache WHILE the folder is still large means the load rejected entries
+        // (poisoned size:0/mtime:0 metadata, or an aborted/partial load) — persisting it would
+        // destroy the good cache. Real incident: a 20,929-file folder's 23,559-entry cache was
+        // overwritten by 32 entries.
+        if (
+            this._featureCacheDiskCount > 0 &&
+            this.featureCache.size < this._featureCacheDiskCount * 0.5 &&
+            this.mediaFiles.length > this.featureCache.size * 2
+        ) {
+            const msg =
+                `Feature-cache save SKIPPED (shrink guard): in-memory ${this.featureCache.size} entries vs ` +
+                `${this._featureCacheDiskCount} on disk for ${this.mediaFiles.length} files.`;
+            console.warn(msg);
+            if (window.electronAPI?.logError) window.electronAPI.logError(msg);
+            return;
+        }
+
         // Round to 6 decimals before serializing. Full-precision floats stringify to
         // ~17 chars each (e.g. "0.12345678901234567"); 6 decimals is well below the
         // noise floor for unit-normalized cosine similarity and ~halves the file size
@@ -6968,18 +7000,21 @@ class MediaViewer {
             return out;
         };
 
-        // Build the serializable entry for one cache item.
+        // Build the serializable entry for one cache item. Returns null when the entry's
+        // size/mtime cannot be resolved — writing size:0/mtime:0 would poison the cache
+        // (0 never matches a real stat, so the entry is rejected as stale forever).
         const buildEntry = (fullPath, featureArray) => {
             const meta = this.featureMetadata.get(fullPath);
             const clipVector = this.clipCache.get(fullPath);
             const fileInfo = meta ? null : this.mediaFiles.find((f) => f.path === fullPath);
+            const size = meta ? meta.size : fileInfo?.size;
+            const mtime = meta ? meta.mtime : fileInfo?.mtimeMs;
+            if (!size || !mtime) return null; // unresolvable — skip rather than poison
             return {
                 vector: round6(featureArray),
                 clipVector: clipVector ? round6(clipVector) : null,
-                // Fallback to live file stats (not zeros) so a missing meta doesn't cause a
-                // permanent cache miss on next load.
-                size: meta ? meta.size : fileInfo?.size || 0,
-                mtime: meta ? meta.mtime : fileInfo?.mtimeMs || 0,
+                size,
+                mtime,
             };
         };
 
@@ -6997,6 +7032,7 @@ class MediaViewer {
                 if (opened?.success) {
                     const BATCH = 1000;
                     let batch = [];
+                    let writtenCount = 0;
                     const flush = async () => {
                         if (batch.length === 0) return;
                         const res = await window.electronAPI.featureCacheWriteChunk(batch);
@@ -7004,13 +7040,18 @@ class MediaViewer {
                         batch = [];
                     };
                     for (const [fullPath, featureArray] of this.featureCache.entries()) {
+                        const entry = buildEntry(fullPath, featureArray);
+                        if (!entry) continue; // unresolvable metadata — never poison the cache
                         const filename = await window.electronAPI.path.basename(fullPath);
-                        batch.push([filename, buildEntry(fullPath, featureArray)]);
+                        batch.push([filename, entry]);
+                        writtenCount++;
                         if (batch.length >= BATCH) await flush();
                     }
                     await flush();
                     const closed = await window.electronAPI.featureCacheWriteClose();
                     if (!closed?.success) throw new Error(closed?.error || 'write-close failed');
+                    // Re-baseline the shrink guard to what is now actually on disk.
+                    this._featureCacheDiskCount = writtenCount;
                     return;
                 }
                 // If open failed, fall through to legacy single-write.
@@ -7018,9 +7059,13 @@ class MediaViewer {
 
             // Legacy fallback: build the whole object and write once (older preload / small caches).
             const features = {};
+            let legacyWrittenCount = 0;
             for (const [fullPath, featureArray] of this.featureCache.entries()) {
+                const entry = buildEntry(fullPath, featureArray);
+                if (!entry) continue; // unresolvable metadata — never poison the cache
                 const filename = await window.electronAPI.path.basename(fullPath);
-                features[filename] = buildEntry(fullPath, featureArray);
+                features[filename] = entry;
+                legacyWrittenCount++;
             }
             await window.electronAPI.writeFile(
                 cacheFile,
@@ -7031,6 +7076,8 @@ class MediaViewer {
                     features,
                 })
             );
+            // Re-baseline the shrink guard to what is now actually on disk.
+            this._featureCacheDiskCount = legacyWrittenCount;
         } catch (error) {
             console.error('Failed to save feature cache:', error);
         }
