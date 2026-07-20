@@ -2506,6 +2506,18 @@ class MediaViewer {
             // so the empty-folder path also clears tournament UI state.
             if (this.isTournamentMode) this.exitTournamentMode();
 
+            // Same reasoning as exitTournamentMode above: must also run BEFORE both branches
+            // diverge, or switching to an EMPTY folder would skip all three — leaving an
+            // in-flight sort/extraction running against the folder that's about to disappear.
+            // A skipped _abortInFlightPredictionSort() in particular never settles the pending
+            // runMlSort promise, so isPredictionSorting stays true and (via the shared
+            // sortAbortController mutual-exclusion guard) wedges BOTH sort paths, not just the
+            // one that was running. A skipped _featureCacheDiskCount reset also leaves the old
+            // folder's baseline armed against whatever folder loads next.
+            this.cancelBackgroundExtraction();
+            this._abortInFlightPredictionSort();
+            this._featureCacheDiskCount = 0;
+
             if (result.files.length === 0) {
                 this.mediaFiles = [];
                 this.baseFolderPath = folderPath;
@@ -2537,11 +2549,6 @@ class MediaViewer {
             this.clipCache.clear();
             this.featureMetadata.clear();
             this.predictionScores.clear();
-            // Cancel any ongoing background extraction
-            this.cancelBackgroundExtraction();
-            // The new folder's on-disk cache size is unknown until its own load runs — carrying
-            // the previous folder's baseline would arm the shrink guard against this folder.
-            this._featureCacheDiskCount = 0;
             // Hydrate corrective-training records for this folder (prunes stale filenames)
             await this.loadBulkRatedFile();
             if (this.sortSimilarityBtn) {
@@ -7264,10 +7271,11 @@ class MediaViewer {
         });
     }
 
-    async collectBulkRatedTrainingExamples() {
+    async collectBulkRatedTrainingExamples(signal) {
         const liked = [];
         const disliked = [];
         for (const [name, bucket] of this.bulkRated) {
+            if (signal?.aborted) break; // cancelled — stop processing ratings
             const file = this.mediaFiles.find((f) => f.name === name);
             if (!file) continue;
             let combined = this.getCombinedFeatures(file.path);
@@ -7289,14 +7297,17 @@ class MediaViewer {
         return { liked, disliked };
     }
 
-    async trainFromHistoricalRatings() {
+    async trainFromHistoricalRatings(signal) {
         if (!this.isMlEnabled || !this.mlWorker) return;
         if (!this.customLikeFolder || !this.customDislikeFolder) return;
+        if (signal?.aborted) return; // cancelled before training started
 
         try {
             // Load files from like folder
             const likedResult = await window.electronAPI.loadFolder(this.customLikeFolder);
             const dislikedResult = await window.electronAPI.loadFolder(this.customDislikeFolder);
+
+            if (signal?.aborted) return; // cancelled while loading historical folders
 
             if (!likedResult.success && !dislikedResult.success) {
                 console.log('No historical ratings found');
@@ -7318,6 +7329,7 @@ class MediaViewer {
 
             // Extract features from liked files
             for (let i = 0; i < likedFiles.length; i++) {
+                if (signal?.aborted) break; // cancelled — stop processing ratings
                 const file = likedFiles[i];
                 try {
                     const features = await this.computeFeatures(file.path);
@@ -7337,6 +7349,7 @@ class MediaViewer {
 
             // Extract features from disliked files
             for (let i = 0; i < dislikedFiles.length; i++) {
+                if (signal?.aborted) break; // cancelled — stop processing ratings
                 const file = dislikedFiles[i];
                 try {
                     const features = await this.computeFeatures(file.path);
@@ -7354,11 +7367,24 @@ class MediaViewer {
                 }
             }
 
+            if (signal?.aborted) {
+                // Cancelled mid-loop — do not send a partial-training message to the ML worker
+                // (it would train a misleadingly incomplete model on whatever was collected so
+                // far); clear the progress UI posted above so it doesn't linger after Cancel.
+                this.clearProgressNotification();
+                return;
+            }
+
             // Re-apply corrective bulk ratings (these files stay in the source folder and are
             // never in the like/dislike folders, so a from-scratch rebuild can't recover them).
-            const bulkExamples = await this.collectBulkRatedTrainingExamples();
+            const bulkExamples = await this.collectBulkRatedTrainingExamples(signal);
             likedFeatures.push(...bulkExamples.liked);
             dislikedFeatures.push(...bulkExamples.disliked);
+
+            if (signal?.aborted) {
+                this.clearProgressNotification();
+                return;
+            }
 
             // Send to ML worker for training
             if (likedFeatures.length > 0 || dislikedFeatures.length > 0) {
@@ -7379,15 +7405,18 @@ class MediaViewer {
      * Train from historical ratings and wait for completion
      * Returns a promise that resolves when training is complete
      */
-    async trainFromHistoricalRatingsAndWait() {
+    async trainFromHistoricalRatingsAndWait(signal) {
         return new Promise(async (resolve) => {
             // Store resolve callback to be called when trainReady is received
             this._trainingCompleteCallback = resolve;
 
-            await this.trainFromHistoricalRatings();
+            await this.trainFromHistoricalRatings(signal);
 
-            // If no training happened (no files), resolve immediately
-            if (!this.customLikeFolder || !this.customDislikeFolder) {
+            // If no training happened (no files) or the caller cancelled mid-flight, resolve
+            // immediately. A cancelled bail means no trainHistorical message was sent, so there
+            // is no trainComplete reply coming — without this the caller would otherwise wait
+            // out the full 30s fallback below even though the expensive work already stopped.
+            if (!this.customLikeFolder || !this.customDislikeFolder || signal?.aborted) {
                 this._trainingCompleteCallback = null;
                 resolve();
             }
@@ -7482,6 +7511,20 @@ class MediaViewer {
                 data: { allFeatures, sortRunId: runId },
             });
         });
+    }
+
+    // Abort an in-flight prediction sort (folder change). The sort reads this.mediaFiles LIVE,
+    // so leaving it running after a folder switch drives work against the NEW folder.
+    // Bumping sortRunId alone is NOT enough: a stale sortComplete then `break`s without
+    // resolving, so `await runMlSort` would hang forever and wedge BOTH sort paths (the
+    // mutual-exclusion guard blocks similarity too). The pending promise must be settled.
+    _abortInFlightPredictionSort(reason = 'folder changed') {
+        this.sortRunId++;
+        this.sortAbortController?.abort();
+        const pendingReject = this._mlSortReject;
+        this._mlSortResolve = null;
+        this._mlSortReject = null;
+        if (pendingReject) pendingReject(new Error(reason));
     }
 
     async requestPredictionScores() {
@@ -7698,9 +7741,10 @@ class MediaViewer {
             // Train from historical ratings if needed.
             if (!this.mlStats?.isReady) {
                 this.updateSortProgress({ phase: 'Training model…' });
-                await this.trainFromHistoricalRatingsAndWait();
+                await this.trainFromHistoricalRatingsAndWait(signal);
                 this.updateSortPredictionButton();
             }
+            if (signal.aborted) throw new Error('cancelled');
             if (!this.mlStats?.isReady) {
                 this.showNotification(
                     `Need more ratings (${this.mlStats?.positiveCount || 0} likes, ${this.mlStats?.negativeCount || 0} dislikes)`,

@@ -1081,6 +1081,45 @@ describe('runMlSort', () => {
     });
 });
 
+describe('_abortInFlightPredictionSort', () => {
+    const _abortInFlightPredictionSort = extractMethod('_abortInFlightPredictionSort');
+
+    it('bumps sortRunId, aborts the controller, and settles the pending ML sort promise', () => {
+        const controller = new AbortController();
+        const rejectSpy = vi.fn();
+        const ctx = {
+            sortRunId: 5,
+            sortAbortController: controller,
+            _mlSortResolve: () => {},
+            _mlSortReject: rejectSpy,
+        };
+        _abortInFlightPredictionSort.call(ctx);
+        expect(ctx.sortRunId).toBe(6);
+        expect(controller.signal.aborted).toBe(true);
+        expect(ctx._mlSortResolve).toBeNull();
+        expect(ctx._mlSortReject).toBeNull();
+        expect(rejectSpy).toHaveBeenCalledTimes(1);
+        const rejectedWith = rejectSpy.mock.calls[0][0];
+        expect(rejectedWith).toBeInstanceOf(Error);
+        expect(rejectedWith.message).toBe('folder changed');
+    });
+
+    it('does not throw when there is no pending ML sort promise', () => {
+        const controller = new AbortController();
+        const ctx = {
+            sortRunId: 0,
+            sortAbortController: controller,
+            _mlSortResolve: null,
+            _mlSortReject: null,
+        };
+        expect(() => _abortInFlightPredictionSort.call(ctx)).not.toThrow();
+        expect(ctx.sortRunId).toBe(1);
+        expect(controller.signal.aborted).toBe(true);
+        expect(ctx._mlSortResolve).toBeNull();
+        expect(ctx._mlSortReject).toBeNull();
+    });
+});
+
 describe('handleSortByPrediction lifecycle', () => {
     const handleSortByPrediction = extractAsyncMethod('handleSortByPrediction');
 
@@ -1159,6 +1198,39 @@ describe('handleSortByPrediction lifecycle', () => {
             },
         });
         await handleSortByPrediction.call(ctx);
+        expect(ctx.isSortedByPrediction).toBe(false);
+        expect(ctx.sortAbortController).toBeNull();
+        expect(ctx.isPredictionSorting).toBe(false);
+    });
+
+    it('bails unsorted when cancelled during the training phase', async () => {
+        const startBackgroundFeatureExtraction = vi.fn(() => Promise.resolve());
+        const runMlSort = vi.fn(() => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} }));
+        const ctx = makeCtx({
+            // Not ready yet, so the training branch actually runs.
+            mlStats: { isReady: false, positiveCount: 0, negativeCount: 0 },
+            // Cold cache (b.png missing, loadFeatureCache resolves without populating it) so
+            // Phase 2 would call startBackgroundFeatureExtraction if execution got that far.
+            // That's the proof point: Phase 2's OWN post-await abort check would otherwise
+            // independently catch this same aborted signal and mask a missing training-phase
+            // check — asserting only runMlSort/isSortedByPrediction/finally-cleanup would still
+            // pass even with the training-phase guard deleted, since Phase 2's check downstream
+            // throws 'cancelled' anyway once mlStats looks ready. Pinning on
+            // startBackgroundFeatureExtraction never being called is what actually isolates the
+            // training-phase guard.
+            featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
+            loadFeatureCache: () => Promise.resolve(), // resolves without populating the cache
+            trainFromHistoricalRatingsAndWait: function () {
+                this.sortAbortController.abort(); // user cancels mid-training
+                this.mlStats = { isReady: true }; // training would have made the model ready
+                return Promise.resolve();
+            },
+            startBackgroundFeatureExtraction,
+            runMlSort,
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+        expect(runMlSort).not.toHaveBeenCalled();
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(ctx.sortAbortController).toBeNull();
         expect(ctx.isPredictionSorting).toBe(false);
@@ -1746,6 +1818,42 @@ describe('collectBulkRatedTrainingExamples', () => {
         expect(result.liked).toHaveLength(1);
         expect(result.liked[0]).toHaveLength(576);
         expect(result.disliked).toEqual([]);
+    });
+});
+
+describe('trainFromHistoricalRatings (signal-aware bail)', () => {
+    const trainFromHistoricalRatings = extractAsyncMethod('trainFromHistoricalRatings');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = {
+            electronAPI: {
+                loadFolder: vi.fn(async () => ({ success: true, files: [] })),
+            },
+        };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('bails before loading historical folders when the signal is already aborted', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const ctx = {
+            isMlEnabled: true,
+            mlWorker: { postMessage: vi.fn() },
+            customLikeFolder: '/liked',
+            customDislikeFolder: '/disliked',
+            updateProgressNotification: vi.fn(),
+            clearProgressNotification: vi.fn(),
+        };
+        await trainFromHistoricalRatings.call(ctx, controller.signal);
+        // Not just "returns early" in the abstract — proves the expensive per-file work (which
+        // starts with loading the like/dislike folders) never starts, and no partial-training
+        // message reaches the ML worker.
+        expect(globalThis.window.electronAPI.loadFolder).not.toHaveBeenCalled();
+        expect(ctx.mlWorker.postMessage).not.toHaveBeenCalled();
     });
 });
 
@@ -2396,8 +2504,15 @@ describe('loadFolder cache reset (Fix 1)', () => {
         // Slice the loadFolder reset block. Anchor the start INSIDE loadFolder — a
         // folder-watch callback earlier in the file also calls perceptualHashes.clear(),
         // and a bare indexOf would match that first and slice an ~820-line window.
+        // End anchor is loadBulkRatedFile() (unique in the file, immediately after the reset
+        // block) rather than cancelBackgroundExtraction() — that call was hoisted to run
+        // BEFORE the empty/non-empty branch split (see 'loadFolder empty-folder teardown'
+        // below), so it now sits before this block, not after. Anchoring on it here would
+        // silently forward-match a distant, unrelated cancelBackgroundExtraction() call site
+        // instead and slice thousands of lines — still "containing" every string below, but
+        // no longer proving anything about this specific block.
         const start = source.indexOf('this.perceptualHashes.clear();', source.indexOf('async loadFolder('));
-        const end = source.indexOf('this.cancelBackgroundExtraction();', start);
+        const end = source.indexOf('await this.loadBulkRatedFile();', start);
         expect(start).toBeGreaterThan(-1);
         expect(end).toBeGreaterThan(start);
         const block = source.slice(start, end);
@@ -2410,6 +2525,81 @@ describe('loadFolder cache reset (Fix 1)', () => {
         ]) {
             expect(block).toContain(cache);
         }
+    });
+});
+
+describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
+    const loadFolder = extractAsyncMethod('loadFolder');
+    // _abortInFlightPredictionSort is a plain sync method with no DOM/electronAPI deps of its
+    // own — wrap the REAL implementation in a vi.fn() spy so the test proves both that
+    // loadFolder's empty-folder branch calls it AND that its real side effects (controller
+    // aborted, pending promise rejected, fields nulled) actually happen, not just that some
+    // stand-in was invoked.
+    const abortInFlightPredictionSortImpl = extractMethod('_abortInFlightPredictionSort');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = {
+            electronAPI: {
+                loadFolder: vi.fn(async () => ({ success: true, files: [] })),
+                path: { basename: (p) => p.split(/[\\/]/).pop() },
+            },
+        };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function makeCtx() {
+        return {
+            isTournamentMode: false,
+            tournament: { engine: 'stale-engine' },
+            mediaFiles: [{ name: 'stale.png', path: '/old/stale.png' }],
+            baseFolderPath: '/old',
+            currentFolderPath: 'old',
+            currentIndex: 3,
+            moveHistory: [{ some: 'entry' }],
+            sortRunId: 5,
+            sortAbortController: new AbortController(),
+            _mlSortResolve: () => {},
+            _mlSortReject: vi.fn(),
+            _featureCacheDiskCount: 99,
+            showLoadingSpinner: vi.fn(),
+            hideLoadingSpinner: vi.fn(),
+            showDropZone: vi.fn(),
+            showError: vi.fn(),
+            exitTournamentMode: vi.fn(),
+            cancelBackgroundExtraction: vi.fn(),
+            _abortInFlightPredictionSort: vi.fn(abortInFlightPredictionSortImpl),
+        };
+    }
+
+    it('tears down an in-flight sort even when the new folder is empty', async () => {
+        const ctx = makeCtx();
+        const rejectSpy = ctx._mlSortReject; // capture before _abortInFlightPredictionSort nulls ctx._mlSortReject
+        await loadFolder.call(ctx, '/new/empty-folder');
+
+        // The cleanup trio must fire on the empty-folder early-return path, not just the
+        // non-empty path — this is the gap Fix B originally missed.
+        expect(ctx.cancelBackgroundExtraction).toHaveBeenCalledTimes(1);
+        expect(ctx._abortInFlightPredictionSort).toHaveBeenCalledTimes(1);
+        expect(ctx._featureCacheDiskCount).toBe(0);
+
+        // Real _abortInFlightPredictionSort side effects (not just "was called"): the pending
+        // runMlSort promise is actually settled, so isPredictionSorting won't be stuck true and
+        // wedge both sort paths via the shared sortAbortController mutual-exclusion guard.
+        expect(ctx.sortRunId).toBe(6);
+        expect(ctx.sortAbortController.signal.aborted).toBe(true);
+        expect(rejectSpy).toHaveBeenCalledTimes(1);
+        expect(rejectSpy.mock.calls[0][0]).toBeInstanceOf(Error);
+        expect(rejectSpy.mock.calls[0][0].message).toBe('folder changed');
+        expect(ctx._mlSortResolve).toBeNull();
+        expect(ctx._mlSortReject).toBeNull();
+
+        // Sanity check we actually took the empty-folder branch.
+        expect(ctx.mediaFiles).toEqual([]);
+        expect(ctx.showError).toHaveBeenCalledWith('No media files found in the selected folder');
     });
 });
 
