@@ -4723,6 +4723,12 @@ class MediaViewer {
             // caches. Restore it FIRST and only then advance the stack, so a failed move leaves
             // engine.history and moveHistory exactly as they were.
             const move = pending.meta;
+            // Mutex across this await: handleTournamentPick/handleTournamentDraw/moveToSpecialFolder
+            // all guard on isLoading, so this blocks a concurrent pick/draw/special from landing while
+            // the disk restore is in flight — otherwise undoUserAction() below could pop and reverse a
+            // freshly-pushed entry instead of the one peekUndoEntry() returned above. Cleared in finally
+            // on every exit path (success or failure), before showTournamentPair() runs.
+            this.isLoading = true;
             try {
                 const moveResult = await window.electronAPI.moveFile({
                     sourcePath: move.newPath,
@@ -4736,6 +4742,8 @@ class MediaViewer {
                 console.error('Error undoing tournament special:', error);
                 this.showError(`Failed to undo move: ${error.message}`);
                 return;
+            } finally {
+                this.isLoading = false;
             }
             // Disk restored — safe to advance. undoUserAction reverses any trailing prunes plus
             // this removal, restoring strategy state (files/winCounts/byes/roundQueue) AND

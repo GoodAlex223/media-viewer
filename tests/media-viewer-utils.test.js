@@ -3639,10 +3639,46 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'EPERM' }));
         await handleTournamentUndo.call(ctx);
         expect(ctx.showError).toHaveBeenCalled();
+        expect(ctx.tournament.engine.peekUndoEntry).toHaveBeenCalledTimes(1);
         expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
         expect(ctx.moveHistory).toEqual([SPECIAL_META]);
         expect(ctx.mediaFiles).toEqual([]);
         expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+
+    it('holds isLoading as a mutex while the disk restore is in flight, clearing it on success', async () => {
+        const ctx = makeCtx({ kind: 'special', meta: SPECIAL_META }, { moveHistory: [SPECIAL_META] });
+        let resolveMoveFile;
+        globalThis.window.electronAPI.moveFile = vi.fn(
+            () =>
+                new Promise((resolve) => {
+                    resolveMoveFile = resolve;
+                })
+        );
+        const pending = handleTournamentUndo.call(ctx);
+        // handleTournamentPick/handleTournamentDraw/moveToSpecialFolder all guard on isLoading — while
+        // the restore is in flight it must read true, or a concurrent pick could divert the undo.
+        expect(ctx.isLoading).toBe(true);
+        resolveMoveFile({ success: true });
+        await pending;
+        expect(ctx.isLoading).toBe(false);
+    });
+
+    it('clears isLoading in finally when the disk restore fails mid-flight', async () => {
+        const ctx = makeCtx({ kind: 'special', meta: SPECIAL_META }, { moveHistory: [SPECIAL_META] });
+        let resolveMoveFile;
+        globalThis.window.electronAPI.moveFile = vi.fn(
+            () =>
+                new Promise((resolve) => {
+                    resolveMoveFile = resolve;
+                })
+        );
+        const pending = handleTournamentUndo.call(ctx);
+        expect(ctx.isLoading).toBe(true);
+        resolveMoveFile({ success: false, error: 'EPERM' });
+        await pending;
+        expect(ctx.isLoading).toBe(false);
+        expect(ctx.showError).toHaveBeenCalled();
     });
 
     it('a special move made outside the tournament cannot divert a pick undo', async () => {
