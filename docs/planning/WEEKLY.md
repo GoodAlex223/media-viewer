@@ -11,7 +11,7 @@
 
 ## Parallel Work
 
-- **User dogfooding / manual 24k+ smoke (no SP; user-side) — gating dependency for G1.** The AI-sort startup UX + incremental cache-load work targets real-24k-folder behavior that cannot be E2E-fixtured (Playwright fixtures top out at a handful of files). The G1 items stay unchecked until a manual smoke on the user's actual 24 000+ file folder confirms: the ~40s silent load is gone/visible, cached data is served (no redundant re-extract), a determinate progress card appears immediately, and cancel actually aborts. Same verification shape as the CW-T tournament work.
+- ✅ **SMOKE PASSED (2026-07-20) — gating dependency for G1 satisfied.** All 5 checks passed on the user's real 20,929-file folder: the ~40s silent load is gone/visible (determinate card appears immediately), cached data is served with no redundant re-extraction, Cancel actually aborts (load + extraction + sort all stop, list stays unsorted), and the post-tournament-exit path behaves identically. Two post-review incidents surfaced and were fixed in-branch — an external `/code-review` data-loss regression (`b8b5636`) and a worse cache-corruption route the smoke itself triggered (`2777bdf`, `c947081`) — see [DONE.md](DONE.md) 2026-07-20 for detail. G1 shipped as **PR #64**. Original gate description follows for context: — The AI-sort startup UX + incremental cache-load work targets real-24k-folder behavior that cannot be E2E-fixtured (Playwright fixtures top out at a handful of files). Same verification shape as the CW-T tournament work.
 - ✅ **DONE EARLY (Sat 2026-07-12) — Strategic-doc brainstorm with the user (gates G4's 🟡 refresh).** The gate is SATISFIED: brainstorm held Jul 12; decisions D1–D5 + user-approved spec (`41d9233`) + mechanical 8-task plan (`a02c256`) live on branch `docs/g4-strategic-docs-refresh`. **Friday = execute `docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md`** (sized for a cheaper model; inline executing-plans is fine). Do NOT drop the 🟡 refresh as "brainstorm didn't happen". Original gate description follows for context: — MILESTONES.md / ROADMAP.md / GOALS.md are frozen at **2026-02-05** and factually wrong (GOALS still says "No automated tests / Manual testing only" and "~6100-line" renderer vs. **434 unit tests + green E2E** and an ~8400-line renderer; Tournament/JXL/CLIP + v2.0 modularization all shipped outside the documented roadmap). The doc edits are ~S but **blocked on a ~15-min decision**: (a) is v1.1 closed/shipped? (b) what is v2.0's real scope now (modularization in progress; ZoomManager/CompareManager/SortingManager/MLManager planned)? (c) where do the big BACKLOG themes (24k-folder perf, add-on system) sit? If the brainstorm doesn't happen, G4's 🟡 refresh drops (the 🟤 CLAUDE.md doc-sync still ships).
 
 ---
@@ -25,12 +25,12 @@
 
 > The week's lead and 🏆. All items share the `handleSortByPrediction` → `loadFeatureCache` → extraction → sort critical path on a large folder, so they batch into one branch. This is the **PR3 slice** of the 🔴 TODO "Speed up AI / similarity sorting on large folders (24k+ files)" item plus the [2026-07-01] AI-sort-startup UX cluster it causes — PR3 (incremental/non-blocking cache-load) removes the ~40s silent wait, and the same fix subsumes the "re-extracts despite cache" bug (the in-memory `featureCache` Map is assigned only at the *end* of the streaming load, so the uncached-file check runs against an empty Map during the load window). The 🔴 sort-perf TODO item stays **OPEN** after this ships — PR2 (hash off the renderer thread) remains, but PR2 addresses *hash/similarity* sorts, not the reported AI-sort pain, so it stays deferred.
 
-- [ ] 🔴 **Incremental / non-blocking feature-cache load (PR3)** — serve `.feature_cache.json` incrementally instead of a ~40s silent blocking streaming load before the sort. Closes BACKLOG 🟤 [2026-05-26]. Root fix for 4 of the [2026-07-01] reports. `media-viewer.js:~6562-6683` (`loadFeatureCache` streaming load), `media-viewer.js:~7324/~7370` (`handleSortByPrediction`).
-- [ ] 🔵 **AI sort re-runs extraction despite valid cached data (bug)** — 🔵 [2026-07-01]. `featureCache` is assigned only at the END of the streaming load, so `!featureCache.has(path)` gates extraction against an empty/partial Map during the ~40s window → redundant re-extraction. Likely subsumed by PR3 (populate the Map incrementally). `media-viewer.js:~6644/~6675`, `~7370/~7392`.
-- [ ] 🔵 **AI sort gives zero feedback — add a determinate progress card** — 🔵 [2026-07-01]. `handleSortByPrediction` shows only transient toasts and no `updateSortProgress` card during load/extract/sort, unlike `handleSortBySimilarity` (which renders the card immediately). Render the card immediately. `media-viewer.js:~7324`, ref `~5191` (`handleSortBySimilarity`), `~1217` (`updateSortProgress`).
-- [ ] 🔵 **Long opaque wait after "loading CLIP model" before extraction/sort begins** — 🔵 [2026-07-01]. The ~40s silent `loadFeatureCache()` runs after the CLIP-load messages with no progress UI; the extraction bar appears only after it completes. Surface progress during the load (folds into PR3 + the progress-card item). `media-viewer.js:~7370`, `~8071` (2s toast then silence).
-- [ ] 🔵 **Exit tournament → click AI sort → long delay before anything happens** — 🔵 [2026-07-01]. Same lazy-extraction + silent-cache-load root as above; verify the fix covers the post-tournament entry path. `media-viewer.js:~7324-7420`.
-- [ ] 🟠 **Can't cancel the AI sort** — 🟠 TODO [2026-07-11]. The sort-progress card's cancel affordance calls `sortAbortController.abort()` but the AI-prediction path doesn't stop. Verify the cancel button is wired/visible for the AI-prediction path and every long-running stage checks `sortAbortController.signal.aborted` and bails. `media-viewer.js:~1214-1240`, `~5270-5567`.
+- [x] 🔴 **Incremental / non-blocking feature-cache load (PR3)** — serve `.feature_cache.json` incrementally instead of a ~40s silent blocking streaming load before the sort. Closes BACKLOG 🟤 [2026-05-26]. Root fix for 4 of the [2026-07-01] reports. `media-viewer.js:~6562-6683` (`loadFeatureCache` streaming load), `media-viewer.js:~7324/~7370` (`handleSortByPrediction`).
+- [x] 🔵 **AI sort re-runs extraction despite valid cached data (bug)** — 🔵 [2026-07-01]. `featureCache` is assigned only at the END of the streaming load, so `!featureCache.has(path)` gates extraction against an empty/partial Map during the ~40s window → redundant re-extraction. Likely subsumed by PR3 (populate the Map incrementally). `media-viewer.js:~6644/~6675`, `~7370/~7392`.
+- [x] 🔵 **AI sort gives zero feedback — add a determinate progress card** — 🔵 [2026-07-01]. `handleSortByPrediction` shows only transient toasts and no `updateSortProgress` card during load/extract/sort, unlike `handleSortBySimilarity` (which renders the card immediately). Render the card immediately. `media-viewer.js:~7324`, ref `~5191` (`handleSortBySimilarity`), `~1217` (`updateSortProgress`).
+- [x] 🔵 **Long opaque wait after "loading CLIP model" before extraction/sort begins** — 🔵 [2026-07-01]. The ~40s silent `loadFeatureCache()` runs after the CLIP-load messages with no progress UI; the extraction bar appears only after it completes. Surface progress during the load (folds into PR3 + the progress-card item). `media-viewer.js:~7370`, `~8071` (2s toast then silence).
+- [x] 🔵 **Exit tournament → click AI sort → long delay before anything happens** — 🔵 [2026-07-01]. Same lazy-extraction + silent-cache-load root as above; verify the fix covers the post-tournament entry path. `media-viewer.js:~7324-7420`.
+- [x] 🟠 **Can't cancel the AI sort** — 🟠 TODO [2026-07-11]. The sort-progress card's cancel affordance calls `sortAbortController.abort()` but the AI-prediction path doesn't stop. Verify the cancel button is wired/visible for the AI-prediction path and every long-running stage checks `sortAbortController.signal.aborted` and bails. `media-viewer.js:~1214-1240`, `~5270-5567`.
 
 ### G2. Tournament-mode bug fixes [batch] 🔵
 **Domain**: JS logic — tournament methods in `media-viewer.js` / `tournament-engine.js` + `styles.css`
@@ -83,7 +83,7 @@
 
 | Group | SP |
 |-------|----|
-| [**G1. AI-sort startup UX & incremental cache-load**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 1 of 3) | (8) |
+| ✅ [**G1. AI-sort startup UX & incremental cache-load**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 1 of 3) — PR #64 | (8) |
 
 **Daily total**: ~4 SP (of the 8 SP batch)
 
@@ -94,7 +94,7 @@
 
 | Group | SP |
 |-------|----|
-| [**G1. AI-sort startup UX & incremental cache-load**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 2 of 3) | (8) |
+| ✅ [**G1. AI-sort startup UX & incremental cache-load**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 2 of 3) — PR #64 | (8) |
 
 **Daily total**: ~4 SP (of the 8 SP batch)
 
@@ -105,7 +105,7 @@
 
 | Group | SP |
 |-------|----|
-| [**G1**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 3 — PR) | (8) |
+| ✅ [**G1**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 3 — PR) — PR #64 | (8) |
 | [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (start — undo repro + fix) | (6) |
 
 **Daily total**: ~3 SP
@@ -149,7 +149,7 @@
 
 | ID | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |----|-------|--------|--------|-------|----------|-----|--------|
-| G1 | AI-sort startup UX & incremental cache-load [batch] 🏆 | JS logic (sort / feature-cache / progress UX) | 🔵 User | 6 (1 🔴 + 4 🔵 + 1 🟠) | 8 | Mon–Wed | ⬜ Planned |
+| G1 | AI-sort startup UX & incremental cache-load [batch] 🏆 | JS logic (sort / feature-cache / progress UX) | 🔵 User | 6 (1 🔴 + 4 🔵 + 1 🟠) | 8 | Mon–Wed | ✅ PR #64 |
 | G2 | Tournament-mode bug fixes [batch] | JS logic (tournament) + CSS | 🔵 User | 3 (1 🔴 + 1 🟠 + 1 🔵) | 6 | Wed–Thu | ⬜ Planned |
 | G3 | Bulk-rate re-pair avoidance [solo] | JS logic (compare-mode ML pairing) | 🔵 User | 1 🟠 | 3 | Thu | ⬜ Planned |
 | G4 | Strategic-doc refresh & CLAUDE.md hygiene [batch] | docs (strategic + CLAUDE.md) | 🟡 Ops (+1 🟤 folded) | 2 | 4 | Fri | ⬜ Planned |

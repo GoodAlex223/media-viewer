@@ -1,5 +1,7 @@
 # AI-Sort Startup UX & Incremental Cache-Load Implementation Plan
 
+**Status:** Complete (2026-07-20) — all 8 tasks implemented (21 commits above `main`, merge-base `dc43736`). Two post-review incidents surfaced and were fixed in-branch: an external `/code-review` of PR #64 caught a data-loss regression (a cancelled feature-cache load could get auto-saved over the on-disk cache), fixed in `b8b5636`; the user-side 24k smoke then found a second, worse route (a folder switch left a stale sort running, corrupting the save path), fixed in `2777bdf` + `c947081`. 434→471 unit, full E2E 52/52, lint clean. **User-side 24k manual smoke PASSED 2026-07-20** on the user's real 20,929-file folder (all 5 gating checks). On branch `feature/g1-ai-sort-startup-ux` (PR #64 open; merge pending at archive time). See [DONE.md](../../planning/DONE.md) 2026-07-20.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Sort-by-Prediction on a 24k-file folder show an immediate determinate progress card, serve cached features incrementally, never redundantly re-extract, and cancel cleanly — by giving `handleSortByPrediction` the same lifecycle `handleSortBySimilarity` already has.
@@ -48,7 +50,7 @@ Isolate the "apply a completed ML sort" logic into its own testable method so la
 **Interfaces:**
 - Produces: `applyPredictionSortResult(result)` where `result = { sortedFilenames: string[]|null, scores?: {[filename]: number}, reason?: string }`. Returns `true` if an order was applied, `false` otherwise. Mutates `this.mediaFiles`, `this.currentIndex`, `this.isSortedByPrediction`, `this.predictionScores`; calls `this.showMedia()`, `this.updateSortPredictionButton()`, `this.showNotification()`.
 
-- [ ] **Step 1: Write failing tests for the new method**
+- [x] **Step 1: Write failing tests for the new method**
 
 Replace the two existing `handleMlWorkerMessage` sortComplete tests (~932-984) with tests targeting the extracted method. Add near the other `extractMethod` consts: `const applyPredictionSortResult = extractMethod('applyPredictionSortResult');`
 
@@ -101,12 +103,12 @@ describe('applyPredictionSortResult', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t applyPredictionSortResult`
 Expected: FAIL — `Could not find method: applyPredictionSortResult`.
 
-- [ ] **Step 3: Add the method and delegate from `sortComplete`**
+- [x] **Step 3: Add the method and delegate from `sortComplete`**
 
 Add the method next to `handleMlWorkerMessage` (e.g. just after it). Note: it does NOT call `clearProgressNotification` — the caller owns the card now.
 
@@ -153,12 +155,12 @@ Replace the body of the `sortComplete` case (~6595-6625) with a delegation that 
                 break;
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t applyPredictionSortResult`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Full suite + lint + commit**
+- [x] **Step 5: Full suite + lint + commit**
 
 ```bash
 npx vitest run && npm run lint
@@ -185,7 +187,7 @@ Make the ML sort awaitable and cancel-safe. `sortComplete` stops applying the or
   - `runMlSort(allFeatures, runId)` → `Promise<{ sortedFilenames, scores, reason }>`. Posts `{type:'getSortedOrder', data:{allFeatures, sortRunId: runId}}`; resolves when a matching `sortComplete` arrives.
   - `sortComplete` message shape now includes `sortRunId` (echoed by the worker).
 
-- [ ] **Step 1: Add constructor state**
+- [x] **Step 1: Add constructor state**
 
 Find the constructor block near `this.extractionRunId = 0;` (~150) and add:
 
@@ -197,7 +199,7 @@ Find the constructor block near `this.extractionRunId = 0;` (~150) and add:
         this.extractionProgressSink = null; // when set, extraction reports here instead of its own indicator
 ```
 
-- [ ] **Step 2: Write failing tests for the stale-guard**
+- [x] **Step 2: Write failing tests for the stale-guard**
 
 ```javascript
 describe('sortComplete stale-guard + runMlSort resolution', () => {
@@ -250,12 +252,12 @@ describe('sortComplete stale-guard + runMlSort resolution', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "stale-guard"`
 Expected: FAIL — current `sortComplete` calls `applyPredictionSortResult`, not the resolver.
 
-- [ ] **Step 4: Rewrite the `sortComplete` case to resolve the promise**
+- [x] **Step 4: Rewrite the `sortComplete` case to resolve the promise**
 
 ```javascript
             case 'sortComplete': {
@@ -280,7 +282,7 @@ Expected: FAIL — current `sortComplete` calls `applyPredictionSortResult`, not
             }
 ```
 
-- [ ] **Step 5: Add `runMlSort`**
+- [x] **Step 5: Add `runMlSort`**
 
 Add near `requestPredictionScores` (~7325):
 
@@ -300,7 +302,7 @@ Add near `requestPredictionScores` (~7325):
     }
 ```
 
-- [ ] **Step 6: Echo `sortRunId` from the worker**
+- [x] **Step 6: Echo `sortRunId` from the worker**
 
 In `ml-worker.js`, change `getSortedOrder` (~205) to accept and echo the id:
 
@@ -324,7 +326,7 @@ And its `case 'getSortedOrder'` (~321-325):
                 self.postMessage(sortResult);
 ```
 
-- [ ] **Step 7: Run tests + lint + commit**
+- [x] **Step 7: Run tests + lint + commit**
 
 ```bash
 npx vitest run tests/media-viewer-utils.test.js -t "stale-guard" && npx vitest run && npm run lint
@@ -347,7 +349,7 @@ Rebuild the AI-sort control flow to mirror `handleSortBySimilarity`: create the 
 - Consumes: `runMlSort(allFeatures, runId)` (Task 2), `applyPredictionSortResult(result)` (Task 1), `loadFeatureCache({signal, onProgress})` (Task 4 — until Task 4 lands, `loadFeatureCache` ignores the options arg, which is harmless), `startBackgroundFeatureExtraction()` + `cancelBackgroundExtraction()` (existing), `updateSortProgress`, `clearProgressNotification`, `sortAbortController`.
 - Produces: the restructured method. On cancel/error, leaves the list unsorted.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 These extract `handleSortByPrediction` and drive it with a fully-mocked ctx. Because the method is long, the mock supplies every `this.*` it touches. Add:
 
@@ -439,12 +441,12 @@ describe('handleSortByPrediction lifecycle', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "handleSortByPrediction lifecycle"`
 Expected: FAIL (current method has no controller/phases/finally; `_phases[0]` undefined, etc.).
 
-- [ ] **Step 3: Rewrite `handleSortByPrediction`**
+- [x] **Step 3: Rewrite `handleSortByPrediction`**
 
 Replace the whole method (~7477-7573) with:
 
@@ -559,12 +561,12 @@ Replace the whole method (~7477-7573) with:
     }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "handleSortByPrediction lifecycle"`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Full suite + lint + commit**
+- [x] **Step 5: Full suite + lint + commit**
 
 ```bash
 npx vitest run && npm run lint
@@ -586,7 +588,7 @@ Give the cache load a cancel signal and progress callback, populate `this.featur
 - Consumes: `window.electronAPI.featureCacheOpen/Chunk/Close` (existing shape until Task 5).
 - Produces: `loadFeatureCache({ signal, onProgress } = {})` — threads options through to `_loadFeatureCacheLocked`. `onProgress(loaded, total)` called after each chunk; `signal.aborted` stops the loop. `this.featureCache` populated incrementally.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 `_loadFeatureCacheLocked` is the async worker; extract and drive it with a mocked `window.electronAPI`. Patch `globalThis.window` in `beforeEach`/`afterEach` (existing pattern in this file).
 
@@ -661,12 +663,12 @@ describe('loadFeatureCache incremental + signal', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "loadFeatureCache incremental"`
 Expected: FAIL — current signature ignores options; `onProgress` never called; abort not honored.
 
-- [ ] **Step 3: Thread options through the three methods**
+- [x] **Step 3: Thread options through the three methods**
 
 ```javascript
     async loadFeatureCache(options = {}) {
@@ -692,7 +694,7 @@ Expected: FAIL — current signature ignores options; `onProgress` never called;
     }
 ```
 
-- [ ] **Step 4: Rewrite the streaming path in `_loadFeatureCacheLocked` for incremental + signal + no per-entry await**
+- [x] **Step 4: Rewrite the streaming path in `_loadFeatureCacheLocked` for incremental + signal + no per-entry await**
 
 Change the method signature to `async _loadFeatureCacheLocked({ signal, onProgress } = {}) {`. Replace the `processEntry` closure and the streaming `if (window.electronAPI.featureCacheOpen)` block (~6755-6809) with:
 
@@ -802,12 +804,12 @@ Then update the legacy fallback block (~6811-6835) to use `ingest` instead of th
 
 Note: the `expectedDim`, `currentFiles`, `freshFeatureCache`/`freshFeatureMetadata` locals at the top (~6747-6753) — keep `expectedDim` and `currentFiles`; **delete** the now-unused `freshFeatureCache` / `freshFeatureMetadata` locals.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "loadFeatureCache incremental"`
 Expected: PASS (3 tests).
 
-- [ ] **Step 6: Full suite + lint + commit**
+- [x] **Step 6: Full suite + lint + commit**
 
 ```bash
 npx vitest run && npm run lint
@@ -831,7 +833,7 @@ Ship vectors as `Float32Array` buffers rather than JSON number-arrays, and consu
 **Interfaces:**
 - Produces: `feature-cache-chunk` returns `{ names: string[], sizes: number[], mtimes: number[], vecBuf: ArrayBuffer, clipBuf: ArrayBuffer|null, hasClip: number[] }` where `vecBuf` is `n*64` little-endian f32, `clipBuf` is `n*512` f32 (full-width; entries without clip have `hasClip[i]===0` and their clip slot is ignored). The old `{ entries }` shape is still returned when `featureDim` is unknown (fallback). Renderer detects binary by presence of `vecBuf`.
 
-- [ ] **Step 1: Write a failing test for the pure packing helper**
+- [x] **Step 1: Write a failing test for the pure packing helper**
 
 `main.js` can't be `require()`d in Vitest (it imports `electron` and has no exports), so the pure packer lives in a shared CJS module `feature-cache-transport.js` (same pattern as `media-formats.js`). Add the test in `tests/feature-cache-transport.test.js`:
 
@@ -862,12 +864,12 @@ describe('packFeatureChunk', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/feature-cache-transport.test.js`
 Expected: FAIL — `packFeatureChunk` is not exported.
 
-- [ ] **Step 3: Create `feature-cache-transport.js` with `packFeatureChunk`, and require it in `main.js`**
+- [x] **Step 3: Create `feature-cache-transport.js` with `packFeatureChunk`, and require it in `main.js`**
 
 Create `feature-cache-transport.js` at the repo root:
 
@@ -911,12 +913,12 @@ const { packFeatureChunk } = require('./feature-cache-transport');
 
 Add `feature-cache-transport.js` to the shared-libs block glob in `eslint.config.mjs` (the block that already lists `media-formats.js`).
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `npx vitest run tests/feature-cache-transport.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Wire `feature-cache-chunk` to return the binary shape**
+- [x] **Step 5: Wire `feature-cache-chunk` to return the binary shape**
 
 ```javascript
     ipcMain.handle('feature-cache-chunk', async (_event, offset, limit) => {
@@ -926,7 +928,7 @@ Expected: PASS.
     });
 ```
 
-- [ ] **Step 6: Write a failing renderer-consume test**
+- [x] **Step 6: Write a failing renderer-consume test**
 
 Add to the `loadFeatureCache incremental` describe a case where the chunk API returns the binary shape:
 
@@ -958,7 +960,7 @@ Add to the `loadFeatureCache incremental` describe a case where the chunk API re
     });
 ```
 
-- [ ] **Step 7: Run to verify it fails, then update the renderer loop to detect binary**
+- [x] **Step 7: Run to verify it fails, then update the renderer loop to detect binary**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "binary chunk shape"` → FAIL (current loop reads `entries`).
 
@@ -997,12 +999,12 @@ Replace the chunk loop body (from Task 4) with a shape-detecting version:
 
 Note: use `.slice` (copy) not `.subarray` (view) so each cached vector owns its own buffer — a shared 64k-wide backing buffer would be pinned in memory and a `subarray` view of the wrong length could leak neighbors. `.slice` on a Float32Array returns a compact copy.
 
-- [ ] **Step 8: Run to verify it passes**
+- [x] **Step 8: Run to verify it passes**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "binary chunk shape"`
 Expected: PASS.
 
-- [ ] **Step 9: Full suite + lint + commit**
+- [x] **Step 9: Full suite + lint + commit**
 
 ```bash
 npx vitest run && npm run lint
@@ -1024,7 +1026,7 @@ Route background-extraction progress into the sort card when the prediction sort
 - Consumes: `this.extractionProgressSink` (set/cleared by `handleSortByPrediction`, Task 3).
 - Produces: when `extractionProgressSink` is set, `showBackgroundExtractionProgress` calls it and does NOT create/update the `#featureExtractionProgress` element.
 
-- [ ] **Step 1: Write a failing test**
+- [x] **Step 1: Write a failing test**
 
 ```javascript
 describe('extraction progress sink', () => {
@@ -1047,12 +1049,12 @@ describe('extraction progress sink', () => {
 
 If `document` is undefined in the unit env, the sink early-return means the method never touches `document` — the test asserts the sink was called and nothing threw.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "extraction progress sink"`
 Expected: FAIL — method touches `document` before any sink check (ReferenceError or no sink call).
 
-- [ ] **Step 3: Add the sink early-return at the top of `showBackgroundExtractionProgress`**
+- [x] **Step 3: Add the sink early-return at the top of `showBackgroundExtractionProgress`**
 
 Insert immediately after the `displayCurrent`/`displayTotal`/`displayCached` computation (before `let indicator = document.getElementById(...)`):
 
@@ -1065,7 +1067,7 @@ Insert immediately after the `displayCurrent`/`displayTotal`/`displayCached` com
         }
 ```
 
-- [ ] **Step 4: Harden the extraction loop's abort checks**
+- [x] **Step 4: Harden the extraction loop's abort checks**
 
 In `startBackgroundFeatureExtraction`, treat a nulled `backgroundExtractionAbort` (set by `cancelBackgroundExtraction`) as aborted so a mid-run cancel terminates gracefully instead of throwing on `null.signal`. Change the three checks (~8308, 8314, 8320) from `if (this.backgroundExtractionAbort?.signal.aborted)` to:
 
@@ -1083,12 +1085,12 @@ and guard the gate call (~8313):
             if (!this.backgroundExtractionAbort || this.backgroundExtractionAbort.signal.aborted) break;
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "extraction progress sink"`
 Expected: PASS.
 
-- [ ] **Step 6: Full suite + lint + commit**
+- [x] **Step 6: Full suite + lint + commit**
 
 ```bash
 npx vitest run && npm run lint
@@ -1106,7 +1108,7 @@ This is diagnose-first (spec D5) — the exact fix depends on the repro, so this
 - Modify: `media-viewer.js` (likely the uncached gate in `handleSortByPrediction` and/or the staleness comparison in `_loadFeatureCacheLocked`) — exact lines determined by the repro.
 - Test: `tests/media-viewer-utils.test.js`
 
-- [ ] **Step 1: Reproduce with instrumentation**
+- [x] **Step 1: Reproduce with instrumentation**
 
 On the real 24k folder (user-side, or a synthetic 200-file cache), after Tasks 1–6, add a temporary log at the uncached computation in `handleSortByPrediction`:
 
@@ -1118,13 +1120,13 @@ On the real 24k folder (user-side, or a synthetic 200-file cache), after Tasks 1
 
 Run a sort on a folder whose `.feature_cache.json` is known-complete-and-valid. Record whether `uncached` > 0 (64-dim staleness) or `clipMissing` > 0 (CLIP absence) or both.
 
-- [ ] **Step 2: Classify and choose the fix**
+- [x] **Step 2: Classify and choose the fix**
 
 - **If `uncached` > 0 on a valid cache** → staleness false-negative. Inspect `size`/`mtime` round-trip: `_loadFeatureCacheLocked` compares `mtime !== currentFile.mtimeMs`; confirm the writer stores `mtimeMs` (float) and the loader compares against the same field with no rounding drift. Fix: compare with a tolerance or normalize both to integers at write+read. Add a unit test that a cache entry written with `mtimeMs = 123.456` re-loads as a cache **hit**.
 - **If `clipMissing` > 0 but `uncached` === 0** → the cache legitimately lacks CLIP vectors (built before CLIP was ready). This is not redundant — extraction *should* run for the missing CLIP. The real bug would be re-extracting the 64-dim it already has: verify `startBackgroundFeatureExtraction`'s per-file `needsHandCrafted = !this.featureCache.has(file.path)` (line ~8325) correctly skips the hand-crafted `loadMediaAsImageData` for cache-hit files. Add a unit test around the filter at ~8280-8286 asserting a file with features-but-no-clip is included but its `needsHandCrafted` is false.
 - **If neither reproduces** → the incremental-populate of Task 4 already closed it (the pre-Task-4 code's local-map-assigned-at-end could interact with a concurrent `kickoffBackgroundExtractionIfEnabled` load). Document this in the commit and the plan's Outcome; no code change beyond Tasks 1–6.
 
-- [ ] **Step 3: Write the failing unit test for the chosen fix** (staleness-tolerance example)
+- [x] **Step 3: Write the failing unit test for the chosen fix** (staleness-tolerance example)
 
 ```javascript
 it('re-loads an entry whose mtime has sub-ms float drift as a cache HIT', async () => {
@@ -1134,9 +1136,9 @@ it('re-loads an entry whose mtime has sub-ms float drift as a cache HIT', async 
 ```
 (Fill in with the concrete `installApi` shape from Task 4 once the repro pins the exact drift.)
 
-- [ ] **Step 4: Implement the minimal fix, run the test, remove the temp logging**
+- [x] **Step 4: Implement the minimal fix, run the test, remove the temp logging**
 
-- [ ] **Step 5: Full suite + lint + commit**
+- [x] **Step 5: Full suite + lint + commit**
 
 ```bash
 npx vitest run && npm run lint
@@ -1152,7 +1154,7 @@ git commit -m "fix(g1): stop redundant feature re-extraction on a valid cache"
 **Files:**
 - Modify: none (or doc updates only)
 
-- [ ] **Step 1: Grep for stale references to relocated logic**
+- [x] **Step 1: Grep for stale references to relocated logic**
 
 Per CLAUDE.md's ref-sweep rule, grep the whole repo (tests + comments) for symbols this branch moved:
 
@@ -1163,17 +1165,17 @@ git grep -n "getSortedOrder" -- '*.js'
 ```
 Expected: no test or comment asserts the OLD `sortComplete`-applies-directly behavior; `processEntry` has no remaining callers (renamed to `ingest`).
 
-- [ ] **Step 2: Full unit suite + lint**
+- [x] **Step 2: Full unit suite + lint**
 
 Run: `npx vitest run && npm run lint`
 Expected: all green; new case count reported.
 
-- [ ] **Step 3: Run the E2E smoke (does not gate, but must not regress)**
+- [x] **Step 3: Run the E2E smoke (does not gate, but must not regress)**
 
 Run: `npm run test:e2e`
 Expected: no new failures vs. the pre-branch baseline (52/52 or the known state).
 
-- [ ] **Step 4: Write the user-side 24k smoke checklist into the PR body**
+- [x] **Step 4: Write the user-side 24k smoke checklist into the PR body**
 
 The PR description must list the manual gate (unchecked until the user confirms on the real folder):
 1. Determinate card appears immediately on Sort-by-Predicted click (no silent wait).
@@ -1182,7 +1184,7 @@ The PR description must list the manual gate (unchecked until the user confirms 
 4. Post-tournament-exit → Sort-by-Predicted behaves identically.
 5. (Report) measured load time before vs. after.
 
-- [ ] **Step 5: Commit any doc updates and open the PR**
+- [x] **Step 5: Commit any doc updates and open the PR**
 
 ```bash
 git add -A
