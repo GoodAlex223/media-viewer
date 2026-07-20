@@ -526,6 +526,22 @@ describe('TournamentEngine unified undo stack (peekUndoEntry / peekUndoKind / un
         expect(eng.strategy.files).toContain('e.jpg'); // the prune was reversed too
     });
 
+    it('undoUserAction absorbs two consecutive trailing prunes on top of one pick', () => {
+        const eng = makeEngine();
+        const p1 = eng.getCurrentPair();
+        eng.recordResult(p1.left, p1.right);
+        eng.removeFile('e.jpg', { trackUndo: true }); // first system prune
+        eng.removeFile('f.jpg', { trackUndo: true }); // second prune stacks directly on top, no pick between them
+
+        const entry = eng.undoUserAction();
+        expect(entry.kind).toBe('pick');
+        expect(eng.history.length).toBe(0); // the pick and both prunes are all consumed by one Undo press
+        expect(eng.files).toContain('e.jpg');
+        expect(eng.files).toContain('f.jpg');
+        expect(eng.strategy.files).toContain('e.jpg'); // both prunes reversed, not just the top one
+        expect(eng.strategy.files).toContain('f.jpg');
+    });
+
     it('undoUserAction returns null and mutates nothing on a prune-only history', () => {
         const eng = makeEngine();
         eng.removeFile('e.jpg', { trackUndo: true });
