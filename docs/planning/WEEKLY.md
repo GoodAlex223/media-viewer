@@ -106,7 +106,7 @@
 | Group | SP |
 |-------|----|
 | ✅ [**G1**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 3 — PR) — PR #64 | (8) |
-| [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (start — undo repro + fix) | (6) |
+| ✅ [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (start — undo repro + fix) — PR #65 | (6) |
 
 **Daily total**: ~3 SP
 
@@ -117,7 +117,7 @@
 
 | Group | SP |
 |-------|----|
-| [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (finish) | 6 |
+| ✅ [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (finish) — PR #65 | 6 |
 | [**G3. Bulk-rate re-pair avoidance**](#g3-bulk-rate-re-pair-avoidance-solo-) [solo] | 3 |
 | [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (start) | (5) |
 
@@ -150,7 +150,7 @@
 | ID | Group | Domain | Source | Tasks | Total SP | Day | Status |
 |----|-------|--------|--------|-------|----------|-----|--------|
 | G1 | AI-sort startup UX & incremental cache-load [batch] 🏆 | JS logic (sort / feature-cache / progress UX) | 🔵 User | 6 (1 🔴 + 4 🔵 + 1 🟠) | 8 | Mon–Wed | ✅ PR #64 |
-| G2 | Tournament-mode bug fixes [batch] | JS logic (tournament) + CSS | 🔵 User | 3 (1 🔴 + 1 🟠 + 1 🔵) | 6 | Wed–Thu | ⬜ Planned |
+| G2 | Tournament-mode bug fixes [batch] | JS logic (tournament) + CSS | 🔵 User | 3 (1 🔴 + 1 🟠 + 1 🔵) | 6 | Wed–Thu | ✅ PR #65 |
 | G3 | Bulk-rate re-pair avoidance [solo] | JS logic (compare-mode ML pairing) | 🔵 User | 1 🟠 | 3 | Thu | ⬜ Planned |
 | G4 | Strategic-doc refresh & CLAUDE.md hygiene [batch] | docs (strategic + CLAUDE.md) | 🟡 Ops (+1 🟤 folded) | 2 | 4 | Fri | ⬜ Planned |
 | G5 | Weekly Reviews [batch] | Research / process | ⚪ Overhead | 4 | 5 | Thu–Fri | ⬜ Planned |

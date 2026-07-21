@@ -74,6 +74,7 @@ Central index for all project documentation.
 | [Test & Tooling Backfill Plan][]             | Test-only backfill: comment-aware `methodSource` brace guard + `src` seam; `extractAddedLines` real-git-diff fixtures; sort-progress card E2E (observer-capture + cancel wiring); play/pause icon toggle E2E via synthetic events (Group CW-V) |
 | [CW-P Process & DX Guardrails Plan][]         | Automated pre-push E2E gate (code-aware skip; pure `parsePushRefs`/`classifyPaths` + fail-safe git-wrapper CLI + Husky v9 hook) + Weekly-Reviews methodology consolidation (6 fixes) + CLAUDE.md ref-sweep bullet (Group CW-P) |
 | [G1 AI-Sort Startup UX Plan][]                 | Phased/cancelable `handleSortByPrediction` + awaitable `runMlSort` (`sortRunId` stale-guard) + atomic incremental `loadFeatureCache` (staged-local, commit-on-complete) + binary `Float32Array` transport for `feature-cache-chunk` + unified sort-card progress; PR3 slice of the 🔴 sort-perf TODO (PR2 hash-off-thread remains); user-side 24k smoke PASSED 2026-07-20; MERGED via PR #64 (`b6ff4ac`) (Group G1) |
+| [G2 Tournament Bug Fixes Plan][]               | `engine.history` unified chronological undo stack (`kind` pick/special/prune + `peekUndoEntry`/`undoUserAction`) replacing the `moveHistory`-peek that let any special move hijack tournament undo + identity re-check for the advisory `isLoading` mutex + mouse-wheel `isTournamentMode` guard + auto-hide `.tournament-header`/`.tournament-controls` (`_setupAutoHide`); MERGED via PR #65 (`937084c`); **user-side manual smoke not run before the user-directed merge** (Group G2) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -112,6 +113,7 @@ Central index for all project documentation.
 [Test & Tooling Backfill Plan]: archive/plans/2026-07-04-cw-v-test-tooling-backfill.md
 [CW-P Process & DX Guardrails Plan]: archive/plans/2026-07-10-cw-p-process-dx-guardrails.md
 [G1 AI-Sort Startup UX Plan]: archive/plans/2026-07-13-ai-sort-startup-ux.md
+[G2 Tournament Bug Fixes Plan]: archive/plans/2026-07-20_g2-tournament-bug-fixes.md
 
 ## Design Specs
 
@@ -158,6 +160,7 @@ Central index for all project documentation.
 | [Docs & CLAUDE.md Hygiene][] | Docs-only consolidation design — verify-then-edit the 5 deferred `revise-claude-md`/doc-drift items; decisions D1 manual-only maintenance (no markers), D2 no historical line-ref sweep (Group CW-D) |
 | [CW-P Process & DX Guardrails][] | Process/DX guardrails design: pre-push E2E gate (conservative code-aware classify, fail-safe CLI, dogfood-on-own-PR) + Weekly-Reviews methodology consolidation (6 fixes) + ref-sweep convention; decisions pre-push-code-aware-skip / consolidate-in-existing-spec / CLAUDE.md-home (Group CW-P) |
 | [G1 AI-Sort Startup UX][] | AI-sort startup UX & incremental cache-load design: D1 visible+cancelable+incremental+best-effort-faster, D2 one unified progress card, D3 cancel stops everything, D4 mirror `handleSortBySimilarity`, D5 diagnose-before-fix (re-extract bug), D6 no on-disk format change (Group G1) |
+| [G2 Tournament Bug Fixes][] | Tournament-mode bug fixes design: D1 unified LIFO undo stack, D2 `engine.history` IS that stack (reverses PR #59 `trackUndo:false`), D3 engine stays dumb (`meta` opaque), D4 system prunes auto-consumed, D5 undo stays session-only, D6 auto-hide mirrors `.header` (edge band + 3s), D7 reveal chrome on entry (Group G2) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -200,6 +203,7 @@ Central index for all project documentation.
 [Docs & CLAUDE.md Hygiene]: superpowers/specs/2026-07-03-cw-d-docs-claude-md-hygiene-design.md
 [CW-P Process & DX Guardrails]: superpowers/specs/2026-07-10-cw-p-process-dx-guardrails-design.md
 [G1 AI-Sort Startup UX]: superpowers/specs/2026-07-13-ai-sort-startup-ux-design.md
+[G2 Tournament Bug Fixes]: superpowers/specs/2026-07-20-g2-tournament-bug-fixes-design.md
 
 ## Security Audits
 

@@ -1,6 +1,6 @@
 # Group G2 — Tournament-Mode Bug Fixes Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix three user-flagged Tournament Mode defects — undo that silently targets the wrong action, mouse-wheel navigation that desyncs the pair, and always-visible chrome that eats viewing area.
 
@@ -9,7 +9,9 @@
 **Tech Stack:** Electron 30 renderer (no bundler), pure-ESM `tournament-engine.js`, Vitest (unit), Playwright + Electron (E2E), Prettier + ESLint flat config.
 
 **Spec:** [docs/superpowers/specs/2026-07-20-g2-tournament-bug-fixes-design.md](../../superpowers/specs/2026-07-20-g2-tournament-bug-fixes-design.md) (commit `49170bd`)
-**Branch:** `fix/g2-tournament-bug-fixes` (already created, spec committed)
+**Branch:** `fix/g2-tournament-bug-fixes` (deleted post-merge, remote + local)
+
+> **Status: Complete (code) — ARCHIVED 2026-07-21.** All 6 tasks executed and reviewed; MERGED via **PR #65** (merge `937084c`). Automated verification green: **492 unit / 55 E2E / lint 0-err**. The whole-branch review + fix waves added three commits beyond the plan (`1c18029` TOCTOU mutex, `0848723` exit-button, `ae98e85` advisory-mutex identity re-check) and a pre-push flake fix (`b6be9c7`). **The "Manual smoke (user-side, gates checkoff)" section below was NOT run before the user-directed merge** — the code is on `main` with that acceptance gate still open (fix-forward if it surfaces anything). See [DONE.md](../../planning/DONE.md) 2026-07-21.
 
 ## Global Constraints
 
@@ -59,7 +61,7 @@
 > first), so `peekUndoEntry()` is added as the primitive and `peekUndoKind()` becomes a one-line
 > wrapper over it. Same semantics, no extra scan cost.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/tournament-engine.test.js`:
 
@@ -160,12 +162,12 @@ describe('TournamentEngine unified undo stack (peekUndoEntry / peekUndoKind / un
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/tournament-engine.test.js --no-file-parallelism`
 Expected: FAIL — `eng.peekUndoKind is not a function` (vitest v4.0.18 is flaky under parallelism on Windows; `--no-file-parallelism` is the house workaround).
 
-- [ ] **Step 3: Add the `kind` discriminator to pick entries**
+- [x] **Step 3: Add the `kind` discriminator to pick entries**
 
 In `tournament-engine.js`, `recordResult` (~line 365) — add `kind` as the first property of the pushed object:
 
@@ -201,7 +203,7 @@ And in `recordDraw` (~line 384):
         });
 ```
 
-- [ ] **Step 4: Make `undo()` return the popped entry**
+- [x] **Step 4: Make `undo()` return the popped entry**
 
 Replace `undo()` (~line 398):
 
@@ -219,7 +221,7 @@ Replace `undo()` (~line 398):
     }
 ```
 
-- [ ] **Step 5: Add the peek + user-undo methods**
+- [x] **Step 5: Add the peek + user-undo methods**
 
 Insert directly after `undo()`:
 
@@ -258,7 +260,7 @@ Insert directly after `undo()`:
     }
 ```
 
-- [ ] **Step 6: Extend `removeFile` with `kind` + `meta`**
+- [x] **Step 6: Extend `removeFile` with `kind` + `meta`**
 
 Replace the `removeFile` doc comment and signature (~line 407-428). Note the rewritten comment — the old one asserts the special path is *not* tracked, which this change reverses:
 
@@ -294,12 +296,12 @@ Replace the `removeFile` doc comment and signature (~line 407-428). Note the rew
     }
 ```
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/tournament-engine.test.js --no-file-parallelism`
 Expected: PASS — 41 tests (31 existing + 10 new).
 
-- [ ] **Step 8: Fix the now-false stale test**
+- [x] **Step 8: Fix the now-false stale test**
 
 The test at `tests/tournament-engine.test.js:458` asserts a rationale this task reverses. Replace it entirely:
 
@@ -319,12 +321,12 @@ The test at `tests/tournament-engine.test.js:458` asserts a rationale this task 
     });
 ```
 
-- [ ] **Step 9: Run the full unit suite**
+- [x] **Step 9: Run the full unit suite**
 
 Run: `npx vitest run --no-file-parallelism`
 Expected: PASS — 481 tests (471 baseline + 10 new).
 
-- [ ] **Step 10: Format, lint, and commit**
+- [x] **Step 10: Format, lint, and commit**
 
 ```bash
 npm run format
@@ -365,7 +367,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 > there is no vacuous-pass risk from `new AsyncFunction` resolving a global. Verified by reading the
 > method body; re-check if the implementation drifts.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/media-viewer-utils.test.js`:
 
@@ -476,12 +478,12 @@ describe('handleTournamentUndo (unified undo stack)', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism`
 Expected: FAIL — the current implementation reads `this.moveHistory[...]` and calls `engine.undo()`, so `peekUndoEntry`/`undoUserAction` are never called and `showNotification` is never called with `'Nothing to undo'`.
 
-- [ ] **Step 3: Track the tournament special-move removal on the undo stack**
+- [x] **Step 3: Track the tournament special-move removal on the undo stack**
 
 Replace `media-viewer.js:1562-1568`:
 
@@ -502,7 +504,7 @@ Replace `media-viewer.js:1562-1568`:
             }
 ```
 
-- [ ] **Step 4: Rewrite `handleTournamentUndo`**
+- [x] **Step 4: Rewrite `handleTournamentUndo`**
 
 Replace `media-viewer.js:4700-4751` in full:
 
@@ -568,12 +570,12 @@ Replace `media-viewer.js:4700-4751` in full:
 
 Note: the old `if (this.isSortedByPrediction) this.requestPredictionScores();` line is **deliberately dropped**, not ported — `enterTournamentMode` calls `restoreOriginalOrderForTournament()`, which forces `isSortedByPrediction = false`, and the sort controls are hidden in-mode, so it is unreachable here.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism`
 Expected: PASS — 194 tests (188 existing + 6 new).
 
-- [ ] **Step 6: Mutation-verify the guards**
+- [x] **Step 6: Mutation-verify the guards**
 
 Four of these tests exist only to pin a guard. A guard test that passes with its guard deleted is worthless (four such tests shipped on the PR #64 branch). Verify each one **fails** when its guard is removed, then restore the guard:
 
@@ -588,12 +590,12 @@ For each: apply the mutation, run `npx vitest run tests/media-viewer-utils.test.
 
 ⚠️ Do **not** use `git checkout -- media-viewer.js` to revert — Steps 3-4 are not committed yet and it would discard them. Each mutation is a one-line change; undo it in the editor.
 
-- [ ] **Step 7: Run the full unit suite**
+- [x] **Step 7: Run the full unit suite**
 
 Run: `npx vitest run --no-file-parallelism`
 Expected: PASS — 487 tests.
 
-- [ ] **Step 8: Format, lint, and commit**
+- [x] **Step 8: Format, lint, and commit**
 
 ```bash
 npm run format
@@ -632,7 +634,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Consumes (Task 1): `engine.peekUndoKind()`.
 - Produces: `#tournamentUndoBtn.disabled` is `true` exactly when `peekUndoKind()` is `null`. Asserted via Playwright `isDisabled()`, which needs no visibility — so it survives Task 5's auto-hide.
 
-- [ ] **Step 1: Write the failing E2E test**
+- [x] **Step 1: Write the failing E2E test**
 
 Append inside the `test.describe('Tournament Mode', …)` block in `tests/e2e/tournament-mode.test.js`:
 
@@ -658,12 +660,12 @@ Append inside the `test.describe('Tournament Mode', …)` block in `tests/e2e/to
     });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js -g "undo button is disabled"`
 Expected: FAIL on the first assertion — the button has no `disabled` attribute at any time.
 
-- [ ] **Step 3: Drive the state from `showTournamentPair`**
+- [x] **Step 3: Drive the state from `showTournamentPair`**
 
 In `media-viewer.js`, immediately after the two progress/tiers lines (~4522-4523):
 
@@ -675,7 +677,7 @@ In `media-viewer.js`, immediately after the two progress/tiers lines (~4522-4523
         if (undoBtn) undoBtn.disabled = this.tournament.engine.peekUndoKind() === null;
 ```
 
-- [ ] **Step 4: Use the same predicate in the summary modal**
+- [x] **Step 4: Use the same predicate in the summary modal**
 
 Replace `media-viewer.js:4796`:
 
@@ -684,12 +686,12 @@ Replace `media-viewer.js:4796`:
             undoBtn.disabled = this.tournament.engine?.peekUndoKind() == null;
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js -g "undo button is disabled"`
 Expected: PASS (1 passed).
 
-- [ ] **Step 6: Run the unit suite and commit**
+- [x] **Step 6: Run the unit suite and commit**
 
 ```bash
 npx vitest run --no-file-parallelism
@@ -718,7 +720,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Consumes: nothing from earlier tasks.
 - Produces: no new API. Behaviour — `wheel` events never reach `nextMedia`/`previousMedia` while `isTournamentMode` is true.
 
-- [ ] **Step 1: Write the failing E2E test**
+- [x] **Step 1: Write the failing E2E test**
 
 Append inside the same `test.describe` block:
 
@@ -759,12 +761,12 @@ Append inside the same `test.describe` block:
     });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js -g "mouse wheel does not navigate"`
 Expected: FAIL — `after.index` is `before.index + 2` (the compare-mode branch of `nextMedia`).
 
-- [ ] **Step 3: Add the guard**
+- [x] **Step 3: Add the guard**
 
 In `media-viewer.js`, insert immediately after the help-overlay guard inside the `wheel` listener (~line 2127, before the `mediaFiles.length === 0` check):
 
@@ -778,17 +780,17 @@ In `media-viewer.js`, insert immediately after the help-overlay guard inside the
                 if (this.isTournamentMode) return;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js -g "mouse wheel does not navigate"`
 Expected: PASS (1 passed).
 
-- [ ] **Step 5: Verify zoom still works outside tournament mode**
+- [x] **Step 5: Verify zoom still works outside tournament mode**
 
 Run: `npx playwright test tests/e2e/ -g "zoom"`
 Expected: PASS — no regression in the zoom tests. If no test matches, run the full E2E suite instead (`npx playwright test`) and confirm 54/54.
 
-- [ ] **Step 6: Format, lint, and commit**
+- [x] **Step 6: Format, lint, and commit**
 
 ```bash
 npm run format
@@ -821,7 +823,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
   - `_setupAutoHide(el, inZone, { delay = 3000, enabled = () => true }): { show, hide } | null` — wires hidden-by-default reveal for one element.
   - `this.tournamentChrome: Array<{ show, hide }>` — the two tournament elements, revealed on mode entry and hidden on exit.
 
-- [ ] **Step 1: Write the failing E2E test and helper**
+- [x] **Step 1: Write the failing E2E test and helper**
 
 Add the helper just below `enterAndStartTournament` in `tests/e2e/tournament-mode.test.js`:
 
@@ -873,12 +875,12 @@ And append this test inside the `test.describe` block:
     });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js -g "tournament chrome hides at rest"`
 Expected: FAIL at the first `not.toHaveClass(/show/)` … actually at the `chromeOpacity(...)).toBe(0)` poll — the chrome is currently always `opacity: 1`.
 
-- [ ] **Step 3: Add the CSS**
+- [x] **Step 3: Add the CSS**
 
 In `styles.css`, replace the `.tournament-header` rule (lines 2279-2292):
 
@@ -931,7 +933,7 @@ And replace the `.tournament-controls` rule (lines 2314-2322):
 }
 ```
 
-- [ ] **Step 4: Extract the reveal helper and wire all three elements**
+- [x] **Step 4: Extract the reveal helper and wire all three elements**
 
 In `media-viewer.js`, replace `setupHeaderVisibility` (lines 2164-2188) with:
 
@@ -981,7 +983,7 @@ In `media-viewer.js`, replace `setupHeaderVisibility` (lines 2164-2188) with:
     }
 ```
 
-- [ ] **Step 5: Reveal on entry, hide on exit**
+- [x] **Step 5: Reveal on entry, hide on exit**
 
 In the fresh-start path (`showTournamentConfigModal`'s start handler, ~line 4480), after the overlay is shown:
 
@@ -1008,7 +1010,7 @@ In `exitTournamentMode` (~line 4355), after hiding the overlay:
         this.tournamentChrome?.forEach((c) => c.hide()); // drop .show + clear pending timers
 ```
 
-- [ ] **Step 6: Update the three existing E2E call sites the auto-hide breaks**
+- [x] **Step 6: Update the three existing E2E call sites the auto-hide breaks**
 
 `.tournament-controls` and `.tournament-header` are now `pointer-events: none` at rest, so a plain `.click()` times out on the hit-target check and a `{ force: true }` click lands on whatever is beneath.
 
@@ -1033,17 +1035,17 @@ At `tests/e2e/tournament-mode.test.js:198-203`, in *exit button in the tournamen
         await page.locator('#tournamentExitBtn').click();
 ```
 
-- [ ] **Step 7: Run the tournament E2E file**
+- [x] **Step 7: Run the tournament E2E file**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js`
 Expected: PASS — all tests in the file, including the three updated ones.
 
-- [ ] **Step 8: Run the full E2E suite (nothing else should regress)**
+- [x] **Step 8: Run the full E2E suite (nothing else should regress)**
 
 Run: `npx playwright test`
 Expected: PASS — 55/55 (52 baseline + Task 3 + Task 4 + this task).
 
-- [ ] **Step 9: Run the unit suite, format, lint, and commit**
+- [x] **Step 9: Run the unit suite, format, lint, and commit**
 
 ```bash
 npx vitest run --no-file-parallelism
@@ -1077,7 +1079,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Consumes: the behaviour established by Tasks 1-5.
 - Produces: no code. Both stale gotchas corrected in place (not annotated — CLAUDE.md is a live doc).
 
-- [ ] **Step 1: Sweep the repo for stale references**
+- [x] **Step 1: Sweep the repo for stale references**
 
 Run each and read every hit, including comments and tests — the unit-only pre-commit hook catches none of these (root cause of the PR #56 follow-ups):
 
@@ -1090,7 +1092,7 @@ git grep -n "moveHistory" -- '*.js'
 
 Expected live hits after Tasks 1-5: `tournament-engine.js` (definition + comment), `media-viewer.js` (the special-move call site + `handleTournamentUndo` + `handleCancel`'s single/compare branches, which are unchanged and still correct), `tests/tournament-engine.test.js`, `tests/media-viewer-utils.test.js`, `CLAUDE.md:190-191`. Anything else asserting that tournament undo reads `moveHistory`, or that the special path is `trackUndo: false`, is stale — fix it.
 
-- [ ] **Step 2: Correct the `handleTournamentUndo` gotcha**
+- [x] **Step 2: Correct the `handleTournamentUndo` gotcha**
 
 Replace `CLAUDE.md:190` in full:
 
@@ -1098,7 +1100,7 @@ Replace `CLAUDE.md:190` in full:
 - `handleTournamentUndo` dispatches off **`engine.history`, the single chronological undo stack** — never `moveHistory` (that peek was the G2 bug: picks don't write to `moveHistory` and it's cleared only on folder change, so any special move, even one made in single mode, hijacked every tournament undo). `engine.peekUndoEntry()` returns the newest **user** entry, skipping system `prune` entries; `kind` is `'pick'` (recordResult/recordDraw), `'special'` (a tournament-mode special-folder move, `meta` = the moveHistory entry, opaque to the engine) or `'prune'` (the `-1` auto-prune, absorbed by `undoUserAction()` so it never costs a press). The special branch restores the file on disk **first** and only then calls `undoUserAction()` — a failed `moveFile` is a clean no-op, not a compensating push-back.
 ```
 
-- [ ] **Step 3: Correct the `engine.files` vs `strategy.files` gotcha**
+- [x] **Step 3: Correct the `engine.files` vs `strategy.files` gotcha**
 
 Replace `CLAUDE.md:191` in full:
 
@@ -1106,7 +1108,7 @@ Replace `CLAUDE.md:191` in full:
 - `engine.files` vs `strategy.files` **diverge after an untracked `removeFile()`** — `engine.files` is authoritative for `getTierBreakdown()`/`handleApply()`. Both the `-1` auto-prune and the special-move removal now pass `{trackUndo: true}` (kinds `'prune'` and `'special'`), so each records a strategy snapshot + `filesSnapshot` and `undo()` restores `files`/`winCounts`/`byes`/`roundQueue` in full — the O(1) inverse-delta of prior picks cannot resurrect a removed file's strategy state on its own. Undo-past-a-removal is therefore safe, and a restored special file re-pairs and reports its real tier instead of being stranded at Tier-0.
 ```
 
-- [ ] **Step 4: Verify CLAUDE.md still passes the structure test**
+- [x] **Step 4: Verify CLAUDE.md still passes the structure test**
 
 Run: `npx vitest run tests/backlog-structure.test.js --no-file-parallelism`
 Expected: PASS (2 tests). Then confirm CLAUDE.md is still under the ~200-line durable-rules ceiling:
@@ -1116,7 +1118,7 @@ wc -l CLAUDE.md
 ```
 Expected: no growth beyond the current count (both edits replace lines 1-for-1).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add CLAUDE.md
@@ -1134,12 +1136,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ## Final verification (before opening the PR)
 
-- [ ] **Full unit suite**: `npx vitest run --no-file-parallelism` → 487 passing (471 baseline + 10 engine + 6 renderer).
-- [ ] **Full E2E suite**: `npx playwright test` → 55/55.
-- [ ] **Lint**: `npm run lint` → 0 errors.
-- [ ] **Format check**: `npm run format:check` → clean.
-- [ ] **Diff review**: `git diff main...HEAD --stat` — expect only `tournament-engine.js`, `media-viewer.js`, `styles.css`, the two unit test files, the E2E file, `CLAUDE.md`, and the spec.
-- [ ] **Confirm no state-format drift**: `git diff main...HEAD -- tournament-engine.js | grep -n "version"` → no hits (spec constraint: persisted state stays `version: 2`).
+- [x] **Full unit suite**: `npx vitest run --no-file-parallelism` → 487 passing (471 baseline + 10 engine + 6 renderer).
+- [x] **Full E2E suite**: `npx playwright test` → 55/55.
+- [x] **Lint**: `npm run lint` → 0 errors.
+- [x] **Format check**: `npm run format:check` → clean.
+- [x] **Diff review**: `git diff main...HEAD --stat` — expect only `tournament-engine.js`, `media-viewer.js`, `styles.css`, the two unit test files, the E2E file, `CLAUDE.md`, and the spec.
+- [x] **Confirm no state-format drift**: `git diff main...HEAD -- tournament-engine.js | grep -n "version"` → no hits (spec constraint: persisted state stays `version: 2`).
 
 ## Manual smoke (user-side, gates checkoff)
 
