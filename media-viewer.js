@@ -1559,11 +1559,18 @@ class MediaViewer {
             // Remove file from array and clean up caches
             this.removeFileFromList(fileToMove.path);
 
-            // Tournament mode: also drop the moved file from the engine. The state write is
-            // debounced (non-blocking) — a crash before it lands is self-healing, since the file
-            // is gone from disk and resume reconciliation prunes it anyway.
+            // Tournament mode: also drop the moved file from the engine. `trackUndo` records it
+            // on engine.history as a `special` entry, IN ORDER with the picks, so Ctrl+A reverses
+            // whichever action happened last; `meta` carries this moveHistory entry back to
+            // handleTournamentUndo (opaque to the engine). The state write is debounced
+            // (non-blocking) — a crash before it lands is self-healing, since the file is gone
+            // from disk and resume reconciliation prunes it anyway.
             if (this.isTournamentMode && this.tournament.engine) {
-                this.tournament.engine.removeFile(fileToMove.path);
+                this.tournament.engine.removeFile(fileToMove.path, {
+                    trackUndo: true,
+                    kind: 'special',
+                    meta: historyEntry,
+                });
                 this.tournament._schedulePersist(this.baseFolderPath);
             }
 
@@ -2125,6 +2132,14 @@ class MediaViewer {
                 const helpOverlayEl = document.getElementById('helpOverlay');
                 if (helpOverlayEl && helpOverlayEl.classList.contains('show')) return;
 
+                // Tournament mode drives pair progression through the Swiss engine — wheel
+                // navigation would advance currentIndex and desync the display from the
+                // engine's chosen pair. Return before preventDefault, matching the help-overlay
+                // guard above. Zoom over media is unaffected: the media elements' own wheel
+                // listeners fire in the bubble phase before this document-level handler, which
+                // never calls stopPropagation.
+                if (this.isTournamentMode) return;
+
                 if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
 
                 // Check if wheel event is over a media element - handle zoom instead of navigation
@@ -2161,30 +2176,48 @@ class MediaViewer {
         );
     }
 
-    setupHeaderVisibility() {
-        let headerTimeout;
-
-        const showHeader = () => {
-            this.header.classList.add('show');
-            clearTimeout(headerTimeout);
-            headerTimeout = setTimeout(() => {
-                this.header.classList.remove('show');
-            }, 3000);
+    // Shared auto-hide wiring. `el` is hidden by default (CSS opacity: 0) and revealed by the
+    // `show` class — while the pointer is inside `inZone(e)`, or while it is over `el` itself —
+    // then hidden `delay` ms after the pointer leaves. `enabled()` gates the zone check so
+    // tournament chrome ignores mouse movement outside tournament mode.
+    _setupAutoHide(el, inZone, { delay = 3000, enabled = () => true } = {}) {
+        if (!el) return null;
+        let timeout;
+        const show = () => {
+            el.classList.add('show');
+            clearTimeout(timeout);
+            timeout = setTimeout(() => el.classList.remove('show'), delay);
         };
-
-        const hideHeader = () => {
-            clearTimeout(headerTimeout);
-            this.header.classList.remove('show');
+        const hide = () => {
+            clearTimeout(timeout);
+            el.classList.remove('show');
         };
-
-        this.header.addEventListener('mouseenter', showHeader);
-        this.header.addEventListener('mouseleave', hideHeader);
-
+        el.addEventListener('mouseenter', show);
+        el.addEventListener('mouseleave', hide);
         document.addEventListener('mousemove', (e) => {
-            if (e.clientY < 50) {
-                showHeader();
-            }
+            if (enabled() && inZone(e)) show();
         });
+        return { show, hide };
+    }
+
+    setupHeaderVisibility() {
+        this._setupAutoHide(this.header, (e) => e.clientY < 50);
+
+        // Tournament chrome (G2): hidden at rest to maximise viewing area. The top band spans
+        // the main header AND the tournament bar (which sits at margin-top: 56px), so one
+        // upward motion reveals both; the bottom band reveals the shared Undo / Both Win /
+        // Both Lose row.
+        const inTournament = () => this.isTournamentMode;
+        this.tournamentChrome = [
+            this._setupAutoHide(document.getElementById('tournamentHeader'), (e) => e.clientY < 110, {
+                enabled: inTournament,
+            }),
+            this._setupAutoHide(
+                document.getElementById('tournamentControls'),
+                (e) => e.clientY > window.innerHeight - 110,
+                { enabled: inTournament }
+            ),
+        ].filter(Boolean);
     }
 
     setupFileInfoVisibility() {
@@ -4353,6 +4386,7 @@ class MediaViewer {
         this.isTournamentMode = false;
         const overlay = document.getElementById('tournamentOverlay');
         if (overlay) overlay.style.display = 'none';
+        this.tournamentChrome?.forEach((c) => c.hide()); // drop .show + clear pending timers
         this.mediaContainer.classList.remove('tournament-mode');
         // Restore sort controls (hidden on entry) when a folder is loaded.
         if (this.mediaFiles.length > 0) {
@@ -4478,6 +4512,9 @@ class MediaViewer {
                 this.mediaContainer.classList.add('tournament-mode');
                 this.setSortControlsVisible(false);
                 document.getElementById('tournamentOverlay').style.display = 'block';
+                // Reveal the chrome once on entry (the 3s timer then hides it) so the pause /
+                // exit affordance and the shared buttons announce themselves before hiding.
+                this.tournamentChrome?.forEach((c) => c.show());
                 await this.showTournamentPair();
             } else {
                 this.switchMode('single');
@@ -4521,6 +4558,9 @@ class MediaViewer {
 
         document.getElementById('tournamentProgress').textContent = this.tournament.getProgressText();
         document.getElementById('tournamentTiers').textContent = this.tournament.getTierBreakdownText();
+        // Undo is available only when the stack holds a user action (system prunes don't count).
+        const undoBtn = document.getElementById('tournamentUndoBtn');
+        if (undoBtn) undoBtn.disabled = this.tournament.engine.peekUndoKind() === null;
 
         const leftIdx = this.getMediaIndex(pair.left);
         const rightIdx = this.getMediaIndex(pair.right);
@@ -4698,54 +4738,94 @@ class MediaViewer {
     }
 
     async handleTournamentUndo() {
-        if (!this.isTournamentMode || !this.tournament.engine) return;
+        if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
 
-        // If the last action was a special-folder move (recorded by moveToSpecialFolder), the
-        // file was physically moved AND removed from the engine AND its caches were cleared by
-        // removeFileFromList. Engine.removeFile is not history-tracked, so a plain engine.undo()
-        // can't recover from it. Mirror handleCancel's special branch: restore the file on disk,
-        // re-add to engine.files, restore feature caches (PR #35 contract), pop moveHistory.
-        const lastMove = this.moveHistory[this.moveHistory.length - 1];
-        if (lastMove?.actionType === 'special') {
-            this.moveHistory.pop();
+        // engine.history is the single chronological undo stack: picks and tournament-mode
+        // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune
+        // in showTournamentPair) are absorbed by undoUserAction so they never cost a press.
+        const pending = this.tournament.engine.peekUndoEntry();
+        if (!pending) {
+            // Also the post-resume case: undo is session-only, so a resumed tournament starts
+            // with an empty stack (the version:2 payload is deliberately history-free).
+            this.showNotification('Nothing to undo', 'info');
+            return;
+        }
+
+        if ((pending.kind ?? 'pick') === 'special') {
+            // The file was physically moved off disk and dropped from mediaFiles + the feature
+            // caches. Restore it FIRST and only then advance the stack, so a failed move leaves
+            // engine.history and moveHistory exactly as they were.
+            const move = pending.meta;
+            // Best-effort mutex across this await: handleTournamentPick/handleTournamentDraw/
+            // moveToSpecialFolder all guard on isLoading, so this blocks a concurrent pick/draw/special
+            // from landing while the disk restore is in flight. Cleared in finally on every exit path,
+            // before showTournamentPair() runs.
+            //
+            // ADVISORY ONLY — isLoading is not exclusively owned. showTournamentPairFast never sets it,
+            // but the setupCompare*Handlers it attaches CLEAR it on bothLoaded/onError, so a pair render
+            // still in flight when undo starts (special-move → immediate Ctrl+A) can drop this flag
+            // mid-restore. The identity re-check below, not this flag, is what actually guarantees we
+            // reverse the entry we peeked.
+            this.isLoading = true;
             try {
                 const moveResult = await window.electronAPI.moveFile({
-                    sourcePath: lastMove.newPath,
+                    sourcePath: move.newPath,
                     targetFolder: this.baseFolderPath,
-                    fileName: lastMove.fileName,
+                    fileName: move.fileName,
                 });
                 if (!moveResult.success) {
                     throw new Error(moveResult.error);
                 }
-                const restoredFile = {
-                    name: lastMove.fileName,
-                    path: lastMove.originalPath,
-                    size: lastMove.fileSize,
-                    type: lastMove.fileType,
-                };
-                this.mediaFiles.push(restoredFile);
-                // Re-add to engine.files; engine.removeFile was not history-tracked.
-                if (!this.tournament.engine.files.includes(restoredFile.path)) {
-                    this.tournament.engine.files.push(restoredFile.path);
-                }
-                this.restoreFeatureCachesFromHistory(lastMove);
-                if (this.isSortedByPrediction) this.requestPredictionScores();
-                this.tournament._schedulePersist(this.baseFolderPath);
-                if (this.showRatingConfirmations) {
-                    this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
-                }
-                this.updateFolderInfo();
-                await this.showTournamentPair();
             } catch (error) {
                 console.error('Error undoing tournament special:', error);
                 this.showError(`Failed to undo move: ${error.message}`);
-                this.moveHistory.push(lastMove);
+                return;
+            } finally {
+                this.isLoading = false;
             }
-            return;
+            // The stack must still be exactly where we left it. peekUndoEntry() is non-mutating, so an
+            // unchanged stack returns the same object; anything else means a pick/draw/special landed
+            // during the await (see the advisory note above). Never reverse an entry the user did not
+            // ask us to — roll the file back to the special folder so the whole undo is a no-op and the
+            // user can simply retry, rather than leaving it on disk but absent from mediaFiles with a
+            // stale moveHistory entry.
+            if (this.tournament.engine.peekUndoEntry() !== pending) {
+                const rollback = await window.electronAPI.moveFile({
+                    sourcePath: move.originalPath,
+                    targetFolder: window.electronAPI.path.dirname(move.newPath),
+                    fileName: move.fileName,
+                });
+                if (!rollback.success) {
+                    // Rollback failed: the file sits in the source folder but is not in mediaFiles.
+                    // Recoverable by reloading the folder; log it so the state is diagnosable.
+                    window.electronAPI.logError?.(
+                        `Tournament undo rollback failed for ${move.fileName}: ${rollback.error ?? 'unknown'}`
+                    );
+                }
+                this.showError('Undo interrupted by another action — please try again');
+                return;
+            }
+            // Disk restored — safe to advance. undoUserAction reverses any trailing prunes plus
+            // this removal, restoring strategy state (files/winCounts/byes/roundQueue) AND
+            // engine.files from the snapshot, so the file re-pairs and reports its real tier.
+            this.tournament.engine.undoUserAction();
+            this.mediaFiles.push({
+                name: move.fileName,
+                path: move.originalPath,
+                size: move.fileSize,
+                type: move.fileType,
+            });
+            this.restoreFeatureCachesFromHistory(move);
+            const moveIdx = this.moveHistory.lastIndexOf(move);
+            if (moveIdx !== -1) this.moveHistory.splice(moveIdx, 1);
+            if (this.showRatingConfirmations) {
+                this.showNotification(`✅ Restored ${move.fileName}`, 'success');
+            }
+            this.updateFolderInfo();
+        } else {
+            this.tournament.engine.undoUserAction();
         }
 
-        // Default: undo the engine's last pair-pick (inverse-delta, or snapshot at round boundaries).
-        this.tournament.engine.undo();
         this.tournament._schedulePersist(this.baseFolderPath);
         await this.showTournamentPair();
     }
@@ -4792,8 +4872,8 @@ class MediaViewer {
         };
 
         if (undoBtn) {
-            // Enable only if there's a pick to undo
-            undoBtn.disabled = (this.tournament.engine?.history?.length ?? 0) === 0;
+            // Enable only if there's a user action to undo (a prune-only stack is not one).
+            undoBtn.disabled = this.tournament.engine?.peekUndoKind() == null;
             undoBtn.onclick = async () => {
                 cleanup();
                 await this.handleTournamentUndo();
@@ -4835,6 +4915,7 @@ class MediaViewer {
         this.mediaContainer.classList.add('tournament-mode');
         this.setSortControlsVisible(false);
         document.getElementById('tournamentOverlay').style.display = 'block';
+        this.tournamentChrome?.forEach((c) => c.show());
         document.querySelectorAll('.mode-btn').forEach((b) => {
             b.classList.toggle('active', b.dataset.mode === 'tournament');
         });

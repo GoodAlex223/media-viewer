@@ -3552,3 +3552,198 @@ describe('saveFeatureCache data-loss guards', () => {
         expect(ctx._featureCacheDiskCount).toBe(1);
     });
 });
+
+describe('handleTournamentUndo (unified undo stack)', () => {
+    const handleTournamentUndo = extractAsyncMethod('handleTournamentUndo');
+
+    function makeCtx(pending, overrides = {}) {
+        const engine = {
+            peekUndoEntry: vi.fn(() => pending),
+            undoUserAction: vi.fn(() => pending),
+        };
+        return {
+            isTournamentMode: true,
+            isLoading: false,
+            baseFolderPath: '/src',
+            showRatingConfirmations: false,
+            mediaFiles: [],
+            moveHistory: [],
+            tournament: { engine, _schedulePersist: vi.fn() },
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            restoreFeatureCachesFromHistory: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showTournamentPair: vi.fn(async () => {}),
+            ...overrides,
+        };
+    }
+
+    const SPECIAL_META = {
+        fileName: 'c.jpg',
+        originalPath: '/src/c.jpg',
+        newPath: '/special/c.jpg',
+        fileSize: 9,
+        fileType: 'image',
+        actionType: 'special',
+    };
+
+    beforeEach(() => {
+        globalThis.window = {
+            electronAPI: {
+                moveFile: vi.fn(async () => ({ success: true })),
+                // Reached only by the stack-changed rollback path; real dirname so the target
+                // folder assertion is faithful rather than tautological.
+                path: { dirname: (p) => path.dirname(p) },
+                logError: vi.fn(),
+            },
+        };
+    });
+
+    afterEach(() => {
+        delete globalThis.window;
+    });
+
+    it('notifies and leaves the engine alone when there is nothing to undo', async () => {
+        const ctx = makeCtx(null);
+        await handleTournamentUndo.call(ctx);
+        expect(ctx.showNotification).toHaveBeenCalledWith('Nothing to undo', 'info');
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+
+    it('undoes a pick without touching the disk', async () => {
+        const ctx = makeCtx({ kind: 'pick' });
+        await handleTournamentUndo.call(ctx);
+        expect(ctx.tournament.engine.undoUserAction).toHaveBeenCalledTimes(1);
+        expect(globalThis.window.electronAPI.moveFile).not.toHaveBeenCalled();
+        expect(ctx.tournament._schedulePersist).toHaveBeenCalledWith('/src');
+        expect(ctx.showTournamentPair).toHaveBeenCalled();
+    });
+
+    it('bails while isLoading (mirrors handleTournamentPick/handleTournamentDraw)', async () => {
+        const ctx = makeCtx({ kind: 'pick' }, { isLoading: true });
+        await handleTournamentUndo.call(ctx);
+        expect(ctx.tournament.engine.peekUndoEntry).not.toHaveBeenCalled();
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+    });
+
+    it('restores the file on disk, then advances the stack, for a special entry', async () => {
+        const ctx = makeCtx({ kind: 'special', meta: SPECIAL_META }, { moveHistory: [SPECIAL_META] });
+        await handleTournamentUndo.call(ctx);
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenCalledWith({
+            sourcePath: '/special/c.jpg',
+            targetFolder: '/src',
+            fileName: 'c.jpg',
+        });
+        expect(ctx.tournament.engine.undoUserAction).toHaveBeenCalledTimes(1);
+        expect(ctx.mediaFiles).toEqual([{ name: 'c.jpg', path: '/src/c.jpg', size: 9, type: 'image' }]);
+        expect(ctx.restoreFeatureCachesFromHistory).toHaveBeenCalledWith(SPECIAL_META);
+        expect(ctx.moveHistory).toEqual([]); // the consumed entry is removed by identity
+        expect(ctx.showTournamentPair).toHaveBeenCalled();
+    });
+
+    it('leaves the stack, moveHistory and mediaFiles untouched when the disk restore fails', async () => {
+        const ctx = makeCtx({ kind: 'special', meta: SPECIAL_META }, { moveHistory: [SPECIAL_META] });
+        globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'EPERM' }));
+        await handleTournamentUndo.call(ctx);
+        expect(ctx.showError).toHaveBeenCalled();
+        expect(ctx.tournament.engine.peekUndoEntry).toHaveBeenCalledTimes(1);
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toEqual([SPECIAL_META]);
+        expect(ctx.mediaFiles).toEqual([]);
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+
+    it('holds isLoading as a mutex while the disk restore is in flight, clearing it on success', async () => {
+        const ctx = makeCtx({ kind: 'special', meta: SPECIAL_META }, { moveHistory: [SPECIAL_META] });
+        let resolveMoveFile;
+        globalThis.window.electronAPI.moveFile = vi.fn(
+            () =>
+                new Promise((resolve) => {
+                    resolveMoveFile = resolve;
+                })
+        );
+        const pending = handleTournamentUndo.call(ctx);
+        // handleTournamentPick/handleTournamentDraw/moveToSpecialFolder all guard on isLoading — while
+        // the restore is in flight it must read true, or a concurrent pick could divert the undo.
+        expect(ctx.isLoading).toBe(true);
+        resolveMoveFile({ success: true });
+        await pending;
+        expect(ctx.isLoading).toBe(false);
+    });
+
+    it('clears isLoading in finally when the disk restore fails mid-flight', async () => {
+        const ctx = makeCtx({ kind: 'special', meta: SPECIAL_META }, { moveHistory: [SPECIAL_META] });
+        let resolveMoveFile;
+        globalThis.window.electronAPI.moveFile = vi.fn(
+            () =>
+                new Promise((resolve) => {
+                    resolveMoveFile = resolve;
+                })
+        );
+        const pending = handleTournamentUndo.call(ctx);
+        expect(ctx.isLoading).toBe(true);
+        resolveMoveFile({ success: false, error: 'EPERM' });
+        await pending;
+        expect(ctx.isLoading).toBe(false);
+        expect(ctx.showError).toHaveBeenCalled();
+    });
+
+    it('a special move made outside the tournament cannot divert a pick undo', async () => {
+        // THE REPORTED BUG. moveHistory holds a special move made in single mode; the newest
+        // engine entry is a pick. Pre-G2 this peeked moveHistory and took the special branch,
+        // restoring an unrelated file while the pick stood — "undo did nothing".
+        const stray = { ...SPECIAL_META, fileName: 's.jpg', newPath: '/special/s.jpg' };
+        const ctx = makeCtx({ kind: 'pick' }, { moveHistory: [stray] });
+        await handleTournamentUndo.call(ctx);
+        expect(globalThis.window.electronAPI.moveFile).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toEqual([stray]);
+        expect(ctx.tournament.engine.undoUserAction).toHaveBeenCalledTimes(1);
+    });
+
+    // The isLoading mutex is advisory, not owned: showTournamentPairFast never SETS isLoading, but the
+    // setupCompare*Handlers it attaches CLEAR it on bothLoaded/onError. So a pair render still in flight
+    // when undo starts (special-move → immediate Ctrl+A) drops the flag mid-restore and lets a pick land.
+    // These two pin the identity re-check that makes correctness independent of the flag.
+    it('does not reverse a different entry when the stack changes during the disk restore', async () => {
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const intruder = { kind: 'pick' };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        let peeks = 0;
+        ctx.tournament.engine.peekUndoEntry = vi.fn(() => (peeks++ === 0 ? pending : intruder));
+
+        await handleTournamentUndo.call(ctx);
+
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+        expect(ctx.showError).toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+        // Nothing half-applied: the renderer-side state is exactly as it was.
+        expect(ctx.moveHistory).toEqual([SPECIAL_META]);
+        expect(ctx.mediaFiles).toEqual([]);
+        expect(ctx.restoreFeatureCachesFromHistory).not.toHaveBeenCalled();
+        // ...and the disk move is rolled back, so the whole undo is a no-op the user can retry.
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenCalledTimes(2);
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenLastCalledWith({
+            sourcePath: '/src/c.jpg',
+            targetFolder: path.dirname('/special/c.jpg'),
+            fileName: 'c.jpg',
+        });
+    });
+
+    it('logs when the interrupted-undo rollback itself fails', async () => {
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        let peeks = 0;
+        ctx.tournament.engine.peekUndoEntry = vi.fn(() => (peeks++ === 0 ? pending : { kind: 'pick' }));
+        globalThis.window.electronAPI.moveFile = vi
+            .fn()
+            .mockResolvedValueOnce({ success: true })
+            .mockResolvedValueOnce({ success: false, error: 'EBUSY' });
+
+        await handleTournamentUndo.call(ctx);
+
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(expect.stringContaining('EBUSY'));
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+        expect(ctx.showError).toHaveBeenCalled();
+    });
+});

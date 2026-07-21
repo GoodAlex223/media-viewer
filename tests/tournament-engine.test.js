@@ -455,11 +455,128 @@ describe('TournamentEngine removeFile trackUndo (undo across a mid-tournament re
         for (const f of files) expect(eng.strategy.winCounts.get(f)).toBe(0);
     });
 
-    it('removeFile defaults to no undo tracking (special-move path handles its own undo)', () => {
+    it('removeFile defaults to no undo tracking, and to kind:"prune" when tracked', () => {
         const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], new SwissStrategy(), { rounds: 3 });
         const before = eng.history.length;
         eng.removeFile('c.jpg'); // no options → default { trackUndo: false }
         expect(eng.history.length).toBe(before);
         expect(eng.files).not.toContain('c.jpg');
+
+        // When tracked without an explicit kind (the -1 auto-prune call site), the entry is a
+        // system prune — it must not consume a user Undo press.
+        eng.removeFile('d.jpg', { trackUndo: true });
+        expect(eng.history[eng.history.length - 1].kind).toBe('prune');
+        expect(eng.peekUndoKind()).toBeNull();
+    });
+});
+
+describe('TournamentEngine unified undo stack (peekUndoEntry / peekUndoKind / undoUserAction)', () => {
+    const FILES = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+    // 6 files → 3 pairs in round 1, so the first two picks are non-boundary inverse-deltas
+    // (roundQueue.length > 1 at captureUndo time), which is the interesting case.
+    const makeEngine = () => new TournamentEngine(FILES, new SwissStrategy(), { rounds: 3 });
+
+    it('peekUndoKind returns null on an empty history', () => {
+        expect(makeEngine().peekUndoKind()).toBeNull();
+        expect(makeEngine().peekUndoEntry()).toBeNull();
+    });
+
+    it('peekUndoKind returns "pick" after a recorded result', () => {
+        const eng = makeEngine();
+        const p = eng.getCurrentPair();
+        eng.recordResult(p.left, p.right);
+        expect(eng.peekUndoKind()).toBe('pick');
+    });
+
+    it('peekUndoKind returns "special" for a kind:"special" removal', () => {
+        const eng = makeEngine();
+        eng.removeFile('c.jpg', { trackUndo: true, kind: 'special', meta: { fileName: 'c.jpg' } });
+        expect(eng.peekUndoKind()).toBe('special');
+    });
+
+    it('peekUndoKind sees past trailing system prunes without mutating', () => {
+        const eng = makeEngine();
+        const p = eng.getCurrentPair();
+        eng.recordResult(p.left, p.right);
+        eng.removeFile('e.jpg', { trackUndo: true }); // default kind → 'prune'
+        eng.removeFile('f.jpg', { trackUndo: true });
+        const depth = eng.history.length;
+        expect(eng.peekUndoKind()).toBe('pick');
+        expect(eng.history.length).toBe(depth); // a peek must never consume
+    });
+
+    it('peekUndoKind returns null when the history holds only system prunes', () => {
+        const eng = makeEngine();
+        eng.removeFile('e.jpg', { trackUndo: true });
+        expect(eng.peekUndoKind()).toBeNull();
+    });
+
+    it('undoUserAction consumes trailing prunes and exactly one user entry', () => {
+        const eng = makeEngine();
+        const p1 = eng.getCurrentPair();
+        eng.recordResult(p1.left, p1.right);
+        const p2 = eng.getCurrentPair();
+        eng.recordResult(p2.left, p2.right);
+        eng.removeFile('e.jpg', { trackUndo: true }); // a system prune sits on top
+
+        const entry = eng.undoUserAction();
+        expect(entry.kind).toBe('pick');
+        expect(eng.history.length).toBe(1); // only the first pick remains
+        expect(eng.peekUndoKind()).toBe('pick');
+        expect(eng.strategy.files).toContain('e.jpg'); // the prune was reversed too
+    });
+
+    it('undoUserAction absorbs two consecutive trailing prunes on top of one pick', () => {
+        const eng = makeEngine();
+        const p1 = eng.getCurrentPair();
+        eng.recordResult(p1.left, p1.right);
+        eng.removeFile('e.jpg', { trackUndo: true }); // first system prune
+        eng.removeFile('f.jpg', { trackUndo: true }); // second prune stacks directly on top, no pick between them
+
+        const entry = eng.undoUserAction();
+        expect(entry.kind).toBe('pick');
+        expect(eng.history.length).toBe(0); // the pick and both prunes are all consumed by one Undo press
+        expect(eng.files).toContain('e.jpg');
+        expect(eng.files).toContain('f.jpg');
+        expect(eng.strategy.files).toContain('e.jpg'); // both prunes reversed, not just the top one
+        expect(eng.strategy.files).toContain('f.jpg');
+    });
+
+    it('undoUserAction returns null and mutates nothing on a prune-only history', () => {
+        const eng = makeEngine();
+        eng.removeFile('e.jpg', { trackUndo: true });
+        const before = eng.history.length;
+        expect(eng.undoUserAction()).toBeNull();
+        expect(eng.history.length).toBe(before);
+        expect(eng.files).not.toContain('e.jpg'); // nothing reversed
+    });
+
+    it('undoing a kind:"special" removal restores full strategy state, not just engine.files', () => {
+        const eng = makeEngine();
+        const meta = { fileName: 'c.jpg', newPath: '/special/c.jpg' };
+        eng.removeFile('c.jpg', { trackUndo: true, kind: 'special', meta });
+        expect(eng.strategy.files).not.toContain('c.jpg');
+
+        const entry = eng.undoUserAction();
+        expect(entry.meta).toBe(meta); // opaque payload round-trips by identity
+        expect(eng.files).toContain('c.jpg');
+        expect(eng.strategy.files).toContain('c.jpg'); // the divergence regression
+        expect(eng.strategy.winCounts.has('c.jpg')).toBe(true);
+        expect(eng.strategy.byes.size).toBe(0); // no phantom bye left by the removal
+    });
+
+    it('treats a history entry with no kind as a pick (entries written before G2)', () => {
+        const eng = makeEngine();
+        eng.history.push({ undo: { kind: 'snapshot', strategyStateSnapshot: eng.strategy.serialize() } });
+        expect(eng.peekUndoKind()).toBe('pick');
+    });
+
+    it('recordResult and recordDraw tag their history entries kind:"pick"', () => {
+        const eng = makeEngine();
+        const p1 = eng.getCurrentPair();
+        eng.recordResult(p1.left, p1.right);
+        const p2 = eng.getCurrentPair();
+        eng.recordDraw(p2.left, p2.right, 'win');
+        expect(eng.history.map((h) => h.kind)).toEqual(['pick', 'pick']);
     });
 });

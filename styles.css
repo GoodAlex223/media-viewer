@@ -2277,7 +2277,6 @@ body {
     z-index: 10;
 }
 .tournament-header {
-    pointer-events: auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2289,6 +2288,17 @@ body {
     /* Push below the main app header (.header is position: fixed, min-height ~50px) so
        the hover-revealed menu doesn't cover the tournament progress + pause button. */
     margin-top: 56px;
+    /* Auto-hide, mirroring .header: hidden at rest to maximise viewing area, revealed by the
+       top edge band (see _setupAutoHide) or by hovering the bar once it is up. The parent
+       .tournament-overlay is pointer-events: none, so `auto` lives in the .show rule. */
+    opacity: 0;
+    transition: opacity var(--transition-slow);
+    pointer-events: none;
+}
+.tournament-header:hover,
+.tournament-header.show {
+    opacity: 1;
+    pointer-events: auto;
 }
 .tournament-progress {
     font-weight: 500;
@@ -2297,7 +2307,6 @@ body {
     font-family: monospace;
 }
 .tournament-pause {
-    pointer-events: auto;
     display: flex;
     align-items: center;
     padding: 4px 8px;
@@ -2312,13 +2321,21 @@ body {
     border-color: rgba(255, 255, 255, 0.35);
 }
 .tournament-controls {
-    pointer-events: auto;
     position: absolute;
     bottom: 16px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     gap: 8px;
+    /* Auto-hide on the bottom edge band — see .tournament-header above. */
+    opacity: 0;
+    transition: opacity var(--transition-slow);
+    pointer-events: none;
+}
+.tournament-controls:hover,
+.tournament-controls.show {
+    opacity: 1;
+    pointer-events: auto;
 }
 /* Tournament-mode control buttons override the inherited dark text from .control-btn.
    The plain Undo button (no like/dislike/special variant) had black text on a
