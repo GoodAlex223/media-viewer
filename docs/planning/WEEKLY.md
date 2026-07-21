@@ -39,9 +39,9 @@
 
 > Three user-flagged tournament follow-ups on the same files. The 🔴 undo bug leads (needs a reliable repro first); the mouse-wheel guard and header auto-hide are scoped and mechanical.
 
-- [ ] 🔴 **Tournament undo intermittently fails** — TODO 🔴 [2026-07-11]. `handleTournamentUndo` has two divergent paths (default `engine.undo()` O(1) inverse-delta vs. the special-move disk-restore branch); investigate which conditions (round boundaries, special-move interleaving, undo-stack desync, rapid presses during `isLoading`) drop an undo silently. **Needs a reliable repro first.** `media-viewer.js:~4684-4790`, `tournament-engine.js` (`engine.undo()`).
-- [ ] 🟠 **Mouse wheel still navigates pairs in tournament mode** — TODO 🟠 [2026-07-11]. The global `wheel` handler falls through to `nextMedia`/`previousMedia` with no `isTournamentMode` guard. Add the guard. `media-viewer.js:~2114-2155`.
-- [ ] 🔵 **Auto-hide tournament header bar + shared control buttons, reveal on hover** — 🔵 [2026-07-11]. Mirror the existing `.header` auto-hide (`.show`) pattern so the tournament header + shared buttons stay hidden and appear on hover, maximizing viewing area. `styles.css:~2279-2340`, `media-viewer.js:~2158` (`setupHeaderVisibility` pattern to mirror).
+- [x] 🔴 **Tournament undo intermittently fails** — ✅ **DONE via PR #65** (merge `937084c`, smoke PASSED). Root cause was NOT the hypothesized "two divergent paths" but `handleTournamentUndo` peeking `moveHistory` (which picks never write, and which clears only on folder change) → any special move even from single mode hijacked every tournament undo; fixed by making `engine.history` the single chronological undo stack. See [DONE.md](DONE.md) 2026-07-21.
+- [x] 🟠 **Mouse wheel still navigates pairs in tournament mode** — ✅ **DONE via PR #65** (merge `937084c`). `if (this.isTournamentMode) return;` atop the document `wheel` handler.
+- [x] 🔵 **Auto-hide tournament header bar + shared control buttons, reveal on hover** — ✅ **DONE via PR #65** (merge `937084c`). `.tournament-header`/`.tournament-controls` mirror `.header` via an extracted `_setupAutoHide` helper (edge-band reveal + 3s hide).
 
 ### G3. Bulk-rate re-pair avoidance [solo] 🔵
 **Domain**: JS logic — compare-mode ML pair selection in `media-viewer.js`
