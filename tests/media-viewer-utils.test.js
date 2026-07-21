@@ -3588,7 +3588,15 @@ describe('handleTournamentUndo (unified undo stack)', () => {
     };
 
     beforeEach(() => {
-        globalThis.window = { electronAPI: { moveFile: vi.fn(async () => ({ success: true })) } };
+        globalThis.window = {
+            electronAPI: {
+                moveFile: vi.fn(async () => ({ success: true })),
+                // Reached only by the stack-changed rollback path; real dirname so the target
+                // folder assertion is faithful rather than tautological.
+                path: { dirname: (p) => path.dirname(p) },
+                logError: vi.fn(),
+            },
+        };
     });
 
     afterEach(() => {
@@ -3691,5 +3699,51 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         expect(globalThis.window.electronAPI.moveFile).not.toHaveBeenCalled();
         expect(ctx.moveHistory).toEqual([stray]);
         expect(ctx.tournament.engine.undoUserAction).toHaveBeenCalledTimes(1);
+    });
+
+    // The isLoading mutex is advisory, not owned: showTournamentPairFast never SETS isLoading, but the
+    // setupCompare*Handlers it attaches CLEAR it on bothLoaded/onError. So a pair render still in flight
+    // when undo starts (special-move → immediate Ctrl+A) drops the flag mid-restore and lets a pick land.
+    // These two pin the identity re-check that makes correctness independent of the flag.
+    it('does not reverse a different entry when the stack changes during the disk restore', async () => {
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const intruder = { kind: 'pick' };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        let peeks = 0;
+        ctx.tournament.engine.peekUndoEntry = vi.fn(() => (peeks++ === 0 ? pending : intruder));
+
+        await handleTournamentUndo.call(ctx);
+
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+        expect(ctx.showError).toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+        // Nothing half-applied: the renderer-side state is exactly as it was.
+        expect(ctx.moveHistory).toEqual([SPECIAL_META]);
+        expect(ctx.mediaFiles).toEqual([]);
+        expect(ctx.restoreFeatureCachesFromHistory).not.toHaveBeenCalled();
+        // ...and the disk move is rolled back, so the whole undo is a no-op the user can retry.
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenCalledTimes(2);
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenLastCalledWith({
+            sourcePath: '/src/c.jpg',
+            targetFolder: path.dirname('/special/c.jpg'),
+            fileName: 'c.jpg',
+        });
+    });
+
+    it('logs when the interrupted-undo rollback itself fails', async () => {
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        let peeks = 0;
+        ctx.tournament.engine.peekUndoEntry = vi.fn(() => (peeks++ === 0 ? pending : { kind: 'pick' }));
+        globalThis.window.electronAPI.moveFile = vi
+            .fn()
+            .mockResolvedValueOnce({ success: true })
+            .mockResolvedValueOnce({ success: false, error: 'EBUSY' });
+
+        await handleTournamentUndo.call(ctx);
+
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(expect.stringContaining('EBUSY'));
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+        expect(ctx.showError).toHaveBeenCalled();
     });
 });

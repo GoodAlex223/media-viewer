@@ -4756,11 +4756,16 @@ class MediaViewer {
             // caches. Restore it FIRST and only then advance the stack, so a failed move leaves
             // engine.history and moveHistory exactly as they were.
             const move = pending.meta;
-            // Mutex across this await: handleTournamentPick/handleTournamentDraw/moveToSpecialFolder
-            // all guard on isLoading, so this blocks a concurrent pick/draw/special from landing while
-            // the disk restore is in flight — otherwise undoUserAction() below could pop and reverse a
-            // freshly-pushed entry instead of the one peekUndoEntry() returned above. Cleared in finally
-            // on every exit path (success or failure), before showTournamentPair() runs.
+            // Best-effort mutex across this await: handleTournamentPick/handleTournamentDraw/
+            // moveToSpecialFolder all guard on isLoading, so this blocks a concurrent pick/draw/special
+            // from landing while the disk restore is in flight. Cleared in finally on every exit path,
+            // before showTournamentPair() runs.
+            //
+            // ADVISORY ONLY — isLoading is not exclusively owned. showTournamentPairFast never sets it,
+            // but the setupCompare*Handlers it attaches CLEAR it on bothLoaded/onError, so a pair render
+            // still in flight when undo starts (special-move → immediate Ctrl+A) can drop this flag
+            // mid-restore. The identity re-check below, not this flag, is what actually guarantees we
+            // reverse the entry we peeked.
             this.isLoading = true;
             try {
                 const moveResult = await window.electronAPI.moveFile({
@@ -4777,6 +4782,28 @@ class MediaViewer {
                 return;
             } finally {
                 this.isLoading = false;
+            }
+            // The stack must still be exactly where we left it. peekUndoEntry() is non-mutating, so an
+            // unchanged stack returns the same object; anything else means a pick/draw/special landed
+            // during the await (see the advisory note above). Never reverse an entry the user did not
+            // ask us to — roll the file back to the special folder so the whole undo is a no-op and the
+            // user can simply retry, rather than leaving it on disk but absent from mediaFiles with a
+            // stale moveHistory entry.
+            if (this.tournament.engine.peekUndoEntry() !== pending) {
+                const rollback = await window.electronAPI.moveFile({
+                    sourcePath: move.originalPath,
+                    targetFolder: window.electronAPI.path.dirname(move.newPath),
+                    fileName: move.fileName,
+                });
+                if (!rollback.success) {
+                    // Rollback failed: the file sits in the source folder but is not in mediaFiles.
+                    // Recoverable by reloading the folder; log it so the state is diagnosable.
+                    window.electronAPI.logError?.(
+                        `Tournament undo rollback failed for ${move.fileName}: ${rollback.error ?? 'unknown'}`
+                    );
+                }
+                this.showError('Undo interrupted by another action — please try again');
+                return;
             }
             // Disk restored — safe to advance. undoUserAction reverses any trailing prunes plus
             // this removal, restoring strategy state (files/winCounts/byes/roundQueue) AND
