@@ -423,10 +423,37 @@ In `media-viewer.js` `undoBulkRating` (~3812): after the `for (const f of lastMo
         this.bulkRatedPairs.delete(this.bulkPairKey(lastMove.bulkFiles[0].name, lastMove.bulkFiles[1].name));
 ```
 
+- [ ] **Step 5b: Update the EXISTING `applyBulkRating` tests (they break otherwise)**
+
+The existing `describe('applyBulkRating', …)` block (search for it, ~line 1629) breaks with the render change: its `makeCtx` provides `nextMedia` but no `showMedia`/`bulkRatedPairs`/`bulkPairKey`, and one test asserts `nextMedia` was called. Apply these three edits:
+
+1. In that block's `makeCtx` (the object literal it returns), add `showMedia`, `bulkRatedPairs`, and the real `bulkPairKey` alongside the existing `nextMedia`:
+
+```javascript
+            nextMedia: vi.fn(),
+            showMedia: vi.fn(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey: extractMethod('bulkPairKey'),
+```
+
+2. In the test titled `trains both files as like and records them as good, then advances`, replace the final assertion:
+
+```javascript
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+```
+
+(was `expect(ctx.nextMedia).toHaveBeenCalledOnce();` — rename the test title's "then advances" to "then re-renders" too.)
+
+3. Fix the now-stale comment in the `bulk-rating undo reverses ML, returns to the rated pair` test (search for `advanced past the rated pair by applyBulkRating's nextMedia()`, ~line 1535):
+
+```javascript
+            mlComparePairIndex: 5, // set high; handleCancel restores prevPairIndex on undo
+```
+
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js`
-Expected: PASS — new tests green; existing `bulk-rating undo reverses ML, returns to the rated pair` and hydration tests still green.
+Expected: PASS — new tests green; the updated existing `applyBulkRating` tests green; the `bulk-rating undo reverses ML, returns to the rated pair` and hydration tests still green.
 
 - [ ] **Step 7: Format, lint, full unit run**
 
@@ -560,10 +587,26 @@ In `media-viewer.js` `loadBulkRatedFile` (~7539), directly after `this.bulkRated
         this.bulkRatedPairs = new Set(); // session-only; starts empty on each folder load
 ```
 
+- [ ] **Step 6b: Add `bulkRatedPairs` to the EXISTING `removeFileFromList` test contexts (they break otherwise)**
+
+The prune loop iterates `this.bulkRatedPairs`, so any existing `removeFileFromList` test whose ctx omits it now throws `undefined is not iterable`. Two ctx factories need one line each:
+
+1. `describe('removeFileFromList', …)` → its `createContext` (search for `function createContext`, ~line 306): add after `bulkRated: new Map(),`:
+
+```javascript
+            bulkRatedPairs: new Set(),
+```
+
+2. `describe('removeFileFromList bulk-rated purge', …)` → its `makeCtx` (~line 1746): add the same line after `bulkRated: new Map([['a.jpg', 'good']]),`:
+
+```javascript
+            bulkRatedPairs: new Set(),
+```
+
 - [ ] **Step 7: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js`
-Expected: PASS — both new tests green; all prior tests still green.
+Expected: PASS — both new tests green; the two updated `removeFileFromList` blocks green; all prior tests still green.
 
 - [ ] **Step 8: Format, lint, full unit run**
 
