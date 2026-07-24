@@ -3863,8 +3863,9 @@ class MediaViewer {
 
         // Bulk rating (Both good / Both bad): no file move to reverse — just undo the ML updates,
         // then refresh the UI like the other handleCancel branches do. Return to the pair that was
-        // bulk-rated (applyBulkRating advanced past it), re-score prediction badges (the ML model
-        // was just reverted), and re-render so the floating Undo button visibility updates.
+        // bulk-rated (applyBulkRating clamped the cursor when the rated pair dropped out of the valid
+        // list; prevPairIndex holds the original index), re-score prediction badges (the ML model was
+        // just reverted), and re-render so the floating Undo button visibility updates.
         if (lastMove.bothGood || lastMove.bothBad) {
             this.moveHistory.pop();
             await this.undoBulkRating(lastMove);
