@@ -188,7 +188,7 @@ test.describe('Compare Mode', () => {
         expect(result.onDisk.data.good).toHaveLength(2);
         expect(result.historyLen).toBe(1);
 
-        // Wait for any in-flight showMedia() triggered by nextMedia() to complete
+        // Wait for the in-flight showMedia() that applyBulkRating triggers to complete
         // before calling handleCancel (it guards on isLoading).
         await page.waitForFunction(() => !window.mediaViewer.isLoading);
 
