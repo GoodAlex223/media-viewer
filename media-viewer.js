@@ -129,6 +129,11 @@ class MediaViewer {
         // Corrective training: filename -> 'good' | 'bad' (mirrors per-folder .bulk_rated.json)
         this.bulkRated = new Map();
 
+        // Exact two-file combos already bulk-rated together, keyed by bulkPairKey(). Session-only
+        // (spec G3 D2): reset empty on each folder load, never persisted. Suppresses re-showing the
+        // same pair in AI-sorted compare.
+        this.bulkRatedPairs = new Set();
+
         // CLIP model state (main process IPC)
         this.clipWorkerReady = false;
         this.clipModelDownloading = false;
@@ -2925,6 +2930,35 @@ class MediaViewer {
             return;
         }
         return this.showCompareMedia(retryCount + 1);
+    }
+
+    // Canonical, order-independent key for a bulk-rated pair. The NUL separator ('\u0000') is
+    // illegal in filenames on every OS, so distinct pairs can never collide. Keyed by filename to
+    // match bulkRated / .bulk_rated.json (filenames are unique within a folder).
+    bulkPairKey(nameA, nameB) {
+        return [nameA, nameB].sort().join('\u0000');
+    }
+
+    // Ordered "extremes" candidate pairs for AI-sorted compare (i-th highest vs i-th lowest),
+    // dropping any exact two-file combo already in bulkRatedPairs. Falls through to the full
+    // candidate list when every pair is suppressed, so the user can always re-rate. Pure — reads
+    // only mediaFiles / predictionScores / bulkRatedPairs; safe to recompute each render.
+    computeValidComparePairs() {
+        const filesWithScores = this.mediaFiles
+            .map((f) => ({ file: f, score: this.predictionScores.get(f.path) ?? 0.5 }))
+            .sort((a, b) => b.score - a.score);
+        const n = filesWithScores.length;
+        const candidates = [];
+        for (let i = 0; i < Math.floor(n / 2); i++) {
+            candidates.push({
+                leftFile: filesWithScores[i].file,
+                rightFile: filesWithScores[n - 1 - i].file,
+            });
+        }
+        const valid = candidates.filter(
+            (p) => !this.bulkRatedPairs.has(this.bulkPairKey(p.leftFile.name, p.rightFile.name))
+        );
+        return valid.length ? valid : candidates;
     }
 
     async showCompareMedia(retryCount = 0) {
