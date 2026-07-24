@@ -3027,31 +3027,19 @@ class MediaViewer {
             // Clear the flag after use
             this._restoredPairFiles = null;
         }
-        // If sorted by prediction, select pairs based on mlComparePairIndex
+        // If sorted by prediction, select from the valid-pairs list (exact rated combos removed,
+        // full-list fall-through). computeValidComparePairs is the single source of truth shared
+        // with navigation, the position count, and undo.
         else if (this.isSortedByPrediction && this.predictionScores.size >= 2) {
-            const filesWithScores = this.mediaFiles
-                .map((f) => ({ file: f, score: this.predictionScores.get(f.path) ?? 0.5 }))
-                .sort((a, b) => b.score - a.score); // Sort descending by score
-
-            // Use mlComparePairIndex to select which pair to show
-            // Index 0 = highest vs lowest, index 1 = 2nd highest vs 2nd lowest, etc.
-            const pairIndex = Math.min(this.mlComparePairIndex, Math.floor(filesWithScores.length / 2) - 1);
-            const leftIndex = Math.max(0, pairIndex);
-            const rightIndex = Math.max(0, filesWithScores.length - 1 - pairIndex);
-
-            // Ensure we don't select the same file twice
-            if (leftIndex >= rightIndex) {
-                leftFile = filesWithScores[0].file;
-                rightFile = filesWithScores[filesWithScores.length - 1].file;
-            } else {
-                leftFile = filesWithScores[leftIndex].file;
-                rightFile = filesWithScores[rightIndex].file;
-            }
+            const pairs = this.computeValidComparePairs();
+            const idx = Math.min(this.mlComparePairIndex, pairs.length - 1);
+            leftFile = pairs[idx].leftFile;
+            rightFile = pairs[idx].rightFile;
 
             const leftScore = this.predictionScores.get(leftFile.path) ?? 0.5;
             const rightScore = this.predictionScores.get(rightFile.path) ?? 0.5;
             console.log(
-                `ML Compare [${pairIndex}]: ${leftFile.name} (${(leftScore * 100).toFixed(1)}%) vs ${rightFile.name} (${(rightScore * 100).toFixed(1)}%)`
+                `ML Compare [${idx}/${pairs.length}]: ${leftFile.name} (${(leftScore * 100).toFixed(1)}%) vs ${rightFile.name} (${(rightScore * 100).toFixed(1)}%)`
             );
         } else {
             // Regular mode: consecutive files based on currentIndex
@@ -3850,6 +3838,8 @@ class MediaViewer {
             this.bulkRated.delete(f.name);
         }
         await this.saveBulkRatedFile();
+        // Re-admit the exact combo so it can reappear at its natural extreme position on re-render.
+        this.bulkRatedPairs.delete(this.bulkPairKey(lastMove.bulkFiles[0].name, lastMove.bulkFiles[1].name));
         this.showNotification('↩️ Bulk rating undone', 'info');
     }
 
@@ -7985,11 +7975,16 @@ class MediaViewer {
 
         await this.saveBulkRatedFile();
 
+        // Suppress re-showing this exact combo (spec G3 D1). Session-only.
+        this.bulkRatedPairs.add(this.bulkPairKey(left.name, right.name));
+
         this.moveHistory.push({
             bothGood: bucket === 'good',
             bothBad: bucket === 'bad',
             bulkFiles,
-            // Pair index BEFORE nextMedia() advances — lets undo return to the rated pair.
+            // Current pair index. showMedia() no longer advances it (the rated pair drops out of
+            // computeValidComparePairs and the next pair slides into this same index) — but the user
+            // may still navigate away with prev/next before undoing, so this remains a real restore point.
             prevPairIndex: this.mlComparePairIndex,
         });
 
@@ -8000,7 +7995,9 @@ class MediaViewer {
             'success'
         );
 
-        this.nextMedia();
+        // Re-render in place, NOT nextMedia(): removing the rated pair from the valid list makes the
+        // next pair slide into the current index automatically. An extra index++ would skip one.
+        this.showMedia();
     }
 
     async handleBothGood() {

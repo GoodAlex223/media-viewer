@@ -1532,7 +1532,7 @@ describe('handleCancel feature restore', () => {
         const ctx = commonMocks({
             isCompareMode: true,
             isSortedByPrediction: true,
-            mlComparePairIndex: 5, // advanced past the rated pair by applyBulkRating's nextMedia()
+            mlComparePairIndex: 5, // set high; handleCancel restores prevPairIndex on undo
             undoBulkRating: vi.fn(async () => {}),
             moveHistory: [
                 {
@@ -1551,6 +1551,67 @@ describe('handleCancel feature restore', () => {
         expect(ctx.mlComparePairIndex).toBe(3); // returned to the bulk-rated pair
         expect(ctx.requestPredictionScores).toHaveBeenCalledOnce(); // badges re-scored after ML revert
         expect(ctx.showMedia).toHaveBeenCalledOnce(); // re-render (refreshes the floating Undo button)
+    });
+
+    it('applyBulkRating records the exact pair key and re-renders in place (no advance)', async () => {
+        const applyBulkRating = extractAsyncMethod('applyBulkRating');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const showMedia = vi.fn();
+        const nextMedia = vi.fn();
+        const ctx = {
+            isSortedByPrediction: true,
+            isCompareMode: true,
+            compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+            compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+            getCombinedFeatures: () => null, // skips updateMlModelWithFeatures
+            updateMlModelWithFeatures: vi.fn(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey,
+            saveBulkRatedFile: async () => {},
+            moveHistory: [],
+            mlComparePairIndex: 3,
+            showNotification: () => {},
+            showMedia,
+            nextMedia,
+        };
+        await applyBulkRating.call(ctx, 'bad');
+
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'z.jpg'))).toBe(true);
+        expect(showMedia).toHaveBeenCalledTimes(1);
+        expect(nextMedia).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.moveHistory[0].prevPairIndex).toBe(3);
+        expect(ctx.moveHistory[0].bothBad).toBe(true);
+    });
+
+    it('undoBulkRating deletes the exact pair key', async () => {
+        const undoBulkRating = extractAsyncMethod('undoBulkRating');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const key = bulkPairKey('a.jpg', 'z.jpg');
+        const ctx = {
+            reverseMlModelUpdate: vi.fn(),
+            bulkRated: new Map([
+                ['a.jpg', 'bad'],
+                ['z.jpg', 'bad'],
+            ]),
+            bulkRatedPairs: new Set([key]),
+            bulkPairKey,
+            saveBulkRatedFile: async () => {},
+            showNotification: () => {},
+        };
+        const lastMove = {
+            bothBad: true,
+            bulkFiles: [
+                { name: 'a.jpg', features: null },
+                { name: 'z.jpg', features: null },
+            ],
+        };
+        await undoBulkRating.call(ctx, lastMove);
+
+        expect(ctx.bulkRatedPairs.has(key)).toBe(false);
+        expect(ctx.bulkRated.has('a.jpg')).toBe(false);
+        expect(ctx.bulkRated.has('z.jpg')).toBe(false);
     });
 
     it('bulk-rating undo tolerates a legacy entry without prevPairIndex (no jump, still refreshes)', async () => {
@@ -1642,11 +1703,14 @@ describe('applyBulkRating', () => {
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
             nextMedia: vi.fn(),
+            showMedia: vi.fn(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey: extractMethod('bulkPairKey'),
             ...overrides,
         };
     }
 
-    it('trains both files as like and records them as good, then advances', async () => {
+    it('trains both files as like and records them as good, then re-renders', async () => {
         const ctx = makeCtx();
         await applyBulkRating.call(ctx, 'good');
         expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledTimes(2);
@@ -1657,7 +1721,7 @@ describe('applyBulkRating', () => {
         expect(ctx.moveHistory).toHaveLength(1);
         expect(ctx.moveHistory[0].bothGood).toBe(true);
         expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
-        expect(ctx.nextMedia).toHaveBeenCalledOnce();
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
     });
 
     it('trains both files as dislike for the bad bucket', async () => {
@@ -1694,6 +1758,7 @@ describe('applyBulkRating', () => {
 
 describe('undoBulkRating', () => {
     const undoBulkRating = extractAsyncMethod('undoBulkRating');
+    const bulkPairKey = extractMethod('bulkPairKey');
 
     it('reverses both updates and clears both files from bulkRated', async () => {
         const ctx = {
@@ -1701,6 +1766,8 @@ describe('undoBulkRating', () => {
                 ['a.jpg', 'good'],
                 ['b.jpg', 'good'],
             ]),
+            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
+            bulkPairKey,
             reverseMlModelUpdate: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
@@ -1719,12 +1786,18 @@ describe('undoBulkRating', () => {
         expect(ctx.reverseMlModelUpdate).toHaveBeenNthCalledWith(2, [4, 5, 6], 'like');
         expect(ctx.showNotification).toHaveBeenCalledWith('↩️ Bulk rating undone', 'info');
         expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'b.jpg'))).toBe(false);
         expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
     });
 
     it('skips ML reversal for files stored with null features', async () => {
         const ctx = {
-            bulkRated: new Map([['a.jpg', 'bad']]),
+            bulkRated: new Map([
+                ['a.jpg', 'bad'],
+                ['b.jpg', 'bad'],
+            ]),
+            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
+            bulkPairKey,
             reverseMlModelUpdate: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
@@ -1732,11 +1805,16 @@ describe('undoBulkRating', () => {
         const lastMove = {
             bothGood: false,
             bothBad: true,
-            bulkFiles: [{ name: 'a.jpg', features: null }],
+            bulkFiles: [
+                { name: 'a.jpg', features: null },
+                { name: 'b.jpg', features: null },
+            ],
         };
         await undoBulkRating.call(ctx, lastMove);
         expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
         expect(ctx.bulkRated.has('a.jpg')).toBe(false);
+        expect(ctx.bulkRated.has('b.jpg')).toBe(false);
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'b.jpg'))).toBe(false);
     });
 });
 
