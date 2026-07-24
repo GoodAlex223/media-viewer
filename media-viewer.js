@@ -7995,6 +7995,14 @@ class MediaViewer {
             prevPairIndex: this.mlComparePairIndex,
         });
 
+        // The rated pair dropped out of the valid list — clamp the cursor into the now-shorter list
+        // so the "Pair N of M" count and the selected pair stay coherent (rating the last valid pair
+        // would otherwise leave the cursor past the end). prevPairIndex above keeps undo exact.
+        this.mlComparePairIndex = Math.min(
+            this.mlComparePairIndex,
+            Math.max(0, this.computeValidComparePairs().length - 1)
+        );
+
         this.showNotification(
             bucket === 'good'
                 ? '👍 Both files marked good (model updated)'

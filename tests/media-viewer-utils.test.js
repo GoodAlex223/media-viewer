@@ -1572,6 +1572,7 @@ describe('handleCancel feature restore', () => {
             saveBulkRatedFile: async () => {},
             moveHistory: [],
             mlComparePairIndex: 3,
+            computeValidComparePairs: () => [{}, {}, {}, {}],
             showNotification: () => {},
             showMedia,
             nextMedia,
@@ -1707,6 +1708,8 @@ describe('applyBulkRating', () => {
             showMedia: vi.fn(),
             bulkRatedPairs: new Set(),
             bulkPairKey: extractMethod('bulkPairKey'),
+            mlComparePairIndex: 0,
+            computeValidComparePairs: () => [{ leftFile: {}, rightFile: {} }],
             ...overrides,
         };
     }
@@ -1754,6 +1757,20 @@ describe('applyBulkRating', () => {
         expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
         expect(ctx.bulkRated.get('a.jpg')).toBe('good');
         expect(ctx.moveHistory[0].bulkFiles[0].features).toBeNull();
+    });
+
+    it('clamps mlComparePairIndex into the shrunk valid list (keeps the count coherent), preserving prevPairIndex', async () => {
+        // Rating the last valid pair: cursor 2, but only 2 valid pairs remain afterward.
+        const ctx = makeCtx({
+            mlComparePairIndex: 2,
+            computeValidComparePairs: () => [
+                { leftFile: {}, rightFile: {} },
+                { leftFile: {}, rightFile: {} },
+            ],
+        });
+        await applyBulkRating.call(ctx, 'bad');
+        expect(ctx.moveHistory[0].prevPairIndex).toBe(2); // original index recorded for undo
+        expect(ctx.mlComparePairIndex).toBe(1); // clamped to valid max (length - 1)
     });
 });
 
@@ -1880,7 +1897,6 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
     });
 
     it('removeFileFromList prunes bulkRatedPairs keys that reference the removed file', () => {
-        const removeFileFromList = extractMethod('removeFileFromList');
         const bulkPairKey = extractMethod('bulkPairKey');
         const gone = { name: 'gone.jpg', path: '/f/gone.jpg' };
         const keep = { name: 'keep.jpg', path: '/f/keep.jpg' };
