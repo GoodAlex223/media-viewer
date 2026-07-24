@@ -1091,6 +1091,12 @@ class MediaViewer {
             this.saveBulkRatedFile();
         }
 
+        // A removed/moved file can never re-pair — drop any rated-pair key that references it.
+        for (const key of this.bulkRatedPairs) {
+            const [a, b] = key.split('\u0000');
+            if (a === removedName || b === removedName) this.bulkRatedPairs.delete(key);
+        }
+
         if (this.currentIndex >= this.mediaFiles.length) {
             this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
         }
@@ -1274,7 +1280,7 @@ class MediaViewer {
         if (this.isCompareMode) {
             // In ML sorted mode, navigate through pairs by score
             if (this.isSortedByPrediction) {
-                const maxPairIndex = Math.floor(this.mediaFiles.length / 2) - 1;
+                const maxPairIndex = Math.max(0, this.computeValidComparePairs().length - 1);
                 this.mlComparePairIndex = Math.min(this.mlComparePairIndex + 1, maxPairIndex);
             } else {
                 // Regular mode: skip by 2
@@ -3792,7 +3798,7 @@ class MediaViewer {
         if (this.isCompareMode && this.mediaFiles.length >= 2) {
             // In ML sorted mode, show pair index instead of file indices
             if (this.isSortedByPrediction && this.predictionScores.size >= 2) {
-                const totalPairs = Math.floor(this.mediaFiles.length / 2);
+                const totalPairs = this.computeValidComparePairs().length;
                 this.mediaIndex.textContent = `Pair ${this.mlComparePairIndex + 1} of ${totalPairs}`;
             } else {
                 this.mediaIndex.textContent = `${this.currentIndex + 1}-${this.currentIndex + 2} of ${this.mediaFiles.length}`;
@@ -7562,6 +7568,7 @@ class MediaViewer {
 
     async loadBulkRatedFile() {
         this.bulkRated = new Map();
+        this.bulkRatedPairs = new Set(); // session-only; starts empty on each folder load
         if (!this.baseFolderPath) return;
         try {
             const result = await window.electronAPI.readBulkRatedFile(this.baseFolderPath);

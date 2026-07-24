@@ -314,6 +314,7 @@ describe('removeFileFromList', () => {
             perceptualHashes: new Map(),
             jxlFrameCache: new Map(),
             bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
             saveBulkRatedFile: vi.fn(),
         };
     }
@@ -1834,6 +1835,7 @@ describe('removeFileFromList bulk-rated purge', () => {
             perceptualHashes: new Map(),
             jxlFrameCache: new Map(),
             bulkRated: new Map([['a.jpg', 'good']]),
+            bulkRatedPairs: new Set(),
             currentIndex: 0,
             saveBulkRatedFile: vi.fn(),
         };
@@ -1850,6 +1852,56 @@ describe('removeFileFromList bulk-rated purge', () => {
         const ctx = makeCtx();
         removeFileFromList.call(ctx, '/f/b.jpg');
         expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
+    });
+});
+
+describe('valid-pairs bounds (G3 Task 3)', () => {
+    it('updateNavigationInfo shows the valid-pairs count as the denominator', () => {
+        const updateNavigationInfo = extractMethod('updateNavigationInfo');
+        const mediaIndex = { textContent: '' };
+        const ctx = {
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            predictionScores: new Map([
+                ['/f/a', 0.9],
+                ['/f/b', 0.1],
+            ]),
+            mediaFiles: [
+                { name: 'a', path: '/f/a' },
+                { name: 'b', path: '/f/b' },
+            ],
+            mlComparePairIndex: 0,
+            mediaIndex,
+            // 3 valid pairs regardless of the 2-file mediaFiles (stubbed to isolate the denominator)
+            computeValidComparePairs: () => [{}, {}, {}],
+        };
+        updateNavigationInfo.call(ctx);
+        expect(mediaIndex.textContent).toBe('Pair 1 of 3');
+    });
+
+    it('removeFileFromList prunes bulkRatedPairs keys that reference the removed file', () => {
+        const removeFileFromList = extractMethod('removeFileFromList');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const gone = { name: 'gone.jpg', path: '/f/gone.jpg' };
+        const keep = { name: 'keep.jpg', path: '/f/keep.jpg' };
+        const other = { name: 'other.jpg', path: '/f/other.jpg' };
+        const ctx = {
+            mediaFiles: [gone, keep, other],
+            currentIndex: 0,
+            predictionScores: new Map(),
+            featureCache: new Map(),
+            clipCache: new Map(),
+            jxlFrameCache: new Map(),
+            featureMetadata: new Map(),
+            perceptualHashes: new Map(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set([bulkPairKey('gone.jpg', 'keep.jpg'), bulkPairKey('keep.jpg', 'other.jpg')]),
+            bulkPairKey,
+            saveBulkRatedFile: () => {},
+        };
+        removeFileFromList.call(ctx, '/f/gone.jpg');
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('gone.jpg', 'keep.jpg'))).toBe(false);
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('keep.jpg', 'other.jpg'))).toBe(true);
     });
 });
 
