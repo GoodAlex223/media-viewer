@@ -8006,6 +8006,7 @@ class MediaViewer {
                 this.pendingCompareRefresh = false;
                 this.pendingCompareUpdates = 0;
                 this.pendingCompareTimeout = null;
+                this.previousScores = null;
                 this.mediaNavigationInProgress = false;
                 this.showMedia();
             }
@@ -8013,7 +8014,10 @@ class MediaViewer {
     }
 
     async applyBulkRating(bucket) {
-        if (!this.isSortedByPrediction || !this.isCompareMode) return;
+        // Drop a re-entrant press while a prior rating's deferred refresh is still pending (up to
+        // 3s): otherwise a fast double D/F or a double-click re-rates the SAME on-screen pair before
+        // it changes — duplicate ML posts plus two moveHistory entries for one user action.
+        if (!this.isSortedByPrediction || !this.isCompareMode || this.mediaNavigationInProgress) return;
         const left = this.compareLeftFile;
         const right = this.compareRightFile;
         if (!left || !right) return;

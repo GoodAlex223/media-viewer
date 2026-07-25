@@ -1656,7 +1656,10 @@ describe('handleCancel feature restore', () => {
         try {
             const beginDeferred = extractMethod('_beginDeferredCompareRefresh');
             const showMedia = vi.fn();
-            const ctx = { showMedia };
+            // Seed a stale pre-rating snapshot, as moveComparePair's mirror-image fallback would
+            // have left behind — the fallback must null it so a delta notification never computes
+            // against out-of-date scores after showMedia() re-renders with the pair still unscored.
+            const ctx = { showMedia, previousScores: new Map([['stale.jpg', 0.5]]) };
             beginDeferred.call(ctx, 2);
             expect(showMedia).not.toHaveBeenCalled();
 
@@ -1666,6 +1669,83 @@ describe('handleCancel feature restore', () => {
             expect(ctx.pendingCompareRefresh).toBe(false);
             expect(ctx.pendingCompareUpdates).toBe(0);
             expect(ctx.mediaNavigationInProgress).toBe(false);
+            expect(ctx.previousScores).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('applyBulkRating drops a re-entrant press while a deferred refresh is pending', async () => {
+        const applyBulkRating = extractAsyncMethod('applyBulkRating');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const updateMlModelWithFeatures = vi.fn(() => true);
+        const saveBulkRatedFile = vi.fn(async () => {});
+        const showMedia = vi.fn();
+        const ctx = {
+            isSortedByPrediction: true,
+            isCompareMode: true,
+            mediaNavigationInProgress: true, // a prior rating's deferred refresh is still in flight
+            compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+            compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+            getCombinedFeatures: () => [1, 2, 3],
+            updateMlModelWithFeatures,
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey,
+            saveBulkRatedFile,
+            moveHistory: [],
+            mlComparePairIndex: 0,
+            computeValidComparePairs: () => [{}, {}],
+            showNotification: () => {},
+            showMedia,
+        };
+        await applyBulkRating.call(ctx, 'good');
+
+        // The whole method must be a no-op — the in-flight rating from the first press owns this
+        // pair until scoreComplete (or the 3s fallback) clears mediaNavigationInProgress.
+        expect(updateMlModelWithFeatures).not.toHaveBeenCalled();
+        expect(saveBulkRatedFile).not.toHaveBeenCalled();
+        expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.bulkRatedPairs.size).toBe(0);
+        expect(ctx.moveHistory).toHaveLength(0);
+        expect(showMedia).not.toHaveBeenCalled();
+    });
+
+    it('applyBulkRating counts exactly one posted update when only one file actually posts', async () => {
+        vi.useFakeTimers();
+        try {
+            const applyBulkRating = extractAsyncMethod('applyBulkRating');
+            const bulkPairKey = extractMethod('bulkPairKey');
+            const showMedia = vi.fn();
+            let calls = 0;
+            const ctx = {
+                isSortedByPrediction: true,
+                isCompareMode: true,
+                compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+                compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+                getCombinedFeatures: () => [1, 2, 3], // both files "have" cached features
+                // First file (left) posts to the worker; second (right) does not — e.g. the worker
+                // was unloaded mid-loop. postedUpdates must track the true count (1), never assume 2.
+                updateMlModelWithFeatures: vi.fn(() => {
+                    calls++;
+                    return calls === 1;
+                }),
+                bulkRated: new Map(),
+                bulkRatedPairs: new Set(),
+                bulkPairKey,
+                saveBulkRatedFile: async () => {},
+                moveHistory: [],
+                mlComparePairIndex: 0,
+                computeValidComparePairs: () => [{}, {}],
+                showNotification: () => {},
+                showMedia,
+                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+            };
+            await applyBulkRating.call(ctx, 'bad');
+
+            expect(ctx.pendingCompareRefresh).toBe(true);
+            expect(ctx.pendingCompareUpdates).toBe(1); // exactly one message was actually posted
+            expect(showMedia).not.toHaveBeenCalled();
         } finally {
             vi.useRealTimers();
         }
@@ -1798,18 +1878,35 @@ describe('applyBulkRating', () => {
         };
     }
 
-    it('trains both files as like and records them as good, then re-renders', async () => {
-        const ctx = makeCtx();
-        await applyBulkRating.call(ctx, 'good');
-        expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledTimes(2);
-        expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'like');
-        expect(ctx.bulkRated.get('a.jpg')).toBe('good');
-        expect(ctx.bulkRated.get('b.jpg')).toBe('good');
-        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
-        expect(ctx.moveHistory).toHaveLength(1);
-        expect(ctx.moveHistory[0].bothGood).toBe(true);
-        expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
-        expect(ctx.showMedia).toHaveBeenCalledOnce();
+    it('trains both files as like and records them as good, then defers the re-render', async () => {
+        vi.useFakeTimers();
+        try {
+            // Override the shared makeCtx() default (a bare vi.fn() returning undefined) with a
+            // realistic "both files actually posted" mock — the shared default would silently take
+            // the immediate-render branch and this test would stop exercising the deferred path.
+            // Overridden here rather than in makeCtx() itself: the shared default is relied on by
+            // sibling tests below (e.g. the mlComparePairIndex clamp test) that don't stub
+            // _beginDeferredCompareRefresh and would break if the default started posting.
+            const ctx = makeCtx({
+                updateMlModelWithFeatures: vi.fn(() => true),
+                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+            });
+            await applyBulkRating.call(ctx, 'good');
+            expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledTimes(2);
+            expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'like');
+            expect(ctx.bulkRated.get('a.jpg')).toBe('good');
+            expect(ctx.bulkRated.get('b.jpg')).toBe('good');
+            expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+            expect(ctx.moveHistory).toHaveLength(1);
+            expect(ctx.moveHistory[0].bothGood).toBe(true);
+            expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
+            // Both posts succeeded — the render must be deferred until scoreComplete, not immediate.
+            expect(ctx.pendingCompareRefresh).toBe(true);
+            expect(ctx.pendingCompareUpdates).toBe(2);
+            expect(ctx.showMedia).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('trains both files as dislike for the bad bucket', async () => {
