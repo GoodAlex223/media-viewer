@@ -3806,8 +3806,19 @@ class MediaViewer {
         if (this.isCompareMode && this.mediaFiles.length >= 2) {
             // In ML sorted mode, show pair index instead of file indices
             if (this.isSortedByPrediction && this.predictionScores.size >= 2) {
-                const totalPairs = this.computeValidComparePairs().length;
-                this.mediaIndex.textContent = `Pair ${this.mlComparePairIndex + 1} of ${totalPairs}`;
+                const allPairs = this.computeAllComparePairs();
+                const validPairs = this.computeValidComparePairs();
+                const idx = Math.min(this.mlComparePairIndex, Math.max(0, validPairs.length - 1));
+                const current = validPairs[idx];
+                // Report the displayed pair's position in the FULL list, so neither the numerator
+                // nor the denominator moves when suppression shrinks the valid list or fall-through
+                // re-admits it. Falls back to the cursor if the pair is somehow not found.
+                let pos = -1;
+                if (current) {
+                    const key = this.bulkPairKey(current.leftFile.name, current.rightFile.name);
+                    pos = allPairs.findIndex((p) => this.bulkPairKey(p.leftFile.name, p.rightFile.name) === key);
+                }
+                this.mediaIndex.textContent = `Pair ${pos >= 0 ? pos + 1 : idx + 1} of ${allPairs.length}`;
             } else {
                 this.mediaIndex.textContent = `${this.currentIndex + 1}-${this.currentIndex + 2} of ${this.mediaFiles.length}`;
             }

@@ -1873,27 +1873,71 @@ describe('removeFileFromList bulk-rated purge', () => {
 });
 
 describe('valid-pairs bounds (G3 Task 3)', () => {
-    it('updateNavigationInfo shows the valid-pairs count as the denominator', () => {
+    it('updateNavigationInfo uses the FULL pair count as the denominator (no shrink, no jump)', () => {
         const updateNavigationInfo = extractMethod('updateNavigationInfo');
+        const bulkPairKey = extractMethod('bulkPairKey');
         const mediaIndex = { textContent: '' };
+        const a = { name: 'a', path: '/f/a' };
+        const b = { name: 'b', path: '/f/b' };
+        const c = { name: 'c', path: '/f/c' };
+        const d = { name: 'd', path: '/f/d' };
+        const all = [
+            { leftFile: a, rightFile: d },
+            { leftFile: b, rightFile: c },
+        ];
         const ctx = {
             isCompareMode: true,
             isSortedByPrediction: true,
             predictionScores: new Map([
                 ['/f/a', 0.9],
-                ['/f/b', 0.1],
+                ['/f/b', 0.7],
+                ['/f/c', 0.3],
+                ['/f/d', 0.1],
             ]),
-            mediaFiles: [
-                { name: 'a', path: '/f/a' },
-                { name: 'b', path: '/f/b' },
-            ],
+            mediaFiles: [a, b, c, d],
             mlComparePairIndex: 0,
             mediaIndex,
-            // 3 valid pairs regardless of the 2-file mediaFiles (stubbed to isolate the denominator)
-            computeValidComparePairs: () => [{}, {}, {}],
+            bulkPairKey,
+            computeAllComparePairs: () => all,
+            // (a,d) was bulk-rated, so only the second pair is valid — the pre-fix code showed
+            // "Pair 1 of 1" here (denominator shrank to the valid count).
+            computeValidComparePairs: () => [all[1]],
         };
         updateNavigationInfo.call(ctx);
-        expect(mediaIndex.textContent).toBe('Pair 1 of 3');
+        // Denominator stays at the real pair count, and the displayed pair reports its TRUE position.
+        expect(mediaIndex.textContent).toBe('Pair 2 of 2');
+    });
+
+    it('updateNavigationInfo reports position 1 with nothing suppressed', () => {
+        const updateNavigationInfo = extractMethod('updateNavigationInfo');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const mediaIndex = { textContent: '' };
+        const a = { name: 'a', path: '/f/a' };
+        const b = { name: 'b', path: '/f/b' };
+        const c = { name: 'c', path: '/f/c' };
+        const d = { name: 'd', path: '/f/d' };
+        const all = [
+            { leftFile: a, rightFile: d },
+            { leftFile: b, rightFile: c },
+        ];
+        const ctx = {
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            predictionScores: new Map([
+                ['/f/a', 0.9],
+                ['/f/b', 0.7],
+                ['/f/c', 0.3],
+                ['/f/d', 0.1],
+            ]),
+            mediaFiles: [a, b, c, d],
+            mlComparePairIndex: 0,
+            mediaIndex,
+            bulkPairKey,
+            computeAllComparePairs: () => all,
+            computeValidComparePairs: () => all,
+        };
+        updateNavigationInfo.call(ctx);
+        expect(mediaIndex.textContent).toBe('Pair 1 of 2');
     });
 
     it('removeFileFromList prunes bulkRatedPairs keys that reference the removed file', () => {
