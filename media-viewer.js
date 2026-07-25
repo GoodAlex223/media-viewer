@@ -2945,11 +2945,11 @@ class MediaViewer {
         return [nameA, nameB].sort().join('\u0000');
     }
 
-    // Ordered "extremes" candidate pairs for AI-sorted compare (i-th highest vs i-th lowest),
-    // dropping any exact two-file combo already in bulkRatedPairs. Falls through to the full
-    // candidate list when every pair is suppressed, so the user can always re-rate. Pure — reads
-    // only mediaFiles / predictionScores / bulkRatedPairs; safe to recompute each render.
-    computeValidComparePairs() {
+    // Full "extremes" candidate list for AI-sorted compare (i-th highest vs i-th lowest), with no
+    // suppression applied. This is the real, stable pair count — the navigation counter reads it so
+    // the total never shrinks as pairs are rated nor jumps when fall-through re-admits them.
+    // Pure — reads only mediaFiles / predictionScores.
+    computeAllComparePairs() {
         const filesWithScores = this.mediaFiles
             .map((f) => ({ file: f, score: this.predictionScores.get(f.path) ?? 0.5 }))
             .sort((a, b) => b.score - a.score);
@@ -2961,6 +2961,14 @@ class MediaViewer {
                 rightFile: filesWithScores[n - 1 - i].file,
             });
         }
+        return candidates;
+    }
+
+    // computeAllComparePairs() minus any exact two-file combo already in bulkRatedPairs. Falls
+    // through to the full list when every pair is suppressed, so the user can always re-rate.
+    // Pure; safe to recompute each render.
+    computeValidComparePairs() {
+        const candidates = this.computeAllComparePairs();
         const valid = candidates.filter(
             (p) => !this.bulkRatedPairs.has(this.bulkPairKey(p.leftFile.name, p.rightFile.name))
         );

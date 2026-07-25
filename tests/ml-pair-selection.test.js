@@ -28,13 +28,19 @@ function extractMethod(methodName) {
 
 // The REAL implementations under test (no replica — extracted from media-viewer.js source).
 const bulkPairKey = extractMethod('bulkPairKey');
+const computeAllComparePairs = extractMethod('computeAllComparePairs');
 const computeValidComparePairs = extractMethod('computeValidComparePairs');
 
-// Invoke computeValidComparePairs with a minimal `this`. bulkPairKey is provided on the ctx so the
-// real key logic is exercised (it does not use `this`, so a bare function reference is fine).
+// Invoke computeValidComparePairs with a minimal `this`. bulkPairKey and computeAllComparePairs are
+// provided on the ctx because the method calls both through `this`.
 function callCompute(mediaFiles, predictionScores, bulkRatedPairs = new Set()) {
-    const ctx = { mediaFiles, predictionScores, bulkRatedPairs, bulkPairKey };
+    const ctx = { mediaFiles, predictionScores, bulkRatedPairs, bulkPairKey, computeAllComparePairs };
     return computeValidComparePairs.call(ctx);
+}
+
+// Invoke computeAllComparePairs directly — it needs no suppression state.
+function callComputeAll(mediaFiles, predictionScores) {
+    return computeAllComparePairs.call({ mediaFiles, predictionScores });
 }
 
 function mockFile(name) {
@@ -176,5 +182,34 @@ describe('computeValidComparePairs — exact-pair suppression', () => {
         expect(pairs).toHaveLength(1);
         expect(pairs[0].leftFile).toBe(two[0]);
         expect(pairs[0].rightFile).toBe(two[1]);
+    });
+});
+
+describe('computeAllComparePairs — unfiltered pair count', () => {
+    const files = [mockFile('a'), mockFile('b'), mockFile('c'), mockFile('d')];
+    const scores = scoreMap([
+        [files[0], 0.9],
+        [files[1], 0.7],
+        [files[2], 0.3],
+        [files[3], 0.1],
+    ]);
+
+    it('returns floor(n/2) pairs in extremes order', () => {
+        const pairs = callComputeAll(files, scores);
+        expect(pairs).toHaveLength(2);
+        expect(pairs[0].leftFile).toBe(files[0]);
+        expect(pairs[0].rightFile).toBe(files[3]);
+        expect(pairs[1].leftFile).toBe(files[1]);
+        expect(pairs[1].rightFile).toBe(files[2]);
+    });
+
+    it('ignores suppression entirely — the count stays stable while the valid list shrinks', () => {
+        const suppressed = new Set([bulkPairKey('a', 'd')]);
+        expect(callCompute(files, scores, suppressed)).toHaveLength(1); // valid list shrank
+        expect(callComputeAll(files, scores)).toHaveLength(2); // full count did not
+    });
+
+    it('returns an empty list for fewer than 2 files', () => {
+        expect(callComputeAll([files[0]], scores)).toHaveLength(0);
     });
 });
