@@ -7957,16 +7957,18 @@ class MediaViewer {
     }
 
     /**
-     * Update ML model with pre-extracted features (used when file will be moved)
+     * Update ML model with pre-extracted features (used when file will be moved).
+     * Returns true only when a message was actually posted to the worker — callers that await a
+     * matching updateComplete must count real posts, not assume one per file.
      */
     updateMlModelWithFeatures(features, actionType) {
         if (!this.isMlEnabled || !this.mlWorker) {
             console.log('[ML Debug] Update skipped: ML disabled or worker not ready');
-            return;
+            return false;
         }
         if (!features) {
             console.warn('[ML Debug] Update skipped: No features provided!');
-            return;
+            return false;
         }
 
         const label = actionType === 'like' ? 1 : 0;
@@ -7981,6 +7983,33 @@ class MediaViewer {
                 label: label,
             },
         });
+        return true;
+    }
+
+    // Hold the compare re-render until the ML worker finishes re-scoring, then let scoreComplete
+    // render from fresh scores (mirrors moveComparePair). The pairing is derived from
+    // predictionScores, so rendering now would re-pair from pre-update scores and the pairs would
+    // never re-mix. `expectedUpdates` MUST be the number of worker messages actually posted, or the
+    // counter never reaches 0 and the view waits out the fallback.
+    _beginDeferredCompareRefresh(expectedUpdates) {
+        if (this.pendingCompareTimeout) {
+            clearTimeout(this.pendingCompareTimeout);
+            this.pendingCompareTimeout = null;
+        }
+        this.pendingCompareRefresh = true;
+        this.pendingCompareUpdates = expectedUpdates;
+        // Block spurious showMedia() calls while we wait; scoreComplete clears it.
+        this.mediaNavigationInProgress = true;
+        this.pendingCompareTimeout = setTimeout(() => {
+            if (this.pendingCompareRefresh) {
+                console.warn('[ML Debug] Compare re-score timeout — showing pair with stale scores');
+                this.pendingCompareRefresh = false;
+                this.pendingCompareUpdates = 0;
+                this.pendingCompareTimeout = null;
+                this.mediaNavigationInProgress = false;
+                this.showMedia();
+            }
+        }, 3000);
     }
 
     async applyBulkRating(bucket) {
@@ -7991,10 +8020,11 @@ class MediaViewer {
 
         const actionType = bucket === 'good' ? 'like' : 'dislike';
         const bulkFiles = [];
+        let postedUpdates = 0;
         for (const f of [left, right]) {
             const features = this.getCombinedFeatures(f.path);
-            if (features) {
-                this.updateMlModelWithFeatures(features, actionType);
+            if (features && this.updateMlModelWithFeatures(features, actionType)) {
+                postedUpdates++;
             }
             bulkFiles.push({ name: f.name, features });
             this.bulkRated.set(f.name, bucket);
@@ -8030,9 +8060,15 @@ class MediaViewer {
             'success'
         );
 
-        // Re-render in place, NOT nextMedia(): removing the rated pair from the valid list makes the
-        // next pair slide into the current index automatically. An extra index++ would skip one.
-        this.showMedia();
+        // Defer the re-render until the model re-scores — otherwise the next pair is derived from
+        // PRE-rating scores and the extremes never re-mix (the rated pair just drops out and its
+        // neighbour slides in). scoreComplete calls showMedia() with fresh scores.
+        if (postedUpdates > 0) {
+            this._beginDeferredCompareRefresh(postedUpdates);
+        } else {
+            // No worker message was posted, so no scoreComplete is coming — render now.
+            this.showMedia();
+        }
     }
 
     async handleBothGood() {

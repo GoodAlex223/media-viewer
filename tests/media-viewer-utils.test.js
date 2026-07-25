@@ -1587,6 +1587,90 @@ describe('handleCancel feature restore', () => {
         expect(ctx.moveHistory[0].bothBad).toBe(true);
     });
 
+    it('applyBulkRating defers the re-render until the model re-scores', async () => {
+        vi.useFakeTimers();
+        try {
+            const applyBulkRating = extractAsyncMethod('applyBulkRating');
+            const bulkPairKey = extractMethod('bulkPairKey');
+            const showMedia = vi.fn();
+            const ctx = {
+                isSortedByPrediction: true,
+                isCompareMode: true,
+                compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+                compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+                getCombinedFeatures: () => [1, 2, 3],
+                updateMlModelWithFeatures: vi.fn(() => true), // both posts succeed
+                bulkRated: new Map(),
+                bulkRatedPairs: new Set(),
+                bulkPairKey,
+                saveBulkRatedFile: async () => {},
+                moveHistory: [],
+                mlComparePairIndex: 0,
+                computeValidComparePairs: () => [{}, {}],
+                showNotification: () => {},
+                showMedia,
+                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+            };
+            await applyBulkRating.call(ctx, 'bad');
+
+            expect(ctx.pendingCompareRefresh).toBe(true);
+            expect(ctx.pendingCompareUpdates).toBe(2); // one per posted update
+            expect(ctx.mediaNavigationInProgress).toBe(true);
+            expect(showMedia).not.toHaveBeenCalled(); // scoreComplete renders, not us
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('applyBulkRating renders immediately when no model update was posted', async () => {
+        const applyBulkRating = extractAsyncMethod('applyBulkRating');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const showMedia = vi.fn();
+        const ctx = {
+            isSortedByPrediction: true,
+            isCompareMode: true,
+            compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+            compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+            getCombinedFeatures: () => [1, 2, 3],
+            updateMlModelWithFeatures: vi.fn(() => false), // ML off / no worker
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey,
+            saveBulkRatedFile: async () => {},
+            moveHistory: [],
+            mlComparePairIndex: 0,
+            computeValidComparePairs: () => [{}, {}],
+            showNotification: () => {},
+            showMedia,
+            _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+        };
+        await applyBulkRating.call(ctx, 'bad');
+
+        // Nothing will come back from the worker — rendering must not be deferred.
+        expect(ctx.pendingCompareRefresh).toBeFalsy();
+        expect(showMedia).toHaveBeenCalledTimes(1);
+    });
+
+    it('the deferred-refresh fallback renders with stale scores after 3s', async () => {
+        vi.useFakeTimers();
+        try {
+            const beginDeferred = extractMethod('_beginDeferredCompareRefresh');
+            const showMedia = vi.fn();
+            const ctx = { showMedia };
+            beginDeferred.call(ctx, 2);
+            expect(showMedia).not.toHaveBeenCalled();
+
+            vi.advanceTimersByTime(3000);
+
+            expect(showMedia).toHaveBeenCalledTimes(1);
+            expect(ctx.pendingCompareRefresh).toBe(false);
+            expect(ctx.pendingCompareUpdates).toBe(0);
+            expect(ctx.mediaNavigationInProgress).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('undoBulkRating deletes the exact pair key', async () => {
         const undoBulkRating = extractAsyncMethod('undoBulkRating');
         const bulkPairKey = extractMethod('bulkPairKey');
