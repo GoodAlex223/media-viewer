@@ -1534,7 +1534,7 @@ describe('handleCancel feature restore', () => {
             isCompareMode: true,
             isSortedByPrediction: true,
             mlComparePairIndex: 5, // set high; handleCancel restores prevPairIndex on undo
-            undoBulkRating: vi.fn(async () => {}),
+            undoBulkRating: vi.fn(async () => 0), // no worker posts -> render immediately
             moveHistory: [
                 {
                     bothGood: true,
@@ -1550,8 +1550,41 @@ describe('handleCancel feature restore', () => {
         expect(ctx.undoBulkRating).toHaveBeenCalledOnce();
         expect(ctx.moveHistory).toHaveLength(0); // entry popped
         expect(ctx.mlComparePairIndex).toBe(3); // returned to the bulk-rated pair
+        // undoBulkRating is stubbed to return 0 posts, so this takes the immediate-render path.
         expect(ctx.requestPredictionScores).toHaveBeenCalledOnce(); // badges re-scored after ML revert
         expect(ctx.showMedia).toHaveBeenCalledOnce(); // re-render (refreshes the floating Undo button)
+    });
+
+    it('bulk-rating undo defers the re-render when reverse updates were posted', async () => {
+        vi.useFakeTimers();
+        try {
+            const ctx = commonMocks({
+                isCompareMode: true,
+                isSortedByPrediction: true,
+                mlComparePairIndex: 5,
+                undoBulkRating: vi.fn(async () => 2), // two reverseUpdate messages posted
+                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+                moveHistory: [
+                    {
+                        bothGood: true,
+                        bothBad: false,
+                        bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
+                        prevPairIndex: 3,
+                    },
+                ],
+            });
+
+            await handleCancel.call(ctx);
+
+            expect(ctx.mlComparePairIndex).toBe(3); // still restored before deferring
+            expect(ctx.pendingCompareRefresh).toBe(true);
+            expect(ctx.pendingCompareUpdates).toBe(2);
+            // reverseUpdateComplete drives the re-score; handleCancel must not do either itself.
+            expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
+            expect(ctx.showMedia).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('applyBulkRating records the exact pair key and re-renders in place (no advance)', async () => {

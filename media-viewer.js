@@ -3856,16 +3856,22 @@ class MediaViewer {
         await this.moveCurrentFile('dislike');
     }
 
+    // Returns the number of reverseUpdate messages actually posted, so handleCancel knows whether
+    // to wait for a re-score or render immediately.
     async undoBulkRating(lastMove) {
         const actionType = lastMove.bothGood ? 'like' : 'dislike';
+        let postedUpdates = 0;
         for (const f of lastMove.bulkFiles) {
-            if (f.features) this.reverseMlModelUpdate(f.features, actionType);
+            if (f.features && this.reverseMlModelUpdate(f.features, actionType)) {
+                postedUpdates++;
+            }
             this.bulkRated.delete(f.name);
         }
         await this.saveBulkRatedFile();
         // Re-admit the exact combo so it can reappear at its natural extreme position on re-render.
         this.bulkRatedPairs.delete(this.bulkPairKey(lastMove.bulkFiles[0].name, lastMove.bulkFiles[1].name));
         this.showNotification('↩️ Bulk rating undone', 'info');
+        return postedUpdates;
     }
 
     async handleCancel() {
@@ -3887,12 +3893,19 @@ class MediaViewer {
         // just reverted), and re-render so the floating Undo button visibility updates.
         if (lastMove.bothGood || lastMove.bothBad) {
             this.moveHistory.pop();
-            await this.undoBulkRating(lastMove);
+            const postedUpdates = await this.undoBulkRating(lastMove);
             if (typeof lastMove.prevPairIndex === 'number') {
                 this.mlComparePairIndex = lastMove.prevPairIndex;
             }
-            if (this.isSortedByPrediction) this.requestPredictionScores();
-            await this.showMedia();
+            // Same deferred protocol as applyBulkRating: rendering now would pair from the
+            // POST-rating scores we are in the middle of reverting, so the pair we restore could be
+            // the wrong one. reverseUpdateComplete drives requestPredictionScores from here.
+            if (this.isSortedByPrediction && postedUpdates > 0) {
+                this._beginDeferredCompareRefresh(postedUpdates);
+            } else {
+                if (this.isSortedByPrediction) this.requestPredictionScores();
+                await this.showMedia();
+            }
             return;
         }
 
@@ -8089,7 +8102,7 @@ class MediaViewer {
      * @param {string} actionType - Original action ('like' or 'dislike')
      */
     reverseMlModelUpdate(features, actionType) {
-        if (!this.isMlEnabled || !this.mlWorker || !features) return;
+        if (!this.isMlEnabled || !this.mlWorker || !features) return false;
 
         this.mlWorker.postMessage({
             type: 'reverseUpdate',
@@ -8098,6 +8111,7 @@ class MediaViewer {
                 label: actionType === 'like' ? 1 : 0,
             },
         });
+        return true;
     }
 
     /**
