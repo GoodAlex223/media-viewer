@@ -3047,7 +3047,7 @@ class MediaViewer {
         }
         // If sorted by prediction, select from the valid-pairs list (exact rated combos removed,
         // full-list fall-through). computeValidComparePairs is the single source of truth shared
-        // with navigation, the position count, and undo.
+        // with undo; updateNavigationInfo now derives its own valid subset locally for performance.
         else if (this.isSortedByPrediction && this.predictionScores.size >= 2) {
             const pairs = this.computeValidComparePairs();
             const idx = Math.min(this.mlComparePairIndex, pairs.length - 1);

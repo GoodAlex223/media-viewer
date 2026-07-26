@@ -93,7 +93,7 @@ media_viewer/
 - `.media-container` overlay blocks pointer events — use `{force:true}` or `page.evaluate()`.
 - Helpers: `seedLocalStorage(page, kv)` (call after `launchApp()`, before `loadFolder()`); `mockFolderDialog(app, path)`; `closeApp()` (races close vs 5s then SIGKILL; Windows `taskkill /F /T`); Lucide CDN stub via `page.route('**/unpkg.com/**')`; `createTempFixtureDir(names?)`.
 - `afterEach` null guards: guard `if (electronApp)`/`if (tmpFixtures)`/`if (page)` before cleanup (`.catch()` only handles rejections, not a sync TypeError on undefined).
-- Before a method that guards on `isLoading` (e.g. `handleCancel` after `applyBulkRating`), `await page.waitForFunction(() => !window.mediaViewer.isLoading)`.
+- Before a method that guards on `isLoading` and `mediaNavigationInProgress` (e.g. `handleCancel` after `applyBulkRating`), `await page.waitForFunction(() => !window.mediaViewer.isLoading && !window.mediaViewer.mediaNavigationInProgress)`. The latter flag is set by deferred-refresh windows (e.g., re-scoring after bulk-rating) without setting `isLoading`.
 
 ## Backlog Intake Rules
 
