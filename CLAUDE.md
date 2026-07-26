@@ -153,7 +153,7 @@ BACKLOG.md is split into three source sections. Authoritative rules live in
 
 **Async Patterns**:
 - Extraction pause/resume: `signalUserActivity()` on nav/rating → 2s idle → `resumeExtraction()` resolves the gate promise. Generation counter `extractionRunId` — stale async callbacks return early.
-- ML compare refresh: `pendingCompareRefresh`/`pendingCompareUpdates` defer `showMedia()` until re-scoring completes (3s fallback); `mediaNavigationInProgress` prevents double-fire.
+- ML compare refresh: `pendingCompareRefresh`/`pendingCompareUpdates` defer `showMedia()` until re-scoring completes (3s fallback); `mediaNavigationInProgress` prevents double-fire. Armed via `_beginDeferredCompareRefresh(n)` from `moveComparePair` (single rating), `applyBulkRating` (bulk) and `handleCancel`'s bulk-undo branch — `n` MUST be the count of worker messages actually posted (`updateMlModelWithFeatures`/`reverseMlModelUpdate` return `false` when ML is off or features are missing), or the counter never reaches 0.
 - CLIP extraction: `@huggingface/transformers` runs in the MAIN process (npm packages can't resolve in Electron Web Workers). Chain: `initClipModel()` → `loadClipModel()` IPC (lazy, concurrent-safe, emits `clip-download-progress`) → image `extractClipEmbedding(path)` / video `extractKeyframes`+`extractClipEmbeddingBatch`; produces 512-dim unit-normalized vectors. Graceful degradation: CLIP unavailable = 64-dim only, no crash. `unloadClipModel` nulls model refs after a 30s idle grace.
 
 **Compare Mode Validation**: `showCompareMedia()` validates files via `checkFileExists` IPC before render (parallel); bounded retry (max 10) → fallback to single mode via `switchToSingleModeUI()`.
