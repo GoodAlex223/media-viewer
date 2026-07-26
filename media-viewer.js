@@ -2969,6 +2969,10 @@ class MediaViewer {
     // Pure; safe to recompute each render.
     computeValidComparePairs() {
         const candidates = this.computeAllComparePairs();
+        // Dominant case (nothing bulk-rated this session): skip building a key for every
+        // candidate — on a 24k-file folder that's thousands of sorts+string-joins per nav
+        // keypress for a filter that can suppress nothing.
+        if (this.bulkRatedPairs.size === 0) return candidates;
         const valid = candidates.filter(
             (p) => !this.bulkRatedPairs.has(this.bulkPairKey(p.leftFile.name, p.rightFile.name))
         );
@@ -3807,17 +3811,32 @@ class MediaViewer {
             // In ML sorted mode, show pair index instead of file indices
             if (this.isSortedByPrediction && this.predictionScores.size >= 2) {
                 const allPairs = this.computeAllComparePairs();
-                const validPairs = this.computeValidComparePairs();
-                const idx = Math.min(this.mlComparePairIndex, Math.max(0, validPairs.length - 1));
-                const current = validPairs[idx];
+                // Derive the valid subset locally instead of calling computeValidComparePairs() —
+                // that would rebuild + re-filter the full candidate list a SECOND time on every nav
+                // keypress (measured ~64ms extra at 24k files). Carry each surviving pair's index
+                // into `allPairs` along with it, so the position lookup below needs no findIndex
+                // key scan. Mirrors computeValidComparePairs' filter + fall-through exactly.
+                let validIndexed;
+                if (this.bulkRatedPairs.size === 0) {
+                    validIndexed = allPairs.map((pair, originalIndex) => ({ pair, originalIndex }));
+                } else {
+                    validIndexed = [];
+                    for (let i = 0; i < allPairs.length; i++) {
+                        const p = allPairs[i];
+                        if (!this.bulkRatedPairs.has(this.bulkPairKey(p.leftFile.name, p.rightFile.name))) {
+                            validIndexed.push({ pair: p, originalIndex: i });
+                        }
+                    }
+                    if (validIndexed.length === 0) {
+                        validIndexed = allPairs.map((pair, originalIndex) => ({ pair, originalIndex }));
+                    }
+                }
+                const idx = Math.min(this.mlComparePairIndex, Math.max(0, validIndexed.length - 1));
+                const current = validIndexed[idx];
                 // Report the displayed pair's position in the FULL list, so neither the numerator
                 // nor the denominator moves when suppression shrinks the valid list or fall-through
                 // re-admits it. Falls back to the cursor if the pair is somehow not found.
-                let pos = -1;
-                if (current) {
-                    const key = this.bulkPairKey(current.leftFile.name, current.rightFile.name);
-                    pos = allPairs.findIndex((p) => this.bulkPairKey(p.leftFile.name, p.rightFile.name) === key);
-                }
+                const pos = current ? current.originalIndex : -1;
                 this.mediaIndex.textContent = `Pair ${pos >= 0 ? pos + 1 : idx + 1} of ${allPairs.length}`;
             } else {
                 this.mediaIndex.textContent = `${this.currentIndex + 1}-${this.currentIndex + 2} of ${this.mediaFiles.length}`;
@@ -3858,19 +3877,31 @@ class MediaViewer {
 
     // Returns the number of reverseUpdate messages actually posted, so handleCancel knows whether
     // to wait for a re-score or render immediately.
+    //
+    // Ordering matters: every await here must resolve BEFORE the reverse-update messages are
+    // posted. handleCancel arms the deferred-refresh window in the synchronous continuation right
+    // after this method returns, and the invariant that protocol depends on is "no await between
+    // posting worker messages and arming the window" — a worker round trip is usually faster than
+    // the saveBulkRatedFile() disk write, so posting before it lets updateComplete/scoreComplete
+    // race the write and land before anything is armed to receive it.
     async undoBulkRating(lastMove) {
         const actionType = lastMove.bothGood ? 'like' : 'dislike';
-        let postedUpdates = 0;
         for (const f of lastMove.bulkFiles) {
-            if (f.features && this.reverseMlModelUpdate(f.features, actionType)) {
-                postedUpdates++;
-            }
             this.bulkRated.delete(f.name);
         }
         await this.saveBulkRatedFile();
         // Re-admit the exact combo so it can reappear at its natural extreme position on re-render.
         this.bulkRatedPairs.delete(this.bulkPairKey(lastMove.bulkFiles[0].name, lastMove.bulkFiles[1].name));
         this.showNotification('↩️ Bulk rating undone', 'info');
+
+        // Post the reverse-update messages LAST, with only synchronous code between here and the
+        // caller arming the deferred-refresh window.
+        let postedUpdates = 0;
+        for (const f of lastMove.bulkFiles) {
+            if (f.features && this.reverseMlModelUpdate(f.features, actionType)) {
+                postedUpdates++;
+            }
+        }
         return postedUpdates;
     }
 
@@ -3880,7 +3911,12 @@ class MediaViewer {
             return;
         }
 
-        if (this.isLoading) return;
+        // mediaNavigationInProgress is also true for the whole of an OPEN deferred-refresh window
+        // (applyBulkRating / undoBulkRating's re-score wait). The protocol has no epoch token, so a
+        // Ctrl+Z landing inside that window would arm a SECOND window on top of the first — the
+        // earlier scoreComplete would then satisfy the later one and render from prediction scores
+        // that haven't finished reverting. Block re-entry here, same as isLoading.
+        if (this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
 
         // Check if last move was a special move in compare mode
@@ -8026,6 +8062,13 @@ class MediaViewer {
         }, 3000);
     }
 
+    // Ordering matters here — see undoBulkRating's header comment for the invariant this
+    // enforces. Feature extraction and the bulkRated bucket are settled BEFORE the
+    // `await saveBulkRatedFile()`; the worker posts happen only after it resolves, with nothing
+    // but synchronous code between posting and this method's caller arming the deferred-refresh
+    // window. Do NOT hoist the posts (or the arm) any earlier: an updateComplete landing before
+    // `bulkRatedPairs`/`moveHistory` are updated below would let scoreComplete re-render the pair
+    // that was just rated.
     async applyBulkRating(bucket) {
         // Drop a re-entrant press while a prior rating's deferred refresh is still pending (up to
         // 3s): otherwise a fast double D/F or a double-click re-rates the SAME on-screen pair before
@@ -8036,18 +8079,27 @@ class MediaViewer {
         if (!left || !right) return;
 
         const actionType = bucket === 'good' ? 'like' : 'dislike';
+
+        // Feature extraction (a synchronous cache lookup) and the bulkRated bucket are settled
+        // BEFORE the disk write below — the worker posts are deferred until after it resolves.
         const bulkFiles = [];
-        let postedUpdates = 0;
         for (const f of [left, right]) {
             const features = this.getCombinedFeatures(f.path);
-            if (features && this.updateMlModelWithFeatures(features, actionType)) {
-                postedUpdates++;
-            }
             bulkFiles.push({ name: f.name, features });
             this.bulkRated.set(f.name, bucket);
         }
 
         await this.saveBulkRatedFile();
+
+        // Post the model updates now — synchronously from here through the arm call at the bottom
+        // of this method, so a worker reply can never arrive before the pair key / moveHistory
+        // entry it implicitly depends on exist.
+        let postedUpdates = 0;
+        for (const f of bulkFiles) {
+            if (f.features && this.updateMlModelWithFeatures(f.features, actionType)) {
+                postedUpdates++;
+            }
+        }
 
         // Suppress re-showing this exact combo (spec G3 D1). Session-only.
         this.bulkRatedPairs.add(this.bulkPairKey(left.name, right.name));
@@ -8100,6 +8152,9 @@ class MediaViewer {
      * Reverse a previous ML model update (for undo functionality)
      * @param {Float32Array|number[]} features - Feature vector of the sample
      * @param {string} actionType - Original action ('like' or 'dislike')
+     * @returns {boolean} true only when a message was actually posted to the worker — callers that
+     *   count expected reverseUpdateComplete replies (e.g. the deferred-refresh protocol) must count
+     *   real posts, not assume one per file.
      */
     reverseMlModelUpdate(features, actionType) {
         if (!this.isMlEnabled || !this.mlWorker || !features) return false;

@@ -1827,6 +1827,33 @@ describe('handleCancel feature restore', () => {
         expect(ctx.mlComparePairIndex).toBe(4); // unchanged when prevPairIndex is absent
         expect(ctx.showMedia).toHaveBeenCalledOnce();
     });
+
+    it('returns early when a deferred-refresh window is already open (mediaNavigationInProgress)', async () => {
+        // Nothing sets isLoading during a deferred window, so mediaNavigationInProgress is the
+        // only signal a second Ctrl+Z has landed inside one. Without this guard, handleCancel would
+        // arm a SECOND window and an earlier scoreComplete could satisfy it — rendering from
+        // prediction scores that have not finished reverting (FIX 1).
+        const ctx = commonMocks({
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            mediaNavigationInProgress: true, // an earlier deferred-refresh window is still open
+            undoBulkRating: vi.fn(),
+            moveHistory: [
+                {
+                    bothGood: true,
+                    bothBad: false,
+                    bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
+                    prevPairIndex: 3,
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        expect(ctx.moveHistory).toHaveLength(1); // untouched — nothing popped
+        expect(ctx.undoBulkRating).not.toHaveBeenCalled();
+        expect(ctx.showMedia).not.toHaveBeenCalled();
+    });
 });
 
 describe('bulk-rated persistence', () => {
@@ -1986,6 +2013,38 @@ describe('applyBulkRating', () => {
         expect(ctx.moveHistory[0].prevPairIndex).toBe(2); // original index recorded for undo
         expect(ctx.mlComparePairIndex).toBe(1); // clamped to valid max (length - 1)
     });
+
+    it('posts model updates only after saveBulkRatedFile resolves (FIX 2 ordering invariant)', async () => {
+        // A worker round trip is usually FASTER than the saveBulkRatedFile disk write. If the posts
+        // went out before the await settled (the pre-FIX-2 bug), updateComplete could land before
+        // anything is armed to receive it. Use a controllable promise to prove the posts wait.
+        let resolveSave;
+        const savePromise = new Promise((resolve) => {
+            resolveSave = resolve;
+        });
+        const callOrder = [];
+        const ctx = makeCtx({
+            saveBulkRatedFile: vi.fn(() => {
+                callOrder.push('save-start');
+                return savePromise;
+            }),
+            updateMlModelWithFeatures: vi.fn(() => {
+                callOrder.push('post');
+                return true;
+            }),
+            _beginDeferredCompareRefresh: vi.fn(),
+        });
+
+        const applyPromise = applyBulkRating.call(ctx, 'bad');
+        // Everything up to and including the `await saveBulkRatedFile()` call runs synchronously;
+        // nothing past it (the posts) may have run yet.
+        expect(callOrder).toEqual(['save-start']);
+        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
+
+        resolveSave();
+        await applyPromise;
+        expect(callOrder).toEqual(['save-start', 'post', 'post']);
+    });
 });
 
 describe('undoBulkRating', () => {
@@ -2047,6 +2106,50 @@ describe('undoBulkRating', () => {
         expect(ctx.bulkRated.has('a.jpg')).toBe(false);
         expect(ctx.bulkRated.has('b.jpg')).toBe(false);
         expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'b.jpg'))).toBe(false);
+    });
+
+    it('posts reverse-update messages only after saveBulkRatedFile resolves (FIX 2 ordering invariant)', async () => {
+        // Mirrors the applyBulkRating ordering test: a worker round trip is usually faster than the
+        // disk write, so if the reverse-update posts went out before the await settled, handleCancel
+        // could arm the deferred window against a reply that already arrived.
+        let resolveSave;
+        const savePromise = new Promise((resolve) => {
+            resolveSave = resolve;
+        });
+        const callOrder = [];
+        const ctx = {
+            bulkRated: new Map([
+                ['a.jpg', 'good'],
+                ['b.jpg', 'good'],
+            ]),
+            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
+            bulkPairKey,
+            reverseMlModelUpdate: vi.fn(() => {
+                callOrder.push('post');
+                return true;
+            }),
+            saveBulkRatedFile: vi.fn(() => {
+                callOrder.push('save-start');
+                return savePromise;
+            }),
+            showNotification: vi.fn(),
+        };
+        const lastMove = {
+            bothGood: true,
+            bothBad: false,
+            bulkFiles: [
+                { name: 'a.jpg', features: [1, 2, 3] },
+                { name: 'b.jpg', features: [4, 5, 6] },
+            ],
+        };
+
+        const undoPromise = undoBulkRating.call(ctx, lastMove);
+        expect(callOrder).toEqual(['save-start']);
+        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
+
+        resolveSave();
+        await undoPromise;
+        expect(callOrder).toEqual(['save-start', 'post', 'post']);
     });
 });
 
@@ -2114,8 +2217,11 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
             bulkPairKey,
             computeAllComparePairs: () => all,
             // (a,d) was bulk-rated, so only the second pair is valid — the pre-fix code showed
-            // "Pair 1 of 1" here (denominator shrank to the valid count).
-            computeValidComparePairs: () => [all[1]],
+            // "Pair 1 of 1" here (denominator shrank to the valid count). updateNavigationInfo now
+            // derives the valid subset itself (FIX 3b/c) instead of calling
+            // computeValidComparePairs — exercise that via bulkRatedPairs directly so the real
+            // filter+carry-index logic runs, not a stub standing in for it.
+            bulkRatedPairs: new Set([bulkPairKey('a', 'd')]),
         };
         updateNavigationInfo.call(ctx);
         // Denominator stays at the real pair count, and the displayed pair reports its TRUE position.
@@ -2148,7 +2254,8 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
             mediaIndex,
             bulkPairKey,
             computeAllComparePairs: () => all,
-            computeValidComparePairs: () => all,
+            // Nothing suppressed — exercises the bulkRatedPairs.size===0 fast path (FIX 3b).
+            bulkRatedPairs: new Set(),
         };
         updateNavigationInfo.call(ctx);
         expect(mediaIndex.textContent).toBe('Pair 1 of 2');
