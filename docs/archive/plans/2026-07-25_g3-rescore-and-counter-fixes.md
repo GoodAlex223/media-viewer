@@ -1,5 +1,7 @@
 # G3 Deferred Re-Score + Stable Pair Counter — Implementation Plan
 
+> **Status: ARCHIVED 2026-08-24 — code-complete, MERGED to `main` on user direction.** Companion follow-up plan to `2026-07-24_g3-bulk-rate-repair-avoidance.md`, produced by the parallel Verification chat after smoke round 1 exposed 2 real defects (D1 "Pair X of Y" shrink-then-jump → full-extremes-count counter; D2 rated pairs not re-mixing → deferred re-render via `pendingCompareRefresh`). All Task steps done; unit 500→513, E2E 55/55, lint 0-err. ⚠️ **User-side re-smoke round 2 was NOT run** before the user-directed merge; the D2 deferred path has no automated coverage (mlWorker null under Playwright). See [DONE.md](../../planning/DONE.md) 2026-08-24 + BACKLOG 🟤 [2026-08-24].
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix the two defects from the PR #66 manual smoke — a "Pair X of Y" counter that decrements then jumps, and bulk ratings that render from stale prediction scores so pairs never re-mix.
@@ -46,7 +48,7 @@
   - `computeAllComparePairs(): Array<{leftFile: File, rightFile: File}>` — full extremes list, `floor(n/2)` entries, ignores suppression. Pure.
   - `computeValidComparePairs(): Array<{leftFile, rightFile}>` — unchanged public behavior; now delegates to `computeAllComparePairs()`. **Callers must provide `computeAllComparePairs` on `this`.**
 
-- [ ] **Step 1: Update the shared test ctx so the split is visible**
+- [x] **Step 1: Update the shared test ctx so the split is visible**
 
 In `tests/ml-pair-selection.test.js`, replace lines 30-38 with:
 
@@ -69,7 +71,7 @@ function callComputeAll(mediaFiles, predictionScores) {
 }
 ```
 
-- [ ] **Step 2: Add the failing test for the new method**
+- [x] **Step 2: Add the failing test for the new method**
 
 Append to `tests/ml-pair-selection.test.js`:
 
@@ -104,12 +106,12 @@ describe('computeAllComparePairs — unfiltered pair count', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `npx vitest run tests/ml-pair-selection.test.js`
 Expected: FAIL — `Could not find method: computeAllComparePairs`.
 
-- [ ] **Step 4: Implement the split**
+- [x] **Step 4: Implement the split**
 
 In `media-viewer.js`, replace the whole `computeValidComparePairs` method (lines 2948-2968, including its leading comment block) with:
 
@@ -145,19 +147,19 @@ In `media-viewer.js`, replace the whole `computeValidComparePairs` method (lines
     }
 ```
 
-- [ ] **Step 5: Run the full unit suite**
+- [x] **Step 5: Run the full unit suite**
 
 Run: `npx vitest run`
 Expected: PASS, 503 tests (500 baseline + 3 new). If `ml-pair-selection.test.js` fails with
 `this.computeAllComparePairs is not a function`, Step 1 was skipped.
 
-- [ ] **Step 6: Mutation-verify the stability test**
+- [x] **Step 6: Mutation-verify the stability test**
 
 Temporarily change `computeAllComparePairs` to `return candidates.filter(...)` (copy the filter from
 `computeValidComparePairs`). Run `npx vitest run tests/ml-pair-selection.test.js` — the "ignores
 suppression entirely" test MUST fail. Restore the correct implementation and re-run.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js tests/ml-pair-selection.test.js
@@ -181,7 +183,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Consumes: `computeAllComparePairs()` and `computeValidComparePairs()` from Task 1; `bulkPairKey(a, b)`.
 - Produces: no new API. `updateNavigationInfo` now renders `Pair <pos> of <allPairs.length>`.
 
-- [ ] **Step 1: Replace the existing counter test with the failing one**
+- [x] **Step 1: Replace the existing counter test with the failing one**
 
 In `tests/media-viewer-utils.test.js`, replace the whole `it('updateNavigationInfo shows the
 valid-pairs count as the denominator', ...)` block (lines 1876-1897) with:
@@ -255,12 +257,12 @@ valid-pairs count as the denominator', ...)` block (lines 1876-1897) with:
     });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "FULL pair count"`
 Expected: FAIL — receives `'Pair 1 of 1'`, expected `'Pair 2 of 2'`.
 
-- [ ] **Step 3: Implement the counter**
+- [x] **Step 3: Implement the counter**
 
 In `media-viewer.js`, replace the ML-sorted branch inside `updateNavigationInfo` (lines 3799-3802):
 
@@ -285,17 +287,17 @@ In `media-viewer.js`, replace the ML-sorted branch inside `updateNavigationInfo`
             } else {
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Mutation-verify**
+- [x] **Step 5: Mutation-verify**
 
 Temporarily change the denominator back to `validPairs.length`. Run
 `npx vitest run tests/media-viewer-utils.test.js -t "FULL pair count"` — it MUST fail. Restore.
 
-- [ ] **Step 6: Run the full suite and commit**
+- [x] **Step 6: Run the full suite and commit**
 
 ```bash
 npx vitest run
@@ -324,7 +326,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
   - `updateMlModelWithFeatures(features, actionType): boolean` — `true` only when a message was posted to the worker.
   - `_beginDeferredCompareRefresh(expectedUpdates: number): void` — arms `pendingCompareRefresh` / `pendingCompareUpdates` / `mediaNavigationInProgress` + the 3 s fallback. Task 4 reuses this.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append inside the same `describe` block that holds the existing `applyBulkRating` test in
 `tests/media-viewer-utils.test.js`:
@@ -415,12 +417,12 @@ Append inside the same `describe` block that holds the existing `applyBulkRating
     });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "defers the re-render"`
 Expected: FAIL — `Could not find method: _beginDeferredCompareRefresh`.
 
-- [ ] **Step 3: Make `updateMlModelWithFeatures` report whether it posted**
+- [x] **Step 3: Make `updateMlModelWithFeatures` report whether it posted**
 
 In `media-viewer.js`, apply three edits inside `updateMlModelWithFeatures` (lines 7943-7965):
 
@@ -438,7 +440,7 @@ Also update the JSDoc line above it to note the return:
      */
 ```
 
-- [ ] **Step 4: Add the deferred-refresh helper**
+- [x] **Step 4: Add the deferred-refresh helper**
 
 In `media-viewer.js`, insert this method immediately **before** `async applyBulkRating(bucket) {`:
 
@@ -470,7 +472,7 @@ In `media-viewer.js`, insert this method immediately **before** `async applyBulk
     }
 ```
 
-- [ ] **Step 5: Count posts and defer in `applyBulkRating`**
+- [x] **Step 5: Count posts and defer in `applyBulkRating`**
 
 In `media-viewer.js`, replace the feature loop (lines 7974-7982):
 
@@ -501,20 +503,20 @@ Then replace the trailing render (lines 8014-8016) with:
         }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js`
 Expected: PASS. The pre-existing test `applyBulkRating records the exact pair key and re-renders in
 place (no advance)` still passes unchanged — it stubs `getCombinedFeatures: () => null`, so
 `postedUpdates` is 0 and it takes the immediate-render path.
 
-- [ ] **Step 7: Mutation-verify**
+- [x] **Step 7: Mutation-verify**
 
 Temporarily change `this._beginDeferredCompareRefresh(postedUpdates)` to
 `this._beginDeferredCompareRefresh(2)` and set the test's `updateMlModelWithFeatures` to
 `vi.fn(() => false)` — the "renders immediately" test MUST fail. Restore both.
 
-- [ ] **Step 8: Run the full suite and commit**
+- [x] **Step 8: Run the full suite and commit**
 
 ```bash
 npx vitest run
@@ -544,7 +546,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
   - `reverseMlModelUpdate(features, actionType): boolean` — `true` only when posted.
   - `undoBulkRating(lastMove): Promise<number>` — resolves to the number of reverse-update messages posted (0-2).
 
-- [ ] **Step 1: Update the existing undo test and add the new one**
+- [x] **Step 1: Update the existing undo test and add the new one**
 
 In `tests/media-viewer-utils.test.js`, replace the two assertions at lines 1553-1554 of the
 `bulk-rating undo reverses ML, returns to the rated pair, and refreshes the UI` test with:
@@ -597,12 +599,12 @@ Then append a new test in the same `describe`:
     });
 ```
 
-- [ ] **Step 2: Run to verify the new test fails**
+- [x] **Step 2: Run to verify the new test fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "defers the re-render when reverse"`
 Expected: FAIL — `pendingCompareRefresh` is `undefined` (handleCancel still renders eagerly).
 
-- [ ] **Step 3: Make `reverseMlModelUpdate` report whether it posted**
+- [x] **Step 3: Make `reverseMlModelUpdate` report whether it posted**
 
 In `media-viewer.js`, replace the guard and add a return in `reverseMlModelUpdate` (lines 8032-8042):
 
@@ -621,7 +623,7 @@ In `media-viewer.js`, replace the guard and add a return in `reverseMlModelUpdat
     }
 ```
 
-- [ ] **Step 4: Return the post count from `undoBulkRating`**
+- [x] **Step 4: Return the post count from `undoBulkRating`**
 
 In `media-viewer.js`, replace the loop and add a return in `undoBulkRating` (lines 3840-3850):
 
@@ -645,7 +647,7 @@ In `media-viewer.js`, replace the loop and add a return in `undoBulkRating` (lin
     }
 ```
 
-- [ ] **Step 5: Defer in the `handleCancel` bulk branch**
+- [x] **Step 5: Defer in the `handleCancel` bulk branch**
 
 In `media-viewer.js`, replace the bulk branch body (lines 3868-3877):
 
@@ -669,17 +671,17 @@ In `media-viewer.js`, replace the bulk branch body (lines 3868-3877):
         }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js`
 Expected: PASS.
 
-- [ ] **Step 7: Mutation-verify**
+- [x] **Step 7: Mutation-verify**
 
 Temporarily change the condition to `if (false && this.isSortedByPrediction && postedUpdates > 0)` —
 the new deferred test MUST fail. Restore.
 
-- [ ] **Step 8: Run the full suite and commit**
+- [x] **Step 8: Run the full suite and commit**
 
 ```bash
 npx vitest run
@@ -705,20 +707,20 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Consumes: everything from Tasks 1-4.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Lint and format**
+- [x] **Step 1: Lint and format**
 
 Run: `npm run lint && npm run format:check`
 Expected: 0 errors. One pre-existing `no-shadow` warning in `tests/media-viewer-utils.test.js` is
 expected and present on `main` — do not "fix" it here.
 
-- [ ] **Step 2: Run the full E2E suite**
+- [x] **Step 2: Run the full E2E suite**
 
 Run: `npm run test:e2e`
 Expected: 55/55 passing. If a compare-mode test times out waiting for a pair to render, the deferred
 protocol is not being cleared — check that the stubbed ML worker in that test posts `updateComplete`,
 and fall back to asserting after the 3 s timeout rather than weakening the implementation.
 
-- [ ] **Step 3: Update the CLAUDE.md deferred-refresh bullet**
+- [x] **Step 3: Update the CLAUDE.md deferred-refresh bullet**
 
 In `CLAUDE.md`, find the bullet beginning `- ML compare refresh:` and replace it with:
 
@@ -726,13 +728,13 @@ In `CLAUDE.md`, find the bullet beginning `- ML compare refresh:` and replace it
 - ML compare refresh: `pendingCompareRefresh`/`pendingCompareUpdates` defer `showMedia()` until re-scoring completes (3s fallback); `mediaNavigationInProgress` prevents double-fire. Armed via `_beginDeferredCompareRefresh(n)` from `moveComparePair` (single rating), `applyBulkRating` (bulk) and `handleCancel`'s bulk-undo branch — `n` MUST be the count of worker messages actually posted (`updateMlModelWithFeatures`/`reverseMlModelUpdate` return `false` when ML is off or features are missing), or the counter never reaches 0.
 ```
 
-- [ ] **Step 4: Retire the now-false BACKLOG entry**
+- [x] **Step 4: Retire the now-false BACKLOG entry**
 
 In `docs/planning/BACKLOG.md`, find the entry titled **"Remove or document dead
 `pendingCompareRefresh` bypass in `reverseUpdateComplete` handler"** and delete it, since Task 4
 makes that branch reachable. If the surrounding section becomes empty, leave the section heading.
 
-- [ ] **Step 5: Commit the docs**
+- [x] **Step 5: Commit the docs**
 
 ```bash
 git add CLAUDE.md docs/planning/BACKLOG.md
@@ -741,7 +743,7 @@ git commit -m "docs(g3): reconcile deferred-refresh docs with bulk rating + undo
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: Push and hand back for the manual smoke**
+- [x] **Step 6: Push and hand back for the manual smoke**
 
 ```bash
 git push

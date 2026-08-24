@@ -50,7 +50,7 @@
 
 > **Solo 3-SP group (rule-4 judgment)**: kept standalone because it has no clean domain-mate among the selected work (G1 is the sort/cache path, G2 is tournament, this is compare-mode ML pairing) and it needs its own short design pass. Re-confirmed by 24k dogfooding.
 
-- [ ] 🟠 **Don't pair two already-bulk-rated files together (with fall-through)** — TODO 🟠 (promoted from BACKLOG 🔵 [2026-06-02]; re-reported as BACKLOG 🔵 [2026-07-01] "'Both good/Both bad' reappear"). In AI-sorted compare, once both files of a pair are rated "Both good"/"Both bad", don't show them paired again; when no un-bulk-rated pair remains, disable the rule and fall back so the user can still re-rate. Short design pass on pair selection (`showCompareMedia` AI-sorted branch + `mlComparePairIndex`), membership test against `this.bulkRated`, and the fall-through condition. `media-viewer.js` (compare pair-selection), `tests/media-viewer-utils.test.js`.
+- [x] 🟠 **Don't pair two already-bulk-rated files together (with fall-through)** — ✅ **shipped 2026-08-24 via PR #66** (merged to `main`; see [DONE.md](DONE.md) 2026-08-24). Exact-pair suppression + full-list fall-through; session-only `bulkRatedPairs`. ⚠️ **User-side re-smoke round 2 NOT run** — shipped on user direction + review + automated suites (500→513 unit / 55 E2E); the deferred-re-render fix (D2) has no automated coverage (mlWorker null under Playwright). _Original:_ In AI-sorted compare, once both files of a pair are rated "Both good"/"Both bad", don't show them paired again; when no un-bulk-rated pair remains, disable the rule and fall back so the user can still re-rate. Short design pass on pair selection (`showCompareMedia` AI-sorted branch + `mlComparePairIndex`), membership test against `this.bulkRated`, and the fall-through condition. `media-viewer.js` (compare pair-selection), `tests/media-viewer-utils.test.js`.
 
 ### G4. Strategic-doc refresh & CLAUDE.md hygiene [batch] 🟡 (+1 🟤 folded)
 **Domain**: docs (planning strategic docs + CLAUDE.md)
@@ -118,7 +118,7 @@
 | Group | SP |
 |-------|----|
 | ✅ [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (finish) — PR #65 | 6 |
-| [**G3. Bulk-rate re-pair avoidance**](#g3-bulk-rate-re-pair-avoidance-solo-) [solo] | 3 |
+| ✅ [**G3. Bulk-rate re-pair avoidance**](#g3-bulk-rate-re-pair-avoidance-solo-) [solo] — PR #66 (⚠️ re-smoke round 2 not run) | 3 |
 | [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (start) | (5) |
 
 **Daily total**: ~9 SP + reviews overhead (strategic brainstorm ✅ done Jul 12, off Thursday's plate)
@@ -151,7 +151,7 @@
 |----|-------|--------|--------|-------|----------|-----|--------|
 | G1 | AI-sort startup UX & incremental cache-load [batch] 🏆 | JS logic (sort / feature-cache / progress UX) | 🔵 User | 6 (1 🔴 + 4 🔵 + 1 🟠) | 8 | Mon–Wed | ✅ PR #64 |
 | G2 | Tournament-mode bug fixes [batch] | JS logic (tournament) + CSS | 🔵 User | 3 (1 🔴 + 1 🟠 + 1 🔵) | 6 | Wed–Thu | ✅ PR #65 |
-| G3 | Bulk-rate re-pair avoidance [solo] | JS logic (compare-mode ML pairing) | 🔵 User | 1 🟠 | 3 | Thu | ⬜ Planned |
+| G3 | Bulk-rate re-pair avoidance [solo] | JS logic (compare-mode ML pairing) | 🔵 User | 1 🟠 | 3 | Thu | ✅ PR #66 ⚠️ (see DONE — re-smoke round 2 NOT run) |
 | G4 | Strategic-doc refresh & CLAUDE.md hygiene [batch] | docs (strategic + CLAUDE.md) | 🟡 Ops (+1 🟤 folded) | 2 | 4 | Fri | ⬜ Planned |
 | G5 | Weekly Reviews [batch] | Research / process | ⚪ Overhead | 4 | 5 | Thu–Fri | ⬜ Planned |
 | **Total (quota-counted)** | | | | **12** | **21** | | |

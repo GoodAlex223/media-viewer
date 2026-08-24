@@ -1,5 +1,7 @@
 # Group G3 — Bulk-Rate Re-Pair Avoidance Implementation Plan
 
+> **Status: ARCHIVED 2026-08-24 — code-complete, MERGED to `main` on user direction.** All implementation Task steps below are done (boxes flipped); automated verification green (unit 500→513 incl. the parallel re-score/counter branch, E2E 55/55, lint 0-err). ⚠️ **The Manual-smoke boxes are left UNCHECKED on purpose** — round 1 (parallel Verification chat) found 2 real defects (both fixed in the companion plan `2026-07-25_g3-rescore-and-counter-fixes.md`); **user-side re-smoke round 2 was NOT run** before the user-directed merge, so the acceptance gate is unsatisfied and the D2 deferred-re-render fix has no automated coverage (mlWorker null under Playwright). Also note: the original design's "count by valid pairs" (Step-3/4 denominator) and cursor-clamp were **superseded** by the companion plan's full-extremes-count counter. See [DONE.md](../../planning/DONE.md) 2026-08-24 + BACKLOG 🟤 [2026-08-24].
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** In AI-sorted compare mode, stop re-showing the exact two-file pair a user already rated "Both good"/"Both bad", while still letting a rated file pair with fresh files and falling through when no un-rated pair remains.
@@ -47,7 +49,7 @@
   - `computeValidComparePairs(): Array<{leftFile: FileObj, rightFile: FileObj}>` — reads `this.mediaFiles`, `this.predictionScores`, `this.bulkRatedPairs`; returns the ordered extremes-pair list with exact-rated combos removed, or the full candidate list when all are suppressed. `FileObj` = `{name, path, ...}` (existing `mediaFiles` element).
   - `this.bulkRatedPairs: Set<string>` — session-only set of `bulkPairKey` values.
 
-- [ ] **Step 1: Rewrite the test file to target the real methods (failing)**
+- [x] **Step 1: Rewrite the test file to target the real methods (failing)**
 
 Replace the entire contents of `tests/ml-pair-selection.test.js` with:
 
@@ -214,12 +216,12 @@ describe('computeValidComparePairs — exact-pair suppression', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run tests/ml-pair-selection.test.js`
 Expected: FAIL — `Could not find method: bulkPairKey` (methods not yet defined).
 
-- [ ] **Step 3: Add `bulkRatedPairs` to the constructor**
+- [x] **Step 3: Add `bulkRatedPairs` to the constructor**
 
 In `media-viewer.js`, immediately after line 130 (`this.bulkRated = new Map();`), add:
 
@@ -230,7 +232,7 @@ In `media-viewer.js`, immediately after line 130 (`this.bulkRated = new Map();`)
         this.bulkRatedPairs = new Set();
 ```
 
-- [ ] **Step 4: Add `bulkPairKey` and `computeValidComparePairs` methods**
+- [x] **Step 4: Add `bulkPairKey` and `computeValidComparePairs` methods**
 
 In `media-viewer.js`, directly above `async showCompareMedia(retryCount = 0) {` (line ~2930), add:
 
@@ -265,17 +267,17 @@ In `media-viewer.js`, directly above `async showCompareMedia(retryCount = 0) {` 
     }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/ml-pair-selection.test.js`
 Expected: PASS (all `bulkPairKey` + `computeValidComparePairs` tests green).
 
-- [ ] **Step 6: Format, lint, full unit run**
+- [x] **Step 6: Format, lint, full unit run**
 
 Run: `npm run format && npm run lint && npx vitest run`
 Expected: Prettier clean, ESLint 0 errors, all unit tests pass (492 + new).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js tests/ml-pair-selection.test.js
@@ -304,7 +306,7 @@ EOF
 - Consumes: `computeValidComparePairs()`, `bulkPairKey()`, `this.bulkRatedPairs` (Task 1).
 - Produces: `applyBulkRating` adds the rated pair's key and calls `this.showMedia()` (not `this.nextMedia()`); `undoBulkRating` deletes the rated pair's key.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/media-viewer-utils.test.js`, find the existing bulk-rating test block (search for `bulk-rating undo reverses ML`) and add these two tests alongside it. They use the file's existing `extractAsyncMethod` helper (search the file for `function extractAsyncMethod`) and the real `bulkPairKey` via `extractMethod`:
 
@@ -370,12 +372,12 @@ In `tests/media-viewer-utils.test.js`, find the existing bulk-rating test block 
 
 **Note:** if `extractMethod` (sync, non-async) is not already defined in this test file, add it next to `extractAsyncMethod` using the same brace-count body but returning `new Function(...)` instead of an async function (mirror the helper in `tests/ml-pair-selection.test.js` from Task 1). Check first — search the file for `function extractMethod`.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "applyBulkRating records" && npx vitest run tests/media-viewer-utils.test.js -t "undoBulkRating deletes"`
 Expected: FAIL — `applyBulkRating` still calls `nextMedia` and does not add the key; `undoBulkRating` does not delete the key.
 
-- [ ] **Step 3: Update `showCompareMedia` AI-sorted branch**
+- [x] **Step 3: Update `showCompareMedia` AI-sorted branch**
 
 In `media-viewer.js`, replace the AI-sorted selection block (lines ~2997-3021, the `else if (this.isSortedByPrediction && this.predictionScores.size >= 2) { ... }` body) with:
 
@@ -397,7 +399,7 @@ In `media-viewer.js`, replace the AI-sorted selection block (lines ~2997-3021, t
         }
 ```
 
-- [ ] **Step 4: Update `applyBulkRating` — record key, re-render in place**
+- [x] **Step 4: Update `applyBulkRating` — record key, re-render in place**
 
 In `media-viewer.js` `applyBulkRating` (~7935): after `await this.saveBulkRatedFile();` (line ~7952) and before the `this.moveHistory.push({...})`, add:
 
@@ -414,7 +416,7 @@ Then replace the final `this.nextMedia();` (line ~7969) with:
         this.showMedia();
 ```
 
-- [ ] **Step 5: Update `undoBulkRating` — delete the pair key**
+- [x] **Step 5: Update `undoBulkRating` — delete the pair key**
 
 In `media-viewer.js` `undoBulkRating` (~3812): after the `for (const f of lastMove.bulkFiles) { ... }` loop and after `await this.saveBulkRatedFile();` (line ~3818), add:
 
@@ -423,7 +425,7 @@ In `media-viewer.js` `undoBulkRating` (~3812): after the `for (const f of lastMo
         this.bulkRatedPairs.delete(this.bulkPairKey(lastMove.bulkFiles[0].name, lastMove.bulkFiles[1].name));
 ```
 
-- [ ] **Step 5b: Update the EXISTING `applyBulkRating` tests (they break otherwise)**
+- [x] **Step 5b: Update the EXISTING `applyBulkRating` tests (they break otherwise)**
 
 The existing `describe('applyBulkRating', …)` block (search for it, ~line 1629) breaks with the render change: its `makeCtx` provides `nextMedia` but no `showMedia`/`bulkRatedPairs`/`bulkPairKey`, and one test asserts `nextMedia` was called. Apply these three edits:
 
@@ -450,17 +452,17 @@ The existing `describe('applyBulkRating', …)` block (search for it, ~line 1629
             mlComparePairIndex: 5, // set high; handleCancel restores prevPairIndex on undo
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js`
 Expected: PASS — new tests green; the updated existing `applyBulkRating` tests green; the `bulk-rating undo reverses ML, returns to the rated pair` and hydration tests still green.
 
-- [ ] **Step 7: Format, lint, full unit run**
+- [x] **Step 7: Format, lint, full unit run**
 
 Run: `npm run format && npm run lint && npx vitest run`
 Expected: clean; all unit tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -488,7 +490,7 @@ EOF
 - Consumes: `computeValidComparePairs()`, `bulkPairKey()`, `this.bulkRatedPairs` (Tasks 1-2).
 - Produces: navigation and the "Pair X of Y" count are bounded by the valid-pairs length; `removeFileFromList` prunes stale pair keys; `loadBulkRatedFile` resets the set per folder.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/media-viewer-utils.test.js`, add:
 
@@ -538,12 +540,12 @@ In `tests/media-viewer-utils.test.js`, add:
 
 **Note:** `removeFileFromList` may reference `this.*` fields beyond those above (per CLAUDE.md it also touches `bulkRated`/`saveBulkRatedFile`). If the call throws on a missing field, add that field to `ctx` as an empty `Map`/no-op until the method runs — do not change the method to suit the test.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "valid-pairs count" && npx vitest run tests/media-viewer-utils.test.js -t "prunes bulkRatedPairs"`
 Expected: FAIL — denominator still `floor(len/2)` = 1 (not 3); prune not implemented.
 
-- [ ] **Step 3: Update `nextMedia` / `previousMedia` bounds**
+- [x] **Step 3: Update `nextMedia` / `previousMedia` bounds**
 
 In `media-viewer.js` `nextMedia`, replace the `isSortedByPrediction` branch (lines ~1271-1273):
 
@@ -556,7 +558,7 @@ In `media-viewer.js` `nextMedia`, replace the `isSortedByPrediction` branch (lin
 
 `previousMedia`'s branch (lines ~1294-1295) keeps its lower bound of 0 — no change needed there (`Math.max(this.mlComparePairIndex - 1, 0)` is already correct). Leave `previousMedia` as-is.
 
-- [ ] **Step 4: Update `updateNavigationInfo` denominator**
+- [x] **Step 4: Update `updateNavigationInfo` denominator**
 
 In `media-viewer.js` `updateNavigationInfo`, replace lines ~3772-3774:
 
@@ -567,7 +569,7 @@ In `media-viewer.js` `updateNavigationInfo`, replace lines ~3772-3774:
             } else {
 ```
 
-- [ ] **Step 5: Prune `bulkRatedPairs` in `removeFileFromList`**
+- [x] **Step 5: Prune `bulkRatedPairs` in `removeFileFromList`**
 
 In `media-viewer.js` `removeFileFromList`, directly after the existing `bulkRated` cleanup (lines ~1085-1087, the `if (this.bulkRated.delete(removedName)) { this.saveBulkRatedFile(); }` block), add:
 
@@ -579,7 +581,7 @@ In `media-viewer.js` `removeFileFromList`, directly after the existing `bulkRate
         }
 ```
 
-- [ ] **Step 6: Reset `bulkRatedPairs` per folder in `loadBulkRatedFile`**
+- [x] **Step 6: Reset `bulkRatedPairs` per folder in `loadBulkRatedFile`**
 
 In `media-viewer.js` `loadBulkRatedFile` (~7539), directly after `this.bulkRated = new Map();` (line ~7540), add:
 
@@ -587,7 +589,7 @@ In `media-viewer.js` `loadBulkRatedFile` (~7539), directly after `this.bulkRated
         this.bulkRatedPairs = new Set(); // session-only; starts empty on each folder load
 ```
 
-- [ ] **Step 6b: Add `bulkRatedPairs` to the EXISTING `removeFileFromList` test contexts (they break otherwise)**
+- [x] **Step 6b: Add `bulkRatedPairs` to the EXISTING `removeFileFromList` test contexts (they break otherwise)**
 
 The prune loop iterates `this.bulkRatedPairs`, so any existing `removeFileFromList` test whose ctx omits it now throws `undefined is not iterable`. Two ctx factories need one line each:
 
@@ -603,17 +605,17 @@ The prune loop iterates `this.bulkRatedPairs`, so any existing `removeFileFromLi
             bulkRatedPairs: new Set(),
 ```
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js`
 Expected: PASS — both new tests green; the two updated `removeFileFromList` blocks green; all prior tests still green.
 
-- [ ] **Step 8: Format, lint, full unit run**
+- [x] **Step 8: Format, lint, full unit run**
 
 Run: `npm run format && npm run lint && npx vitest run`
 Expected: clean; all unit tests pass.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -633,9 +635,9 @@ EOF
 
 ## Verification (before opening the PR)
 
-- [ ] **Full unit suite:** `npx vitest run` — all pass (492 baseline + 8-10 new). Record the new count.
-- [ ] **Lint + format:** `npm run lint` (0 errors) and `npm run format:check` (clean).
-- [ ] **E2E suite (pre-push gate requires it — `media-viewer.js` changed):** `npm run test:e2e` — 55/55 green. No new E2E is added by this plan; the existing compare-mode suite must still pass.
+- [x] **Full unit suite:** `npx vitest run` — all pass (492 baseline + 8-10 new). Record the new count.
+- [x] **Lint + format:** `npm run lint` (0 errors) and `npm run format:check` (clean).
+- [x] **E2E suite (pre-push gate requires it — `media-viewer.js` changed):** `npm run test:e2e` — 55/55 green. No new E2E is added by this plan; the existing compare-mode suite must still pass.
 - [ ] **Manual smoke** (`npm start`, AI-sorted compare, ≥6 files with a trained model):
   - [ ] Rate a pair "Both bad" → that exact pair does **not** recur while navigating forward/back.
   - [ ] A file from a rated pair **still appears** paired with a different, un-rated file.
