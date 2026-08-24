@@ -188,9 +188,11 @@ test.describe('Compare Mode', () => {
         expect(result.onDisk.data.good).toHaveLength(2);
         expect(result.historyLen).toBe(1);
 
-        // Wait for any in-flight showMedia() triggered by nextMedia() to complete
-        // before calling handleCancel (it guards on isLoading).
-        await page.waitForFunction(() => !window.mediaViewer.isLoading);
+        // Wait for the in-flight showMedia() that applyBulkRating triggers to complete
+        // before calling handleCancel (it guards on both isLoading and mediaNavigationInProgress).
+        await page.waitForFunction(
+            () => !window.mediaViewer.isLoading && !window.mediaViewer.mediaNavigationInProgress
+        );
 
         // Undo clears the buckets and the on-disk record.
         const afterUndo = await page.evaluate(async () => {

@@ -314,6 +314,7 @@ describe('removeFileFromList', () => {
             perceptualHashes: new Map(),
             jxlFrameCache: new Map(),
             bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
             saveBulkRatedFile: vi.fn(),
         };
     }
@@ -1532,8 +1533,8 @@ describe('handleCancel feature restore', () => {
         const ctx = commonMocks({
             isCompareMode: true,
             isSortedByPrediction: true,
-            mlComparePairIndex: 5, // advanced past the rated pair by applyBulkRating's nextMedia()
-            undoBulkRating: vi.fn(async () => {}),
+            mlComparePairIndex: 5, // set high; handleCancel restores prevPairIndex on undo
+            undoBulkRating: vi.fn(async () => 0), // no worker posts -> render immediately
             moveHistory: [
                 {
                     bothGood: true,
@@ -1549,8 +1550,267 @@ describe('handleCancel feature restore', () => {
         expect(ctx.undoBulkRating).toHaveBeenCalledOnce();
         expect(ctx.moveHistory).toHaveLength(0); // entry popped
         expect(ctx.mlComparePairIndex).toBe(3); // returned to the bulk-rated pair
+        // undoBulkRating is stubbed to return 0 posts, so this takes the immediate-render path.
         expect(ctx.requestPredictionScores).toHaveBeenCalledOnce(); // badges re-scored after ML revert
         expect(ctx.showMedia).toHaveBeenCalledOnce(); // re-render (refreshes the floating Undo button)
+    });
+
+    it('bulk-rating undo defers the re-render when reverse updates were posted', async () => {
+        vi.useFakeTimers();
+        try {
+            const ctx = commonMocks({
+                isCompareMode: true,
+                isSortedByPrediction: true,
+                mlComparePairIndex: 5,
+                undoBulkRating: vi.fn(async () => 2), // two reverseUpdate messages posted
+                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+                moveHistory: [
+                    {
+                        bothGood: true,
+                        bothBad: false,
+                        bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
+                        prevPairIndex: 3,
+                    },
+                ],
+            });
+
+            await handleCancel.call(ctx);
+
+            expect(ctx.mlComparePairIndex).toBe(3); // still restored before deferring
+            expect(ctx.pendingCompareRefresh).toBe(true);
+            expect(ctx.pendingCompareUpdates).toBe(2);
+            // reverseUpdateComplete drives the re-score; handleCancel must not do either itself.
+            expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
+            expect(ctx.showMedia).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('applyBulkRating records the exact pair key and re-renders in place (no advance)', async () => {
+        const applyBulkRating = extractAsyncMethod('applyBulkRating');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const showMedia = vi.fn();
+        const nextMedia = vi.fn();
+        const ctx = {
+            isSortedByPrediction: true,
+            isCompareMode: true,
+            compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+            compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+            getCombinedFeatures: () => null, // skips updateMlModelWithFeatures
+            updateMlModelWithFeatures: vi.fn(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey,
+            saveBulkRatedFile: async () => {},
+            moveHistory: [],
+            mlComparePairIndex: 3,
+            computeValidComparePairs: () => [{}, {}, {}, {}],
+            showNotification: () => {},
+            showMedia,
+            nextMedia,
+        };
+        await applyBulkRating.call(ctx, 'bad');
+
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'z.jpg'))).toBe(true);
+        expect(showMedia).toHaveBeenCalledTimes(1);
+        expect(nextMedia).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.moveHistory[0].prevPairIndex).toBe(3);
+        expect(ctx.moveHistory[0].bothBad).toBe(true);
+    });
+
+    it('applyBulkRating defers the re-render until the model re-scores', async () => {
+        vi.useFakeTimers();
+        try {
+            const applyBulkRating = extractAsyncMethod('applyBulkRating');
+            const bulkPairKey = extractMethod('bulkPairKey');
+            const showMedia = vi.fn();
+            const ctx = {
+                isSortedByPrediction: true,
+                isCompareMode: true,
+                compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+                compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+                getCombinedFeatures: () => [1, 2, 3],
+                updateMlModelWithFeatures: vi.fn(() => true), // both posts succeed
+                bulkRated: new Map(),
+                bulkRatedPairs: new Set(),
+                bulkPairKey,
+                saveBulkRatedFile: async () => {},
+                moveHistory: [],
+                mlComparePairIndex: 0,
+                computeValidComparePairs: () => [{}, {}],
+                showNotification: () => {},
+                showMedia,
+                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+            };
+            await applyBulkRating.call(ctx, 'bad');
+
+            expect(ctx.pendingCompareRefresh).toBe(true);
+            expect(ctx.pendingCompareUpdates).toBe(2); // one per posted update
+            expect(ctx.mediaNavigationInProgress).toBe(true);
+            expect(showMedia).not.toHaveBeenCalled(); // scoreComplete renders, not us
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('applyBulkRating renders immediately when no model update was posted', async () => {
+        const applyBulkRating = extractAsyncMethod('applyBulkRating');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const showMedia = vi.fn();
+        const ctx = {
+            isSortedByPrediction: true,
+            isCompareMode: true,
+            compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+            compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+            getCombinedFeatures: () => [1, 2, 3],
+            updateMlModelWithFeatures: vi.fn(() => false), // ML off / no worker
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey,
+            saveBulkRatedFile: async () => {},
+            moveHistory: [],
+            mlComparePairIndex: 0,
+            computeValidComparePairs: () => [{}, {}],
+            showNotification: () => {},
+            showMedia,
+            _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+        };
+        await applyBulkRating.call(ctx, 'bad');
+
+        // Nothing will come back from the worker — rendering must not be deferred.
+        expect(ctx.pendingCompareRefresh).toBeFalsy();
+        expect(showMedia).toHaveBeenCalledTimes(1);
+    });
+
+    it('the deferred-refresh fallback renders with stale scores after 3s', async () => {
+        vi.useFakeTimers();
+        try {
+            const beginDeferred = extractMethod('_beginDeferredCompareRefresh');
+            const showMedia = vi.fn();
+            // Seed a stale pre-rating snapshot, as moveComparePair's mirror-image fallback would
+            // have left behind — the fallback must null it so a delta notification never computes
+            // against out-of-date scores after showMedia() re-renders with the pair still unscored.
+            const ctx = { showMedia, previousScores: new Map([['stale.jpg', 0.5]]) };
+            beginDeferred.call(ctx, 2);
+            expect(showMedia).not.toHaveBeenCalled();
+
+            vi.advanceTimersByTime(3000);
+
+            expect(showMedia).toHaveBeenCalledTimes(1);
+            expect(ctx.pendingCompareRefresh).toBe(false);
+            expect(ctx.pendingCompareUpdates).toBe(0);
+            expect(ctx.mediaNavigationInProgress).toBe(false);
+            expect(ctx.previousScores).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('applyBulkRating drops a re-entrant press while a deferred refresh is pending', async () => {
+        const applyBulkRating = extractAsyncMethod('applyBulkRating');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const updateMlModelWithFeatures = vi.fn(() => true);
+        const saveBulkRatedFile = vi.fn(async () => {});
+        const showMedia = vi.fn();
+        const ctx = {
+            isSortedByPrediction: true,
+            isCompareMode: true,
+            mediaNavigationInProgress: true, // a prior rating's deferred refresh is still in flight
+            compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+            compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+            getCombinedFeatures: () => [1, 2, 3],
+            updateMlModelWithFeatures,
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey,
+            saveBulkRatedFile,
+            moveHistory: [],
+            mlComparePairIndex: 0,
+            computeValidComparePairs: () => [{}, {}],
+            showNotification: () => {},
+            showMedia,
+        };
+        await applyBulkRating.call(ctx, 'good');
+
+        // The whole method must be a no-op — the in-flight rating from the first press owns this
+        // pair until scoreComplete (or the 3s fallback) clears mediaNavigationInProgress.
+        expect(updateMlModelWithFeatures).not.toHaveBeenCalled();
+        expect(saveBulkRatedFile).not.toHaveBeenCalled();
+        expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.bulkRatedPairs.size).toBe(0);
+        expect(ctx.moveHistory).toHaveLength(0);
+        expect(showMedia).not.toHaveBeenCalled();
+    });
+
+    it('applyBulkRating counts exactly one posted update when only one file actually posts', async () => {
+        vi.useFakeTimers();
+        try {
+            const applyBulkRating = extractAsyncMethod('applyBulkRating');
+            const bulkPairKey = extractMethod('bulkPairKey');
+            const showMedia = vi.fn();
+            let calls = 0;
+            const ctx = {
+                isSortedByPrediction: true,
+                isCompareMode: true,
+                compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
+                compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
+                getCombinedFeatures: () => [1, 2, 3], // both files "have" cached features
+                // First file (left) posts to the worker; second (right) does not — e.g. the worker
+                // was unloaded mid-loop. postedUpdates must track the true count (1), never assume 2.
+                updateMlModelWithFeatures: vi.fn(() => {
+                    calls++;
+                    return calls === 1;
+                }),
+                bulkRated: new Map(),
+                bulkRatedPairs: new Set(),
+                bulkPairKey,
+                saveBulkRatedFile: async () => {},
+                moveHistory: [],
+                mlComparePairIndex: 0,
+                computeValidComparePairs: () => [{}, {}],
+                showNotification: () => {},
+                showMedia,
+                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+            };
+            await applyBulkRating.call(ctx, 'bad');
+
+            expect(ctx.pendingCompareRefresh).toBe(true);
+            expect(ctx.pendingCompareUpdates).toBe(1); // exactly one message was actually posted
+            expect(showMedia).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('undoBulkRating deletes the exact pair key', async () => {
+        const undoBulkRating = extractAsyncMethod('undoBulkRating');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const key = bulkPairKey('a.jpg', 'z.jpg');
+        const ctx = {
+            reverseMlModelUpdate: vi.fn(),
+            bulkRated: new Map([
+                ['a.jpg', 'bad'],
+                ['z.jpg', 'bad'],
+            ]),
+            bulkRatedPairs: new Set([key]),
+            bulkPairKey,
+            saveBulkRatedFile: async () => {},
+            showNotification: () => {},
+        };
+        const lastMove = {
+            bothBad: true,
+            bulkFiles: [
+                { name: 'a.jpg', features: null },
+                { name: 'z.jpg', features: null },
+            ],
+        };
+        await undoBulkRating.call(ctx, lastMove);
+
+        expect(ctx.bulkRatedPairs.has(key)).toBe(false);
+        expect(ctx.bulkRated.has('a.jpg')).toBe(false);
+        expect(ctx.bulkRated.has('z.jpg')).toBe(false);
     });
 
     it('bulk-rating undo tolerates a legacy entry without prevPairIndex (no jump, still refreshes)', async () => {
@@ -1566,6 +1826,33 @@ describe('handleCancel feature restore', () => {
 
         expect(ctx.mlComparePairIndex).toBe(4); // unchanged when prevPairIndex is absent
         expect(ctx.showMedia).toHaveBeenCalledOnce();
+    });
+
+    it('returns early when a deferred-refresh window is already open (mediaNavigationInProgress)', async () => {
+        // Nothing sets isLoading during a deferred window, so mediaNavigationInProgress is the
+        // only signal a second Ctrl+Z has landed inside one. Without this guard, handleCancel would
+        // arm a SECOND window and an earlier scoreComplete could satisfy it — rendering from
+        // prediction scores that have not finished reverting (FIX 1).
+        const ctx = commonMocks({
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            mediaNavigationInProgress: true, // an earlier deferred-refresh window is still open
+            undoBulkRating: vi.fn(),
+            moveHistory: [
+                {
+                    bothGood: true,
+                    bothBad: false,
+                    bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
+                    prevPairIndex: 3,
+                },
+            ],
+        });
+
+        await handleCancel.call(ctx);
+
+        expect(ctx.moveHistory).toHaveLength(1); // untouched — nothing popped
+        expect(ctx.undoBulkRating).not.toHaveBeenCalled();
+        expect(ctx.showMedia).not.toHaveBeenCalled();
     });
 });
 
@@ -1642,22 +1929,44 @@ describe('applyBulkRating', () => {
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
             nextMedia: vi.fn(),
+            showMedia: vi.fn(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey: extractMethod('bulkPairKey'),
+            mlComparePairIndex: 0,
+            computeValidComparePairs: () => [{ leftFile: {}, rightFile: {} }],
             ...overrides,
         };
     }
 
-    it('trains both files as like and records them as good, then advances', async () => {
-        const ctx = makeCtx();
-        await applyBulkRating.call(ctx, 'good');
-        expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledTimes(2);
-        expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'like');
-        expect(ctx.bulkRated.get('a.jpg')).toBe('good');
-        expect(ctx.bulkRated.get('b.jpg')).toBe('good');
-        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
-        expect(ctx.moveHistory).toHaveLength(1);
-        expect(ctx.moveHistory[0].bothGood).toBe(true);
-        expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
-        expect(ctx.nextMedia).toHaveBeenCalledOnce();
+    it('trains both files as like and records them as good, then defers the re-render', async () => {
+        vi.useFakeTimers();
+        try {
+            // Override the shared makeCtx() default (a bare vi.fn() returning undefined) with a
+            // realistic "both files actually posted" mock — the shared default would silently take
+            // the immediate-render branch and this test would stop exercising the deferred path.
+            // Overridden here rather than in makeCtx() itself: the shared default is relied on by
+            // sibling tests below (e.g. the mlComparePairIndex clamp test) that don't stub
+            // _beginDeferredCompareRefresh and would break if the default started posting.
+            const ctx = makeCtx({
+                updateMlModelWithFeatures: vi.fn(() => true),
+                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
+            });
+            await applyBulkRating.call(ctx, 'good');
+            expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledTimes(2);
+            expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'like');
+            expect(ctx.bulkRated.get('a.jpg')).toBe('good');
+            expect(ctx.bulkRated.get('b.jpg')).toBe('good');
+            expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+            expect(ctx.moveHistory).toHaveLength(1);
+            expect(ctx.moveHistory[0].bothGood).toBe(true);
+            expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
+            // Both posts succeeded — the render must be deferred until scoreComplete, not immediate.
+            expect(ctx.pendingCompareRefresh).toBe(true);
+            expect(ctx.pendingCompareUpdates).toBe(2);
+            expect(ctx.showMedia).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('trains both files as dislike for the bad bucket', async () => {
@@ -1690,10 +1999,57 @@ describe('applyBulkRating', () => {
         expect(ctx.bulkRated.get('a.jpg')).toBe('good');
         expect(ctx.moveHistory[0].bulkFiles[0].features).toBeNull();
     });
+
+    it('clamps mlComparePairIndex into the shrunk valid list (keeps the count coherent), preserving prevPairIndex', async () => {
+        // Rating the last valid pair: cursor 2, but only 2 valid pairs remain afterward.
+        const ctx = makeCtx({
+            mlComparePairIndex: 2,
+            computeValidComparePairs: () => [
+                { leftFile: {}, rightFile: {} },
+                { leftFile: {}, rightFile: {} },
+            ],
+        });
+        await applyBulkRating.call(ctx, 'bad');
+        expect(ctx.moveHistory[0].prevPairIndex).toBe(2); // original index recorded for undo
+        expect(ctx.mlComparePairIndex).toBe(1); // clamped to valid max (length - 1)
+    });
+
+    it('posts model updates only after saveBulkRatedFile resolves (FIX 2 ordering invariant)', async () => {
+        // A worker round trip is usually FASTER than the saveBulkRatedFile disk write. If the posts
+        // went out before the await settled (the pre-FIX-2 bug), updateComplete could land before
+        // anything is armed to receive it. Use a controllable promise to prove the posts wait.
+        let resolveSave;
+        const savePromise = new Promise((resolve) => {
+            resolveSave = resolve;
+        });
+        const callOrder = [];
+        const ctx = makeCtx({
+            saveBulkRatedFile: vi.fn(() => {
+                callOrder.push('save-start');
+                return savePromise;
+            }),
+            updateMlModelWithFeatures: vi.fn(() => {
+                callOrder.push('post');
+                return true;
+            }),
+            _beginDeferredCompareRefresh: vi.fn(),
+        });
+
+        const applyPromise = applyBulkRating.call(ctx, 'bad');
+        // Everything up to and including the `await saveBulkRatedFile()` call runs synchronously;
+        // nothing past it (the posts) may have run yet.
+        expect(callOrder).toEqual(['save-start']);
+        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
+
+        resolveSave();
+        await applyPromise;
+        expect(callOrder).toEqual(['save-start', 'post', 'post']);
+    });
 });
 
 describe('undoBulkRating', () => {
     const undoBulkRating = extractAsyncMethod('undoBulkRating');
+    const bulkPairKey = extractMethod('bulkPairKey');
 
     it('reverses both updates and clears both files from bulkRated', async () => {
         const ctx = {
@@ -1701,6 +2057,8 @@ describe('undoBulkRating', () => {
                 ['a.jpg', 'good'],
                 ['b.jpg', 'good'],
             ]),
+            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
+            bulkPairKey,
             reverseMlModelUpdate: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
@@ -1719,12 +2077,18 @@ describe('undoBulkRating', () => {
         expect(ctx.reverseMlModelUpdate).toHaveBeenNthCalledWith(2, [4, 5, 6], 'like');
         expect(ctx.showNotification).toHaveBeenCalledWith('↩️ Bulk rating undone', 'info');
         expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'b.jpg'))).toBe(false);
         expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
     });
 
     it('skips ML reversal for files stored with null features', async () => {
         const ctx = {
-            bulkRated: new Map([['a.jpg', 'bad']]),
+            bulkRated: new Map([
+                ['a.jpg', 'bad'],
+                ['b.jpg', 'bad'],
+            ]),
+            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
+            bulkPairKey,
             reverseMlModelUpdate: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
@@ -1732,11 +2096,60 @@ describe('undoBulkRating', () => {
         const lastMove = {
             bothGood: false,
             bothBad: true,
-            bulkFiles: [{ name: 'a.jpg', features: null }],
+            bulkFiles: [
+                { name: 'a.jpg', features: null },
+                { name: 'b.jpg', features: null },
+            ],
         };
         await undoBulkRating.call(ctx, lastMove);
         expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
         expect(ctx.bulkRated.has('a.jpg')).toBe(false);
+        expect(ctx.bulkRated.has('b.jpg')).toBe(false);
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'b.jpg'))).toBe(false);
+    });
+
+    it('posts reverse-update messages only after saveBulkRatedFile resolves (FIX 2 ordering invariant)', async () => {
+        // Mirrors the applyBulkRating ordering test: a worker round trip is usually faster than the
+        // disk write, so if the reverse-update posts went out before the await settled, handleCancel
+        // could arm the deferred window against a reply that already arrived.
+        let resolveSave;
+        const savePromise = new Promise((resolve) => {
+            resolveSave = resolve;
+        });
+        const callOrder = [];
+        const ctx = {
+            bulkRated: new Map([
+                ['a.jpg', 'good'],
+                ['b.jpg', 'good'],
+            ]),
+            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
+            bulkPairKey,
+            reverseMlModelUpdate: vi.fn(() => {
+                callOrder.push('post');
+                return true;
+            }),
+            saveBulkRatedFile: vi.fn(() => {
+                callOrder.push('save-start');
+                return savePromise;
+            }),
+            showNotification: vi.fn(),
+        };
+        const lastMove = {
+            bothGood: true,
+            bothBad: false,
+            bulkFiles: [
+                { name: 'a.jpg', features: [1, 2, 3] },
+                { name: 'b.jpg', features: [4, 5, 6] },
+            ],
+        };
+
+        const undoPromise = undoBulkRating.call(ctx, lastMove);
+        expect(callOrder).toEqual(['save-start']);
+        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
+
+        resolveSave();
+        await undoPromise;
+        expect(callOrder).toEqual(['save-start', 'post', 'post']);
     });
 });
 
@@ -1756,6 +2169,7 @@ describe('removeFileFromList bulk-rated purge', () => {
             perceptualHashes: new Map(),
             jxlFrameCache: new Map(),
             bulkRated: new Map([['a.jpg', 'good']]),
+            bulkRatedPairs: new Set(),
             currentIndex: 0,
             saveBulkRatedFile: vi.fn(),
         };
@@ -1772,6 +2186,103 @@ describe('removeFileFromList bulk-rated purge', () => {
         const ctx = makeCtx();
         removeFileFromList.call(ctx, '/f/b.jpg');
         expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
+    });
+});
+
+describe('valid-pairs bounds (G3 Task 3)', () => {
+    it('updateNavigationInfo uses the FULL pair count as the denominator (no shrink, no jump)', () => {
+        const updateNavigationInfo = extractMethod('updateNavigationInfo');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const mediaIndex = { textContent: '' };
+        const a = { name: 'a', path: '/f/a' };
+        const b = { name: 'b', path: '/f/b' };
+        const c = { name: 'c', path: '/f/c' };
+        const d = { name: 'd', path: '/f/d' };
+        const all = [
+            { leftFile: a, rightFile: d },
+            { leftFile: b, rightFile: c },
+        ];
+        const ctx = {
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            predictionScores: new Map([
+                ['/f/a', 0.9],
+                ['/f/b', 0.7],
+                ['/f/c', 0.3],
+                ['/f/d', 0.1],
+            ]),
+            mediaFiles: [a, b, c, d],
+            mlComparePairIndex: 0,
+            mediaIndex,
+            bulkPairKey,
+            computeAllComparePairs: () => all,
+            // (a,d) was bulk-rated, so only the second pair is valid — the pre-fix code showed
+            // "Pair 1 of 1" here (denominator shrank to the valid count). updateNavigationInfo now
+            // derives the valid subset itself (FIX 3b/c) instead of calling
+            // computeValidComparePairs — exercise that via bulkRatedPairs directly so the real
+            // filter+carry-index logic runs, not a stub standing in for it.
+            bulkRatedPairs: new Set([bulkPairKey('a', 'd')]),
+        };
+        updateNavigationInfo.call(ctx);
+        // Denominator stays at the real pair count, and the displayed pair reports its TRUE position.
+        expect(mediaIndex.textContent).toBe('Pair 2 of 2');
+    });
+
+    it('updateNavigationInfo reports position 1 with nothing suppressed', () => {
+        const updateNavigationInfo = extractMethod('updateNavigationInfo');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const mediaIndex = { textContent: '' };
+        const a = { name: 'a', path: '/f/a' };
+        const b = { name: 'b', path: '/f/b' };
+        const c = { name: 'c', path: '/f/c' };
+        const d = { name: 'd', path: '/f/d' };
+        const all = [
+            { leftFile: a, rightFile: d },
+            { leftFile: b, rightFile: c },
+        ];
+        const ctx = {
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            predictionScores: new Map([
+                ['/f/a', 0.9],
+                ['/f/b', 0.7],
+                ['/f/c', 0.3],
+                ['/f/d', 0.1],
+            ]),
+            mediaFiles: [a, b, c, d],
+            mlComparePairIndex: 0,
+            mediaIndex,
+            bulkPairKey,
+            computeAllComparePairs: () => all,
+            // Nothing suppressed — exercises the bulkRatedPairs.size===0 fast path (FIX 3b).
+            bulkRatedPairs: new Set(),
+        };
+        updateNavigationInfo.call(ctx);
+        expect(mediaIndex.textContent).toBe('Pair 1 of 2');
+    });
+
+    it('removeFileFromList prunes bulkRatedPairs keys that reference the removed file', () => {
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const gone = { name: 'gone.jpg', path: '/f/gone.jpg' };
+        const keep = { name: 'keep.jpg', path: '/f/keep.jpg' };
+        const other = { name: 'other.jpg', path: '/f/other.jpg' };
+        const ctx = {
+            mediaFiles: [gone, keep, other],
+            currentIndex: 0,
+            predictionScores: new Map(),
+            featureCache: new Map(),
+            clipCache: new Map(),
+            jxlFrameCache: new Map(),
+            featureMetadata: new Map(),
+            perceptualHashes: new Map(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set([bulkPairKey('gone.jpg', 'keep.jpg'), bulkPairKey('keep.jpg', 'other.jpg')]),
+            bulkPairKey,
+            saveBulkRatedFile: () => {},
+        };
+        removeFileFromList.call(ctx, '/f/gone.jpg');
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('gone.jpg', 'keep.jpg'))).toBe(false);
+        expect(ctx.bulkRatedPairs.has(bulkPairKey('keep.jpg', 'other.jpg'))).toBe(true);
     });
 });
 

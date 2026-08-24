@@ -82,7 +82,7 @@ media_viewer/
 **Testing (Unit — Vitest)**:
 - Config `vitest.config.js`; tests in `tests/**/*.test.js` excluding `tests/e2e/**`.
 - CJS modules in ESM tests: `createRequire(import.meta.url)` then `require('../module')`. Pure-ESM modules (`tournament-engine.js`) import directly. Web Worker modules: stub `globalThis.self = { onmessage: null, postMessage: () => {} }` before `require()`.
-- MediaViewer method testing: `extractMethod(name)` / `extractAsyncMethod(name)` read source, extract the method body by brace-counting, and return a `Function`/`AsyncFunction` invoked via `.call(mockCtx, ...)`. The mock ctx must supply every `this.*` the method touches (e.g. `removeFileFromList` needs `clipCache`/`jxlFrameCache`/`bulkRated` Maps + `saveBulkRatedFile`). Replicate heavy-DOM algorithm logic as standalone helpers (see `ml-pair-selection.test.js`).
+- MediaViewer method testing: `extractMethod(name)` / `extractAsyncMethod(name)` read source, extract the method body by brace-counting, and return a `Function`/`AsyncFunction` invoked via `.call(mockCtx, ...)`. The mock ctx must supply every `this.*` the method touches (e.g. `removeFileFromList` needs `clipCache`/`jxlFrameCache`/`bulkRated` Maps + `bulkRatedPairs` Set + `saveBulkRatedFile`). Replicate heavy-DOM algorithm logic as standalone helpers (see `ml-pair-selection.test.js`).
 - Globals/time: patch `globalThis.localStorage`/`globalThis.window` in `beforeEach`/`afterEach`; `vi.useFakeTimers()`+`vi.setSystemTime()` for time.
 - Worker abort flag is not directly accessible — set via `self.onmessage({data:{type:'abort'}})`, reset via a `resetAbort()` helper sending an unknown-algorithm `startSort` (handler resets the flag before the switch). Prefer exact `.toThrow('message')` over regex to catch message drift.
 - `TournamentEngine.undo()` test mocks must set `Object.setPrototypeOf(mock, {constructor: StrategyClass})` and `StrategyClass.deserialize = vi.fn()` (undo calls `StrategyCtor.deserialize`).
@@ -93,7 +93,7 @@ media_viewer/
 - `.media-container` overlay blocks pointer events — use `{force:true}` or `page.evaluate()`.
 - Helpers: `seedLocalStorage(page, kv)` (call after `launchApp()`, before `loadFolder()`); `mockFolderDialog(app, path)`; `closeApp()` (races close vs 5s then SIGKILL; Windows `taskkill /F /T`); Lucide CDN stub via `page.route('**/unpkg.com/**')`; `createTempFixtureDir(names?)`.
 - `afterEach` null guards: guard `if (electronApp)`/`if (tmpFixtures)`/`if (page)` before cleanup (`.catch()` only handles rejections, not a sync TypeError on undefined).
-- Before a method that guards on `isLoading` (e.g. `handleCancel` after `applyBulkRating`), `await page.waitForFunction(() => !window.mediaViewer.isLoading)`.
+- Before a method that guards on `isLoading` and `mediaNavigationInProgress` (e.g. `handleCancel` after `applyBulkRating`), `await page.waitForFunction(() => !window.mediaViewer.isLoading && !window.mediaViewer.mediaNavigationInProgress)`. The latter flag is set by deferred-refresh windows (e.g., re-scoring after bulk-rating) without setting `isLoading`.
 
 ## Backlog Intake Rules
 
@@ -138,7 +138,7 @@ BACKLOG.md is split into three source sections. Authoritative rules live in
 **Index Management**: `moveCurrentFile()` wraps to 0 on the last file; `removeFileFromList()` caps to length-1; folder loads / sorts / mode switches reset to 0.
 
 **Cache Management**:
-- `removeFileFromList()` is the centralized cleanup: array splice + purge of predictionScores/featureCache/clipCache/jxlFrameCache/featureMetadata/perceptualHashes (+ `bulkRated`, with conditional `saveBulkRatedFile()`) + currentIndex adjustment.
+- `removeFileFromList()` is the centralized cleanup: array splice + purge of predictionScores/featureCache/clipCache/jxlFrameCache/featureMetadata/perceptualHashes (+ `bulkRated`, with conditional `saveBulkRatedFile()`; + prune of `bulkRatedPairs` keys referencing the removed filename) + currentIndex adjustment.
 - Feature cache v4: on-disk `{vector,size,mtime,clipVector?}`; in-memory `featureCache` holds `Float32Array(64)`, `clipCache` holds `Float32Array(512)` separately; `getCombinedFeatures(path)` merges → 576-dim. `featureMetadata` Map is decoupled from `mediaFiles` so it survives moves. Stale entries pruned on load (size/mtime mismatch → re-extract).
 - `restoreFeatureCachesFromHistory(entry)` (inverse of `removeFileFromList`): 576-dim `mlFeatures` → split into featureCache(0..64)+clipCache(64..576); 64-dim → featureCache only; `mtime:0` forces re-extraction next reload. Called in all `handleCancel` branches before `showMedia()`.
 - ML model cache: `saveMlModel()` writes `{modelState,timestamp}` to `.ml_model.json`; `deleteMlModelCache()` is misnamed — it writes `''` (no `deleteFile` IPC exists). Rename tracked in BACKLOG.
@@ -153,7 +153,7 @@ BACKLOG.md is split into three source sections. Authoritative rules live in
 
 **Async Patterns**:
 - Extraction pause/resume: `signalUserActivity()` on nav/rating → 2s idle → `resumeExtraction()` resolves the gate promise. Generation counter `extractionRunId` — stale async callbacks return early.
-- ML compare refresh: `pendingCompareRefresh`/`pendingCompareUpdates` defer `showMedia()` until re-scoring completes (3s fallback); `mediaNavigationInProgress` prevents double-fire.
+- ML compare refresh: `pendingCompareRefresh`/`pendingCompareUpdates` defer `showMedia()` until re-scoring completes (3s fallback); `mediaNavigationInProgress` prevents double-fire. `applyBulkRating` and `handleCancel`'s bulk-undo branch arm it via `_beginDeferredCompareRefresh(n)`; `moveComparePair` (single rating) arms the same protocol with equivalent inline code. `n` MUST be the count of worker messages actually posted (`updateMlModelWithFeatures`/`reverseMlModelUpdate` return `false` when ML is off or features are missing), or the counter never reaches 0.
 - CLIP extraction: `@huggingface/transformers` runs in the MAIN process (npm packages can't resolve in Electron Web Workers). Chain: `initClipModel()` → `loadClipModel()` IPC (lazy, concurrent-safe, emits `clip-download-progress`) → image `extractClipEmbedding(path)` / video `extractKeyframes`+`extractClipEmbeddingBatch`; produces 512-dim unit-normalized vectors. Graceful degradation: CLIP unavailable = 64-dim only, no crash. `unloadClipModel` nulls model refs after a 30s idle grace.
 
 **Compare Mode Validation**: `showCompareMedia()` validates files via `checkFileExists` IPC before render (parallel); bounded retry (max 10) → fallback to single mode via `switchToSingleModeUI()`.

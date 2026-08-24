@@ -6,196 +6,210 @@ const fs = require('fs');
 const path = require('path');
 const source = fs.readFileSync(path.join(__dirname, '..', 'media-viewer.js'), 'utf-8');
 
-// Extract method bodies using regex and create callable functions
-function _extractMethod(methodName) {
+// Extract a MediaViewer method body by brace-counting and return a callable Function.
+function extractMethod(methodName) {
     const regex = new RegExp(`^\\s{4}${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
     const match = source.match(regex);
-    if (!match) {
-        throw new Error(`Could not find method: ${methodName}`);
-    }
-
+    if (!match) throw new Error(`Could not find method: ${methodName}`);
     const startIndex = match.index;
     let braceCount = 0;
     let methodEnd = -1;
     const searchStart = startIndex + match[0].length - 1;
-
     for (let i = searchStart; i < source.length; i++) {
-        if (source[i] === '{') {
-            braceCount++;
-        }
-        if (source[i] === '}') {
-            braceCount--;
-        }
+        if (source[i] === '{') braceCount++;
+        if (source[i] === '}') braceCount--;
         if (braceCount === 0) {
             methodEnd = i + 1;
             break;
         }
     }
-
-    const methodBody = source.substring(searchStart + 1, methodEnd - 1);
-    const params = match[1];
-    return new Function(params, methodBody);
+    return new Function(match[1], source.substring(searchStart + 1, methodEnd - 1));
 }
 
-/**
- * Helper: Extract the ML pair selection logic from showCompareMedia().
- * Since showCompareMedia() is async and has many DOM dependencies,
- * we test the pair selection algorithm directly by replicating it.
- *
- * The algorithm (from media-viewer.js showCompareMedia):
- *   1. Build filesWithScores = mediaFiles.map(f => ({file: f, score: predictionScores.get(f.path) ?? 0.5}))
- *   2. Sort descending by score
- *   3. pairIndex = Math.min(mlComparePairIndex, Math.floor(filesWithScores.length / 2) - 1)
- *   4. leftIndex = Math.max(0, pairIndex), rightIndex = Math.max(0, filesWithScores.length - 1 - pairIndex)
- *   5. If leftIndex >= rightIndex: left=[0], right=[last]; else left=[leftIndex], right=[rightIndex]
- */
-function selectMlPair(mediaFiles, predictionScores, mlComparePairIndex) {
-    const filesWithScores = mediaFiles
-        .map((f) => ({ file: f, score: predictionScores.get(f.path) ?? 0.5 }))
-        .sort((a, b) => b.score - a.score);
+// The REAL implementations under test (no replica — extracted from media-viewer.js source).
+const bulkPairKey = extractMethod('bulkPairKey');
+const computeAllComparePairs = extractMethod('computeAllComparePairs');
+const computeValidComparePairs = extractMethod('computeValidComparePairs');
 
-    const pairIndex = Math.min(mlComparePairIndex, Math.floor(filesWithScores.length / 2) - 1);
-    const leftIndex = Math.max(0, pairIndex);
-    const rightIndex = Math.max(0, filesWithScores.length - 1 - pairIndex);
-
-    let leftFile, rightFile;
-    if (leftIndex >= rightIndex) {
-        leftFile = filesWithScores[0].file;
-        rightFile = filesWithScores[filesWithScores.length - 1].file;
-    } else {
-        leftFile = filesWithScores[leftIndex].file;
-        rightFile = filesWithScores[rightIndex].file;
-    }
-
-    return {
-        leftFile,
-        rightFile,
-        leftScore: predictionScores.get(leftFile.path) ?? 0.5,
-        rightScore: predictionScores.get(rightFile.path) ?? 0.5,
-    };
+// Invoke computeValidComparePairs with a minimal `this`. bulkPairKey and computeAllComparePairs are
+// provided on the ctx because the method calls both through `this`.
+function callCompute(mediaFiles, predictionScores, bulkRatedPairs = new Set()) {
+    const ctx = { mediaFiles, predictionScores, bulkRatedPairs, bulkPairKey, computeAllComparePairs };
+    return computeValidComparePairs.call(ctx);
 }
 
-// Helper to create mock file objects
-function mockFile(name, filePath) {
-    return { name, path: filePath || `/mock/${name}` };
+// Invoke computeAllComparePairs directly — it needs no suppression state.
+function callComputeAll(mediaFiles, predictionScores) {
+    return computeAllComparePairs.call({ mediaFiles, predictionScores });
 }
 
-describe('ML pair selection logic', () => {
-    it('selects highest vs lowest for pairIndex 0', () => {
-        const files = [mockFile('a'), mockFile('b'), mockFile('c'), mockFile('d')];
-        const scores = new Map([
-            [files[0].path, 0.9],
-            [files[1].path, 0.7],
-            [files[2].path, 0.3],
-            [files[3].path, 0.1],
-        ]);
+function mockFile(name) {
+    return { name, path: `/mock/${name}` };
+}
+// Build a score Map keyed by path for the given [file, score] pairs.
+function scoreMap(entries) {
+    return new Map(entries.map(([f, s]) => [f.path, s]));
+}
 
-        const result = selectMlPair(files, scores, 0);
-        expect(result.leftScore).toBe(0.9);
-        expect(result.rightScore).toBe(0.1);
-        expect(result.leftFile).toBe(files[0]);
-        expect(result.rightFile).toBe(files[3]);
+describe('bulkPairKey', () => {
+    it('is order-independent', () => {
+        expect(bulkPairKey('a.jpg', 'z.jpg')).toBe(bulkPairKey('z.jpg', 'a.jpg'));
+    });
+    it('separates with NUL (distinct pairs never collide)', () => {
+        expect(bulkPairKey('a', 'b')).not.toBe(bulkPairKey('a', 'c'));
+        expect(bulkPairKey('a.jpg', 'z.jpg')).toContain('\u0000');
+    });
+});
+
+describe('computeValidComparePairs — extremes pairing (no suppression)', () => {
+    const files = [mockFile('a'), mockFile('b'), mockFile('c'), mockFile('d')];
+    const scores = scoreMap([
+        [files[0], 0.9],
+        [files[1], 0.7],
+        [files[2], 0.3],
+        [files[3], 0.1],
+    ]);
+
+    it('pair 0 = highest vs lowest, pair 1 = 2nd highest vs 2nd lowest', () => {
+        const pairs = callCompute(files, scores);
+        expect(pairs).toHaveLength(2);
+        expect(pairs[0].leftFile).toBe(files[0]);
+        expect(pairs[0].rightFile).toBe(files[3]);
+        expect(pairs[1].leftFile).toBe(files[1]);
+        expect(pairs[1].rightFile).toBe(files[2]);
     });
 
-    it('selects 2nd highest vs 2nd lowest for pairIndex 1', () => {
-        const files = [mockFile('a'), mockFile('b'), mockFile('c'), mockFile('d')];
-        const scores = new Map([
-            [files[0].path, 0.9],
-            [files[1].path, 0.7],
-            [files[2].path, 0.3],
-            [files[3].path, 0.1],
+    it('defaults missing scores to 0.5', () => {
+        const partial = scoreMap([
+            [files[0], 0.9],
+            // files[1], files[2] missing -> 0.5
+            [files[3], 0.1],
         ]);
-
-        const result = selectMlPair(files, scores, 1);
-        expect(result.leftScore).toBe(0.7);
-        expect(result.rightScore).toBe(0.3);
+        const pairs = callCompute(files, partial);
+        expect(pairs[0].leftFile).toBe(files[0]);
+        expect(pairs[0].rightFile).toBe(files[3]);
     });
 
-    it('handles 2 files boundary', () => {
-        const files = [mockFile('a'), mockFile('b')];
-        const scores = new Map([
-            [files[0].path, 0.8],
-            [files[1].path, 0.2],
-        ]);
-
-        const result = selectMlPair(files, scores, 0);
-        expect(result.leftScore).toBe(0.8);
-        expect(result.rightScore).toBe(0.2);
-    });
-
-    it('handles equal scores without crashing', () => {
-        const files = [mockFile('a'), mockFile('b'), mockFile('c')];
-        const scores = new Map([
-            [files[0].path, 0.5],
-            [files[1].path, 0.5],
-            [files[2].path, 0.5],
-        ]);
-
-        const result = selectMlPair(files, scores, 0);
-        expect(result.leftScore).toBe(0.5);
-        expect(result.rightScore).toBe(0.5);
-        expect(result.leftFile).not.toBe(result.rightFile);
-    });
-
-    it('defaults to 0.5 for files missing from predictionScores', () => {
-        const files = [mockFile('a'), mockFile('b'), mockFile('c')];
-        const scores = new Map([
-            [files[0].path, 0.9],
-            // files[1] intentionally missing
-            [files[2].path, 0.1],
-        ]);
-
-        const result = selectMlPair(files, scores, 0);
-        // Highest is 0.9 (file a), lowest is 0.1 (file c)
-        expect(result.leftScore).toBe(0.9);
-        expect(result.rightScore).toBe(0.1);
-        expect(result.leftFile).toBe(files[0]);
-        expect(result.rightFile).toBe(files[2]);
-    });
-
-    it('clamps pairIndex when it exceeds max', () => {
-        const files = [mockFile('a'), mockFile('b'), mockFile('c'), mockFile('d')];
-        const scores = new Map([
-            [files[0].path, 0.9],
-            [files[1].path, 0.7],
-            [files[2].path, 0.3],
-            [files[3].path, 0.1],
-        ]);
-
-        // pairIndex 99 should clamp to max valid (1 for 4 files)
-        const result = selectMlPair(files, scores, 99);
-        expect(result.leftScore).toBe(0.7);
-        expect(result.rightScore).toBe(0.3);
-    });
-
-    it('handles boundary conditions with odd file count and high pairIndex', () => {
-        // 3 files → max pairIndex = floor(3/2)-1 = 0
-        const files = [mockFile('a'), mockFile('b'), mockFile('c')];
-        const scores = new Map([
-            [files[0].path, 0.9],
-            [files[1].path, 0.5],
-            [files[2].path, 0.1],
-        ]);
-
-        // pairIndex clamped to 0 for 3 files
-        const result = selectMlPair(files, scores, 0);
-        expect(result.leftScore).toBe(0.9);
-        expect(result.rightScore).toBe(0.1);
-
-        // High pairIndex with 2 files — clamped to 0, still returns correct pair
-        const result2 = selectMlPair(
-            [mockFile('x'), mockFile('y')],
-            new Map([
-                ['/mock/x', 0.9],
-                ['/mock/y', 0.1],
-            ]),
-            5
+    it('2-file boundary yields a single pair', () => {
+        const two = [mockFile('x'), mockFile('y')];
+        const pairs = callCompute(
+            two,
+            scoreMap([
+                [two[0], 0.8],
+                [two[1], 0.2],
+            ])
         );
-        expect(result2.leftScore).toBe(0.9);
-        expect(result2.rightScore).toBe(0.1);
+        expect(pairs).toHaveLength(1);
+        expect(pairs[0].leftFile).toBe(two[0]);
+        expect(pairs[0].rightFile).toBe(two[1]);
+    });
 
-        // Note: The leftIndex >= rightIndex guard in showCompareMedia() is a safety net
-        // for edge cases that cannot be triggered with 2+ files after clamping.
-        // These tests verify the clamping prevents out-of-bounds access.
+    it('odd file count leaves the middle file unpaired', () => {
+        const three = [mockFile('h'), mockFile('m'), mockFile('l')];
+        const pairs = callCompute(
+            three,
+            scoreMap([
+                [three[0], 0.9],
+                [three[1], 0.5],
+                [three[2], 0.1],
+            ])
+        );
+        expect(pairs).toHaveLength(1);
+        expect(pairs[0].leftFile).toBe(three[0]);
+        expect(pairs[0].rightFile).toBe(three[2]);
+    });
+});
+
+describe('computeValidComparePairs — exact-pair suppression', () => {
+    const files = [mockFile('a'), mockFile('b'), mockFile('c'), mockFile('d')];
+    const scores = scoreMap([
+        [files[0], 0.9],
+        [files[1], 0.7],
+        [files[2], 0.3],
+        [files[3], 0.1],
+    ]);
+
+    it('skips the exact rated combo, surfacing the next pair at index 0', () => {
+        const rated = new Set([bulkPairKey('a', 'd')]); // the highest-vs-lowest pair
+        const pairs = callCompute(files, scores, rated);
+        expect(pairs).toHaveLength(1);
+        expect(pairs[0].leftFile).toBe(files[1]);
+        expect(pairs[0].rightFile).toBe(files[2]);
+    });
+
+    it('a rated file still pairs with a fresh file (only the exact combo is suppressed)', () => {
+        // Rate (a,d). Six files: a,b,c,d,e,f. `a` should still appear paired with the new lowest.
+        const six = [mockFile('a'), mockFile('b'), mockFile('c'), mockFile('d'), mockFile('e'), mockFile('f')];
+        const s = scoreMap([
+            [six[0], 0.9],
+            [six[1], 0.8],
+            [six[2], 0.6],
+            [six[3], 0.4],
+            [six[4], 0.2],
+            [six[5], 0.05],
+        ]);
+        // Extremes: (a,f),(b,e),(c,d). Rate (a,f).
+        const rated = new Set([bulkPairKey('a', 'f')]);
+        const pairs = callCompute(six, s, rated);
+        expect(pairs).toHaveLength(2);
+        expect(pairs.map((p) => [p.leftFile.name, p.rightFile.name])).toEqual([
+            ['b', 'e'],
+            ['c', 'd'],
+        ]);
+        // `a` is no longer paired — it is the middle-ish extreme; the point is (a,f) never recurs.
+        expect(pairs.some((p) => p.leftFile.name === 'a' && p.rightFile.name === 'f')).toBe(false);
+    });
+
+    it('falls through to the full list when every pair is suppressed', () => {
+        const rated = new Set([bulkPairKey('a', 'd'), bulkPairKey('b', 'c')]);
+        const pairs = callCompute(files, scores, rated);
+        expect(pairs).toHaveLength(2); // full candidate list, not empty
+        expect(pairs[0].leftFile).toBe(files[0]);
+        expect(pairs[0].rightFile).toBe(files[3]);
+    });
+
+    it('2-file fall-through: a rated single pair is re-shown', () => {
+        const two = [mockFile('x'), mockFile('y')];
+        const rated = new Set([bulkPairKey('x', 'y')]);
+        const pairs = callCompute(
+            two,
+            scoreMap([
+                [two[0], 0.8],
+                [two[1], 0.2],
+            ]),
+            rated
+        );
+        expect(pairs).toHaveLength(1);
+        expect(pairs[0].leftFile).toBe(two[0]);
+        expect(pairs[0].rightFile).toBe(two[1]);
+    });
+});
+
+describe('computeAllComparePairs — unfiltered pair count', () => {
+    const files = [mockFile('a'), mockFile('b'), mockFile('c'), mockFile('d')];
+    const scores = scoreMap([
+        [files[0], 0.9],
+        [files[1], 0.7],
+        [files[2], 0.3],
+        [files[3], 0.1],
+    ]);
+
+    it('returns floor(n/2) pairs in extremes order', () => {
+        const pairs = callComputeAll(files, scores);
+        expect(pairs).toHaveLength(2);
+        expect(pairs[0].leftFile).toBe(files[0]);
+        expect(pairs[0].rightFile).toBe(files[3]);
+        expect(pairs[1].leftFile).toBe(files[1]);
+        expect(pairs[1].rightFile).toBe(files[2]);
+    });
+
+    it('ignores suppression entirely — the count stays stable while the valid list shrinks', () => {
+        const suppressed = new Set([bulkPairKey('a', 'd')]);
+        expect(callCompute(files, scores, suppressed)).toHaveLength(1); // valid list shrank
+        expect(callComputeAll(files, scores)).toHaveLength(2); // full count did not
+    });
+
+    it('returns an empty list for fewer than 2 files', () => {
+        expect(callComputeAll([files[0]], scores)).toHaveLength(0);
     });
 });
