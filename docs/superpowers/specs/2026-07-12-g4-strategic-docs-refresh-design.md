@@ -464,3 +464,47 @@ Add one line to the local weekly-planning prompt (the one verified against the 2
 - **Release model**: keep versioned trains (rejected — went stale once; nothing cuts releases) vs. pure theme board (rejected — loses the v2.0 label CLAUDE.md/BACKLOG reference) → hybrid chosen.
 - **Staleness fix**: keep quarterly note (rejected — the mechanism that already failed) vs. nothing (rejected) → weekly-planning check chosen (the one cadence that provably runs).
 - **Handoff depth**: directives-only spec (rejected — a small model drafting strategic prose risks re-introducing exactly the aspirational fiction being purged) → near-final content embedded.
+
+---
+
+## 9. Amendment — 2026-08-27 Re-Verification (execution-time)
+
+**Context**: execution slipped from the scheduled Fri 2026-07-17 to **2026-08-27** (~6.5 weeks). In that window G1 (PR #64), G2 (PR #65), G3 (PR #66) and G5 (merge `4f1e65a`) all landed. Per § 3, the executor re-ran every fact command; the results triggered the spec's own **"structural contradiction → STOP and report"** rule. This section records the re-verified facts and the four resulting user decisions. **§ 1–§ 8 remain approved and in force**; where § 4 target content conflicts with this section, **this section wins**.
+
+Branch note: the original `docs/g4-strategic-docs-refresh` was cut on 2026-07-12 and had fallen ~6 weeks behind `main`. It was preserved as `stale/g4-strategic-docs-refresh-2026-07-12`; the branch of the same name was re-cut from `main` (`a8df78c`) and the spec + plan commits cherry-picked across. The stale branch's third commit (a scratch WEEKLY note, `0148897`) was deliberately dropped.
+
+### 9.1 Re-verified fact table
+
+| Fact | § 3 value (2026-07-12) | Verified 2026-08-27 | Kind |
+|------|------------------------|---------------------|------|
+| Unit tests | 434 passed, 16 files | **513 passed, 17 files** | numeric drift |
+| E2E tests | 52 tests, 13 files | **55 tests, 13 files** | numeric drift |
+| Renderer size | 7,864 lines (write "~7,900") | **9,418 lines** (write "~9,400") | ⚠️ **structural** |
+| Managers extracted | FullscreenManager, TournamentManager + TournamentEngine | unchanged — still 2 of 6 | holds |
+| Managers still planned | Zoom, Compare, Sorting, ML | unchanged | holds |
+| v1.1 features 1 & 2 | ✅ shipped | unchanged | holds |
+| Pre-push gate behavior | RUN/SKIP, fail-safe RUN | unchanged | holds |
+| G1 status | ⬜ Planned Jul 13–17 | ✅ **PR #64**, merged `b6ff4ac` 2026-07-20; user-side 24k smoke **PASSED** (20,929-file folder, all 5 checks) | anticipated by § 3 |
+| G2 status | (not in spec) | ✅ **PR #65**, merged `937084c` 2026-07-21; 6-point smoke PASSED | ⚠️ **structural** |
+| G3 status | (not in spec) | ✅ **PR #66** work merged `0b00275` 2026-08-24 (⚠️ re-smoke round 2 not run) | ⚠️ **structural** |
+| G5 status | (not in spec) | ✅ merged `4f1e65a` 2026-08-27; added REVIEW-QUEUE § 4 | ⚠️ **structural** |
+| CLAUDE.md size | (not tracked) | **205 lines**; 🟤 [2026-08-27] proposes migrating path-conditional content to `.claude/rules/` | noted, not acted on |
+
+### 9.2 Decisions (user-approved 2026-08-27)
+
+| # | Contradiction | Decision |
+|---|---------------|----------|
+| **D6** | Renderer grew 7,864 → 9,418 (+1,554, +20%) with **zero** extractions, so § 4.1's KR *"Renderer line count trending down … ~7,900 … 🟡"* asserts the opposite of the measurement | **Report honestly**: reword the KR to *"Renderer line count reduced by the four extractions"*, status **🔴**, Current = `~9,400 (up from ~7,900 in July)`. Add a growth note to the ROADMAP v2.0 section. Rationale: these docs went stale last time by describing intent as status — restating that here would reproduce the exact defect the refresh exists to remove |
+| **D7** | The *24k AI-sort smooth end-to-end* milestone's target (July 2026) has **passed** and all four DoD boxes are met, but § 4.3 pre-wrote it 🟡 In Progress | **Mark ✅ Complete, 2026-07-20** (PR #64 + the gating user smoke). Its DoD as written is AI-sort-specific and fully satisfied. The open PR2 (hash/similarity sort off the renderer thread) stays a separate **🔴 KR** under GOALS Objective 1 — it is *not* retro-added to a milestone that never scoped it. Health Summary → 3 complete / 1 in progress |
+| **D8** | Both § 4.2 **Now** themes have drained — 24k perf (G1 ✅, only the PR2 slice open) and rating/tournament UX polish (undo, wheel guard, auto-hide, bulk-rate re-pair — all ✅ via #65/#66) | **Promote v2.0 modularization from Next to Now.** Now = *24k perf remainder (PR2 hash-off-thread)* + *v2.0 modularization*. Next = *UI architecture overhaul*. Later unchanged. Rationale: directly answers D6 — the renderer is growing faster than extraction is removing, so modularization is where effort should go, and the board should say where effort **should** go, not where it went |
+| **D9** | The G4 spec and plan are **not indexed** in `docs/README.md` — the 8th recurrence of a class already filed for automation (BACKLOG 🟤, "the manual checklist has now failed 7 times") | **Fold the index fix into this branch** (2 link definitions). Rationale: leaving it means the hygiene branch reproduces the defect it exists to correct. Does **not** pre-empt the automation entry, which stays open |
+
+### 9.3 Scope explicitly held out
+
+- **`.claude/rules/` migration** (🟤 [2026-08-27]) — touches `CLAUDE.md` like § 4.4 does, but is a separate M-sized item with its own trial-eval criteria. Folding it in would smuggle unreviewed scope into a docs refresh.
+- **§ 7 Out of Scope stands unchanged** — WEEKLY.md's own `~8400` / `434 unit` mentions are not edited; it is a dated plan document, true at write time.
+- **§ 5 user-side action still outstanding** — the weekly-planning-prompt line cannot be applied from the repo.
+
+### 9.4 Numeric substitutions for § 4
+
+Every occurrence in § 4 target content is superseded as follows: `434 unit` → **513 unit**; `52 E2E` → **55 E2E**; `~7,900` → **~9,400** (except where D6 requires the "up from ~7,900 in July" comparative); `<DATE>` → **2026-08-27**.
