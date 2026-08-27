@@ -30,10 +30,9 @@ Central index for all project documentation.
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
 | [Video Fullscreen Toggle][] | Exit fullscreen on second video click |
-| [G4 Strategic-Doc Refresh][] | Mechanical execution of the G4 spec: rewrite GOALS/ROADMAP/MILESTONES, sync CLAUDE.md to the pre-push E2E gate, install the planning-session staleness check (Group G4) |
 
 [Video Fullscreen Toggle]: planning/plans/2025-12-29_video-fullscreen-toggle.md
-[G4 Strategic-Doc Refresh]: planning/plans/2026-07-12_g4-strategic-docs-refresh.md
+[G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 
 ## Archived Plans
 
@@ -77,6 +76,8 @@ Central index for all project documentation.
 | [CW-P Process & DX Guardrails Plan][]         | Automated pre-push E2E gate (code-aware skip; pure `parsePushRefs`/`classifyPaths` + fail-safe git-wrapper CLI + Husky v9 hook) + Weekly-Reviews methodology consolidation (6 fixes) + CLAUDE.md ref-sweep bullet (Group CW-P) |
 | [G1 AI-Sort Startup UX Plan][]                 | Phased/cancelable `handleSortByPrediction` + awaitable `runMlSort` (`sortRunId` stale-guard) + atomic incremental `loadFeatureCache` (staged-local, commit-on-complete) + binary `Float32Array` transport for `feature-cache-chunk` + unified sort-card progress; PR3 slice of the 🔴 sort-perf TODO (PR2 hash-off-thread remains); user-side 24k smoke PASSED 2026-07-20; MERGED via PR #64 (`b6ff4ac`) (Group G1) |
 | [G2 Tournament Bug Fixes Plan][]               | `engine.history` unified chronological undo stack (`kind` pick/special/prune + `peekUndoEntry`/`undoUserAction`) replacing the `moveHistory`-peek that let any special move hijack tournament undo + identity re-check for the advisory `isLoading` mutex + mouse-wheel `isTournamentMode` guard + auto-hide `.tournament-header`/`.tournament-controls` (`_setupAutoHide`); MERGED via PR #65 (`937084c`); **user-side 6-point manual smoke PASSED 2026-07-21** (all 6 checks) (Group G2) |
+
+| [G4 Strategic-Doc Refresh Plan][] | Strategic docs refreshed to August-2026 reality (v1.1 retro-closed, v2.0 = modularization arc, Now/Next/Later theme board) + CLAUDE.md/PROJECT.md sync + planning-session staleness rule (Group G4) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md

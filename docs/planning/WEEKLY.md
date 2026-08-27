@@ -12,7 +12,7 @@
 ## Parallel Work
 
 - ✅ **SMOKE PASSED (2026-07-20) — gating dependency for G1 satisfied.** All 5 checks passed on the user's real 20,929-file folder: the ~40s silent load is gone/visible (determinate card appears immediately), cached data is served with no redundant re-extraction, Cancel actually aborts (load + extraction + sort all stop, list stays unsorted), and the post-tournament-exit path behaves identically. Two post-review incidents surfaced and were fixed in-branch — an external `/code-review` data-loss regression (`b8b5636`) and a worse cache-corruption route the smoke itself triggered (`2777bdf`, `c947081`) — see [DONE.md](DONE.md) 2026-07-20 for detail. G1 shipped as **PR #64**, **MERGED** into `main` in `b6ff4ac` (branch `feature/g1-ai-sort-startup-ux` deleted remote + local). Original gate description follows for context: — The AI-sort startup UX + incremental cache-load work targets real-24k-folder behavior that cannot be E2E-fixtured (Playwright fixtures top out at a handful of files). Same verification shape as the CW-T tournament work.
-- ✅ **DONE EARLY (Sat 2026-07-12) — Strategic-doc brainstorm with the user (gates G4's 🟡 refresh).** The gate is SATISFIED: brainstorm held Jul 12; decisions D1–D5 + user-approved spec (`41d9233`) + mechanical 8-task plan (`a02c256`) live on branch `docs/g4-strategic-docs-refresh`. **Friday = execute `docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md`** (sized for a cheaper model; inline executing-plans is fine). Do NOT drop the 🟡 refresh as "brainstorm didn't happen". Original gate description follows for context: — MILESTONES.md / ROADMAP.md / GOALS.md are frozen at **2026-02-05** and factually wrong (GOALS still says "No automated tests / Manual testing only" and "~6100-line" renderer vs. **434 unit tests + green E2E** and an ~8400-line renderer; Tournament/JXL/CLIP + v2.0 modularization all shipped outside the documented roadmap). The doc edits are ~S but **blocked on a ~15-min decision**: (a) is v1.1 closed/shipped? (b) what is v2.0's real scope now (modularization in progress; ZoomManager/CompareManager/SortingManager/MLManager planned)? (c) where do the big BACKLOG themes (24k-folder perf, add-on system) sit? If the brainstorm doesn't happen, G4's 🟡 refresh drops (the 🟤 CLAUDE.md doc-sync still ships).
+- ✅ **DONE EARLY (Sat 2026-07-12) — Strategic-doc brainstorm with the user (gates G4's 🟡 refresh).** The gate is SATISFIED: brainstorm held Jul 12; decisions D1–D5 + user-approved spec (`41d9233`) + mechanical 8-task plan (`a02c256`) live on branch `docs/g4-strategic-docs-refresh`. **Friday = execute `docs/archive/plans/2026-07-12_g4-strategic-docs-refresh.md`** (sized for a cheaper model; inline executing-plans is fine). Do NOT drop the 🟡 refresh as "brainstorm didn't happen". Original gate description follows for context: — MILESTONES.md / ROADMAP.md / GOALS.md are frozen at **2026-02-05** and factually wrong (GOALS still says "No automated tests / Manual testing only" and "~6100-line" renderer vs. **434 unit tests + green E2E** and an ~8400-line renderer; Tournament/JXL/CLIP + v2.0 modularization all shipped outside the documented roadmap). The doc edits are ~S but **blocked on a ~15-min decision**: (a) is v1.1 closed/shipped? (b) what is v2.0's real scope now (modularization in progress; ZoomManager/CompareManager/SortingManager/MLManager planned)? (c) where do the big BACKLOG themes (24k-folder perf, add-on system) sit? If the brainstorm doesn't happen, G4's 🟡 refresh drops (the 🟤 CLAUDE.md doc-sync still ships).
 
 ---
 
@@ -57,10 +57,10 @@
 **Source**: 🟡 Operational (strategic-doc refresh) **+** 🟤 Auto-Generated (1 CLAUDE.md doc-sync, folded)
 **Total SP**: 4 — one branch, one PR (docs-only → manual review, no `/code-review` fan-out per the [2026-06-29] convention). ~~The 🟡 refresh is **gated on the Thursday brainstorm**~~ → **gate SATISFIED early (Sat 2026-07-12)**: spec `41d9233` + plan `a02c256` committed on branch `docs/g4-strategic-docs-refresh`; the 🟤 doc-sync is folded into that same plan (Task 5).
 
-> Mixed-source docs group (mirrors CW-P's "🟡 + 1 🟤 folded" shape). Scheduled Friday. **Friday's job is now purely mechanical: execute `docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md` (cheaper model OK) → docs-only PR → manual review.**
+> Mixed-source docs group (mirrors CW-P's "🟡 + 1 🟤 folded" shape). Scheduled Friday. **Friday's job is now purely mechanical: execute `docs/archive/plans/2026-07-12_g4-strategic-docs-refresh.md` (cheaper model OK) → docs-only PR → manual review.**
 
-- [ ] 🟡 **Refresh MILESTONES.md / ROADMAP.md / GOALS.md** — 🟡 [2026-07-01]. All three frozen at 2026-02-05 and factually wrong (GOALS "no automated tests" vs. 434 unit; "~6100-line" vs. ~8400-line renderer; v1.1 "On Track Q1 2026"; v2.0 "Not Started" though modularization is underway). After the brainstorm sets direction (v1.1 closed? v2.0 real scope? where do 24k-perf / add-on themes sit?), rewrite all three + bump each `Last Updated`. Effort: S (edits) after a ~M discussion.
-- [ ] 🟤 **Sync CLAUDE.md to the new pre-push E2E gate** — 🟤 [2026-07-11] PR #63 post-merge. The Architecture-tree `scripts/` bullet lists only `check-secrets.js` and the "Build & Development Commands" hook prose omits the new conditional pre-push E2E gate (`scripts/check-e2e-needed.js` + `.husky/pre-push`) + its `--no-verify` bypass. **Recurrence** of the [2026-06-18] PR #51 doc-drift class fixed in PR #52 — the same 2 lines drift on every script/hook addition. `CLAUDE.md` (Architecture tree; hook prose).
+- [x] 🟡 **Refresh MILESTONES.md / ROADMAP.md / GOALS.md** — 🟡 [2026-07-01]. All three frozen at 2026-02-05 and factually wrong (GOALS "no automated tests" vs. 434 unit; "~6100-line" vs. ~8400-line renderer; v1.1 "On Track Q1 2026"; v2.0 "Not Started" though modularization is underway). After the brainstorm sets direction (v1.1 closed? v2.0 real scope? where do 24k-perf / add-on themes sit?), rewrite all three + bump each `Last Updated`. Effort: S (edits) after a ~M discussion.
+- [x] 🟤 **Sync CLAUDE.md to the new pre-push E2E gate** — 🟤 [2026-07-11] PR #63 post-merge. The Architecture-tree `scripts/` bullet lists only `check-secrets.js` and the "Build & Development Commands" hook prose omits the new conditional pre-push E2E gate (`scripts/check-e2e-needed.js` + `.husky/pre-push`) + its `--no-verify` bypass. **Recurrence** of the [2026-06-18] PR #51 doc-drift class fixed in PR #52 — the same 2 lines drift on every script/hook addition. `CLAUDE.md` (Architecture tree; hook prose).
 
 ### G5. Weekly Reviews [batch] ⚪ Overhead
 **Domain**: Research / process (exempt overhead — excluded from the source-quota denominator)
@@ -128,11 +128,11 @@
 ---
 
 ### Friday, July 17 — Docs refresh + Reviews wrap + buffer
-> Light close: **execute the ready-made G4 plan** (`docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md` — brainstorm already held Sat Jul 12, spec+plan on branch `docs/g4-strategic-docs-refresh`; cheaper model OK), finish Weekly Reviews, absorb G1/G2 spillover and the user-side 24k smoke follow-up.
+> Light close: **execute the ready-made G4 plan** (`docs/archive/plans/2026-07-12_g4-strategic-docs-refresh.md` — brainstorm already held Sat Jul 12, spec+plan on branch `docs/g4-strategic-docs-refresh`; cheaper model OK), finish Weekly Reviews, absorb G1/G2 spillover and the user-side 24k smoke follow-up.
 
 | Group | SP |
 |-------|----|
-| [**G4. Strategic-doc refresh & CLAUDE.md hygiene**](#g4-strategic-doc-refresh--claudemd-hygiene-batch--1--folded) [batch] | 4 |
+| ✅ [**G4. Strategic-doc refresh & CLAUDE.md hygiene**](#g4-strategic-doc-refresh--claudemd-hygiene-batch--1--folded) [batch] — merged `a843d36` | 4 |
 | ✅ [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (finish) — held 2026-08-27 | (5) |
 
 **Daily total**: 4 SP + reviews overhead + G1/G2 buffer
@@ -154,7 +154,7 @@
 | G1 | AI-sort startup UX & incremental cache-load [batch] 🏆 | JS logic (sort / feature-cache / progress UX) | 🔵 User | 6 (1 🔴 + 4 🔵 + 1 🟠) | 8 | Mon–Wed | ✅ PR #64 |
 | G2 | Tournament-mode bug fixes [batch] | JS logic (tournament) + CSS | 🔵 User | 3 (1 🔴 + 1 🟠 + 1 🔵) | 6 | Wed–Thu | ✅ PR #65 |
 | G3 | Bulk-rate re-pair avoidance [solo] | JS logic (compare-mode ML pairing) | 🔵 User | 1 🟠 | 3 | Thu | ✅ PR #66 ⚠️ (see DONE — re-smoke round 2 NOT run) |
-| G4 | Strategic-doc refresh & CLAUDE.md hygiene [batch] | docs (strategic + CLAUDE.md) | 🟡 Ops (+1 🟤 folded) | 2 | 4 | Fri | ⬜ Planned |
+| G4 | Strategic-doc refresh & CLAUDE.md hygiene [batch] | docs (strategic + CLAUDE.md) | 🟡 Ops (+1 🟤 folded) | 2 | 4 | Fri | ✅ 2026-08-27 (no PR — merged `a843d36`) |
 | G5 | Weekly Reviews [batch] | Research / process | ⚪ Overhead | 4 | 5 | Thu–Fri | ✅ 2026-08-27 (no PR — merged `4f1e65a`) |
 | **Total (quota-counted)** | | | | **12** | **21** | | |
 | **Total (incl. ⚪ overhead)** | | | | **16** | **26** | | |

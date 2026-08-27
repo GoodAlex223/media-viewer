@@ -50,7 +50,6 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 | Plan | Task | Status | Started |
 |------|------|--------|---------|
 | [2025-12-29_video-fullscreen-toggle.md](2025-12-29_video-fullscreen-toggle.md) | Video fullscreen toggle | In Progress | 2025-12-29 |
-| [2026-07-12_g4-strategic-docs-refresh.md](2026-07-12_g4-strategic-docs-refresh.md) | G4 strategic-doc refresh & CLAUDE.md hygiene | In Progress | 2026-08-27 |
 
 ---
 

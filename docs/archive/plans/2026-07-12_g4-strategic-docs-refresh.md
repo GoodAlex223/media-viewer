@@ -407,16 +407,16 @@ Tell the user to add this line to their local weekly-planning prompt:
 - Consumes: merged PR number `#N`.
 - Produces: closed-out G4 per CLAUDE.md § Task Completion.
 
-- [ ] **Step 1: Check off shipped work**
+- [x] **Step 1: Check off shipped work**
 
 - WEEKLY.md: G4 Summary-Table Status → `✅ PR #N` (the number, never a bare ✅) AND the Friday Daily-Schedule G4 entry; check both G4 task boxes (🟡 refresh + 🟤 doc-sync).
 - BACKLOG.md: check off the 🟡 [2026-07-01] strategic-doc-refresh entry and the 🟤 [2026-07-11] CLAUDE.md doc-sync entry (grep for them; annotate `✅ Resolved <date> via PR #N`).
 
-- [ ] **Step 2: DONE.md entry**
+- [x] **Step 2: DONE.md entry**
 
 Add a dated G4 entry: summary (strategic docs refreshed to reality — hybrid model, theme board, staleness rule; CLAUDE.md gate sync + line-count fix), plan link (archived path), PR #N, spec link.
 
-- [ ] **Step 3: Archive this plan**
+- [x] **Step 3: Archive this plan**
 
 ```powershell
 git mv docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md docs/archive/plans/2026-07-12_g4-strategic-docs-refresh.md
@@ -426,11 +426,11 @@ Flip all remaining `- [ ]` step boxes in the archived copy to `- [x]` (line-star
 `| [G4 Strategic-Doc Refresh Plan][] | Strategic docs refreshed to July-2026 reality (v1.1 closed, v2.0 = modularization, theme board) + CLAUDE.md pre-push gate sync + planning-session staleness rule (Group G4) |`
 and `[G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md`.
 
-- [ ] **Step 4: Extract ≥2 improvements to BACKLOG** (routed 🟤, per Backlog Intake Rules, `### [<date>] G4 closeout` group)
+- [x] **Step 4: Extract ≥2 improvements to BACKLOG** (routed 🟤, per Backlog Intake Rules, `### [<date>] G4 closeout` group)
 
 Seed candidates (verify still-unfiled first; tag `[possible-dup-of: …]` if similar): (1) automate the CLAUDE.md-vs-`scripts/`+`.husky/` drift guard (recurring class: PR #51 → PR #63 → G4); (2) WEEKLY.md "~8400-line"-style numeric claims — consider sourcing recurring numbers (test count, renderer lines) from one place at plan-write time.
 
-- [ ] **Step 5: Commit closeout**
+- [x] **Step 5: Commit closeout**
 
 ```powershell
 git add -A
