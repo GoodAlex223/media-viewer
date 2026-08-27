@@ -2,6 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> ⚠️ **PARTIALLY SUPERSEDED — executed 2026-08-27, not 2026-07-17.** This plan was written on 2026-07-12 against facts that had drifted by execution time (G1/G2/G3/G5 all landed in between). Re-running the fact commands tripped the spec's own "structural contradiction → STOP and report" rule, and the user approved four amendments recorded as **D6–D9 in spec § 9**. Where this plan's numbers or instructions conflict with spec § 9, **§ 9 wins**. Specifically:
+>
+> - **Task 5 Step 3** says replace `~8400` with `~7,900`. Superseded — the executed value is **`~9400`** (measured 9,418). Per **D6** the renderer KR is also reported 🔴 and reworded, not 🟡 "trending down".
+> - **Task 4** pre-writes the *24k AI-sort smooth end-to-end* milestone as 🟡 In Progress. Superseded by **D7** — recorded ✅ Complete 2026-07-20.
+> - **Task 3**'s theme board is superseded by **D8** — v2.0 modularization promoted Next → Now; the drained rating/tournament polish theme retired.
+> - Scope gained one item per **D9**: index the G4 spec + plan in `docs/README.md`.
+> - Expected unit count is **513**, not 434; E2E **55**, not 52.
+> - **Task 7 Step 5 (open the PR) is cancelled** by the task brief for this run — branch is pushed for backup, no PR opened.
+
 **Goal:** Bring `docs/planning/GOALS.md`, `ROADMAP.md`, `MILESTONES.md` from their frozen 2026-02-05 state to July-2026 reality, sync CLAUDE.md to the pre-push E2E gate, and install the weekly-planning staleness rule — all content pre-decided and embedded in the approved spec.
 
 **Architecture:** Docs-only change on branch `docs/g4-strategic-docs-refresh` (already exists, spec committed as `41d9233`). The spec — [`docs/superpowers/specs/2026-07-12-g4-strategic-docs-refresh-design.md`](../../superpowers/specs/2026-07-12-g4-strategic-docs-refresh-design.md) — embeds **near-final replacement content**; this plan is the mechanical procedure to apply it. No strategic judgment is required or permitted: where this plan says "copy the fenced block from spec § 4.X", copy it **verbatim** (do not retype, do not paraphrase), replacing only the `<DATE>` placeholders.
@@ -24,22 +33,27 @@
 ### Task 1: Preflight — branch + fact re-verification
 
 **Files:**
+
 - No edits. Read: spec § 3; `docs/planning/WEEKLY.md` (G1 row); `.husky/pre-push`; `scripts/check-e2e-needed.js` (header comment).
 
 **Interfaces:**
+
 - Produces: a confirmed fact set (unit count, E2E count, renderer line count, G1 status) used verbatim by Tasks 2–5.
 
-- [ ] **Step 1: Confirm branch and clean tree**
+- [x] **Step 1: Confirm branch and clean tree**
 
 Run:
+
 ```powershell
 git checkout docs/g4-strategic-docs-refresh && git status --short
 ```
+
 Expected: branch switch succeeds (or already on it); no unexpected modified files.
 
-- [ ] **Step 2: Re-run the spec § 3 fact commands**
+- [x] **Step 2: Re-run the spec § 3 fact commands**
 
 Run each and note the fresh values:
+
 ```powershell
 npx vitest run --no-file-parallelism 2>&1 | Select-String 'Test Files|Tests '
 npx playwright test --list 2>$null | Select-Object -Last 1
@@ -48,21 +62,24 @@ Test-Path fullscreen.js, tournament.js, tournament-engine.js
 Select-String 'Video fullscreen toggle' docs/planning/DONE.md | Select-Object -First 1
 npx playwright test --list 2>$null | Select-String 'zoom' | Select-Object -First 2
 ```
+
 Expected (as of 2026-07-12): `434 passed (434)` / 16 files; `Total: 52 tests in 13 files`; `7864`; `True True True`; a DONE.md hit; zoom.test.js entries.
 
-- [ ] **Step 3: Check G1 status in WEEKLY.md**
+- [x] **Step 3: Check G1 status in WEEKLY.md**
 
 Run:
+
 ```powershell
 Select-String 'G1 \|' docs/planning/WEEKLY.md
 ```
+
 Expected: G1 row Status `⬜ Planned` → spec content applies as written. If G1 shows `✅ PR #N`: **structural drift** — the three G1-dependent KRs in spec § 4.1 Objective 1 and the first milestone in § 4.3 must flip to shipped wording. STOP and report to the user before writing (per spec § 3), proposing the flipped wording.
 
-- [ ] **Step 4: Confirm the pre-push gate behavior is unchanged**
+- [x] **Step 4: Confirm the pre-push gate behavior is unchanged**
 
 Read `.husky/pre-push` (5 lines) and the header comment of `scripts/check-e2e-needed.js`. Expected: `node scripts/check-e2e-needed.js` prints RUN/SKIP; SKIP only when every changed path is `*.md` or under `docs/`; fail-safe → RUN; bypass `git push --no-verify`. If different, STOP and report (CLAUDE.md Edit 2 in Task 5 would document fiction).
 
-- [ ] **Step 5: Decide drift handling**
+- [x] **Step 5: Decide drift handling**
 
 If every value matched: proceed. If only numbers moved (e.g. 435 tests): note the fresh numbers — Tasks 2–5 substitute them wherever the stale number appears in the spec content. No commit in this task.
 
@@ -71,39 +88,46 @@ If every value matched: proceed. If only numbers moved (e.g. 435 tests): note th
 ### Task 2: Replace `docs/planning/GOALS.md`
 
 **Files:**
+
 - Modify: `docs/planning/GOALS.md` (full replacement)
 - Source: spec § 4.1 fenced block
 
 **Interfaces:**
+
 - Consumes: Task 1 fact set (test counts in the Constraints table, `~7,900` renderer size, G1 status wording).
 - Produces: GOALS.md referenced by ROADMAP/MILESTONES cross-links (Tasks 3–4) and by the README staleness rule (Task 6).
 
-- [ ] **Step 1: Apply the replacement**
+- [x] **Step 1: Apply the replacement**
 
-Open spec § 4.1. Copy the entire ```` ```markdown ```` fenced block verbatim as the new full content of `docs/planning/GOALS.md`. Replace `<DATE>` (1 occurrence, the `Last Updated` line) with today's date. Substitute any Task-1 fresh numbers.
+Open spec § 4.1. Copy the entire ` ```markdown ` fenced block verbatim as the new full content of `docs/planning/GOALS.md`. Replace `<DATE>` (1 occurrence, the `Last Updated` line) with today's date. Substitute any Task-1 fresh numbers.
 
-- [ ] **Step 2: Verify no stale content remains**
+- [x] **Step 2: Verify no stale content remains**
 
 Run:
+
 ```powershell
 Select-String -Path docs/planning/GOALS.md -Pattern '6100|No automated tests|Q1 2026|<DATE>|Core Stability|UX Refinement'
 ```
+
 Expected: **no output**.
 
-- [ ] **Step 3: Verify the new anchors are present**
+- [x] **Step 3: Verify the new anchors are present**
 
 Run:
+
 ```powershell
 Select-String -Path docs/planning/GOALS.md -Pattern '24k-Scale Responsiveness|Maintainable Architecture|No CI service|staleness check'
 ```
+
 Expected: ≥4 matching lines.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add docs/planning/GOALS.md
 git commit -m "docs(planning): rewrite GOALS.md to July 2026 reality (G4)"
 ```
+
 Expected: pre-commit passes (unit suite green).
 
 ---
@@ -111,34 +135,40 @@ Expected: pre-commit passes (unit suite green).
 ### Task 3: Replace `docs/planning/ROADMAP.md`
 
 **Files:**
+
 - Modify: `docs/planning/ROADMAP.md` (full replacement)
 - Source: spec § 4.2 fenced block
 
 **Interfaces:**
+
 - Consumes: Task 1 fact set; D1/D3 decisions already baked into the spec content.
 - Produces: the theme board + v1.1-closed/v2.0-in-progress release sections that MILESTONES.md (Task 4) mirrors.
 
-- [ ] **Step 1: Apply the replacement**
+- [x] **Step 1: Apply the replacement**
 
-Copy the spec § 4.2 ```` ```markdown ```` fenced block verbatim as the new full content of `docs/planning/ROADMAP.md`. Replace `<DATE>` (2 occurrences: `Last Updated` + the v1.1 "retro-declared" line). Substitute Task-1 fresh numbers.
+Copy the spec § 4.2 ` ```markdown ` fenced block verbatim as the new full content of `docs/planning/ROADMAP.md`. Replace `<DATE>` (2 occurrences: `Last Updated` + the v1.1 "retro-declared" line). Substitute Task-1 fresh numbers.
 
-- [ ] **Step 2: Verify no stale content remains**
+- [x] **Step 2: Verify no stale content remains**
 
 Run:
+
 ```powershell
 Select-String -Path docs/planning/ROADMAP.md -Pattern '6100|Q1 2026|<DATE>|Not Started \(Target: TBD\)|Future \(v3\.0\+\)|TypeScript migration|Cloud sync'
 ```
+
 Expected: **no output** (the old v3.0+ speculative list is deliberately dropped per spec § 4.2 note).
 
-- [ ] **Step 3: Verify the new structure is present**
+- [x] **Step 3: Verify the new structure is present**
 
 Run:
+
 ```powershell
 Select-String -Path docs/planning/ROADMAP.md -Pattern '## Theme Board|### Now|### Next|### Later|Shipped|Modularization'
 ```
+
 Expected: matches for every pattern (Now/Next/Later headers, v1.1 ✅ Shipped, v2.0 Modularization).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add docs/planning/ROADMAP.md
@@ -150,34 +180,40 @@ git commit -m "docs(planning): ROADMAP.md — close v1.1, v2.0 = modularization,
 ### Task 4: Replace `docs/planning/MILESTONES.md`
 
 **Files:**
+
 - Modify: `docs/planning/MILESTONES.md` (full replacement)
-- Source: spec § 4.3 fenced block (**note: it is a 4-backtick fence** because the content itself contains a 3-backtick timeline diagram — copy everything between the ````` ````markdown ````` markers, keeping the inner ``` diagram fence intact)
+- Source: spec § 4.3 fenced block (**note: it is a 4-backtick fence** because the content itself contains a 3-backtick timeline diagram — copy everything between the ` ````markdown ` markers, keeping the inner ``` diagram fence intact)
 
 **Interfaces:**
+
 - Consumes: Task 1 fact set; the two milestone targets (July 2026; Q4 2026 soft) approved in the spec.
 - Produces: milestone statuses consistent with ROADMAP (Task 3) — v1.1 ✅ in both, v2.0 in-progress in both.
 
-- [ ] **Step 1: Apply the replacement**
+- [x] **Step 1: Apply the replacement**
 
 Copy the spec § 4.3 fenced block verbatim as the new full content of `docs/planning/MILESTONES.md`. Replace `<DATE>` (3 occurrences: `Last Updated`, v1.1 "retro-declared", v1.1 "strategic-doc refresh" DoD line). Substitute Task-1 fresh numbers.
 
-- [ ] **Step 2: Verify no stale content remains**
+- [x] **Step 2: Verify no stale content remains**
 
 Run:
+
 ```powershell
 Select-String -Path docs/planning/MILESTONES.md -Pattern 'Q1 2026|<DATE>|TASK-002.*Not Started|v1\.1 Polish \| Q1|On Track'
 ```
+
 Expected: **no output**.
 
-- [ ] **Step 3: Verify the new milestones + intact diagram**
+- [x] **Step 3: Verify the new milestones + intact diagram**
 
 Run:
+
 ```powershell
 Select-String -Path docs/planning/MILESTONES.md -Pattern '24k AI-sort smooth|v2\.0 modularization complete|24k AI-sort smooth\]|✅ Complete \| 2'
 ```
+
 Expected: the two new 🎯 milestones, the timeline diagram line, and the Health Summary `✅ Complete | 2` row all present.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add docs/planning/MILESTONES.md
@@ -189,38 +225,44 @@ git commit -m "docs(planning): MILESTONES.md — v1.1 retro-closed, two honest 2
 ### Task 5: CLAUDE.md — three surgical edits
 
 **Files:**
+
 - Modify: `CLAUDE.md` (3 string edits — NOT a rewrite; source: spec § 4.4)
 
 **Interfaces:**
+
 - Consumes: Task 1 confirmation that the pre-push gate behavior matches spec § 3; fresh renderer line count.
 - Produces: CLAUDE.md consistent with `scripts/`, `.husky/`, and the strategic docs' `~7,900` figure.
 
-- [ ] **Step 1: Edit 1 — Architecture tree `scripts/` bullet**
+- [x] **Step 1: Edit 1 — Architecture tree `scripts/` bullet**
 
 Find the line beginning `├── scripts/` and replace it exactly per spec § 4.4 Edit 1 (appends `; check-e2e-needed.js (pre-push E2E gate decision — parsePushRefs/classifyPaths + fail-safe RUN/SKIP CLI)`).
 
-- [ ] **Step 2: Edit 2 — hook prose**
+- [x] **Step 2: Edit 2 — hook prose**
 
 In "Build & Development Commands", replace the sentence `E2E is NOT run by the hook.` with the spec § 4.4 Edit 2 replacement text (pre-push RUN/SKIP behavior, docs-only skip, fail-safe → RUN, `git push --no-verify` bypass) — copy it verbatim.
 
-- [ ] **Step 3: Edit 3 — renderer line count**
+- [x] **Step 3: Edit 3 — renderer line count**
 
 Run:
+
 ```powershell
 Select-String -Path CLAUDE.md -Pattern '8400'
 ```
+
 Replace every occurrence's `~8400` with `~7,900` (or the Task-1 fresh figure rounded to the nearest hundred with a `~`).
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
+
 ```powershell
 Select-String -Path CLAUDE.md -Pattern '8400'
 Select-String -Path CLAUDE.md -Pattern 'check-e2e-needed'
 ```
+
 Expected: first command **no output**; second command **≥2 matches** (tree bullet + hook prose).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add CLAUDE.md
@@ -232,30 +274,34 @@ git commit -m "docs(claude-md): sync pre-push E2E gate + renderer line count (G4
 ### Task 6: `docs/planning/README.md` — staleness rule + missing table rows
 
 **Files:**
+
 - Modify: `docs/planning/README.md` (2 edits; source: spec § 4.5)
 
 **Interfaces:**
+
 - Consumes: nothing from other tasks (independent), but its staleness rule is what GOALS.md's `Review Cycle` line (Task 2) points at.
 - Produces: the in-repo home of the weekly-planning staleness check.
 
-- [ ] **Step 1: Edit 1 — replace `### Strategic Review`**
+- [x] **Step 1: Edit 1 — replace `### Strategic Review`**
 
 Replace the entire existing `### Strategic Review` section (heading + the four "Periodically review" checkboxes) with the spec § 4.5 Edit 1 fenced block, verbatim.
 
-- [ ] **Step 2: Edit 2 — add missing document rows**
+- [x] **Step 2: Edit 2 — add missing document rows**
 
 In the "Task Management (Tactical)" table, add the two rows from spec § 4.5 Edit 2 (WEEKLY.md, REVIEW-QUEUE.md). In the Overview table, change the Tactical row's Documents cell from `TODO.md, BACKLOG.md` to `WEEKLY.md, TODO.md, BACKLOG.md, REVIEW-QUEUE.md`.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
+
 ```powershell
 Select-String -Path docs/planning/README.md -Pattern 'staleness check|WEEKLY.md|REVIEW-QUEUE.md|🟡 Operational BACKLOG'
 Select-String -Path docs/planning/README.md -Pattern 'Periodically review'
 ```
+
 Expected: first command matches all four patterns; second command **no output**.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add docs/planning/README.md
@@ -267,45 +313,55 @@ git commit -m "docs(planning): README — weekly staleness rule + WEEKLY/REVIEW-
 ### Task 7: Final sweep, push, PR
 
 **Files:**
+
 - No new edits (fixes only if the sweep fails). Read: all five changed files.
 
 **Interfaces:**
+
 - Consumes: Tasks 2–6 complete.
 - Produces: pushed branch + open docs-only PR for the user's manual review.
 
-- [ ] **Step 1: Cross-doc leftover-fiction sweep** (spec § 6 rule 4)
+- [x] **Step 1: Cross-doc leftover-fiction sweep** (spec § 6 rule 4)
 
 Run:
+
 ```powershell
 Select-String -Path docs/planning/GOALS.md, docs/planning/ROADMAP.md, docs/planning/MILESTONES.md -Pattern '6100|No automated tests|Q1 2026|<DATE>'
 ```
+
 Expected: **no output**. Any hit → fix in the offending file, amendless follow-up commit `docs(planning): fix leftover stale reference (G4 sweep)`.
 
-- [ ] **Step 2: Link-target check**
+- [x] **Step 2: Link-target check**
 
 Every relative link used by the new content must resolve:
+
 ```powershell
 Test-Path docs/planning/README.md, docs/planning/WEEKLY.md, docs/planning/TODO.md, docs/planning/BACKLOG.md, docs/planning/MILESTONES.md, docs/planning/ROADMAP.md, docs/planning/GOALS.md, docs/planning/REVIEW-QUEUE.md
 ```
+
 Expected: all `True`.
 
-- [ ] **Step 3: Confirm the diff is docs-only**
+- [x] **Step 3: Confirm the diff is docs-only**
 
 Run:
+
 ```powershell
 git diff main --name-only
 ```
+
 Expected: exactly the five § Global-Constraints files + `docs/superpowers/specs/2026-07-12-g4-strategic-docs-refresh-design.md` + `docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md`. Anything else → stop and investigate.
 
-- [ ] **Step 4: Push — expect the SKIP message**
+- [x] **Step 4: Push — expect the SKIP message**
 
 Run:
+
 ```powershell
 git push -u origin docs/g4-strategic-docs-refresh
 ```
+
 Expected: pre-push prints the docs-only skip line (from `check-e2e-needed.js` → SKIP) and does NOT start Playwright. If E2E starts, abort (Ctrl+C is fine — the hook only gates the push), run Step 3 again, investigate.
 
-- [ ] **Step 5: Open the PR**
+- [x] **Step 5: Open the PR**
 
 ```powershell
 gh pr create --title "docs(G4): strategic-doc refresh to July 2026 reality + CLAUDE.md pre-push gate sync" --body @'
@@ -326,11 +382,13 @@ Spec (user-approved 2026-07-12, decisions D1–D5): docs/superpowers/specs/2026-
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 '@
 ```
+
 Expected: PR URL printed. Report it to the user together with the § 5 reminder below.
 
-- [ ] **Step 6: Remind the user of their out-of-repo action** (spec § 5)
+- [x] **Step 6: Remind the user of their out-of-repo action** (spec § 5)
 
 Tell the user to add this line to their local weekly-planning prompt:
+
 > Strategic-docs staleness check: compare ROADMAP/GOALS/MILESTONES against what shipped since the last plan; if contradicted or `Last Updated` > 2 months, file a 🟡 "strategic-doc refresh" BACKLOG entry.
 
 ---
@@ -338,10 +396,12 @@ Tell the user to add this line to their local weekly-planning prompt:
 ### Task 8: Closeout (GATED — only after the user approves/merges the PR)
 
 **Files:**
+
 - Modify: `docs/planning/WEEKLY.md`, `docs/planning/BACKLOG.md`, `docs/planning/TODO.md` (if a G4 row exists), `docs/planning/DONE.md`, `docs/README.md`
 - Move: this plan → `docs/archive/plans/2026-07-12_g4-strategic-docs-refresh.md`
 
 **Interfaces:**
+
 - Consumes: merged PR number `#N`.
 - Produces: closed-out G4 per CLAUDE.md § Task Completion.
 
@@ -359,6 +419,7 @@ Add a dated G4 entry: summary (strategic docs refreshed to reality — hybrid mo
 ```powershell
 git mv docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md docs/archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 ```
+
 Flip all remaining `- [ ]` step boxes in the archived copy to `- [x]` (line-start boxes only). Add a row + link-ref in `docs/README.md` § Archived Plans:
 `| [G4 Strategic-Doc Refresh Plan][] | Strategic docs refreshed to July-2026 reality (v1.1 closed, v2.0 = modularization, theme board) + CLAUDE.md pre-push gate sync + weekly staleness rule (Group G4) |`
 and `[G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md`.
@@ -373,4 +434,5 @@ Seed candidates (verify still-unfiled first; tag `[possible-dup-of: …]` if sim
 git add -A
 git commit -m "docs(planning): G4 closeout — WEEKLY/BACKLOG/DONE + plan archive (PR #N)"
 ```
+
 Then capture durable learnings to memory per CLAUDE.md § Task Completion step 5.
