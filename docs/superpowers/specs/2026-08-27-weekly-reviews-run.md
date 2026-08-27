@@ -1,7 +1,7 @@
 # Group G5 — Weekly Reviews (2026-08-27 catch-up run): Run-card
 
 **Date**: 2026-08-27 (catch-up run — the WEEKLY.md slot it closes is the stale **July 13–17** plan's Group G5)
-**Branch**: `chore/g5-weekly-reviews`
+**Branch**: `chore/g5-weekly-reviews` (merged into `main` 2026-08-27 as `4f1e65a`, then deleted)
 **Source**: ⚪ Overhead — WEEKLY.md Group G5 (5 SP, exempt from the source-quota denominator).
 **Status**: executed 2026-08-27. Branch pushed, **no PR** (per the task brief).
 **Methodology reference**: [`2026-06-26-weekly-reviews-first-run-design.md`](2026-06-26-weekly-reviews-first-run-design.md)
@@ -192,8 +192,8 @@ no harness, no parallel fan-out, no rate-limiting — within the 8–12 budget a
    would exceed the sibling repo's one-per-run cadence. Parked in §4 Next-up with its grep evidence,
    so the next run can promote it without re-deriving anything.
 3. **Summary-Table status is not `✅ PR #N`.** The house rule wants the PR number, never a bare `✅`;
-   this run has no PR by instruction, so the cell reads `✅ 2026-08-27 (no PR — branch
-   chore/g5-weekly-reviews)` — preserving the traceability the rule exists for.
+   this run has no PR by instruction, so the cell reads `✅ 2026-08-27 (no PR — merged
+   4f1e65a)` — preserving the traceability the rule exists for by naming the merge commit instead.
 4. **WEEKLY.md is checked off but is the stale July 13–17 plan.** The G5 block carries an explicit
    "run held 2026-08-27, not in this plan's week" banner so the checkmarks cannot be misread as
    on-schedule. G4 remains unshipped and was left untouched, as scoped.
