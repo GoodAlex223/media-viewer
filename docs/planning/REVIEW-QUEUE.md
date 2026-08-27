@@ -83,14 +83,18 @@ Same, for AI models/tools other than Claude.
 
 **Added 2026-08-27** (WEEKLY.md G5). Unlike sections 1–3, this section's candidates are **not external
 web hits** — they are learnings crossing a repo boundary. The conventions below are **imported** from
-the sibling repo [`claude-code-universal-config`](../../../claude-code-universal-config/docs/planning/REVIEW-QUEUE.md),
+the sibling repo `claude-code-universal-config` (its `docs/planning/REVIEW-QUEUE.md`; a sibling checkout,
+deliberately not linked — a relative path would resolve above this repo root and 404 in any clone),
 which has run an equivalent section four times (2026-07-03, -07-16, -07-21, -07-27), rather than
 invented here — one convention, two directions.
 
 ### Conventions
 
 - **Verdict vocab is `propagate | pass | defer`** (not `adopt`).
-- **Row**: `YYYY-MM-DD — <learning/origin> — verdict: … — note`.
+- **Row (outbound)**: `YYYY-MM-DD — <learning/origin> — verdict: … — note`.
+- **Row (inbound)**: `YYYY-MM-DD — <origin repo / source> — <per-item status> — note`. An inbound
+  sweep covers several items at once, so the status is stated **per item** inside the row rather than as a
+  single trailing verdict.
 - **`propagate` → file a row in [`TODO.md`](TODO.md) § Spawned Tasks** — the outbound analog of
   `adopt` → 🟤 BACKLOG. `pass`/`defer` stay in this file.
 - **Verify against the target; never assume.** Confirm a learning is absent from the destination by
@@ -116,9 +120,9 @@ invented here — one convention, two directions.
 
 ### Reviewed log — inbound
 
-<!-- newest last: YYYY-MM-DD — <item/origin repo> — status — note -->
+<!-- newest last: YYYY-MM-DD — <origin repo / source> — <per-item status> — note -->
 
-2026-08-27 — `claude-code-universal-config` § Spawned Tasks → **4 rows addressed to media_viewer**, none of which had ever reached this repo's planning docs. This is the first inbound sweep, and it is the reason D1 made the section bidirectional. Status per row: (1) **`dead-rules-audit`** — upstream-confirmed 2026-07-27 with a measurement against *this* repo's `CLAUDE.md` (36 rules / 10 judgeable) → **consumed by this run's §1 Plugins `adopt`**; deliberately **not** double-filed as a separate propagation task. (2) **`/wayfinder` planning skill** (Matt Pocock, video `F3lL98Pj90o`), (3) **Jenkins automation server** — routed here explicitly for *"CI/CD, scheduled jobs"*, which lands on this repo's known and documented **no-CI** gap, and (4) **design-themed Claude video sub-batch** (`NWDuC-w1lwA`, `7FU98O0JLHs`, `K2_qHRcbNtU`, `Pe-ubc8ypis`, Chase AI). Rows 2–4 all carry an upstream marker that *the origin repo's own REVIEW-QUEUE review is still pending* (🔵 [2026-08-24] there) — so per the inbound rule they are **recorded and parked, not filed as work**; importing an unvetted recommendation would launder the origin's uncertainty into this repo's backlog. Re-check them once the origin's verdicts land.
+2026-08-27 — `claude-code-universal-config` § Spawned Tasks → **4 rows reaching media_viewer**, none of which had ever arrived in this repo's planning docs. Precisely: **3 are media_viewer-dedicated** and the 4th (`dead-rules-audit`) is a **shared row targeting four projects** (`social_stats`, media_viewer, `goodalex223`, `rating_bot`) on which media_viewer is named the strongest fit — which is why its adopt rests on this repo's own 36-rules/10-judgeable measurement rather than on the row itself. This is the first inbound sweep, and it is the reason D1 made the section bidirectional. Status per row: (1) **`dead-rules-audit`** — upstream-confirmed 2026-07-27 with a measurement against *this* repo's `CLAUDE.md` (36 rules / 10 judgeable) → **consumed by this run's §1 Plugins `adopt`**; deliberately **not** double-filed as a separate propagation task. (2) **`/wayfinder` planning skill** (Matt Pocock, video `F3lL98Pj90o`), (3) **Jenkins automation server** — routed here explicitly for *"CI/CD, scheduled jobs"*, which lands on this repo's known and documented **no-CI** gap, and (4) **design-themed Claude video sub-batch** (`NWDuC-w1lwA`, `7FU98O0JLHs`, `K2_qHRcbNtU`, `Pe-ubc8ypis`, Chase AI). Rows 2–4 all carry an upstream marker that *the origin repo's own REVIEW-QUEUE review is still pending* (🔵 [2026-08-24] there) — so per the inbound rule they are **recorded and parked, not filed as work**; importing an unvetted recommendation would launder the origin's uncertainty into this repo's backlog. Re-check them once the origin's verdicts land.
 
 ### Next-up (parked)
 

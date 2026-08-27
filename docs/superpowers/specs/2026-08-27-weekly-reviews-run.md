@@ -111,7 +111,12 @@ feature-dev, Context7, Playwright MCP).
   runners-up, drop anything promoted into a Reviewed log).
 - **BACKLOG.md** — one 🟤 Auto-Generated entry per `adopt`, under
   `### [2026-08-27] From: Weekly Reviews (catch-up run)`, in the intake format.
-- **TODO.md** — `§ Spawned Tasks` rows for any `propagate`, plus the inbound items surfaced by D1.
+- **TODO.md** — `§ Spawned Tasks` rows for any `propagate`. Inbound items surfaced by D1 are filed here
+  **only if their origin repo’s own review has landed**; otherwise they are parked in REVIEW-QUEUE §4.
+- **DONE.md** — the Task-Completion transition entry (run summary, verdicts, run-card link, key changes)
+  **plus** the `**Last Updated**` line. Written **in-branch at closeout**, as both prior runs did (2026-07-05
+  in `a1076a7`, 2026-06-26 in `c4a04b3`) — having no PR does not defer it.
+- **docs/README.md** — index this run-card in the Design Specs table (row + link definition).
 - **WEEKLY.md** — check off G5's four boxes, the Thu/Fri schedule lines, and flip the Summary-Table G5
   status, with a dated note that the run was held 2026-08-27.
 - **Commit** the doc edits; **push** the branch. **No PR** (per the task brief).
@@ -192,6 +197,15 @@ no harness, no parallel fan-out, no rate-limiting — within the 8–12 budget a
 4. **WEEKLY.md is checked off but is the stale July 13–17 plan.** The G5 block carries an explicit
    "run held 2026-08-27, not in this plan's week" banner so the checkmarks cannot be misread as
    on-schedule. G4 remains unshipped and was left untouched, as scoped.
+5. **Inbound items were parked, not filed — the Outputs list above planned the opposite.** It said
+   § Spawned Tasks would carry "the inbound items surfaced by D1"; on inspection three of the four carried
+   an upstream-review-still-pending marker, so they were recorded in REVIEW-QUEUE §4 and parked instead.
+   § Spawned Tasks therefore holds **one** row (the outbound `propagate`), not five. The Outputs list has
+   been corrected to state the rule rather than the assumption.
+6. **Two closeout steps were initially missed and then folded back in.** The closeout commit did the
+   WEEKLY.md half of the Task-Completion transition but skipped the **DONE.md** half, and the run-card was
+   not indexed in **docs/README.md** — both caught by the local whole-branch review, both traceable to the
+   Outputs list above never naming either file. Fixed in-branch; the Outputs list now names both.
 
 ### Observations for the next planning conversation (not actioned here)
 
@@ -207,7 +221,7 @@ no harness, no parallel fan-out, no rate-limiting — within the 8–12 budget a
 
 - REVIEW-QUEUE.md: 5 verdict rows dated `2026-08-27` (2 Plugins + 1 + 1 + 1); section 4 present with
   its conventions, both logs, and Next-up; heading structure confirmed by grep.
-- BACKLOG.md: 3 🟤 entries under `### [2026-08-27] From: Weekly Reviews (catch-up run)` — one per
+- BACKLOG.md: 3 🟤 entries under `### [2026-08-27] From: Weekly Reviews (2026-08-27 catch-up run) (3 items)` — one per
   `adopt`, none for the `pass`. `backlog-structure.test.js` green (all 4 required headers intact).
 - TODO.md: heading renamed to `§ Spawned Tasks` after a repo-wide grep confirmed a single definition
   site and two references expecting the longer form; the `propagate` row is filed with its evidence.
