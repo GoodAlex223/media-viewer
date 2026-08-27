@@ -202,9 +202,15 @@ Active tasks and backlog.
 
 ---
 
-## 🔀 Spawned
+## 🔀 Spawned Tasks
 
 <!-- Tasks generated from completed work. Include origin for traceability. -->
+<!-- Also the routing sink for REVIEW-QUEUE.md §4 `propagate` verdicts — cross-project/out-of-tree
+     follow-ups whose target is another repo or `~/.claude`. Such a row is NOT verifiable in this
+     tree; its status is user-maintained. Renamed from `## 🔀 Spawned` on 2026-08-27 so WEEKLY.md's
+     two "TODO § Spawned Tasks" references resolve. -->
+
+- [ ] **Propagate the code-review rating axis — score by *realness*, not severity — to global `~/.claude`** — _Origin_: REVIEW-QUEUE.md §4 outbound, verdict `propagate` (2026-08-27); learnings from PRs #59/#64/#65/#66. _Target_: the **synced product**, so this is a two-trees edit — `claude-code-universal-config/home-claude/POLICIES/code-review.md` **and** live `~/.claude/POLICIES/code-review.md`. _What to add_, two clauses: (1) a confirmed defect must not be dropped because it is hard to hit, cheap to fix, or comment-only — frequency and recoverability are **not** realness; a numeric severity filter is a proxy that structurally caps some real findings below its own threshold; and (2) a shared-state/lifecycle race that **pre-exists** a PR becomes that PR's finding when the PR adds a **new consumer** whose correctness depends on the broken invariant. _Why it earns a global slot_: it fired on **four consecutive PRs** here, and the one time it was deferred it cost a **23,559-entry / 126 MB** feature cache of real user data (PR #64). _Verified absent at the target_: `realness` / `severity axis` / `confirmed bug` return **0 hits** in both trees' `POLICIES/code-review.md`. The one adjacent hit (global L266, "raised below its own reporting threshold and passed on informally rather than posting") governs **bookkeeping** — every remark gets a bullet — and is complementary: this rule is upstream of it. _Source of truth here_: memory files `feedback_defer_lifecycle_findings.md`, `feedback_review_threshold_comment_findings.md` (per-project, reach no other repo by any route). Status user-maintained — not verifiable from this tree.
 
 ---
 

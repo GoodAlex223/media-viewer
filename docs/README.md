@@ -160,6 +160,8 @@ Central index for all project documentation.
 | [Docs & CLAUDE.md Hygiene][] | Docs-only consolidation design — verify-then-edit the 5 deferred `revise-claude-md`/doc-drift items; decisions D1 manual-only maintenance (no markers), D2 no historical line-ref sweep (Group CW-D) |
 | [CW-P Process & DX Guardrails][] | Process/DX guardrails design: pre-push E2E gate (conservative code-aware classify, fail-safe CLI, dogfood-on-own-PR) + Weekly-Reviews methodology consolidation (6 fixes) + ref-sweep convention; decisions pre-push-code-aware-skip / consolidate-in-existing-spec / CLAUDE.md-home (Group CW-P) |
 | [G1 AI-Sort Startup UX][] | AI-sort startup UX & incremental cache-load design: D1 visible+cancelable+incremental+best-effort-faster, D2 one unified progress card, D3 cancel stops everything, D4 mirror `handleSortBySimilarity`, D5 diagnose-before-fix (re-extract bug), D6 no on-disk format change (Group G1) |
+| [Weekly Reviews 2026-07-05 Run][] | Run-card for the 2nd Weekly Reviews run (not a design spec): candidate picks + scope guards + appended Outcome/retro; 4 verdicts, 2 adopt (`typescript-lsp`; autonomous e2e/visual verification) (Group WR) |
+| [Weekly Reviews 2026-08-27 Run][] | Run-card for the 3rd (catch-up) Weekly Reviews run: decisions D1 bidirectional cross-project propagation / D2 confirmed target scope / D3 candidate placement, scope guards, and appended Outcome with 5 verdicts, 3 adopt + 1 propagate and 6 recorded deviations (Group G5) |
 | [G2 Tournament Bug Fixes][] | Tournament-mode bug fixes design: D1 unified LIFO undo stack, D2 `engine.history` IS that stack (reverses PR #59 `trackUndo:false`), D3 engine stays dumb (`meta` opaque), D4 system prunes auto-consumed, D5 undo stays session-only, D6 auto-hide mirrors `.header` (edge band + 3s), D7 reveal chrome on entry (Group G2) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
@@ -203,6 +205,8 @@ Central index for all project documentation.
 [Docs & CLAUDE.md Hygiene]: superpowers/specs/2026-07-03-cw-d-docs-claude-md-hygiene-design.md
 [CW-P Process & DX Guardrails]: superpowers/specs/2026-07-10-cw-p-process-dx-guardrails-design.md
 [G1 AI-Sort Startup UX]: superpowers/specs/2026-07-13-ai-sort-startup-ux-design.md
+[Weekly Reviews 2026-07-05 Run]: superpowers/specs/2026-07-05-weekly-reviews-run.md
+[Weekly Reviews 2026-08-27 Run]: superpowers/specs/2026-08-27-weekly-reviews-run.md
 [G2 Tournament Bug Fixes]: superpowers/specs/2026-07-20-g2-tournament-bug-fixes-design.md
 
 ## Security Audits
