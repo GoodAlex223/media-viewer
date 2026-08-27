@@ -2,12 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> ⚠️ **PARTIALLY SUPERSEDED — executed 2026-08-27, not 2026-07-17.** This plan was written on 2026-07-12 against facts that had drifted by execution time (G1/G2/G3/G5 all landed in between). Re-running the fact commands tripped the spec's own "structural contradiction → STOP and report" rule, and the user approved four amendments recorded as **D6–D9 in spec § 9**. Where this plan's numbers or instructions conflict with spec § 9, **§ 9 wins**. Specifically:
+> ⚠️ **PARTIALLY SUPERSEDED — executed 2026-08-27, not 2026-07-17.** This plan was written on 2026-07-12 against facts that had drifted by execution time (G1/G2/G3/G5 all landed in between). Re-running the fact commands tripped the spec's own "structural contradiction → STOP and report" rule, and the user approved five amendments recorded as **D6–D10 in spec § 9**. Where this plan's numbers or instructions conflict with spec § 9, **§ 9 wins**. Specifically:
 >
 > - **Task 5 Step 3** says replace `~8400` with `~7,900`. Superseded — the executed value is **`~9400`** (measured 9,418). Per **D6** the renderer KR is also reported 🔴 and reworded, not 🟡 "trending down".
 > - **Task 4** pre-writes the *24k AI-sort smooth end-to-end* milestone as 🟡 In Progress. Superseded by **D7** — recorded ✅ Complete 2026-07-20.
 > - **Task 3**'s theme board is superseded by **D8** — v2.0 modularization promoted Next → Now; the drained rating/tournament polish theme retired.
 > - Scope gained one item per **D9**: index the G4 spec + plan in `docs/README.md`.
+> - **D10 — cadence wording.** Everywhere this plan says *"weekly staleness rule"* / *"weekly-planning staleness check"* (Goal line, Task 6 Interfaces, its suggested commit message, the Summary), read **"planning-session staleness check"**. The measured gap between review runs is 7.5 weeks, so "weekly" asserted a cadence the repo's own evidence contradicted. The shipped docs say *"whatever its cadence"*. The Task 8 Archived-Plans row at the end of this plan has already been corrected, because that one is copied into a **live** doc at closeout.
+> - Scope gained a second item per **D11**: `PROJECT.md` — the spec's file list omitted it, but it carried the same "no automated tests / ~6100-line renderer" claims this refresh exists to kill, and Knowledge Sources reads it *before* `docs/`.
 > - Expected unit count is **513**, not 434; E2E **55**, not 52.
 > - **Task 7 Step 5 (open the PR) is cancelled** by the task brief for this run — branch is pushed for backup, no PR opened.
 
@@ -421,7 +423,7 @@ git mv docs/planning/plans/2026-07-12_g4-strategic-docs-refresh.md docs/archive/
 ```
 
 Flip all remaining `- [ ]` step boxes in the archived copy to `- [x]` (line-start boxes only). Add a row + link-ref in `docs/README.md` § Archived Plans:
-`| [G4 Strategic-Doc Refresh Plan][] | Strategic docs refreshed to July-2026 reality (v1.1 closed, v2.0 = modularization, theme board) + CLAUDE.md pre-push gate sync + weekly staleness rule (Group G4) |`
+`| [G4 Strategic-Doc Refresh Plan][] | Strategic docs refreshed to July-2026 reality (v1.1 closed, v2.0 = modularization, theme board) + CLAUDE.md pre-push gate sync + planning-session staleness rule (Group G4) |`
 and `[G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md`.
 
 - [ ] **Step 4: Extract ≥2 improvements to BACKLOG** (routed 🟤, per Backlog Intake Rules, `### [<date>] G4 closeout` group)
