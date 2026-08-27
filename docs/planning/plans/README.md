@@ -47,11 +47,11 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 ## Current Plans
 
-| Plan                                                                           | Task                    | Status      | Started    |
-| ------------------------------------------------------------------------------ | ----------------------- | ----------- | ---------- |
+| Plan | Task | Status | Started |
+|------|------|--------|---------|
 | [2025-12-29_video-fullscreen-toggle.md](2025-12-29_video-fullscreen-toggle.md) | Video fullscreen toggle | In Progress | 2025-12-29 |
 
 ---
 
-_Template: [../../../.claude/TEMPLATES/plan.md](../../../.claude/TEMPLATES/plan.md)_
-_Archive: [../../archive/plans/](../../archive/plans/)_
+*Template: [../../../.claude/TEMPLATES/plan.md](../../../.claude/TEMPLATES/plan.md)*
+*Archive: [../../archive/plans/](../../archive/plans/)*
