@@ -3,7 +3,7 @@
 **Date**: 2026-08-27 (catch-up run — the WEEKLY.md slot it closes is the stale **July 13–17** plan's Group G5)
 **Branch**: `chore/g5-weekly-reviews`
 **Source**: ⚪ Overhead — WEEKLY.md Group G5 (5 SP, exempt from the source-quota denominator).
-**Status**: in progress.
+**Status**: executed 2026-08-27. Branch pushed, **no PR** (per the task brief).
 **Methodology reference**: [`2026-06-26-weekly-reviews-first-run-design.md`](2026-06-26-weekly-reviews-first-run-design.md)
 § *Methodology (canonical — current practice)* — the reusable "how we run Weekly Reviews" spec.
 Previous run-card: [`2026-07-05-weekly-reviews-run.md`](2026-07-05-weekly-reviews-run.md).
@@ -133,6 +133,83 @@ Docs/process change — verification is **review of the written rows**, not a te
 
 ---
 
-## Outcome
+## Outcome (2026-08-27 run)
 
-_(filled in at the end of the run)_
+**Executed** on branch `chore/g5-weekly-reviews`. **10 web calls** (5 `WebSearch` + 5 `WebFetch`),
+no harness, no parallel fan-out, no rate-limiting — within the 8–12 budget and consistent with the
+2026-07-05 run's 9. Five verdict rows appended, exactly as scoped.
+
+| Category | Pick | Verdict |
+|----------|------|---------|
+| Plugins / official store | `security-guidance` | **adopt** → 🟤 |
+| Plugins / wider internet | `dead-rules-audit` (`karanb192/claude-code-hooks`) | **adopt** → 🟤 |
+| Claude best-practice | route by primitive — **path-scoped rules** half only | **adopt** → 🟤 |
+| Non-Claude best-practice | harness engineering (Fowler) | pass |
+| Cross-project propagation | PRs #63–#66 window; review rating axis | **propagate** → § Spawned Tasks |
+
+### Key discoveries
+
+- **The most valuable finding was not on the web.** Investigating the propagation *target* revealed
+  that `claude-code-universal-config` had been running an equivalent section for four cycles **and
+  had already routed four items at media_viewer that never arrived** (`dead-rules-audit`,
+  `/wayfinder`, Jenkins-for-the-no-CI-gap, a design-video batch). The category was one-way by
+  specification, so the channel had been silently dropping inbound work. This is what D1 fixed.
+- **Importing beat inventing.** Category 4 needed no design: a settled convention, four runs of
+  precedent, and a verdict vocab already existed one repo over. The only real design question was
+  *direction*, not *shape*.
+- **Hybrid sourcing reversed a parked verdict, which is the whole point of rule #5.**
+  `security-guidance` was parked 2026-07-05 as "low fit"; the fresh check found it top-recommended
+  and the *primary doc* showed the parked reasoning was inverted — "no CI" is an argument **for** an
+  in-session security layer, since nothing catches it later. A rote parked-first pass would have
+  skipped it as pre-flagged weak; a rote fresh-only pass would have missed that it was already parked.
+- **Every fit claim in this run was measured or grepped, never asserted.** CLAUDE.md is **205 lines**
+  and `.claude/rules/` **does not exist** (category 2). `realness`/`severity axis`/`confirmed bug`
+  return **0 hits** in both `~/.claude/POLICIES/code-review.md` and `home-claude/POLICIES/code-review.md`
+  (category 4). `pre-push` returns 0 hits in the synced product — its only matches are session
+  transcripts, which are not policy. `dead-rules-audit`'s fit rests on a parser measurement (36 rules
+  / 10 judgeable), not on its README.
+- **The adjacent-hit check changed a claim.** Global `POLICIES/code-review.md` L266 *does* mention
+  sub-threshold remarks — but it governs **bookkeeping** (every remark gets a bullet in the response
+  record), not the **rating axis**. Without reading it, the propagate row would have overclaimed
+  novelty; with it, the row is precise about being complementary and upstream.
+- **A secondary source was caught asserting a plugin that does not exist.** A roundup named an
+  Anthropic "Frontend Design" plugin as the most-installed official plugin (~277k); it appears
+  nowhere in the official marketplace roster. Recorded as unverified in Next-up rather than carried.
+- **Inbound items were parked, not imported.** Three of the four carry an upstream marker that the
+  origin repo's own review is *still pending*. Filing them as work would launder the origin's
+  uncertainty into this repo's backlog, so they are recorded and parked for re-check.
+
+### Deviations from the plan, recorded rather than buried
+
+1. **Category 4 is bidirectional**, where WEEKLY.md specified outbound-only (D1, user-approved).
+2. **One `propagate`, not two.** The pre-push E2E gate is equally absent at the target and verified
+   so, but its audience is narrower (presupposes an E2E suite *and* no CI) and a second propagation
+   would exceed the sibling repo's one-per-run cadence. Parked in §4 Next-up with its grep evidence,
+   so the next run can promote it without re-deriving anything.
+3. **Summary-Table status is not `✅ PR #N`.** The house rule wants the PR number, never a bare `✅`;
+   this run has no PR by instruction, so the cell reads `✅ 2026-08-27 (no PR — branch
+   chore/g5-weekly-reviews)` — preserving the traceability the rule exists for.
+4. **WEEKLY.md is checked off but is the stale July 13–17 plan.** The G5 block carries an explicit
+   "run held 2026-08-27, not in this plan's week" banner so the checkmarks cannot be misread as
+   on-schedule. G4 remains unshipped and was left untouched, as scoped.
+
+### Observations for the next planning conversation (not actioned here)
+
+- **Adopts are accumulating untried.** Five now stand unchecked in BACKLOG — `pr-review-toolkit`
+  (2026-06-26), `typescript-lsp` + autonomous verification (2026-07-05), and this run's three — at
+  ~1.5–3 per run with **zero** burn-down across three runs. D4 keeps `adopt` hands-off deliberately,
+  so this is working as designed; whether to gate new adopts on trialling old ones, or to schedule a
+  trial batch, is a planning decision.
+- **The review cadence itself slipped ~7.5 weeks.** Worth deciding whether Weekly Reviews are truly
+  weekly, or a ~monthly batch that should be planned as one.
+
+### Verification performed
+
+- REVIEW-QUEUE.md: 5 verdict rows dated `2026-08-27` (2 Plugins + 1 + 1 + 1); section 4 present with
+  its conventions, both logs, and Next-up; heading structure confirmed by grep.
+- BACKLOG.md: 3 🟤 entries under `### [2026-08-27] From: Weekly Reviews (catch-up run)` — one per
+  `adopt`, none for the `pass`. `backlog-structure.test.js` green (all 4 required headers intact).
+- TODO.md: heading renamed to `§ Spawned Tasks` after a repo-wide grep confirmed a single definition
+  site and two references expecting the longer form; the `propagate` row is filed with its evidence.
+- WEEKLY.md: 4 G5 boxes + Thu/Fri schedule rows checked, Summary-Table status flipped, banner added.
+- Unit suite **513/513 green** on every commit (the pre-commit hook runs it regardless of docs-only).

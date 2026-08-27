@@ -69,10 +69,12 @@
 
 > Read [REVIEW-QUEUE.md](REVIEW-QUEUE.md) first. Per the codified methodology (CW-P, PR #63): **hybrid sourcing** (fresh-check the live landscape AND the parked Next-up item, review whichever is strongest) using **lightweight inline `WebSearch` + a few `WebFetch`** — never the deep-research harness. Append a verdict row per category; on an `adopt`, file a 🟤 BACKLOG entry; on a `propagate` (category 4), file a TODO § Spawned Tasks row.
 
-- [ ] **Plugins (2 SP)** — two independent tops: official store (Next-up parked: **commit-commands**, **security-guidance**) + wider internet (Next-up parked: **playwright-cli-agents**, Electron gap noted) — else the live top hit.
-- [ ] **Claude best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **`/clear` between unrelated tasks**).
-- [ ] **Non-Claude AI best-practices (1 SP)** — top not-yet-reviewed (Next-up parked: **GitHub Spec Kit** — already practiced).
-- [ ] **Cross-project propagation (1 SP)** — outbound scan of what shipped here since the last run (this week's DONE entries, merged PRs, changed memory/config); `propagate | pass | defer`.
+> ✅ **RUN HELD 2026-08-27, not in this plan's week** — a **catch-up run** (~7.5 weeks after the 2026-07-05 run), so its scan window is *since 2026-07-05* (PRs #63–#66), not "this week". Branch `chore/g5-weekly-reviews`, run-card [`2026-08-27-weekly-reviews-run.md`](../superpowers/specs/2026-08-27-weekly-reviews-run.md). **5 verdicts / 3 adopt** (`security-guidance`, `dead-rules-audit`, path-scoped-rules migration → 🟤 [2026-08-27]) **+ 1 pass** (harness engineering) **+ 1 propagate** (review rating axis → TODO § Spawned Tasks). 10 web calls, no harness. **Shipped without a PR on user direction** — the branch is pushed, not merged.
+
+- [x] **Plugins (2 SP)** — ✅ 2 verdicts. Store: **`security-guidance`** → **adopt** (reverses its own [2026-07-05] "low fit" parking — it occupies the *in-session* stage neither ESLint nor the secret guard covers, and no-CI argues *for* it). Wider internet: **`dead-rules-audit`** → **adopt** (arrived via the new inbound propagation channel, pre-measured against this repo's CLAUDE.md at 36 rules / 10 judgeable).
+- [x] **Claude best-practices (1 SP)** — ✅ **adopt**, scoped to one half: route path-conditional CLAUDE.md content to **path-scoped rules** (`.claude/rules/`). Measured: CLAUDE.md is **205 lines** (over the 200 bar) and `.claude/rules/` does not exist. The hook-promotion and skills halves are already practiced here.
+- [x] **Non-Claude AI best-practices (1 SP)** — ✅ **pass**: **harness engineering** (the provider-neutral 2026 theme). Its guides/sensors taxonomy maps onto machinery this repo already runs (ESLint, the pre-commit chain, the pre-push E2E gate, `/code-review`), and Fowler concedes there is no quantitative evidence. Observability parked as the one unpracticed layer.
+- [x] **Cross-project propagation (1 SP)** — ✅ **propagate**, and the category was **defined**: REVIEW-QUEUE.md §4 now exists, importing `claude-code-universal-config`'s four-run-deep convention rather than inventing one. ⚠️ **Made bidirectional** (a deliberate widening of this line's outbound-only wording — see run-card D1): the sibling repo already held **four unactioned rows addressed to media_viewer**, which a one-way channel would have dropped permanently.
 
 ---
 
@@ -119,7 +121,7 @@
 |-------|----|
 | ✅ [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (finish) — PR #65 | 6 |
 | ✅ [**G3. Bulk-rate re-pair avoidance**](#g3-bulk-rate-re-pair-avoidance-solo-) [solo] — PR #66 (⚠️ re-smoke round 2 not run) | 3 |
-| [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (start) | (5) |
+| ✅ [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (start) — held 2026-08-27 | (5) |
 
 **Daily total**: ~9 SP + reviews overhead (strategic brainstorm ✅ done Jul 12, off Thursday's plate)
 
@@ -131,7 +133,7 @@
 | Group | SP |
 |-------|----|
 | [**G4. Strategic-doc refresh & CLAUDE.md hygiene**](#g4-strategic-doc-refresh--claudemd-hygiene-batch--1--folded) [batch] | 4 |
-| [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (finish) | (5) |
+| ✅ [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (finish) — held 2026-08-27 | (5) |
 
 **Daily total**: 4 SP + reviews overhead + G1/G2 buffer
 
@@ -153,7 +155,7 @@
 | G2 | Tournament-mode bug fixes [batch] | JS logic (tournament) + CSS | 🔵 User | 3 (1 🔴 + 1 🟠 + 1 🔵) | 6 | Wed–Thu | ✅ PR #65 |
 | G3 | Bulk-rate re-pair avoidance [solo] | JS logic (compare-mode ML pairing) | 🔵 User | 1 🟠 | 3 | Thu | ✅ PR #66 ⚠️ (see DONE — re-smoke round 2 NOT run) |
 | G4 | Strategic-doc refresh & CLAUDE.md hygiene [batch] | docs (strategic + CLAUDE.md) | 🟡 Ops (+1 🟤 folded) | 2 | 4 | Fri | ⬜ Planned |
-| G5 | Weekly Reviews [batch] | Research / process | ⚪ Overhead | 4 | 5 | Thu–Fri | ⬜ Planned |
+| G5 | Weekly Reviews [batch] | Research / process | ⚪ Overhead | 4 | 5 | Thu–Fri | ✅ 2026-08-27 (no PR — branch `chore/g5-weekly-reviews`) |
 | **Total (quota-counted)** | | | | **12** | **21** | | |
 | **Total (incl. ⚪ overhead)** | | | | **16** | **26** | | |
 
