@@ -24,7 +24,7 @@ npm run lint           # Lint all JS (lint:fix to auto-fix)
 npm run format         # Prettier (format:check to verify only)
 ```
 
-Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret scan, fail-fast first step) → lint-staged (ESLint --fix + Prettier on staged `*.{js,cjs}`, Prettier on staged `*.{json,css,html}`) → `npx vitest run` (unit tests must pass). E2E is NOT run by the hook.
+Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret scan, fail-fast first step) → lint-staged (ESLint --fix + Prettier on staged `*.{js,cjs}`, Prettier on staged `*.{json,css,html}`) → `npx vitest run` (unit tests must pass). E2E is NOT run by the pre-commit hook. Pre-push hook (Husky): `node scripts/check-e2e-needed.js` prints RUN/SKIP for the outgoing range (SKIP only when EVERY changed path is `*.md` or under `docs/`; any git/parse failure fails safe to RUN); on RUN the hook runs the full Playwright E2E suite. Bypass a WIP push with `git push --no-verify`.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ media_viewer/
 ├── main.js              # Electron main process: IPC handlers, file ops, JXL/CLIP/tournament/bulk-rated/feature-cache IPC
 ├── logger.js            # File logger (init/log/warn/error/cleanup/getLogPath) → app.getPath('logs')/media-viewer.log
 ├── preload.js           # Security bridge (contextBridge → window.electronAPI): file ops, CLIP IPC, tournament IPC, bulk-rated IPC, logError
-├── media-viewer.js      # Renderer: all UI logic (~8400 lines, MediaViewer class); imports FullscreenManager + TournamentManager
+├── media-viewer.js      # Renderer: all UI logic (~9400 lines, MediaViewer class); imports FullscreenManager + TournamentManager
 ├── index.html           # Main HTML entry point
 ├── styles.css           # Application styling, design system
 ├── sorting-worker.js    # Web Worker: sorting (MST, similarity, CLIP cosine); exports MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance, sortMediaBySimilarityClip/Mst
@@ -49,7 +49,7 @@ media_viewer/
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
-├── scripts/             # Maintenance scripts (Node CJS): check-secrets.js (pre-commit secret guard — scanForSecrets + extractAddedLines + CLI)
+├── scripts/             # Maintenance scripts (Node CJS): check-secrets.js (pre-commit secret guard — scanForSecrets + extractAddedLines + CLI); check-e2e-needed.js (pre-push E2E gate decision — parsePushRefs/classifyPaths + fail-safe RUN/SKIP CLI)
 ├── tests/               # Unit (Vitest, tests/*.test.js) + E2E (Playwright, tests/e2e/)
 │   └── e2e/             # fixtures/ (1x1 PNGs, tiny.mp4, static.jxl) + helpers/ (electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs)
 ├── .claude/agents/      # Shared agent definitions tracked in git (other .claude/* gitignored)
