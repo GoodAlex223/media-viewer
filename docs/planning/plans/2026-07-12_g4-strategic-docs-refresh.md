@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> ⚠️ **PARTIALLY SUPERSEDED — executed 2026-08-27, not 2026-07-17.** This plan was written on 2026-07-12 against facts that had drifted by execution time (G1/G2/G3/G5 all landed in between). Re-running the fact commands tripped the spec's own "structural contradiction → STOP and report" rule, and the user approved five amendments recorded as **D6–D10 in spec § 9**. Where this plan's numbers or instructions conflict with spec § 9, **§ 9 wins**. Specifically:
+> ⚠️ **PARTIALLY SUPERSEDED — executed 2026-08-27, not 2026-07-17.** This plan was written on 2026-07-12 against facts that had drifted by execution time (G1/G2/G3/G5 all landed in between). Re-running the fact commands tripped the spec's own "structural contradiction → STOP and report" rule, and the user approved amendments recorded as **D6 onward in spec § 9**. Where this plan's numbers or instructions conflict with spec § 9, **§ 9 wins**. Specifically:
 >
 > - **Task 5 Step 3** says replace `~8400` with `~7,900`. Superseded — the executed value is **`~9400`** (measured 9,418). Per **D6** the renderer KR is also reported 🔴 and reworded, not 🟡 "trending down".
 > - **Task 4** pre-writes the *24k AI-sort smooth end-to-end* milestone as 🟡 In Progress. Superseded by **D7** — recorded ✅ Complete 2026-07-20.
