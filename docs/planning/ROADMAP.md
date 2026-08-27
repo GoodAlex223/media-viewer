@@ -22,7 +22,7 @@ Make Media Viewer the most efficient tool for reviewing and organizing large med
 
 ## Theme Board
 
-Work flows weekly from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](WEEKLY.md); this board is the strategic map of where the themes sit, not a duplicate task list.
+Work flows each planning session from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](WEEKLY.md); this board is the strategic map of where the themes sit, not a duplicate task list.
 
 ### Now
 
@@ -99,7 +99,7 @@ Originally-planned v2.0 features delivered early: automated testing (Vitest + Pl
 
 ## Ongoing
 
-- Keep documentation current with codebase (weekly-planning staleness check — see [README.md](README.md) § Strategic Review)
+- Keep documentation current with codebase (planning-session staleness check — see [README.md](README.md) § Strategic Review)
 - Performance monitoring for large media collections
 - Security review of file operations
 

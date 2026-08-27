@@ -3,7 +3,7 @@
 Project objectives and success metrics.
 
 **Last Updated**: 2026-08-27
-**Review Cycle**: Continuous — weekly-planning staleness check (see [README.md](README.md) § Strategic Review)
+**Review Cycle**: Continuous — planning-session staleness check (see [README.md](README.md) § Strategic Review)
 
 ---
 

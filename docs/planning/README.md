@@ -55,8 +55,8 @@ Ideas → BACKLOG.md → TODO.md → Work → DONE.md
 
 ### Strategic Review (staleness check)
 
-Run as part of every weekly planning session (ROADMAP/GOALS/MILESTONES are already
-listed planning Sources):
+Run as part of every planning session, whatever its cadence (ROADMAP/GOALS/MILESTONES
+are already listed planning Sources):
 
 - If work shipped since the last plan **contradicts** the strategic docs (a feature
   landed outside the theme board, a Key Result was met or made obsolete, a milestone
