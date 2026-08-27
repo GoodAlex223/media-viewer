@@ -2,7 +2,7 @@
 
 Project-specific configuration. Universal rules are in [CLAUDE.md](CLAUDE.md).
 
-**Last Updated**: 2026-02-05
+**Last Updated**: 2026-08-27
 
 ---
 
@@ -17,8 +17,8 @@ Project-specific configuration. Universal rules are in [CLAUDE.md](CLAUDE.md).
 | Language | JavaScript (ES6+) |
 | Framework | Electron 39.x |
 | UI | HTML/CSS (no framework) |
-| Testing | Manual (no automated tests) |
-| CI/CD | None |
+| Testing | Vitest (513 unit) + Playwright (55 E2E) |
+| CI/CD | No CI service; gates are local Husky hooks (pre-commit + pre-push) |
 
 ---
 
@@ -48,16 +48,21 @@ npm install
 # Run application
 npm start
 
-# Run tests (not configured)
+# Run unit tests (Vitest)
 npm test
+
+# Run E2E tests (Playwright + Electron)
+npm run test:e2e
 ```
 
 ### Code Quality
 
 ```bash
-# No linting configured
+npm run lint          # ESLint (lint:fix to auto-fix)
+npm run format        # Prettier (format:check to verify only)
 # No type checking (plain JavaScript)
-# No pre-commit hooks configured
+# Husky pre-commit: secret scan -> lint-staged -> unit tests
+# Husky pre-push: conditional E2E (skipped for docs-only pushes)
 ```
 
 ---
@@ -87,7 +92,7 @@ npm test
 
 ### Code Patterns
 
-- **Single-file renderer**: All UI logic in `media-viewer.js` (class-based)
+- **Renderer under modularization**: most UI logic in `media-viewer.js` (class-based); v2.0 extracts subsystems into ES modules (FullscreenManager, TournamentManager done)
 - **IPC Communication**: Main process handles file operations, renderer handles UI
 - **Event-driven**: DOM events trigger state changes and UI updates
 - **Web Workers**: CPU-intensive operations (sorting, ML) run in workers
@@ -138,9 +143,9 @@ npm test
 
 ## Known Limitations
 
-1. **Large renderer file**: `media-viewer.js` contains all UI logic (~6100+ lines) - consider modularizing
+1. **Large renderer file**: `media-viewer.js` is ~9,400 lines - modularization underway (v2.0, 2 of 6 managers extracted)
 2. **No TypeScript**: Plain JavaScript with no type checking
-3. **No automated tests**: Manual testing only
+3. **No CI service**: all gates are local Husky hooks; a bypassed hook has no server-side backstop
 4. **Sandbox disabled**: Required for file operations but reduces security
 
 ---

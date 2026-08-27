@@ -2,7 +2,7 @@
 
 Key targets with dates.
 
-**Last Updated**: 2026-02-05
+**Last Updated**: 2026-08-27
 
 ---
 
@@ -17,22 +17,24 @@ Milestones are significant checkpoints. They should be:
 
 ## Upcoming Milestones
 
-### 🎯 v1.1 Release
+### 🎯 v2.0 modularization complete
 
-**Target Date**: Q1 2026
-**Status**: 🟡 On Track
+**Target Date**: Q4 2026 (soft)
+**Status**: 🟡 In Progress — 2 of 6 managers extracted
 
 **Definition of Done**:
-- [ ] TASK-001 (Video fullscreen toggle) tested and archived
-- [ ] TASK-002 (Visual scale controls) implemented and tested
-- [ ] Manual testing checklist passed
-- [ ] All documentation up to date
+- [ ] ZoomManager extracted
+- [ ] CompareManager extracted
+- [ ] SortingManager extracted
+- [ ] MLManager extracted
+- [ ] Unit + E2E suites green after each extraction
+- [ ] CLAUDE.md architecture section updated per extraction
 
-**Dependencies**:
-- None
+**Dependencies**: none hard; sits in the roadmap's **Now** column as of 2026-08-27
 
 **Risks**:
-- Large renderer file makes changes error-prone
+- Extractions compete for weekly capacity with user-flagged work (the ≥50% 🔵 quota floor)
+- The renderer is currently growing faster than extraction shrinks it (~7,900 → ~9,400 lines, Jul → Aug 2026), so the "< ~6,000" target recedes with every feature week that skips an extraction
 
 ---
 
@@ -40,21 +42,49 @@ Milestones are significant checkpoints. They should be:
 
 ```
 2026
-Q1              Q2              Q3
- │               │               │
- ▼               ▼               │
-[v1.1]          [v2.0]          │
-Polish          Architecture    │
+Q3                          Q4
+ │                           │
+ ▼                           ▼
+[24k AI-sort smooth] ✅     [v2.0 modularization]
+shipped 2026-07-20          4 manager extractions
 ```
 
 | Milestone | Target Date | Status |
 |-----------|-------------|--------|
-| v1.1 Polish | Q1 2026 | 🟡 On Track |
-| v2.0 Architecture | Q2 2026 | ⬜ Not Started |
+| 24k AI-sort smooth end-to-end | July 2026 | ✅ Complete (2026-07-20) |
+| v2.0 modularization complete | Q4 2026 (soft) | 🟡 In Progress (2/6) |
 
 ---
 
 ## Completed Milestones
+
+### ✅ 24k AI-sort smooth end-to-end
+
+**Completed**: 2026-07-20 (target was July 2026 — met)
+**Result**: On Time
+
+**What was delivered** (against the original Definition of Done):
+- [x] Sort-by-Predicted shows a determinate progress card immediately (no silent ~40s wait)
+- [x] Cached features are served — no redundant re-extraction on a warm cache
+- [x] Cancel aborts the AI-sort path mid-run
+- [x] Verified by a manual smoke on the real 24,000+ file folder — all 5 checks passed on a **20,929-file** folder
+
+Shipped via PR #64 (merge `b6ff4ac`). Two defects were found and fixed **before** merge rather than deferred: an external-review data-loss regression (`b8b5636`) and a smoke-triggered cache-corruption route (`2777bdf` + `c947081`).
+
+> **Scope note**: this milestone covered the *AI-sort* path only. The separate PR2 slice — hash/similarity sort off the renderer thread — remains open and is tracked as a 🔴 Key Result under [GOALS.md](GOALS.md) Objective 1, not as part of this milestone.
+
+### ✅ v1.1 Polish Release
+
+**Completed**: retro-declared 2026-08-27 (named features shipped 2026-02)
+**Result**: Scope exceeded many times over
+
+**What was delivered** (against the original Definition of Done):
+- [x] Video fullscreen toggle — shipped 2026-02-05, later extracted into FullscreenManager
+- [x] Visual scale controls — zoom slider + popover, E2E-covered (`zoom.test.js`)
+- [x] "Manual testing checklist passed" — superseded: 513 unit + 55 E2E tests, hook-enforced, plus per-PR manual smokes
+- [x] "All documentation up to date" — satisfied by the 2026-08-27 strategic-doc refresh
+
+Beyond scope: Tournament mode, JXL viewer, CLIP semantic sorting, bulk-rate training, automated test suite, shortcut customization, local quality gates.
 
 ### ✅ v1.0 Core Features
 
@@ -78,11 +108,10 @@ Polish          Architecture    │
 
 | Status | Count | Milestones |
 |--------|-------|------------|
-| ✅ Complete | 1 | v1.0 Core Features |
-| 🟡 On Track | 1 | v1.1 Polish |
-| ⬜ Not Started | 1 | v2.0 Architecture |
+| ✅ Complete | 3 | v1.0 Core Features, v1.1 Polish, 24k AI-sort smooth |
+| 🟡 In Progress | 1 | v2.0 modularization |
 
 ---
 
-*See [ROADMAP.md](ROADMAP.md) for release context.*
+*See [ROADMAP.md](ROADMAP.md) for release context and the theme board.*
 *See [TODO.md](TODO.md) for tactical tasks toward milestones.*

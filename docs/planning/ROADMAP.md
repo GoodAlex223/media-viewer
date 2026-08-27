@@ -1,8 +1,8 @@
 # Roadmap
 
-Long-term vision and major releases.
+Long-term vision, active themes, and releases.
 
-**Last Updated**: 2026-02-05
+**Last Updated**: 2026-08-27
 
 ---
 
@@ -14,63 +14,70 @@ Make Media Viewer the most efficient tool for reviewing and organizing large med
 
 ## Current Phase
 
-**Phase**: Polish
-**Focus**: Stability and core feature refinement
-**Timeline**: Q1 2026
+**Phase**: Scale & Modularize
+**Focus**: Hold the 24k-folder gains while carving the renderer into modules
+**Timeline**: H2 2026
+
+---
+
+## Theme Board
+
+Work flows each planning session from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](WEEKLY.md); this board is the strategic map of where the themes sit, not a duplicate task list.
+
+### Now
+
+- **24k-folder performance — remainder** — the AI-sort half shipped (PR #64, smoke-verified on a 20,929-file folder). What remains is the **PR2 slice: hash/similarity sort off the renderer thread**. Tracked as TODO 🔴 "Speed up AI / similarity sorting on large folders (24k+)", which stays open.
+- **v2.0 modularization** — extract ZoomManager, CompareManager, SortingManager, MLManager (see the v2.0 release below). **Promoted from Next on 2026-08-27**: the renderer grew ~1,550 lines between July and August while extraction was paused, so modularization is losing ground to feature work. This is where the architecture effort should go next.
+
+### Next
+
+- **UI architecture overhaul** — mode-aware control registry, centralized z-index scale (CSS custom properties), responsive pass for window sizes / large counts. BACKLOG [2026-05-25]; explicitly a prerequisite before any 4th mode ships.
+
+### Later
+
+- **Add-on / extension system** — design first (define core-app identity: what is core, what is an add-on), then in dependency order: sorting-as-add-ons, lossless-compression port (`media_compression` project), platform integrations (YouTube/TikTok/Twitter/Instagram/Civitai), link-based rating. BACKLOG [2026-04-08] cluster + [2026-05-30] compression entry.
+- **Progressive loading** — thumbnail / lowest-quality-first display while full media loads. BACKLOG [2026-04-08].
+
+> **Drained on 2026-08-27**: the *rating & tournament UX polish* theme is no longer a standing Now item — tournament undo reliability, the mouse-wheel guard, header auto-hide (PR #65) and bulk-rate re-pair avoidance (PR #66) all shipped. Further items of this kind re-enter through normal BACKLOG intake from 24k dogfooding rather than holding a board slot.
 
 ---
 
 ## Releases
 
-### v1.1 — Polish Release (Target: Q1 2026)
+### v1.1 — Polish Release ✅ Shipped
 
 **Theme**: Core stability and UX refinement
-**Status**: 🔄 In Progress
+**Status**: ✅ Complete (retro-declared 2026-08-27; scope long since exceeded)
 
-**Goals**:
-- [ ] Complete remaining UI/UX tasks
-- [ ] All existing features stable and tested
-
-**Key Features**:
+Named features:
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Video fullscreen toggle | In Progress | Click to exit fullscreen |
-| Visual scale controls | Planned | UI for zoom manipulation |
+| Video fullscreen toggle | ✅ Shipped 2026-02 | Later extracted into FullscreenManager |
+| Visual scale controls | ✅ Shipped | Zoom slider + popover; E2E-covered (`zoom.test.js`) |
 
-**Success Criteria**:
-- All TODO.md tasks complete
-- Manual testing checklist passed
+Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engine, persistence, session undo), JXL + animated-JXL viewer, CLIP semantic sorting + 576-dim ML pipeline, bulk-rate corrective training, automated test suite (513 unit + 55 E2E), keyboard-shortcut customization, local quality gates (pre-commit secret scan/lint/unit; conditional pre-push E2E).
 
----
+### v2.0 — Modularization 🔄 In Progress
 
-### v2.0 — Architecture (Target: TBD)
+**Theme**: Carve the monolithic renderer into manager modules (v2.0 pattern: stateful manager class + constructor-injected host callbacks)
+**Status**: 🔄 In Progress — 2 of 6 managers extracted
+**Done when**: ZoomManager, CompareManager, SortingManager, and MLManager are extracted with unit + E2E suites green.
 
-**Theme**: Code quality and maintainability
-**Status**: ⬜ Not Started
+| Module | Status |
+|--------|--------|
+| FullscreenManager (`fullscreen.js`) | ✅ Extracted |
+| TournamentManager (`tournament.js`) + TournamentEngine (`tournament-engine.js`) | ✅ Extracted |
+| ZoomManager | ⬜ Planned |
+| CompareManager | ⬜ Planned |
+| SortingManager | ⬜ Planned |
+| MLManager | ⬜ Planned |
 
-**Goals**:
-- [ ] Modularize media-viewer.js into separate files
-- [ ] Add automated test framework
+Originally-planned v2.0 features delivered early: automated testing (Vitest + Playwright, hook-enforced), keyboard-shortcut customization.
 
-**Key Features**:
+> **Losing ground.** `media-viewer.js` went from ~7,900 lines (2026-07-12) to ~9,400 (2026-08-27) — +1,550, with no extraction in that window. Feature work is adding to the renderer faster than modularization is removing from it. This is the reason v2.0 moved into the **Now** column.
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Modularize media-viewer.js | Not Started | Split ~6100+ line file into modules |
-| Automated testing | Not Started | Add Jest or similar framework |
-| Keyboard shortcut customization | Not Started | User-configurable shortcuts |
-
----
-
-### Future (v3.0+)
-
-**Potential directions**:
-- TypeScript migration for improved maintainability
-- Plugin system for community extensions
-- Cloud sync for preferences across devices
-- Batch operations for multiple file processing
-- Advanced ML features for better preference learning
+**Target**: Q4 2026 (soft)
 
 ---
 
@@ -92,7 +99,7 @@ Make Media Viewer the most efficient tool for reviewing and organizing large med
 
 ## Ongoing
 
-- Keep documentation current with codebase
+- Keep documentation current with codebase (planning-session staleness check — see [README.md](README.md) § Strategic Review)
 - Performance monitoring for large media collections
 - Security review of file operations
 
@@ -106,6 +113,6 @@ Make Media Viewer the most efficient tool for reviewing and organizing large med
 
 ---
 
-*See [TODO.md](TODO.md) for current tactical tasks.*
+*See [WEEKLY.md](WEEKLY.md) for the current week's plan.*
 *See [MILESTONES.md](MILESTONES.md) for key dates.*
-*See [BACKLOG.md](BACKLOG.md) for unprioritized ideas.*
+*See [BACKLOG.md](BACKLOG.md) for the full idea/task pool.*
