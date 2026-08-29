@@ -2557,6 +2557,13 @@ class MediaViewer {
             console.log('Loading folder:', folderPath);
             this.showLoadingSpinner();
 
+            // Drop an open deferred compare refresh BEFORE the scan: a 24k-file folder takes longer
+            // than the window's 3 s fallback, which would otherwise showMedia() the OLD pair mid-await
+            // (and could still be rendering when mediaFiles is swapped below). Repeated after the
+            // await — showLoadingSpinner() does not set isLoading, so the old folder stays interactive
+            // during the scan and a bulk rating landing there can arm a fresh window.
+            this._cancelDeferredCompareRefresh();
+
             const result = await window.electronAPI.loadFolder(folderPath);
             console.log('Load result:', result);
 
@@ -2584,7 +2591,7 @@ class MediaViewer {
             this.cancelBackgroundExtraction();
             this._abortInFlightPredictionSort();
             this._featureCacheDiskCount = 0;
-            // A deferred compare refresh armed in the OLD folder (bulk rating / undo / pair rating)
+            // Second cancel (see the pre-await one): a deferred compare refresh armed DURING the scan
             // would otherwise fire showMedia() against the NEW folder when its 3 s fallback lands.
             this._cancelDeferredCompareRefresh();
 

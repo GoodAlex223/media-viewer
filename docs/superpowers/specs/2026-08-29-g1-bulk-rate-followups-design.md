@@ -102,6 +102,13 @@ Call sites: `loadFolder` (next to `cancelBackgroundExtraction()`, before the bra
 `moveComparePair` <2-files block (replaces the inline clear; that block already sets
 `mediaNavigationInProgress = false` unconditionally just above, so behavior there is unchanged).
 
+> **Amendment (2026-08-29, review round):** `loadFolder` calls the helper **twice** — once BEFORE
+> `await window.electronAPI.loadFolder()` (a scan longer than the 3 s fallback would otherwise let the
+> fallback render the OLD pair mid-await, still in flight when `mediaFiles` is swapped) and once after,
+> at the position above (`showLoadingSpinner()` does not set `isLoading`, so the old folder stays
+> interactive during the scan and can arm a fresh window). A single pre-await cancel is not enough on
+> its own for the same reason.
+
 Tests (`tests/media-viewer-utils.test.js`): helper — both branches of the `wasPending` rule; `loadFolder`
 extract-method test in the style of "empty-folder teardown" asserting the helper runs on the empty **and**
 non-empty branch.

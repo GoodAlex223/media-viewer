@@ -2435,10 +2435,15 @@ describe('loadFolder drops an open deferred compare refresh (G1 T2)', () => {
         globalThis.window = origWindow;
     });
 
-    it('cancels the window on the empty-folder branch (before the branches diverge)', async () => {
+    it('cancels the window BEFORE a scan that outlives the 3 s fallback, and again on the empty-folder branch', async () => {
         vi.useFakeTimers();
         try {
             const fallback = vi.fn();
+            // A 24k-file scan takes longer than the fallback: advance past it INSIDE the await.
+            globalThis.window.electronAPI.loadFolder = vi.fn(async () => {
+                vi.advanceTimersByTime(3500);
+                return { success: true, files: [] };
+            });
             const ctx = {
                 isTournamentMode: false,
                 tournament: { engine: null },
@@ -2468,25 +2473,31 @@ describe('loadFolder drops an open deferred compare refresh (G1 T2)', () => {
                 _cancelDeferredCompareRefresh: vi.fn(cancelImpl),
             };
             await loadFolder.call(ctx, '/new/empty-folder');
-            expect(ctx._cancelDeferredCompareRefresh).toHaveBeenCalledTimes(1);
+            expect(ctx._cancelDeferredCompareRefresh).toHaveBeenCalledTimes(2); // pre-scan + post-scan
             expect(ctx.pendingCompareRefresh).toBe(false);
             expect(ctx.pendingCompareTimeout).toBeNull();
             expect(ctx.mediaNavigationInProgress).toBe(false);
             vi.advanceTimersByTime(3500);
-            expect(fallback).not.toHaveBeenCalled(); // no showMedia() against the new folder
+            expect(fallback).not.toHaveBeenCalled(); // neither mid-scan nor against the new folder
             expect(ctx.mediaFiles).toEqual([]); // sanity: the empty branch was taken
         } finally {
             vi.useRealTimers();
         }
     });
 
-    it('is called before the empty/non-empty split, so the non-empty branch is covered too', () => {
+    it('is called before the scan AND before the empty/non-empty split (non-empty branch covered too)', () => {
         const body = methodSource('loadFolder');
-        const cancel = body.indexOf('this._cancelDeferredCompareRefresh();');
+        const call = 'this._cancelDeferredCompareRefresh();';
+        const first = body.indexOf(call);
+        const second = body.indexOf(call, first + 1);
+        const scan = body.indexOf('await window.electronAPI.loadFolder(');
         const split = body.indexOf('if (result.files.length === 0)');
         const abort = body.indexOf('this._abortInFlightPredictionSort();');
-        expect(cancel).toBeGreaterThan(abort);
-        expect(cancel).toBeLessThan(split);
+        expect(first).toBeGreaterThan(-1);
+        expect(first).toBeLessThan(scan); // the fallback cannot fire mid-await
+        expect(second).toBeGreaterThan(abort); // a window armed DURING the scan is dropped too
+        expect(second).toBeLessThan(split);
+        expect(body.indexOf(call, second + 1)).toBe(-1); // exactly two
     });
 });
 
@@ -2670,48 +2681,71 @@ describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
         globalThis.window = origWindow;
     });
 
+    const historyEntry = (name, actionType, prunedPairKeys, extra = {}) => ({
+        fileName: name,
+        originalPath: `/folder/${name}`,
+        newPath: `/folder/${actionType}/${name}`,
+        fileSize: 100,
+        fileType: 'image/png',
+        actionType,
+        mlFeatures: null,
+        prunedPairKeys,
+        ...extra,
+    });
+    const makeCtx = (overrides) => ({
+        isLoading: false,
+        mediaNavigationInProgress: false,
+        isCompareMode: false,
+        isTournamentMode: false,
+        mediaFiles: [{ name: 'f.png', path: '/folder/f.png' }],
+        moveHistory: [],
+        currentIndex: 0,
+        baseFolderPath: '/folder',
+        featureCache: new Map(),
+        clipCache: new Map(),
+        featureMetadata: new Map(),
+        predictionScores: new Map(),
+        bulkRatedPairs: new Set(),
+        isSortedByPrediction: false,
+        isMlEnabled: false,
+        mlWorker: null,
+        signalUserActivity: () => {},
+        showNotification: () => {},
+        showError: () => {},
+        updateFolderInfo: () => {},
+        showMedia: vi.fn(async () => {}),
+        requestPredictionScores: vi.fn(),
+        restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+        reverseMlModelUpdate: vi.fn(),
+        ...overrides,
+    });
+
     it('single-mode undo of a like restores the key pruned when the file was moved', async () => {
         const key = bulkPairKey('a.png', 'f.png');
-        const ctx = {
-            isLoading: false,
-            mediaNavigationInProgress: false,
-            isCompareMode: false,
-            isTournamentMode: false,
-            mediaFiles: [{ name: 'f.png', path: '/folder/f.png' }],
-            moveHistory: [
-                {
-                    fileName: 'a.png',
-                    originalPath: '/folder/a.png',
-                    newPath: '/folder/like/a.png',
-                    fileSize: 100,
-                    fileType: 'image/png',
-                    actionType: 'like',
-                    mlFeatures: null,
-                    prunedPairKeys: [key],
-                },
-            ],
-            currentIndex: 0,
-            baseFolderPath: '/folder',
-            featureCache: new Map(),
-            clipCache: new Map(),
-            featureMetadata: new Map(),
-            predictionScores: new Map(),
-            bulkRatedPairs: new Set(),
-            isSortedByPrediction: false,
-            isMlEnabled: false,
-            mlWorker: null,
-            signalUserActivity: () => {},
-            showNotification: () => {},
-            showError: () => {},
-            updateFolderInfo: () => {},
-            showMedia: vi.fn(async () => {}),
-            requestPredictionScores: vi.fn(),
-            restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
-            reverseMlModelUpdate: vi.fn(),
-        };
+        const ctx = makeCtx({ moveHistory: [historyEntry('a.png', 'like', [key])] });
         await handleCancel.call(ctx);
         expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a.png', 'f.png']);
         expect(ctx.bulkRatedPairs.has(key)).toBe(true);
+    });
+
+    it('compare-pair undo (two entries) restores the keys captured on BOTH entries, shared key included', async () => {
+        const keyAB = bulkPairKey('a.png', 'b.png');
+        const keyAF = bulkPairKey('a.png', 'f.png');
+        const keyBF = bulkPairKey('b.png', 'f.png');
+        // moveComparePair captures both entries BEFORE either prune, so the a–b key sits on both;
+        // Set.add makes the double restore idempotent.
+        const ctx = makeCtx({
+            isCompareMode: true,
+            moveHistory: [
+                historyEntry('a.png', 'like', [keyAB, keyAF], { compareMode: true }),
+                historyEntry('b.png', 'dislike', [keyAB, keyBF], { compareMode: true }),
+            ],
+        });
+        await handleCancel.call(ctx);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['f.png', 'a.png', 'b.png']);
+        expect([...ctx.bulkRatedPairs].sort()).toEqual([keyAB, keyAF, keyBF].sort());
+        expect(ctx.moveHistory).toEqual([]);
+        expect(ctx.showMedia).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -939,6 +939,15 @@ git push -u origin g1-bulk-rate-followups
 ### [2026-08-29 11:40] — PHASE: Complete — Task 5
 - `npm run lint`: 0 errors, 1 pre-existing warning. CLAUDE.md: 4 edits (206 lines). Pushed to `origin/g1-bulk-rate-followups` (pre-push hook ran the full Playwright suite). **No PR** (user direction).
 
+### [2026-08-29 14:30] — PHASE: Review round (branch `/code-review`, 5 reviewers + scoring pass) → fixes in-branch
+Three findings survived verification (each scored 75 — below the pipeline's 80 cut, surfaced per the standing direction on verified findings); all three re-confirmed against the source and fixed, plus the reviewer's sub-threshold note adopted:
+- **CLAUDE.md wording** — the `restoreFeatureCachesFromHistory` bullet said "before `showMedia()`", but tournament undo renders via `showTournamentPair()` (`media-viewer.js` ~4955). Reworded to "before the next render".
+- **T2 narrowed the `loadFolder` race, did not close it** — the cancel ran AFTER `await window.electronAPI.loadFolder()`, so a scan longer than the 3 s fallback (24k folders) let the fallback `showMedia()` the OLD pair mid-await. Now cancelled BEFORE the scan as well; the post-await cancel stays because `showLoadingSpinner()` does not set `isLoading` — the old folder is still interactive during the scan and a bulk rating there can arm a fresh window. The behavioral test now advances fake timers 3.5 s INSIDE the mocked scan; the source-order test asserts exactly two calls (one before the await, one before the split).
+- **E2E flake vector** — warm-up `updateComplete` replies straggling >100 ms apart re-arm `_scoreDebounceTimer`, so a second `scoreAll` could still be in flight when `predictionScores.size >= 2` was satisfied; its late `scoreComplete` would prepend to the exact event list. The reviewer's proposed wait (`_scoreDebounceTimer === null`) is NOT sufficient on its own — there is no in-flight-scoreAll flag — so the test now counts `scoreAll` posts vs `scoreComplete` replies and waits for equality + idle debounce + all six warm-up replies before clearing the event list. (`_saveModelTimer` checked and clean: it only calls `saveMlModel()`.)
+- **Sub-threshold note (50) adopted** — a dynamic `handleCancel` compare-pair test (two entries, shared a–b key double-captured) now covers the two-entry restore; the describe gained `makeCtx`/`historyEntry` helpers.
+- Mutation checks: pre-await cancel dropped → exactly the 2 T2 tests fail; restore disabled → exactly the 4 T3 restore tests fail (incl. the new one). Unit 528 → **529**; `compare-mode.test.js` 9/9.
+- Reviewer-confirmed non-changes: `wasPending` rule kept (always-release would clobber an in-flight `showMedia`); no fourth history-pushing `removeFileFromList` caller (`removeFailedFile`, the compare-validation purges, the tournament media-load failures and `moveComparePair`'s own prunes push no history); no rename of `restoreFeatureCachesFromHistory`.
+
 ## 5. Key Discoveries
 
 - **The 🟤 premise was wrong in a useful way**: "mlWorker is null under Playwright" was true, but the cause is lazy init, not a harness limit — so the honest fix needed no stub, no flag, and no harness file. Measure a premise before designing around it.
@@ -951,9 +960,9 @@ git push -u origin g1-bulk-rate-followups
 - `scoreComplete` with `scores: null` does not clear the deferred window (waits out the 3 s fallback) — BACKLOG 🟤 at closeout (spec D5).
 - Late `scoreComplete` after a folder switch can write old scores onto same-named files (filename-keyed reply, path-keyed map) — BACKLOG 🟤 at closeout (spec D5).
 - `moveToSpecialFolder` / `moveComparePair` capture sites are covered by a source-order assertion only (both are dialog/DOM-heavy to extract); a behavioral extract-method test for each would retire that. BACKLOG 🟤 (test-coverage).
-- `mediaNavigationInProgress` doubles as a navigation mutex and a deferred-window flag; `_cancelDeferredCompareRefresh`'s `wasPending` rule papers over that. A dedicated deferred-window token would remove the ambiguity. BACKLOG 🟤 (design).
+- `mediaNavigationInProgress` doubles as a navigation mutex and a deferred-window flag; `_cancelDeferredCompareRefresh`'s `wasPending` rule papers over that. A dedicated deferred-window token (epoch) would remove the ambiguity — and would also let `loadFolder` cancel once instead of twice (review round). BACKLOG 🟤 (design).
 
 ## 7. Testing
 
-- Unit: 513 → **528** (`npx vitest run`; +4 T2, +8 T3, +3 T4). E2E: `compare-mode.test.js` 8 → **9** (the new test runs the real `ml-worker.js`); full Playwright suite via the pre-push hook.
-- Mutation checks: T1 (D2 revert), T3 (restore disabled), T4 ×2 — all caught, all restored (`git diff --quiet media-viewer.js` verified after each).
+- Unit: 513 → **529** (`npx vitest run`; +4 T2, +8 T3, +3 T4, +1 review round). E2E: `compare-mode.test.js` 8 → **9** (the new test runs the real `ml-worker.js`); full Playwright suite via the pre-push hook.
+- Mutation checks: T1 (D2 revert), T3 (restore disabled), T4 ×2, review round ×2 (pre-await cancel dropped; restore disabled again) — all caught, all restored (`git diff --quiet media-viewer.js` / byte-compare verified after each).

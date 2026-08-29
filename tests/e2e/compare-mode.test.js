@@ -230,27 +230,24 @@ test.describe('Compare Mode', () => {
                 return v;
             };
             mv.initializeMlWorker();
-        });
-        await page.waitForFunction(() => window.mediaViewer.mlStats != null); // initComplete
 
-        // scoreAll replies scores:null until the model has >=3 likes and >=3 dislikes — warm it up,
-        // then wait for the debounced re-score so no warm-up reply leaks into the assertions.
-        await page.evaluate(() => {
-            const mv = window.mediaViewer;
-            for (let i = 0; i < 3; i++) {
-                mv.updateMlModelWithFeatures(mv.getCombinedFeatures(`warm-like-${i}`), 'like');
-                mv.updateMlModelWithFeatures(mv.getCombinedFeatures(`warm-dislike-${i}`), 'dislike');
-            }
-        });
-        await page.waitForFunction(() => window.mediaViewer.mlStats?.isReady === true);
-        await page.waitForFunction(() => window.mediaViewer.predictionScores.size >= 2);
-
-        // Instrument AFTER warm-up: record worker replies + every showMedia() call, in order.
-        await page.evaluate(() => {
-            const mv = window.mediaViewer;
+            // Instrument BEFORE warm-up so every worker exchange is observable: replies (minus
+            // 'progress') go to __mlEvents, and scoreAll posts are counted so the test can wait for
+            // the worker to be QUIESCENT (every scoreAll answered) before asserting. Warm-up
+            // updateComplete replies straggling >100 ms apart re-arm the score debounce, which can
+            // leave a second scoreAll in flight after the first reply has already populated
+            // predictionScores — its late scoreComplete would then prepend to the event list.
             window.__mlEvents = [];
+            window.__scoreAllPosted = 0;
+            window.__scoreCompleteSeen = 0;
+            const origPost = mv.mlWorker.postMessage.bind(mv.mlWorker);
+            mv.mlWorker.postMessage = (m) => {
+                if (m.type === 'scoreAll') window.__scoreAllPosted++;
+                return origPost(m);
+            };
             const origHandle = mv.handleMlWorkerMessage.bind(mv);
             mv.handleMlWorkerMessage = (m) => {
+                if (m.type === 'scoreComplete') window.__scoreCompleteSeen++;
                 if (m.type !== 'progress') {
                     window.__mlEvents.push(
                         m.type === 'scoreComplete' ? `scoreComplete:${m.scores ? 'scores' : 'null'}` : m.type
@@ -258,11 +255,41 @@ test.describe('Compare Mode', () => {
                 }
                 return origHandle(m);
             };
+        });
+        await page.waitForFunction(() => window.mediaViewer.mlStats != null); // initComplete
+        const samplesBefore = await page.evaluate(() => window.mediaViewer.mlStats.totalSamples);
+
+        // scoreAll replies scores:null until the model has >=3 likes and >=3 dislikes — warm it up.
+        await page.evaluate(() => {
+            const mv = window.mediaViewer;
+            for (let i = 0; i < 3; i++) {
+                mv.updateMlModelWithFeatures(mv.getCombinedFeatures(`warm-like-${i}`), 'like');
+                mv.updateMlModelWithFeatures(mv.getCombinedFeatures(`warm-dislike-${i}`), 'dislike');
+            }
+        });
+        // Quiescence: all six warm-up replies landed, the score debounce is idle, and every scoreAll it
+        // posted has been answered (with real scores — the model is ready by then).
+        await page.waitForFunction((before) => {
+            const mv = window.mediaViewer;
+            return (
+                mv.mlStats?.isReady === true &&
+                mv.mlStats.totalSamples === before + 6 &&
+                !mv._scoreDebounceTimer &&
+                window.__scoreAllPosted > 0 &&
+                window.__scoreCompleteSeen === window.__scoreAllPosted &&
+                mv.predictionScores.size >= 2
+            );
+        }, samplesBefore);
+
+        // Record showMedia() calls too, then start the assertions from a clean event list.
+        await page.evaluate(() => {
+            const mv = window.mediaViewer;
             const origShow = mv.showMedia.bind(mv);
             mv.showMedia = (...args) => {
                 window.__mlEvents.push('showMedia');
                 return origShow(...args);
             };
+            window.__mlEvents.length = 0;
             // Same forced AI-sorted compare state the persistence test uses.
             mv.isCompareMode = true;
             mv.isSortedByPrediction = true;
