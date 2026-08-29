@@ -1092,16 +1092,26 @@ class MediaViewer {
         }
 
         // A removed/moved file can never re-pair — drop any rated-pair key that references it.
-        for (const key of this.bulkRatedPairs) {
-            const [a, b] = key.split('\u0000');
-            if (a === removedName || b === removedName) this.bulkRatedPairs.delete(key);
-        }
+        for (const key of this._bulkPairKeysReferencing(removedName)) this.bulkRatedPairs.delete(key);
 
         if (this.currentIndex >= this.mediaFiles.length) {
             this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
         }
 
         return index;
+    }
+
+    // Every rated-pair key that names `fileName` on either side. removeFileFromList prunes these;
+    // the move sites capture them onto the history entry FIRST (as `prunedPairKeys`) so undo can
+    // reinstate them via restoreFeatureCachesFromHistory — otherwise a pair rated before a
+    // single-file move could re-pair after that move is undone.
+    _bulkPairKeysReferencing(fileName) {
+        const keys = [];
+        for (const key of this.bulkRatedPairs) {
+            const [a, b] = key.split('\u0000');
+            if (a === fileName || b === fileName) keys.push(key);
+        }
+        return keys;
     }
 
     getMediaIndex(path) {
@@ -1118,7 +1128,13 @@ class MediaViewer {
     }
 
     restoreFeatureCachesFromHistory(entry) {
-        if (!entry || !entry.mlFeatures) return;
+        if (!entry) return;
+        // Re-admit the rated-pair keys removeFileFromList pruned for this file (captured by the move
+        // sites as prunedPairKeys). Before the features guard: a file with no features still owns them.
+        if (entry.prunedPairKeys) {
+            for (const key of entry.prunedPairKeys) this.bulkRatedPairs.add(key);
+        }
+        if (!entry.mlFeatures) return;
         const features = entry.mlFeatures;
         const path = entry.originalPath;
 
@@ -1399,7 +1415,7 @@ class MediaViewer {
             }
 
             // Store move in history for undo functionality (include ML features for reversal)
-            this.moveHistory.push({
+            const historyEntry = {
                 fileName: currentFile.name,
                 originalPath: currentFile.path,
                 newPath: moveResult.targetPath,
@@ -1407,7 +1423,11 @@ class MediaViewer {
                 fileType: currentFile.type,
                 actionType: actionType,
                 mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
-            });
+            };
+            // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
+            const prunedPairKeys = this._bulkPairKeysReferencing(currentFile.name);
+            if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
+            this.moveHistory.push(historyEntry);
 
             // Show success notification (if enabled)
             if (this.showRatingConfirmations) {
@@ -1547,6 +1567,9 @@ class MediaViewer {
                 actionType: 'special',
                 mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
             };
+            // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
+            const prunedPairKeys = this._bulkPairKeysReferencing(fileToMove.name);
+            if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
 
             // In compare mode, store remaining file info for proper undo
             if (side === 'left' || side === 'right') {
@@ -5255,7 +5278,7 @@ class MediaViewer {
 
             // Store primary move in history (include ML features for reversal)
             const primaryFeatures = primarySide === 'left' ? leftFeatures : rightFeatures;
-            this.moveHistory.push({
+            const primaryEntry = {
                 fileName: primaryFile.name,
                 originalPath: primaryFile.path,
                 newPath: primaryMoveResult.targetPath,
@@ -5264,7 +5287,11 @@ class MediaViewer {
                 actionType: primaryAction,
                 mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
                 compareMode: true,
-            });
+            };
+            // Capture the rated-pair keys removeFileFromList (below) is about to prune, so undo can reinstate them.
+            const primaryPrunedKeys = this._bulkPairKeysReferencing(primaryFile.name);
+            if (primaryPrunedKeys.length > 0) primaryEntry.prunedPairKeys = primaryPrunedKeys;
+            this.moveHistory.push(primaryEntry);
 
             // Move secondary file (the other one)
             const secondaryFile = primarySide === 'left' ? rightFile : leftFile;
@@ -5291,7 +5318,7 @@ class MediaViewer {
 
             // Store secondary move in history (include ML features for reversal)
             const secondaryFeatures = primarySide === 'left' ? rightFeatures : leftFeatures;
-            this.moveHistory.push({
+            const secondaryEntry = {
                 fileName: secondaryFile.name,
                 originalPath: secondaryFile.path,
                 newPath: secondaryMoveResult.targetPath,
@@ -5300,7 +5327,10 @@ class MediaViewer {
                 actionType: secondaryAction,
                 mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
                 compareMode: true,
-            });
+            };
+            const secondaryPrunedKeys = this._bulkPairKeysReferencing(secondaryFile.name);
+            if (secondaryPrunedKeys.length > 0) secondaryEntry.prunedPairKeys = secondaryPrunedKeys;
+            this.moveHistory.push(secondaryEntry);
 
             // Show notifications (if enabled)
             if (this.showRatingConfirmations) {

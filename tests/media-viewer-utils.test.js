@@ -315,6 +315,7 @@ describe('removeFileFromList', () => {
             jxlFrameCache: new Map(),
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
+            _bulkPairKeysReferencing: extractMethod('_bulkPairKeysReferencing'),
             saveBulkRatedFile: vi.fn(),
         };
     }
@@ -2170,6 +2171,7 @@ describe('removeFileFromList bulk-rated purge', () => {
             jxlFrameCache: new Map(),
             bulkRated: new Map([['a.jpg', 'good']]),
             bulkRatedPairs: new Set(),
+            _bulkPairKeysReferencing: extractMethod('_bulkPairKeysReferencing'),
             currentIndex: 0,
             saveBulkRatedFile: vi.fn(),
         };
@@ -2278,6 +2280,7 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
             bulkRated: new Map(),
             bulkRatedPairs: new Set([bulkPairKey('gone.jpg', 'keep.jpg'), bulkPairKey('keep.jpg', 'other.jpg')]),
             bulkPairKey,
+            _bulkPairKeysReferencing: extractMethod('_bulkPairKeysReferencing'),
             saveBulkRatedFile: () => {},
         };
         removeFileFromList.call(ctx, '/f/gone.jpg');
@@ -2399,6 +2402,231 @@ describe('loadFolder drops an open deferred compare refresh (G1 T2)', () => {
         const abort = body.indexOf('this._abortInFlightPredictionSort();');
         expect(cancel).toBeGreaterThan(abort);
         expect(cancel).toBeLessThan(split);
+    });
+});
+
+describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
+    const bulkPairKey = extractMethod('bulkPairKey');
+    const keysReferencing = extractMethod('_bulkPairKeysReferencing');
+    const restore = extractMethod('restoreFeatureCachesFromHistory'); // removeFileFromList: module-level const
+
+    function cacheCtx(files, pairs) {
+        return {
+            mediaFiles: files,
+            currentIndex: 0,
+            predictionScores: new Map(),
+            featureCache: new Map(),
+            clipCache: new Map(),
+            jxlFrameCache: new Map(),
+            featureMetadata: new Map(),
+            perceptualHashes: new Map(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(pairs),
+            bulkPairKey,
+            _bulkPairKeysReferencing: keysReferencing,
+            saveBulkRatedFile: () => {},
+        };
+    }
+
+    function moveCtx(files, pairs, overrides = {}) {
+        return {
+            ...cacheCtx(files, pairs),
+            isLoading: false,
+            isMlEnabled: false, // skips feature extraction — not what these tests are about
+            mlWorker: null,
+            currentMedia: null,
+            customLikeFolder: '/liked',
+            customDislikeFolder: '/disliked',
+            moveHistory: [],
+            showRatingConfirmations: false,
+            areFoldersConfigured: () => true,
+            getCombinedFeatures: () => null,
+            removeFileFromList,
+            updateMlModelWithFeatures: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = {
+            electronAPI: {
+                path: { basename: (p) => p.split('/').pop() },
+                checkFolderExists: vi.fn(async () => true),
+                moveFile: vi.fn(async ({ fileName }) => ({ success: true, targetPath: `/liked/${fileName}` })),
+            },
+        };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('_bulkPairKeysReferencing returns every key naming the file on either side, nothing else', () => {
+        const ctx = cacheCtx([], [bulkPairKey('a', 'f'), bulkPairKey('f', 'z'), bulkPairKey('b', 'c')]);
+        expect(keysReferencing.call(ctx, 'f').sort()).toEqual([bulkPairKey('a', 'f'), bulkPairKey('f', 'z')].sort());
+        expect(keysReferencing.call(ctx, 'b')).toEqual([bulkPairKey('b', 'c')]);
+        expect(keysReferencing.call(ctx, 'nope')).toEqual([]);
+        expect(ctx.bulkRatedPairs.size).toBe(3); // read-only
+    });
+
+    it('restoreFeatureCachesFromHistory re-adds prunedPairKeys even when the entry has no mlFeatures', () => {
+        const ctx = {
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+            bulkRatedPairs: new Set(),
+        };
+        const key = bulkPairKey('a', 'f');
+        restore.call(ctx, { originalPath: '/f/a', mlFeatures: null, prunedPairKeys: [key] });
+        expect(ctx.bulkRatedPairs.has(key)).toBe(true);
+        expect(ctx.featureCache.size).toBe(0);
+    });
+
+    it('tolerates entries without prunedPairKeys (legacy / nothing pruned)', () => {
+        const ctx = {
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+            bulkRatedPairs: new Set(),
+        };
+        restore.call(ctx, { originalPath: '/f/a', mlFeatures: null });
+        expect(ctx.bulkRatedPairs.size).toBe(0);
+    });
+
+    it('LIFO: rate-pair (a,f) -> move a -> move f -> undo f -> undo a restores the key exactly once, on a', () => {
+        const a = { name: 'a', path: '/f/a' };
+        const f = { name: 'f', path: '/f/f' };
+        const key = bulkPairKey('a', 'f');
+        const ctx = cacheCtx([a, f], [key]);
+
+        // move a — capture BEFORE the prune (what the move sites do), then prune
+        const entryA = { originalPath: a.path, mlFeatures: null };
+        const prunedA = keysReferencing.call(ctx, a.name);
+        if (prunedA.length > 0) entryA.prunedPairKeys = prunedA;
+        removeFileFromList.call(ctx, a.path);
+        expect(ctx.bulkRatedPairs.has(key)).toBe(false);
+        expect(entryA.prunedPairKeys).toEqual([key]);
+
+        // move f — nothing left to capture
+        const entryF = { originalPath: f.path, mlFeatures: null };
+        const prunedF = keysReferencing.call(ctx, f.name);
+        if (prunedF.length > 0) entryF.prunedPairKeys = prunedF;
+        removeFileFromList.call(ctx, f.path);
+        expect(entryF.prunedPairKeys).toBeUndefined();
+
+        // undo f, then undo a
+        restore.call(ctx, entryF);
+        expect(ctx.bulkRatedPairs.size).toBe(0);
+        restore.call(ctx, entryA);
+        expect([...ctx.bulkRatedPairs]).toEqual([key]);
+    });
+
+    it('moveCurrentFile captures the pruned keys onto its history entry (single-mode like)', async () => {
+        const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+        const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, type: 'image/jpeg' };
+        const f = { name: 'f.jpg', path: '/f/f.jpg', size: 10, type: 'image/jpeg' };
+        const key = bulkPairKey('a.jpg', 'f.jpg');
+        const ctx = moveCtx([a, f], [key]);
+        await moveCurrentFile.call(ctx, 'like');
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.moveHistory[0].prunedPairKeys).toEqual([key]);
+        expect(ctx.bulkRatedPairs.has(key)).toBe(false); // pruned after capture
+        expect(ctx.mediaFiles).toEqual([f]);
+    });
+
+    it('moveCurrentFile omits prunedPairKeys when nothing referenced the file', async () => {
+        const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+        const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, type: 'image/jpeg' };
+        const ctx = moveCtx([a], [bulkPairKey('x', 'y')]);
+        await moveCurrentFile.call(ctx, 'like');
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.moveHistory[0]).not.toHaveProperty('prunedPairKeys');
+        expect(ctx.bulkRatedPairs.size).toBe(1); // unrelated key untouched
+    });
+
+    it('moveToSpecialFolder and moveComparePair capture before they prune (source order)', () => {
+        // These two are DOM/dialog-heavy; assert the ordering invariant on the source instead:
+        // every _bulkPairKeysReferencing( capture precedes the first removeFileFromList( call,
+        // and the captured keys land on the history entry as prunedPairKeys.
+        for (const [name, captures] of [
+            ['moveToSpecialFolder', 1],
+            ['moveComparePair', 2],
+        ]) {
+            const body = methodSource(name);
+            const prune = body.indexOf('this.removeFileFromList(');
+            expect(prune, name).toBeGreaterThan(-1);
+            const hits = [...body.matchAll(/this\._bulkPairKeysReferencing\(/g)].map((m) => m.index);
+            expect(hits, name).toHaveLength(captures);
+            for (const idx of hits) expect(idx, name).toBeLessThan(prune);
+            expect(body, name).toContain('prunedPairKeys');
+        }
+    });
+});
+
+describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
+    const handleCancel = extractAsyncMethod('handleCancel');
+    const bulkPairKey = extractMethod('bulkPairKey');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = {
+            electronAPI: {
+                moveFile: vi.fn(async ({ fileName }) => ({ success: true, targetPath: `/folder/${fileName}` })),
+                path: { basename: async (p) => p.split('/').pop() },
+            },
+        };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('single-mode undo of a like restores the key pruned when the file was moved', async () => {
+        const key = bulkPairKey('a.png', 'f.png');
+        const ctx = {
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: false,
+            isTournamentMode: false,
+            mediaFiles: [{ name: 'f.png', path: '/folder/f.png' }],
+            moveHistory: [
+                {
+                    fileName: 'a.png',
+                    originalPath: '/folder/a.png',
+                    newPath: '/folder/like/a.png',
+                    fileSize: 100,
+                    fileType: 'image/png',
+                    actionType: 'like',
+                    mlFeatures: null,
+                    prunedPairKeys: [key],
+                },
+            ],
+            currentIndex: 0,
+            baseFolderPath: '/folder',
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+            predictionScores: new Map(),
+            bulkRatedPairs: new Set(),
+            isSortedByPrediction: false,
+            isMlEnabled: false,
+            mlWorker: null,
+            signalUserActivity: () => {},
+            showNotification: () => {},
+            showError: () => {},
+            updateFolderInfo: () => {},
+            showMedia: vi.fn(async () => {}),
+            requestPredictionScores: vi.fn(),
+            restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+            reverseMlModelUpdate: vi.fn(),
+        };
+        await handleCancel.call(ctx);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a.png', 'f.png']);
+        expect(ctx.bulkRatedPairs.has(key)).toBe(true);
     });
 });
 
