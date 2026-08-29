@@ -11,7 +11,7 @@
 
 ## Parallel Work
 
-- **User-side re-smoke round 2 of PR #66 (optional, 24k folder)** — never run before the user-directed merge on 2026-08-24 (round 1 found 2 real defects the suites missed). G1's `mlWorker` stub gives the D2 deferred-refresh path _automated_ coverage regardless, so this is a belt-and-braces check, not a gate. If run, record the result in [DONE.md](DONE.md) 2026-08-24.
+- **User-side re-smoke round 2 of PR #66 (optional, 24k folder)** — never run before the user-directed merge on 2026-08-24 (round 1 found 2 real defects the suites missed). G1's real-worker E2E (merged `66b16af`, 2026-08-29 — no stub: `mlWorker` was lazy-init, not a harness limit) gives the D2 deferred-refresh path _automated_ coverage regardless, so this is a belt-and-braces check, not a gate. If run, record the result in [DONE.md](DONE.md) 2026-08-24.
 - **REVIEW-QUEUE §4 inbound items** (`/wayfinder`, Jenkins-for-the-no-CI-gap, the design-video sub-batch) — parked until `claude-code-universal-config`'s own verdicts land; re-check during G6, do not action earlier.
 - **TODO § Spawned Tasks** — propagate the code-review _realness_ rating axis to `~/.claude` (two-trees edit, user-maintained, not verifiable from this tree). Independent of this week's groups.
 
@@ -27,10 +27,10 @@
 
 > The week's 🏆 (a Cleanup Week may take an auto-generated **correctness** item as its challenge). The PR #66 deferred-re-render fix (D2) — the main correctness property of that branch — has **zero** automated coverage: `mlWorker` is null under Playwright, so `postedUpdates` is always 0, `_beginDeferredCompareRefresh` is never reached, and the compare-mode bulk-rating E2E passes for the wrong reason. Stub the worker so the test can fail. The three lifecycle fixes ride the same branch because they touch the same `bulkRatedPairs` / `pendingCompareRefresh` state.
 
-- [ ] **Stub `mlWorker` under Playwright → real E2E coverage of the deferred-refresh protocol** — a test worker (or harness flag) that answers `update`/`reverseUpdate`/`score` so `postedUpdates > 0` and `_beginDeferredCompareRefresh` → `mediaNavigationInProgress` → deferred `showMedia()` is actually exercised; assert the re-render happens _after_ re-scoring (the D2 property). `tests/e2e/compare-mode.test.js`, `tests/e2e/helpers/` (3) — 🟤 [2026-08-24]
-- [ ] **`loadFolder` clears `pendingCompareRefresh` / `pendingCompareTimeout`** — a stray 3 s deferred-refresh timer can fire `showMedia()` against the NEW folder (bulk-rate → immediately switch folders); reuse the cleanup idiom already at the `moveComparePair` site. `media-viewer.js` (`loadFolder`) (1) — 🟤 [2026-08-24]
-- [ ] **Undo of a single-file move reinstates the pruned `bulkRatedPairs` key** — `removeFileFromList` prunes keys referencing the removed file; the like/dislike/special undo paths restore the file (`_restoredPairFiles` + `restoreFeatureCachesFromHistory`) without the key, so `(a,f)` can re-pair after `rate-pair → single-rate a → undo`. Capture referencing keys on the move-history entry; restore alongside the feature caches. `media-viewer.js` (`removeFileFromList`, `handleCancel` restore branches) (1) — 🟤 [2026-08-24]
-- [ ] **Close the counter + undo-arithmetic coverage gaps** — `updateNavigationInfo`'s duplicated fall-through branch (a mutation removing it survives all 513 tests) and `undoBulkRating`'s posted-count arithmetic (every `reverseMlModelUpdate` mock returns `undefined`). `tests/media-viewer-utils.test.js` (1) — 🟤 [2026-08-24]
+- [x] **Stub `mlWorker` under Playwright → real E2E coverage of the deferred-refresh protocol** — ✅ shipped 2026-08-29 as the **real** worker (lazy init was the cause, not the harness; no stub/flag). _Original:_ a test worker (or harness flag) that answers `update`/`reverseUpdate`/`score` so `postedUpdates > 0` and `_beginDeferredCompareRefresh` → `mediaNavigationInProgress` → deferred `showMedia()` is actually exercised; assert the re-render happens _after_ re-scoring (the D2 property). `tests/e2e/compare-mode.test.js`, `tests/e2e/helpers/` (3) — 🟤 [2026-08-24]
+- [x] **`loadFolder` clears `pendingCompareRefresh` / `pendingCompareTimeout`** — ✅ 2026-08-29 (cancelled twice: pre-scan + pre-split — review round). a stray 3 s deferred-refresh timer can fire `showMedia()` against the NEW folder (bulk-rate → immediately switch folders); reuse the cleanup idiom already at the `moveComparePair` site. `media-viewer.js` (`loadFolder`) (1) — 🟤 [2026-08-24]
+- [x] **Undo of a single-file move reinstates the pruned `bulkRatedPairs` key** — ✅ 2026-08-29. `removeFileFromList` prunes keys referencing the removed file; the like/dislike/special undo paths restore the file (`_restoredPairFiles` + `restoreFeatureCachesFromHistory`) without the key, so `(a,f)` can re-pair after `rate-pair → single-rate a → undo`. Capture referencing keys on the move-history entry; restore alongside the feature caches. `media-viewer.js` (`removeFileFromList`, `handleCancel` restore branches) (1) — 🟤 [2026-08-24]
+- [x] **Close the counter + undo-arithmetic coverage gaps** — ✅ 2026-08-29. `updateNavigationInfo`'s duplicated fall-through branch (a mutation removing it survives all 513 tests) and `undoBulkRating`'s posted-count arithmetic (every `reverseMlModelUpdate` mock returns `undefined`). `tests/media-viewer-utils.test.js` (1) — 🟤 [2026-08-24]
 
 _Deferred from the same section (not this week)_: per-render memoization of the compare-pair lists (perf, no defect — folds with the existing memoization item); "two existing entries are now more reachable" (folds into its own canonical 🟤 entries).
 
@@ -73,7 +73,7 @@ _Deferred from the same section_: keyboard-focus a11y of auto-hidden chrome (mus
 > The 🟡 entry's own diagnosis: 5 `adopt` verdicts across 3 runs with **zero burn-down** — "a review process whose output is never tried produces verdicts, not value." A Cleanup Week is the slot the entry itself proposes (option b). Trial the two with the best-measured fit, trial one _on this week's own PR_, and settle the policy so the queue stops growing unconsumed.
 
 - [ ] **Trial `dead-rules-audit`** (`karanb192/claude-code-hooks`; Node ≥18, no deps; parser measured 36 rules / 10 judgeable on this repo's CLAUDE.md) — install, run through the G1/G2 sessions, read the scorecard; record what it flags `⚠ promote→hook` and whether it earns its per-edit hook cost. (1) — 🟤 [2026-08-27]
-- [ ] **Trial `pr-review-toolkit` on the G1 PR** (its test-reviewer + silent-failure-hunter agents are the stated fit) — compare its findings against the `/code-review` pass on the same PR; log signal-beyond-baseline. (1) — 🟤 [2026-06-26]
+- [ ] **Trial `pr-review-toolkit` on the G1 PR** (its test-reviewer + silent-failure-hunter agents are the stated fit) — ⚠️ _G1 merged locally with NO PR on 2026-08-29 (`66b16af`) — trial it on the G2 PR instead._ compare its findings against the `/code-review` pass on the same PR; log signal-beyond-baseline. (1) — 🟤 [2026-06-26]
 - [ ] 🟡 **Decide the adopt-consumption policy (a / b / c) and the Weekly-Reviews cadence** (observed 2026-06-26 → 07-05 → 08-27: a ~monthly batch whose scan window already says "since the last run") — record in [REVIEW-QUEUE.md](REVIEW-QUEUE.md) § Conventions + BACKLOG 📌 Process Rules; while there, check the `security-guidance` prerequisite (Python 3.10+ on `PATH`) and note it on that 🟤 entry. (1) — 🟡 [2026-08-27]
 
 _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, or sooner if the policy decision says "gate new adopts on trialling old ones"); the "autonomous visual-verification" checklist line (G1's stub is the concrete instance).
@@ -112,7 +112,7 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 
 | Group                                                                                                          | SP  |
 | -------------------------------------------------------------------------------------------------------------- | --- |
-| [**G1. Bulk-rate follow-ups**](#g1-bulk-rate-follow-ups-batch--) [batch] 🏆 🟤 (day 1 of 2 — stub + D2 assertion) | (6) |
+| ✅ [**G1. Bulk-rate follow-ups**](#g1-bulk-rate-follow-ups-batch--) [batch] 🏆 🟤 (day 1 of 2 — real worker + D2 assertion; shipped 2026-08-29, merge `66b16af`) | (6) |
 
 **Daily total**: ~4 SP (of the 6 SP batch)
 
@@ -124,7 +124,7 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 
 | Group                                                                                                                                                                                              | SP  |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| [**G1. Bulk-rate follow-ups**](#g1-bulk-rate-follow-ups-batch--) [batch] 🏆 🟤 (day 2 — lifecycle fixes, PR)                                                                                          | (6) |
+| ✅ [**G1. Bulk-rate follow-ups**](#g1-bulk-rate-follow-ups-batch--) [batch] 🏆 🟤 (day 2 — lifecycle fixes; merged locally, no PR)                                                                                          | (6) |
 | [**G4. Adopt-queue trial batch**](#g4-adopt-queue-trial-batch--cadence-decision-batch--1--folded) [batch] 🟤 (`pr-review-toolkit` on the G1 PR; `dead-rules-audit` installed for the rest of the week) | (3) |
 | [**G2. Tournament undo hardening**](#g2-tournament-undo-hardening-batch-) [batch] 🟤 (start — reconcile → drop history + CLAUDE.md bullet)                                                             | (5) |
 
@@ -175,7 +175,7 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 
 | ID  | Group                                             | Domain                                    | Source                  | Tasks                | Total SP | Day       | Status     |
 | --- | ------------------------------------------------- | ----------------------------------------- | ----------------------- | -------------------- | -------- | --------- | ---------- |
-| G1  | Bulk-rate follow-ups [batch] 🏆                   | JS logic (compare bulk-rate) + E2E harness | 🟤 Auto                 | 4                    | 6        | Mon–Tue   | ☐ Planned  |
+| G1  | Bulk-rate follow-ups [batch] 🏆                   | JS logic (compare bulk-rate) + E2E harness | 🟤 Auto                 | 4                    | 6        | Mon–Tue   | ✅ merged `66b16af` (no PR, 2026-08-29) |
 | G2  | Tournament undo hardening [batch]                 | JS logic (tournament) + CLAUDE.md          | 🟤 Auto                 | 4 (closes 6 entries) | 5        | Tue–Wed   | ☐ Planned  |
 | G3  | Docs & process guardrails [batch]                 | scripts / tooling / docs                   | 🟤 Auto (+1 🟡 folded)  | 6 (closes 10 entries) | 6       | Wed–Thu   | ☐ Planned  |
 | G4  | Adopt-queue trial batch + cadence decision [batch] | Claude Code tooling / process             | 🟤 Auto (+1 🟡 folded)  | 3                    | 3        | Tue + Fri | ☐ Planned  |

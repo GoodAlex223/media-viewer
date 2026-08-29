@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Aug 31–Sep 4 § G1 (🏆, 6 SP) ← BACKLOG 🟤 `[2026-08-24] PR #66 … smoke round-1 + review follow-ups`
 **Created**: 2026-08-29
-**Status**: In Progress
+**Status**: ✅ Complete — merged to `main` 2026-08-29 (merge `66b16af`, `--no-ff`, branch deleted remote + local; **no PR** by task brief; review-round fixes `9a86c2e`)
 **Last Updated**: 2026-08-29
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. (This run: executed inline by the planning session — full context already loaded.)

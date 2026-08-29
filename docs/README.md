@@ -33,6 +33,7 @@ Central index for all project documentation.
 
 [Video Fullscreen Toggle]: planning/plans/2025-12-29_video-fullscreen-toggle.md
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
+[G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
 
 ## Archived Plans
 
@@ -78,6 +79,7 @@ Central index for all project documentation.
 | [G2 Tournament Bug Fixes Plan][]               | `engine.history` unified chronological undo stack (`kind` pick/special/prune + `peekUndoEntry`/`undoUserAction`) replacing the `moveHistory`-peek that let any special move hijack tournament undo + identity re-check for the advisory `isLoading` mutex + mouse-wheel `isTournamentMode` guard + auto-hide `.tournament-header`/`.tournament-controls` (`_setupAutoHide`); MERGED via PR #65 (`937084c`); **user-side 6-point manual smoke PASSED 2026-07-21** (all 6 checks) (Group G2) |
 
 | [G4 Strategic-Doc Refresh Plan][] | Strategic docs refreshed to August-2026 reality (v1.1 retro-closed, v2.0 = modularization arc, Now/Next/Later theme board) + CLAUDE.md/PROJECT.md sync + planning-session staleness rule (Group G4) |
+| [G1 Bulk-Rate Follow-ups Plan][] | Real-worker E2E for the PR #66 deferred re-render (D2/D4) + `loadFolder` deferred-window cancel, `prunedPairKeys` restore on undo, counter/undo-arithmetic coverage; review-round log (Group G1, Cleanup Week #3) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -166,6 +168,7 @@ Central index for all project documentation.
 | [Weekly Reviews 2026-07-05 Run][] | Run-card for the 2nd Weekly Reviews run (not a design spec): candidate picks + scope guards + appended Outcome/retro; 4 verdicts, 2 adopt (`typescript-lsp`; autonomous e2e/visual verification) (Group WR) |
 | [Weekly Reviews 2026-08-27 Run][] | Run-card for the 3rd (catch-up) Weekly Reviews run: decisions D1 bidirectional cross-project propagation / D2 confirmed target scope / D3 candidate placement, scope guards, and appended Outcome with 5 verdicts, 3 adopt + 1 propagate and 6 recorded deviations (Group G5) |
 | [G4 Strategic-Doc Refresh Design][] | Strategic-doc refresh + CLAUDE.md pre-push-gate sync: D1 hybrid release model (v1.1 retro-closed, v2.0 the one forward version, rest → Now/Next/Later themes), D2 v2.0 = modularization arc only, D3 theme-board placement, D4 weekly-planning staleness check replaces the quarterly note, D5 spec embeds near-final content; § 9 records the 2026-08-27 re-verification (D6 onward), including D10, which supersedes D4's "weekly" wording as cadence-neutral (Group G4) |
+| [G1 Bulk-Rate Follow-ups Design][] | Bulk-rate follow-ups design: D1 the E2E runs the real `ml-worker.js` (lazy init was the cause, not the harness — no stub/flag), D2 `_cancelDeferredCompareRefresh` with the `wasPending` rule (§ 2 amended: `loadFolder` cancels twice), D3 `prunedPairKeys` captured on the history entry and restored before the `mlFeatures` guard, D4 mutation-verified tests, D5 two design-time findings deliberately deferred to BACKLOG (Group G1) |
 | [G2 Tournament Bug Fixes][] | Tournament-mode bug fixes design: D1 unified LIFO undo stack, D2 `engine.history` IS that stack (reverses PR #59 `trackUndo:false`), D3 engine stays dumb (`meta` opaque), D4 system prunes auto-consumed, D5 undo stays session-only, D6 auto-hide mirrors `.header` (edge band + 3s), D7 reveal chrome on entry (Group G2) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
@@ -213,6 +216,7 @@ Central index for all project documentation.
 [Weekly Reviews 2026-08-27 Run]: superpowers/specs/2026-08-27-weekly-reviews-run.md
 [G2 Tournament Bug Fixes]: superpowers/specs/2026-07-20-g2-tournament-bug-fixes-design.md
 [G4 Strategic-Doc Refresh Design]: superpowers/specs/2026-07-12-g4-strategic-docs-refresh-design.md
+[G1 Bulk-Rate Follow-ups Design]: superpowers/specs/2026-08-29-g1-bulk-rate-followups-design.md
 
 ## Security Audits
 
@@ -228,4 +232,4 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-08-27*
+*Last Updated: 2026-08-29*
