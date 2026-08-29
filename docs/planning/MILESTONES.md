@@ -86,7 +86,7 @@ Shipped via PR #64 (merge `b6ff4ac`). Two defects were found and fixed **before*
 
 - [x] Video fullscreen toggle — shipped 2026-02-05, later extracted into FullscreenManager
 - [x] Visual scale controls — zoom slider + popover, E2E-covered (`zoom.test.js`)
-- [x] "Manual testing checklist passed" — superseded: 513 unit + 55 E2E tests, hook-enforced, plus per-PR manual smokes
+- [x] "Manual testing checklist passed" — superseded: hook-enforced unit + E2E suites (current counts in PROJECT.md), plus per-PR manual smokes
 - [x] "All documentation up to date" — satisfied by the 2026-08-27 strategic-doc refresh
 
 Beyond scope: Tournament mode, JXL viewer, CLIP semantic sorting, bulk-rate training, automated test suite, shortcut customization, local quality gates.

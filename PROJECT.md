@@ -17,7 +17,7 @@ Project-specific configuration. Universal rules are in [CLAUDE.md](CLAUDE.md).
 | Language | JavaScript (ES6+) |
 | Framework | Electron 39.x |
 | UI | HTML/CSS (no framework) |
-| Testing | Vitest (513 unit) + Playwright (55 E2E) |
+| Testing | Vitest (529 unit) + Playwright (56 E2E) |
 | CI/CD | No CI service; gates are local Husky hooks (pre-commit + pre-push) |
 
 ---
