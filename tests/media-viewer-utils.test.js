@@ -2286,6 +2286,122 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
     });
 });
 
+describe('_cancelDeferredCompareRefresh', () => {
+    const cancel = extractMethod('_cancelDeferredCompareRefresh');
+
+    it('clears an open window (timer, flags, snapshot) and releases mediaNavigationInProgress', () => {
+        vi.useFakeTimers();
+        try {
+            const fallback = vi.fn();
+            const ctx = {
+                pendingCompareRefresh: true,
+                pendingCompareUpdates: 2,
+                pendingCompareTimeout: setTimeout(fallback, 3000),
+                previousScores: new Map([['/f/a', 0.5]]),
+                mediaNavigationInProgress: true,
+            };
+            cancel.call(ctx);
+            expect(ctx.pendingCompareRefresh).toBe(false);
+            expect(ctx.pendingCompareUpdates).toBe(0);
+            expect(ctx.pendingCompareTimeout).toBeNull();
+            expect(ctx.previousScores).toBeNull();
+            expect(ctx.mediaNavigationInProgress).toBe(false);
+            vi.advanceTimersByTime(3500);
+            expect(fallback).not.toHaveBeenCalled(); // the 3 s fallback can no longer fire showMedia()
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('leaves mediaNavigationInProgress alone when no window was open', () => {
+        // The flag is also held by ordinary in-flight navigation — a no-op cancel must not release it.
+        const ctx = {
+            pendingCompareRefresh: false,
+            pendingCompareUpdates: 0,
+            pendingCompareTimeout: null,
+            previousScores: null,
+            mediaNavigationInProgress: true,
+        };
+        cancel.call(ctx);
+        expect(ctx.mediaNavigationInProgress).toBe(true);
+        expect(ctx.pendingCompareRefresh).toBe(false);
+    });
+});
+
+describe('loadFolder drops an open deferred compare refresh (G1 T2)', () => {
+    const loadFolder = extractAsyncMethod('loadFolder');
+    const cancelImpl = extractMethod('_cancelDeferredCompareRefresh');
+    const abortImpl = extractMethod('_abortInFlightPredictionSort');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = {
+            electronAPI: {
+                loadFolder: vi.fn(async () => ({ success: true, files: [] })),
+                path: { basename: (p) => p.split(/[\\/]/).pop() },
+            },
+        };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('cancels the window on the empty-folder branch (before the branches diverge)', async () => {
+        vi.useFakeTimers();
+        try {
+            const fallback = vi.fn();
+            const ctx = {
+                isTournamentMode: false,
+                tournament: { engine: null },
+                mediaFiles: [{ name: 'stale.png', path: '/old/stale.png' }],
+                baseFolderPath: '/old',
+                currentFolderPath: 'old',
+                currentIndex: 0,
+                moveHistory: [],
+                sortRunId: 0,
+                sortAbortController: null,
+                _mlSortResolve: null,
+                _mlSortReject: null,
+                _featureCacheDiskCount: 0,
+                // An open deferred window from a bulk rating in the OLD folder:
+                pendingCompareRefresh: true,
+                pendingCompareUpdates: 2,
+                pendingCompareTimeout: setTimeout(fallback, 3000),
+                previousScores: null,
+                mediaNavigationInProgress: true,
+                showLoadingSpinner: vi.fn(),
+                hideLoadingSpinner: vi.fn(),
+                showDropZone: vi.fn(),
+                showError: vi.fn(),
+                exitTournamentMode: vi.fn(),
+                cancelBackgroundExtraction: vi.fn(),
+                _abortInFlightPredictionSort: vi.fn(abortImpl),
+                _cancelDeferredCompareRefresh: vi.fn(cancelImpl),
+            };
+            await loadFolder.call(ctx, '/new/empty-folder');
+            expect(ctx._cancelDeferredCompareRefresh).toHaveBeenCalledTimes(1);
+            expect(ctx.pendingCompareRefresh).toBe(false);
+            expect(ctx.pendingCompareTimeout).toBeNull();
+            expect(ctx.mediaNavigationInProgress).toBe(false);
+            vi.advanceTimersByTime(3500);
+            expect(fallback).not.toHaveBeenCalled(); // no showMedia() against the new folder
+            expect(ctx.mediaFiles).toEqual([]); // sanity: the empty branch was taken
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('is called before the empty/non-empty split, so the non-empty branch is covered too', () => {
+        const body = methodSource('loadFolder');
+        const cancel = body.indexOf('this._cancelDeferredCompareRefresh();');
+        const split = body.indexOf('if (result.files.length === 0)');
+        const abort = body.indexOf('this._abortInFlightPredictionSort();');
+        expect(cancel).toBeGreaterThan(abort);
+        expect(cancel).toBeLessThan(split);
+    });
+});
+
 describe('collectBulkRatedTrainingExamples', () => {
     const collect = extractAsyncMethod('collectBulkRatedTrainingExamples');
 
@@ -3083,6 +3199,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
             _abortInFlightPredictionSort: vi.fn(abortInFlightPredictionSortImpl),
+            _cancelDeferredCompareRefresh: vi.fn(),
         };
     }
 

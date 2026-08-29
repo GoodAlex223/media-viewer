@@ -2561,6 +2561,9 @@ class MediaViewer {
             this.cancelBackgroundExtraction();
             this._abortInFlightPredictionSort();
             this._featureCacheDiskCount = 0;
+            // A deferred compare refresh armed in the OLD folder (bulk rating / undo / pair rating)
+            // would otherwise fire showMedia() against the NEW folder when its 3 s fallback lands.
+            this._cancelDeferredCompareRefresh();
 
             if (result.files.length === 0) {
                 this.mediaFiles = [];
@@ -5345,13 +5348,7 @@ class MediaViewer {
                 this.hideLoadingSpinner();
 
                 // Clear pending ML state
-                if (this.pendingCompareTimeout) {
-                    clearTimeout(this.pendingCompareTimeout);
-                    this.pendingCompareTimeout = null;
-                }
-                this.pendingCompareRefresh = false;
-                this.pendingCompareUpdates = 0;
-                this.previousScores = null;
+                this._cancelDeferredCompareRefresh();
 
                 // switchToSingleModeUI() tears down the stale compare wrappers.
                 this.switchToSingleModeUI();
@@ -8060,6 +8057,22 @@ class MediaViewer {
                 this.showMedia();
             }
         }, 3000);
+    }
+
+    // Drop an open deferred compare refresh (armed by applyBulkRating, handleCancel's bulk-undo
+    // branch and moveComparePair). Releases mediaNavigationInProgress ONLY when a window was
+    // actually open — that flag is also held by ordinary in-flight navigation, which this must
+    // not clobber.
+    _cancelDeferredCompareRefresh() {
+        const wasPending = this.pendingCompareRefresh;
+        if (this.pendingCompareTimeout) {
+            clearTimeout(this.pendingCompareTimeout);
+            this.pendingCompareTimeout = null;
+        }
+        this.pendingCompareRefresh = false;
+        this.pendingCompareUpdates = 0;
+        this.previousScores = null;
+        if (wasPending) this.mediaNavigationInProgress = false;
     }
 
     // Ordering matters here — see undoBulkRating's header comment for the invariant this
