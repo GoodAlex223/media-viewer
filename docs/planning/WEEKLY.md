@@ -19,11 +19,12 @@
 ## Task Groups
 
 ### G1. AI-sort startup UX & incremental cache-load [batch] 🏆 🔵
+
 **Domain**: JS logic — `handleSortByPrediction` / `loadFeatureCache` / feature-extraction + sort-progress UX
 **Source**: 🔵 User-Flagged
 **Total SP**: 8 — one branch, one PR, one review (front-loaded Mon–Wed; design-heavy perf/UX, gates on a real-24k smoke)
 
-> The week's lead and 🏆. All items share the `handleSortByPrediction` → `loadFeatureCache` → extraction → sort critical path on a large folder, so they batch into one branch. This is the **PR3 slice** of the 🔴 TODO "Speed up AI / similarity sorting on large folders (24k+ files)" item plus the [2026-07-01] AI-sort-startup UX cluster it causes — PR3 (incremental/non-blocking cache-load) removes the ~40s silent wait, and the same fix subsumes the "re-extracts despite cache" bug (the in-memory `featureCache` Map is assigned only at the *end* of the streaming load, so the uncached-file check runs against an empty Map during the load window). The 🔴 sort-perf TODO item stays **OPEN** after this ships — PR2 (hash off the renderer thread) remains, but PR2 addresses *hash/similarity* sorts, not the reported AI-sort pain, so it stays deferred.
+> The week's lead and 🏆. All items share the `handleSortByPrediction` → `loadFeatureCache` → extraction → sort critical path on a large folder, so they batch into one branch. This is the **PR3 slice** of the 🔴 TODO "Speed up AI / similarity sorting on large folders (24k+ files)" item plus the [2026-07-01] AI-sort-startup UX cluster it causes — PR3 (incremental/non-blocking cache-load) removes the ~40s silent wait, and the same fix subsumes the "re-extracts despite cache" bug (the in-memory `featureCache` Map is assigned only at the _end_ of the streaming load, so the uncached-file check runs against an empty Map during the load window). The 🔴 sort-perf TODO item stays **OPEN** after this ships — PR2 (hash off the renderer thread) remains, but PR2 addresses _hash/similarity_ sorts, not the reported AI-sort pain, so it stays deferred.
 
 - [x] 🔴 **Incremental / non-blocking feature-cache load (PR3)** — serve `.feature_cache.json` incrementally instead of a ~40s silent blocking streaming load before the sort. Closes BACKLOG 🟤 [2026-05-26]. Root fix for 4 of the [2026-07-01] reports. `media-viewer.js:~6562-6683` (`loadFeatureCache` streaming load), `media-viewer.js:~7324/~7370` (`handleSortByPrediction`).
 - [x] 🔵 **AI sort re-runs extraction despite valid cached data (bug)** — 🔵 [2026-07-01]. `featureCache` is assigned only at the END of the streaming load, so `!featureCache.has(path)` gates extraction against an empty/partial Map during the ~40s window → redundant re-extraction. Likely subsumed by PR3 (populate the Map incrementally). `media-viewer.js:~6644/~6675`, `~7370/~7392`.
@@ -33,6 +34,7 @@
 - [x] 🟠 **Can't cancel the AI sort** — 🟠 TODO [2026-07-11]. The sort-progress card's cancel affordance calls `sortAbortController.abort()` but the AI-prediction path doesn't stop. Verify the cancel button is wired/visible for the AI-prediction path and every long-running stage checks `sortAbortController.signal.aborted` and bails. `media-viewer.js:~1214-1240`, `~5270-5567`.
 
 ### G2. Tournament-mode bug fixes [batch] 🔵
+
 **Domain**: JS logic — tournament methods in `media-viewer.js` / `tournament-engine.js` + `styles.css`
 **Source**: 🔵 User-Flagged
 **Total SP**: 6 — one branch, one PR
@@ -44,6 +46,7 @@
 - [x] 🔵 **Auto-hide tournament header bar + shared control buttons, reveal on hover** — ✅ **DONE via PR #65** (merge `937084c`). `.tournament-header`/`.tournament-controls` mirror `.header` via an extracted `_setupAutoHide` helper (edge-band reveal + 3s hide).
 
 ### G3. Bulk-rate re-pair avoidance [solo] 🔵
+
 **Domain**: JS logic — compare-mode ML pair selection in `media-viewer.js`
 **Source**: 🔵 User-Flagged
 **Total SP**: 3 — one branch, one PR
@@ -53,6 +56,7 @@
 - [x] 🟠 **Don't pair two already-bulk-rated files together (with fall-through)** — ✅ **shipped 2026-08-24 via PR #66** (merged to `main`; see [DONE.md](DONE.md) 2026-08-24). Exact-pair suppression + full-list fall-through; session-only `bulkRatedPairs`. ⚠️ **User-side re-smoke round 2 NOT run** — shipped on user direction + review + automated suites (500→513 unit / 55 E2E); the deferred-re-render fix (D2) has no automated coverage (mlWorker null under Playwright). _Original:_ In AI-sorted compare, once both files of a pair are rated "Both good"/"Both bad", don't show them paired again; when no un-bulk-rated pair remains, disable the rule and fall back so the user can still re-rate. Short design pass on pair selection (`showCompareMedia` AI-sorted branch + `mlComparePairIndex`), membership test against `this.bulkRated`, and the fall-through condition. `media-viewer.js` (compare pair-selection), `tests/media-viewer-utils.test.js`.
 
 ### G4. Strategic-doc refresh & CLAUDE.md hygiene [batch] 🟡 (+1 🟤 folded)
+
 **Domain**: docs (planning strategic docs + CLAUDE.md)
 **Source**: 🟡 Operational (strategic-doc refresh) **+** 🟤 Auto-Generated (1 CLAUDE.md doc-sync, folded)
 **Total SP**: 4 — one branch, one PR (docs-only → manual review, no `/code-review` fan-out per the [2026-06-29] convention). ~~The 🟡 refresh is **gated on the Thursday brainstorm**~~ → **gate SATISFIED early (Sat 2026-07-12)**: spec `41d9233` + plan `a02c256` committed on branch `docs/g4-strategic-docs-refresh`; the 🟤 doc-sync is folded into that same plan (Task 5).
@@ -63,15 +67,16 @@
 - [x] 🟤 **Sync CLAUDE.md to the new pre-push E2E gate** — 🟤 [2026-07-11] PR #63 post-merge. The Architecture-tree `scripts/` bullet lists only `check-secrets.js` and the "Build & Development Commands" hook prose omits the new conditional pre-push E2E gate (`scripts/check-e2e-needed.js` + `.husky/pre-push`) + its `--no-verify` bypass. **Recurrence** of the [2026-06-18] PR #51 doc-drift class fixed in PR #52 — the same 2 lines drift on every script/hook addition. `CLAUDE.md` (Architecture tree; hook prose).
 
 ### G5. Weekly Reviews [batch] ⚪ Overhead
+
 **Domain**: Research / process (exempt overhead — excluded from the source-quota denominator)
 **Source**: ⚪ Overhead
 **Total SP**: 5 — scheduled late (Thu/Fri), low-risk, must not displace G1
 
 > Read [REVIEW-QUEUE.md](REVIEW-QUEUE.md) first. Per the codified methodology (CW-P, PR #63): **hybrid sourcing** (fresh-check the live landscape AND the parked Next-up item, review whichever is strongest) using **lightweight inline `WebSearch` + a few `WebFetch`** — never the deep-research harness. Append a verdict row per category; on an `adopt`, file a 🟤 BACKLOG entry; on a `propagate` (category 4), file a TODO § Spawned Tasks row.
 
-> ✅ **RUN HELD 2026-08-27, not in this plan's week** — a **catch-up run** (~7.5 weeks after the 2026-07-05 run), so its scan window is *since 2026-07-05* (PRs #63–#66), not "this week". Branch `chore/g5-weekly-reviews`, run-card [`2026-08-27-weekly-reviews-run.md`](../superpowers/specs/2026-08-27-weekly-reviews-run.md). **5 verdicts / 3 adopt** (`security-guidance`, `dead-rules-audit`, path-scoped-rules migration → 🟤 [2026-08-27]) **+ 1 pass** (harness engineering) **+ 1 propagate** (review rating axis → TODO § Spawned Tasks). 10 web calls, no harness. **Shipped without a PR on user direction** — reviewed locally on the whole branch, then **MERGED into `main` 2026-08-27** (`4f1e65a`, `--no-ff`; branch deleted remote + local); see [DONE.md](DONE.md) 2026-08-27.
+> ✅ **RUN HELD 2026-08-27, not in this plan's week** — a **catch-up run** (~7.5 weeks after the 2026-07-05 run), so its scan window is _since 2026-07-05_ (PRs #63–#66), not "this week". Branch `chore/g5-weekly-reviews`, run-card [`2026-08-27-weekly-reviews-run.md`](../superpowers/specs/2026-08-27-weekly-reviews-run.md). **5 verdicts / 3 adopt** (`security-guidance`, `dead-rules-audit`, path-scoped-rules migration → 🟤 [2026-08-27]) **+ 1 pass** (harness engineering) **+ 1 propagate** (review rating axis → TODO § Spawned Tasks). 10 web calls, no harness. **Shipped without a PR on user direction** — reviewed locally on the whole branch, then **MERGED into `main` 2026-08-27** (`4f1e65a`, `--no-ff`; branch deleted remote + local); see [DONE.md](DONE.md) 2026-08-27.
 
-- [x] **Plugins (2 SP)** — ✅ 2 verdicts. Store: **`security-guidance`** → **adopt** (reverses its own [2026-07-05] "low fit" parking — it occupies the *in-session* stage neither ESLint nor the secret guard covers, and no-CI argues *for* it). Wider internet: **`dead-rules-audit`** → **adopt** (arrived via the new inbound propagation channel, pre-measured against this repo's CLAUDE.md at 36 rules / 10 judgeable).
+- [x] **Plugins (2 SP)** — ✅ 2 verdicts. Store: **`security-guidance`** → **adopt** (reverses its own [2026-07-05] "low fit" parking — it occupies the _in-session_ stage neither ESLint nor the secret guard covers, and no-CI argues _for_ it). Wider internet: **`dead-rules-audit`** → **adopt** (arrived via the new inbound propagation channel, pre-measured against this repo's CLAUDE.md at 36 rules / 10 judgeable).
 - [x] **Claude best-practices (1 SP)** — ✅ **adopt**, scoped to one half: route path-conditional CLAUDE.md content to **path-scoped rules** (`.claude/rules/`). Measured: CLAUDE.md is **205 lines** (over the 200 bar) and `.claude/rules/` does not exist. The hook-promotion and skills halves are already practiced here.
 - [x] **Non-Claude AI best-practices (1 SP)** — ✅ **pass**: **harness engineering** (the provider-neutral 2026 theme). Its guides/sensors taxonomy maps onto machinery this repo already runs (ESLint, the pre-commit chain, the pre-push E2E gate, `/code-review`), and Fowler concedes there is no quantitative evidence. Observability parked as the one unpracticed layer.
 - [x] **Cross-project propagation (1 SP)** — ✅ **propagate**, and the category was **defined**: REVIEW-QUEUE.md §4 now exists, importing `claude-code-universal-config`'s four-run-deep convention rather than inventing one. ⚠️ **Made bidirectional** (a deliberate widening of this line's outbound-only wording — see run-card D1): the sibling repo already held **four unactioned rows addressed to media_viewer**, which a one-way channel would have dropped permanently.
@@ -81,10 +86,11 @@
 ## Daily Schedule
 
 ### Monday, July 13 — 🏆 AI-sort UX (day 1)
+
 > Front-load the highest-value user pain. Start with the incremental cache-load core (PR3) + the "re-extracts despite cache" bug it subsumes — the root of the ~40s silent wait.
 
-| Group | SP |
-|-------|----|
+| Group                                                                                                                                             | SP  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
 | ✅ [**G1. AI-sort startup UX & incremental cache-load**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 1 of 3) — PR #64 | (8) |
 
 **Daily total**: ~4 SP (of the 8 SP batch)
@@ -92,10 +98,11 @@
 ---
 
 ### Tuesday, July 14 — 🏆 AI-sort UX (day 2)
+
 > The feedback + control layer: determinate progress card in `handleSortByPrediction`, cancel wiring for the AI-prediction path, and the long-opaque-wait / post-tournament-entry paths. Hand off for a real-24k smoke.
 
-| Group | SP |
-|-------|----|
+| Group                                                                                                                                             | SP  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
 | ✅ [**G1. AI-sort startup UX & incremental cache-load**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 2 of 3) — PR #64 | (8) |
 
 **Daily total**: ~4 SP (of the 8 SP batch)
@@ -103,11 +110,12 @@
 ---
 
 ### Wednesday, July 15 — G1 PR → begin Tournament bugs
+
 > Land G1 unit tests, open the G1 PR (checkoff gates on the user-side 24k smoke). Then begin G2 with the 🔴 undo bug — reproduce first, then fix.
 
-| Group | SP |
-|-------|----|
-| ✅ [**G1**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 3 — PR) — PR #64 | (8) |
+| Group                                                                                                                    | SP  |
+| ------------------------------------------------------------------------------------------------------------------------ | --- |
+| ✅ [**G1**](#g1-ai-sort-startup-ux--incremental-cache-load-batch--) [batch] 🏆 (day 3 — PR) — PR #64                     | (8) |
 | ✅ [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (start — undo repro + fix) — PR #65 | (6) |
 
 **Daily total**: ~3 SP
@@ -115,25 +123,27 @@
 ---
 
 ### Thursday, July 16 — Tournament bugs finish + Bulk-rate + Reviews start
+
 > Finish G2 (mouse-wheel guard, header auto-hide), do G3 (bulk-rate re-pair). ~~Hold the strategic-doc brainstorm~~ ✅ already held Sat Jul 12 (see Parallel Work) — Thursday freed up. Begin Weekly Reviews late.
 
-| Group | SP |
-|-------|----|
-| ✅ [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (finish) — PR #65 | 6 |
-| ✅ [**G3. Bulk-rate re-pair avoidance**](#g3-bulk-rate-re-pair-avoidance-solo-) [solo] — PR #66 (⚠️ re-smoke round 2 not run) | 3 |
-| ✅ [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (start) — held 2026-08-27 | (5) |
+| Group                                                                                                                         | SP  |
+| ----------------------------------------------------------------------------------------------------------------------------- | --- |
+| ✅ [**G2. Tournament-mode bug fixes**](#g2-tournament-mode-bug-fixes-batch-) [batch] (finish) — PR #65                        | 6   |
+| ✅ [**G3. Bulk-rate re-pair avoidance**](#g3-bulk-rate-re-pair-avoidance-solo-) [solo] — PR #66 (⚠️ re-smoke round 2 not run) | 3   |
+| ✅ [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (start) — held 2026-08-27                             | (5) |
 
 **Daily total**: ~9 SP + reviews overhead (strategic brainstorm ✅ done Jul 12, off Thursday's plate)
 
 ---
 
 ### Friday, July 17 — Docs refresh + Reviews wrap + buffer
+
 > Light close: **execute the ready-made G4 plan** (`docs/archive/plans/2026-07-12_g4-strategic-docs-refresh.md` — brainstorm already held Sat Jul 12, spec+plan on branch `docs/g4-strategic-docs-refresh`; cheaper model OK), finish Weekly Reviews, absorb G1/G2 spillover and the user-side 24k smoke follow-up.
 
-| Group | SP |
-|-------|----|
-| ✅ [**G4. Strategic-doc refresh & CLAUDE.md hygiene**](#g4-strategic-doc-refresh--claudemd-hygiene-batch--1--folded) [batch] — merged `a843d36` | 4 |
-| ✅ [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (finish) — held 2026-08-27 | (5) |
+| Group                                                                                                                                           | SP  |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| ✅ [**G4. Strategic-doc refresh & CLAUDE.md hygiene**](#g4-strategic-doc-refresh--claudemd-hygiene-batch--1--folded) [batch] — merged `a843d36` | 4   |
+| ✅ [**G5. Weekly Reviews**](#g5-weekly-reviews-batch--overhead) [batch] (finish) — held 2026-08-27                                              | (5) |
 
 **Daily total**: 4 SP + reviews overhead + G1/G2 buffer
 
@@ -149,15 +159,15 @@
 
 ## Summary Table
 
-| ID | Group | Domain | Source | Tasks | Total SP | Day | Status |
-|----|-------|--------|--------|-------|----------|-----|--------|
-| G1 | AI-sort startup UX & incremental cache-load [batch] 🏆 | JS logic (sort / feature-cache / progress UX) | 🔵 User | 6 (1 🔴 + 4 🔵 + 1 🟠) | 8 | Mon–Wed | ✅ PR #64 |
-| G2 | Tournament-mode bug fixes [batch] | JS logic (tournament) + CSS | 🔵 User | 3 (1 🔴 + 1 🟠 + 1 🔵) | 6 | Wed–Thu | ✅ PR #65 |
-| G3 | Bulk-rate re-pair avoidance [solo] | JS logic (compare-mode ML pairing) | 🔵 User | 1 🟠 | 3 | Thu | ✅ PR #66 ⚠️ (see DONE — re-smoke round 2 NOT run) |
-| G4 | Strategic-doc refresh & CLAUDE.md hygiene [batch] | docs (strategic + CLAUDE.md) | 🟡 Ops (+1 🟤 folded) | 2 | 4 | Fri | ✅ 2026-08-27 (no PR — merged `a843d36`) |
-| G5 | Weekly Reviews [batch] | Research / process | ⚪ Overhead | 4 | 5 | Thu–Fri | ✅ 2026-08-27 (no PR — merged `4f1e65a`) |
-| **Total (quota-counted)** | | | | **12** | **21** | | |
-| **Total (incl. ⚪ overhead)** | | | | **16** | **26** | | |
+| ID                            | Group                                                  | Domain                                        | Source                | Tasks                  | Total SP | Day     | Status                                             |
+| ----------------------------- | ------------------------------------------------------ | --------------------------------------------- | --------------------- | ---------------------- | -------- | ------- | -------------------------------------------------- |
+| G1                            | AI-sort startup UX & incremental cache-load [batch] 🏆 | JS logic (sort / feature-cache / progress UX) | 🔵 User               | 6 (1 🔴 + 4 🔵 + 1 🟠) | 8        | Mon–Wed | ✅ PR #64                                          |
+| G2                            | Tournament-mode bug fixes [batch]                      | JS logic (tournament) + CSS                   | 🔵 User               | 3 (1 🔴 + 1 🟠 + 1 🔵) | 6        | Wed–Thu | ✅ PR #65                                          |
+| G3                            | Bulk-rate re-pair avoidance [solo]                     | JS logic (compare-mode ML pairing)            | 🔵 User               | 1 🟠                   | 3        | Thu     | ✅ PR #66 ⚠️ (see DONE — re-smoke round 2 NOT run) |
+| G4                            | Strategic-doc refresh & CLAUDE.md hygiene [batch]      | docs (strategic + CLAUDE.md)                  | 🟡 Ops (+1 🟤 folded) | 2                      | 4        | Fri     | ✅ 2026-08-27 (no PR — merged `a843d36`)           |
+| G5                            | Weekly Reviews [batch]                                 | Research / process                            | ⚪ Overhead           | 4                      | 5        | Thu–Fri | ✅ 2026-08-27 (no PR — merged `4f1e65a`)           |
+| **Total (quota-counted)**     |                                                        |                                               |                       | **12**                 | **21**   |         |                                                    |
+| **Total (incl. ⚪ overhead)** |                                                        |                                               |                       | **16**                 | **26**   |         |                                                    |
 
 _At closeout, check off each constituent BACKLOG/TODO entry individually. G1 largely closes the reported AI-sort pain but the 🔴 "Speed up AI / similarity sorting" TODO stays OPEN (PR2 hash-off-thread remains)._
 
@@ -167,7 +177,7 @@ _At closeout, check off each constituent BACKLOG/TODO entry individually. G1 lar
 
 - **Why a normal week (not cleanup).** The last Cleanup Week (July 6–10, 2nd ever) just shipped; cadence puts the next ~early August. The ≥50% 🔵 floor resumes, and last week's plan explicitly earmarked the deferred user work (AI-sort UX cluster, bulk-rate re-pair) as this week's lead.
 - **G1 is the risk.** ~8 SP of design-heavy perf/UX that can only be truly verified on the user's real 24k folder (not E2E-fixturable). Its checkoff may legitimately slip past Friday even if the code lands — the smoke is user-side/async (same pattern as CW-T). **Never drop G1** — it is the whole point of the week.
-- **What defers again.** **PR2 (hash computation off the renderer thread)** — the other half of the 🔴 sort-perf item — stays deferred: it speeds *hash/similarity* sorts, not the reported AI-sort pain, so it is lowest-priority. The 🔴 TODO item stays OPEN after G1. Also parked: image panning feature, single-mode media picker, recently-opened-folders, JXL animation smoothness, fullscreen-exit-regardless-of-zoom, ML retrain-on-source-folder-change investigation.
+- **What defers again.** **PR2 (hash computation off the renderer thread)** — the other half of the 🔴 sort-perf item — stays deferred: it speeds _hash/similarity_ sorts, not the reported AI-sort pain, so it is lowest-priority. The 🔴 TODO item stays OPEN after G1. Also parked: image panning feature, single-mode media picker, recently-opened-folders, JXL animation smoothness, fullscreen-exit-regardless-of-zoom, ML retrain-on-source-folder-change investigation.
 - **G4's 🟡 refresh gate is SATISFIED (updated 2026-07-12).** The brainstorm was held early on Sat Jul 12 (not Thursday): decisions D1–D5 approved, spec (`41d9233`) + mechanical plan (`a02c256`) committed on branch `docs/g4-strategic-docs-refresh`. G4 no longer depends on any discussion — Friday just executes the plan. Do NOT defer the 🟡 refresh a 3rd time.
 - **Overrun drop order** (updated 2026-07-12 — G4 is no longer discussion-gated, it's cheap mechanical execution): trim **G2** to the two highest-value items first (🔴 undo + 🟠 mouse-wheel; defer the header auto-hide), then **G3**, then G4 slips to the following Monday at worst. Never drop G1.
 - **Docs-only PR handling**: G4 is docs-only — per the [2026-06-29] convention, recognize it before any `/code-review` fan-out and merge/defer in-session.
@@ -176,6 +186,7 @@ _At closeout, check off each constituent BACKLOG/TODO entry individually. G1 lar
 - _Brainstorm sanity-checks: week dates confirmed Mon Jul 13 – Fri Jul 17 vs. today 2026-07-12 and vs. git/DONE (prev plan = July 6–10, all merged); velocity design-heavy ~14–16 SP (target 21 quota-counted is ambitious → G1 risk noted + overrun drop order set); Cleanup Week NOT due (last July 6–10); 🔵 quota abundantly satisfiable._
 
 ### Quota Check
+
 - 🔵 **User-Flagged SP**: 17 / 21 (**81%**) — ✅ ≥50% (G1 8 + G2 6 + G3 3)
 - 🟡 **Operational SP**: 3 / 21 (**14%**) — ✅ ≤25% (G4 strategic-doc refresh)
 - 🟤 **Auto-Generated SP**: 1 / 21 (**5%**), 1 group (folded into G4) — ✅ ≤25% AND ≤1 group

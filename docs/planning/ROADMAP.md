@@ -38,7 +38,7 @@ Work flows each planning session from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](W
 - **Add-on / extension system** — design first (define core-app identity: what is core, what is an add-on), then in dependency order: sorting-as-add-ons, lossless-compression port (`media_compression` project), platform integrations (YouTube/TikTok/Twitter/Instagram/Civitai), link-based rating. BACKLOG [2026-04-08] cluster + [2026-05-30] compression entry.
 - **Progressive loading** — thumbnail / lowest-quality-first display while full media loads. BACKLOG [2026-04-08].
 
-> **Drained on 2026-08-27**: the *rating & tournament UX polish* theme is no longer a standing Now item — tournament undo reliability, the mouse-wheel guard, header auto-hide (PR #65) and bulk-rate re-pair avoidance (PR #66) all shipped. Further items of this kind re-enter through normal BACKLOG intake from 24k dogfooding rather than holding a board slot.
+> **Drained on 2026-08-27**: the _rating & tournament UX polish_ theme is no longer a standing Now item — tournament undo reliability, the mouse-wheel guard, header auto-hide (PR #65) and bulk-rate re-pair avoidance (PR #66) all shipped. Further items of this kind re-enter through normal BACKLOG intake from 24k dogfooding rather than holding a board slot.
 
 ---
 
@@ -51,10 +51,10 @@ Work flows each planning session from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](W
 
 Named features:
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Video fullscreen toggle | ✅ Shipped 2026-02 | Later extracted into FullscreenManager |
-| Visual scale controls | ✅ Shipped | Zoom slider + popover; E2E-covered (`zoom.test.js`) |
+| Feature                 | Status             | Notes                                               |
+| ----------------------- | ------------------ | --------------------------------------------------- |
+| Video fullscreen toggle | ✅ Shipped 2026-02 | Later extracted into FullscreenManager              |
+| Visual scale controls   | ✅ Shipped         | Zoom slider + popover; E2E-covered (`zoom.test.js`) |
 
 Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engine, persistence, session undo), JXL + animated-JXL viewer, CLIP semantic sorting + 576-dim ML pipeline, bulk-rate corrective training, automated test suite (513 unit + 55 E2E), keyboard-shortcut customization, local quality gates (pre-commit secret scan/lint/unit; conditional pre-push E2E).
 
@@ -64,14 +64,14 @@ Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engin
 **Status**: 🔄 In Progress — 2 of 6 managers extracted
 **Done when**: ZoomManager, CompareManager, SortingManager, and MLManager are extracted with unit + E2E suites green.
 
-| Module | Status |
-|--------|--------|
-| FullscreenManager (`fullscreen.js`) | ✅ Extracted |
+| Module                                                                          | Status       |
+| ------------------------------------------------------------------------------- | ------------ |
+| FullscreenManager (`fullscreen.js`)                                             | ✅ Extracted |
 | TournamentManager (`tournament.js`) + TournamentEngine (`tournament-engine.js`) | ✅ Extracted |
-| ZoomManager | ⬜ Planned |
-| CompareManager | ⬜ Planned |
-| SortingManager | ⬜ Planned |
-| MLManager | ⬜ Planned |
+| ZoomManager                                                                     | ⬜ Planned   |
+| CompareManager                                                                  | ⬜ Planned   |
+| SortingManager                                                                  | ⬜ Planned   |
+| MLManager                                                                       | ⬜ Planned   |
 
 Originally-planned v2.0 features delivered early: automated testing (Vitest + Playwright, hook-enforced), keyboard-shortcut customization.
 
@@ -113,6 +113,6 @@ Originally-planned v2.0 features delivered early: automated testing (Vitest + Pl
 
 ---
 
-*See [WEEKLY.md](WEEKLY.md) for the current week's plan.*
-*See [MILESTONES.md](MILESTONES.md) for key dates.*
-*See [BACKLOG.md](BACKLOG.md) for the full idea/task pool.*
+_See [WEEKLY.md](WEEKLY.md) for the current week's plan._
+_See [MILESTONES.md](MILESTONES.md) for key dates._
+_See [BACKLOG.md](BACKLOG.md) for the full idea/task pool._

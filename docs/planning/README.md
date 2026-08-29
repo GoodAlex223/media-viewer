@@ -8,11 +8,11 @@ Project planning, task management, and strategic direction.
 
 This directory contains documents for planning **what** to build and **why**, at both tactical and strategic levels.
 
-| Level          | Timeframe    | Documents                           |
-| -------------- | ------------ | ----------------------------------- |
-| **Strategic**  | Months/Years | ROADMAP.md, GOALS.md, MILESTONES.md |
+| Level          | Timeframe    | Documents                                       |
+| -------------- | ------------ | ----------------------------------------------- |
+| **Strategic**  | Months/Years | ROADMAP.md, GOALS.md, MILESTONES.md             |
 | **Tactical**   | Days/Weeks   | WEEKLY.md, TODO.md, BACKLOG.md, REVIEW-QUEUE.md |
-| **Historical** | Past         | DONE.md                             |
+| **Historical** | Past         | DONE.md                                         |
 
 ---
 
@@ -20,13 +20,13 @@ This directory contains documents for planning **what** to build and **why**, at
 
 ### Task Management (Tactical)
 
-| Document                           | Purpose                                                        |
-| ---------------------------------- | -------------------------------------------------------------- |
+| Document                           | Purpose                                                         |
+| ---------------------------------- | --------------------------------------------------------------- |
 | [WEEKLY.md](WEEKLY.md)             | Current week's plan: task groups, daily schedule, source quotas |
-| [TODO.md](TODO.md)                 | Active tasks, prioritized and ready to work                    |
-| [BACKLOG.md](BACKLOG.md)           | Ideas and tasks not yet prioritized                            |
-| [DONE.md](DONE.md)                 | Completed tasks with learnings                                 |
-| [REVIEW-QUEUE.md](REVIEW-QUEUE.md) | Weekly Reviews queue: parked candidates + verdict log          |
+| [TODO.md](TODO.md)                 | Active tasks, prioritized and ready to work                     |
+| [BACKLOG.md](BACKLOG.md)           | Ideas and tasks not yet prioritized                             |
+| [DONE.md](DONE.md)                 | Completed tasks with learnings                                  |
+| [REVIEW-QUEUE.md](REVIEW-QUEUE.md) | Weekly Reviews queue: parked candidates + verdict log           |
 
 ### Strategic Planning
 
