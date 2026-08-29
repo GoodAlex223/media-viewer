@@ -2152,6 +2152,57 @@ describe('undoBulkRating', () => {
         await undoPromise;
         expect(callOrder).toEqual(['save-start', 'post', 'post']);
     });
+
+    it('returns the number of reverse updates actually posted (true/true -> 2, true/false -> 1, false/false -> 0)', async () => {
+        // Every other mock here returns undefined, which left the posted-count arithmetic untested —
+        // and that count is what handleCancel arms the deferred-refresh window with.
+        const make = (replies) => ({
+            bulkRated: new Map([
+                ['a.jpg', 'good'],
+                ['b.jpg', 'good'],
+            ]),
+            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
+            bulkPairKey,
+            reverseMlModelUpdate: vi.fn().mockReturnValueOnce(replies[0]).mockReturnValueOnce(replies[1]),
+            saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
+            showNotification: vi.fn(),
+        });
+        const lastMove = {
+            bothGood: true,
+            bothBad: false,
+            bulkFiles: [
+                { name: 'a.jpg', features: [1, 2, 3] },
+                { name: 'b.jpg', features: [4, 5, 6] },
+            ],
+        };
+        await expect(undoBulkRating.call(make([true, true]), lastMove)).resolves.toBe(2);
+        await expect(undoBulkRating.call(make([true, false]), lastMove)).resolves.toBe(1);
+        await expect(undoBulkRating.call(make([false, false]), lastMove)).resolves.toBe(0);
+    });
+
+    it('returns 0 when both files have null features (nothing posted)', async () => {
+        const ctx = {
+            bulkRated: new Map([
+                ['a.jpg', 'bad'],
+                ['b.jpg', 'bad'],
+            ]),
+            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
+            bulkPairKey,
+            reverseMlModelUpdate: vi.fn(() => true),
+            saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
+            showNotification: vi.fn(),
+        };
+        const lastMove = {
+            bothGood: false,
+            bothBad: true,
+            bulkFiles: [
+                { name: 'a.jpg', features: null },
+                { name: 'b.jpg', features: null },
+            ],
+        };
+        await expect(undoBulkRating.call(ctx, lastMove)).resolves.toBe(0);
+        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
+    });
 });
 
 describe('removeFileFromList bulk-rated purge', () => {
@@ -2261,6 +2312,40 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
         };
         updateNavigationInfo.call(ctx);
         expect(mediaIndex.textContent).toBe('Pair 1 of 2');
+    });
+
+    it('updateNavigationInfo falls through to the FULL list when every pair is suppressed (index 1)', () => {
+        // With mlComparePairIndex 0 a deleted fall-through would still print "Pair 1 of 2" (empty
+        // validIndexed -> idx clamps to 0 -> cursor fallback) — index 1 is what makes the mutation visible.
+        const updateNavigationInfo = extractMethod('updateNavigationInfo');
+        const bulkPairKey = extractMethod('bulkPairKey');
+        const mediaIndex = { textContent: '' };
+        const a = { name: 'a', path: '/f/a' };
+        const b = { name: 'b', path: '/f/b' };
+        const c = { name: 'c', path: '/f/c' };
+        const d = { name: 'd', path: '/f/d' };
+        const all = [
+            { leftFile: a, rightFile: d },
+            { leftFile: b, rightFile: c },
+        ];
+        const ctx = {
+            isCompareMode: true,
+            isSortedByPrediction: true,
+            predictionScores: new Map([
+                ['/f/a', 0.9],
+                ['/f/b', 0.7],
+                ['/f/c', 0.3],
+                ['/f/d', 0.1],
+            ]),
+            mediaFiles: [a, b, c, d],
+            mlComparePairIndex: 1,
+            mediaIndex,
+            bulkPairKey,
+            computeAllComparePairs: () => all,
+            bulkRatedPairs: new Set([bulkPairKey('a', 'd'), bulkPairKey('b', 'c')]),
+        };
+        updateNavigationInfo.call(ctx);
+        expect(mediaIndex.textContent).toBe('Pair 2 of 2');
     });
 
     it('removeFileFromList prunes bulkRatedPairs keys that reference the removed file', () => {
