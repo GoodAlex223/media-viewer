@@ -47,7 +47,7 @@
 - Consumes (existing renderer API): `initializeMlWorker()`, `updateMlModelWithFeatures(features, actionType)`, `applyBulkRating(bucket)`, `handleCancel()`, `handleMlWorkerMessage(message)`, `showMedia()`, fields `mlStats`, `predictionScores`, `pendingCompareRefresh`, `pendingCompareUpdates`, `pendingCompareTimeout`, `mediaNavigationInProgress`, `isLoading`.
 - Produces: nothing for later tasks.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```js
     test('bulk rating and its undo defer the re-render until the REAL ML worker re-scores (D2/D4)', async () => {
@@ -182,12 +182,12 @@
     });
 ```
 
-- [ ] **Step 2: Run it — expected PASS against current `main` code** (the D2 fix is already shipped; this task adds the coverage)
+- [x] **Step 2: Run it — expected PASS against current `main` code** (the D2 fix is already shipped; this task adds the coverage)
 
 Run: `npx playwright test tests/e2e/compare-mode.test.js -g "REAL ML worker"`
 Expected: 1 passed.
 
-- [ ] **Step 3: Fail-first mutation check** — in `media-viewer.js` `applyBulkRating`, temporarily replace
+- [x] **Step 3: Fail-first mutation check** — in `media-viewer.js` `applyBulkRating`, temporarily replace
 
 ```js
         if (postedUpdates > 0) {
@@ -202,12 +202,12 @@ with
 ```
 Run the same command. Expected: FAIL at `expect(armed.pending).toBe(true)` (or the `not.toContain('showMedia')` line). **Restore the original** (`git checkout -- media-viewer.js`), re-run, expected PASS.
 
-- [ ] **Step 4: Run the whole compare-mode E2E file**
+- [x] **Step 4: Run the whole compare-mode E2E file**
 
 Run: `npx playwright test tests/e2e/compare-mode.test.js`
 Expected: all passed (was 6 tests; now 7).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/e2e/compare-mode.test.js
@@ -225,7 +225,7 @@ git commit -m "test(e2e): cover the deferred compare re-render under the real ML
 **Interfaces:**
 - Produces: `_cancelDeferredCompareRefresh(): void` — clears `pendingCompareTimeout`, `pendingCompareRefresh=false`, `pendingCompareUpdates=0`, `previousScores=null`; sets `mediaNavigationInProgress=false` **only if** `pendingCompareRefresh` was true on entry.
 
-- [ ] **Step 1: Write the failing tests** (append before `describe('collectBulkRatedTrainingExamples'`)
+- [x] **Step 1: Write the failing tests** (append before `describe('collectBulkRatedTrainingExamples'`)
 
 ```js
 describe('_cancelDeferredCompareRefresh', () => {
@@ -347,12 +347,12 @@ describe('loadFolder drops an open deferred compare refresh (G1 T2)', () => {
 
 Also update the existing `loadFolder empty-folder teardown (Fix B follow-up)` `makeCtx()` — add `_cancelDeferredCompareRefresh: vi.fn(),` after `_abortInFlightPredictionSort: …` (it will otherwise throw `not a function` once `loadFolder` calls the helper).
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run media-viewer-utils -t "_cancelDeferredCompareRefresh|drops an open deferred"`
 Expected: FAIL — `Could not find method: _cancelDeferredCompareRefresh`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `media-viewer.js`, directly after `_beginDeferredCompareRefresh`:
 
@@ -400,12 +400,12 @@ with
                 this._cancelDeferredCompareRefresh();
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `npx vitest run media-viewer-utils`
 Expected: all pass (213 → 216).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -424,7 +424,7 @@ git commit -m "fix(compare): loadFolder drops an open deferred compare refresh (
 - Produces: `_bulkPairKeysReferencing(fileName: string): string[]` — every `bulkRatedPairs` key naming `fileName` on either side (keys are `bulkPairKey(a, b)` = sorted names joined by `'\u0000'`).
 - History-entry field: `prunedPairKeys?: string[]` — present only when non-empty; consumed by `restoreFeatureCachesFromHistory(entry)`.
 
-- [ ] **Step 1: Write the failing tests** (append before `describe('collectBulkRatedTrainingExamples'`)
+- [x] **Step 1: Write the failing tests** (append before `describe('collectBulkRatedTrainingExamples'`)
 
 ```js
 describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
@@ -669,12 +669,12 @@ Also update the three existing `removeFileFromList` contexts so the real prune s
 - `describe('removeFileFromList bulk-rated purge')` `makeCtx` (~2159): same line
 - `it('removeFileFromList prunes bulkRatedPairs keys …')` ctx (~2269): same line
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run media-viewer-utils -t "G1 T3"`
 Expected: FAIL — `Could not find method: _bulkPairKeysReferencing`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `media-viewer.js`, after `bulkPairKey`:
 
@@ -756,14 +756,14 @@ Expected: FAIL — `Could not find method: _bulkPairKeysReferencing`.
 ```
 and the same for `secondaryEntry` / `secondaryPrunedKeys` / `secondaryFile.name`.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `npx vitest run media-viewer-utils`
 Expected: all pass (216 → 224).
 
-- [ ] **Step 5: Mutation check** — comment out the `if (entry.prunedPairKeys)` block in `restoreFeatureCachesFromHistory`; expected: the three restore/LIFO/handleCancel tests FAIL. Restore.
+- [x] **Step 5: Mutation check** — comment out the `if (entry.prunedPairKeys)` block in `restoreFeatureCachesFromHistory`; expected: the three restore/LIFO/handleCancel tests FAIL. Restore.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -777,7 +777,7 @@ git commit -m "fix(compare): undo of a single-file move reinstates pruned bulkRa
 **Files:**
 - Test: `tests/media-viewer-utils.test.js` — append to `describe('valid-pairs bounds (G3 Task 3)')` and `describe('undoBulkRating')`
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 In `describe('valid-pairs bounds (G3 Task 3)')`:
 
@@ -870,15 +870,15 @@ In `describe('undoBulkRating')`:
     });
 ```
 
-- [ ] **Step 2: Run — expected PASS** (these cover shipped code)
+- [x] **Step 2: Run — expected PASS** (these cover shipped code)
 
 Run: `npx vitest run media-viewer-utils -t "falls through to the FULL list|actually posted|null features \(nothing posted\)"`
 
-- [ ] **Step 3: Mutation checks**
+- [x] **Step 3: Mutation checks**
   - Delete the `if (validIndexed.length === 0) { validIndexed = allPairs.map(…) }` block in `updateNavigationInfo` → the fall-through test must FAIL (`Pair 1 of 2`). Restore.
   - Change `postedUpdates++` to nothing in `undoBulkRating` → the arithmetic test must FAIL. Restore.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/media-viewer-utils.test.js
@@ -889,17 +889,17 @@ git commit -m "test: cover updateNavigationInfo fall-through and undoBulkRating 
 
 ### Task 5: Full verification, CLAUDE.md, push
 
-- [ ] **Step 1: Full suites**
+- [x] **Step 1: Full suites**
 
 Run: `npx vitest run` → expected 513 + 12 = **525** passing. Run: `npm run lint` → 0 errors. Run: `npx playwright test tests/e2e/compare-mode.test.js` → all pass.
 
-- [ ] **Step 2: CLAUDE.md** (4 edits)
+- [x] **Step 2: CLAUDE.md** (4 edits)
   - Line ~141 (`removeFileFromList()` bullet): "+ prune of `bulkRatedPairs` keys referencing the removed filename" → "+ prune of `bulkRatedPairs` keys referencing the removed filename (via `_bulkPairKeysReferencing(name)`)".
   - Line ~143 (`restoreFeatureCachesFromHistory(entry)` bullet): append "Also re-adds `entry.prunedPairKeys` (the keys the move sites capture via `_bulkPairKeysReferencing` right before `removeFileFromList` prunes) — this runs before the `mlFeatures` guard, so a file with no features still gets its keys back."
   - Line ~156 (ML compare refresh bullet): append "`_cancelDeferredCompareRefresh()` drops an open window (`loadFolder`, before its empty/non-empty split; `moveComparePair`'s <2-files exit) and releases `mediaNavigationInProgress` only if a window was actually open."
   - Line ~96 (E2E bullets): add "- `mlWorker` is **lazy** (`initializeMlWorker()` runs on the first AI sort / settings toggle) — an E2E that needs real scoring must call it, override `getCombinedFeatures` with **576-dim** vectors, and warm the model (≥3 likes + ≥3 dislikes) or `scoreAll` replies `scores: null` and the deferred window waits out its 3 s fallback."
 
-- [ ] **Step 3: Commit + push**
+- [x] **Step 3: Commit + push**
 
 ```bash
 git add CLAUDE.md docs/planning/plans/2026-08-29_g1-bulk-rate-followups.md
@@ -922,15 +922,38 @@ git push -u origin g1-bulk-rate-followups
 ### [2026-08-29 10:20] — PHASE: Planning
 - Brainstorm approved (user). Spec committed `023830c`. Key finding: `mlWorker` is null in E2E because `initializeMlWorker()` is lazy — not a harness limit → real worker, no stub (D1).
 
+### [2026-08-29 10:45] — PHASE: Sub-Item Complete — Task 1 (`bdcde3b`)
+- Real-worker E2E passed on first run (2.1 s); fail-first check done: `if (false)` in place of `if (postedUpdates > 0)` → fails at `expect(armed.pending).toBe(true)`. Restored. compare-mode file 9/9.
+
+### [2026-08-29 11:00] — PHASE: Sub-Item Complete — Task 2 (`0d3ae44`)
+- `_cancelDeferredCompareRefresh` + `loadFolder` call + `moveComparePair` block → helper. 4 new tests (plan said 3; the helper got both branches of the `wasPending` rule). 517 unit.
+
+### [2026-08-29 11:20] — PHASE: Sub-Item Complete — Task 3 (`f708b76`)
+- Deviation: the prune-loop replacement + helper insertion were applied by a scratch Node script (`t3-helper.cjs`, built with `String.fromCharCode(92)+'u0000'`) because every attempt to type the source's six-character `\u0000` escape into an Edit string produced a raw NUL byte (same failure hit the spec and plan files earlier). Everything else via Edit.
+- One `no-shadow` warning I introduced (local `removeFileFromList` redeclared the module-level const) removed; the remaining warning at test line ~2158 is pre-existing.
+- Mutation check: `if (false && entry.prunedPairKeys)` → exactly the 3 restore tests fail. 8 new tests. 525 unit.
+
+### [2026-08-29 11:30] — PHASE: Sub-Item Complete — Task 4 (`bb95bf0`)
+- Both mutations caught (fall-through disabled → `Pair 1 of 2`; `postedUpdates++` dropped → count 0). 3 new tests. 528 unit.
+
+### [2026-08-29 11:40] — PHASE: Complete — Task 5
+- `npm run lint`: 0 errors, 1 pre-existing warning. CLAUDE.md: 4 edits (206 lines). Pushed to `origin/g1-bulk-rate-followups` (pre-push hook ran the full Playwright suite). **No PR** (user direction).
+
 ## 5. Key Discoveries
 
-_(filled at closeout)_
+- **The 🟤 premise was wrong in a useful way**: "mlWorker is null under Playwright" was true, but the cause is lazy init, not a harness limit — so the honest fix needed no stub, no flag, and no harness file. Measure a premise before designing around it.
+- **A first-run green on a new E2E is not evidence** until the mutation check runs — the fail-first step is what proved the test observes the D2 property rather than passing around it.
+- **The real-worker chain has a warm-up gate** (`hasEnoughSamples` = 3+3) and the deferred-window clear lives inside `if (message.scores)`; a `scores: null` reply stalls to the 3 s fallback (BACKLOG).
+- **Raw NUL in tool strings**: typing the `\u0000` escape into Edit/Write content repeatedly emitted a real NUL byte (3 files). Build such strings with `String.fromCharCode(92)` in a scratch script, or reference "the NUL separator" in prose.
 
 ## 6. Future Improvements
 
 - `scoreComplete` with `scores: null` does not clear the deferred window (waits out the 3 s fallback) — BACKLOG 🟤 at closeout (spec D5).
 - Late `scoreComplete` after a folder switch can write old scores onto same-named files (filename-keyed reply, path-keyed map) — BACKLOG 🟤 at closeout (spec D5).
+- `moveToSpecialFolder` / `moveComparePair` capture sites are covered by a source-order assertion only (both are dialog/DOM-heavy to extract); a behavioral extract-method test for each would retire that. BACKLOG 🟤 (test-coverage).
+- `mediaNavigationInProgress` doubles as a navigation mutex and a deferred-window flag; `_cancelDeferredCompareRefresh`'s `wasPending` rule papers over that. A dedicated deferred-window token would remove the ambiguity. BACKLOG 🟤 (design).
 
 ## 7. Testing
 
-_(results appended at closeout)_
+- Unit: 513 → **528** (`npx vitest run`; +4 T2, +8 T3, +3 T4). E2E: `compare-mode.test.js` 8 → **9** (the new test runs the real `ml-worker.js`); full Playwright suite via the pre-push hook.
+- Mutation checks: T1 (D2 revert), T3 (restore disabled), T4 ×2 — all caught, all restored (`git diff --quiet media-viewer.js` verified after each).
