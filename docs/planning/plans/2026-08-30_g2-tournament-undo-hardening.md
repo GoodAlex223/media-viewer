@@ -61,7 +61,7 @@ failing an assertion. Task 3 depends on this; read its Step 1 carefully.
   - `TournamentEngine.prototype.clearHistory(): number` — empties `this.history`, returns the count dropped. Used by Task 2.
   - `TournamentEngine.prototype.dropEntry(entry: object): boolean` — splices that exact entry out of `this.history` **without reversing it**; returns `true` if found. Used by Task 3.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/tournament-engine.test.js`. Uses the real `SwissStrategy`, matching the existing
 `inverse-delta undo (real SwissStrategy)` describe at L324 — construction idiom
@@ -160,7 +160,7 @@ describe('TournamentEngine.dropEntry', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js --no-file-parallelism
@@ -168,7 +168,7 @@ npx vitest run tests/tournament-engine.test.js --no-file-parallelism
 
 Expected: FAIL — `eng.clearHistory is not a function` / `eng.dropEntry is not a function`.
 
-- [ ] **Step 3: Implement both methods**
+- [x] **Step 3: Implement both methods**
 
 In `tournament-engine.js`, inside `class TournamentEngine`, immediately **after** the closing brace of
 `removeFile(...)` (~L474) and **before** `isComplete()`:
@@ -198,7 +198,7 @@ In `tournament-engine.js`, inside `class TournamentEngine`, immediately **after*
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/tournament-engine.test.js --no-file-parallelism
@@ -210,14 +210,14 @@ Expected: PASS. Then the full suite — it must be **529 + 7 = 536**:
 npx vitest run --no-file-parallelism
 ```
 
-- [ ] **Step 5: Mutation-verify the two load-bearing guards**
+- [x] **Step 5: Mutation-verify the two load-bearing guards**
 
 These two assertions are the ones that would silently rot. Break each, confirm RED, restore:
 
 1. In `clearHistory`, change `return dropped;` to `return 0;` → the "returns the number of entries dropped" case must FAIL. Restore.
 2. In `dropEntry`, change `lastIndexOf(entry)` to `findIndex((e) => e.kind === entry.kind)` → "removes only the given entry when two share a kind" must FAIL. Restore.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tournament-engine.js tests/tournament-engine.test.js
@@ -259,7 +259,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 hundreds of files; tracking each pushes an O(n) `strategy.serialize()` snapshot, reversing the CW-T/PR #55
 24k performance win. The prune loop stays untracked *on purpose*; the stack is dropped once instead.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add inside the existing `describe('TournamentManager.reconcileWithFiles', ...)` block in
 `tests/tournament-manager.test.js`. `makeHost()` (L4) already provides `showNotification: vi.fn()`.
@@ -348,7 +348,7 @@ Add inside the existing `describe('TournamentManager.reconcileWithFiles', ...)` 
     });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js --no-file-parallelism
@@ -356,7 +356,7 @@ npx vitest run tests/tournament-manager.test.js --no-file-parallelism
 
 Expected: FAIL — history still holds the pick; `showNotification` not called.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `tournament.js`, replace the body of the `if (removed.length > 0)` block in `reconcileWithFiles`:
 
@@ -384,7 +384,7 @@ Note: the notification is gated on `droppedUndo > 0`, **not** `removed.length > 
 path `TournamentEngine.deserialize` has already set `history = []` (`tournament-engine.js:525`), so the
 count is 0 and nothing fires — silent exactly where the user never had a stack to lose.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/tournament-manager.test.js --no-file-parallelism
@@ -394,12 +394,12 @@ npx vitest run --no-file-parallelism
 Expected: PASS; full suite **536 + 5 = 541**. The six pre-existing `reconcileWithFiles` assertions must
 still be green — if any went red, the return shape was changed by mistake.
 
-- [ ] **Step 5: Mutation-verify the gate**
+- [x] **Step 5: Mutation-verify the gate**
 
 Change `if (droppedUndo > 0)` to `if (removed.length > 0)` → "stays silent when it prunes but the history
 was already empty" must FAIL. Restore.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tournament.js tests/tournament-manager.test.js
@@ -452,7 +452,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 > threshold, so that test takes the retry branch and its `expect(ctx.showError).toHaveBeenCalled()` stays
 > green.
 
-- [ ] **Step 1: Add the missing ctx field, then write the failing tests**
+- [x] **Step 1: Add the missing ctx field, then write the failing tests**
 
 First, in `tests/media-viewer-utils.test.js`, add one line to the `makeCtx` return object inside
 `describe('handleTournamentUndo (unified undo stack)')` (~L4534), after `moveHistory: [],`:
@@ -539,7 +539,7 @@ Then append these cases inside the same describe block:
     });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism
@@ -547,7 +547,7 @@ npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism
 
 Expected: FAIL — `dropEntry` never called, `_tournamentRestoreFailures.get(pending)` is `undefined`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 **3a.** Add the module constant near the other module-scope constants at the top of `media-viewer.js`:
 
@@ -628,7 +628,7 @@ directly after `handleTournamentUndo`:
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism
@@ -639,7 +639,7 @@ Expected: PASS; full suite **541 + 4 = 545**. Confirm the pre-existing
 `clears isLoading in finally when the disk restore fails mid-flight` is still green — it is the canary for
 the ctx-field problem flagged above.
 
-- [ ] **Step 5: Re-read the whole method for the `ae98e85` regression risk**
+- [x] **Step 5: Re-read the whole method for the `ae98e85` regression risk**
 
 Open `handleTournamentUndo` end to end and confirm the identity re-check
 (`if (this.tournament.engine.peekUndoEntry() !== pending)`) still sits **after** the `finally` and **before**
@@ -647,12 +647,12 @@ Open `handleTournamentUndo` end to end and confirm the identity re-check
 peeked; the restructure must not have displaced it. The two rollback tests at
 `tests/media-viewer-utils.test.js:4683` and `:4708` pin it — both must be green.
 
-- [ ] **Step 6: Mutation-verify**
+- [x] **Step 6: Mutation-verify**
 
 Change `failures >= TOURNAMENT_RESTORE_MAX_ATTEMPTS` to `failures >= 99` → "drops the entry and its
 moveHistory twin on the SECOND consecutive failure" must FAIL. Restore.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -705,7 +705,7 @@ but these three handlers.
 
 The existing `isLoading` entry guards **stay**. This adds a lock; it does not replace one.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `describe('tournament isLoading guards (Fix 2)', ...)` in `tests/media-viewer-utils.test.js`. Its
 `makeCtx` (~L3411) needs no new field — `this._tournamentRenderBusy` reads `undefined` (falsy) on entry,
@@ -781,7 +781,7 @@ which is the correct "not busy" state, and the implementation assigns it thereaf
     });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism
@@ -789,7 +789,7 @@ npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism
 
 Expected: FAIL — `handlePairResult` called twice (no lock); `_tournamentRenderBusy` is `undefined`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 **3a.** Constructor, immediately after the `_tournamentRestoreFailures` line added in Task 3:
 
@@ -862,7 +862,7 @@ body in `try { … } finally { this._tournamentRenderBusy = false; }`. The inner
 wanted — `isLoading` blocks a concurrent pick/draw/special *during the disk restore*, `_tournamentRenderBusy`
 blocks a concurrent render *for the whole handler*.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism
@@ -873,14 +873,14 @@ Expected: PASS; full suite **545 + 4 = 549**. All pre-existing cases in
 `describe('tournament isLoading guards (Fix 2)')` and
 `describe('handleTournamentUndo (unified undo stack)')` must still be green.
 
-- [ ] **Step 5: Mutation-verify**
+- [x] **Step 5: Mutation-verify**
 
 Delete the `if (this._tournamentRenderBusy) return;` line from `handleTournamentPick` → "handleTournamentPick
 refuses to re-enter while a render is in flight" must FAIL. Restore. Then move the
 `this._tournamentRenderBusy = false;` assignment out of the `finally` to just after the trailing `await` →
 "releases the lock when the render throws" must FAIL. Restore.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -931,7 +931,7 @@ engine holding picks, a folder whose files vanished externally, `mediaFiles.leng
 `moveHistory.length === 0` — `#tournamentUndoBtn` reads *enabled* (it consults `peekUndoKind()`,
 `media-viewer.js:4695`) while the keydown guard gates on `moveHistory.length`. Button and shortcut disagree.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 The guard lives in an anonymous `document.addEventListener('keydown', …)` callback inside
 `setupEventListeners`, which `extractMethod` cannot reach. Test the predicate as a standalone helper —
@@ -982,7 +982,7 @@ describe('empty-state undo guard (canUndo predicate)', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism
@@ -992,7 +992,7 @@ Expected: FAIL — only the last case ("the replica matches…"), because `media
 `this.moveHistory.length > 0`. The five predicate cases pass immediately (they exercise the replica). That
 is expected and correct: the source assertion is the one doing real work here.
 
-- [ ] **Step 3: Implement the keydown guard**
+- [x] **Step 3: Implement the keydown guard**
 
 `media-viewer.js:2075`, replacing `if (action === 'undo' && this.moveHistory.length > 0) {`:
 
@@ -1010,7 +1010,7 @@ is expected and correct: the source assertion is the one doing real work here.
                 if (action === 'undo' && canUndo) {
 ```
 
-- [ ] **Step 4: Implement the `exitTournamentMode` invariant comment**
+- [x] **Step 4: Implement the `exitTournamentMode` invariant comment**
 
 `media-viewer.js:4517`, directly above `exitTournamentMode() {`:
 
@@ -1028,7 +1028,7 @@ is expected and correct: the source assertion is the one doing real work here.
     // that forgets to null the engine would silently reintroduce the hazard.
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/media-viewer-utils.test.js --no-file-parallelism
@@ -1037,13 +1037,13 @@ npx vitest run --no-file-parallelism
 
 Expected: PASS; full suite **549 + 6 = 555**.
 
-- [ ] **Step 6: Mutation-verify the source assertion**
+- [x] **Step 6: Mutation-verify the source assertion**
 
 Delete the `isTournamentMode &&` conjunct from `media-viewer.js` → "the replica matches the predicate in
 media-viewer.js" must FAIL. Restore. (This is the only test that can catch source drift here, so it must be
 proven to fire.)
 
-- [ ] **Step 7: Update CLAUDE.md line 192**
+- [x] **Step 7: Update CLAUDE.md line 192**
 
 Replace the single 964-char bullet at `CLAUDE.md:192` with these two. The current tail — *"a third
 `removeFile()` call site … stays untracked, so undo crossing it … can still strand a file at Tier-0"* —
@@ -1054,7 +1054,7 @@ is made **false** by Task 2 and must be rewritten, not merely shortened. A live 
 - The third `removeFile()` call site, `reconcileWithFiles` (`tournament.js`, runs on every tournament-mode entry), stays **untracked by design** and calls `engine.clearHistory()` instead: a bulk reconcile can prune hundreds of files, and one O(n) `strategy.serialize()` snapshot each would undo the PR #55 24k win. Dropping the session-only stack is O(1) and honest — `peekUndoKind()` → null, button disabled, "Nothing to undo" — and the user is told when a non-empty stack is dropped. A `special` entry whose disk restore fails twice is discarded outright (`engine.dropEntry()` + its `moveHistory` twin), so a dead entry cannot wedge the stack; the resulting `engine.files` gap self-heals via the `-1` auto-prune.
 ```
 
-- [ ] **Step 8: Verify formatting, then commit**
+- [x] **Step 8: Verify formatting, then commit**
 
 ```bash
 npx prettier --check media-viewer.js
@@ -1094,7 +1094,7 @@ Three closing items for the undo-stack hardening group:
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
-- [ ] **Step 9: Push**
+- [x] **Step 9: Push**
 
 ```bash
 git push -u origin g2-tournament-undo-hardening
