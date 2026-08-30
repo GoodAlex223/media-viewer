@@ -183,7 +183,7 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 | G1  | Bulk-rate follow-ups [batch] 🏆                   | JS logic (compare bulk-rate) + E2E harness | 🟤 Auto                 | 4                    | 6        | Mon–Tue   | ✅ merged `66b16af` (no PR, 2026-08-29) |
 | G2  | Tournament undo hardening [batch]                 | JS logic (tournament) + CLAUDE.md          | 🟤 Auto                 | 4 (closes 6 entries) | 5        | Tue–Wed   | ☐ Planned  |
 | G3  | Docs & process guardrails [batch]                 | scripts / tooling / docs                   | 🟤 Auto (+1 🟡 folded)  | 6 (closes 10 entries) | 6       | Wed–Thu   | ☐ Planned  |
-| G4  | Adopt-queue trial batch + cadence decision [batch] | Claude Code tooling / process             | 🟤 Auto (+1 🟡 folded)  | 3                    | 3        | Tue + Fri | ☐ Planned  |
+| G4  | Adopt-queue trial batch + cadence decision [batch] | Claude Code tooling / process             | 🟤 Auto (+1 🟡 folded)  | 3                    | 3        | Tue + Fri | 🔄 2/3 merged `bf58c01` (no PR) — `dead-rules-audit` read-out at G6 Fri |
 | G5  | AI-sort training-phase progress polish [batch]    | JS logic (sort-progress / training)        | 🔵 User                 | 2                    | 3        | Thu       | ☐ Planned  |
 | G6  | Weekly Reviews [batch]                            | Research / process                         | ⚪ Overhead             | 4                    | 5        | Fri       | ☐ Planned  |
 |     | **Total (quota-counted)**                         |                                           |                         | **19**               | **23**   |           |            |
