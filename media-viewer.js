@@ -55,6 +55,11 @@ const ACTION_LABELS = {
 
 const CLIP_UNLOAD_DELAY_MS = 30000; // grace period before unloading the CLIP model after extraction
 
+// Consecutive failed disk restores of the SAME tournament `special` undo entry before the entry
+// is discarded. 1 would let a transient lock (antivirus, network drive) cost the user an undo;
+// leaving it forever wedges the stack, since every later press retries the same absent path.
+const TOURNAMENT_RESTORE_MAX_ATTEMPTS = 2;
+
 class MediaViewer {
     constructor() {
         this.mediaFiles = [];
@@ -67,6 +72,10 @@ class MediaViewer {
         this.baseFolderPath = '';
         this.moveHistory = [];
         this.isLoading = false;
+        // Per-entry consecutive failure count for tournament `special` undo restores. WeakMap,
+        // not a field on the entry: `meta` is the only renderer-owned field on an engine entry,
+        // and this is collected automatically when the entry leaves the stack.
+        this._tournamentRestoreFailures = new WeakMap();
         this.isVideoLoading = false;
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
@@ -4898,6 +4907,8 @@ class MediaViewer {
             // still in flight when undo starts (special-move → immediate Ctrl+A) can drop this flag
             // mid-restore. The identity re-check below, not this flag, is what actually guarantees we
             // reverse the entry we peeked.
+            let restoreFailed = false;
+            let droppedWedged = false;
             this.isLoading = true;
             try {
                 const moveResult = await window.electronAPI.moveFile({
@@ -4909,11 +4920,26 @@ class MediaViewer {
                     throw new Error(moveResult.error);
                 }
             } catch (error) {
+                restoreFailed = true;
                 console.error('Error undoing tournament special:', error);
-                this.showError(`Failed to undo move: ${error.message}`);
-                return;
+                const failures = (this._tournamentRestoreFailures.get(pending) ?? 0) + 1;
+                this._tournamentRestoreFailures.set(pending, failures);
+                if (failures >= TOURNAMENT_RESTORE_MAX_ATTEMPTS) {
+                    droppedWedged = true;
+                } else {
+                    this.showError(`Failed to undo move: ${error.message}`);
+                }
             } finally {
                 this.isLoading = false;
+            }
+            if (restoreFailed) {
+                if (droppedWedged) {
+                    this._dropWedgedSpecialEntry(pending, move);
+                    this.showError(`Couldn't restore ${move.fileName} — skipping this undo`);
+                    // Re-render so #tournamentUndoBtn re-reads peekUndoKind() and can disable.
+                    await this.showTournamentPair();
+                }
+                return;
             }
             // The stack must still be exactly where we left it. peekUndoEntry() is non-mutating, so an
             // unchanged stack returns the same object; anything else means a pick/draw/special landed
@@ -4960,6 +4986,21 @@ class MediaViewer {
 
         this.tournament._schedulePersist(this.baseFolderPath);
         await this.showTournamentPair();
+    }
+
+    // A `special` undo entry whose disk restore keeps failing can never be reversed — the file is
+    // not where the entry says it is. Discard both halves so the stack cannot wedge: the engine
+    // entry (dropped, NOT undone) and its moveHistory twin, which handleCancel would otherwise
+    // re-attempt from single mode. A moveHistory entry we can no longer honour is not worth keeping.
+    //
+    // Safe because it self-heals: the file stays out of engine.files while entries BENEATH still
+    // hold filesSnapshots containing it, so undoing past this point restores a snapshot naming an
+    // absent file — and showTournamentPair's -1 auto-prune removes it again, that time with
+    // {trackUndo: true}. The divergence closes on the next render instead of persisting.
+    _dropWedgedSpecialEntry(entry, move) {
+        this.tournament.engine?.dropEntry(entry);
+        const moveIdx = this.moveHistory.lastIndexOf(move);
+        if (moveIdx !== -1) this.moveHistory.splice(moveIdx, 1);
     }
 
     async handleTournamentSpecial(side) {
