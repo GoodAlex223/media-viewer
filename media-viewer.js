@@ -55,8 +55,9 @@ const ACTION_LABELS = {
 
 const CLIP_UNLOAD_DELAY_MS = 30000; // grace period before unloading the CLIP model after extraction
 
-// Consecutive failed disk restores of the SAME tournament `special` undo entry before the entry
-// is discarded. 1 would let a transient lock (antivirus, network drive) cost the user an undo;
+// Cumulative failed disk restores of the SAME tournament `special` undo entry (not a
+// consecutive-attempts streak — see _tournamentRestoreFailures below) before the entry is
+// discarded. 1 would let a transient lock (antivirus, network drive) cost the user an undo;
 // leaving it forever wedges the stack, since every later press retries the same absent path.
 const TOURNAMENT_RESTORE_MAX_ATTEMPTS = 2;
 
@@ -4972,6 +4973,13 @@ class MediaViewer {
                     this._tournamentRestoreFailures.set(pending, failures);
                     if (failures >= TOURNAMENT_RESTORE_MAX_ATTEMPTS) {
                         droppedWedged = true;
+                        // Unlike the first failure (forwarded via showError below, which logs
+                        // error.message itself), this permanent-discard path shows the user only
+                        // a generic message — so the OS error must be logged explicitly here or
+                        // it is lost to console.error alone (not forwarded to media-viewer.log).
+                        window.electronAPI.logError?.(
+                            `Tournament undo restore permanently failed for ${move.fileName}: ${error.message}`
+                        );
                     } else {
                         this.showError(`Failed to undo move: ${error.message}`);
                     }
@@ -5042,14 +5050,23 @@ class MediaViewer {
     // entry (dropped, NOT undone) and its moveHistory twin, which handleCancel would otherwise
     // re-attempt from single mode. A moveHistory entry we can no longer honour is not worth keeping.
     //
-    // NOT fully self-healing: the file stays out of engine.files while entries BENEATH still hold
-    // filesSnapshots containing it, so undoing past this point can resurrect a phantom.
-    // showTournamentPair's -1 auto-prune removes it again (that time with {trackUndo: true}) — but
-    // only once that file is next DRAWN INTO A PAIR, not necessarily on the very next render. Until
-    // then, getTierBreakdown() (iterates engine.files, no notion of a phantom) over-counts it, so
-    // tier/progress text can be transiently high.
+    // Also clears the REST of the stack (engine.clearHistory()) — dropping the one entry is NOT
+    // enough. Every entry still beneath it holds a filesSnapshot captured BEFORE this removal, and
+    // undoing one is a 'delta'-kind undo for most picks (SwissStrategy.captureUndo — only a
+    // round-boundary pick snapshots) that restores engine.files from that stale snapshot without
+    // touching strategy.files at all. That resurrects a phantom: present in engine.files, absent
+    // from strategy.files. Pairs are drawn from strategy, so the phantom is never dealt into a
+    // pair — the -1 auto-prune that would otherwise clean it up NEVER fires — and it sits
+    // over-counted by getTierBreakdown() and persisted by serialize() until the tournament ends.
+    // Clearing removes the only path to that state; same O(1) trade reconcileWithFiles already
+    // makes on a bulk prune. The caller's showError already reports the failed restore, so this
+    // only adds a toast when the clear actually cost the user something.
     _dropWedgedSpecialEntry(entry, move) {
         this.tournament.engine?.dropEntry(entry);
+        const droppedUndo = this.tournament.engine?.clearHistory() ?? 0;
+        if (droppedUndo > 0) {
+            this.showNotification('Tournament undo history cleared', 'info');
+        }
         const moveIdx = this.moveHistory.lastIndexOf(move);
         if (moveIdx !== -1) this.moveHistory.splice(moveIdx, 1);
     }
