@@ -49,6 +49,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan                                                                           | Task                    | Status      | Started    |
 | ------------------------------------------------------------------------------ | ----------------------- | ----------- | ---------- |
+| [2026-08-30_g2-tournament-undo-hardening.md](2026-08-30_g2-tournament-undo-hardening.md) | G2 tournament undo hardening | In Progress | 2026-08-30 |
 | [2025-12-29_video-fullscreen-toggle.md](2025-12-29_video-fullscreen-toggle.md) | Video fullscreen toggle | In Progress | 2025-12-29 |
 
 ---
