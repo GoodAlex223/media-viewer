@@ -2091,7 +2091,17 @@ class MediaViewer {
                 const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
                 const keyStr = this.buildKeyString(e);
                 const action = this.shortcutReverseMap[mode]?.[keyStr];
-                if (action === 'undo' && this.moveHistory.length > 0) {
+                // The undo shortcut must also fire for a tournament whose engine still holds an
+                // undoable entry. #tournamentUndoBtn already consults peekUndoKind() (~L4695), so
+                // gating the SHORTCUT on moveHistory alone let the button read enabled while
+                // Ctrl+A silently no-opped. The isTournamentMode conjunct is load-bearing:
+                // executeAction('undo') resolves through the mode-keyed reverse map, so without it
+                // a stale engine.history would let a SINGLE-mode Ctrl+A call handleCancel against
+                // an empty moveHistory.
+                const canUndo =
+                    this.moveHistory.length > 0 ||
+                    (this.isTournamentMode && this.tournament?.engine?.peekUndoKind() != null);
+                if (action === 'undo' && canUndo) {
                     e.preventDefault();
                     this.executeAction('undo');
                 }
@@ -4533,6 +4543,17 @@ class MediaViewer {
         modal.style.display = 'flex';
     }
 
+    // INVARIANT: every exit path that can leave entries in `engine.history` must ALSO null
+    // `tournament.engine`. The unified undo stack is session-only and mode-agnostic, so a
+    // surviving engine after a mode switch is a cross-mode undo hazard. This method does NOT null
+    // it — callers do: loadFolder (both branches of its empty/non-empty split), handleDiscard
+    // (tournament.js:77) and handleApply (tournament.js:70).
+    //
+    // KNOWN HOLE: switchMode skips the leave prompt once engine.isComplete(), reachable via
+    // Escape-out-of-summary-modal, and the summary modal's own Undo button calls
+    // handleTournamentUndo WITHOUT exiting. The empty-state keydown guard's isTournamentMode
+    // conjunct (~L2075) neutralizes the one consequence that matters today. A future exit path
+    // that forgets to null the engine would silently reintroduce the hazard.
     exitTournamentMode() {
         this.isTournamentMode = false;
         const overlay = document.getElementById('tournamentOverlay');

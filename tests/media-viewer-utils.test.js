@@ -4879,3 +4879,42 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         expect(ctx.isLoading).toBe(false);
     });
 });
+
+describe('empty-state undo guard (canUndo predicate)', () => {
+    // Replica of the media-viewer.js:2075 predicate. The source assertion below pins it.
+    const canUndo = (ctx) =>
+        ctx.moveHistory.length > 0 || (ctx.isTournamentMode && ctx.tournament?.engine?.peekUndoKind() != null);
+
+    const engineWith = (kind) => ({ engine: { peekUndoKind: () => kind } });
+
+    it('allows undo when moveHistory has an entry (pre-existing behaviour)', () => {
+        expect(canUndo({ moveHistory: [{}], isTournamentMode: false, tournament: { engine: null } })).toBe(true);
+    });
+
+    it('allows undo for a tournament whose engine still holds a user entry', () => {
+        // The gap: #tournamentUndoBtn reads enabled (it consults peekUndoKind) while the
+        // shortcut no-ops, because moveHistory is empty. Button and shortcut disagreed.
+        expect(canUndo({ moveHistory: [], isTournamentMode: true, tournament: engineWith('pick') })).toBe(true);
+    });
+
+    it('refuses undo when the engine holds nothing undoable', () => {
+        expect(canUndo({ moveHistory: [], isTournamentMode: true, tournament: engineWith(null) })).toBe(false);
+    });
+
+    it('refuses undo in SINGLE mode even with a live engine history', () => {
+        // Load-bearing: executeAction('undo') resolves through the mode-keyed reverse map, so in
+        // single mode it calls handleCancel — which must not run against an empty moveHistory
+        // just because an exit left tournament.engine non-null (the D-4b invariant hole).
+        expect(canUndo({ moveHistory: [], isTournamentMode: false, tournament: engineWith('pick') })).toBe(false);
+    });
+
+    it('tolerates a null engine and a missing tournament', () => {
+        expect(canUndo({ moveHistory: [], isTournamentMode: true, tournament: { engine: null } })).toBe(false);
+        expect(canUndo({ moveHistory: [], isTournamentMode: true, tournament: undefined })).toBe(false);
+    });
+
+    it('the replica matches the predicate in media-viewer.js', () => {
+        // Guards against the replica drifting from the source it stands in for.
+        expect(source).toContain('this.isTournamentMode && this.tournament?.engine?.peekUndoKind() != null');
+    });
+});
