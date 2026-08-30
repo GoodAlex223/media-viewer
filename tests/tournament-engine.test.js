@@ -651,9 +651,15 @@ describe('TournamentEngine.dropEntry', () => {
         eng.removeFile('d.jpg', { trackUndo: true, kind: 'special', meta: { fileName: 'd.jpg' } });
         const [first, second] = eng.history;
 
-        expect(eng.dropEntry(first)).toBe(true);
+        // Drop the LATER of two same-kind entries first: this is the only call pattern that
+        // discriminates reference-identity removal from a match-by-kind scan, which would
+        // wrongly remove `first`. Dropping `first` alone cannot catch that — index 0 is where
+        // a kind-matching scan lands anyway.
+        expect(eng.dropEntry(second)).toBe(true);
+        expect(eng.history).toEqual([first]);
 
-        expect(eng.history).toEqual([second]);
+        expect(eng.dropEntry(first)).toBe(true);
+        expect(eng.history).toEqual([]);
     });
 
     it('leaves the newest user entry visible to peekUndoEntry after a drop', () => {
