@@ -472,6 +472,29 @@ export class TournamentEngine {
         this.strategy.removeFile(filePath);
     }
 
+    // Discard the entire session-only undo stack in O(1). Used where a bulk mutation would
+    // otherwise need one O(n) strategy snapshot per file (reconcileWithFiles' prune can drop
+    // hundreds at once on a 24k folder — that would undo the PR #55 perf win). Dropping is NOT
+    // undoing: strategy state stands, only the ability to reverse it is given up. Honest
+    // outcome: peekUndoKind() -> null, the button disables, Ctrl+A says "Nothing to undo".
+    // Returns the number of entries dropped so the caller can decide whether to notify.
+    clearHistory() {
+        const dropped = this.history.length;
+        this.history = [];
+        return dropped;
+    }
+
+    // Remove ONE entry without reversing it. For a `special` entry whose disk restore is
+    // permanently failing: reversing it is impossible (the file is not on disk), and leaving it
+    // on top wedges every later undo, since each press retries the same absent path.
+    // Returns true if the entry was found and removed.
+    dropEntry(entry) {
+        const i = this.history.lastIndexOf(entry);
+        if (i === -1) return false;
+        this.history.splice(i, 1);
+        return true;
+    }
+
     isComplete() {
         return this.strategy.isComplete();
     }

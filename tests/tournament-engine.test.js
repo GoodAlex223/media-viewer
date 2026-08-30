@@ -580,3 +580,94 @@ describe('TournamentEngine unified undo stack (peekUndoEntry / peekUndoKind / un
         expect(eng.history.map((h) => h.kind)).toEqual(['pick', 'pick']);
     });
 });
+
+describe('TournamentEngine.clearHistory', () => {
+    it('empties the stack and returns the number of entries dropped', () => {
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        const p1 = eng.getCurrentPair();
+        eng.recordResult(p1.left, p1.right);
+        const p2 = eng.getCurrentPair();
+        eng.recordResult(p2.left, p2.right);
+        expect(eng.history.length).toBe(2);
+
+        expect(eng.clearHistory()).toBe(2);
+        expect(eng.history).toEqual([]);
+        expect(eng.peekUndoKind()).toBeNull();
+    });
+
+    it('returns 0 and stays a no-op on an already-empty stack', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg'], new SwissStrategy(), { rounds: 3 });
+        expect(eng.clearHistory()).toBe(0);
+        expect(eng.history).toEqual([]);
+    });
+
+    it('does NOT reverse the picks it drops — strategy state stands', () => {
+        // The whole point: dropping is not undoing. Win counts and gamesPlayed must survive,
+        // otherwise a reconcile would silently rewind the tournament.
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        const p = eng.getCurrentPair();
+        eng.recordResult(p.left, p.right);
+        expect(eng.strategy.winCounts.get(p.left)).toBe(1);
+
+        eng.clearHistory();
+
+        expect(eng.strategy.winCounts.get(p.left)).toBe(1);
+        expect(eng.strategy.gamesPlayed).toBe(1);
+    });
+});
+
+describe('TournamentEngine.dropEntry', () => {
+    it('removes the entry without reversing it and returns true', () => {
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        const p = eng.getCurrentPair();
+        eng.recordResult(p.left, p.right);
+        eng.removeFile('c.jpg', { trackUndo: true, kind: 'special', meta: { fileName: 'c.jpg' } });
+        const special = eng.history[eng.history.length - 1];
+        expect(special.kind).toBe('special');
+        const winsBefore = eng.strategy.winCounts.get(p.left);
+
+        expect(eng.dropEntry(special)).toBe(true);
+
+        expect(eng.history).not.toContain(special);
+        expect(eng.history.length).toBe(1); // the pick survives
+        // Not reversed: the file stays removed and the strategy is untouched.
+        expect(eng.files).not.toContain('c.jpg');
+        expect(eng.strategy.winCounts.get(p.left)).toBe(winsBefore);
+    });
+
+    it('returns false for an entry that is not on the stack', () => {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg'], new SwissStrategy(), { rounds: 3 });
+        expect(eng.dropEntry({ kind: 'special' })).toBe(false);
+        expect(eng.history).toEqual([]);
+    });
+
+    it('removes only the given entry when two share a kind', () => {
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        eng.removeFile('c.jpg', { trackUndo: true, kind: 'special', meta: { fileName: 'c.jpg' } });
+        eng.removeFile('d.jpg', { trackUndo: true, kind: 'special', meta: { fileName: 'd.jpg' } });
+        const [first, second] = eng.history;
+
+        expect(eng.dropEntry(first)).toBe(true);
+
+        expect(eng.history).toEqual([second]);
+    });
+
+    it('leaves the newest user entry visible to peekUndoEntry after a drop', () => {
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'];
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+        const p = eng.getCurrentPair();
+        eng.recordResult(p.left, p.right);
+        eng.removeFile('c.jpg', { trackUndo: true, kind: 'special', meta: { fileName: 'c.jpg' } });
+        const special = eng.history[eng.history.length - 1];
+        expect(eng.peekUndoEntry()).toBe(special);
+
+        eng.dropEntry(special);
+
+        // The pick beneath is now reachable — this is what un-wedges the stack.
+        expect(eng.peekUndoKind()).toBe('pick');
+    });
+});
