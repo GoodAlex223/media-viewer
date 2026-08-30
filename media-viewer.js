@@ -4547,7 +4547,8 @@ class MediaViewer {
     // `tournament.engine`. The unified undo stack is session-only and mode-agnostic, so a
     // surviving engine after a mode switch is a cross-mode undo hazard. This method does NOT null
     // it — callers do: loadFolder (both branches of its empty/non-empty split), handleDiscard
-    // (tournament.js:77) and handleApply (tournament.js:70).
+    // (tournament.js:77), handleApply (tournament.js:70) and showTournamentLeavePrompt's
+    // Save & leave accept handler (~L4426, after tournament.flush()).
     //
     // KNOWN HOLE: switchMode skips the leave prompt once engine.isComplete(), reachable via
     // Escape-out-of-summary-modal, and the summary modal's own Undo button calls
