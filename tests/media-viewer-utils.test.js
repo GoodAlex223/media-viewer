@@ -3484,6 +3484,74 @@ describe('tournament isLoading guards (Fix 2)', () => {
         expect(ctx.tournament.handlePairResult).not.toHaveBeenCalled();
         expect(ctx.showTournamentPair).not.toHaveBeenCalled();
     });
+
+    it('handleTournamentPick refuses to re-enter while a render is in flight', async () => {
+        // isLoading cannot do this job: showTournamentPairFast's compare handlers CLEAR it on
+        // bothLoaded, so an isLoading-based guard evaporates at first paint (media-viewer.js:3355).
+        const ctx = makeCtx();
+        let releaseRender;
+        ctx.showTournamentPair = vi.fn(
+            () =>
+                new Promise((resolve) => {
+                    releaseRender = resolve;
+                })
+        );
+
+        const first = handleTournamentPick.call(ctx, 'L', 'R');
+        // Simulate exactly what the real render does to the advisory flag mid-flight.
+        ctx.isLoading = false;
+        await handleTournamentPick.call(ctx, 'L', 'R');
+
+        expect(ctx.tournament.handlePairResult).toHaveBeenCalledTimes(1);
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+
+        releaseRender();
+        await first;
+        expect(ctx._tournamentRenderBusy).toBe(false);
+    });
+
+    it('handleTournamentDraw refuses to re-enter while a render is in flight', async () => {
+        const ctx = makeCtx();
+        let releaseRender;
+        ctx.showTournamentPair = vi.fn(
+            () =>
+                new Promise((resolve) => {
+                    releaseRender = resolve;
+                })
+        );
+
+        const first = handleTournamentDraw.call(ctx, 'win');
+        ctx.isLoading = false;
+        await handleTournamentDraw.call(ctx, 'win');
+
+        expect(ctx.tournament.handlePairDraw).toHaveBeenCalledTimes(1);
+
+        releaseRender();
+        await first;
+        expect(ctx._tournamentRenderBusy).toBe(false);
+    });
+
+    it('releases the lock when the render throws', async () => {
+        // finally must span the trailing await, or one failed render wedges the mode for good.
+        const ctx = makeCtx();
+        ctx.showTournamentPair = vi.fn(async () => {
+            throw new Error('render boom');
+        });
+
+        await expect(handleTournamentPick.call(ctx, 'L', 'R')).rejects.toThrow('render boom');
+
+        expect(ctx._tournamentRenderBusy).toBe(false);
+        // The lock released, so the next pick is accepted rather than permanently refused.
+        ctx.showTournamentPair = vi.fn(async () => {});
+        await handleTournamentPick.call(ctx, 'L', 'R');
+        expect(ctx.tournament.handlePairResult).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases the lock after a normal pick', async () => {
+        const ctx = makeCtx();
+        await handleTournamentPick.call(ctx, 'L', 'R');
+        expect(ctx._tournamentRenderBusy).toBe(false);
+    });
 });
 
 describe('loadFolder cache reset (Fix 1)', () => {
