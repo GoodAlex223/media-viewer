@@ -445,4 +445,82 @@ describe('TournamentManager.reconcileWithFiles', () => {
         expect(tm.reconcileWithFiles(['a.jpg', 'b.jpg'])).toBe(0);
         tm.cancelPending();
     });
+
+    it('drops the session-only undo history when it prunes anything', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        tm.cancelPending();
+        const p = tm.engine.getCurrentPair();
+        tm.engine.recordResult(p.left, p.right);
+        expect(tm.engine.history.length).toBe(1);
+
+        tm.reconcileWithFiles(['a.jpg', 'b.jpg']); // c,d gone from disk
+        tm.cancelPending();
+
+        // Untracked removal + a live history would strand a file at Tier-0 on undo-past.
+        expect(tm.engine.history).toEqual([]);
+        expect(tm.engine.peekUndoKind()).toBeNull();
+    });
+
+    it('notifies exactly once when a non-empty history is dropped', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        tm.cancelPending();
+        const p = tm.engine.getCurrentPair();
+        tm.engine.recordResult(p.left, p.right);
+        host.showNotification.mockClear();
+
+        tm.reconcileWithFiles(['a.jpg', 'b.jpg']);
+        tm.cancelPending();
+
+        expect(host.showNotification).toHaveBeenCalledTimes(1);
+        expect(host.showNotification).toHaveBeenCalledWith(expect.stringContaining('undo history cleared'), 'info');
+    });
+
+    it('stays silent when it prunes but the history was already empty', async () => {
+        // The disk-resume path: deserialize() sets history = [] (session-only undo), so a
+        // reconcile there must not toast about an undo stack the user never had.
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        tm.cancelPending();
+        host.showNotification.mockClear();
+
+        expect(tm.reconcileWithFiles(['a.jpg', 'b.jpg'])).toBe(2);
+        tm.cancelPending();
+
+        expect(host.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('leaves the history intact when it prunes nothing', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        tm.cancelPending();
+        const p = tm.engine.getCurrentPair();
+        tm.engine.recordResult(p.left, p.right);
+        host.showNotification.mockClear();
+
+        expect(tm.reconcileWithFiles(['a.jpg', 'b.jpg', 'e.jpg'])).toBe(0);
+
+        expect(tm.engine.history.length).toBe(1);
+        expect(host.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('singularises the notification for a one-file prune', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/test/folder', 3);
+        tm.cancelPending();
+        const p = tm.engine.getCurrentPair();
+        tm.engine.recordResult(p.left, p.right);
+        host.showNotification.mockClear();
+
+        tm.reconcileWithFiles(['a.jpg', 'b.jpg']);
+        tm.cancelPending();
+
+        expect(host.showNotification).toHaveBeenCalledWith(expect.stringContaining('1 file left'), 'info');
+    });
 });
