@@ -72,9 +72,14 @@ class MediaViewer {
         this.baseFolderPath = '';
         this.moveHistory = [];
         this.isLoading = false;
-        // Per-entry consecutive failure count for tournament `special` undo restores. WeakMap,
-        // not a field on the entry: `meta` is the only renderer-owned field on an engine entry,
-        // and this is collected automatically when the entry leaves the stack.
+        // Per-entry failure count for tournament `special` undo restores. WeakMap, not a field on
+        // the entry: `meta` is the only renderer-owned field on an engine entry, and this is
+        // collected automatically when the entry leaves the stack.
+        // CUMULATIVE per entry lifetime, not a consecutive-attempts streak: nothing resets it except
+        // the entry leaving the stack (a successful undo pops it; the second failure drops it). An
+        // entry that fails once, survives while unrelated picks/draws/specials come and go, and only
+        // later fails again is dropped on that second failure even though it reads to the user as a
+        // fresh attempt — intended, since it bounds total attempts against a permanently-broken path.
         this._tournamentRestoreFailures = new WeakMap();
         this.isVideoLoading = false;
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
@@ -4993,10 +4998,12 @@ class MediaViewer {
     // entry (dropped, NOT undone) and its moveHistory twin, which handleCancel would otherwise
     // re-attempt from single mode. A moveHistory entry we can no longer honour is not worth keeping.
     //
-    // Safe because it self-heals: the file stays out of engine.files while entries BENEATH still
-    // hold filesSnapshots containing it, so undoing past this point restores a snapshot naming an
-    // absent file — and showTournamentPair's -1 auto-prune removes it again, that time with
-    // {trackUndo: true}. The divergence closes on the next render instead of persisting.
+    // NOT fully self-healing: the file stays out of engine.files while entries BENEATH still hold
+    // filesSnapshots containing it, so undoing past this point can resurrect a phantom.
+    // showTournamentPair's -1 auto-prune removes it again (that time with {trackUndo: true}) — but
+    // only once that file is next DRAWN INTO A PAIR, not necessarily on the very next render. Until
+    // then, getTierBreakdown() (iterates engine.files, no notion of a phantom) over-counts it, so
+    // tier/progress text can be transiently high.
     _dropWedgedSpecialEntry(entry, move) {
         this.tournament.engine?.dropEntry(entry);
         const moveIdx = this.moveHistory.lastIndexOf(move);
