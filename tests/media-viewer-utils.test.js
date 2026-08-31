@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
+import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
 const require = createRequire(import.meta.url);
 
 // MediaViewer methods are instance methods on an ES module class.
@@ -74,6 +75,19 @@ function extractAsyncMethod(methodName) {
     const params = match[1];
 
     return new AsyncFunction(params, methodBody);
+}
+
+// extractMethod/extractAsyncMethod build the function via `new Function`/`new AsyncFunction`,
+// which run in the GLOBAL scope, not the lexical scope of media-viewer.js — a bare reference to
+// a module-scope `const` (e.g. TOURNAMENT_RESTORE_MAX_ATTEMPTS) inside an extracted method body
+// resolves through the global object, so it must be mirrored onto globalThis before the call.
+// Same pattern as tests/keyboard-shortcuts.test.js's extractDefaultShortcuts(), reading from
+// source instead of hardcoding the value so the two can't silently drift apart.
+function extractModuleConstant(name) {
+    const regex = new RegExp(`^const ${name}\\s*=\\s*([^;]+);`, 'm');
+    const match = source.match(regex);
+    if (!match) throw new Error(`Could not find module constant: ${name}`);
+    return new Function(`return ${match[1]}`)();
 }
 
 // Guard for methodSource's naive brace counter (below). The counter is corrupted
@@ -3471,6 +3485,11 @@ describe('tournament isLoading guards (Fix 2)', () => {
         expect(ctx.tournament.handlePairResult).not.toHaveBeenCalled();
         expect(ctx.showTournamentPair).not.toHaveBeenCalled();
     });
+
+    // NOTE: the four re-entrancy cases that stood here were reverted with Task 4 on 2026-08-31.
+    // A lock over this handler family cannot hold while _buildTournamentSide re-enters the render
+    // from a DOM error callback that never passes through a handler — see BACKLOG [2026-08-31].
+    // isLoading remains the only (advisory) guard; the cases above pin what it does and does not do.
 });
 
 describe('loadFolder cache reset (Fix 1)', () => {
@@ -4535,6 +4554,10 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         const engine = {
             peekUndoEntry: vi.fn(() => pending),
             undoUserAction: vi.fn(() => pending),
+            dropEntry: vi.fn(() => true),
+            // Default: nothing further to clear (no assertion in this suite relies on the
+            // "history cleared" toast firing) — see the dedicated clearHistory tests below.
+            clearHistory: vi.fn(() => 0),
         };
         return {
             isTournamentMode: true,
@@ -4543,6 +4566,11 @@ describe('handleTournamentUndo (unified undo stack)', () => {
             showRatingConfirmations: false,
             mediaFiles: [],
             moveHistory: [],
+            _tournamentRestoreFailures: new WeakMap(),
+            // Real implementation, not a mock: handleTournamentUndo calls this.* on itself, and
+            // the drop/re-render assertions below need the actual dropEntry-call + splice logic
+            // to run. Same convention as _bulkPairKeysReferencing in the removeFileFromList suite.
+            _dropWedgedSpecialEntry: extractMethod('_dropWedgedSpecialEntry'),
             tournament: { engine, _schedulePersist: vi.fn() },
             showNotification: vi.fn(),
             showError: vi.fn(),
@@ -4572,10 +4600,12 @@ describe('handleTournamentUndo (unified undo stack)', () => {
                 logError: vi.fn(),
             },
         };
+        globalThis.TOURNAMENT_RESTORE_MAX_ATTEMPTS = extractModuleConstant('TOURNAMENT_RESTORE_MAX_ATTEMPTS');
     });
 
     afterEach(() => {
         delete globalThis.window;
+        delete globalThis.TOURNAMENT_RESTORE_MAX_ATTEMPTS;
     });
 
     it('notifies and leaves the engine alone when there is nothing to undo', async () => {
@@ -4622,7 +4652,10 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'EPERM' }));
         await handleTournamentUndo.call(ctx);
         expect(ctx.showError).toHaveBeenCalled();
-        expect(ctx.tournament.engine.peekUndoEntry).toHaveBeenCalledTimes(1);
+        // Twice: the initial peek, then the identity re-check that now also guards the failure
+        // exit (the drop path mutates the stack, so it needs the same protection as the success
+        // path). Non-mutating either way — what matters is the assertions below.
+        expect(ctx.tournament.engine.peekUndoEntry).toHaveBeenCalledTimes(2);
         expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
         expect(ctx.moveHistory).toEqual([SPECIAL_META]);
         expect(ctx.mediaFiles).toEqual([]);
@@ -4720,5 +4753,254 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(expect.stringContaining('EBUSY'));
         expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
         expect(ctx.showError).toHaveBeenCalled();
+    });
+
+    it('keeps the entry on the stack after ONE restore failure so the user can retry', async () => {
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'EPERM' }));
+
+        await handleTournamentUndo.call(ctx);
+
+        expect(ctx.tournament.engine.dropEntry).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toEqual([SPECIAL_META]); // twin preserved for the retry
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+        expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+        expect(ctx._tournamentRestoreFailures.get(pending)).toBe(1);
+    });
+
+    it('drops the entry and its moveHistory twin on the SECOND consecutive failure', async () => {
+        // Otherwise the dead entry sits on top forever and every later Ctrl+A retries the same
+        // absent path, with no way past it — the wedge this task exists to remove.
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'ENOENT' }));
+
+        await handleTournamentUndo.call(ctx);
+        await handleTournamentUndo.call(ctx);
+
+        expect(ctx.tournament.engine.dropEntry).toHaveBeenCalledWith(pending);
+        // Finding 1: dropping the one entry is not enough — the rest of the stack (any entry
+        // whose filesSnapshot predates this removal) must be cleared too, or a later undo can
+        // resurrect this file as a phantom in engine.files. See _dropWedgedSpecialEntry.
+        expect(ctx.tournament.engine.clearHistory).toHaveBeenCalledTimes(1);
+        expect(ctx.moveHistory).toEqual([]);
+        expect(ctx.showError).toHaveBeenLastCalledWith(expect.stringContaining('c.jpg'));
+        // Finding 5: the OS error behind the permanent discard must reach media-viewer.log, not
+        // just console.error (which is not forwarded).
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(expect.stringContaining('ENOENT'));
+        // Re-rendered so #tournamentUndoBtn re-reads peekUndoKind() and can disable.
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+        // Never reversed — the engine entry is discarded, not undone.
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+    });
+
+    it('tells the user their undo history was cleared, only when the clear actually dropped something', async () => {
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        ctx.tournament.engine.clearHistory = vi.fn(() => 2); // two entries beneath the wedged one
+        globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'ENOENT' }));
+
+        await handleTournamentUndo.call(ctx);
+        await handleTournamentUndo.call(ctx);
+
+        expect(ctx.showNotification).toHaveBeenCalledWith('Tournament undo history cleared', 'info');
+    });
+
+    it('does not claim the history was cleared when there was nothing left to clear', async () => {
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] }); // default clearHistory -> 0
+        globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'ENOENT' }));
+
+        await handleTournamentUndo.call(ctx);
+        await handleTournamentUndo.call(ctx);
+
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('does not drop or clear when another action landed during the failed restore', async () => {
+        // The drop path mutates the stack just as much as the success path does: dropEntry()
+        // splices by identity and clearHistory() takes EVERYTHING with it — including an entry
+        // that landed while the failing moveFile was in flight. Nothing serializes the tournament
+        // handler family (Task 4's lock was reverted — BACKLOG [2026-08-31]) and isLoading is
+        // advisory, so this is reachable; the revert widened the window rather than closing it.
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'ENOENT' }));
+
+        await handleTournamentUndo.call(ctx); // failure 1 — entry stays, stack unchanged
+        // Second call: the entry is still on top when we peek it, but a pick lands during the
+        // (also failing) restore, so the identity re-check must see a different top.
+        const intruder = { kind: 'pick' };
+        let peeks = 0;
+        ctx.tournament.engine.peekUndoEntry = vi.fn(() => (peeks++ === 0 ? pending : intruder));
+
+        await handleTournamentUndo.call(ctx);
+
+        expect(ctx.tournament.engine.dropEntry).not.toHaveBeenCalled();
+        expect(ctx.tournament.engine.clearHistory).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toEqual([SPECIAL_META]); // twin survives alongside its entry
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+        expect(ctx.showError).toHaveBeenLastCalledWith(expect.stringContaining('interrupted'));
+        // No rollback move: the restore FAILED, so the file never left the special folder.
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenCalledTimes(2);
+        // The failure count survives on the entry, so the next undo that reaches it discards it.
+        expect(ctx._tournamentRestoreFailures.get(pending)).toBe(2);
+    });
+
+    it('counts failures per entry, not globally', async () => {
+        // A failure against entry A must not push an unrelated entry B over the threshold.
+        const first = { kind: 'special', meta: SPECIAL_META };
+        const secondMeta = { ...SPECIAL_META, fileName: 'z.jpg', newPath: '/special/z.jpg' };
+        const second = { kind: 'special', meta: secondMeta };
+        const ctx = makeCtx(first, { moveHistory: [SPECIAL_META, secondMeta] });
+        globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'EPERM' }));
+
+        await handleTournamentUndo.call(ctx);
+        ctx.tournament.engine.peekUndoEntry = vi.fn(() => second);
+        await handleTournamentUndo.call(ctx);
+
+        expect(ctx.tournament.engine.dropEntry).not.toHaveBeenCalled();
+        expect(ctx._tournamentRestoreFailures.get(first)).toBe(1);
+        expect(ctx._tournamentRestoreFailures.get(second)).toBe(1);
+    });
+
+    it('clears isLoading before the post-failure re-render', async () => {
+        // showTournamentPair must not run with the mutex still held.
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'ENOENT' }));
+        let loadingAtRender = null;
+        ctx.showTournamentPair = vi.fn(async () => {
+            loadingAtRender = ctx.isLoading;
+        });
+
+        await handleTournamentUndo.call(ctx);
+        await handleTournamentUndo.call(ctx);
+
+        expect(loadingAtRender).toBe(false);
+        expect(ctx.isLoading).toBe(false);
+    });
+
+    it('CHARACTERIZATION: a second undo DOES re-enter mid-render — nothing guards this today', async () => {
+        // Not the behaviour we want; the behaviour we have. Unlike the special branch (isLoading
+        // held across the moveFile await), a 'pick'/'draw' undo sets NO isLoading anywhere in this
+        // method, so a double Ctrl+A during showTournamentPair() reverses TWO entries.
+        //
+        // Task 4 added a lock here and was reverted on 2026-08-31: any lock over this handler
+        // family either misses the re-entrant render path (_buildTournamentSide's DOM error
+        // callback calls showTournamentPair() un-awaited, bypassing every handler) and silently
+        // drops user input, or covers it and wedges. Measured both. See BACKLOG [2026-08-31].
+        //
+        // This test is the tripwire: when the real guard lands it MUST go red, and be replaced
+        // with the assertion that the second undo is served rather than doubled or dropped.
+        const ctx = makeCtx({ kind: 'pick' });
+        let releaseRender;
+        let renders = 0;
+        // Only the FIRST render hangs — the one the second undo re-enters. Later calls resolve, or
+        // the second undo would never settle and the timeout would mask what is being shown here.
+        ctx.showTournamentPair = vi.fn(() => {
+            renders += 1;
+            return renders === 1 ? new Promise((resolve) => (releaseRender = resolve)) : Promise.resolve();
+        });
+
+        const first = handleTournamentUndo.call(ctx);
+        // Simulate exactly what the real render does to the advisory isLoading flag mid-flight.
+        ctx.isLoading = false;
+        await handleTournamentUndo.call(ctx);
+
+        // Two reversals from two presses, the first render still in flight: unguarded re-entry.
+        expect(ctx.tournament.engine.undoUserAction).toHaveBeenCalledTimes(2);
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(2);
+
+        releaseRender();
+        await first;
+    });
+});
+
+describe('_dropWedgedSpecialEntry clears the rest of the stack (Finding 1: no phantom on undo-past-a-drop)', () => {
+    // Uses a REAL TournamentEngine + SwissStrategy (not the mocked engine used above) — the bug
+    // this guards against is a genuine engine.files/strategy.files desync that only a real
+    // captureUndo()/applyUndo() delta round-trip reproduces; a mocked engine can't manifest it.
+    const dropWedgedSpecialEntry = extractMethod('_dropWedgedSpecialEntry');
+
+    it('leaves peekUndoKind() null and undoUserAction() a no-op, so a later undo cannot resurrect the dropped file into engine.files', () => {
+        // 6 files -> round 1 has 3 pairs, so the first pick is a non-boundary inverse-delta
+        // (roundQueue.length > 1 at captureUndo time) — the case whose applyUndo never restores
+        // strategy.files (see SwissStrategy.applyUndo's 'delta' branch).
+        const files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg'];
+        const engine = new TournamentEngine(files, new SwissStrategy(), { rounds: 3 });
+
+        const p1 = engine.getCurrentPair();
+        engine.recordResult(p1.left, p1.right);
+        expect(engine.history[engine.history.length - 1].undo.kind).toBe('delta');
+
+        // A tournament-mode special move removes 'c.jpg', tracked so it is fully reversible on
+        // its own (snapshot-kind undo) — exactly what a real special-folder move records.
+        const move = { fileName: 'c.jpg', originalPath: '/src/c.jpg', newPath: '/special/c.jpg' };
+        engine.removeFile('c.jpg', { trackUndo: true, kind: 'special', meta: move });
+        const specialEntry = engine.history[engine.history.length - 1];
+        expect(engine.files).not.toContain('c.jpg');
+        expect(engine.strategy.files).not.toContain('c.jpg');
+
+        // The disk restore for this entry has now permanently failed (2 attempts) — the real
+        // handleTournamentUndo path this method exists for.
+        const ctx = { tournament: { engine }, moveHistory: [move], showNotification: vi.fn() };
+        dropWedgedSpecialEntry.call(ctx, specialEntry, move);
+
+        expect(engine.history).not.toContain(specialEntry);
+        // Nothing must remain on the stack that could reverse PAST the drop.
+        expect(engine.peekUndoKind()).toBeNull();
+
+        const filesBefore = [...engine.files];
+        // A user retrying Ctrl+A (or any later undo press) must be a genuine no-op.
+        expect(engine.undoUserAction()).toBeNull();
+        expect(engine.files).toEqual(filesBefore);
+        expect(engine.files).not.toContain('c.jpg');
+        // THE invariant the bug violated: engine.files must never hold a file absent from
+        // strategy.files (a "phantom"). Pairs are drawn from strategy, so a phantom is never
+        // dealt into a pair — the -1 auto-prune that would otherwise clean it up never fires,
+        // leaving it over-counted by getTierBreakdown() and persisted by serialize().
+        expect(engine.files.every((f) => engine.strategy.files.includes(f))).toBe(true);
+    });
+});
+
+describe('empty-state undo guard (canUndo predicate)', () => {
+    // Replica of the media-viewer.js:2075 predicate. The source assertion below pins it.
+    const canUndo = (ctx) =>
+        ctx.moveHistory.length > 0 || (ctx.isTournamentMode && ctx.tournament?.engine?.peekUndoKind() != null);
+
+    const engineWith = (kind) => ({ engine: { peekUndoKind: () => kind } });
+
+    it('allows undo when moveHistory has an entry (pre-existing behaviour)', () => {
+        expect(canUndo({ moveHistory: [{}], isTournamentMode: false, tournament: { engine: null } })).toBe(true);
+    });
+
+    it('allows undo for a tournament whose engine still holds a user entry', () => {
+        // The gap: #tournamentUndoBtn reads enabled (it consults peekUndoKind) while the
+        // shortcut no-ops, because moveHistory is empty. Button and shortcut disagreed.
+        expect(canUndo({ moveHistory: [], isTournamentMode: true, tournament: engineWith('pick') })).toBe(true);
+    });
+
+    it('refuses undo when the engine holds nothing undoable', () => {
+        expect(canUndo({ moveHistory: [], isTournamentMode: true, tournament: engineWith(null) })).toBe(false);
+    });
+
+    it('refuses undo in SINGLE mode even with a live engine history', () => {
+        // Load-bearing: executeAction('undo') resolves through the mode-keyed reverse map, so in
+        // single mode it calls handleCancel — which must not run against an empty moveHistory
+        // just because an exit left tournament.engine non-null (the D-4b invariant hole).
+        expect(canUndo({ moveHistory: [], isTournamentMode: false, tournament: engineWith('pick') })).toBe(false);
+    });
+
+    it('tolerates a null engine and a missing tournament', () => {
+        expect(canUndo({ moveHistory: [], isTournamentMode: true, tournament: { engine: null } })).toBe(false);
+        expect(canUndo({ moveHistory: [], isTournamentMode: true, tournament: undefined })).toBe(false);
+    });
+
+    it('the replica matches the predicate in media-viewer.js', () => {
+        // Guards against the replica drifting from the source it stands in for.
+        expect(source).toContain('this.isTournamentMode && this.tournament?.engine?.peekUndoKind() != null');
     });
 });

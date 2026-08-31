@@ -295,6 +295,25 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 
 ## 🟤 Auto-Generated Tech Debt
 
+### [2026-08-31] G2 Task 4 revert — E2E measurement (2 items)
+
+**Origin**: Group G2 (tournament undo hardening). Task 4 (`_tournamentRenderBusy` re-entrancy lock,
+spec DEC-1) was implemented as specified, shipped in `57fa2a4`, then **reverted on 2026-08-31** after
+whole-branch E2E measurement showed it silently swallowing user input. Item 1 is the blocker that makes
+the lock unsound; item 2 is the original guard, re-filed as blocked on it. Claude-surfaced → 🟤.
+The measurement that separated them, tournament E2E (`tests/e2e/tournament-mode.test.js`, 9 cases):
+
+| Configuration | Result |
+|---|---|
+| `main` | 4/4 runs green |
+| Branch through Task 3 (`5a09376`) | 3/3 runs green |
+| Branch with Task 4's lock (`820f34d`) | ~2 of 3 runs fail |
+| Serializing variant (`g2-serialization-wip` `b155374`) | ~1 failure per run |
+| **Lock neutralized, all other tasks intact** | **4/4, then 5/5 after the revert** |
+
+- [ ] **Un-awaited re-entrant `showTournamentPair()` from inside `_buildTournamentSide`** — one defect, three sites. `_buildTournamentSide` attaches a media `error` listener ([media-viewer.js](../../media-viewer.js) `~:4879`) that calls `removeFileFromList()` then `this.showTournamentPair()` **un-awaited**, and its JXL decode-failure path (`~:4852`) does the same — both from *inside* the render that `showTournamentPair` started, via a DOM callback that never passes through a handler. The third site is `moveToSpecialFolder`'s un-awaited render (`~:4830`), already filed separately; fold them together, since the fix is one decision about how a render restarts itself. Consequences today: a file that fails to decode fires a spontaneous `removeFileFromList` + re-render underneath whatever else is running, mutating `mediaFiles` and (via the `-1` auto-prune) the engine mid-flight. It is also **reproducible on demand** — `tiny.mp4` fails to load in the Playwright fixtures on every failing run (`Failed to load video: tiny.mp4` in the renderer console), so this has a ready repro rather than needing one invented. **This is the blocker for item 2**: no lock over the handler family can be sound while the render re-enters itself behind the handlers' backs. Effort: M. Affected: [media-viewer.js](../../media-viewer.js) (`_buildTournamentSide`, `moveToSpecialFolder`), [tests/e2e/tournament-mode.test.js](../../tests/e2e/tournament-mode.test.js).
+- [ ] **Re-entrancy guard for the tournament handler family — BLOCKED on item 1** — re-filed from 🟤 [2026-07-21] (PR #65 review follow-ups), where it read "guard the trailing `await showTournamentPair()` … with the existing `isLoading` mutex". Both mechanisms proposed so far are now known wrong, and the second was measured rather than reasoned: (a) `isLoading` cannot hold — `setupCompareImageHandlers`/`setupCompareVideoHandlers` clear it at first paint, so the guard dissolves exactly when it is needed; (b) a dedicated flag drops the second action silently — a pick followed promptly by Ctrl+A lost the undo with no feedback at all, which is what the table above measures. A serializing variant that **waits** instead of dropping is parked on branch **`g2-serialization-wip` (`b155374`)**, unit-green (566) and mutation-verified but still failing E2E ~1 run in 1 — it lands on the first horn of the same dilemma, which is the evidence that the precondition (item 1), not the lock design, is what is missing. ⚠️ **That branch also changes a pre-existing guard**: `_isForeignLoadInFlight()` narrows the `isLoading` entry check to refuse only loads that are *not* our own in-flight render (without it the queueing is unreachable, because the pick's own render sets `isLoading`). That is a behaviour change to shipped code and needs its own review when it lands, not a free ride on the new-code review. A tripwire is in place: `tests/media-viewer-utils.test.js` carries a CHARACTERIZATION test asserting that a second undo currently DOES re-enter mid-render — it must go red when the real guard lands. Effort: M (after item 1). Affected: [media-viewer.js](../../media-viewer.js) (`handleTournamentPick`/`Draw`/`Undo`), [tests/media-viewer-utils.test.js](../../tests/media-viewer-utils.test.js).
+
 ### [2026-08-30] From: G4 closeout (4 items)
 
 **Origin**: Closeout of Group G4 (adopt-queue trial batch), merged `bf58c01`. Process gaps the session

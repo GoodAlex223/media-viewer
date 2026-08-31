@@ -55,6 +55,12 @@ const ACTION_LABELS = {
 
 const CLIP_UNLOAD_DELAY_MS = 30000; // grace period before unloading the CLIP model after extraction
 
+// Cumulative failed disk restores of the SAME tournament `special` undo entry (not a
+// consecutive-attempts streak — see _tournamentRestoreFailures below) before the entry is
+// discarded. 1 would let a transient lock (antivirus, network drive) cost the user an undo;
+// leaving it forever wedges the stack, since every later press retries the same absent path.
+const TOURNAMENT_RESTORE_MAX_ATTEMPTS = 2;
+
 class MediaViewer {
     constructor() {
         this.mediaFiles = [];
@@ -67,6 +73,15 @@ class MediaViewer {
         this.baseFolderPath = '';
         this.moveHistory = [];
         this.isLoading = false;
+        // Per-entry failure count for tournament `special` undo restores. WeakMap, not a field on
+        // the entry: `meta` is the only renderer-owned field on an engine entry, and this is
+        // collected automatically when the entry leaves the stack.
+        // CUMULATIVE per entry lifetime, not a consecutive-attempts streak: nothing resets it except
+        // the entry leaving the stack (a successful undo pops it; the second failure drops it). An
+        // entry that fails once, survives while unrelated picks/draws/specials come and go, and only
+        // later fails again is dropped on that second failure even though it reads to the user as a
+        // fresh attempt — intended, since it bounds total attempts against a permanently-broken path.
+        this._tournamentRestoreFailures = new WeakMap();
         this.isVideoLoading = false;
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
@@ -2072,7 +2087,18 @@ class MediaViewer {
                 const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
                 const keyStr = this.buildKeyString(e);
                 const action = this.shortcutReverseMap[mode]?.[keyStr];
-                if (action === 'undo' && this.moveHistory.length > 0) {
+                // The undo shortcut must also fire for a tournament whose engine still holds an
+                // undoable entry. #tournamentUndoBtn already consults peekUndoKind() (in
+                // showTournamentPair, where the button's disabled state is set), so
+                // gating the SHORTCUT on moveHistory alone let the button read enabled while
+                // Ctrl+A silently no-opped. The isTournamentMode conjunct is load-bearing:
+                // executeAction('undo') resolves through the mode-keyed reverse map, so without it
+                // a stale engine.history would let a SINGLE-mode Ctrl+A call handleCancel against
+                // an empty moveHistory.
+                const canUndo =
+                    this.moveHistory.length > 0 ||
+                    (this.isTournamentMode && this.tournament?.engine?.peekUndoKind() != null);
+                if (action === 'undo' && canUndo) {
                     e.preventDefault();
                     this.executeAction('undo');
                 }
@@ -4514,6 +4540,24 @@ class MediaViewer {
         modal.style.display = 'flex';
     }
 
+    // INVARIANT: every exit path that can leave entries in `engine.history` must ALSO null
+    // `tournament.engine`. The unified undo stack is session-only and mode-agnostic, so a
+    // surviving engine after a mode switch is a cross-mode undo hazard. This method does NOT null
+    // it — callers do: loadFolder (both branches of its empty/non-empty split), handleDiscard
+    // (tournament.js:77), handleApply (tournament.js:70) and showTournamentLeavePrompt's
+    // Save & leave accept handler (after tournament.flush()).
+    //
+    // KNOWN HOLES — exit paths that do NOT null the engine. This list is the whole of them today;
+    // treat it as the thing to extend when adding an exit, not as proof the next one is safe:
+    //   1. _applyModeSwitch's 'single' and 'compare' branches, when switchMode skipped the leave
+    //      prompt because engine.isComplete() — reachable via Escape-out-of-summary-modal. The
+    //      summary modal's own Undo button likewise calls handleTournamentUndo WITHOUT exiting.
+    //   2. _retryCompareAfterRemoval and showCompareMedia's <2-files branch, both of which drop to
+    //      single mode mid-render. Reachable from tournament mode: showTournamentPairFast falls
+    //      back to showCompareMedia while the wrappers do not exist yet (the first pair), so an
+    //      unusable file there lands in these branches.
+    // The empty-state keydown guard's isTournamentMode conjunct (the `canUndo` disjunction in the
+    // keydown handler) neutralizes the one consequence that matters today.
     exitTournamentMode() {
         this.isTournamentMode = false;
         const overlay = document.getElementById('tournamentOverlay');
@@ -4871,7 +4915,6 @@ class MediaViewer {
 
     async handleTournamentUndo() {
         if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
-
         // engine.history is the single chronological undo stack: picks and tournament-mode
         // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune
         // in showTournamentPair) are absorbed by undoUserAction so they never cost a press.
@@ -4898,6 +4941,8 @@ class MediaViewer {
             // still in flight when undo starts (special-move → immediate Ctrl+A) can drop this flag
             // mid-restore. The identity re-check below, not this flag, is what actually guarantees we
             // reverse the entry we peeked.
+            let restoreFailed = false;
+            let droppedWedged = false;
             this.isLoading = true;
             try {
                 const moveResult = await window.electronAPI.moveFile({
@@ -4909,19 +4954,56 @@ class MediaViewer {
                     throw new Error(moveResult.error);
                 }
             } catch (error) {
+                restoreFailed = true;
                 console.error('Error undoing tournament special:', error);
-                this.showError(`Failed to undo move: ${error.message}`);
-                return;
+                const failures = (this._tournamentRestoreFailures.get(pending) ?? 0) + 1;
+                this._tournamentRestoreFailures.set(pending, failures);
+                if (failures >= TOURNAMENT_RESTORE_MAX_ATTEMPTS) {
+                    droppedWedged = true;
+                    // Unlike the first failure (forwarded via showError below, which logs
+                    // error.message itself), this permanent-discard path shows the user only
+                    // a generic message — so the OS error must be logged explicitly here or
+                    // it is lost to console.error alone (not forwarded to media-viewer.log).
+                    window.electronAPI.logError?.(
+                        `Tournament undo restore permanently failed for ${move.fileName}: ${error.message}`
+                    );
+                } else {
+                    this.showError(`Failed to undo move: ${error.message}`);
+                }
             } finally {
                 this.isLoading = false;
             }
             // The stack must still be exactly where we left it. peekUndoEntry() is non-mutating, so an
             // unchanged stack returns the same object; anything else means a pick/draw/special landed
-            // during the await (see the advisory note above). Never reverse an entry the user did not
-            // ask us to — roll the file back to the special folder so the whole undo is a no-op and the
-            // user can simply retry, rather than leaving it on disk but absent from mediaFiles with a
-            // stale moveHistory entry.
-            if (this.tournament.engine.peekUndoEntry() !== pending) {
+            // during the await (see the advisory note above). Nothing serializes the tournament
+            // handler family — the re-entrancy guard that would have is BACKLOG [2026-08-31],
+            // blocked on the un-awaited re-entrant renders in _buildTournamentSide — so isLoading
+            // is the only thing in the way, and it is advisory. Reachable, not theoretical. BOTH
+            // exits below need the check: the failure path mutates the stack too, and
+            // _dropWedgedSpecialEntry's clearHistory() would take the entry that just landed with it.
+            const stackMoved = this.tournament.engine.peekUndoEntry() !== pending;
+            if (restoreFailed) {
+                if (droppedWedged) {
+                    if (stackMoved) {
+                        // Leave the wedged entry in place. Its failure count lives on
+                        // _tournamentRestoreFailures keyed by the entry object itself, so the next
+                        // undo that reaches it fails once more and discards it then — nothing leaks.
+                        this.showError('Undo interrupted by another action — please try again');
+                    } else {
+                        this._dropWedgedSpecialEntry(pending, move);
+                        this.showError(`Couldn't restore ${move.fileName} — skipping this undo`);
+                        // Re-render so #tournamentUndoBtn re-reads peekUndoKind() and can disable.
+                        await this.showTournamentPair();
+                    }
+                }
+                // Not wedged yet: the catch above already surfaced the OS error via showError.
+                return;
+            }
+            // Never reverse an entry the user did not ask us to — roll the file back to the special
+            // folder so the whole undo is a no-op and the user can simply retry, rather than leaving
+            // it on disk but absent from mediaFiles with a stale moveHistory entry. (No rollback is
+            // needed on the failure path above: the restore failed, so the file never moved.)
+            if (stackMoved) {
                 const rollback = await window.electronAPI.moveFile({
                     sourcePath: move.originalPath,
                     targetFolder: window.electronAPI.path.dirname(move.newPath),
@@ -4960,6 +5042,32 @@ class MediaViewer {
 
         this.tournament._schedulePersist(this.baseFolderPath);
         await this.showTournamentPair();
+    }
+
+    // A `special` undo entry whose disk restore keeps failing can never be reversed — the file is
+    // not where the entry says it is. Discard both halves so the stack cannot wedge: the engine
+    // entry (dropped, NOT undone) and its moveHistory twin, which handleCancel would otherwise
+    // re-attempt from single mode. A moveHistory entry we can no longer honour is not worth keeping.
+    //
+    // Also clears the REST of the stack (engine.clearHistory()) — dropping the one entry is NOT
+    // enough. Every entry still beneath it holds a filesSnapshot captured BEFORE this removal, and
+    // undoing one is a 'delta'-kind undo for most picks (SwissStrategy.captureUndo — only a
+    // round-boundary pick snapshots) that restores engine.files from that stale snapshot without
+    // touching strategy.files at all. That resurrects a phantom: present in engine.files, absent
+    // from strategy.files. Pairs are drawn from strategy, so the phantom is never dealt into a
+    // pair — the -1 auto-prune that would otherwise clean it up NEVER fires — and it sits
+    // over-counted by getTierBreakdown() and persisted by serialize() until the tournament ends.
+    // Clearing removes the only path to that state; same O(1) trade reconcileWithFiles already
+    // makes on a bulk prune. The caller's showError already reports the failed restore, so this
+    // only adds a toast when the clear actually cost the user something.
+    _dropWedgedSpecialEntry(entry, move) {
+        this.tournament.engine?.dropEntry(entry);
+        const droppedUndo = this.tournament.engine?.clearHistory() ?? 0;
+        if (droppedUndo > 0) {
+            this.showNotification('Tournament undo history cleared', 'info');
+        }
+        const moveIdx = this.moveHistory.lastIndexOf(move);
+        if (moveIdx !== -1) this.moveHistory.splice(moveIdx, 1);
     }
 
     async handleTournamentSpecial(side) {

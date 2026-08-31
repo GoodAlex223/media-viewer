@@ -119,6 +119,20 @@ export class TournamentManager {
             this.engine.removeFile(f);
         }
         if (removed.length > 0) {
+            // The prune loop above stays UNTRACKED on purpose: {trackUndo:true} per file would
+            // push an O(n) strategy.serialize() snapshot each, and a bulk reconcile can drop
+            // hundreds at once — that is the CW-T/PR #55 24k perf win, undone. Instead drop the
+            // whole session-only stack once, in O(1). Undoing PAST an untracked removal would
+            // otherwise restore engine.files from a stale filesSnapshot but not strategy state,
+            // stranding the file at Tier-0.
+            const droppedUndo = this.engine.clearHistory();
+            if (droppedUndo > 0) {
+                this.host.showNotification(
+                    `${removed.length} file${removed.length === 1 ? '' : 's'} left the folder — ` +
+                        `tournament undo history cleared`,
+                    'info'
+                );
+            }
             this._schedulePersist(this.host.baseFolderPath);
         }
         return removed.length;
