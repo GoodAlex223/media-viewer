@@ -82,11 +82,14 @@ class MediaViewer {
         // later fails again is dropped on that second failure even though it reads to the user as a
         // fresh attempt — intended, since it bounds total attempts against a permanently-broken path.
         this._tournamentRestoreFailures = new WeakMap();
-        // Re-entrancy lock for the tournament handler family. NOT isLoading: showTournamentPairFast's
-        // setupCompareImageHandlers/setupCompareVideoHandlers clear that flag on bothLoaded/onError, so
-        // an isLoading-based guard dissolves at first paint and a second trigger renders concurrently.
-        // Nothing outside handleTournamentPick/Draw/Undo touches this one.
+        // Serialization state for the tournament handler family — see _acquireTournamentRender.
+        // NOT isLoading: showTournamentPairFast's setupCompareImageHandlers/setupCompareVideoHandlers
+        // clear that flag on bothLoaded/onError, so an isLoading-based guard dissolves at first paint
+        // and a second trigger renders concurrently. Nothing outside the tournament handlers and
+        // _acquireTournamentRender touches these three.
         this._tournamentRenderBusy = false;
+        this._tournamentRenderPromise = null; // settles when the in-flight action releases
+        this._tournamentActionQueued = false; // at most ONE action may wait for that release
         this.isVideoLoading = false;
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
@@ -4696,7 +4699,7 @@ class MediaViewer {
                 // Reveal the chrome once on entry (the 3s timer then hides it) so the pause /
                 // exit affordance and the shared buttons announce themselves before hiding.
                 this.tournamentChrome?.forEach((c) => c.show());
-                await this.showTournamentPair();
+                await this._renderTournamentPairLocked();
             } else {
                 this.switchMode('single');
             }
@@ -4884,11 +4887,82 @@ class MediaViewer {
         else this.rightMedia = media;
     }
 
-    async handleTournamentPick(winner, loser) {
-        if (!this.isTournamentMode || this.isLoading) return;
-        if (this._tournamentRenderBusy) return;
-        this._tournamentRenderBusy = true;
+    // The pair render performed on tournament ENTRY (fresh start and resume). It takes the same
+    // lock the handlers do, so a key pressed while the first pair is still painting queues behind
+    // it instead of being refused as a "foreign" load — that first render is the longest one in
+    // the mode (full showCompareMedia, and longer still when a side fails to decode), so it is the
+    // widest window in which a keypress could otherwise be swallowed.
+    async _renderTournamentPairLocked() {
+        // null means another action is already queued, which cannot happen on entry (no handler
+        // can be in flight yet). Render anyway if it ever does: unlocked is no worse than before.
+        const release = await this._acquireTournamentRender();
         try {
+            await this.showTournamentPair();
+        } finally {
+            release?.();
+        }
+    }
+
+    // isLoading is a reason to refuse a tournament action ONLY when the load is not our own pair
+    // render. While the serialization lock is held, isLoading belongs to that render — refusing on
+    // it would silently swallow the keypress, which is precisely the drop _acquireTournamentRender
+    // exists to remove, and it would make the queueing below unreachable in practice (the pick's
+    // own render sets isLoading, so every follow-up press would bounce off this line first).
+    // A foreign load — the initial pair render, a special-folder move — still refuses, as before.
+    _isForeignLoadInFlight() {
+        return this.isLoading && !this._tournamentRenderBusy;
+    }
+
+    // Serializes the tournament handler family (pick / draw / undo) behind the in-flight pair
+    // render. Resolves to a release function, or to null when the caller must not run at all.
+    //
+    // A second action arriving mid-render WAITS rather than being dropped. Dropping it silently
+    // swallowed real keypresses: isLoading is already false at first paint (the compare handlers
+    // clear it), so a pick followed promptly by Ctrl+A lost the undo with no feedback at all.
+    // At most ONE action waits — presses beyond that during the same render are duplicates and
+    // are refused, so a mashed key cannot build a backlog of stale actions.
+    //
+    // Callers that carry a pair-specific verdict (pick, draw) MUST re-check that their pair is
+    // still current after acquiring: waiting means the engine may have advanced underneath them.
+    async _acquireTournamentRender() {
+        if (this._tournamentRenderBusy) {
+            if (this._tournamentActionQueued) return null;
+            this._tournamentActionQueued = true;
+            try {
+                // A loop, not a single await: the holder clears the flag and resolves the promise
+                // in the same finally, but this waiter only resumes a microtask later — wide
+                // enough for a fresh (unqueued) press to take the lock in between. Re-check.
+                while (this._tournamentRenderBusy) {
+                    await this._tournamentRenderPromise;
+                }
+            } finally {
+                this._tournamentActionQueued = false;
+            }
+        }
+        // Synchronous from the check above through this assignment — nothing can interleave.
+        this._tournamentRenderBusy = true;
+        let release;
+        this._tournamentRenderPromise = new Promise((resolve) => (release = resolve));
+        return () => {
+            this._tournamentRenderBusy = false;
+            release();
+        };
+    }
+
+    async handleTournamentPick(winner, loser) {
+        if (!this.isTournamentMode) return;
+        if (this._isForeignLoadInFlight()) return;
+        const release = await this._acquireTournamentRender();
+        if (!release) return;
+        try {
+            // This may have waited behind a render, during which the engine can have advanced —
+            // a double-tapped key queues one press. Recording it then would score a verdict on a
+            // pair the user never saw, so drop it unless the pressed pair is still current.
+            const pair = this.tournament.engine?.getCurrentPair();
+            const stillCurrent =
+                !!pair &&
+                ((pair.left === winner && pair.right === loser) || (pair.left === loser && pair.right === winner));
+            if (!stillCurrent) return;
             this.signalUserActivity();
             try {
                 await this.tournament.handlePairResult(winner, loser);
@@ -4897,18 +4971,24 @@ class MediaViewer {
             }
             await this.showTournamentPair();
         } finally {
-            this._tournamentRenderBusy = false;
+            release();
         }
     }
 
     async handleTournamentDraw(outcome) {
-        if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
-        if (this._tournamentRenderBusy) return;
-        this._tournamentRenderBusy = true;
+        if (!this.isTournamentMode || !this.tournament.engine) return;
+        if (this._isForeignLoadInFlight()) return;
+        // Capture the pair the user actually pressed against BEFORE waiting for any in-flight
+        // render. Reading it only after the wait would apply their verdict to the NEXT pair.
+        const pressed = this.tournament.engine.getCurrentPair();
+        if (!pressed) return;
+        const release = await this._acquireTournamentRender();
+        if (!release) return;
         try {
             this.signalUserActivity();
-            const pair = this.tournament.engine.getCurrentPair();
-            if (!pair) return;
+            const pair = this.tournament.engine?.getCurrentPair();
+            // Same re-validation as handleTournamentPick: waiting lets the engine advance.
+            if (!pair || pair.left !== pressed.left || pair.right !== pressed.right) return;
             try {
                 await this.tournament.handlePairDraw(pair.left, pair.right, outcome);
                 // Confirmation toast lives INSIDE the try: only show "recorded" after the
@@ -4926,14 +5006,17 @@ class MediaViewer {
             }
             await this.showTournamentPair();
         } finally {
-            this._tournamentRenderBusy = false;
+            release();
         }
     }
 
     async handleTournamentUndo() {
-        if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
-        if (this._tournamentRenderBusy) return;
-        this._tournamentRenderBusy = true;
+        if (!this.isTournamentMode || !this.tournament.engine) return;
+        if (this._isForeignLoadInFlight()) return;
+        // No pair re-validation after the wait, unlike pick/draw: "undo the last thing" stays a
+        // valid intent whatever the render did, and the stack is re-peeked below anyway.
+        const release = await this._acquireTournamentRender();
+        if (!release) return;
         try {
             // engine.history is the single chronological undo stack: picks and tournament-mode
             // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune
@@ -5061,7 +5144,7 @@ class MediaViewer {
             this.tournament._schedulePersist(this.baseFolderPath);
             await this.showTournamentPair();
         } finally {
-            this._tournamentRenderBusy = false;
+            release();
         }
     }
 
@@ -5185,7 +5268,7 @@ class MediaViewer {
         // the live-engine fast-path (enterTournamentMode ~4149, which skips reconciliation) and
         // is idempotent on the disk path. Root fix for "cannot enter after add-media + AI sort".
         this.tournament.reconcileWithFiles(this.mediaFiles.map((f) => f.path));
-        await this.showTournamentPair();
+        await this._renderTournamentPairLocked();
     }
 
     // Compare mode methods
