@@ -4715,7 +4715,10 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'EPERM' }));
         await handleTournamentUndo.call(ctx);
         expect(ctx.showError).toHaveBeenCalled();
-        expect(ctx.tournament.engine.peekUndoEntry).toHaveBeenCalledTimes(1);
+        // Twice: the initial peek, then the identity re-check that now also guards the failure
+        // exit (the drop path mutates the stack, so it needs the same protection as the success
+        // path). Non-mutating either way — what matters is the assertions below.
+        expect(ctx.tournament.engine.peekUndoEntry).toHaveBeenCalledTimes(2);
         expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
         expect(ctx.moveHistory).toEqual([SPECIAL_META]);
         expect(ctx.mediaFiles).toEqual([]);
@@ -4877,6 +4880,35 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         await handleTournamentUndo.call(ctx);
 
         expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('does not drop or clear when another action landed during the failed restore', async () => {
+        // The drop path mutates the stack just as much as the success path does: dropEntry()
+        // splices by identity and clearHistory() takes EVERYTHING with it — including an entry
+        // that landed while the failing moveFile was in flight. handleTournamentSpecial sits
+        // OUTSIDE _tournamentRenderBusy and isLoading is advisory, so this is reachable.
+        const pending = { kind: 'special', meta: SPECIAL_META };
+        const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
+        globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'ENOENT' }));
+
+        await handleTournamentUndo.call(ctx); // failure 1 — entry stays, stack unchanged
+        // Second call: the entry is still on top when we peek it, but a pick lands during the
+        // (also failing) restore, so the identity re-check must see a different top.
+        const intruder = { kind: 'pick' };
+        let peeks = 0;
+        ctx.tournament.engine.peekUndoEntry = vi.fn(() => (peeks++ === 0 ? pending : intruder));
+
+        await handleTournamentUndo.call(ctx);
+
+        expect(ctx.tournament.engine.dropEntry).not.toHaveBeenCalled();
+        expect(ctx.tournament.engine.clearHistory).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toEqual([SPECIAL_META]); // twin survives alongside its entry
+        expect(ctx.tournament.engine.undoUserAction).not.toHaveBeenCalled();
+        expect(ctx.showError).toHaveBeenLastCalledWith(expect.stringContaining('interrupted'));
+        // No rollback move: the restore FAILED, so the file never left the special folder.
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenCalledTimes(2);
+        // The failure count survives on the entry, so the next undo that reaches it discards it.
+        expect(ctx._tournamentRestoreFailures.get(pending)).toBe(2);
     });
 
     it('counts failures per entry, not globally', async () => {
