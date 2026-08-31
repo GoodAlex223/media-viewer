@@ -34,6 +34,7 @@ Central index for all project documentation.
 [Video Fullscreen Toggle]: planning/plans/2025-12-29_video-fullscreen-toggle.md
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
+[G2 Tournament Undo Hardening Plan]: archive/plans/2026-08-30_g2-tournament-undo-hardening.md
 
 ## Archived Plans
 
@@ -80,6 +81,7 @@ Central index for all project documentation.
 
 | [G4 Strategic-Doc Refresh Plan][] | Strategic docs refreshed to August-2026 reality (v1.1 retro-closed, v2.0 = modularization arc, Now/Next/Later theme board) + CLAUDE.md/PROJECT.md sync + planning-session staleness rule (Group G4) |
 | [G1 Bulk-Rate Follow-ups Plan][] | Real-worker E2E for the PR #66 deferred re-render (D2/D4) + `loadFolder` deferred-window cancel, `prunedPairKeys` restore on undo, counter/undo-arithmetic coverage; review-round log (Group G1, Cleanup Week #3) |
+| [G2 Tournament Undo Hardening Plan][] | Engine `clearHistory`/`dropEntry` primitives + `reconcileWithFiles` drops the session-only stack in O(1) + a failed special-restore drops its own entry instead of wedging + empty-state keydown `canUndo` consults `engine.history`; **4 of 5 tasks shipped** — Task 4's `_tournamentRenderBusy` lock was implemented, measured against the tournament E2E, and reverted as unsound (the render re-enters itself from DOM callbacks behind the handlers) (Group G2, Cleanup Week #3) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md

@@ -2,8 +2,8 @@
 
 **Task Reference**: WEEKLY.md Aug 31–Sep 4 § G2 (🟤, 5 SP) ← BACKLOG 🟤 `### [2026-07-21] PR #65 review follow-ups`
 **Created**: 2026-08-30
-**Status**: In Progress
-**Last Updated**: 2026-08-30
+**Status**: Complete — **4 of 5 tasks shipped**; Task 4 implemented, measured, and reverted (see its SUPERSEDED note)
+**Last Updated**: 2026-08-31
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -1135,27 +1135,119 @@ Run after the plan is written, before execution.
 Spec approved (`d851bf9`). Plan written; baseline 529 unit tests / 17 files verified green. Branch
 `g2-tournament-undo-hardening` created off `main` (`1d072e3`) and pushed.
 
+### [2026-08-30] — PHASE: Execution
+
+Five tasks, one commit each, TDD throughout: `cf7a30d` (T1, +7 with the `37ca6b3` strengthening),
+`74d3961` (T2, +5), `b7a964b`/`5a09376` (T3, +4), `57fa2a4` (T4, +4), `19e6762`/`3eff3eb` (T5, +6).
+Per-task counts hit exactly: 529 → 536 → 541 → 545 → 549 → 555.
+
+Three rulings taken during execution rather than deferred. **T1**: the plan's own mutation did not
+fire — dropping the first of two same-kind entries lands at index 0, exactly where the buggy
+`findIndex` mutant lands, so the test could not discriminate. Strengthened in place (`37ca6b3`),
+count preserved. **T3**: the plan's prescribed self-heal comment was false as written; corrected.
+**T5**: the same false claim had also reached CLAUDE.md and was corrected there, and the
+`exitTournamentMode` caller list was completed (a 4th null site exists at `media-viewer.js:4426`).
+
+### [2026-08-31] — PHASE: Review
+
+Whole-branch review, five parallel reviewers + confidence scoring. One code finding at 75 and five
+documentation findings, all fixed: `e33d7c8` (the wedged-entry drop path needed the same identity
+re-check the success path performs 13 lines below — the drop mutated `engine.history` on a `pending`
+captured before an `await`) and `b352360` (three live docs this branch left describing code it had
+changed). Unit 555 → 560.
+
+The review's own headline was not any single finding: **five of six shared one root cause** — the
+documentation was written from the plan rather than re-verified against the code at the moment of
+writing. That is the same root cause G4's review recorded one group earlier.
+
+### [2026-08-31] — PHASE: Revert (Task 4)
+
+Task 4 shipped, then failed E2E. Fix attempts, in order: a serializing variant that waits instead of
+dropping (parked on `g2-serialization-wip`, `b155374` — unit-green at 566, three guards
+mutation-verified, still ~1 failure per run), then locking the tournament entry renders too. At the
+three-attempt stop condition, measured the alternative instead of continuing:
+
+| Configuration | Tournament E2E |
+| --- | --- |
+| `main` | 4/4 green |
+| Branch through Task 3 (`5a09376`) | 3/3 green |
+| Branch with Task 4's lock (`820f34d`) | ~2 of 3 runs fail |
+| Serializing variant (`b155374`) | ~1 failure per run |
+| Lock neutralized, everything else intact | 4/4 green |
+| After the revert (`a4bf666`) | 5/5 green |
+
+Reverted as a hand-authored forward commit, not `git revert 57fa2a4` — four later commits touch the
+same methods and `e33d7c8` had to survive intact (verified: `git diff -w` reduces to the constructor
+field, three guard/set/`try`+`finally` blocks, and one reworded comment; no statement moved across a
+`catch` boundary). Unit 560 → **556**, exactly Task 4's four cases.
+
 ---
 
 ## 5. Key Discoveries
 
-_(fill in during execution)_
+1. **Task 4 was unsound as specified, not merely incomplete — and the spec is where that was
+   decided.** `_buildTournamentSide` re-enters the render from DOM callbacks that never pass through
+   a handler: the media `error` listener (`media-viewer.js:4879`) and the JXL decode-failure path
+   (`:4852`) both call `showTournamentPair()` un-awaited, from *inside* the render
+   `showTournamentPair` started. Against a render that re-enters itself, a lock over the handler
+   family has exactly two outcomes: miss that path and silently drop user input (what shipped — a
+   Ctrl+A pressed promptly after a pick was lost with no feedback), or cover it and wedge. The spec
+   scoped `moveToSpecialFolder`'s un-awaited render out of bounds and never went looking for
+   siblings; the review's reviewer asked the right question ("which entry points do not take the
+   lock") and got a handler-shaped answer, because nobody's frame included the render internals.
+2. **Three attempts did not fail — three attempts proved a precondition was missing.** The stop rule
+   fires on the count, but the useful output was the bisect with a proper control (lock neutralized,
+   everything else intact → 4/4), which converts "stuck" into "this task is blocked on a named
+   defect". The serializing variant is the experiment that distinguishes the two horns, and it landed
+   on the first one.
+3. **The E2E over-represented the trigger and correctly represented the failure mode.** `tiny.mp4`
+   fails to decode in the Playwright fixtures on every run, so the re-entrant re-render storm is
+   constant there and rare in production. But the failure mode it exposed — a silent `return` that
+   discards a keypress — is real regardless of how the storm starts, and `removeFileFromList` firing
+   from a media error is a genuine production path (the toast literally says "Skipping missing file").
+4. **A late correction reaches the code and stops.** Five of six review findings were live docs made
+   false by this branch's own changes, including two that had *just* been corrected for a different
+   reason. The revert then re-opened the same surface (four docs asserted `_tournamentRenderBusy`
+   shipped) — caught before landing this time, and fixed in the same commit as the change so the
+   correction cannot drift from it. Third instance in this branch; first one caught in advance.
+5. **`_tournamentRenderBusy` is gone but its tripwire is not.** The undo re-entrancy test was
+   rewritten as an explicit CHARACTERIZATION test asserting that a second undo *does* re-enter and
+   reverses two entries, with a note that it must go red when the real guard lands. It fails honestly
+   today instead of documenting a guarantee that no longer exists.
 
 ---
 
 ## 6. Future Improvements
 
-_(minimum 2 at closeout; the spec §7 out-of-scope list seeds this)_
+1. **Fix the un-awaited re-entrant renders** — `_buildTournamentSide`'s error listener (`:4879`) and
+   JXL decode-failure path (`:4852`), plus `moveToSpecialFolder` (`:4830`). One defect, three sites,
+   one decision about how a render restarts itself. Filed 🟤 `[2026-08-31]`; the blocker for #2.
+2. **Re-land the re-entrancy guard once #1 is fixed** — the original 🟤 `[2026-07-21]` item, re-filed
+   as blocked. Both mechanisms tried so far are known wrong; the serializing variant on
+   `g2-serialization-wip` is the starting point, but its `_isForeignLoadInFlight()` changes a
+   pre-existing guard and needs its own review rather than a free ride.
+3. **Spec §7 out-of-scope residue** — enforcing (rather than documenting) the `exitTournamentMode`
+   invariant, and the dead `2025-12-29_video-fullscreen-toggle.md` row in
+   `docs/planning/plans/README.md`.
+4. **Close the two undisclosed `exitTournamentMode` exit paths** — `_retryCompareAfterRemoval`
+   (`:2983`) and `showCompareMedia`'s `<2`-files branch (`:3055`) call it without nulling
+   `tournament.engine`. Documented in the invariant comment by this branch; not yet fixed.
 
 ---
 
 ## 7. Testing
 
-**Unit** — `npx vitest run --no-file-parallelism`. Expected progression: 529 → 536 (T1) → 541 (T2) →
+**Unit** — `npx vitest run --no-file-parallelism`. Planned progression: 529 → 536 (T1) → 541 (T2) →
 545 (T3) → 549 (T4) → 555 (T5). These are exact per-task case counts, not estimates; a mismatch means a
 case was dropped or duplicated, so reconcile before moving on.
 
+**Actual**: every per-task checkpoint hit exactly, then 555 → **560** for the review round (the
+identity-re-check fix, +4), then 560 → **556** on the Task 4 revert (−4, exactly its own cases). Final
+**556 passing / 17 files**.
+
 **E2E** — no test changes in this group; the pre-push hook runs the full Playwright suite on push.
+Final: **56/56** through the real gate (no `--no-verify`), plus 5/5 standalone tournament runs. The
+suite is also what falsified Task 4 — see the Implementation Log's revert phase for the bisect.
 
 **Manual smoke** (user-side, after push): start a tournament, make 3 picks, special-move a file, Ctrl+A to
 restore it, then leave and re-enter tournament mode after deleting a file from the folder externally —
