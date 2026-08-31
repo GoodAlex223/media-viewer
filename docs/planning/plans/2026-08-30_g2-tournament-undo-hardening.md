@@ -687,6 +687,19 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 ### Task 4: `_tournamentRenderBusy` re-entrancy lock
 
+> ⚠️ **SUPERSEDED — implemented as written, then REVERTED on 2026-08-31.** This task shipped in
+> `57fa2a4` and was reverted after whole-branch E2E measurement. It is unsound as specified, not
+> merely incomplete: `_buildTournamentSide` re-enters the render from DOM callbacks that bypass
+> every handler (the media `error` listener and the JXL decode-failure path both call
+> `showTournamentPair()` un-awaited, from inside the render). A lock over the handler family
+> therefore either misses that path and silently drops user input — the shipped behaviour, which
+> lost a Ctrl+A pressed promptly after a pick — or covers it and wedges. Tournament E2E: **4/4
+> green with the lock neutralized, ~2/3 runs failing with it**; a serializing variant that waits
+> instead of dropping (branch `g2-serialization-wip`, `b155374`) still failed ~1 per run. The
+> guard is re-filed to BACKLOG [2026-08-31] as blocked on the re-entrant renders. Everything
+> below is retained as the record of what was built; do not use it as a specification.
+> Tasks 1, 2, 3 and 5 are unaffected and shipped.
+
 **Files:**
 - Modify: `media-viewer.js` — constructor (~L70), `handleTournamentPick` (~L4838), `handleTournamentDraw` (~L4849), `handleTournamentUndo` (~L4872)
 - Test: `tests/media-viewer-utils.test.js` — `describe('tournament isLoading guards (Fix 2)')` (~L3407)

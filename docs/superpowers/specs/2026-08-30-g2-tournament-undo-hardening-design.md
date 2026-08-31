@@ -88,7 +88,19 @@ referenced in §4 D-1.)
 
 | ID | Question | Decision | Rejected alternatives | Implemented in |
 |----|----------|----------|-----------------------|----------------|
-| **DEC-1** | What guards the trailing `showTournamentPair()`? | **Dedicated re-entrancy flag** `_tournamentRenderBusy` | Generation counter (last-trigger-wins; tears down a half-rendered pair). Literal `isLoading` (F1 — partial guard only). | §4 **D-3** |
+| **DEC-1** | What guards the trailing `showTournamentPair()`? | ~~**Dedicated re-entrancy flag** `_tournamentRenderBusy`~~ — **SUPERSEDED 2026-08-31: implemented, measured, reverted.** See the note below the table. | Generation counter (last-trigger-wins; tears down a half-rendered pair). Literal `isLoading` (F1 — partial guard only). | §4 **D-3** |
+
+> ⚠️ **DEC-1 SUPERSEDED (2026-08-31)** — the decision was unsound as specified, and its precondition
+> was missing rather than merely unstated. `_buildTournamentSide` re-enters the render from DOM
+> callbacks that never pass through a handler: the media `error` listener and the JXL decode-failure
+> path both call `showTournamentPair()` un-awaited, from inside the render that `showTournamentPair`
+> itself started. Against a render that re-enters itself, any lock over the handler family has only
+> two outcomes — miss the re-entrant path and silently drop user input (what shipped; a pick followed
+> promptly by Ctrl+A lost the undo with no feedback), or cover it and wedge. Both were measured on the
+> tournament E2E: **4/4 green with the lock neutralized, ~2/3 runs failing with it**, and a serializing
+> variant (branch `g2-serialization-wip`, `b155374`) still failing ~1 per run. Task 4 was reverted; the
+> guard is re-filed to BACKLOG [2026-08-31] as **blocked on** fixing those re-entrant renders first.
+> DEC-2 and DEC-3 are unaffected and shipped.
 | **DEC-2** | Escape policy for a wedged `special` entry? | **Drop after 2 consecutive failures** on the same entry, with a toast | Drop on 1st failure (a transient AV/network lock costs an undo). Demote to `'prune'` (silently reclassifies a user action). | §4 **D-2** |
 | **DEC-3** | Tell the user when a reconcile drops a non-empty history? | **Notify** — only when a prune actually drops a non-empty stack | Silent drop (BACKLOG's literal text; leaves "Nothing to undo" unexplained). | §4 **D-1** |
 

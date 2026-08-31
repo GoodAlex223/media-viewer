@@ -82,11 +82,6 @@ class MediaViewer {
         // later fails again is dropped on that second failure even though it reads to the user as a
         // fresh attempt — intended, since it bounds total attempts against a permanently-broken path.
         this._tournamentRestoreFailures = new WeakMap();
-        // Re-entrancy lock for the tournament handler family. NOT isLoading: showTournamentPairFast's
-        // setupCompareImageHandlers/setupCompareVideoHandlers clear that flag on bothLoaded/onError, so
-        // an isLoading-based guard dissolves at first paint and a second trigger renders concurrently.
-        // Nothing outside handleTournamentPick/Draw/Undo touches this one.
-        this._tournamentRenderBusy = false;
         this.isVideoLoading = false;
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
@@ -4886,183 +4881,167 @@ class MediaViewer {
 
     async handleTournamentPick(winner, loser) {
         if (!this.isTournamentMode || this.isLoading) return;
-        if (this._tournamentRenderBusy) return;
-        this._tournamentRenderBusy = true;
+        this.signalUserActivity();
         try {
-            this.signalUserActivity();
-            try {
-                await this.tournament.handlePairResult(winner, loser);
-            } catch (err) {
-                window.electronAPI.logError('Tournament pick failed: ' + (err && err.message ? err.message : err));
-            }
-            await this.showTournamentPair();
-        } finally {
-            this._tournamentRenderBusy = false;
+            await this.tournament.handlePairResult(winner, loser);
+        } catch (err) {
+            window.electronAPI.logError('Tournament pick failed: ' + (err && err.message ? err.message : err));
         }
+        await this.showTournamentPair();
     }
 
     async handleTournamentDraw(outcome) {
         if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
-        if (this._tournamentRenderBusy) return;
-        this._tournamentRenderBusy = true;
+        this.signalUserActivity();
+        const pair = this.tournament.engine.getCurrentPair();
+        if (!pair) return;
         try {
-            this.signalUserActivity();
-            const pair = this.tournament.engine.getCurrentPair();
-            if (!pair) return;
-            try {
-                await this.tournament.handlePairDraw(pair.left, pair.right, outcome);
-                // Confirmation toast lives INSIDE the try: only show "recorded" after the
-                // draw actually persisted. A thrown record (e.g. stale pair) must NOT show a
-                // false success toast — it falls to the catch, and showTournamentPair below
-                // still advances the UI regardless.
-                if (this.showRatingConfirmations) {
-                    this.showNotification(
-                        outcome === 'win' ? '🤝 Both advance (tie)' : '👎 Both stay (tie)',
-                        outcome === 'win' ? 'success' : 'info'
-                    );
-                }
-            } catch (err) {
-                window.electronAPI.logError('Tournament draw failed: ' + (err && err.message ? err.message : err));
+            await this.tournament.handlePairDraw(pair.left, pair.right, outcome);
+            // Confirmation toast lives INSIDE the try: only show "recorded" after the
+            // draw actually persisted. A thrown record (e.g. stale pair) must NOT show a
+            // false success toast — it falls to the catch, and showTournamentPair below
+            // still advances the UI regardless.
+            if (this.showRatingConfirmations) {
+                this.showNotification(
+                    outcome === 'win' ? '🤝 Both advance (tie)' : '👎 Both stay (tie)',
+                    outcome === 'win' ? 'success' : 'info'
+                );
             }
-            await this.showTournamentPair();
-        } finally {
-            this._tournamentRenderBusy = false;
+        } catch (err) {
+            window.electronAPI.logError('Tournament draw failed: ' + (err && err.message ? err.message : err));
         }
+        await this.showTournamentPair();
     }
 
     async handleTournamentUndo() {
         if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
-        if (this._tournamentRenderBusy) return;
-        this._tournamentRenderBusy = true;
-        try {
-            // engine.history is the single chronological undo stack: picks and tournament-mode
-            // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune
-            // in showTournamentPair) are absorbed by undoUserAction so they never cost a press.
-            const pending = this.tournament.engine.peekUndoEntry();
-            if (!pending) {
-                // Also the post-resume case: undo is session-only, so a resumed tournament starts
-                // with an empty stack (the version:2 payload is deliberately history-free).
-                this.showNotification('Nothing to undo', 'info');
+        // engine.history is the single chronological undo stack: picks and tournament-mode
+        // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune
+        // in showTournamentPair) are absorbed by undoUserAction so they never cost a press.
+        const pending = this.tournament.engine.peekUndoEntry();
+        if (!pending) {
+            // Also the post-resume case: undo is session-only, so a resumed tournament starts
+            // with an empty stack (the version:2 payload is deliberately history-free).
+            this.showNotification('Nothing to undo', 'info');
+            return;
+        }
+
+        if ((pending.kind ?? 'pick') === 'special') {
+            // The file was physically moved off disk and dropped from mediaFiles + the feature
+            // caches. Restore it FIRST and only then advance the stack, so a failed move leaves
+            // engine.history and moveHistory exactly as they were.
+            const move = pending.meta;
+            // Best-effort mutex across this await: handleTournamentPick/handleTournamentDraw/
+            // moveToSpecialFolder all guard on isLoading, so this blocks a concurrent pick/draw/special
+            // from landing while the disk restore is in flight. Cleared in finally on every exit path,
+            // before showTournamentPair() runs.
+            //
+            // ADVISORY ONLY — isLoading is not exclusively owned. showTournamentPairFast never sets it,
+            // but the setupCompare*Handlers it attaches CLEAR it on bothLoaded/onError, so a pair render
+            // still in flight when undo starts (special-move → immediate Ctrl+A) can drop this flag
+            // mid-restore. The identity re-check below, not this flag, is what actually guarantees we
+            // reverse the entry we peeked.
+            let restoreFailed = false;
+            let droppedWedged = false;
+            this.isLoading = true;
+            try {
+                const moveResult = await window.electronAPI.moveFile({
+                    sourcePath: move.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: move.fileName,
+                });
+                if (!moveResult.success) {
+                    throw new Error(moveResult.error);
+                }
+            } catch (error) {
+                restoreFailed = true;
+                console.error('Error undoing tournament special:', error);
+                const failures = (this._tournamentRestoreFailures.get(pending) ?? 0) + 1;
+                this._tournamentRestoreFailures.set(pending, failures);
+                if (failures >= TOURNAMENT_RESTORE_MAX_ATTEMPTS) {
+                    droppedWedged = true;
+                    // Unlike the first failure (forwarded via showError below, which logs
+                    // error.message itself), this permanent-discard path shows the user only
+                    // a generic message — so the OS error must be logged explicitly here or
+                    // it is lost to console.error alone (not forwarded to media-viewer.log).
+                    window.electronAPI.logError?.(
+                        `Tournament undo restore permanently failed for ${move.fileName}: ${error.message}`
+                    );
+                } else {
+                    this.showError(`Failed to undo move: ${error.message}`);
+                }
+            } finally {
+                this.isLoading = false;
+            }
+            // The stack must still be exactly where we left it. peekUndoEntry() is non-mutating, so an
+            // unchanged stack returns the same object; anything else means a pick/draw/special landed
+            // during the await (see the advisory note above). Nothing serializes the tournament
+            // handler family — the re-entrancy guard that would have is BACKLOG [2026-08-31],
+            // blocked on the un-awaited re-entrant renders in _buildTournamentSide — so isLoading
+            // is the only thing in the way, and it is advisory. Reachable, not theoretical. BOTH
+            // exits below need the check: the failure path mutates the stack too, and
+            // _dropWedgedSpecialEntry's clearHistory() would take the entry that just landed with it.
+            const stackMoved = this.tournament.engine.peekUndoEntry() !== pending;
+            if (restoreFailed) {
+                if (droppedWedged) {
+                    if (stackMoved) {
+                        // Leave the wedged entry in place. Its failure count lives on
+                        // _tournamentRestoreFailures keyed by the entry object itself, so the next
+                        // undo that reaches it fails once more and discards it then — nothing leaks.
+                        this.showError('Undo interrupted by another action — please try again');
+                    } else {
+                        this._dropWedgedSpecialEntry(pending, move);
+                        this.showError(`Couldn't restore ${move.fileName} — skipping this undo`);
+                        // Re-render so #tournamentUndoBtn re-reads peekUndoKind() and can disable.
+                        await this.showTournamentPair();
+                    }
+                }
+                // Not wedged yet: the catch above already surfaced the OS error via showError.
                 return;
             }
-
-            if ((pending.kind ?? 'pick') === 'special') {
-                // The file was physically moved off disk and dropped from mediaFiles + the feature
-                // caches. Restore it FIRST and only then advance the stack, so a failed move leaves
-                // engine.history and moveHistory exactly as they were.
-                const move = pending.meta;
-                // Best-effort mutex across this await: handleTournamentPick/handleTournamentDraw/
-                // moveToSpecialFolder all guard on isLoading, so this blocks a concurrent pick/draw/special
-                // from landing while the disk restore is in flight. Cleared in finally on every exit path,
-                // before showTournamentPair() runs.
-                //
-                // ADVISORY ONLY — isLoading is not exclusively owned. showTournamentPairFast never sets it,
-                // but the setupCompare*Handlers it attaches CLEAR it on bothLoaded/onError, so a pair render
-                // still in flight when undo starts (special-move → immediate Ctrl+A) can drop this flag
-                // mid-restore. The identity re-check below, not this flag, is what actually guarantees we
-                // reverse the entry we peeked.
-                let restoreFailed = false;
-                let droppedWedged = false;
-                this.isLoading = true;
-                try {
-                    const moveResult = await window.electronAPI.moveFile({
-                        sourcePath: move.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: move.fileName,
-                    });
-                    if (!moveResult.success) {
-                        throw new Error(moveResult.error);
-                    }
-                } catch (error) {
-                    restoreFailed = true;
-                    console.error('Error undoing tournament special:', error);
-                    const failures = (this._tournamentRestoreFailures.get(pending) ?? 0) + 1;
-                    this._tournamentRestoreFailures.set(pending, failures);
-                    if (failures >= TOURNAMENT_RESTORE_MAX_ATTEMPTS) {
-                        droppedWedged = true;
-                        // Unlike the first failure (forwarded via showError below, which logs
-                        // error.message itself), this permanent-discard path shows the user only
-                        // a generic message — so the OS error must be logged explicitly here or
-                        // it is lost to console.error alone (not forwarded to media-viewer.log).
-                        window.electronAPI.logError?.(
-                            `Tournament undo restore permanently failed for ${move.fileName}: ${error.message}`
-                        );
-                    } else {
-                        this.showError(`Failed to undo move: ${error.message}`);
-                    }
-                } finally {
-                    this.isLoading = false;
-                }
-                // The stack must still be exactly where we left it. peekUndoEntry() is non-mutating, so an
-                // unchanged stack returns the same object; anything else means a pick/draw/special landed
-                // during the await (see the advisory note above) — handleTournamentSpecial runs OUTSIDE
-                // _tournamentRenderBusy, so this is reachable rather than theoretical. BOTH exits below
-                // need the check: the failure path mutates the stack too, and _dropWedgedSpecialEntry's
-                // clearHistory() would take the entry that just landed down with it.
-                const stackMoved = this.tournament.engine.peekUndoEntry() !== pending;
-                if (restoreFailed) {
-                    if (droppedWedged) {
-                        if (stackMoved) {
-                            // Leave the wedged entry in place. Its failure count lives on
-                            // _tournamentRestoreFailures keyed by the entry object itself, so the next
-                            // undo that reaches it fails once more and discards it then — nothing leaks.
-                            this.showError('Undo interrupted by another action — please try again');
-                        } else {
-                            this._dropWedgedSpecialEntry(pending, move);
-                            this.showError(`Couldn't restore ${move.fileName} — skipping this undo`);
-                            // Re-render so #tournamentUndoBtn re-reads peekUndoKind() and can disable.
-                            await this.showTournamentPair();
-                        }
-                    }
-                    // Not wedged yet: the catch above already surfaced the OS error via showError.
-                    return;
-                }
-                // Never reverse an entry the user did not ask us to — roll the file back to the special
-                // folder so the whole undo is a no-op and the user can simply retry, rather than leaving
-                // it on disk but absent from mediaFiles with a stale moveHistory entry. (No rollback is
-                // needed on the failure path above: the restore failed, so the file never moved.)
-                if (stackMoved) {
-                    const rollback = await window.electronAPI.moveFile({
-                        sourcePath: move.originalPath,
-                        targetFolder: window.electronAPI.path.dirname(move.newPath),
-                        fileName: move.fileName,
-                    });
-                    if (!rollback.success) {
-                        // Rollback failed: the file sits in the source folder but is not in mediaFiles.
-                        // Recoverable by reloading the folder; log it so the state is diagnosable.
-                        window.electronAPI.logError?.(
-                            `Tournament undo rollback failed for ${move.fileName}: ${rollback.error ?? 'unknown'}`
-                        );
-                    }
-                    this.showError('Undo interrupted by another action — please try again');
-                    return;
-                }
-                // Disk restored — safe to advance. undoUserAction reverses any trailing prunes plus
-                // this removal, restoring strategy state (files/winCounts/byes/roundQueue) AND
-                // engine.files from the snapshot, so the file re-pairs and reports its real tier.
-                this.tournament.engine.undoUserAction();
-                this.mediaFiles.push({
-                    name: move.fileName,
-                    path: move.originalPath,
-                    size: move.fileSize,
-                    type: move.fileType,
+            // Never reverse an entry the user did not ask us to — roll the file back to the special
+            // folder so the whole undo is a no-op and the user can simply retry, rather than leaving
+            // it on disk but absent from mediaFiles with a stale moveHistory entry. (No rollback is
+            // needed on the failure path above: the restore failed, so the file never moved.)
+            if (stackMoved) {
+                const rollback = await window.electronAPI.moveFile({
+                    sourcePath: move.originalPath,
+                    targetFolder: window.electronAPI.path.dirname(move.newPath),
+                    fileName: move.fileName,
                 });
-                this.restoreFeatureCachesFromHistory(move);
-                const moveIdx = this.moveHistory.lastIndexOf(move);
-                if (moveIdx !== -1) this.moveHistory.splice(moveIdx, 1);
-                if (this.showRatingConfirmations) {
-                    this.showNotification(`✅ Restored ${move.fileName}`, 'success');
+                if (!rollback.success) {
+                    // Rollback failed: the file sits in the source folder but is not in mediaFiles.
+                    // Recoverable by reloading the folder; log it so the state is diagnosable.
+                    window.electronAPI.logError?.(
+                        `Tournament undo rollback failed for ${move.fileName}: ${rollback.error ?? 'unknown'}`
+                    );
                 }
-                this.updateFolderInfo();
-            } else {
-                this.tournament.engine.undoUserAction();
+                this.showError('Undo interrupted by another action — please try again');
+                return;
             }
-
-            this.tournament._schedulePersist(this.baseFolderPath);
-            await this.showTournamentPair();
-        } finally {
-            this._tournamentRenderBusy = false;
+            // Disk restored — safe to advance. undoUserAction reverses any trailing prunes plus
+            // this removal, restoring strategy state (files/winCounts/byes/roundQueue) AND
+            // engine.files from the snapshot, so the file re-pairs and reports its real tier.
+            this.tournament.engine.undoUserAction();
+            this.mediaFiles.push({
+                name: move.fileName,
+                path: move.originalPath,
+                size: move.fileSize,
+                type: move.fileType,
+            });
+            this.restoreFeatureCachesFromHistory(move);
+            const moveIdx = this.moveHistory.lastIndexOf(move);
+            if (moveIdx !== -1) this.moveHistory.splice(moveIdx, 1);
+            if (this.showRatingConfirmations) {
+                this.showNotification(`✅ Restored ${move.fileName}`, 'success');
+            }
+            this.updateFolderInfo();
+        } else {
+            this.tournament.engine.undoUserAction();
         }
+
+        this.tournament._schedulePersist(this.baseFolderPath);
+        await this.showTournamentPair();
     }
 
     // A `special` undo entry whose disk restore keeps failing can never be reversed — the file is

@@ -3486,73 +3486,10 @@ describe('tournament isLoading guards (Fix 2)', () => {
         expect(ctx.showTournamentPair).not.toHaveBeenCalled();
     });
 
-    it('handleTournamentPick refuses to re-enter while a render is in flight', async () => {
-        // isLoading cannot do this job: showTournamentPairFast's compare handlers CLEAR it on
-        // bothLoaded, so an isLoading-based guard evaporates at first paint (media-viewer.js:3355).
-        const ctx = makeCtx();
-        let releaseRender;
-        ctx.showTournamentPair = vi.fn(
-            () =>
-                new Promise((resolve) => {
-                    releaseRender = resolve;
-                })
-        );
-
-        const first = handleTournamentPick.call(ctx, 'L', 'R');
-        // Simulate exactly what the real render does to the advisory flag mid-flight.
-        ctx.isLoading = false;
-        await handleTournamentPick.call(ctx, 'L', 'R');
-
-        expect(ctx.tournament.handlePairResult).toHaveBeenCalledTimes(1);
-        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
-
-        releaseRender();
-        await first;
-        expect(ctx._tournamentRenderBusy).toBe(false);
-    });
-
-    it('handleTournamentDraw refuses to re-enter while a render is in flight', async () => {
-        const ctx = makeCtx();
-        let releaseRender;
-        ctx.showTournamentPair = vi.fn(
-            () =>
-                new Promise((resolve) => {
-                    releaseRender = resolve;
-                })
-        );
-
-        const first = handleTournamentDraw.call(ctx, 'win');
-        ctx.isLoading = false;
-        await handleTournamentDraw.call(ctx, 'win');
-
-        expect(ctx.tournament.handlePairDraw).toHaveBeenCalledTimes(1);
-
-        releaseRender();
-        await first;
-        expect(ctx._tournamentRenderBusy).toBe(false);
-    });
-
-    it('releases the lock when the render throws', async () => {
-        // finally must span the trailing await, or one failed render wedges the mode for good.
-        const ctx = makeCtx();
-        ctx.showTournamentPair = vi.fn(async () => {
-            throw new Error('render boom');
-        });
-
-        await expect(handleTournamentPick.call(ctx, 'L', 'R')).rejects.toThrow('render boom');
-
-        expect(ctx._tournamentRenderBusy).toBe(false);
-        // The lock released, so the next pick is accepted rather than permanently refused.
-        ctx.showTournamentPair = vi.fn(async () => {});
-        await handleTournamentPick.call(ctx, 'L', 'R');
-        expect(ctx.tournament.handlePairResult).toHaveBeenCalledTimes(2);
-    });
-
-    it('releases the lock after a normal pick', async () => {
-        const ctx = makeCtx();
-        await handleTournamentPick.call(ctx, 'L', 'R');
-        expect(ctx._tournamentRenderBusy).toBe(false);
-    });
+    // NOTE: the four re-entrancy cases that stood here were reverted with Task 4 on 2026-08-31.
+    // A lock over this handler family cannot hold while _buildTournamentSide re-enters the render
+    // from a DOM error callback that never passes through a handler — see BACKLOG [2026-08-31].
+    // isLoading remains the only (advisory) guard; the cases above pin what it does and does not do.
 });
 
 describe('loadFolder cache reset (Fix 1)', () => {
@@ -4885,8 +4822,9 @@ describe('handleTournamentUndo (unified undo stack)', () => {
     it('does not drop or clear when another action landed during the failed restore', async () => {
         // The drop path mutates the stack just as much as the success path does: dropEntry()
         // splices by identity and clearHistory() takes EVERYTHING with it — including an entry
-        // that landed while the failing moveFile was in flight. handleTournamentSpecial sits
-        // OUTSIDE _tournamentRenderBusy and isLoading is advisory, so this is reachable.
+        // that landed while the failing moveFile was in flight. Nothing serializes the tournament
+        // handler family (Task 4's lock was reverted — BACKLOG [2026-08-31]) and isLoading is
+        // advisory, so this is reachable; the revert widened the window rather than closing it.
         const pending = { kind: 'special', meta: SPECIAL_META };
         const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });
         globalThis.window.electronAPI.moveFile = vi.fn(async () => ({ success: false, error: 'ENOENT' }));
@@ -4945,32 +4883,39 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         expect(ctx.isLoading).toBe(false);
     });
 
-    it('refuses to re-enter while a render is in flight (the non-special branch sets no isLoading at all)', async () => {
-        // Unlike the special branch (isLoading held across the moveFile await), a 'pick'/'draw'
-        // undo sets NO isLoading anywhere in this method — _tournamentRenderBusy is the ONLY
-        // guard standing between a double Ctrl+A during showTournamentPair() and a double
-        // undoUserAction(). Mirrors the Pick/Draw re-entrancy tests in "tournament isLoading
-        // guards (Fix 2)".
+    it('CHARACTERIZATION: a second undo DOES re-enter mid-render — nothing guards this today', async () => {
+        // Not the behaviour we want; the behaviour we have. Unlike the special branch (isLoading
+        // held across the moveFile await), a 'pick'/'draw' undo sets NO isLoading anywhere in this
+        // method, so a double Ctrl+A during showTournamentPair() reverses TWO entries.
+        //
+        // Task 4 added a lock here and was reverted on 2026-08-31: any lock over this handler
+        // family either misses the re-entrant render path (_buildTournamentSide's DOM error
+        // callback calls showTournamentPair() un-awaited, bypassing every handler) and silently
+        // drops user input, or covers it and wedges. Measured both. See BACKLOG [2026-08-31].
+        //
+        // This test is the tripwire: when the real guard lands it MUST go red, and be replaced
+        // with the assertion that the second undo is served rather than doubled or dropped.
         const ctx = makeCtx({ kind: 'pick' });
         let releaseRender;
-        ctx.showTournamentPair = vi.fn(
-            () =>
-                new Promise((resolve) => {
-                    releaseRender = resolve;
-                })
-        );
+        let renders = 0;
+        // Only the FIRST render hangs — the one the second undo re-enters. Later calls resolve, or
+        // the second undo would never settle and the timeout would mask what is being shown here.
+        ctx.showTournamentPair = vi.fn(() => {
+            renders += 1;
+            return renders === 1 ? new Promise((resolve) => (releaseRender = resolve)) : Promise.resolve();
+        });
 
         const first = handleTournamentUndo.call(ctx);
         // Simulate exactly what the real render does to the advisory isLoading flag mid-flight.
         ctx.isLoading = false;
         await handleTournamentUndo.call(ctx);
 
-        expect(ctx.tournament.engine.undoUserAction).toHaveBeenCalledTimes(1);
-        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+        // Two reversals from two presses, the first render still in flight: unguarded re-entry.
+        expect(ctx.tournament.engine.undoUserAction).toHaveBeenCalledTimes(2);
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(2);
 
         releaseRender();
         await first;
-        expect(ctx._tournamentRenderBusy).toBe(false);
     });
 });
 
