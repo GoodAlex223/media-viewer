@@ -131,7 +131,7 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
 | ✅ [**G1. Bulk-rate follow-ups**](#g1-bulk-rate-follow-ups-batch--) [batch] 🏆 🟤 (day 2 — lifecycle fixes; merged locally, no PR)                                                                                          | (6) |
 | [**G4. Adopt-queue trial batch**](#g4-adopt-queue-trial-batch--cadence-decision-batch--1--folded) [batch] 🟤 (`pr-review-toolkit` on the G1 PR; `dead-rules-audit` installed for the rest of the week) | (3) |
-| 🔄 [**G2. Tournament undo hardening**](#g2-tournament-undo-hardening-batch-) [batch] 🟤 (start — reconcile → drop history + CLAUDE.md bullet; ran early, 2026-08-30)                                     | (5) |
+| ✅ [**G2. Tournament undo hardening**](#g2-tournament-undo-hardening-batch-) [batch] 🟤 (start — reconcile → drop history + CLAUDE.md bullet; ran early, 2026-08-30)                                     | (5) |
 
 **Daily total**: ~5 SP
 
@@ -143,7 +143,7 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 
 | Group                                                                                                                       | SP  |
 | --------------------------------------------------------------------------------------------------------------------------- | --- |
-| 🔄 [**G2. Tournament undo hardening**](#g2-tournament-undo-hardening-batch-) [batch] 🟤 (finish — 3/4 shipped on branch `a4bf666`, no PR, **unmerged**; Task 4 reverted 2026-08-31) | 5   |
+| ✅ [**G2. Tournament undo hardening**](#g2-tournament-undo-hardening-batch-) [batch] 🟤 (finish — 3/4 shipped, **MERGED `6305a7a`** (no PR), branch deleted; Task 4 reverted 2026-08-31) | 5   |
 | [**G3. Docs & process guardrails**](#g3-docs--process-guardrails-batch--1--folded) [batch] 🟤 (start — `check-docs-index.js` + backfill) | (6) |
 
 **Daily total**: ~6 SP
@@ -181,7 +181,7 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 | ID  | Group                                             | Domain                                    | Source                  | Tasks                | Total SP | Day       | Status     |
 | --- | ------------------------------------------------- | ----------------------------------------- | ----------------------- | -------------------- | -------- | --------- | ---------- |
 | G1  | Bulk-rate follow-ups [batch] 🏆                   | JS logic (compare bulk-rate) + E2E harness | 🟤 Auto                 | 4                    | 6        | Mon–Tue   | ✅ merged `66b16af` (no PR, 2026-08-29) |
-| G2  | Tournament undo hardening [batch]                 | JS logic (tournament) + CLAUDE.md          | 🟤 Auto                 | 4 (closes 5 entries) | 5        | Tue–Wed   | 🔄 3/4 on branch `a4bf666` (no PR, **unmerged**, 2026-08-31) — Task 4 reverted as unsound, re-filed 🟤 [2026-08-31] |
+| G2  | Tournament undo hardening [batch]                 | JS logic (tournament) + CLAUDE.md          | 🟤 Auto                 | 4 (closes 5 entries) | 5        | Tue–Wed   | ✅ 3/4 **MERGED `6305a7a`** (no PR, `--no-ff`, branch deleted remote + local, 2026-08-31) — Task 4 reverted as unsound, re-filed 🟤 [2026-08-31] |
 | G3  | Docs & process guardrails [batch]                 | scripts / tooling / docs                   | 🟤 Auto (+1 🟡 folded)  | 6 (closes 10 entries) | 6       | Wed–Thu   | ☐ Planned  |
 | G4  | Adopt-queue trial batch + cadence decision [batch] | Claude Code tooling / process             | 🟤 Auto (+1 🟡 folded)  | 3                    | 3        | Tue + Fri | 🔄 2/3 merged `bf58c01` (no PR) — `dead-rules-audit` read-out at G6 Fri |
 | G5  | AI-sort training-phase progress polish [batch]    | JS logic (sort-progress / training)        | 🔵 User                 | 2                    | 3        | Thu       | ☐ Planned  |
