@@ -49,7 +49,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan                                                                           | Task                    | Status      | Started    |
 | ------------------------------------------------------------------------------ | ----------------------- | ----------- | ---------- |
-| [2025-12-29_video-fullscreen-toggle.md](2025-12-29_video-fullscreen-toggle.md) | Video fullscreen toggle | In Progress | 2025-12-29 |
+| [2026-09-02_g3-docs-process-guardrails.md](2026-09-02_g3-docs-process-guardrails.md) | G3 Docs & process guardrails | In Progress | 2026-09-02 |
 
 ---
 
