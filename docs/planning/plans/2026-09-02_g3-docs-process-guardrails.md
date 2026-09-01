@@ -71,13 +71,13 @@ Closes 🟤 [2026-08-27] G5 closeout (index automation), 🟤 [2026-07-04] PR #6
 
 🟤 [2026-07-11] PR #63.
 
-- [ ] `64 * 1024 * 1024` on the `git diff --name-only` `execFileSync`, matching `check-secrets.js`. The sibling `merge-base` call returns one SHA and stays bare.
+- [x] `64 * 1024 * 1024` on the `git diff --name-only` `execFileSync`, matching `check-secrets.js`. The sibling `merge-base` call returns one SHA and stays bare. Comment records why it matters: `execFileSync` throws `ENOBUFS` rather than returning short, and the existing catch turns that into a fail-safe RUN — so the default 1 MB was a spurious-RUN risk, never a silent SKIP.
 
 ### Task 4 — Repo-level `.vscode/settings.json` (1 SP)
 
 🟤 [2026-08-27] G4 closeout.
 
-- [ ] New `.vscode/settings.json` with `[markdown]: { "editor.formatOnSave": false }` (`.gitignore` only ignores `.vscode-test`, so the file commits)
+- [x] New `.vscode/settings.json` with `[markdown]: { "editor.formatOnSave": false }` (`.gitignore` only ignores `.vscode-test`, so the file commits). Added `"files.eol": "\n"` alongside it — `.gitattributes` already enforces LF, and the same class of editor-vs-repo fight is what this file exists to stop. JSONC comments carry the rationale; verified Prettier accepts them.
 
 **Decision — the bracketed optional guard is dropped.** The entry offers "and/or a pre-commit guard rejecting staged `.md` hunks whose only change is whitespace/escape churn"; WEEKLY qualifies it "only if cheap". It is not cheap — separating escape churn from legitimate prose edits reliably needs most of a Markdown-aware differ, and a false positive blocks a real commit. The interim "stage docs by explicit path" rule already covers the `git add -A` half of the observed damage.
 
@@ -85,20 +85,33 @@ Closes 🟤 [2026-08-27] G5 closeout (index automation), 🟤 [2026-07-04] PR #6
 
 🟤 [2026-08-27] G5 closeout + G4 closeout ×2 — the in-tree half of three items.
 
-- [ ] `docs/planning/plans/README.md`: a **Closeout artifacts** block (BACKLOG · TODO · DONE · WEEKLY · `docs/README.md` · `docs/archive/plans/`, each done or **N/A with a reason**) + a **live-surface preflight** line
-- [ ] `docs/planning/README.md`: a "do not restate a count or range derived from a list elsewhere" convention line
-- [ ] The `.claude/TEMPLATES/` half is **out of tree** (global, gitignored) → record as a TODO § Spawned Tasks row for `claude-code-universal-config`, do not edit here
+- [x] `docs/planning/plans/README.md`: a **Closeout artifacts** table (BACKLOG · TODO · DONE · WEEKLY · `docs/README.md` · `docs/archive/plans/`, each done or **N/A with a reason**) + the two review-time detection heuristics; **live-surface preflight** added as step 4 of § Creating a Plan, where it is actually read
+- [x] `docs/planning/README.md`: § Document Conventions — "do not restate a count or range derived from a list elsewhere", with the G4 three-strikes evidence and the review-time tell
+- [x] The `.claude/TEMPLATES/` half is **out of tree** (global, gitignored) → recorded as a TODO § Spawned Tasks row, cross-referencing the in-tree wording to copy from
 
 ### Task 6 — 🟡 Stabilize `npx vitest run` under vitest v4 (1 SP)
 
 🟡 [2026-07-02].
 
-- [ ] `fileParallelism: false` in `vitest.config.js` (the workaround already proven on this repo) — try `pool: 'forks'` instead if the wall-clock cost is steep
-- [ ] Confirm 5 consecutive full-suite runs are deterministic; record the wall-clock delta against the 8.22s baseline
+- [x] **`pool: 'threads'`** in `vitest.config.js` — **not** `fileParallelism: false`, and the reason is measured, not assumed
+- [x] 5 consecutive full-suite runs deterministic: 5/5 green, ~4.2s steady state (first run 9.2s cold)
+
+**The flake did not reproduce.** 15 consecutive full-suite runs on the default `forks` pool were green (vitest 4.0.18, unchanged since the tests were introduced — never bumped, so no upstream fix explains it). The entry's own acceptance criterion, "5 consecutive deterministic runs", therefore already passed before any change. Its origin line is the tell: the failure surfaced "during the Group CW-T **subagent** run" — under concurrent load, not on an idle machine.
+
+Measured wall clock, 3 runs each:
+
+| Config | Wall clock | Verdict |
+| --- | --- | --- |
+| default (`forks`) | 4.24 / 5.14 / 4.97 s | the path that raced |
+| `pool: 'threads'` | 4.43 / 4.26 / 4.21 s | **chosen** — marginally faster, different startup path |
+| `fileParallelism: false` | 11.38 / 10.19 / 10.11 s | rejected: 2.2x on every commit, forever |
+
+User decision 2026-09-02: take `threads`. It costs nothing and moves off the diagnosed mechanism, so the bet is cheap — but the honest caveat is recorded in the config comment and here: this mitigates a **diagnosed mechanism**, not a **reproduced failure**. Serializing would have removed the race by construction, at ~+5.8s on every commit to fix something that has never once failed a commit.
 
 ---
 
 ## Implementation Log
 
 - **2026-09-02** — Brainstormed as bounded; design approved in-session. Branch `g3-docs-process-guardrails` cut from `main` `38c9ef4`. Baseline measured: 556 unit tests / 17 files, 8.22s. Three premise corrections measured and recorded above.
+- **2026-09-02** — Tasks 3–6 complete (commit 2). `maxBuffer` parity landed with a comment naming the actual failure mode. `.vscode/settings.json` created (Prettier accepts the JSONC comments). Closeout conventions split across the two planning READMEs, with the out-of-tree template half filed as a Spawned Task. Vitest: flake unreproducible in 15 runs; three configs measured; `pool: 'threads'` chosen on cost grounds; 5/5 deterministic after the change. **Status: all 6 tasks shipped.**
 - **2026-09-02** — Tasks 1 + 2 complete. TDD: test red (module absent) → 21 green → 2 mutations verified and reverted. Guard reproduced the measurement end-to-end (27 MISSING / 1 BROKEN), then drove the backfill to `EXIT=0`. Suite **556 → 577 passing / 18 files** (9.18s). No duplicate reference labels (113 definitions). ESLint + Prettier clean on both new files.
