@@ -7,6 +7,7 @@ Completed implementation plans preserved for historical reference.
 ## What Goes Here
 
 Plans are archived when:
+
 1. All implementation steps are marked `[x]` complete
 2. All tests are passing
 3. "Key Discoveries" section is filled in
@@ -17,26 +18,15 @@ Plans are archived when:
 
 ## Archived Plans
 
-| Plan | Task | Archived Date |
-|------|------|---------------|
-| [2025-12-25_notifications-media-info-less-intrusive.md](2025-12-25_notifications-media-info-less-intrusive.md) | Less intrusive notifications | 2026-01-10 |
-| [2025-12-27_sorting-cache.md](2025-12-27_sorting-cache.md) | Sorting algorithm cache | 2026-01-10 |
-| [2025-12-28_background-feature-extraction.md](2025-12-28_background-feature-extraction.md) | Background feature extraction | 2026-01-10 |
-| [2026-01-02_compare-mode-ai-sort-bug.md](2026-01-02_compare-mode-ai-sort-bug.md) | Compare mode AI sort bug | 2026-01-10 |
-| [2026-04-20-group-e-resource-management.md](2026-04-20-group-e-resource-management.md) | Group E: Resource Management (CLIP unload + logger guard) | 2026-04-21 |
-| [2026-04-29-group-f-build-dx.md](2026-04-29-group-f-build-dx.md) | Group F: Build & DX (Lucide CDN pin + regression-checker update) | 2026-04-29 |
-| [2026-06-19-sort-responsiveness-core.md](2026-06-19-sort-responsiveness-core.md) | Group P1: Sort responsiveness core (progress/cancel card + O(n²) MST-fallback fix + yielding + dead-code removal), PR1 of 3 | 2026-06-19 |
-| [2026-06-24-tournament-large-folder-perf.md](2026-06-24-tournament-large-folder-perf.md) | Group P2: Tournament large-folder performance (debounced single-flight persistence + O(n) consumed-marker pairing + cached path→index Map + slim v2 history-free payload + atomic write) | 2026-06-24 |
-| [2026-06-25-extraction-timing.md](2026-06-25-extraction-timing.md) | Group P3: Feature-extraction timing — lazy / on-demand (remove folder-open + CLIP-toggle kickoffs; conditional on-demand CLIP-sort trigger gated by `clipVectorsNeedExtraction`) — MERGED 2026-06-26 via PR #56 (`9d65500`) | 2026-06-25 |
-| [2026-06-26-weekly-reviews-first-run.md](2026-06-26-weekly-reviews-first-run.md) | Group WR: Weekly Reviews first run (4 verdicts: pr-review-toolkit `adopt`; test-writer-fixer / TDD Guard / local-model review `defer`) — ⚪ Overhead, no code PR | 2026-06-26 |
-| [2026-06-30-tournament-exit-affordances.md](2026-06-30-tournament-exit-affordances.md) | Group T1: Tournament exit affordances (in-tournament exit button + confirm-before-app-close, both reusing `showTournamentLeavePrompt`) | 2026-06-30 |
-| [2026-07-01-cw-t-tournament-correctness-hardening.md](2026-07-01-cw-t-tournament-correctness-hardening.md) | Group CW-T: Tournament correctness, persistence & hardening (O(1) inverse-delta undo + `showTournamentPairFast` wrapper-reuse render + `reconcileWithFiles`-on-every-entry closing the live-engine gap + hardened `-1` divergence capture + persistent perf log + 6 debt items) — real-24k smoke PASSED; MERGED 2026-07-03 via PR #59 (`ae9588d`) | 2026-07-02 |
-| [2026-07-03-cw-d-docs-claude-md-hygiene.md](2026-07-03-cw-d-docs-claude-md-hygiene.md) | Group CW-D: Docs & CLAUDE.md hygiene (5 deferred `revise-claude-md`/doc-drift items — 3 tournament gotchas + debounced-persistence/`v2` note + MinHeap/VPTree worker-only note into CLAUDE.md; PR2/PR3 per-phase framing into DONE/TODO; manual-only maintenance decision D1) — docs-only; MERGED 2026-07-04 via PR #60 (`dba3ecf`) | 2026-07-03 |
-| [2026-07-04-cw-v-test-tooling-backfill.md](2026-07-04-cw-v-test-tooling-backfill.md) | Group CW-V: Test & tooling backfill (comment-aware `methodSource` brace guard + `src` seam; `extractAddedLines` real-git-diff fixtures; sort-progress card E2E; play/pause icon toggle E2E via synthetic events) — test-only; 423 unit / full E2E 52/52; MERGED via PR #61 (`85f1f29`) | 2026-07-05 |
-| [2026-07-13-ai-sort-startup-ux.md](2026-07-13-ai-sort-startup-ux.md) | Group G1: AI-sort startup UX & incremental cache-load (phased/cancelable `handleSortByPrediction` + awaitable `runMlSort` with `sortRunId` stale-guard + atomic incremental `loadFeatureCache` (staged-local, commit-on-complete) + binary `Float32Array` transport for `feature-cache-chunk` + unified sort-card progress + warm-cache gate) — PR3 slice of the 🔴 "Speed up AI/similarity sorting" TODO (stays OPEN, PR2 remains); two post-review incidents fixed in-branch (data-loss regression `b8b5636`; 24k-smoke cache-corruption `2777bdf`+`c947081`); 434→471 unit / full E2E 52/52; user-side 24k smoke PASSED 2026-07-20; MERGED via PR #64 (`b6ff4ac`) | 2026-07-20 |
-| [2026-07-20_g2-tournament-bug-fixes.md](2026-07-20_g2-tournament-bug-fixes.md) | Group G2: Tournament-mode bug fixes (🔴 undo — `engine.history` unified chronological undo stack with `kind` pick/special/prune + `peekUndoEntry`/`undoUserAction`, replacing the `moveHistory`-peek that let any special move hijack tournament undo; identity re-check makes correctness independent of the advisory `isLoading` mutex; 🟠 mouse-wheel `isTournamentMode` guard; 🔵 auto-hide `.tournament-header`/`.tournament-controls` via extracted `_setupAutoHide`) — external `/code-review` "No issues found" but verifying it surfaced the advisory-mutex defect (`ae98e85`); 471→492 unit / full E2E 52→55; **user-side 6-point manual smoke PASSED 2026-07-21** (all 6 checks, post-merge); MERGED via PR #65 (`937084c`) | 2026-07-21 |
-| [2026-07-24_g3-bulk-rate-repair-avoidance.md](2026-07-24_g3-bulk-rate-repair-avoidance.md) | Group G3: Bulk-rate re-pair avoidance (🔵 User-Flagged, solo) — AI-sorted compare stops re-showing the exact two-file pair rated Both good/Both bad; **exact-pair** suppression + full-list fall-through, session-only `bulkRatedPairs` (no `.bulk_rated.json` change); pure `bulkPairKey`/`computeValidComparePairs` core wired into `showCompareMedia`/`applyBulkRating`/`undoBulkRating`. Subagent-driven (3 TDD tasks + opus whole-branch review). ⚠️ **MERGED to `main` 2026-08-24 on USER DIRECTION** (GitHub PR #66 closed unmerged, then local `--no-ff`); user-side re-smoke round 2 NOT run. See companion plan below. | 2026-08-24 |
-| [2026-07-25_g3-rescore-and-counter-fixes.md](2026-07-25_g3-rescore-and-counter-fixes.md) | Group G3 companion (parallel Verification chat) — smoke round 1 found 2 real defects the 500-unit/55-E2E suite missed: D1 "Pair X of Y" shrank-then-jumped (denominator counted un-rated pairs → full-extremes count `computeAllComparePairs`) and D2 rated pairs re-appeared instead of re-mixing (`applyBulkRating` rendered synchronously from pre-rating scores → deferred via `pendingCompareRefresh`, same for `handleCancel` bulk-undo) + 3 review-found; unit 500→**513**, E2E 55/55. ⚠️ D2 fix has ZERO automated coverage (mlWorker null under Playwright); merged with the above on user direction. | 2026-08-24 |
+**The index lives in [`docs/README.md` § Archived Plans](../../README.md).** It is the single
+canonical list, and it is machine-enforced: `scripts/check-docs-index.js` fails the commit if a
+file in this directory has no link there, or if any link there does not resolve.
+
+This page deliberately keeps **no second table**. The one it used to carry had drifted to 18 of
+60 plans — a hand-maintained mirror of an enforced list is guaranteed to lose, and keeping two
+indexes in sync is the failure mode the guard exists to end. `git log -p -- docs/archive/plans/README.md`
+recovers the old rows if anyone needs them. Everything below is the archive **process**, which
+is what this page is for.
 
 ---
 
@@ -84,12 +74,15 @@ Review the plan's "Future Improvements" and "Key Discoveries" sections:
 [Brief description of what was actually done]
 
 **Key Decisions**:
+
 - [Decision 1]: [Why]
 
 **Lessons Learned**:
+
 - [Lesson from the plan]
 
 **Follow-up Tasks**:
+
 - [Link to any new TODO.md items spawned]
 ```
 
@@ -111,6 +104,9 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 - Update `../../README.md` — add the **design spec** under "Design Specs" (specs are the commonly-missed half — index BOTH the plan AND its spec)
 - Update `../README.md` — add to "Archived Documents" table (if a non-plan doc)
 
+> The pre-commit guard checks steps 5's first two bullets for you, and it reads the **git
+> index** — so stage `docs/README.md` in the same commit as the moved plan, or the guard fires.
+
 ---
 
 ## Quick Checklist
@@ -127,4 +123,5 @@ rm .claude/plans/YYYY-MM-DD_task-name.md
 
 ---
 
-*Last Updated: 2026-08-24 (added Group G3 bulk-rate re-pair avoidance + its re-score/counter companion plan)*
+_There is deliberately no "Last Updated" line here — git records when this file last changed,
+and the footer this page used to carry went stale exactly the way `docs/README.md`'s did._

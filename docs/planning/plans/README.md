@@ -40,7 +40,9 @@ Move to archive when ALL are true:
 - [ ] **Cited commit SHAs verified as ancestors of `main`** (`git merge-base --is-ancestor <sha> main`)
 - [ ] Summary added to `../DONE.md`
 - [ ] **Indexed in `docs/README.md` — plan under Archived Plans AND spec under Design Specs**
-      (enforced by `scripts/check-docs-index.js` in pre-commit — the commit fails without it)
+      (`scripts/check-docs-index.js` in pre-commit checks that a link to each file exists
+      *somewhere* in `docs/README.md` and resolves; it is section-agnostic, so putting the row
+      in the right table is still on you)
 
 ### Closeout artifacts
 

@@ -2,7 +2,44 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { extractLinks, findUnindexed, findBrokenTargets } = require('../scripts/check-docs-index.js');
+const {
+    extractLinks,
+    findUnindexed,
+    findBrokenTargets,
+    stripCode,
+    selectIndexedFiles,
+} = require('../scripts/check-docs-index.js');
+
+describe('stripCode', () => {
+    it('removes a fenced block', () => {
+        expect(stripCode('a\n```\nhidden\n```\nb')).not.toContain('hidden');
+    });
+
+    it('removes a tilde-fenced block', () => {
+        expect(stripCode('a\n~~~\nhidden\n~~~\nb')).not.toContain('hidden');
+    });
+
+    it('removes a fenced block with an info string', () => {
+        expect(stripCode('a\n```bash\nhidden\n```\nb')).not.toContain('hidden');
+    });
+
+    it('removes an inline code span', () => {
+        expect(stripCode('use `hidden` here')).not.toContain('hidden');
+    });
+
+    it('removes a double-backtick span', () => {
+        expect(stripCode('use ``hid`den`` here')).not.toContain('hid');
+    });
+
+    it('keeps ordinary prose and links intact', () => {
+        expect(stripCode('see [a](b.md) now')).toContain('[a](b.md)');
+    });
+
+    it('leaves an unterminated fence stripped to end of document', () => {
+        // Safer to drop the tail than to parse a half-open fence as live links.
+        expect(stripCode('a\n```\nhidden')).not.toContain('hidden');
+    });
+});
 
 describe('extractLinks', () => {
     it('extracts a reference-style link definition', () => {
@@ -29,6 +66,40 @@ describe('extractLinks', () => {
         ]);
     });
 
+    it('extracts an inline link carrying a title', () => {
+        expect(extractLinks('[a](archive/plans/x.md "The Title")')).toEqual([
+            { label: 'a', target: 'archive/plans/x.md' },
+        ]);
+    });
+
+    it('extracts a reference definition carrying a title', () => {
+        expect(extractLinks('[a]: archive/plans/x.md "The Title"\n')).toEqual([
+            { label: 'a', target: 'archive/plans/x.md' },
+        ]);
+    });
+
+    it('extracts an angle-bracket target', () => {
+        expect(extractLinks('[a](<archive/plans/has space.md>)')).toEqual([
+            { label: 'a', target: 'archive/plans/has space.md' },
+        ]);
+    });
+
+    it('extracts a link whose label contains brackets', () => {
+        expect(extractLinks('[a [b] c](archive/plans/x.md)')).toEqual([
+            { label: 'a [b] c', target: 'archive/plans/x.md' },
+        ]);
+    });
+
+    it('ignores a link inside a fenced code block', () => {
+        // The false NEGATIVE this prevents matters most: a plan "indexed" only by an
+        // illustrative snippet would otherwise pass the guard.
+        expect(extractLinks('```\n[Fake]: archive/plans/nope.md\n```\n')).toEqual([]);
+    });
+
+    it('ignores a link inside an inline code span', () => {
+        expect(extractLinks('use `[x](archive/plans/nope.md)` here')).toEqual([]);
+    });
+
     it('ignores absolute URLs and mailto targets', () => {
         const md = '[repo](https://example.com/x.md)\n[docs](http://example.com)\n[mail](mailto:a@b.c)\n';
         expect(extractLinks(md)).toEqual([]);
@@ -49,7 +120,6 @@ describe('extractLinks', () => {
     });
 
     it('does not treat a collapsed reference usage as a definition', () => {
-        // `[Label][]` inside a table cell is a usage, not a definition — it carries no target.
         expect(extractLinks('| [Sorting Cache][] | Cache sorting results |\n')).toEqual([]);
     });
 
@@ -64,6 +134,41 @@ describe('extractLinks', () => {
     it('returns [] for empty or non-string input', () => {
         expect(extractLinks('')).toEqual([]);
         expect(extractLinks(null)).toEqual([]);
+    });
+});
+
+describe('selectIndexedFiles', () => {
+    const DIRS = ['archive/plans', 'superpowers/specs'];
+
+    it('keeps .md files under the indexed directories, made docs-relative', () => {
+        const tracked = ['docs/archive/plans/a.md', 'docs/superpowers/specs/b-design.md', 'media-viewer.js'];
+        expect(selectIndexedFiles(tracked, DIRS)).toEqual(['archive/plans/a.md', 'superpowers/specs/b-design.md']);
+    });
+
+    it('excludes non-markdown files', () => {
+        expect(selectIndexedFiles(['docs/archive/plans/notes.txt'], DIRS)).toEqual([]);
+    });
+
+    it('excludes README.md in any case form', () => {
+        const tracked = ['docs/archive/plans/README.md', 'docs/archive/plans/readme.md'];
+        expect(selectIndexedFiles(tracked, DIRS)).toEqual([]);
+    });
+
+    it('excludes files in sibling directories that merely share a prefix', () => {
+        // `archive/plans-old/` must not be swept in by a naive startsWith.
+        expect(selectIndexedFiles(['docs/archive/plans-old/a.md'], DIRS)).toEqual([]);
+    });
+
+    it('excludes nested paths deeper than the indexed directory', () => {
+        expect(selectIndexedFiles(['docs/archive/plans/sub/a.md'], DIRS)).toEqual([]);
+    });
+
+    it('normalizes backslash separators', () => {
+        expect(selectIndexedFiles(['docs\\archive\\plans\\a.md'], DIRS)).toEqual(['archive/plans/a.md']);
+    });
+
+    it('returns [] for an empty tracked list', () => {
+        expect(selectIndexedFiles([], DIRS)).toEqual([]);
     });
 });
 
