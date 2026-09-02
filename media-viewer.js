@@ -174,6 +174,7 @@ class MediaViewer {
         this._mlSortReject = null;
         this.isPredictionSorting = false; // re-entrancy guard for handleSortByPrediction
         this.extractionProgressSink = null; // when set, extraction reports here instead of its own indicator
+        this.clipProgressSink = null; // when set, CLIP download % reports here as well as its toasts
         this.extractionPaused = false; // True while user is navigating/rating
         this.extractionResumeResolve = null; // Resolves awaitExtractionGate() when paused
         this.extractionResumeTimer = null; // setTimeout handle for 2s idle resume
@@ -1233,9 +1234,10 @@ class MediaViewer {
             // Update existing notification.
             // Guard: if the element was taken over by updateSortProgress (which builds a
             // different DOM structure without .progress-message), rebuild the simple text
-            // structure so we don't dereference null. This lets non-sort callers (ML
-            // scoring progress, historical-ratings loop) safely fire during a long sort
-            // without throwing a TypeError.
+            // structure so we don't dereference null. The remaining caller is ML worker
+            // progress arriving while no prediction sort owns the card (deferred
+            // compare-refresh re-scoring) — which can still overlap a similarity sort's
+            // card, so the guard stays load-bearing.
             let messageSpan = this.progressNotification.querySelector('.progress-message');
             if (!messageSpan) {
                 // Element was in sort-progress card form — reset to simple text form.
@@ -6963,9 +6965,31 @@ class MediaViewer {
                 break;
             }
 
-            case 'progress':
-                this.updateProgressNotification(message.message);
+            case 'progress': {
+                // The worker answers trainHistorical/sortByPrediction with its own progress.
+                // While a prediction sort owns the shared element as a cancelable card, these
+                // must stay in card form — updateProgressNotification would rebuild it as
+                // plain text and destroy Cancel for the tail of training and all of scoring.
+                const hasCounts = typeof message.total === 'number' && message.total > 0;
+                if (this.isPredictionSorting) {
+                    this.updateSortProgress({
+                        phase: message.message,
+                        current: message.current,
+                        total: message.total,
+                    });
+                } else if (!this.isComputingHashes) {
+                    // No card (e.g. deferred compare-refresh re-scoring) — keep the counts
+                    // the plain-text form would otherwise lose.
+                    this.updateProgressNotification(
+                        hasCounts ? `${message.message} ${message.current}/${message.total}` : message.message
+                    );
+                }
+                // else: a similarity sort owns the card. requestPredictionScores() fires by
+                // itself when extraction finishes with a ready model, so this lands with no
+                // user action. Plain text would destroy THAT sort's Cancel button and card
+                // form would mislabel its phase, so background scoring goes unreported.
                 break;
+            }
 
             case 'error':
                 console.error('ML Worker error:', message.message);
@@ -7596,8 +7620,13 @@ class MediaViewer {
     async collectBulkRatedTrainingExamples(signal) {
         const liked = [];
         const disliked = [];
+        const total = this.bulkRated.size;
+        let processed = 0;
         for (const [name, bucket] of this.bulkRated) {
             if (signal?.aborted) break; // cancelled — stop processing ratings
+            // Reported before the `continue` below so the count still advances for entries
+            // whose file has left the folder — otherwise the bar stalls short of 100%.
+            this.updateSortProgress({ phase: 'Processing corrective ratings', current: ++processed, total });
             const file = this.mediaFiles.find((f) => f.name === name);
             if (!file) continue;
             let combined = this.getCombinedFeatures(file.path);
@@ -7644,7 +7673,10 @@ class MediaViewer {
                 return;
             }
 
-            this.updateProgressNotification('Loading historical ratings...');
+            // Report through the sort card (not updateProgressNotification, which rebuilds the
+            // shared element into its plain-text form and destroys the Cancel button for what
+            // is the longest phase of the sort). No counts => the card's indeterminate mode.
+            this.updateSortProgress({ phase: 'Loading historical ratings…' });
 
             const likedFeatures = [];
             const dislikedFeatures = [];
@@ -7661,9 +7693,13 @@ class MediaViewer {
                     if (clipVector) combined.set(clipVector, 64);
                     likedFeatures.push(Array.from(combined));
 
-                    if ((i + 1) % 10 === 0) {
-                        this.updateProgressNotification(`Processing likes: ${i + 1}/${likedFiles.length}`);
-                    }
+                    // Every file, not every 10th: per-file CLIP + ffprobe means a small
+                    // like folder could finish with the bar never having moved at all.
+                    this.updateSortProgress({
+                        phase: 'Processing likes',
+                        current: i + 1,
+                        total: likedFiles.length,
+                    });
                 } catch (err) {
                     console.warn(`Skipping ${file.name}:`, err.message);
                 }
@@ -7681,9 +7717,11 @@ class MediaViewer {
                     if (clipVector) combined.set(clipVector, 64);
                     dislikedFeatures.push(Array.from(combined));
 
-                    if ((i + 1) % 10 === 0) {
-                        this.updateProgressNotification(`Processing dislikes: ${i + 1}/${dislikedFiles.length}`);
-                    }
+                    this.updateSortProgress({
+                        phase: 'Processing dislikes',
+                        current: i + 1,
+                        total: dislikedFiles.length,
+                    });
                 } catch (err) {
                     console.warn(`Skipping ${file.name}:`, err.message);
                 }
@@ -7692,8 +7730,8 @@ class MediaViewer {
             if (signal?.aborted) {
                 // Cancelled mid-loop — do not send a partial-training message to the ML worker
                 // (it would train a misleadingly incomplete model on whatever was collected so
-                // far); clear the progress UI posted above so it doesn't linger after Cancel.
-                this.clearProgressNotification();
+                // far). Teardown of the progress UI is the caller's, not ours: see the
+                // ownership note at the end of this method.
                 return;
             }
 
@@ -7704,7 +7742,6 @@ class MediaViewer {
             dislikedFeatures.push(...bulkExamples.disliked);
 
             if (signal?.aborted) {
-                this.clearProgressNotification();
                 return;
             }
 
@@ -7716,10 +7753,12 @@ class MediaViewer {
                 });
             }
 
-            this.clearProgressNotification();
+            // Progress-UI ownership: this method never tears the card down, on any path.
+            // handleSortByPrediction's finally is the single owner, and every exit from here
+            // — success, cancel, throw — unwinds through it. Clearing here as well was
+            // redundant, and doing it on only some paths made the asymmetry look meaningful.
         } catch (error) {
             console.error('Error training from historical:', error);
-            this.clearProgressNotification();
         }
     }
 
@@ -8043,10 +8082,30 @@ class MediaViewer {
             if (!this.mlWorker || this.featureWorkers.length === 0) {
                 this.initializeMlWorker();
                 this.initializeFeaturePool();
-                if (this.enableClipFeatures) this.initClipModel();
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 await this.loadMlModel();
+                // AWAIT the model load. Fired un-awaited, extractClipEmbedding returns null
+                // for every file processed before clipWorkerReady flips, so the historical
+                // training loop below trained on 576-dim vectors whose CLIP half was all
+                // zeros — silently, since a null embedding is a supported degraded mode.
+                if (this.enableClipFeatures) {
+                    this.updateSortProgress({ phase: 'Loading CLIP model…' });
+                    this.clipProgressSink = (percent) =>
+                        this.updateSortProgress({
+                            phase: 'Downloading CLIP model…',
+                            current: percent,
+                            total: 100,
+                        });
+                    try {
+                        await this.initClipModel();
+                    } finally {
+                        this.clipProgressSink = null;
+                    }
+                }
             }
+            // Cancel stays clickable throughout the load above; it cannot interrupt the
+            // in-flight IPC download, so it takes effect here instead.
+            if (signal.aborted) throw new Error('cancelled');
 
             // Phase 1 — load cached features (incremental + determinate + cancelable).
             // Skip the ~40s on-disk reload if the in-memory cache is already warm for every
@@ -8081,6 +8140,9 @@ class MediaViewer {
             // Phase 2 — extract any missing features (drives the SAME card via the sink).
             const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
             if (uncachedFiles.length > 0) {
+                // No indeterminate priming needed: startBackgroundFeatureExtraction's head is
+                // await-free, so it reaches showBackgroundExtractionProgress — and through it
+                // this sink — synchronously, with a real cached/total count.
                 this.extractionProgressSink = (current, total) =>
                     this.updateSortProgress({ phase: 'Extracting features…', current, total });
                 try {
@@ -8119,6 +8181,7 @@ class MediaViewer {
             this.sortAbortController = null;
             this.isPredictionSorting = false;
             this.extractionProgressSink = null;
+            this.clipProgressSink = null;
         }
     }
 
@@ -8466,6 +8529,9 @@ class MediaViewer {
         if (window.electronAPI.onClipDownloadProgress) {
             removeProgressListener = window.electronAPI.onClipDownloadProgress((data) => {
                 this.clipModelDownloading = true;
+                // Sink first and unthrottled: when a prediction sort owns the operation it
+                // renders this as a determinate bar, where every-10%-only reads as a stall.
+                this.clipProgressSink?.(data.progress);
                 if (data.progress % 10 === 0) {
                     this.showNotification(`Downloading CLIP model... ${data.progress}%`, 'info');
                 }

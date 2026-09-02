@@ -1064,6 +1064,86 @@ describe('sortComplete stale-guard + runMlSort resolution', () => {
             reason: 'Sorting failed: boom',
         });
     });
+
+    // The ML worker answers `trainHistorical` and `sortByPrediction` with its own progress
+    // messages. Routed to updateProgressNotification they rebuild the shared element as plain
+    // text — killing Cancel for the tail of the training phase and the whole scoring phase,
+    // which would have silently undone the G5 fix one phase later.
+    it('keeps worker progress in the cancelable card while a prediction sort owns it', () => {
+        const ctx = {
+            isPredictionSorting: true,
+            updateSortProgress: vi.fn(),
+            updateProgressNotification: vi.fn(),
+        };
+
+        handleMlWorkerMessage.call(ctx, {
+            type: 'progress',
+            message: 'Scoring files...',
+            current: 5,
+            total: 100,
+        });
+
+        expect(ctx.updateSortProgress).toHaveBeenCalledWith({
+            phase: 'Scoring files...',
+            current: 5,
+            total: 100,
+        });
+        expect(ctx.updateProgressNotification).not.toHaveBeenCalled();
+    });
+
+    it('keeps the plain-text notification, with counts, when no sort owns the element', () => {
+        // e.g. the deferred compare-refresh re-scoring, which has no card and no Cancel.
+        const ctx = {
+            isPredictionSorting: false,
+            updateSortProgress: vi.fn(),
+            updateProgressNotification: vi.fn(),
+        };
+
+        handleMlWorkerMessage.call(ctx, {
+            type: 'progress',
+            message: 'Scoring files...',
+            current: 5,
+            total: 100,
+        });
+
+        expect(ctx.updateProgressNotification).toHaveBeenCalledWith('Scoring files... 5/100');
+        expect(ctx.updateSortProgress).not.toHaveBeenCalled();
+    });
+
+    it('leaves a similarity sort’s card alone rather than demoting it', () => {
+        // requestPredictionScores() fires on its own when background extraction finishes with
+        // a ready model, so worker progress can land while handleSortBySimilarity owns the
+        // card. Plain-text form would destroy THAT sort's Cancel button; writing our phase
+        // into it would mislabel it. Neither: the background scoring just goes unreported.
+        const ctx = {
+            isPredictionSorting: false,
+            isComputingHashes: true,
+            updateSortProgress: vi.fn(),
+            updateProgressNotification: vi.fn(),
+        };
+
+        handleMlWorkerMessage.call(ctx, {
+            type: 'progress',
+            message: 'Scoring files...',
+            current: 5,
+            total: 100,
+        });
+
+        expect(ctx.updateProgressNotification).not.toHaveBeenCalled();
+        expect(ctx.updateSortProgress).not.toHaveBeenCalled();
+    });
+
+    it('omits the counts suffix for a countless worker progress message', () => {
+        const ctx = {
+            isPredictionSorting: false,
+            updateSortProgress: vi.fn(),
+            updateProgressNotification: vi.fn(),
+        };
+
+        handleMlWorkerMessage.call(ctx, { type: 'progress', message: 'Training complete' });
+
+        expect(ctx.updateProgressNotification).toHaveBeenCalledWith('Training complete');
+    });
 });
 
 describe('runMlSort', () => {
@@ -1167,7 +1247,7 @@ describe('handleSortByPrediction lifecycle', () => {
             showNotification: () => {},
             updateSortPredictionButton: () => {},
             updateSortProgress: (p) => phases.push(p.phase),
-            clearProgressNotification: () => {},
+            clearProgressNotification: vi.fn(),
             loadFeatureCache: () => Promise.resolve(),
             startBackgroundFeatureExtraction: () => Promise.resolve(),
             cancelBackgroundExtraction: () => {},
@@ -1250,6 +1330,10 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(ctx.sortAbortController).toBeNull();
         expect(ctx.isPredictionSorting).toBe(false);
+        // trainFromHistoricalRatings deliberately clears nothing on any path; this finally is
+        // the single owner of card teardown, so the cancel path must be covered HERE or a
+        // cancelled sort leaves its card on screen forever.
+        expect(ctx.clearProgressNotification).toHaveBeenCalled();
     });
 
     it('bails unsorted when aborted during the extraction phase', async () => {
@@ -1319,6 +1403,71 @@ describe('handleSortByPrediction lifecycle', () => {
         const ctx = makeCtx({ isPredictionSorting: true });
         await handleSortByPrediction.call(ctx);
         expect(ctx._phases.length).toBe(0); // returned immediately
+    });
+
+    it('waits for the CLIP model before training on historical ratings', async () => {
+        // The un-awaited initClipModel() left clipWorkerReady false for the head of the
+        // training loop, where extractClipEmbedding returns null — so those files trained the
+        // model on 576-dim vectors whose CLIP half (dims 64..576) was all zeros, silently.
+        const order = [];
+        const ctx = makeCtx({
+            mlWorker: null, // forces the lazy-init branch
+            enableClipFeatures: true,
+            mlStats: { isReady: false, positiveCount: 0, negativeCount: 0 },
+            initializeMlWorker: function () {
+                this.mlWorker = {};
+            },
+            initClipModel: async function () {
+                order.push('clip:start');
+                // Must outlast the lazy-init block's own 100ms settle sleep. Both timers are
+                // registered before either fires and setTimeout preserves delay order, so this
+                // is deterministic, not a race: with the call left un-awaited, `train` is
+                // reached on the 100ms timer while this one is still pending.
+                await new Promise((r) => setTimeout(r, 400));
+                this.clipWorkerReady = true;
+                order.push('clip:done');
+            },
+            trainFromHistoricalRatingsAndWait: function () {
+                order.push(`train(clipReady=${this.clipWorkerReady === true})`);
+                this.mlStats = { isReady: true };
+                return Promise.resolve();
+            },
+        });
+
+        await handleSortByPrediction.call(ctx);
+
+        expect(order).toEqual(['clip:start', 'clip:done', 'train(clipReady=true)']);
+        expect(ctx._phases).toContain('Loading CLIP model…');
+    });
+
+    it('routes CLIP download progress into the sort card and clears the sink afterwards', async () => {
+        const counted = [];
+        const ctx = makeCtx({
+            mlWorker: null,
+            enableClipFeatures: true,
+            clipProgressSink: null,
+            updateSortProgress: function (p) {
+                this._phases.push(p.phase);
+                if (typeof p.current === 'number') counted.push(p);
+            },
+            initClipModel: async function () {
+                this.clipProgressSink?.(42);
+                this.clipWorkerReady = true;
+            },
+        });
+
+        await handleSortByPrediction.call(ctx);
+
+        expect(counted).toContainEqual({ phase: 'Downloading CLIP model…', current: 42, total: 100 });
+        expect(ctx.clipProgressSink).toBeNull(); // released, or the next sort's card is driven by a stale closure
+    });
+
+    it('skips the CLIP wait entirely when CLIP features are disabled', async () => {
+        const initClipModel = vi.fn(async () => {});
+        const ctx = makeCtx({ mlWorker: null, enableClipFeatures: false, initClipModel });
+        await handleSortByPrediction.call(ctx);
+        expect(initClipModel).not.toHaveBeenCalled();
+        expect(ctx.isSortedByPrediction).toBe(true);
     });
 
     it('is mutually exclusive with an in-progress similarity sort', async () => {
@@ -2777,6 +2926,7 @@ describe('collectBulkRatedTrainingExamples', () => {
                 { name: 'b.jpg', path: '/f/b.jpg' },
             ],
             getCombinedFeatures: (p) => (p === '/f/a.jpg' ? [1, 1] : [2, 2]),
+            updateSortProgress: () => {},
         };
         const result = await collect.call(ctx);
         expect(result.liked).toEqual([[1, 1]]);
@@ -2788,6 +2938,7 @@ describe('collectBulkRatedTrainingExamples', () => {
             bulkRated: new Map([['gone.jpg', 'good']]),
             mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
             getCombinedFeatures: () => [9, 9],
+            updateSortProgress: () => {},
         };
         const result = await collect.call(ctx);
         expect(result.liked).toEqual([]);
@@ -2801,11 +2952,56 @@ describe('collectBulkRatedTrainingExamples', () => {
             getCombinedFeatures: () => null,
             computeFeatures: async () => new Float32Array(64).fill(0.5),
             extractClipEmbedding: async () => new Float32Array(512).fill(0.1),
+            updateSortProgress: () => {},
         };
         const result = await collect.call(ctx);
         expect(result.liked).toHaveLength(1);
         expect(result.liked[0]).toHaveLength(576);
         expect(result.disliked).toEqual([]);
+    });
+
+    it('reports corrective ratings through the sort card so the phase is not silent', async () => {
+        const ctx = {
+            bulkRated: new Map([
+                ['a.jpg', 'good'],
+                ['b.jpg', 'bad'],
+            ]),
+            mediaFiles: [
+                { name: 'a.jpg', path: '/f/a.jpg' },
+                { name: 'b.jpg', path: '/f/b.jpg' },
+            ],
+            getCombinedFeatures: () => [1, 1],
+            updateSortProgress: vi.fn(),
+        };
+
+        await collect.call(ctx);
+
+        expect(ctx.updateSortProgress.mock.calls.map(([a]) => a)).toEqual([
+            { phase: 'Processing corrective ratings', current: 1, total: 2 },
+            { phase: 'Processing corrective ratings', current: 2, total: 2 },
+        ]);
+    });
+
+    it('advances the count for bulk-rated names whose file has left the folder', async () => {
+        // Reported before the `continue`, or the bar stalls short of 100% on a folder where
+        // some rated files have since been moved out.
+        const ctx = {
+            bulkRated: new Map([
+                ['gone.jpg', 'good'],
+                ['a.jpg', 'good'],
+            ]),
+            mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
+            getCombinedFeatures: () => [1, 1],
+            updateSortProgress: vi.fn(),
+        };
+
+        await collect.call(ctx);
+
+        expect(ctx.updateSortProgress.mock.calls.at(-1)[0]).toEqual({
+            phase: 'Processing corrective ratings',
+            current: 2,
+            total: 2,
+        });
     });
 });
 
@@ -2842,6 +3038,180 @@ describe('trainFromHistoricalRatings (signal-aware bail)', () => {
         // message reaches the ML worker.
         expect(globalThis.window.electronAPI.loadFolder).not.toHaveBeenCalled();
         expect(ctx.mlWorker.postMessage).not.toHaveBeenCalled();
+    });
+});
+
+// G5 item 1: the historical-ratings phase is the LONGEST phase of an AI sort, and it was the
+// one phase that lost the Cancel button — updateProgressNotification() rebuilds the shared
+// element into its plain-text form, destroying the sort card's bar and Cancel button. These
+// tests pin the card form (updateSortProgress) and per-file reporting for every loop in the
+// phase; asserting "updateProgressNotification was never called" is what makes them fail if
+// any single loop is left on the old call.
+describe('trainFromHistoricalRatings (progress reporting)', () => {
+    const trainFromHistoricalRatings = extractAsyncMethod('trainFromHistoricalRatings');
+    let origWindow;
+
+    const filesNamed = (...names) => names.map((n) => ({ name: n, path: `/h/${n}` }));
+
+    function makeTrainCtx({ liked = [], disliked = [] } = {}) {
+        globalThis.window = {
+            electronAPI: {
+                loadFolder: vi.fn(async (folder) => ({
+                    success: true,
+                    files: folder === '/liked' ? liked : disliked,
+                })),
+            },
+        };
+        return {
+            isMlEnabled: true,
+            mlWorker: { postMessage: vi.fn() },
+            customLikeFolder: '/liked',
+            customDislikeFolder: '/disliked',
+            updateProgressNotification: vi.fn(),
+            updateSortProgress: vi.fn(),
+            clearProgressNotification: vi.fn(),
+            computeFeatures: vi.fn(async () => new Float32Array(64)),
+            extractClipEmbedding: vi.fn(async () => new Float32Array(512)),
+            collectBulkRatedTrainingExamples: vi.fn(async () => ({ liked: [], disliked: [] })),
+        };
+    }
+
+    const countedCalls = (spy, phase) =>
+        spy.mock.calls.map(([arg]) => arg).filter((a) => a.phase === phase && typeof a.current === 'number');
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('reports every liked file through the cancelable sort card, starting at file 1', async () => {
+        const ctx = makeTrainCtx({ liked: filesNamed('a.png', 'b.png', 'c.png') });
+
+        await trainFromHistoricalRatings.call(ctx, undefined);
+
+        // The old code reported only every 10th file, so 3 files produced ZERO updates.
+        expect(countedCalls(ctx.updateSortProgress, 'Processing likes')).toEqual([
+            { phase: 'Processing likes', current: 1, total: 3 },
+            { phase: 'Processing likes', current: 2, total: 3 },
+            { phase: 'Processing likes', current: 3, total: 3 },
+        ]);
+        expect(ctx.updateProgressNotification).not.toHaveBeenCalled();
+    });
+
+    it('reports every disliked file through the cancelable sort card, starting at file 1', async () => {
+        const ctx = makeTrainCtx({ disliked: filesNamed('x.png', 'y.png') });
+
+        await trainFromHistoricalRatings.call(ctx, undefined);
+
+        expect(countedCalls(ctx.updateSortProgress, 'Processing dislikes')).toEqual([
+            { phase: 'Processing dislikes', current: 1, total: 2 },
+            { phase: 'Processing dislikes', current: 2, total: 2 },
+        ]);
+        expect(ctx.updateProgressNotification).not.toHaveBeenCalled();
+    });
+
+    it('announces the folder-load wait as an indeterminate card phase, not plain text', async () => {
+        const ctx = makeTrainCtx({ liked: filesNamed('a.png') });
+
+        await trainFromHistoricalRatings.call(ctx, undefined);
+
+        // No current/total => the card's existing `indeterminate` mode (animated bar + Cancel).
+        const phases = ctx.updateSortProgress.mock.calls.map(([a]) => a);
+        expect(phases).toContainEqual({ phase: 'Loading historical ratings…' });
+    });
+
+    it('never tears the card down itself on the success path — the caller owns teardown', async () => {
+        const ctx = makeTrainCtx({ liked: filesNamed('a.png') });
+
+        await trainFromHistoricalRatings.call(ctx, undefined);
+
+        expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
+        expect(ctx.mlWorker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'trainHistorical' }));
+    });
+
+    it('leaves teardown to the caller on the cancel path too, and posts no partial training', async () => {
+        const controller = new AbortController();
+        const ctx = makeTrainCtx({ liked: filesNamed('a.png', 'b.png') });
+        ctx.computeFeatures = vi.fn(async () => {
+            controller.abort();
+            return new Float32Array(64);
+        });
+
+        await trainFromHistoricalRatings.call(ctx, controller.signal);
+
+        expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
+        expect(ctx.mlWorker.postMessage).not.toHaveBeenCalled();
+    });
+});
+
+// G5 item 2: initClipModel's only feedback was a toast every 10%, and handleSortByPrediction
+// fired it un-awaited — so a cold sort showed a motionless card AND fed the historical
+// training loop 576-dim vectors whose CLIP half was all zeros (extractClipEmbedding returns
+// null while clipWorkerReady is false).
+describe('initClipModel (progress sink)', () => {
+    const initClipModel = extractAsyncMethod('initClipModel');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('feeds every download-progress event to clipProgressSink, not just multiples of ten', async () => {
+        let emit;
+        const removeListener = vi.fn();
+        globalThis.window = {
+            electronAPI: {
+                onClipDownloadProgress: (cb) => {
+                    emit = cb;
+                    return removeListener;
+                },
+                loadClipModel: vi.fn(async () => {
+                    emit({ progress: 3 });
+                    emit({ progress: 7 });
+                    emit({ progress: 10 });
+                    return { success: true };
+                }),
+            },
+        };
+        const seen = [];
+        const ctx = {
+            enableClipFeatures: true,
+            clipProgressSink: (p) => seen.push(p),
+            showNotification: vi.fn(),
+        };
+
+        await initClipModel.call(ctx);
+
+        expect(seen).toEqual([3, 7, 10]);
+        expect(ctx.clipWorkerReady).toBe(true);
+        expect(removeListener).toHaveBeenCalled();
+    });
+
+    it('does not throw when no sink is installed (CLIP loading outside a sort)', async () => {
+        let emit;
+        globalThis.window = {
+            electronAPI: {
+                onClipDownloadProgress: (cb) => {
+                    emit = cb;
+                    return () => {};
+                },
+                loadClipModel: vi.fn(async () => {
+                    emit({ progress: 20 });
+                    return { success: true };
+                }),
+            },
+        };
+        const ctx = { enableClipFeatures: true, clipProgressSink: null, showNotification: vi.fn() };
+
+        await initClipModel.call(ctx);
+
+        expect(ctx.clipWorkerReady).toBe(true);
+        expect(ctx.showNotification).toHaveBeenCalledWith('Downloading CLIP model... 20%', 'info');
     });
 });
 
