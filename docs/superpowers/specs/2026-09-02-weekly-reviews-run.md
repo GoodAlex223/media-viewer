@@ -166,4 +166,70 @@ Docs/process change — verification is **review of the written rows**, not a te
 
 ## Outcome (2026-09-02 run)
 
-_Filled in at closeout._
+**Executed** on branch `g6-weekly-reviews`. **8 web calls** (4 `WebSearch` + 4 `WebFetch`), no harness,
+no parallel fan-out — within the 8–12 budget and consistent with the prior runs' 9 and 10. Five verdict
+rows and two § 5 trial read-outs, exactly as scoped.
+
+| Category                        | Pick                                                            | Verdict                          |
+| ------------------------------- | --------------------------------------------------------------- | -------------------------------- |
+| Plugins / official store        | `github` + the whole External-integrations category               | pass                             |
+| Plugins / wider internet        | `fracalo/electron-playwright-mcp`                                 | pass                             |
+| Claude best-practice            | installed-plugin context-cost & disuse audit                      | **adopt** → 🟤                   |
+| Non-Claude best-practice        | loop engineering / evidence-gating (gate half only)               | **adopt** → 🟤                   |
+| Cross-project propagation       | "a reviewer's negative finding must cite its evidence"            | **propagate** → § Spawned Tasks  |
+| § 5 read-out (G4's terminal)    | `dead-rules-audit`                                                | **drop** (compliance tool)       |
+| § 5 read-out                    | autonomous / visual verification                                  | **inconclusive** → re-trial      |
+
+### Key discoveries
+
+- **A trial can produce abundant data and still be worthless.** The read-out rule this run inherited
+  guarded one failure — a vehicle that scores nothing. The vehicle scored 2,134 times. What nobody had
+  checked was whether the *judge* measures compliance, and it does not: it flags a rule whenever any of
+  its backticked tokens appears in added code, prescriptions included. The evidence was in the tool's
+  own output the whole time — the rules it nominated for promotion were the ones G2 had just shipped
+  and enforced. `dead-rules-audit` was adopted on a **parser** measurement and never a **judge** one.
+- **The order of the checklist changed the outcome.** D4 was written as bookkeeping and turned out to
+  be load-bearing: § 5's cap had exactly 3 outstanding trials, so running the read-outs first is what
+  let §§2–3 file adopts at all. Reversed, two legitimate adopts would have parked behind a cap that
+  lifted minutes later.
+- **Both adopts came out of the failures, not the web.** The six-day window produced no plugin adopt,
+  as predicted. What it produced instead was two picks traceable to what the read-outs measured —
+  plugin cost, because this run chose to keep a dud installed on a timing figure rather than a token
+  figure; evidence-gating, because a practice with no gate was measurably never performed.
+- **The strongest §1b candidate in the section's history was still a `pass`, and the reason mattered.**
+  `electron-playwright-mcp` is the first pick ever to clear the standing Electron gap. Checking it
+  properly (1★, 15 commits, ISC) against what the repo already owns established that the
+  visual-verification failure was **never a tooling problem** — which is what makes §3's adopt a *gate*
+  rather than another tool. The negative result did more work than an adopt would have.
+- **`propagate` had the same disease as `adopt`, one section over.** Verifying the target for this
+  run's propagation also revealed that 2026-08-27's was never applied (`realness`: 0 hits). § 5 exists
+  precisely to stop that, and covers adopts only. Recorded on the row, surfaced for planning, not
+  fixed unilaterally.
+- **Every claim in this run was measured or grepped.** The plugin verdicts come from running its own
+  exported `parseRules`/`judge`, not its README. The official roster was re-read first-hand. The
+  propagation's absence is 0 hits across two 382-line files, both confirmed to exist so the zero is a
+  real absence. The inbound items were re-checked against the sibling repo at `7dbfd15`, not against
+  last run's note. G5's lack of visual evidence is `git log --name-only` plus a DONE.md grep.
+- **A roundup asserted a nonexistent official plugin for the second consecutive run** ("Frontend
+  Design" again, now joined by Semgrep and Chrome DevTools). Promoted from a per-run observation to a
+  standing note in §1 Next-up.
+
+### Deviations from the plan, recorded rather than buried
+
+1. **Dated 2026-09-02, not 2026-09-04.** The brainstorm named the run-card `2026-09-04`; it is dated by
+   the day it actually ran, following the precedent that a run-card is dated by its run and never by
+   its slot. WEEKLY.md's Friday rows are checked with an explicit "held two days early" note.
+2. **A pre-existing table defect was fixed in passing.** § 5's `dead-rules-audit` row contained
+   `` `Edit|MultiEdit|Write` `` written unescaped into a Markdown cell on 2026-08-30, splitting the row
+   into 7 columns so its Note rendered truncated at "MultiEdit". Caught by a column-count check over
+   every table in the touched docs, not by reading. Fixed to `` `Edit` / `MultiEdit` / `Write` ``; all
+   tables in all six files now validate.
+3. **The visual-verification re-trial is filed once and referenced twice.** §3's adopt and § 5's
+   re-trial are the same work, so they share a single 🟤 entry rather than double-filing — consistent
+   with how the 2026-08-27 run handled `dead-rules-audit` across §1 and §4.
+4. **G6's Summary-Table task count was wrong and is corrected 4 → 5** (with the overhead-inclusive
+   total 23 → 24). The scorecard read-out was added to G6's checklist after the table was written —
+   the exact failure already filed as 🟤 "a WEEKLY cross-reference does not create a line item".
+5. **No `pass` row was forced for the parked §2/§3 runners-up.** Both were weighed per rule #5 and lost
+   on actionability; they stay parked with a dated note rather than being logged as reviewed, since
+   neither was reviewed on its own merits.
