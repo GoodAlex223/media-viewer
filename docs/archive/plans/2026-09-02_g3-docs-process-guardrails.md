@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Aug 31–Sep 4 § G3 (🟤 + 1 🟡 folded, 6 SP) ← BACKLOG 🟤 `### [2026-08-27] From: G5 closeout` ×2, `### [2026-08-27] From: G4 closeout` ×4, `### [2026-07-04] PR #60` ×1, `### [2026-07-11] PR #63` ×1, three one-off index backfills, + 🟡 `### [2026-07-02] Vitest v4 full-suite worker flake`
 **Created**: 2026-09-02
-**Status**: In Progress
+**Status**: Complete — all 6 tasks shipped; **MERGED to `main` 2026-09-02 as `45a0d9b`** (no PR, branch deleted)
 **Last Updated**: 2026-09-02
 
 **Goal:** Replace two chronic manual-checklist failures with automation, clear the residue they left behind, and stop the local verification loop from costing a retry.
@@ -142,6 +142,53 @@ The alternative considered was bailing on an unterminated fence — consistent w
 blocks real commits, and training people to reach for `--no-verify` is the exact failure the
 review's finding 3 identified (that flag also skips the fail-fast secret scan). If this ever
 bites, bailing is the fix, and it is ~5 lines in `stripCode`.
+
+---
+
+## Key Discoveries
+
+1. **A guard that reads the working tree does not guard a commit.** `git commit` commits the
+   index. The first implementation read the worktree, so staging a new plan and forgetting
+   `git add docs/README.md` landed an unindexed plan with the guard green — the exact failure
+   it was built to stop. Sharpened by a rule this repo already had: *stage docs by explicit
+   path, never `git add -A`* makes partial staging the **normal** path here, not an edge case.
+   The guard failed open precisely where the manual checklist historically failed.
+2. **Presence-checking by basename is a different, weaker guard than path-checking.**
+   `2025-12-29_video-fullscreen-toggle.md` was *mentioned* in the index via a path it had not
+   lived at for months. Basename matching called that indexed; full-path matching correctly
+   reports one missing row **plus** one dead link. The source entry specced presence-only,
+   which could not have prevented the very defect the same group cleaned up by hand.
+3. **A probe that never executes the target returns a pass-shaped answer.** `require()` does not
+   set `require.main`, so probing a CLI guarded by `require.main === module` measured an *empty
+   program* and printed the result I expected. It "confirmed" a real defect twice on worthless
+   evidence. Use `Module._load(path, null, true)` or a real subprocess — and be most suspicious
+   of a probe that agrees with you. Same class as the defect under investigation: a check that
+   cannot fail looks exactly like one that passes.
+4. **The item's premise can be wrong in both directions at once.** The vitest flake never
+   reproduced (15/15 green), *and* the entry's suggested remedy — "try `pool: 'forks'`" — was a
+   no-op, because `forks` **is** v4's default. Verified empirically with an `isMainThread`
+   probe rather than from docs. Measuring the premise before executing it changed the task from
+   "apply the suggested fix" to "the suggested fix does nothing; here is what the options cost".
+5. **Two indexes that must mirror each other is the disease, not the cure.** `docs/archive/plans/README.md`
+   carried a second, unenforced table that had drifted to 18 of 60 plans. Backfilling it would
+   have doubled the maintenance the guard exists to remove; deleting it and pointing at the one
+   machine-checked list was the smaller and more durable change.
+
+## Future Improvements
+
+Filed to BACKLOG 🟤 `### [2026-09-02] From: G3 closeout` at close:
+
+1. **An unclosed code fence silently un-checks every link after it** — `stripCode` runs a
+   half-open fence to EOF; dropped links block loudly via MISSING, but a dead link after the
+   fence goes unchecked. Fix is ~5 lines (bail on unterminated fence); deliberately deferred,
+   reasoning in § Known Limitations above.
+2. **`.husky/pre-commit` has no per-check bypass**, so any single false positive forces
+   `--no-verify`, which also disarms the fail-fast secret scan. A `SKIP=<check>` convention
+   would make strictness affordable — and removes the main argument against improvement 1.
+3. **Sweep the repo's remaining restated derived counts** — this group added the convention but
+   not the sweep, then hit two live instances inside its own scope (`7 times` was 8;
+   `PROJECT.md`'s `529 unit` was 597). Delete each value in favour of an open-ended reference
+   rather than refreshing it.
 
 ---
 

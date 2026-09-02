@@ -29,9 +29,8 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| [G3 Docs & Process Guardrails Plan][] | Docs-index guard, closeout conventions, vitest flake |
+| _None currently active_ | — |
 
-[G3 Docs & Process Guardrails Plan]: planning/plans/2026-09-02_g3-docs-process-guardrails.md
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
 [G2 Tournament Undo Hardening Plan]: archive/plans/2026-08-30_g2-tournament-undo-hardening.md
@@ -100,6 +99,7 @@ Central index for all project documentation.
 | [TASK-028 CLIP Semantic Features Plan][] | 512-dim CLIP embeddings concatenated with the 64-dim hand-crafted features |
 | [G3 Bulk-Rate Re-Pair Avoidance Plan][] | Stop re-showing a pair already rated "Both good"/"Both bad" in AI-sorted compare (Group G3) |
 | [G3 Re-Score & Counter Fixes Plan][] | Deferred re-score + stable "Pair X of Y" counter — the two PR #66 manual-smoke defects (Group G3) |
+| [G3 Docs & Process Guardrails Plan][] | Docs-index pre-commit guard (index-sourced, both directions) + 24-row backfill + closeout conventions + `pool: 'threads'`; 5-reviewer round fixed 2 blocking defects in the guard itself (Group G3, Cleanup Week #3) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -158,6 +158,7 @@ Central index for all project documentation.
 [TASK-028 CLIP Semantic Features Plan]: archive/plans/2026-04-05-task-028-clip-semantic-features.md
 [G3 Bulk-Rate Re-Pair Avoidance Plan]: archive/plans/2026-07-24_g3-bulk-rate-repair-avoidance.md
 [G3 Re-Score & Counter Fixes Plan]: archive/plans/2026-07-25_g3-rescore-and-counter-fixes.md
+[G3 Docs & Process Guardrails Plan]: archive/plans/2026-09-02_g3-docs-process-guardrails.md
 
 ## Design Specs
 

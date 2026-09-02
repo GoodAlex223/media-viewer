@@ -2,7 +2,7 @@
 
 Project-specific configuration. Universal rules are in [CLAUDE.md](CLAUDE.md).
 
-**Last Updated**: 2026-08-27
+**Last Updated**: 2026-09-02
 
 ---
 
@@ -17,7 +17,7 @@ Project-specific configuration. Universal rules are in [CLAUDE.md](CLAUDE.md).
 | Language | JavaScript (ES6+) |
 | Framework | Electron 39.x |
 | UI | HTML/CSS (no framework) |
-| Testing | Vitest (529 unit) + Playwright (56 E2E) |
+| Testing | Vitest (unit) + Playwright (E2E) — for current counts run `npm test` / `npm run test:e2e` |
 | CI/CD | No CI service; gates are local Husky hooks (pre-commit + pre-push) |
 
 ---
