@@ -1110,6 +1110,29 @@ describe('sortComplete stale-guard + runMlSort resolution', () => {
         expect(ctx.updateSortProgress).not.toHaveBeenCalled();
     });
 
+    it('leaves a similarity sort’s card alone rather than demoting it', () => {
+        // requestPredictionScores() fires on its own when background extraction finishes with
+        // a ready model, so worker progress can land while handleSortBySimilarity owns the
+        // card. Plain-text form would destroy THAT sort's Cancel button; writing our phase
+        // into it would mislabel it. Neither: the background scoring just goes unreported.
+        const ctx = {
+            isPredictionSorting: false,
+            isComputingHashes: true,
+            updateSortProgress: vi.fn(),
+            updateProgressNotification: vi.fn(),
+        };
+
+        handleMlWorkerMessage.call(ctx, {
+            type: 'progress',
+            message: 'Scoring files...',
+            current: 5,
+            total: 100,
+        });
+
+        expect(ctx.updateProgressNotification).not.toHaveBeenCalled();
+        expect(ctx.updateSortProgress).not.toHaveBeenCalled();
+    });
+
     it('omits the counts suffix for a countless worker progress message', () => {
         const ctx = {
             isPredictionSorting: false,
@@ -1224,7 +1247,7 @@ describe('handleSortByPrediction lifecycle', () => {
             showNotification: () => {},
             updateSortPredictionButton: () => {},
             updateSortProgress: (p) => phases.push(p.phase),
-            clearProgressNotification: () => {},
+            clearProgressNotification: vi.fn(),
             loadFeatureCache: () => Promise.resolve(),
             startBackgroundFeatureExtraction: () => Promise.resolve(),
             cancelBackgroundExtraction: () => {},
@@ -1307,6 +1330,10 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(ctx.sortAbortController).toBeNull();
         expect(ctx.isPredictionSorting).toBe(false);
+        // trainFromHistoricalRatings deliberately clears nothing on any path; this finally is
+        // the single owner of card teardown, so the cancel path must be covered HERE or a
+        // cancelled sort leaves its card on screen forever.
+        expect(ctx.clearProgressNotification).toHaveBeenCalled();
     });
 
     it('bails unsorted when aborted during the extraction phase', async () => {
@@ -3095,19 +3122,16 @@ describe('trainFromHistoricalRatings (progress reporting)', () => {
         expect(phases).toContainEqual({ phase: 'Loading historical ratings…' });
     });
 
-    it('hands the card off to the caller instead of tearing it down on the success path', async () => {
+    it('never tears the card down itself on the success path — the caller owns teardown', async () => {
         const ctx = makeTrainCtx({ liked: filesNamed('a.png') });
 
         await trainFromHistoricalRatings.call(ctx, undefined);
 
-        // handleSortByPrediction's finally owns teardown. Clearing here blanked the card
-        // across the un-instrumented head of startBackgroundFeatureExtraction, which does not
-        // reach extractionProgressSink until its first file completes.
         expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
         expect(ctx.mlWorker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'trainHistorical' }));
     });
 
-    it('still clears the card when cancelled mid-loop', async () => {
+    it('leaves teardown to the caller on the cancel path too, and posts no partial training', async () => {
         const controller = new AbortController();
         const ctx = makeTrainCtx({ liked: filesNamed('a.png', 'b.png') });
         ctx.computeFeatures = vi.fn(async () => {
@@ -3117,7 +3141,7 @@ describe('trainFromHistoricalRatings (progress reporting)', () => {
 
         await trainFromHistoricalRatings.call(ctx, controller.signal);
 
-        expect(ctx.clearProgressNotification).toHaveBeenCalled();
+        expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
         expect(ctx.mlWorker.postMessage).not.toHaveBeenCalled();
     });
 });

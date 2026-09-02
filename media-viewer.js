@@ -6977,13 +6977,17 @@ class MediaViewer {
                         current: message.current,
                         total: message.total,
                     });
-                } else {
+                } else if (!this.isComputingHashes) {
                     // No card (e.g. deferred compare-refresh re-scoring) — keep the counts
                     // the plain-text form would otherwise lose.
                     this.updateProgressNotification(
                         hasCounts ? `${message.message} ${message.current}/${message.total}` : message.message
                     );
                 }
+                // else: a similarity sort owns the card. requestPredictionScores() fires by
+                // itself when extraction finishes with a ready model, so this lands with no
+                // user action. Plain text would destroy THAT sort's Cancel button and card
+                // form would mislabel its phase, so background scoring goes unreported.
                 break;
             }
 
@@ -7726,8 +7730,8 @@ class MediaViewer {
             if (signal?.aborted) {
                 // Cancelled mid-loop — do not send a partial-training message to the ML worker
                 // (it would train a misleadingly incomplete model on whatever was collected so
-                // far); clear the progress UI posted above so it doesn't linger after Cancel.
-                this.clearProgressNotification();
+                // far). Teardown of the progress UI is the caller's, not ours: see the
+                // ownership note at the end of this method.
                 return;
             }
 
@@ -7738,7 +7742,6 @@ class MediaViewer {
             dislikedFeatures.push(...bulkExamples.disliked);
 
             if (signal?.aborted) {
-                this.clearProgressNotification();
                 return;
             }
 
@@ -7750,14 +7753,12 @@ class MediaViewer {
                 });
             }
 
-            // Deliberately no clearProgressNotification() here: handleSortByPrediction's
-            // finally owns teardown, and clearing blanked the card across the head of
-            // startBackgroundFeatureExtraction, which does not reach extractionProgressSink
-            // until its first file completes. The cancel paths above still clear, since they
-            // end the phase early rather than handing off to a next one.
+            // Progress-UI ownership: this method never tears the card down, on any path.
+            // handleSortByPrediction's finally is the single owner, and every exit from here
+            // — success, cancel, throw — unwinds through it. Clearing here as well was
+            // redundant, and doing it on only some paths made the asymmetry look meaningful.
         } catch (error) {
             console.error('Error training from historical:', error);
-            this.clearProgressNotification();
         }
     }
 
@@ -8139,9 +8140,9 @@ class MediaViewer {
             // Phase 2 — extract any missing features (drives the SAME card via the sink).
             const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
             if (uncachedFiles.length > 0) {
-                // Indeterminate until the first sink callback: startBackgroundFeatureExtraction
-                // does not reach showBackgroundExtractionProgress until a file completes.
-                this.updateSortProgress({ phase: 'Extracting features…' });
+                // No indeterminate priming needed: startBackgroundFeatureExtraction's head is
+                // await-free, so it reaches showBackgroundExtractionProgress — and through it
+                // this sink — synchronously, with a real cached/total count.
                 this.extractionProgressSink = (current, total) =>
                     this.updateSortProgress({ phase: 'Extracting features…', current, total });
                 try {
