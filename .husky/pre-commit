@@ -1,3 +1,4 @@
 node scripts/check-secrets.js
+node scripts/check-docs-index.js
 npx lint-staged
 npx vitest run

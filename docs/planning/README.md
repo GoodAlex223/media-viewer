@@ -53,6 +53,18 @@ Ideas → BACKLOG.md → TODO.md → Work → DONE.md
 3. **Starting work?** → Create plan in `plans/`
 4. **Completed?** → Move to DONE.md with summary
 
+### Document Conventions
+
+- **Do not restate a count or range that is derived from a list elsewhere — reference the
+  list open-endedly instead.** Derived values go stale the moment their source grows, and
+  refreshing one only resets the clock. G4 hit this three times in a single branch: `baed3ba`
+  wrote "D6–D9" while D10 was pending; `02998ec` corrected it to "D6–D10" _while adding D11
+  in the same diff_. The fix that held was deleting the value ("§ 9 records … **D6 onward**"),
+  not refreshing it. This repo carries many such values — test totals, `(N items)` in BACKLOG
+  group headers, "2 of 6 managers", Health-Summary tallies.
+- **Review-time tell**: when checking a fix to a derived value, verify whether the _same
+  commit_ extended the source the fix just described.
+
 ### Strategic Review (staleness check)
 
 Run as part of every planning session, whatever its cadence (ROADMAP/GOALS/MILESTONES

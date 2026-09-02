@@ -1,0 +1,19 @@
+{
+    // Markdown is format-on-save OFF at the repo level, deliberately.
+    //
+    // Repo tooling already leaves Markdown alone: .prettierignore lists `docs/` and `*.md`,
+    // and lint-staged only formats *.{js,cjs,json,css,html}. The damage came from an editor
+    // reformatting files it merely had open. Two separate incidents: during G4 a `git add -A`
+    // swept six unrelated planning docs into a commit (reverted in 900a6ea), and among that
+    // noise the formatter had inserted backslash escapes inside code spans -- `scripts/**/*.js`
+    // became `scripts/\*\*/*.js`, which renders the escapes literally; then on 2026-08-28 the
+    // same formatter corrupted `media-viewer.js` into `media*viewer.js` in REVIEW-QUEUE.md.
+    // Corrupting, not cosmetic.
+    //
+    // Settling it here rather than per-machine keeps it from depending on one person's setup.
+    "[markdown]": {
+        "editor.formatOnSave": false
+    },
+    // .gitattributes enforces LF; match it so the editor does not fight the repo.
+    "files.eol": "\n"
+}

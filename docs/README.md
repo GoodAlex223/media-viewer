@@ -29,9 +29,9 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| [Video Fullscreen Toggle][] | Exit fullscreen on second video click |
+| [G3 Docs & Process Guardrails Plan][] | Docs-index guard, closeout conventions, vitest flake |
 
-[Video Fullscreen Toggle]: planning/plans/2025-12-29_video-fullscreen-toggle.md
+[G3 Docs & Process Guardrails Plan]: planning/plans/2026-09-02_g3-docs-process-guardrails.md
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
 [G2 Tournament Undo Hardening Plan]: archive/plans/2026-08-30_g2-tournament-undo-hardening.md
@@ -78,10 +78,28 @@ Central index for all project documentation.
 | [CW-P Process & DX Guardrails Plan][]         | Automated pre-push E2E gate (code-aware skip; pure `parsePushRefs`/`classifyPaths` + fail-safe git-wrapper CLI + Husky v9 hook) + Weekly-Reviews methodology consolidation (6 fixes) + CLAUDE.md ref-sweep bullet (Group CW-P) |
 | [G1 AI-Sort Startup UX Plan][]                 | Phased/cancelable `handleSortByPrediction` + awaitable `runMlSort` (`sortRunId` stale-guard) + atomic incremental `loadFeatureCache` (staged-local, commit-on-complete) + binary `Float32Array` transport for `feature-cache-chunk` + unified sort-card progress; PR3 slice of the 🔴 sort-perf TODO (PR2 hash-off-thread remains); user-side 24k smoke PASSED 2026-07-20; MERGED via PR #64 (`b6ff4ac`) (Group G1) |
 | [G2 Tournament Bug Fixes Plan][]               | `engine.history` unified chronological undo stack (`kind` pick/special/prune + `peekUndoEntry`/`undoUserAction`) replacing the `moveHistory`-peek that let any special move hijack tournament undo + identity re-check for the advisory `isLoading` mutex + mouse-wheel `isTournamentMode` guard + auto-hide `.tournament-header`/`.tournament-controls` (`_setupAutoHide`); MERGED via PR #65 (`937084c`); **user-side 6-point manual smoke PASSED 2026-07-21** (all 6 checks) (Group G2) |
-
 | [G4 Strategic-Doc Refresh Plan][] | Strategic docs refreshed to August-2026 reality (v1.1 retro-closed, v2.0 = modularization arc, Now/Next/Later theme board) + CLAUDE.md/PROJECT.md sync + planning-session staleness rule (Group G4) |
 | [G1 Bulk-Rate Follow-ups Plan][] | Real-worker E2E for the PR #66 deferred re-render (D2/D4) + `loadFolder` deferred-window cancel, `prunedPairKeys` restore on undo, counter/undo-arithmetic coverage; review-round log (Group G1, Cleanup Week #3) |
 | [G2 Tournament Undo Hardening Plan][] | Engine `clearHistory`/`dropEntry` primitives + `reconcileWithFiles` drops the session-only stack in O(1) + a failed special-restore drops its own entry instead of wedging + empty-state keydown `canUndo` consults `engine.history`; **4 of 5 tasks shipped** — Task 4's `_tournamentRenderBusy` lock was implemented, measured against the tournament E2E, and reverted as unsound (the render re-enters itself from DOM callbacks behind the handlers) (Group G2, Cleanup Week #3) |
+| [Video Fullscreen Toggle Plan][] | Exit fullscreen on a second video click |
+| [TASK-002 Visual Scale Controls Plan][] | Visual media scale controls |
+| [TASK-003 Centralized removeFile Plan][] | Centralized `removeFile()` cleanup method |
+| [TASK-004 Compare File Validation Plan][] | File-existence validation in `showCompareMedia()` |
+| [TASK-006 Unified Fullscreen Cleanup Plan][] | Unified fullscreen-exit cleanup method |
+| [TASK-008 Cache Age Display Plan][] | Cache age shown in the sorting notification |
+| [TASK-010 Extraction ETA Plan][] | Estimated time remaining for feature extraction |
+| [TASK-018 UI Polish Plan][] | `:active` press animation on `.control-btn` + `cleanupFullscreen()` early-return guard |
+| [TASK-019 Extract Fullscreen Module Plan][] | Extract `FullscreenManager` from `media-viewer.js` — establishes the v2.0 modularization pattern |
+| [TASK-020 ML Sorting Fix Plan][] | Compare-mode re-scoring race + score-delta feedback + pair-selection unit tests |
+| [TASK-021 Compare Overlay UX Plan][] | Overlay control buttons reachable and clickable without overlapping video controls |
+| [TASK-022 Compare Last-Pair Plan][] | Last-pair infinite error loop fixed; undo preserved instead of a drop zone |
+| [TASK-024 Per-Folder Feature Cache Plan][] | Feature cache reloads on folder switch, with file-change detection |
+| [TASK-025 Application Logging Plan][] | File-based logging of main-process output and renderer errors |
+| [TASK-026 Keyboard Shortcuts Plan][] | Customizable rating/navigation shortcuts (unified QWER+AD defaults) |
+| [TASK-027 Undo Empty Folder Plan][] | Undo works when no media remains, restoring files and the correct view mode |
+| [TASK-028 CLIP Semantic Features Plan][] | 512-dim CLIP embeddings concatenated with the 64-dim hand-crafted features |
+| [G3 Bulk-Rate Re-Pair Avoidance Plan][] | Stop re-showing a pair already rated "Both good"/"Both bad" in AI-sorted compare (Group G3) |
+| [G3 Re-Score & Counter Fixes Plan][] | Deferred re-score + stable "Pair X of Y" counter — the two PR #66 manual-smoke defects (Group G3) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -121,6 +139,25 @@ Central index for all project documentation.
 [CW-P Process & DX Guardrails Plan]: archive/plans/2026-07-10-cw-p-process-dx-guardrails.md
 [G1 AI-Sort Startup UX Plan]: archive/plans/2026-07-13-ai-sort-startup-ux.md
 [G2 Tournament Bug Fixes Plan]: archive/plans/2026-07-20_g2-tournament-bug-fixes.md
+[Video Fullscreen Toggle Plan]: archive/plans/2025-12-29_video-fullscreen-toggle.md
+[TASK-002 Visual Scale Controls Plan]: archive/plans/2026-02-05_visual-scale-controls.md
+[TASK-003 Centralized removeFile Plan]: archive/plans/2026-02-06_centralized-remove-file.md
+[TASK-004 Compare File Validation Plan]: archive/plans/2026-02-06_compare-file-validation.md
+[TASK-006 Unified Fullscreen Cleanup Plan]: archive/plans/2026-02-24_task-006-unified-fullscreen-cleanup.md
+[TASK-008 Cache Age Display Plan]: archive/plans/2026-03-05_task-008-cache-age-display.md
+[TASK-010 Extraction ETA Plan]: archive/plans/2026-03-05_task-010-extraction-eta.md
+[TASK-018 UI Polish Plan]: archive/plans/2026-03-20-task-018-ui-polish.md
+[TASK-019 Extract Fullscreen Module Plan]: archive/plans/2026-03-21-extract-fullscreen-module.md
+[TASK-020 ML Sorting Fix Plan]: archive/plans/2026-03-21-task-020-ml-sorting-fix.md
+[TASK-021 Compare Overlay UX Plan]: archive/plans/2026-03-21-task-021-fix-compare-overlay-ux.md
+[TASK-022 Compare Last-Pair Plan]: archive/plans/2026-03-22-task-022-fix-compare-last-pair.md
+[TASK-024 Per-Folder Feature Cache Plan]: archive/plans/2026-03-24-task-024-per-folder-feature-cache.md
+[TASK-025 Application Logging Plan]: archive/plans/2026-03-26-task-025-application-logging.md
+[TASK-026 Keyboard Shortcuts Plan]: archive/plans/2026-03-27-task-026-keyboard-shortcut-customization.md
+[TASK-027 Undo Empty Folder Plan]: archive/plans/2026-03-28-task-027-fix-undo-empty-folder.md
+[TASK-028 CLIP Semantic Features Plan]: archive/plans/2026-04-05-task-028-clip-semantic-features.md
+[G3 Bulk-Rate Re-Pair Avoidance Plan]: archive/plans/2026-07-24_g3-bulk-rate-repair-avoidance.md
+[G3 Re-Score & Counter Fixes Plan]: archive/plans/2026-07-25_g3-rescore-and-counter-fixes.md
 
 ## Design Specs
 
@@ -173,6 +210,11 @@ Central index for all project documentation.
 | [G1 Bulk-Rate Follow-ups Design][] | Bulk-rate follow-ups design: D1 the E2E runs the real `ml-worker.js` (lazy init was the cause, not the harness — no stub/flag), D2 `_cancelDeferredCompareRefresh` with the `wasPending` rule (§ 2 amended: `loadFolder` cancels twice), D3 `prunedPairKeys` captured on the history entry and restored before the `mlFeatures` guard, D4 mutation-verified tests, D5 two design-time findings deliberately deferred to BACKLOG (Group G1) |
 | [G2 Tournament Undo Hardening][] | Undo-stack lifecycle hardening design: DEC-1 **reverted, not shipped** — a dedicated `_tournamentRenderBusy` flag replaced the specified `isLoading` mutex (which cannot hold: the compare handlers clear it at first paint), but E2E measurement showed the flag silently drops user input, because `_buildTournamentSide` re-enters the render from a DOM error callback that bypasses every handler; the guard is blocked on that and re-filed to BACKLOG [2026-08-31]. DEC-2 drop a `special` entry after 2 **cumulative** restore failures — counted per entry for its whole lifetime, with nothing resetting the count except the entry leaving the stack (`dropEntry` + `moveHistory` twin + `clearHistory` for the entries beneath it), DEC-3 `reconcileWithFiles` drops the session-only history in O(1) and notifies (per-file `trackUndo` would undo the PR #55 24k win); plus the empty-state keydown `canUndo` guard and the `exitTournamentMode` invariant comment (Group G2, Aug 31–Sep 4) |
 | [G2 Tournament Bug Fixes][] | Tournament-mode bug fixes design: D1 unified LIFO undo stack, D2 `engine.history` IS that stack (reverses PR #59 `trackUndo:false`), D3 engine stays dumb (`meta` opaque), D4 system prunes auto-consumed, D5 undo stays session-only, D6 auto-hide mirrors `.header` (edge band + 3s), D7 reveal chrome on entry (Group G2) |
+| [TASK-018 UI Polish][] | Button press effects + `cleanupFullscreen()` guard design |
+| [Tournament Mode][] | Swiss-style tournament engine + `TournamentManager` + 3-way mode selector (Groups E + F) |
+| [CW-V Test & Tooling Backfill][] | Test-only backfill design: comment-aware `methodSource` brace guard + `src` seam; `extractAddedLines` real-git-diff coverage (Group CW-V) |
+| [G3 Bulk-Rate Re-Pair Avoidance][] | Avoid re-showing an already bulk-rated pair while still letting a rated file pair with fresh files (Group G3) |
+| [G3 Re-Score & Counter Fixes][] | Deferred re-score before render + a pair counter that no longer decrements then jumps (Group G3) |
 
 [TASK-019 Extract Fullscreen Module]: superpowers/specs/2026-03-21-task-019-extract-fullscreen-module-design.md
 [TASK-020 ML Sorting Investigation]: superpowers/specs/2026-03-21-task-020-ml-sorting-investigation-design.md
@@ -221,6 +263,11 @@ Central index for all project documentation.
 [G4 Strategic-Doc Refresh Design]: superpowers/specs/2026-07-12-g4-strategic-docs-refresh-design.md
 [G1 Bulk-Rate Follow-ups Design]: superpowers/specs/2026-08-29-g1-bulk-rate-followups-design.md
 [G2 Tournament Undo Hardening]: superpowers/specs/2026-08-30-g2-tournament-undo-hardening-design.md
+[TASK-018 UI Polish]: superpowers/specs/2026-03-20-task-018-ui-polish-design.md
+[Tournament Mode]: superpowers/specs/2026-05-25-tournament-mode-design.md
+[CW-V Test & Tooling Backfill]: superpowers/specs/2026-07-04-cw-v-test-tooling-backfill-design.md
+[G3 Bulk-Rate Re-Pair Avoidance]: superpowers/specs/2026-07-24-g3-bulk-rate-repair-avoidance-design.md
+[G3 Re-Score & Counter Fixes]: superpowers/specs/2026-07-25-g3-rescore-and-counter-fixes-design.md
 
 ## Security Audits
 
@@ -236,4 +283,6 @@ Central index for all project documentation.
 
 ---
 
-*Last Updated: 2026-08-29*
+This index is enforced by `scripts/check-docs-index.js` (pre-commit): every file under
+`docs/archive/plans/` and `docs/superpowers/specs/` must be linked here, and every link must
+resolve. There is deliberately no "Last Updated" line — git records when this file last changed.
