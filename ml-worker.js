@@ -186,7 +186,10 @@ function scoreFiles(allFeatures) {
         }
 
         if ((i + 1) % 100 === 0) {
-            updateProgress(`Scoring: ${i + 1}/${filenames.length}`, i + 1, filenames.length);
+            // Label only — the counts already travel in current/total, and both consumers
+            // (the sort card and the plain-text notification) render them themselves.
+            // Embedding them here printed them twice and made the phase label jump.
+            updateProgress('Scoring files...', i + 1, filenames.length);
         }
     }
 
