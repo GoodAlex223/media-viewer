@@ -120,6 +120,31 @@ User decision 2026-09-02: take `threads`. It costs nothing and moves off the dia
 
 ---
 
+## Known Limitations
+
+**An unclosed code fence in `docs/README.md` blanks the rest of the document.** `stripCode`
+treats a half-open fence as running to EOF, so links after it are never extracted. Verified:
+given `[Keep](a.md)` before an unterminated ` ``` `, `Keep` survives and everything after is
+dropped. (Nested fences are fine — a 4-backtick fence correctly survives an inner 3-backtick
+one.)
+
+The consequence splits, and only one half is silent:
+
+- Dropped links make their files report **MISSING** → the commit blocks. Fail-safe.
+- A genuine **dead link** sitting after the fence goes unchecked. Silent.
+
+Left as-is deliberately. The loud half fires first in practice: a malformed index surfaces as
+MISSING before the silent half can matter, and the narrow window where it bites needs a
+malformed document *plus* every plan/spec link surviving *plus* a dead link after the fence.
+
+The alternative considered was bailing on an unterminated fence — consistent with this guard's
+"any uncertainty blocks" invariant. Not taken, because a stricter parser that false-positives
+blocks real commits, and training people to reach for `--no-verify` is the exact failure the
+review's finding 3 identified (that flag also skips the fail-fast secret scan). If this ever
+bites, bailing is the fix, and it is ~5 lines in `stripCode`.
+
+---
+
 ## Implementation Log
 
 - **2026-09-02** — Brainstormed as bounded; design approved in-session. Branch `g3-docs-process-guardrails` cut from `main` `38c9ef4`. Baseline measured: 556 unit tests / 17 files, 8.22s. Three premise corrections measured and recorded above.
