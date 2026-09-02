@@ -41,8 +41,12 @@ WEEKLY.md's verdict rule guards one failure mode: _"a scorecard reporting zero s
 `~/.claude/dead-rules-audit/ledger.json` holds **13 sessions, 6,499 relevance hits, 2,134 judgements,
 1,136 "violations"**. The vehicle worked. The _scoring_ does not.
 
-Measured first-hand against this repo's `CLAUDE.md` (32,585 bytes / 211 lines) using the plugin's own
-`parseRules` and `judge` exports: `judge()` marks a rule violated when **any** backticked token from
+Measured first-hand against this repo's `CLAUDE.md` — **32,957 bytes / 210 lines** by `wc -c` / `wc -l`,
+which is deliberately spelled out because a naive probe disagrees: `readFileSync(f, 'utf8').length`
+returns **32,585** (UTF-16 code units, not bytes — the file is multi-byte UTF-8) and
+`split('\n').length` returns **211** on a 210-line file ending in a newline. An earlier draft of this
+run-card carried those two probe outputs mislabelled as bytes and lines; every other figure below came
+from the plugin's own functions and was unaffected. Using the plugin's `parseRules` and `judge` exports: `judge()` marks a rule violated when **any** backticked token from
 that rule appears in newly-added live code — and `ruleKeywords` does not separate _prescribed_ tokens
 from _prohibited_ ones. Rule 36's token set is `loadfolder`, `exittournamentmode`, `tournament`,
 `engine` — every one of which the rule instructs you to write. Two snippets that obey their rules
@@ -63,7 +67,8 @@ would reproduce the same invalid numbers — which is why the outcome is `drop` 
 Three secondary measurements, recorded because they are cheap and will not be re-derived:
 
 - The parser now reads **42 rules / 13 prohibition-shaped / 12 judgeable**, against G4's 2026-08-30
-  figure of 38 / 12 / 11 — `CLAUDE.md` grew from 206 to 211 lines during G2 + G3.
+  figure of 38 / 12 / 11 — `CLAUDE.md` grew from **206 to 210** lines during G2 + G3. The 206 baseline
+  is sound (`git show bf58c01:CLAUDE.md | wc -l` = 206); only the endpoint was wrong, per the unit note above.
 - The ledger holds **43** rules to the current 42: editing `CLAUDE.md` mid-trial orphans rules, because
   entries are keyed by a hash of the rule _text_. A rule's history resets whenever its wording changes.
 - Two distinct rules both report `id=35`.
@@ -131,7 +136,8 @@ feature-dev, Context7, Playwright MCP, `pr-review-toolkit`, `security-guidance`,
 - **REVIEW-QUEUE.md** — 5 verdict rows dated `2026-09-02` across §§1–4; **2 outcome rows** in § 5's
   trial log (`dead-rules-audit` → `drop`, visual verification → per the evidence found); each
   category's _Next-up_ refreshed (add runners-up, remove anything promoted into a Reviewed log).
-- **BACKLOG.md** — one 🟤 entry per `adopt` under `### [2026-09-02] From: Weekly Reviews`, in the
+- **BACKLOG.md** — one 🟤 entry per `adopt` under `### [2026-09-02] From: Weekly Reviews`, **plus any
+  defect the run itself surfaces** (the BACKLOG groups by intake _event_, and this run is one), in the
   intake format; **flip the `dead-rules-audit` trial entry** to its `drop` outcome.
 - **TODO.md** — a `§ Spawned Tasks` row for the D2 `propagate`, naming its target file and its
   two-trees nature. Inbound §4 items are filed here **only** if their origin repo's review has landed;
@@ -233,3 +239,14 @@ rows and two § 5 trial read-outs, exactly as scoped.
 5. **No `pass` row was forced for the parked §2/§3 runners-up.** Both were weighed per rule #5 and lost
    on actionability; they stay parked with a dated note rather than being logged as reviewed, since
    neither was reviewed on its own merits.
+6. **A third BACKLOG entry was filed that this run did not plan for**, and this Outcome initially
+   failed to say so — the same late-sweep failure the PR review caught in DONE.md, present here too and
+   not flagged by it. The closeout's own relative-link check found **27 broken links in DONE.md's
+   March–May 2026 entries**, all off by one directory level. Filed rather than fixed (out of scope for an
+   overhead batch), which took the section from 2 items to 3; the Outputs list above now states the rule
+   — adopts _plus_ whatever the run itself surfaces — rather than assuming adopts are the only source.
+7. **Four review findings fixed post-PR, all stale-or-unverifiable claims in live docs**, plus the
+   sub-threshold note. Detailed in the PR's consolidated response comment. The one worth carrying: the
+   `CLAUDE.md` size in D1 was wrong because the probe's **labels** were wrong, not its arithmetic —
+   `readFileSync(f,'utf8').length` is UTF-16 code units, not bytes, and `split` on newlines overcounts a
+   trailing-newline file by one. Every figure that came from the plugin's own functions verified exactly.
