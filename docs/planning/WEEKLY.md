@@ -88,10 +88,12 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 **Source**: 🔵 User-Flagged — `### [2026-08-28] From: manual testing` (batches 2 + 4)
 **Total SP**: 3 — one branch, one PR (Thu)
 
+> ✅ **DONE 2026-09-02 — both items, MERGED `0d3fed5`** (no PR; reviewed locally by 5 reviewers + an adversarial pass, one finding fixed in `e2b5724`). Unit 597 → 613, E2E 56/56. Shipped **two fixes beyond the brief**, both required for the items' stated properties to actually hold: the ML-worker progress replies (which would have undone item 1 one phase later) and the awaited CLIP load (which fixed silent zero-CLIP training vectors, not just a motionless bar).
+>
 > The Cleanup Week's sanctioned 🔵 exception (precedent: July 6–10). Both are residuals of PR #64's cancel work on the **same code path** (`updateProgressNotification` demotes the cancelable card to plain text for exactly the longest phase), small, user-visible, and dup-tagged to each other in BACKLOG ("same fix vehicle"). The abort machinery already covers the phase — this is UI only.
 
-- [ ] **Keep the cancelable sort-progress card through the historical-ratings phase** — route the likes/dislikes loop's progress through `updateSortProgress` instead of `updateProgressNotification`, so Cancel stays clickable while "Processing likes: i/n" runs. `media-viewer.js:~1201-1219`, `~7505-7543`, `~1235-1253` (2) — 🔵 [2026-08-28]
-- [ ] **Indeterminate progress from CLIP-model load until the first determinate update; report from file 1** — render CLIP load + the historical phase in the card's existing `indeterminate` mode (no dead window between the "CLIP model loaded" toast and the first "Processing likes" line), and report per file rather than every 10th. `media-viewer.js:~8302-8338`, `~7904`, `~7522-7544`, `~1259-1267` (1) — 🔵 [2026-08-28]
+- [x] **Keep the cancelable sort-progress card through the historical-ratings phase** — ✅ shipped 2026-09-02 (`595ec19`). All four calls routed to `updateSortProgress`; `collectBulkRatedTrainingExamples`, silent until now, reports too. The sweep found a fourth site — the ML worker's own progress replies also demoted the card, so Cancel would still have died for the tail of training and all of scoring. _Original:_ route the likes/dislikes loop's progress through `updateSortProgress` instead of `updateProgressNotification`, so Cancel stays clickable while "Processing likes: i/n" runs. `media-viewer.js:~1201-1219`, `~7505-7543`, `~1235-1253` (2) — 🔵 [2026-08-28]
+- [x] **Indeterminate progress from CLIP-model load until the first determinate update; report from file 1** — ✅ shipped 2026-09-02 (`595ec19`, review fix `e2b5724`). Per-file reporting; CLIP load **awaited** behind a `clipProgressSink`. 🔴 The entry's premise was wrong and the reality was worse than a UI gap: the un-awaited `initClipModel()` yields **null** embeddings, not a wait, so a cold sort trained on 576-dim vectors with an all-zero CLIP half. User approved the wider scope. _Original:_ render CLIP load + the historical phase in the card's existing `indeterminate` mode (no dead window between the "CLIP model loaded" toast and the first "Processing likes" line), and report per file rather than every 10th. `media-viewer.js:~8302-8338`, `~7904`, `~7522-7544`, `~1259-1267` (1) — 🔵 [2026-08-28]
 
 ### G6. Weekly Reviews [batch] ⚪ Overhead
 
@@ -157,7 +159,7 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 | Group                                                                                                             | SP  |
 | ----------------------------------------------------------------------------------------------------------------- | --- |
 | ✅ [**G3. Docs & process guardrails**](#g3-docs--process-guardrails-batch--1--folded) [batch] 🟤 (finish — all 6 shipped a day early, **MERGED `45a0d9b`**; no PR — reviewed locally, 5 reviewers, 2 blocking defects fixed in-branch) | 6   |
-| [**G5. AI-sort training-phase progress polish**](#g5-ai-sort-training-phase-progress-polish-batch-) [batch] 🔵       | 3   |
+| ✅ [**G5. AI-sort training-phase progress polish**](#g5-ai-sort-training-phase-progress-polish-batch-) [batch] 🔵 (both items; **MERGED `0d3fed5`**, no PR, branch deleted) | 3   |
 
 **Daily total**: ~6 SP
 
