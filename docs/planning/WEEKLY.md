@@ -173,8 +173,8 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 
 | Group                                                                                                                                       | SP  |
 | ------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| ✅ [**G4. Adopt-queue trial batch**](#g4-adopt-queue-trial-batch--cadence-decision-batch--1--folded) [batch] 🟤 (finish — scorecard read-out + 🟡 decision; **all 3 done**, read-out held 2026-09-02, two days early) | 3   |
-| ✅ [**G6. Weekly Reviews**](#g6-weekly-reviews-batch--overhead) [batch] ⚪ (all 5 items; run held **2026-09-02**, two days ahead of this slot — 5 verdict rows + 2 trial read-outs) | (5) |
+| ✅ [**G4. Adopt-queue trial batch**](#g4-adopt-queue-trial-batch--cadence-decision-batch--1--folded) [batch] 🟤 (finish — scorecard read-out + 🟡 decision; **all 3 done**, read-out held 2026-09-02 two days early, merged `de4bdac`) | 3   |
+| ✅ [**G6. Weekly Reviews**](#g6-weekly-reviews-batch--overhead) [batch] ⚪ (all 5 items; run held **2026-09-02**, two days ahead of this slot — 5 verdict rows + 2 trial read-outs; **PR #67 → merge `de4bdac`**) | (5) |
 
 **Daily total**: ~2 SP + reviews overhead + G1–G3 buffer
 
@@ -187,9 +187,9 @@ _Deferred_: `typescript-lsp` and `security-guidance` trials (next Cleanup Week, 
 | G1  | Bulk-rate follow-ups [batch] 🏆                   | JS logic (compare bulk-rate) + E2E harness | 🟤 Auto                 | 4                    | 6        | Mon–Tue   | ✅ merged `66b16af` (no PR, 2026-08-29) |
 | G2  | Tournament undo hardening [batch]                 | JS logic (tournament) + CLAUDE.md          | 🟤 Auto                 | 4 (closes 5 entries) | 5        | Tue–Wed   | ✅ 3/4 **MERGED `6305a7a`** (no PR, `--no-ff`, branch deleted remote + local, 2026-08-31) — Task 4 reverted as unsound, re-filed 🟤 [2026-08-31] |
 | G3  | Docs & process guardrails [batch]                 | scripts / tooling / docs                   | 🟤 Auto (+1 🟡 folded)  | 6 (closes 10 entries) | 6       | Wed–Thu   | ✅ `45a0d9b` |
-| G4  | Adopt-queue trial batch + cadence decision [batch] | Claude Code tooling / process             | 🟤 Auto (+1 🟡 folded)  | 3                    | 3        | Tue + Fri | ✅ 3/3 merged `bf58c01` (no PR) + the `dead-rules-audit` read-out on the G6 branch (**PR #67**, 2026-09-02) — outcome `drop`, see [REVIEW-QUEUE.md](REVIEW-QUEUE.md) § 5 |
+| G4  | Adopt-queue trial batch + cadence decision [batch] | Claude Code tooling / process             | 🟤 Auto (+1 🟡 folded)  | 3                    | 3        | Tue + Fri | ✅ 3/3 merged `bf58c01` (no PR) + the `dead-rules-audit` read-out landed via **PR #67 → merge `de4bdac`** (2026-09-03) — outcome `drop`, see [REVIEW-QUEUE.md](REVIEW-QUEUE.md) § 5 |
 | G5  | AI-sort training-phase progress polish [batch]    | JS logic (sort-progress / training)        | 🔵 User                 | 2 (closes 2 entries) | 3        | Thu       | ✅ 2/2 **MERGED `0d3fed5`** (no PR, `--no-ff`, branch deleted remote + local, 2026-09-02) |
-| G6  | Weekly Reviews [batch]                            | Research / process                         | ⚪ Overhead             | 5                    | 5        | Fri       | ✅ **PR #67** (opened 2026-09-02; run held 2 days early — carries G4's terminal read-out) |
+| G6  | Weekly Reviews [batch]                            | Research / process                         | ⚪ Overhead             | 5                    | 5        | Fri       | ✅ **PR #67 → merge `de4bdac`** (2026-09-03; run held 2 days early, 3 review rounds — carries G4's terminal read-out) |
 |     | **Total (quota-counted)**                         |                                           |                         | **19**               | **23**   |           |            |
 |     | **Total (incl. ⚪ overhead)**                     |                                           |                         | **24**               | **28**   |           |            |
 
