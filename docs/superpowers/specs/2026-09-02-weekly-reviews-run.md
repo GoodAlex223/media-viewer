@@ -250,3 +250,14 @@ rows and two § 5 trial read-outs, exactly as scoped.
    `CLAUDE.md` size in D1 was wrong because the probe's **labels** were wrong, not its arithmetic —
    `readFileSync(f,'utf8').length` is UTF-16 code units, not bytes, and `split` on newlines overcounts a
    trailing-newline file by one. Every figure that came from the plugin's own functions verified exactly.
+8. **A second review round caught one follow-on that the first round's fix missed — and the miss was in
+   the _verification_, not the edit.** The `206 → 211` growth figure was corrected in this run-card but
+   not in REVIEW-QUEUE.md, and the sweep that was supposed to catch that searched the prose spelling
+   `206 to 211` while the surviving occurrence used a Unicode arrow, `206 → 211`. The grep returned 0
+   against text it could never have matched, which is indistinguishable from a clean sweep. This is the
+   `critical-thinking.md` Phase-4 failure in its purest form — **a check that cannot fail looks exactly
+   like one that passes** — and it is the second time this session that a zero was mistaken for
+   evidence. The replacement sweep searches the **numbers** (`/206\s*(?:→|->|to|–|—)\s*211/`, `211` near
+   a unit word, `32,585` near "bytes") across all 131 markdown files under `docs/`, and carries a
+   **positive control** that asserts it can still find the three deliberate mentions of the trap — so a
+   dead sweep reports itself instead of reporting success.
