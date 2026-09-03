@@ -241,12 +241,12 @@ rows and two § 5 trial read-outs, exactly as scoped.
    neither was reviewed on its own merits.
 6. **A third BACKLOG entry was filed that this run did not plan for**, and this Outcome initially
    failed to say so — the same late-sweep failure the PR review caught in DONE.md, present here too and
-   not flagged by it. The closeout's own relative-link check found **27 broken links in DONE.md's
-   March–May 2026 entries**, all off by one directory level. Filed rather than fixed (out of scope for an
+   not flagged by it. The closeout's own relative-link check found **broken links in DONE.md's pre-June
+   2026 entries**, most of them off by one directory level. Filed rather than fixed (out of scope for an
    overhead batch), which took the section from 2 items to 3; the Outputs list above now states the rule
    — adopts _plus_ whatever the run itself surfaces — rather than assuming adopts are the only source.
-7. **Four review findings fixed post-PR, all stale-or-unverifiable claims in live docs**, plus the
-   sub-threshold note. Detailed in the PR's consolidated response comment. The one worth carrying: the
+7. **Round 1 of the PR review: every finding was a stale-or-unverifiable claim in a live doc**, plus
+   the sub-threshold note (counts omitted — the review rounds continued past this entry). Detailed in the PR's consolidated response comment. The one worth carrying: the
    `CLAUDE.md` size in D1 was wrong because the probe's **labels** were wrong, not its arithmetic —
    `readFileSync(f,'utf8').length` is UTF-16 code units, not bytes, and `split` on newlines overcounts a
    trailing-newline file by one. Every figure that came from the plugin's own functions verified exactly.
@@ -269,3 +269,20 @@ rows and two § 5 trial read-outs, exactly as scoped.
    file ×3) — different patterns over the same tree, which is why an earlier draft of this paragraph
    read "three" immediately after naming the other pattern and invited exactly the units confusion the
    § 5 cell three sections up now exists to document.
+9. **Round 3 found the derived-count failure a fourth time — inside the entry the round-1 fix filed —
+   and the number was wrong.** The broken-links BACKLOG entry claimed **27** links across "March–May
+   2026" entries, "every one off by exactly one directory level". Re-measured with a resolver:
+   **26** broken, of which **25** are fixed by `../../` → `../` and **one is not** — `DONE.md:1299`
+   targets `../superpowers/plans/…`, a directory that does not exist (the file lives under
+   `archive/plans/`), so no change of _level_ fixes it. Provenance of the 27: the original sweep
+   reported 29 hits across three files — `BACKLOG.md` 2 (false positives matched inside prose),
+   `TODO.md` 1 (an intentional out-of-tree reference), `DONE.md` 26 — and subtracting only the two
+   false positives gave 27, silently absorbing TODO.md's one into DONE.md's total. **One correction to
+   the review**, verified: it placed the odd link in the `2026-05-21` entry and concluded that the
+   body's narrower range made "every one" hold. `DONE.md:1299` actually sits inside
+   `[2026-05-14] Group B` (heading at 1296, next heading at 1314), which the body's range explicitly
+   includes — so "every one" was false under **both** readings, and the body's count is 26, not 25.
+   The entry now carries **no count and no date range**, names the odd link explicitly, and warns that
+   a blanket `sed` followed by a `../../` re-check yields a false clean. That trap, not the arithmetic,
+   is the finding that mattered: it would have closed the item with a broken link still in the file
+   and nothing tracking it.
