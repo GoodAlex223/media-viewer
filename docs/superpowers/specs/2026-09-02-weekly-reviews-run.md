@@ -259,5 +259,13 @@ rows and two § 5 trial read-outs, exactly as scoped.
    like one that passes** — and it is the second time this session that a zero was mistaken for
    evidence. The replacement sweep searches the **numbers** (`/206\s*(?:→|->|to|–|—)\s*211/`, `211` near
    a unit word, `32,585` near "bytes") across all 131 markdown files under `docs/`, and carries a
-   **positive control** that asserts it can still find the three deliberate mentions of the trap — so a
-   dead sweep reports itself instead of reporting success.
+   **positive control** — a second, deliberately different pattern
+   (`/yields 211|returns \*\*211\*\*|endpoint as 211/`) matched over the same scope, asserted to return
+   **greater than zero** — so a dead sweep reports itself instead of reporting success. The control
+   asserts a **property, not a count**: an expected-count is calibrated against prose that any later
+   edit changes, so it fails on a correct tree and becomes one more dead check of the kind this
+   deviation exists to retire. For reproduction, the two figures at `8858339` were: the control pattern
+   **3** (`REVIEW-QUEUE.md` ×2, this file ×1) and the `206…211` sweep pattern **5** (`DONE.md` ×2, this
+   file ×3) — different patterns over the same tree, which is why an earlier draft of this paragraph
+   read "three" immediately after naming the other pattern and invited exactly the units confusion the
+   § 5 cell three sections up now exists to document.
