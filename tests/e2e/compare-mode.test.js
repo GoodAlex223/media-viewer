@@ -285,8 +285,22 @@ test.describe('Compare Mode', () => {
         });
 
         // --- Rating (G1): renders immediately, with no 'update' message posted to the (real,
-        // ready, warmed-up) worker — there is no deferred window left to wait out.
-        await page.evaluate(() => window.mediaViewer.applyBulkRating('good'));
+        // ready, warmed-up) worker. "Immediately" is checked synchronously, not by waiting and
+        // seeing whether it eventually settles: applyBulkRating's showMedia() call is NOT awaited
+        // (fire-and-forget), so a reintroduced deferred window would instead arm
+        // pendingCompareRefresh and call showMedia() only later, from scoreComplete — and against
+        // an already-warmed real worker that round trip can easily land inside a multi-second
+        // wait too, so a wait alone would not catch the regression. The decisive check is that
+        // showMedia() has ALREADY been invoked (and its render already under way) by the time
+        // applyBulkRating() itself resolves, in the very same turn.
+        const immediatelyAfterRating = await page.evaluate(async () => {
+            const mv = window.mediaViewer;
+            await mv.applyBulkRating('good');
+            return { showMediaCalls: window.__showMediaCalls, navInProgress: mv.mediaNavigationInProgress };
+        });
+        expect(immediatelyAfterRating.showMediaCalls).toBe(1); // invoked synchronously, not deferred
+        expect(immediatelyAfterRating.navInProgress).toBe(true); // its render is already under way
+
         await page.waitForFunction(
             () => !window.mediaViewer.mediaNavigationInProgress && !window.mediaViewer.isLoading,
             null,
@@ -299,17 +313,27 @@ test.describe('Compare Mode', () => {
         // applyBulkRating never re-scores (it doesn't touch the model at all any more), so
         // nothing is posted to the worker for a rating — not even a scoreAll.
         expect(afterRating.posted).toEqual([]);
-        expect(afterRating.showMediaCalls).toBe(1); // rendered once, immediately
+        expect(afterRating.showMediaCalls).toBe(1); // still just the one render — no second, deferred one
 
         // --- Undo (G1): same immediate-render contract, but handleCancel's bulk-undo branch DOES
-        // call requestPredictionScores() (must-NOT-delete: badges/pair-selection still re-score
-        // after training changes) — so a 'scoreAll' is expected here. What must still be absent is
-        // 'update' / 'reverseUpdate': the online-update senders themselves.
-        await page.evaluate(() => {
+        // call requestPredictionScores() (must-NOT-delete item 3: badges/pair-selection still
+        // re-score) and, unlike applyBulkRating, DOES `await showMedia()`. That await settles once
+        // showCompareMedia()'s own async steps finish (file-exists checks, DOM setup) — NOT once
+        // the image has visually finished loading: that happens later, in the <img> 'load' event
+        // listener (setupCompareImageHandlers), which is where mediaNavigationInProgress actually
+        // clears. So navInProgress is still true here too, same as the rating side above; the
+        // decisive signal remains showMediaCalls (0 in a reintroduced deferred window, since
+        // handleCancel would resolve immediately via _beginDeferredCompareRefresh instead).
+        const immediatelyAfterUndo = await page.evaluate(async () => {
+            const mv = window.mediaViewer;
             window.__postedTypes.length = 0;
             window.__showMediaCalls = 0;
-            return window.mediaViewer.handleCancel();
+            await mv.handleCancel();
+            return { showMediaCalls: window.__showMediaCalls, navInProgress: mv.mediaNavigationInProgress };
         });
+        expect(immediatelyAfterUndo.showMediaCalls).toBe(1); // invoked (and awaited) synchronously
+        expect(immediatelyAfterUndo.navInProgress).toBe(true); // render started; not yet visually complete
+
         await page.waitForFunction(
             () => !window.mediaViewer.mediaNavigationInProgress && !window.mediaViewer.isLoading,
             null,
@@ -319,6 +343,9 @@ test.describe('Compare Mode', () => {
             posted: [...window.__postedTypes],
             showMediaCalls: window.__showMediaCalls,
         }));
+        // Positive control: requestPredictionScores() must actually have posted a scoreAll, not
+        // merely be absent from a list that would also be empty if the call were silently dropped.
+        expect(afterUndo.posted).toContain('scoreAll');
         expect(afterUndo.posted).not.toContain('update');
         expect(afterUndo.posted).not.toContain('reverseUpdate');
         expect(afterUndo.showMediaCalls).toBe(1);

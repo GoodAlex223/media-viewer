@@ -1092,7 +1092,8 @@ describe('sortComplete stale-guard + runMlSort resolution', () => {
     });
 
     it('keeps the plain-text notification, with counts, when no sort owns the element', () => {
-        // e.g. the deferred compare-refresh re-scoring, which has no card and no Cancel.
+        // e.g. requestPredictionScores() firing outside an active sort (handleCancel's undo
+        // branches, initComplete, background extraction) — no card, no Cancel.
         const ctx = {
             isPredictionSorting: false,
             updateSortProgress: vi.fn(),
@@ -1867,7 +1868,7 @@ describe('handleCancel feature restore', () => {
                 {
                     bothGood: true,
                     bothBad: false,
-                    bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
+                    bulkFiles: [{ name: 'a.jpg' }],
                     prevPairIndex: 3,
                 },
             ],
@@ -1894,7 +1895,6 @@ describe('handleCancel feature restore', () => {
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
             compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-            getCombinedFeatures: () => null, // cache miss
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             bulkPairKey,
@@ -1925,7 +1925,6 @@ describe('handleCancel feature restore', () => {
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
             compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-            getCombinedFeatures: () => [1, 2, 3],
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             bulkPairKey,
@@ -1941,9 +1940,9 @@ describe('handleCancel feature restore', () => {
         // The model is no longer updated per-rating, so there is no worker round trip to wait
         // for — applyBulkRating renders synchronously within the same call, every time.
         expect(showMedia).toHaveBeenCalledTimes(1);
-        // The captured features still land on the history entry (not posted anywhere) — see
-        // media-viewer.js applyBulkRating's bulkFiles capture.
-        expect(ctx.moveHistory[0].bulkFiles[0].features).toEqual([1, 2, 3]);
+        // bulkFiles carries only the name now — nothing computes or stores features for it
+        // (getCombinedFeatures is never called from applyBulkRating any more).
+        expect(ctx.moveHistory[0].bulkFiles).toEqual([{ name: 'a.jpg' }, { name: 'z.jpg' }]);
     });
 
     it('applyBulkRating drops a re-entrant press while navigation is already in flight', async () => {
@@ -1957,7 +1956,6 @@ describe('handleCancel feature restore', () => {
             mediaNavigationInProgress: true, // e.g. the previous rating's showMedia() render is still in flight
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
             compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-            getCombinedFeatures: () => [1, 2, 3],
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             bulkPairKey,
@@ -2013,7 +2011,7 @@ describe('handleCancel feature restore', () => {
             isSortedByPrediction: true,
             mlComparePairIndex: 4,
             undoBulkRating: vi.fn(async () => {}),
-            moveHistory: [{ bothBad: true, bulkFiles: [{ name: 'a.jpg', features: null }] }],
+            moveHistory: [{ bothBad: true, bulkFiles: [{ name: 'a.jpg' }] }],
         });
 
         await handleCancel.call(ctx);
@@ -2035,7 +2033,7 @@ describe('handleCancel feature restore', () => {
                 {
                     bothGood: true,
                     bothBad: false,
-                    bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
+                    bulkFiles: [{ name: 'a.jpg' }],
                     prevPairIndex: 3,
                 },
             ],
@@ -2117,7 +2115,6 @@ describe('applyBulkRating', () => {
             compareRightFile: { name: 'b.jpg', path: '/f/b.jpg' },
             bulkRated: new Map(),
             moveHistory: [],
-            getCombinedFeatures: () => [1, 2, 3],
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
             nextMedia: vi.fn(),
@@ -2167,13 +2164,6 @@ describe('applyBulkRating', () => {
         expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
     });
 
-    it('stores a null features value on the bulk-file entry when the cache misses', async () => {
-        const ctx = makeCtx({ getCombinedFeatures: () => null });
-        await applyBulkRating.call(ctx, 'good');
-        expect(ctx.bulkRated.get('a.jpg')).toBe('good');
-        expect(ctx.moveHistory[0].bulkFiles[0].features).toBeNull();
-    });
-
     it('clamps mlComparePairIndex into the shrunk valid list (keeps the count coherent), preserving prevPairIndex', async () => {
         // Rating the last valid pair: cursor 2, but only 2 valid pairs remain afterward.
         const ctx = makeCtx({
@@ -2207,10 +2197,7 @@ describe('undoBulkRating', () => {
         const lastMove = {
             bothGood: true,
             bothBad: false,
-            bulkFiles: [
-                { name: 'a.jpg', features: [1, 2, 3] },
-                { name: 'b.jpg', features: [4, 5, 6] },
-            ],
+            bulkFiles: [{ name: 'a.jpg' }, { name: 'b.jpg' }],
         };
         await undoBulkRating.call(ctx, lastMove);
         expect(ctx.showNotification).toHaveBeenCalledWith('↩️ Bulk rating undone', 'info');
@@ -2219,7 +2206,7 @@ describe('undoBulkRating', () => {
         expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
     });
 
-    it('clears bulkRated for entries stored with null features (nothing to reverse — it never touches the model)', async () => {
+    it('clears bulkRated for the bad bucket too', async () => {
         const ctx = {
             bulkRated: new Map([
                 ['a.jpg', 'bad'],
@@ -2233,10 +2220,7 @@ describe('undoBulkRating', () => {
         const lastMove = {
             bothGood: false,
             bothBad: true,
-            bulkFiles: [
-                { name: 'a.jpg', features: null },
-                { name: 'b.jpg', features: null },
-            ],
+            bulkFiles: [{ name: 'a.jpg' }, { name: 'b.jpg' }],
         };
         await undoBulkRating.call(ctx, lastMove);
         expect(ctx.bulkRated.has('a.jpg')).toBe(false);

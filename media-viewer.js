@@ -1286,9 +1286,10 @@ class MediaViewer {
             // Guard: if the element was taken over by updateSortProgress (which builds a
             // different DOM structure without .progress-message), rebuild the simple text
             // structure so we don't dereference null. The remaining caller is ML worker
-            // progress arriving while no prediction sort owns the card (deferred
-            // compare-refresh re-scoring) — which can still overlap a similarity sort's
-            // card, so the guard stays load-bearing.
+            // progress arriving while no prediction sort owns the card — background scoring's
+            // requestPredictionScores() firing on its own when extraction finishes with a ready
+            // model (see the 'progress' case below) — which can still land while a sort's card is
+            // up, so the guard stays load-bearing.
             let messageSpan = this.progressNotification.querySelector('.progress-message');
             if (!messageSpan) {
                 // Element was in sort-progress card form — reset to simple text form.
@@ -1482,7 +1483,8 @@ class MediaViewer {
                 throw new Error(moveResult.error);
             }
 
-            // Store move in history for undo functionality (include ML features for reversal)
+            // Store move in history for undo functionality (mlFeatures feeds
+            // restoreFeatureCachesFromHistory's cache restoration on undo)
             const historyEntry = {
                 fileName: currentFile.name,
                 originalPath: currentFile.path,
@@ -3998,11 +4000,11 @@ class MediaViewer {
         // Check if last move was a special move in compare mode
         const lastMove = this.moveHistory[this.moveHistory.length - 1];
 
-        // Bulk rating (Both good / Both bad): no file move to reverse — just undo the ML updates,
-        // then refresh the UI like the other handleCancel branches do. Return to the pair that was
-        // bulk-rated (applyBulkRating clamped the cursor when the rated pair dropped out of the valid
-        // list; prevPairIndex holds the original index), re-score prediction badges (the ML model was
-        // just reverted), and re-render so the floating Undo button visibility updates.
+        // Bulk rating (Both good / Both bad): no file move to reverse, and no model update to
+        // reverse either — undoBulkRating only clears the bulkRated/bulkRatedPairs bookkeeping and
+        // re-saves. Return to the pair that was bulk-rated (applyBulkRating clamped the cursor when
+        // the rated pair dropped out of the valid list; prevPairIndex holds the original index),
+        // refresh prediction badges, and re-render so the floating Undo button visibility updates.
         if (lastMove.bothGood || lastMove.bothBad) {
             this.moveHistory.pop();
             await this.undoBulkRating(lastMove);
@@ -5381,7 +5383,8 @@ class MediaViewer {
                 throw new Error(primaryMoveResult.error);
             }
 
-            // Store primary move in history (include ML features for reversal)
+            // Store primary move in history (mlFeatures feeds restoreFeatureCachesFromHistory's
+            // cache restoration on undo)
             const primaryFeatures = primarySide === 'left' ? leftFeatures : rightFeatures;
             const primaryEntry = {
                 fileName: primaryFile.name,
@@ -5421,7 +5424,8 @@ class MediaViewer {
                 throw new Error(secondaryMoveResult.error);
             }
 
-            // Store secondary move in history (include ML features for reversal)
+            // Store secondary move in history (mlFeatures feeds restoreFeatureCachesFromHistory's
+            // cache restoration on undo)
             const secondaryFeatures = primarySide === 'left' ? rightFeatures : leftFeatures;
             const secondaryEntry = {
                 fileName: secondaryFile.name,
@@ -6821,8 +6825,9 @@ class MediaViewer {
                         total: message.total,
                     });
                 } else if (!this.isComputingHashes) {
-                    // No card (e.g. deferred compare-refresh re-scoring) — keep the counts
-                    // the plain-text form would otherwise lose.
+                    // No card (e.g. requestPredictionScores() firing from handleCancel's undo
+                    // branches, initComplete, or background extraction finishing while no sort is
+                    // active) — keep the counts the plain-text form would otherwise lose.
                     this.updateProgressNotification(
                         hasCounts ? `${message.message} ${message.current}/${message.total}` : message.message
                     );
@@ -7949,8 +7954,7 @@ class MediaViewer {
 
         const bulkFiles = [];
         for (const f of [left, right]) {
-            const features = this.getCombinedFeatures(f.path);
-            bulkFiles.push({ name: f.name, features });
+            bulkFiles.push({ name: f.name });
             this.bulkRated.set(f.name, bucket);
         }
 
