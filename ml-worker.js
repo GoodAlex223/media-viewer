@@ -107,47 +107,6 @@ function trainFromHistorical(likedFeatures, dislikedFeatures, seed = 1) {
 }
 
 /**
- * Incremental model update after new rating
- * @param {number[]} features - Feature vector of rated file
- * @param {number} label - Rating (1 = like, 0 = dislike)
- * @returns {Object} Update result
- */
-function updateModel(features, label) {
-    if (!model) {
-        return { type: 'error', message: 'Model not initialized' };
-    }
-
-    const prediction = model.update(features, label);
-
-    return {
-        type: 'updateComplete',
-        prediction,
-        stats: model.getStats(),
-        modelState: model.toJSON(),
-    };
-}
-
-/**
- * Reverse a previous model update (for undo functionality)
- * @param {number[]} features - Feature vector of the sample to reverse
- * @param {number} label - Original label (1 = like, 0 = dislike)
- * @returns {Object} Reverse update result
- */
-function reverseUpdateModel(features, label) {
-    if (!model) {
-        return { type: 'error', message: 'Model not initialized' };
-    }
-
-    model.reverseUpdate(features, label);
-
-    return {
-        type: 'reverseUpdateComplete',
-        stats: model.getStats(),
-        modelState: model.toJSON(),
-    };
-}
-
-/**
  * Score all files with current model
  * @param {Object} allFeatures - Map of filename to features
  * @returns {Object} Scoring result
@@ -294,30 +253,6 @@ self.onmessage = function (e) {
                 self.postMessage({
                     type: 'error',
                     message: 'Training failed: ' + error.message,
-                });
-            }
-            break;
-
-        case 'update':
-            try {
-                const updateResult = updateModel(data.features, data.label);
-                self.postMessage(updateResult);
-            } catch (error) {
-                self.postMessage({
-                    type: 'error',
-                    message: 'Update failed: ' + error.message,
-                });
-            }
-            break;
-
-        case 'reverseUpdate':
-            try {
-                const reverseResult = reverseUpdateModel(data.features, data.label);
-                self.postMessage(reverseResult);
-            } catch (error) {
-                self.postMessage({
-                    type: 'error',
-                    message: 'Reverse update failed: ' + error.message,
                 });
             }
             break;

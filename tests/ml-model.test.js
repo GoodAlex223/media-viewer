@@ -138,26 +138,6 @@ describe('OnlineLogisticRegression', () => {
         });
     });
 
-    describe('reverseUpdate', () => {
-        it('approximately reverses a prior update', () => {
-            const model = new OnlineLogisticRegression(4);
-            const features = [1, 0.5, 0.3, 0.1];
-            const beforePrediction = model.predict(features);
-            model.update(features, 1);
-            model.reverseUpdate(features, 1);
-            const afterPrediction = model.predict(features);
-            // Not exact reversal due to 1.2x LR multiplier, but should be close
-            expect(Math.abs(afterPrediction - beforePrediction)).toBeLessThan(0.05);
-        });
-
-        it('floors class counts at 0', () => {
-            const model = new OnlineLogisticRegression(4);
-            model.reverseUpdate([1, 0, 0, 0], 1);
-            expect(model.positiveCount).toBe(0);
-            expect(model.totalSamples).toBe(0);
-        });
-    });
-
     describe('hasEnoughSamples', () => {
         it('returns false with no samples', () => {
             const model = new OnlineLogisticRegression(4);

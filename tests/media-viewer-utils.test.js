@@ -1190,7 +1190,6 @@ describe('initComplete / trainComplete — version capture + worker-promise call
     it('settles a pending _runWorkerTraining callback with {stats, modelState} and clears it', () => {
         let resolved = null;
         const ctx = {
-            saveMlModel: () => {},
             requestPredictionScores: () => {},
             _trainingCompleteCallback: (payload) => (resolved = payload),
         };
@@ -1202,7 +1201,7 @@ describe('initComplete / trainComplete — version capture + worker-promise call
     });
 
     it('does not throw when no _trainingCompleteCallback is pending', () => {
-        const ctx = { saveMlModel: () => {}, requestPredictionScores: () => {} };
+        const ctx = { requestPredictionScores: () => {} };
         const stats = { isReady: false, totalSamples: 0 };
         expect(() => handleMlWorkerMessage.call(ctx, { type: 'trainComplete', stats, modelState: {} })).not.toThrow();
     });
@@ -1319,7 +1318,6 @@ describe('handleSortByPrediction lifecycle', () => {
                     Promise.resolve({ source: 'trained', stats: { isReady: true }, fingerprint: 'fp', descriptor: {} }),
             },
             showMlLearningIndicator: () => {},
-            loadMlModel: () => Promise.resolve(),
             initializeMlWorker: () => {},
             initializeFeaturePool: () => {},
             initClipModel: () => {},
@@ -5171,6 +5169,15 @@ describe('online-update protocol removed (G1)', () => {
     it('no longer defines the online update or reverse-update helpers', () => {
         expect(source).not.toContain('updateMlModelWithFeatures(');
         expect(source).not.toContain('reverseMlModelUpdate(');
+    });
+
+    // Task 8: the per-source-folder model file these helpers used to feed is gone too — the
+    // fingerprint-keyed cache in app data (ml-training.js) replaced it.
+    it('no longer defines the per-source-folder model file helpers', () => {
+        expect(source).not.toContain('async loadMlModel(');
+        expect(source).not.toContain('async saveMlModel(');
+        expect(source).not.toContain('async deleteMlModelCache(');
+        expect(source).not.toContain('.ml_model.json');
     });
 
     it('no longer defines the deferred compare-refresh protocol', () => {

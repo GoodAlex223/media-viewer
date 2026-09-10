@@ -144,50 +144,6 @@ class OnlineLogisticRegression {
     }
 
     /**
-     * Reverse a previous update (for undo functionality)
-     * Applies negative gradient to approximately reverse the effect
-     * @param {Float32Array|number[]} features - Feature vector of the sample to reverse
-     * @param {number} label - Original label (1 = like, 0 = dislike)
-     */
-    reverseUpdate(features, label) {
-        // Decrement class counts
-        if (label === 1) {
-            this.positiveCount = Math.max(0, this.positiveCount - 1);
-        } else {
-            this.negativeCount = Math.max(0, this.negativeCount - 1);
-        }
-        this.totalSamples = Math.max(0, this.totalSamples - 1);
-
-        // Apply reverse gradient (same logic as update but with negative error)
-        const totalClasses = this.positiveCount + this.negativeCount;
-        let sampleWeight = 1.0;
-
-        if (totalClasses > 10) {
-            if (label === 1 && this.positiveCount > 0) {
-                sampleWeight = totalClasses / (2 * this.positiveCount);
-            } else if (label === 0 && this.negativeCount > 0) {
-                sampleWeight = totalClasses / (2 * this.negativeCount);
-            }
-            sampleWeight = Math.min(5.0, Math.max(0.2, sampleWeight));
-        }
-
-        const prediction = this.predict(features);
-        // Reverse: use negative error direction
-        const error = -(label - prediction);
-
-        // Use slightly higher learning rate for reversal to ensure effect is undone
-        const adaptiveLR = (this.learningRate * 1.2) / (1 + this.totalSamples * this.decayRate);
-
-        for (let i = 0; i < this.featureDim; i++) {
-            const featureVal = features[i] || 0;
-            const gradient = sampleWeight * error * featureVal - this.regularization * this.weights[i];
-            this.weights[i] += adaptiveLR * gradient;
-        }
-
-        this.weights[this.featureDim] += adaptiveLR * sampleWeight * error;
-    }
-
-    /**
      * Batch training for initial model fitting
      * @param {Array<Float32Array|number[]>} featuresArray - Array of feature vectors
      * @param {number[]} labelsArray - Array of labels

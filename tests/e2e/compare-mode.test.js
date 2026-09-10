@@ -211,11 +211,12 @@ test.describe('Compare Mode', () => {
         // ml-worker.js up explicitly and warm it to a trained, ready state via the SAME
         // trainHistorical round trip ensureTrainedModel uses in production (Task 6's
         // _runWorkerTraining) — the per-rating online update that used to warm a model up here is
-        // gone (G1), and posting raw 'update' messages no longer does anything observable: the
-        // renderer stopped listening for updateComplete. Using a REAL worker (not a stub) proves a
-        // negative against it: a bulk rating and its undo must post NEITHER 'update' NOR
-        // 'reverseUpdate' — even though a live, warmed-up worker is sitting right there and would
-        // happily answer them.
+        // gone (G1): the renderer no longer posts 'update'/'reverseUpdate' (Task 7), and the
+        // worker no longer even has handlers for them (Task 8) — either message now comes back as
+        // an 'error' ("Unknown message type"). Using a REAL worker (not a stub) proves a negative
+        // against it: a bulk rating and its undo must post NEITHER 'update' NOR 'reverseUpdate' —
+        // even though a live, warmed-up worker is sitting right there and ready to receive
+        // whatever the renderer sends it.
         await seedLocalStorage(page, { mlPredictionEnabled: 'true' });
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);

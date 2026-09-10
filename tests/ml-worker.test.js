@@ -99,3 +99,27 @@ describe('ml-worker initComplete (G1)', () => {
         expect(reply.trainingConfigVersion).toBe(TRAINING_CONFIG_VERSION);
     });
 });
+
+describe('online-update messages removed (G1)', () => {
+    it('answers an update message with an unknown-type error', () => {
+        posted.length = 0;
+        send({ type: 'update', data: { features: vec(576, 0.5), label: 1 } });
+        const err = lastOfType('error');
+        expect(err).toBeDefined();
+        expect(err.message).toContain('Unknown message type');
+    });
+
+    it('answers a reverseUpdate message with an unknown-type error', () => {
+        posted.length = 0;
+        send({ type: 'reverseUpdate', data: { features: vec(576, 0.5), label: 1 } });
+        expect(lastOfType('error')).toBeDefined();
+    });
+
+    it('still trains, so update() survives as the trainBatch primitive', () => {
+        send({
+            type: 'trainHistorical',
+            data: { likedFeatures: [vec(576, 0.4)], dislikedFeatures: [vec(576, -0.4)], seed: 1 },
+        });
+        expect(lastOfType('trainComplete')).toBeDefined();
+    });
+});

@@ -6749,7 +6749,6 @@ class MediaViewer {
                     console.warn('ML model was reset (version/dim mismatch) — clearing stale cache');
                     this.mlModelState = null;
                     this.predictionScores = new Map();
-                    this.deleteMlModelCache();
                 }
                 // If model was restored with samples, request scores
                 if (message.stats?.isReady && this.mediaFiles.length > 0) {
@@ -6760,7 +6759,6 @@ class MediaViewer {
             case 'trainComplete':
                 this.mlModelState = message.modelState;
                 this.mlStats = message.stats;
-                this.saveMlModel();
                 if (message.stats.totalSamples > 0) {
                     this.showNotification(
                         `ML trained: ${message.stats.positiveCount} likes, ${message.stats.negativeCount} dislikes`,
@@ -6871,57 +6869,6 @@ class MediaViewer {
         this.updateSortPredictionButton();
         this.showNotification('Sorted by predicted preference', 'success');
         return true;
-    }
-
-    async loadMlModel() {
-        if (!this.baseFolderPath || !this.isMlEnabled) return;
-
-        try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
-            const data = await window.electronAPI.readFile(cacheFile);
-
-            if (data) {
-                const parsed = JSON.parse(data);
-                this.mlModelState = parsed.modelState;
-
-                if (this.mlWorker) {
-                    this.mlWorker.postMessage({
-                        type: 'init',
-                        data: { savedModel: this.mlModelState },
-                    });
-                }
-                console.log('ML model loaded from cache');
-            }
-        } catch (_error) {
-            console.log('No ML model cache found');
-        }
-    }
-
-    async saveMlModel() {
-        if (!this.baseFolderPath || !this.mlModelState) return;
-
-        try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
-            await window.electronAPI.writeFile(
-                cacheFile,
-                JSON.stringify({
-                    modelState: this.mlModelState,
-                    timestamp: Date.now(),
-                })
-            );
-        } catch (error) {
-            console.error('Failed to save ML model:', error);
-        }
-    }
-
-    async deleteMlModelCache() {
-        if (!this.baseFolderPath) return;
-        try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
-            await window.electronAPI.writeFile(cacheFile, '');
-        } catch (_error) {
-            // Ignore — file may not exist
-        }
     }
 
     resetMlModel() {
@@ -7821,7 +7768,6 @@ class MediaViewer {
                 this.initializeMlWorker();
                 this.initializeFeaturePool();
                 await new Promise((resolve) => setTimeout(resolve, 100));
-                await this.loadMlModel();
             }
             // initializeMlWorker()'s own catch sets isMlEnabled=false and leaves mlWorker null
             // when Worker construction throws — the top-of-method guard already passed (ML was
