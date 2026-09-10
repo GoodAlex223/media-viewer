@@ -76,9 +76,16 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 ## Current Plans
 
-| Plan                                                                           | Task                    | Status      | Started    |
-| ------------------------------------------------------------------------------ | ----------------------- | ----------- | ---------- |
-| [2026-09-02_g3-docs-process-guardrails.md](2026-09-02_g3-docs-process-guardrails.md) | G3 Docs & process guardrails | In Progress | 2026-09-02 |
+| Plan                    | Task | Status | Started |
+| ------------------------ | ---- | ------ | ------- |
+| _None currently active_ | —    | —      | —       |
+
+<!-- 2026-09-10 (Group G1 closeout): the previous row here, 2026-09-02_g3-docs-process-guardrails.md,
+     was stale — that plan was archived on 2026-09-02 (see docs/README.md's "G3 Docs & Process
+     Guardrails Plan" row) and no longer exists in this directory. This table was not updated when
+     it archived. G1's own plan (2026-09-10_ml-training-pipeline.md) was executed via a controller
+     ledger rather than being tracked here, then archived directly — see docs/README.md's
+     "G1 ML Training Pipeline Plan" row. -->
 
 ---
 

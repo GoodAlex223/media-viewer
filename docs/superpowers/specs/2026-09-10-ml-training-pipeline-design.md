@@ -312,3 +312,54 @@ grep -n "feature-cache-open\|feature-cache-write-open" main.js
 # § 6: the deletion surface
 grep -n "updateMlModelWithFeatures\|reverseMlModelUpdate\|_beginDeferredCompareRefresh" media-viewer.js
 ```
+
+---
+
+## 13. Superseded during implementation (dated 2026-09-10, closeout of Task 10)
+
+This is a frozen design doc — implementation is recorded here as corrections, not silent rewrites.
+Three claims above diverged from what shipped. All three were caught and ruled on during
+per-task review, not at closeout; this section propagates those rulings back into the spec text
+they correct.
+
+**§ 7.1 — the descriptor does not record `clipCoverage`, by deliberate ruling, not omission.**
+The text above says "The descriptor records `clipCoverage`." It does not, and the controller ruled
+against adding it (Task 5 review): fingerprinting CLIP coverage would make every partial-CLIP
+state key differently — a run with 99% of training files carrying a real CLIP half and a run with
+100% coverage would never share a cache entry, and the 5-slot model-cache LRU would thrash between
+near-identical fingerprints instead of ever settling on one. The shipped control is narrower and
+more conservative: `enableClipFeatures` stays in the descriptor (input 4, unchanged), and coverage
+is enforced procedurally instead — `cacheable` (`ml-training.js`'s `ensureTrainedModel`) is `false`
+whenever CLIP is on and any training row lacks a real CLIP half, so the model is **trained but not
+cached** rather than served as a false cache hit. A degraded run is therefore distinguishable only
+by the gate firing (and its accompanying user-facing notify), never by a dedicated key — which is
+sufficient, because the gate now covers all three row sources (like folder, dislike folder,
+bulk-rated) plus the session tier, not only the disk cache the original text implied.
+
+**§ 8 — the shipped progress phases do not match the text above in two respects.** "Loading
+training vectors…" is never emitted; the first phase actually posted is `'Checking training
+set…'` (`ensureTrainedModel`'s very first `onProgress` call), and a per-folder vector load has no
+dedicated phase label of its own — it happens silently inside `_collectFolderVectors` before that
+function starts reporting. Separately, `'Processing likes: i/n'` (and dislikes) is **not** "only
+for files actually being extracted" as stated: `_collectFolderVectors` calls `onProgress` once per
+file in the loop regardless of whether that file was a cache hit or needed re-extraction, so the
+counter advances through every file in the folder, not only the ones costing CLIP inference. The
+same is true of `'Processing corrective ratings'` in `_collectBulkRatedVectors`. The phases that
+are genuinely emitted, in order, are: `'Checking training set…'` → (`'Loading cached model…'`, on
+a model-cache hit only) → `'Processing likes'` (per-file, all files) → `'Processing dislikes'`
+(per-file, all files) → `'Processing corrective ratings'` (per-file, all resolved bulk-rated
+entries) → `'Training model…'`. All still route through `updateSortProgress`, so the sort card and
+its Cancel button survive every phase exactly as designed — only the phase *labels and triggering
+condition* differ from this section's original text.
+
+**§ 7.2 — a vector-cache write failure does not leave vectors "in memory for the session."** The
+table above says a vector-cache write failure is "Logged; vectors stay in memory for the session."
+In the shipped implementation, the `entries` `Map` built and mutated inside `_collectFolderVectors`
+(via `_loadVectorCache` and the per-file extraction loop) is a **local variable**, scoped to that
+one call — `MlTrainingManager` keeps no persistent in-memory vector cache of its own across calls
+(only `sessionFingerprint`/`sessionStats` persist on the instance). When `_saveVectorCache` fails
+(shrink guard, a thrown IO error, or a failed `writeChunk`/`writeClose`), the freshly-extracted
+vectors are logged and then discarded along with the rest of `entries` once `_collectFolderVectors`
+returns — the next call re-extracts everything that was not already durably on disk before the
+failed save. The "logged" half of the table row is accurate; the "stays in memory for the session"
+half is not.

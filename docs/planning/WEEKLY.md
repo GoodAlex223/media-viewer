@@ -89,21 +89,21 @@
 
 > Front-load the one user-dependent step: the G1 brainstorm (Monday morning if the user is available; otherwise G4 leads the day and G1 shifts to Tue–Thu). G4 starts with the worker harness so it lands before G1's implementation touches `ml-worker.js`.
 
-- **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — brainstorm + spec (part 1 of 3)
+- **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — brainstorm + spec (part 1 of 3) ✅ done — spec: [2026-09-10-ml-training-pipeline-design.md](../superpowers/specs/2026-09-10-ml-training-pipeline-design.md)
 - **[G4](#g4-ml-pipeline-integrity-batch-)** 🟤 — housekeeping flip + worker harness (part 1 of 2)
 
 **Daily total**: ~6 SP
 
 ### Tuesday, September 8 — G1 plan → implement; G4 lands
 
-- **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — plan + implementation start (part 2 of 3)
+- **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — plan + implementation start (part 2 of 3) ✅ done — plan executed as a 10-task subagent-driven SDD run on branch `g1-ml-training-pipeline`
 - **[G4](#g4-ml-pipeline-integrity-batch-)** 🟤 — zero-CLIP doors; review; merge (part 2 of 2)
 
 **Daily total**: ~6 SP
 
 ### Wednesday, September 9 — G1 finish
 
-- **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — tests, review, merge, closeout rulings on the deferred-refresh cluster (part 3 of 3)
+- **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — tests, review, merge, closeout rulings on the deferred-refresh cluster (part 3 of 3) ✅ tests + per-task review rounds + closeout rulings done (unit 613→735); **merge still pending** — see Summary Table Status
 
 **Daily total**: ~4 SP (+ review)
 
@@ -130,7 +130,7 @@
 
 | ID  | Group                                                  | Domain                                        | Source      | Tasks | Total SP | Day     | Status     |
 | --- | ------------------------------------------------------ | --------------------------------------------- | ----------- | ----- | -------- | ------- | ---------- |
-| G1  | ML training pipeline — design pass + retrain skip [solo] 🏆 | JS logic (ML training / feature cache) + new module | 🔵 User     | 3     | 8        | Mon–Wed | ☐ Planned  |
+| G1  | ML training pipeline — design pass + retrain skip [solo] 🏆 | JS logic (ML training / feature cache) + new module | 🔵 User     | 3     | 8        | Mon–Wed | ◐ Branch complete, unmerged (`g1-ml-training-pipeline`, no PR) |
 | G2  | Reachable overlay controls [batch]                     | CSS layout + renderer DOM + E2E evidence      | 🔵 User     | 3 (closes 4 🔵 + 1 🟤) | 5 | Thu | ☐ Planned  |
 | G3  | Compare-mode special hotkeys + tooltips [batch]        | Shortcuts + tooltips                          | 🔵 User     | 2     | 3        | Thu–Fri | ☐ Planned  |
 | G4  | ML pipeline integrity [batch]                          | JS logic (CLIP lifecycle) + test infra        | 🟤 Auto     | 3 (+1 housekeeping) | 5 | Mon–Tue | ☐ Planned  |
@@ -140,6 +140,7 @@
 
 _Source legend: 🔵 User · 🟡 Ops · 🟤 Auto · ⚪ Overhead (exempt from the quota denominator)._
 _Status cell on completion: `✅ <merge-SHA>` (this project merges locally with no PR by default — four of four groups last week; `✅ PR #N` only where a PR was actually opened). Never a bare `✅`. Check off each constituent BACKLOG/TODO entry in the same commit — the miss G4 item 0 corrects came from doing it in a separate step._
+_G1's row (2026-09-10) deliberately does not use either `✅` form: its closeout task ran, and is committing this very row, **before** the branch is merged — writing `✅ <merge-SHA>` here would be exactly the "closeout is written before the merge, and the merge falsifies it" defect this project has hit before (BACKLOG `[2026-08-31]` item 2). `◐ Branch complete, unmerged` records the true state and should be flipped to `✅ <merge-SHA>` in the same commit that actually merges the branch, not before._
 
 ---
 

@@ -92,7 +92,7 @@ npm run format        # Prettier (format:check to verify only)
 
 ### Code Patterns
 
-- **Renderer under modularization**: most UI logic in `media-viewer.js` (class-based); v2.0 extracts subsystems into ES modules (FullscreenManager, TournamentManager done)
+- **Renderer under modularization**: most UI logic in `media-viewer.js` (class-based); v2.0 extracts subsystems into ES modules (FullscreenManager, TournamentManager, MlTrainingManager done)
 - **IPC Communication**: Main process handles file operations, renderer handles UI
 - **Event-driven**: DOM events trigger state changes and UI updates
 - **Web Workers**: CPU-intensive operations (sorting, ML) run in workers

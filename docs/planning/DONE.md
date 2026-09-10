@@ -14,6 +14,81 @@ Completed tasks with implementation details and learnings.
 
 ## 2026-09 (September)
 
+### 2026-09-10 — Group G1: ML training pipeline — design pass + retrain skip 🔵 🏆 — 10/10 tasks, review complete, **merge pending**
+
+**Spec**: [2026-09-10-ml-training-pipeline-design.md](../superpowers/specs/2026-09-10-ml-training-pipeline-design.md) (3 claims superseded in § 13 during implementation)
+**Plan**: [archived](../archive/plans/2026-09-10_ml-training-pipeline.md) — 10-task subagent-driven SDD plan, executed via a controller ledger (`.superpowers/sdd/2026-09-10_ml-training-pipeline/progress.md`) rather than in-plan checkbox tracking
+**Branch**: `g1-ml-training-pipeline`, cut from `main` at `357800d`. **Not yet merged as of this entry** — every task shipped with its own per-task review round (several with fix rounds), but the whole-branch merge is a separate, later decision. No PR by task-brief instruction; reviewed locally, task-by-task, instead.
+**Commits**: `0a3aace`/`231e19d` (spec) → `1f540e3` (plan) → `bcd6fa9`..`e6a37f9` (Tasks 1–9, 18 commits) → this closeout commit (Task 10) — 21 commits above `357800d` through `e6a37f9`, plus this one.
+**Tests**: unit 613 → **735** (every commit green); E2E 56 → **61**, run three times clean on the final revision.
+
+**Summary**: The root cause recorded in TODO.md and the WEEKLY.md group note was wrong, and the
+correction changed the whole design (spec § 1): `resetMlModel()` never fires on a source-folder
+change — its call sites are the four like/dislike folder controls and the CLIP toggle, never
+`loadFolder()`. The real defect was that the trained model was cached **per source folder**
+(`.ml_model.json` inside `baseFolderPath`) while trained from **globally-configured** like/dislike
+folders, so a never-before-sorted source folder found no cache and re-extracted/retrained a
+byte-identical training set — and, the inverse defect found during the design pass, an
+already-sorted folder never retrained again no matter how the like/dislike folders changed
+afterward. The fix makes the model's identity follow its **training set** instead of the folder
+being viewed: a new `ml-training.js` module (`MlTrainingManager`, the v2.0 pattern) owns a
+declared `TrainingSetDescriptor`, its fingerprint, per-training-folder vector caches (reusing the
+source folder's own v4 feature-cache format/staleness/streaming-IO/atomic-write machinery, held in
+isolated Maps so training vectors never leak into `featureCache`/`clipCache`/`featureMetadata`),
+and a fingerprint-keyed model cache in app data (`userData/ml-model-cache.json`, LRU of 5, atomic
+`.tmp`+rename). `ensureTrainedModel()` resolves in three tiers — live session (free) → persisted
+model cache (a small read) → rebuild from cached vectors (extracting only what's missing or
+stale) — so a source-only folder switch now hits the cache for free, and a genuinely changed
+like/dislike folder correctly retrains (spec § 9.3's two E2E properties prove both directions, not
+just that retraining was disabled). The online per-rating update protocol (`updateMlModelWithFeatures`/
+`reverseMlModelUpdate`, the worker's `update`/`reverseUpdate` handlers, and the up-to-3s deferred
+compare-refresh window after every rating) is deleted outright (spec D1) — the model is rebuilt
+from cached vectors on each AI-sort request instead, which is what makes the retrain-skip cache
+correctness-critical rather than merely an optimization. **Visible user-facing change**: the
+per-rating "ML updated: N files rescored (X↑ Y↓)" toast (`previousScores` delta notification,
+originally TASK-020) is gone along with the protocol it reported on — ratings no longer trigger an
+immediate re-score, so there is no longer a per-rating delta to announce. `showMlLearningIndicator`
+(spec D6) now fires once per **sort** instead, reporting what the model was trained on
+(`🧠 Trained on N👍 M👎` / `🧠 Model reused — N👍 M👎`). `trainFromHistorical` now resets before
+training and seeds its shuffle from the fingerprint, so a cache hit is verifiable against a
+rebuild, not merely plausible (spec D7).
+
+**Two real defects surfaced and fixed during review, beyond the plan's own text**: (1) Task 5
+review, CRITICAL — `sessionFingerprint` was committed *before* the CLIP-coverage gate ran, so a
+degraded model (cold CLIP, mid-session) became an indistinguishable `source: 'session'` hit for
+the rest of the session even though the user-facing message promised a rebuild "next sort"; fixed
+by gating the commit on `cacheable`. (2) Task 9 review — `mlModelVersion`/`featureVersion`/
+`trainingConfigVersion` start at `0` until their respective worker handshakes reply, and treating
+an unsettled `{0,0,0}` as a real fingerprint input would let two sessions with genuinely different
+feature/training-config versions collide on the same cache entry and silently serve one's model
+against the other's inputs; fixed with a `versionsKnown` gate plus replacing a racy
+`setTimeout(100)` with a real awaited handshake (whose own fix, in turn, introduced and then
+closed a hang in `initializeFeaturePool` on a probe-worker error — round 2's own review finding).
+
+**Key changes** (highlights; see the branch's 21 commits for the full history):
+
+- **`ml-training.js`** (new, 791 lines) — `MlTrainingManager`: `buildDescriptor`/`fingerprintDescriptor`/`seedFromFingerprint`, `_loadVectorCache`/`_saveVectorCache`, `_readCachedModel`/`_writeCachedModel`/`invalidateModelCache`, `ensureTrainedModel`.
+- **`media-viewer.js`** — 9,642 → **9,393** lines net across the branch (Global Constraints required the new module to remove more than it added; Task 7 alone: 156 insertions / 983 deletions): `trainFromHistoricalRatings`, `trainFromHistoricalRatingsAndWait`, `collectBulkRatedTrainingExamples`, `updateMlModelWithFeatures`, `reverseMlModelUpdate`, `_beginDeferredCompareRefresh`/`_cancelDeferredCompareRefresh`, `loadMlModel`/`saveMlModel`/`deleteMlModelCache` all deleted; `handleSortByPrediction` now calls `mlTraining.ensureTrainedModel()`; Settings gains a "Rebuild model" control (`handleRebuildModelClick`).
+- **`ml-worker.js`/`ml-model.js`** — `trainFromHistorical` resets before training and takes a seed; `trainBatch` counts each sample once regardless of epoch count (previously inflated `positiveCount`/`negativeCount` by the epoch count) and shuffles via a seeded `mulberry32` PRNG instead of `Math.random()`; `TRAINING_CONFIG_VERSION` added; the `update`/`reverseUpdate` message cases and `reverseUpdateModel` deleted.
+- **`main.js`/`preload.js`** — `read-ml-model-cache`/`write-ml-model-cache` IPC pair (atomic `.tmp`+rename, mirrors `writeTournamentState`), exposed as `readMlModelCache()`/`writeMlModelCache()`.
+- **`tests/`** — new `tests/ml-training.test.js` and `tests/ml-worker.test.js`; `tests/e2e/compare-mode.test.js` gains a real-`ml-worker.js` regression test proving a bulk rating and its undo post **no** messages to the worker; new E2E properties proving the retrain-skip/retrain-on-change pair and the Settings rebuild escape hatch.
+- **`CLAUDE.md`** — Architecture (`ml-training.js` added), Code Conventions → Patterns (`MlTrainingManager` added), State Management (`resetMlModel()` bullet rewritten), Cache Management (training-vector cache + model cache bullets added, bulk-rated cache bullet corrected), Async Patterns (the "ML compare refresh" paragraph deleted), Active gotchas (`deleteMlModelCache()` bullet replaced with the `FEATURE_CACHE_VERSION`/`FEATURE_VERSION` mismatch gotcha), plus two E2E-testing bullets corrected by the closeout's concept-level sweep (not literal-identifier matches).
+- **`PROJECT.md`** — module list now includes `MlTrainingManager`.
+- **`BACKLOG.md`** — 19 existing entries flipped/annotated (3 done, 1 decided-and-implemented, 2 annotated-not-closed, 8 reaped, 2 re-scoped/stays-open, 3 moot); 13 new 🟤 entries filed from the execution ledger's surviving deferred findings.
+- **`TODO.md`** — the canonical 🟠 promoted item marked done with the corrected root cause.
+- **`docs/superpowers/specs/2026-09-10-ml-training-pipeline-design.md`** — § 13 "Superseded during implementation" added, correcting three claims (no `clipCoverage` in the descriptor, by ruling; the actual emitted progress phases; a vector-cache write failure discards in-memory vectors rather than retaining them for the session).
+
+**Key decisions / learnings**:
+
+- ⭐ **The recorded root cause was wrong, and re-measuring it changed the fix.** `resetMlModel()` was never the mechanism; the model being cached per source folder while trained from global folders was. Both TODO.md and the WEEKLY.md group note repeated the wrong claim going into the design pass — corrected in the spec (§ 1) before implementation started, not discovered mid-build.
+- ⭐ **Committing a fingerprint before its coverage gate runs makes a degraded state permanently indistinguishable from a healthy one for the rest of the session** — the Task 5 review's Critical finding. The lesson generalizes past this branch: any "cache the result of a decision" pattern must gate the cache commit on the same check that gates cacheability, not commit first and validate after.
+- ⭐ **A `0` sentinel is not "no value yet" for free — it has to be excluded explicitly, or it becomes a real (wrong) fingerprint input.** Three worker-reported version constants default to `0` before their handshake replies land; treating that as a legitimate fingerprint value would have let two differently-versioned sessions collide on the same cache entry. Caught in review, not by the plan's own test suite (Task 9's ledger records this as the controller's own self-correction of an earlier "bounded and self-limiting" ruling that turned out to be wrong).
+- ⭐ **A fix for one race can introduce a different one on an asymmetric twin.** Replacing a racy `setTimeout(100)` with a real awaited handshake fixed the version race but, because `initializeFeaturePool` and `initializeMlWorker` handle a worker `onerror` asymmetrically, introduced a hang on a probe-worker error — caught by the very next review round, not shipped.
+- ⭐ **A doc-only closeout task still needs its own concept-level grep, not just an identifier grep.** Six CLAUDE.md lines were pre-flagged by symbol name; a prose sweep for concepts ("deferred window", "3s fallback", "postedUpdates") found two more (the E2E-testing bullets) that no identifier grep would have matched — the same lesson this branch's own `git log` already carries from Task 7's review round.
+- ⚠️ **This entry is written before the branch is merged, by design, not by oversight.** WEEKLY.md's G1 row uses `◐ Branch complete, unmerged` rather than `✅ <merge-SHA>` for exactly the reason BACKLOG `[2026-08-31]` item 2 records: writing a merge-complete status before the merge happens is a real, previously-observed failure mode in this project ("closeout is written before the merge, and the merge falsifies it"). Flip both to `✅ <merge-SHA>` in the commit that actually merges this branch.
+
+**Follow-up tasks**: BACKLOG 🟤 `[2026-09-10] From: G1 ML training pipeline — execution review follow-ups` (13 entries — 4 explicitly mandated by the closeout dispatch, 2 brief-specified, 1 pre-existing-observation, 6 from the closeout's own judgment pass over the execution ledger); 19 pre-existing BACKLOG entries plus 1 TODO entry (20 total) ruled on in the same commit.
+
 ### 2026-09-02 — Group G6: Weekly Reviews (2026-09-02 run) ⚪ Overhead — **5/5, + G4's terminal read-out**
 
 **Run-card**: [2026-09-02-weekly-reviews-run.md](../superpowers/specs/2026-09-02-weekly-reviews-run.md) (methodology rule #6 — a codified repeat needs brainstorm → run-card → execute, not a fresh spec + plan).
