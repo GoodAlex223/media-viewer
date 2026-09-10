@@ -495,6 +495,100 @@ describe('model cache', () => {
     });
 });
 
+// Direct, low-level tests for the bulk-rated vector-extraction phase, mirroring how
+// _loadVectorCache/_saveVectorCache are tested directly above. Needed because, at the
+// ensureTrainedModel level, the outer `if (bulk.aborted || signal?.aborted) return miss;` check
+// masks whether `_collectBulkRatedVectors`'s OWN `aborted` flag is set correctly -- a black-box
+// call through ensureTrainedModel cannot discriminate that on its own.
+describe('_collectBulkRatedVectors (direct)', () => {
+    const resolvedOf = (file = { path: '/src/b1.jpg', size: 1, mtimeMs: 1 }) => [
+        { name: 'b1.jpg', bucket: 'good', file },
+    ];
+
+    // Important 3 (review round 1): the folder collector re-extracts on `needsClip`, which is what
+    // makes a degraded run temporary. This collector's only trigger was `if (!feature)` -- a
+    // bulk-rated file whose 64-dim feature is warm but whose CLIP half is absent from clipCache
+    // took clip=null, counted as missing, and was NEVER retried. The gate then fired on every
+    // single sort until the host's background extraction happened to fill clipCache on its own.
+    it('re-extracts when the feature is cached but the CLIP half is missing, with CLIP on', async () => {
+        const warmFeature = new Float32Array(64).fill(0.5);
+        const computeFeatures = vi.fn(async () => new Float32Array(64).fill(0.9));
+        const extractClipEmbedding = vi.fn(async () => new Float32Array(512).fill(0.25));
+        const m = managerWith({
+            computeFeatures,
+            extractClipEmbedding,
+            getBulkRatedContext: vi.fn(() => ({
+                featureCache: new Map([['/src/b1.jpg', warmFeature]]),
+                clipCache: new Map(), // feature is warm; CLIP half was never filled in
+            })),
+        });
+        const result = await m._collectBulkRatedVectors(resolvedOf(), true, undefined);
+        expect(extractClipEmbedding).toHaveBeenCalledWith('/src/b1.jpg');
+        expect(computeFeatures).not.toHaveBeenCalled(); // the warm feature must be reused, not redone
+        expect(result.clipMissing).toBe(0);
+        expect(result.liked).toHaveLength(1);
+    });
+
+    it('does not re-extract when the feature and CLIP half are both already cached', async () => {
+        const computeFeatures = vi.fn();
+        const extractClipEmbedding = vi.fn();
+        const m = managerWith({
+            computeFeatures,
+            extractClipEmbedding,
+            getBulkRatedContext: vi.fn(() => ({
+                featureCache: new Map([['/src/b1.jpg', new Float32Array(64).fill(0.5)]]),
+                clipCache: new Map([['/src/b1.jpg', new Float32Array(512).fill(0.25)]]),
+            })),
+        });
+        const result = await m._collectBulkRatedVectors(resolvedOf(), true, undefined);
+        expect(computeFeatures).not.toHaveBeenCalled();
+        expect(extractClipEmbedding).not.toHaveBeenCalled();
+        expect(result.liked).toHaveLength(1);
+    });
+
+    it('does not re-extract a missing CLIP half when CLIP features are off', async () => {
+        const computeFeatures = vi.fn();
+        const extractClipEmbedding = vi.fn();
+        const m = managerWith({
+            computeFeatures,
+            extractClipEmbedding,
+            getBulkRatedContext: vi.fn(() => ({
+                featureCache: new Map([['/src/b1.jpg', new Float32Array(64).fill(0.5)]]),
+                clipCache: new Map(),
+            })),
+        });
+        const result = await m._collectBulkRatedVectors(resolvedOf(), false, undefined);
+        expect(computeFeatures).not.toHaveBeenCalled();
+        expect(extractClipEmbedding).not.toHaveBeenCalled();
+        expect(result.liked).toHaveLength(1);
+    });
+
+    // Minor 3 (review round 1): no `aborted` flag was returned at all, unlike the folder collector
+    // -- safe only because ensureTrainedModel separately re-checks signal?.aborted. Returning it
+    // directly is tested here, not through ensureTrainedModel, because the outer check would mask
+    // whether this flag is actually set.
+    it('reports aborted:true when the signal trips mid-loop', async () => {
+        const controller = new AbortController();
+        let calls = 0;
+        const m = managerWith({
+            computeFeatures: vi.fn(async () => new Float32Array(64)),
+            extractClipEmbedding: vi.fn(async () => {
+                calls++;
+                if (calls === 1) controller.abort();
+                return new Float32Array(512);
+            }),
+            getBulkRatedContext: vi.fn(() => ({ featureCache: new Map(), clipCache: new Map() })),
+        });
+        const twoResolved = [
+            { name: 'b1.jpg', bucket: 'good', file: { path: '/src/b1.jpg', size: 1, mtimeMs: 1 } },
+            { name: 'b2.jpg', bucket: 'good', file: { path: '/src/b2.jpg', size: 2, mtimeMs: 2 } },
+        ];
+        const result = await m._collectBulkRatedVectors(twoResolved, true, controller.signal);
+        expect(result.aborted).toBe(true);
+        expect(result.liked).toHaveLength(1); // the loop stopped before the second entry
+    });
+});
+
 describe('ensureTrainedModel', () => {
     const versions = { mlModelVersion: 3, featureCacheVersion: 4, featureVersion: 2, trainingConfigVersion: 1 };
 
@@ -556,11 +650,25 @@ describe('ensureTrainedModel', () => {
     });
 
     it('returns source "session" on a repeat call with an unchanged training set', async () => {
-        const { m } = scenario();
+        // bulkRated is non-empty so this test can actually discriminate Important-4's fix: with an
+        // EMPTY bulk set (the scenario default), the buggy pre-fix code's unconditional bulk-vector
+        // pass is a no-op loop either way and this assertion would pass against broken code too.
+        const { m } = scenario({
+            bulkRated: new Map([['b1.jpg', 'good']]),
+            mediaFiles: [{ name: 'b1.jpg', path: '/src/b1.jpg', size: 30, mtimeMs: 7 }],
+        });
         await m.ensureTrainedModel({});
+        m.computeFeatures.mockClear();
+        m.extractClipEmbedding.mockClear();
+        m.cacheIo.open.mockClear();
         const second = await m.ensureTrainedModel({});
         expect(second.source).toBe('session');
         expect(m.trainModel).toHaveBeenCalledTimes(1);
+        // The "free repeat sort" claim: a session hit must do NO vector work at all, folder or
+        // bulk-rated -- not even a cache-file open.
+        expect(m.computeFeatures).not.toHaveBeenCalled();
+        expect(m.extractClipEmbedding).not.toHaveBeenCalled();
+        expect(m.cacheIo.open).not.toHaveBeenCalled();
     });
 
     it('retrains when the like folder changes', async () => {
@@ -594,14 +702,26 @@ describe('ensureTrainedModel', () => {
     });
 
     it('loads from the model cache in a fresh session instead of training', async () => {
-        const { m: first, modelCacheStore } = scenario();
+        // Non-empty bulkRated for the same reason as the session-hit test above: it is the only
+        // way this test can discriminate the pre-Important-4 bug, where bulk vector extraction ran
+        // unconditionally before the model-cache check even looked at the fingerprint.
+        const bulkOverrides = {
+            bulkRated: new Map([['b1.jpg', 'good']]),
+            mediaFiles: [{ name: 'b1.jpg', path: '/src/b1.jpg', size: 30, mtimeMs: 7 }],
+        };
+        const { m: first, modelCacheStore } = scenario(bulkOverrides);
         await first.ensureTrainedModel({});
 
-        const { m: second } = scenario({ store: modelCacheStore.value });
+        const { m: second } = scenario({ ...bulkOverrides, store: modelCacheStore.value });
         const res = await second.ensureTrainedModel({});
         expect(res.source).toBe('model-cache');
         expect(second.trainModel).not.toHaveBeenCalled();
         expect(second.loadModelState).toHaveBeenCalledTimes(1);
+        // A model-cache hit is the other "cheap tier" -- it must never touch a vector, folder or
+        // bulk-rated, or open a folder's cache file.
+        expect(second.computeFeatures).not.toHaveBeenCalled();
+        expect(second.extractClipEmbedding).not.toHaveBeenCalled();
+        expect(second.cacheIo.open).not.toHaveBeenCalled();
     });
 
     // Correction 4: _readCachedModel validates the STORE's version but not an individual entry's
@@ -675,6 +795,209 @@ describe('ensureTrainedModel', () => {
         expect(m.trainModel).toHaveBeenCalledTimes(1);
         expect(modelCacheStore.value?.entries || []).toHaveLength(0);
         expect(m.notify).toHaveBeenCalled();
+    });
+
+    // CRITICAL (review round 1): the CLIP gate protected the DISK cache but not the SESSION
+    // cache. sessionFingerprint/sessionStats were committed unconditionally before the gate ran,
+    // so a second call took the session branch and served the degraded model with source
+    // 'session' -- no rebuild, no notification, indistinguishable from a healthy hit, even though
+    // the user-facing message promises "it will rebuild next sort." A cold CLIP model makes every
+    // file clipMissing, so this fires on literally the first sort of a session.
+    it('retrains every call while CLIP coverage stays incomplete, never serving a degraded model from session', async () => {
+        const { m } = scenario({ extractClipEmbedding: vi.fn(async () => null) });
+        const first = await m.ensureTrainedModel({});
+        const second = await m.ensureTrainedModel({});
+        expect(first.source).toBe('trained');
+        expect(second.source).toBe('trained'); // never 'session'
+        expect(m.trainModel).toHaveBeenCalledTimes(2);
+    });
+
+    // Important 2 (review round 1): a file whose extraction THROWS drops no row and increments no
+    // counter (the catch's `continue` skips both) -- so the fingerprint (built from the full folder
+    // scan) still counts the file while the model that gets cached under it never saw the file's
+    // vector. Next run, if the file extracts fine, the fingerprint is UNCHANGED (same name/size/
+    // mtime) and the cache serves the model that never saw it. Permanently, until the folder
+    // changes. Treating a caught failure like a CLIP-coverage gap (train, don't cache) closes it.
+    it('trains but does not cache when a file throws during extraction', async () => {
+        const { m, modelCacheStore } = scenario({
+            managerOverrides: {
+                computeFeatures: vi.fn(async (path) => {
+                    if (path === '/likes/l2.jpg') throw new Error('decode failed');
+                    return new Float32Array(64).fill(0.5);
+                }),
+            },
+        });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(modelCacheStore.value?.entries || []).toHaveLength(0);
+        expect(m.notify).toHaveBeenCalled();
+        expect(m.logError).toHaveBeenCalled();
+    });
+
+    // Minor 2 (review round 1): a clip that is truthy but the WRONG length (e.g. a corrupt or
+    // partially-written vector) must not silently pass every `!clip` truthiness check. Only a
+    // real, CLIP_DIM-length vector counts as "has CLIP."
+    it('treats a wrong-length CLIP vector as missing, not present', async () => {
+        const { m, modelCacheStore } = scenario({
+            extractClipEmbedding: vi.fn(async () => new Float32Array(10)), // truthy, wrong length
+        });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(modelCacheStore.value?.entries || []).toHaveLength(0);
+        expect(m.notify).toHaveBeenCalled();
+    });
+
+    // Minor 4 (review round 1): a re-extract attempt that STILL comes back without CLIP must not
+    // count as "extracted" -- otherwise a persistently CLIP-less folder rewrites its entire vector
+    // cache, byte-identical, on every single sort.
+    it('does not rewrite the vector cache when a re-extract still comes back without CLIP', async () => {
+        const seeded = [
+            entry('l1.jpg', 10, 1),
+            entry('l2.jpg', 11, 2),
+            entry('l3.jpg', 12, 3),
+            entry('d1.jpg', 20, 4),
+            entry('d2.jpg', 21, 5),
+            entry('d3.jpg', 22, 6),
+        ];
+        for (const [, value] of seeded) value.clipVector = null; // CLIP was unavailable when cached
+        const io = makeCacheIo(seeded);
+        const { m } = scenario({ cacheIo: io, extractClipEmbedding: vi.fn(async () => null) });
+        await m.ensureTrainedModel({});
+        expect(io.writeOpen).not.toHaveBeenCalled();
+    });
+
+    // Important 5 (review round 1): a failed folder scan reads as an EMPTY folder
+    // (`success ? files : []`), so the descriptor honestly records "this folder is empty" and a
+    // one-class model trains and gets CACHED under that fingerprint -- every later session with
+    // the folder still unreachable (e.g. a disconnected drive) gets a cache hit on it. Design doc
+    // § 7.2 requires "Report" for this row; nothing was logged or notified before this fix.
+    it('trains but does not cache when a folder scan fails, and reports it', async () => {
+        const { m, modelCacheStore } = scenario({
+            managerOverrides: {
+                loadFolder: vi.fn(async (p) =>
+                    p === '/likes'
+                        ? { success: false, error: 'ENOENT' }
+                        : {
+                              success: true,
+                              files: [
+                                  { name: 'd1.jpg', path: '/dislikes/d1.jpg', size: 20, mtimeMs: 4 },
+                                  { name: 'd2.jpg', path: '/dislikes/d2.jpg', size: 21, mtimeMs: 5 },
+                                  { name: 'd3.jpg', path: '/dislikes/d3.jpg', size: 22, mtimeMs: 6 },
+                              ],
+                          }
+                ),
+            },
+        });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(modelCacheStore.value?.entries || []).toHaveLength(0);
+        expect(m.notify).toHaveBeenCalled();
+        expect(m.logError).toHaveBeenCalled();
+    });
+
+    it('logs and notifies for each folder scan failure even when the result is a skip', async () => {
+        const { m } = scenario({
+            managerOverrides: {
+                loadFolder: vi.fn(async () => ({ success: false, error: 'ENOENT' })),
+            },
+        });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('skipped');
+        expect(m.notify).toHaveBeenCalledTimes(2); // once per folder
+        expect(m.logError).toHaveBeenCalledTimes(2);
+    });
+
+    // Spec gap A (review round 1): every scenario above uses an EMPTY vector cache (makeCacheIo()
+    // default), so corrections 1-3's plumbing (files.length as scanCount, the aborted flag,
+    // diskCount pass-through) and the feature's own headline retrain-skip claim are all invisible
+    // to the suite. A WARM cache is required to exercise any of it.
+    it('does not call computeFeatures or extractClipEmbedding for files already warm in the vector cache', async () => {
+        const io = makeCacheIo([
+            entry('l1.jpg', 10, 1),
+            entry('l2.jpg', 11, 2),
+            entry('l3.jpg', 12, 3),
+            entry('d1.jpg', 20, 4),
+            entry('d2.jpg', 21, 5),
+            entry('d3.jpg', 22, 6),
+        ]);
+        const { m } = scenario({ cacheIo: io });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(m.computeFeatures).not.toHaveBeenCalled();
+        expect(m.extractClipEmbedding).not.toHaveBeenCalled();
+        expect(io.writeOpen).not.toHaveBeenCalled(); // nothing new to persist
+    });
+
+    it('never opens the vector-cache writer when the load itself was aborted', async () => {
+        const io = makeCacheIo(new Array(600).fill(null));
+        const controller = new AbortController();
+        io.chunk = vi.fn().mockImplementation(async () => {
+            controller.abort(); // takes effect on the loop's NEXT iteration check
+            return packFeatureChunk([entry('l1.jpg', 10, 1)]);
+        });
+        const { m } = scenario({ cacheIo: io });
+        const res = await m.ensureTrainedModel({ signal: controller.signal });
+        expect(res.source).toBe('skipped');
+        expect(io.writeOpen).not.toHaveBeenCalled();
+        expect(m.trainModel).not.toHaveBeenCalled();
+    });
+
+    // Spec gap B (review round 1): design doc § 9.1 prescribes these two properties explicitly;
+    // neither existed.
+    it('never writes a training-folder path into the host featureCache or clipCache (isolation)', async () => {
+        // Pre-populate with an EXISTING source-folder entry so the assertion is a real isolation
+        // check, not just "an empty Map stayed empty because nothing here ever touches it."
+        const hostFeatureCache = new Map([['/src/existing.jpg', new Float32Array(64)]]);
+        const hostClipCache = new Map([['/src/existing.jpg', new Float32Array(512)]]);
+        const { m } = scenario({
+            managerOverrides: {
+                getBulkRatedContext: vi.fn(() => ({
+                    bulkRated: new Map(),
+                    mediaFiles: [],
+                    featureCache: hostFeatureCache,
+                    clipCache: hostClipCache,
+                })),
+            },
+        });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect([...hostFeatureCache.keys()]).toEqual(['/src/existing.jpg']);
+        expect([...hostClipCache.keys()]).toEqual(['/src/existing.jpg']);
+    });
+
+    it('leaves every likes-folder entry a cache hit when only the dislikes folder changes (per-folder granularity)', async () => {
+        const io = makeCacheIo([
+            entry('l1.jpg', 10, 1),
+            entry('l2.jpg', 11, 2),
+            entry('l3.jpg', 12, 3),
+            entry('d1.jpg', 20, 4),
+            entry('d2.jpg', 21, 5),
+            entry('d3.jpg', 22, 6),
+        ]);
+        const { m } = scenario({ cacheIo: io });
+        await m.ensureTrainedModel({});
+        expect(m.computeFeatures).not.toHaveBeenCalled(); // baseline: everything already warm
+
+        m.loadFolder.mockImplementation(async (p) => ({
+            success: true,
+            files:
+                p === '/likes'
+                    ? [
+                          { name: 'l1.jpg', path: '/likes/l1.jpg', size: 10, mtimeMs: 1 },
+                          { name: 'l2.jpg', path: '/likes/l2.jpg', size: 11, mtimeMs: 2 },
+                          { name: 'l3.jpg', path: '/likes/l3.jpg', size: 12, mtimeMs: 3 },
+                      ]
+                    : [
+                          { name: 'd1.jpg', path: '/dislikes/d1.jpg', size: 20, mtimeMs: 4 },
+                          { name: 'd2.jpg', path: '/dislikes/d2.jpg', size: 21, mtimeMs: 5 },
+                          { name: 'd3.jpg', path: '/dislikes/d3.jpg', size: 22, mtimeMs: 6 },
+                          { name: 'NEW.jpg', path: '/dislikes/NEW.jpg', size: 99, mtimeMs: 99 },
+                      ],
+        }));
+        await m.ensureTrainedModel({});
+
+        const extractedPaths = m.computeFeatures.mock.calls.map((c) => c[0]);
+        expect(extractedPaths).toEqual(['/dislikes/NEW.jpg']);
     });
 
     it('caches normally when CLIP is off, since zero halves are then expected', async () => {
