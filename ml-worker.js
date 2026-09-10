@@ -63,12 +63,19 @@ function initializeModel(savedModel) {
  * Train model from historical data (files in like/dislike folders)
  * @param {Array<number[]>} likedFeatures - Features of liked files
  * @param {Array<number[]>} dislikedFeatures - Features of disliked files
+ * @param {number} seed - Seed for trainBatch's deterministic shuffle (default: 1)
  * @returns {Object} Training result
  */
-function trainFromHistorical(likedFeatures, dislikedFeatures) {
+function trainFromHistorical(likedFeatures, dislikedFeatures, seed = 1) {
     if (!model) {
         initializeModel(null);
     }
+
+    // Reset before training. Without this, trainBatch warm-starts onto the previous weights,
+    // so a file removed from the like folder could never be unlearned and totalSamples grew
+    // without bound (dragging adaptiveLR toward zero). A rebuild must reproduce the model a
+    // fresh install would produce, or the fingerprint cache is keyed on a lie.
+    model.reset();
 
     const totalSamples = likedFeatures.length + dislikedFeatures.length;
 
@@ -88,7 +95,7 @@ function trainFromHistorical(likedFeatures, dislikedFeatures) {
 
     // Batch train with multiple epochs
     const epochs = Math.min(10, Math.max(3, Math.floor(50 / totalSamples)));
-    model.trainBatch(features, labels, epochs);
+    model.trainBatch(features, labels, epochs, seed);
 
     updateProgress('Training complete', totalSamples, totalSamples);
 
@@ -270,13 +277,18 @@ self.onmessage = function (e) {
                 modelWasReset: wasReset,
                 modelVersion: ML_MODEL_VERSION,
                 featureDim: DEFAULT_FEATURE_DIM,
+                trainingConfigVersion: TRAINING_CONFIG_VERSION,
             });
             break;
 
         case 'trainHistorical':
             abortFlag = false;
             try {
-                const trainResult = trainFromHistorical(data.likedFeatures || [], data.dislikedFeatures || []);
+                const trainResult = trainFromHistorical(
+                    data.likedFeatures || [],
+                    data.dislikedFeatures || [],
+                    data.seed || 1
+                );
                 self.postMessage(trainResult);
             } catch (error) {
                 self.postMessage({

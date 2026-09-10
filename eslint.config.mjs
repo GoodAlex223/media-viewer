@@ -136,6 +136,7 @@ export default [
                 OnlineLogisticRegression: 'readonly',
                 ML_MODEL_VERSION: 'readonly',
                 DEFAULT_FEATURE_DIM: 'readonly',
+                TRAINING_CONFIG_VERSION: 'readonly',
                 // Globals from importScripts('feature-extractor.js')
                 extractFeatures: 'readonly',
                 FEATURE_VERSION: 'readonly',
