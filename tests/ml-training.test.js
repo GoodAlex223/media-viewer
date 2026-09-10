@@ -482,4 +482,15 @@ describe('model cache', () => {
         expect(mc.current.entries).toEqual([]);
         expect(m.sessionFingerprint).toBeNull();
     });
+
+    it('logs when invalidateModelCache resolves a graceful write failure, rather than swallowing it', async () => {
+        const logError = vi.fn();
+        const mc = {
+            read: vi.fn(async () => ({ success: true, store: null })),
+            write: vi.fn(async () => ({ success: false, error: 'EACCES' })),
+        };
+        const m = managerWith({ modelCache: mc, logError });
+        await m.invalidateModelCache();
+        expect(logError).toHaveBeenCalled();
+    });
 });

@@ -375,9 +375,23 @@ export class MlTrainingManager {
 
     /** Escape hatch behind the Settings "Rebuild model" control. */
     async invalidateModelCache() {
+        // Nulled unconditionally, before the write is even attempted: this is the session's
+        // record of "what the live model was trained on," held only in memory, so forgetting it
+        // can never itself fail. Forgetting it here -- even if the disk clear below fails -- means
+        // the next lookup re-checks the fingerprint rather than trusting the in-memory model
+        // forever; it does not, by itself, guarantee a stale disk entry stops being served (that
+        // still depends on the write below actually succeeding), but leaving it set would also
+        // suppress this method's *only* other effect on a failed write, compounding one silent
+        // no-op into two.
         this.sessionFingerprint = null;
         try {
-            await this.modelCache.write({ version: MlTrainingManager.MODEL_CACHE_VERSION, entries: [] });
+            const write = await this.modelCache.write({
+                version: MlTrainingManager.MODEL_CACHE_VERSION,
+                entries: [],
+            });
+            if (!write?.success) {
+                this.logError(`ML model cache clear failed: ${write?.error || 'unknown error'}`);
+            }
         } catch (err) {
             this.logError(`ML model cache clear failed: ${err.message}`);
         }
