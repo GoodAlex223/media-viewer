@@ -318,15 +318,15 @@ grep -n "updateMlModelWithFeatures\|reverseMlModelUpdate\|_beginDeferredCompareR
 ## 13. Superseded during implementation (dated 2026-09-10, closeout of Task 10)
 
 This is a frozen design doc — implementation is recorded here as corrections, not silent rewrites.
-Three claims above diverged from what shipped. All three were caught and ruled on during
-per-task review, not at closeout; this section propagates those rulings back into the spec text
-they correct.
+Four claims above diverged from what shipped. Three were caught and ruled on during per-task
+review; the fourth (§ 5.2's "LRU") was caught during the Task 10 fix round. This section
+propagates those rulings back into the spec text they correct.
 
 **§ 7.1 — the descriptor does not record `clipCoverage`, by deliberate ruling, not omission.**
 The text above says "The descriptor records `clipCoverage`." It does not, and the controller ruled
 against adding it (Task 5 review): fingerprinting CLIP coverage would make every partial-CLIP
 state key differently — a run with 99% of training files carrying a real CLIP half and a run with
-100% coverage would never share a cache entry, and the 5-slot model-cache LRU would thrash between
+100% coverage would never share a cache entry, and the 5-slot model cache would thrash between
 near-identical fingerprints instead of ever settling on one. The shipped control is narrower and
 more conservative: `enableClipFeatures` stays in the descriptor (input 4, unchanged), and coverage
 is enforced procedurally instead — `cacheable` (`ml-training.js`'s `ensureTrainedModel`) is `false`
@@ -363,3 +363,14 @@ vectors are logged and then discarded along with the rest of `entries` once `_co
 returns — the next call re-extracts everything that was not already durably on disk before the
 failed save. The "logged" half of the table row is accurate; the "stays in memory for the session"
 half is not.
+
+**§ 5.2 — the model cache is not true LRU.** The text above says "LRU over the last 5
+fingerprints." The shipped `_readCachedModel` (`ml-training.js`) is a pure `.find()` over the
+stored entries — a cache **hit** never reorders or touches the list. Only `_writeCachedModel`,
+reached solely on a rebuild (both the session and model-cache tiers having missed), prepends the
+new/rewritten entry and slices to `MODEL_CACHE_LIMIT`. Eviction is therefore by write-recency, not
+access-recency: an entry served repeatedly from the session or model-cache tier but never
+rewritten is not protected from eviction the way genuine LRU (which refreshes recency on every
+hit) would protect it. Caught during the Task 10 fix round, not during implementation review;
+inconsequential at five slots for a single-user desktop app, but the wording
+asserted a mechanism the code does not have.
