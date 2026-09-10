@@ -621,20 +621,43 @@ export class MlTrainingManager {
         });
         const fingerprint = fingerprintDescriptor(descriptor);
 
-        if (this.sessionFingerprint === fingerprint) {
+        // Task 9 review, Important 1: mlModelVersion/featureVersion/trainingConfigVersion start
+        // at 0 in media-viewer.js until their respective worker handshakes reply (initComplete /
+        // the feature-worker version probe), and those replies are fire-and-forget -- so a sort
+        // that runs before either lands computes a descriptor with some of these pinned to 0.
+        // OnlineLogisticRegression.isCompatible (ml-model.js) validates only `version` and
+        // `featureDim`; it does NOT check FEATURE_VERSION or TRAINING_CONFIG_VERSION, which makes
+        // these two descriptor fields their SOLE invalidation mechanism. Treating an unsettled
+        // {0,0,0} as a real value would let two sessions with genuinely different feature/
+        // training-config versions collide on the same fingerprint (both pinned to 0) and
+        // silently serve one's model against the other's inputs -- a stale model served as valid,
+        // the exact failure class this cache exists to prevent, and not merely a wasted retrain.
+        // All three real constants are >= 1 (ML_MODEL_VERSION=3, FEATURE_VERSION=2,
+        // TRAINING_CONFIG_VERSION=1), so 0 is unambiguously "not yet reported," never a
+        // legitimate value. Below, this gates the session hit, the cache READ (closing the read
+        // side is what neutralises a sentinel-keyed entry already on disk -- waiting for the
+        // handshake alone would not), and `cacheable` (so an unsettled session never WRITES a
+        // sentinel-keyed entry either). The cost is one extra retrain in the racy case, the same
+        // honest cost already accepted elsewhere here for incomplete CLIP coverage.
+        const versionsKnown =
+            descriptor.mlModelVersion > 0 && descriptor.featureVersion > 0 && descriptor.trainingConfigVersion > 0;
+
+        if (versionsKnown && this.sessionFingerprint === fingerprint) {
             return { source: 'session', stats: this.sessionStats || null, fingerprint, descriptor };
         }
 
-        const cached = await this._readCachedModel(fingerprint);
-        if (cached && !signal?.aborted) {
-            this.onProgress({ phase: 'Loading cached model…' });
-            const loaded = await this._safeLoadModelState(cached.modelState, fingerprint);
-            if (loaded) {
-                this.sessionFingerprint = fingerprint;
-                this.sessionStats = loaded.stats;
-                return { source: 'model-cache', stats: loaded.stats, fingerprint, descriptor };
+        if (versionsKnown) {
+            const cached = await this._readCachedModel(fingerprint);
+            if (cached && !signal?.aborted) {
+                this.onProgress({ phase: 'Loading cached model…' });
+                const loaded = await this._safeLoadModelState(cached.modelState, fingerprint);
+                if (loaded) {
+                    this.sessionFingerprint = fingerprint;
+                    this.sessionStats = loaded.stats;
+                    return { source: 'model-cache', stats: loaded.stats, fingerprint, descriptor };
+                }
+                // Malformed entry -- fall through to a rebuild instead of serving nothing.
             }
-            // Malformed entry -- fall through to a rebuild instead of serving nothing.
         }
         if (signal?.aborted) return miss;
 
@@ -677,7 +700,11 @@ export class MlTrainingManager {
         // exactly like incomplete CLIP coverage does.
         const clipMissing = likes.clipMissing + dislikes.clipMissing + bulk.clipMissing;
         const rowsFailed = likes.failed + dislikes.failed + bulk.failed;
-        const cacheable = !scanFailed && rowsFailed === 0 && !(config.enableClipFeatures && clipMissing > 0);
+        // versionsKnown: see the comment where it's computed above -- caching under an unsettled
+        // {0,0,0}-pinned fingerprint would let a later, correctly-versioned session collide with
+        // and load this one's stale weights.
+        const cacheable =
+            versionsKnown && !scanFailed && rowsFailed === 0 && !(config.enableClipFeatures && clipMissing > 0);
 
         if (cacheable) {
             this.sessionFingerprint = fingerprint;
@@ -710,7 +737,18 @@ export class MlTrainingManager {
         return { source: 'trained', stats, fingerprint, descriptor };
     }
 
-    /** Escape hatch behind the Settings "Rebuild model" control. */
+    /**
+     * Escape hatch behind the Settings "Rebuild model" control.
+     *
+     * Returns `true` only when the on-disk store was actually replaced with an empty one --
+     * `false` on a write failure. Task 9 review, Important 2: the caller (media-viewer.js) tells
+     * the user "it will rebuild on the next AI sort," which is false whenever the disk clear
+     * failed (the stale entry survives, and the next ensureTrainedModel call still hits it via
+     * `_readCachedModel`, serving `'model-cache'` again with no rebuild) -- exactly when this
+     * last-resort control matters most, since a user who was told it worked has no reason to
+     * retry. A caller that ignores the return value keeps today's behavior; media-viewer.js's
+     * handler uses it to show a warning instead of a false success.
+     */
     async invalidateModelCache() {
         // Nulled unconditionally, before the write is even attempted: this is the session's
         // record of "what the live model was trained on," held only in memory, so forgetting it
@@ -728,9 +766,12 @@ export class MlTrainingManager {
             });
             if (!write?.success) {
                 this.logError(`ML model cache clear failed: ${write?.error || 'unknown error'}`);
+                return false;
             }
+            return true;
         } catch (err) {
             this.logError(`ML model cache clear failed: ${err.message}`);
+            return false;
         }
     }
 }

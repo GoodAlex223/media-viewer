@@ -493,6 +493,37 @@ describe('model cache', () => {
         await m.invalidateModelCache();
         expect(logError).toHaveBeenCalled();
     });
+
+    // Task 9 review, Important 2: the caller (media-viewer.js's Settings "Rebuild model" handler)
+    // tells the user "it will rebuild on the next AI sort" -- which is false whenever the disk
+    // clear failed, since the stale entry then survives and the next ensureTrainedModel call
+    // still serves it as 'model-cache'. The return value is what lets the caller distinguish the
+    // two cases instead of announcing success unconditionally.
+    it('invalidateModelCache resolves true on a successful write', async () => {
+        const mc = makeModelCache({ version: 1, entries: [{ fingerprint: 'abc', modelState: {}, stats: {} }] });
+        const m = managerWith({ modelCache: mc });
+        await expect(m.invalidateModelCache()).resolves.toBe(true);
+    });
+
+    it('invalidateModelCache resolves false when the write reports failure', async () => {
+        const mc = {
+            read: vi.fn(async () => ({ success: true, store: null })),
+            write: vi.fn(async () => ({ success: false, error: 'EACCES' })),
+        };
+        const m = managerWith({ modelCache: mc });
+        await expect(m.invalidateModelCache()).resolves.toBe(false);
+    });
+
+    it('invalidateModelCache resolves false when the write throws', async () => {
+        const mc = {
+            read: vi.fn(async () => ({ success: true, store: null })),
+            write: vi.fn(async () => {
+                throw new Error('disk full');
+            }),
+        };
+        const m = managerWith({ modelCache: mc });
+        await expect(m.invalidateModelCache()).resolves.toBe(false);
+    });
 });
 
 // Direct, low-level tests for the bulk-rated vector-extraction phase, mirroring how
@@ -842,6 +873,92 @@ describe('ensureTrainedModel', () => {
         expect(second.computeFeatures).not.toHaveBeenCalled();
         expect(second.extractClipEmbedding).not.toHaveBeenCalled();
         expect(second.cacheIo.open).not.toHaveBeenCalled();
+    });
+
+    // Task 9 review, Important 1: mlModelVersion/featureVersion/trainingConfigVersion start at 0
+    // in media-viewer.js until their respective worker handshakes reply (initComplete / the
+    // feature-worker version probe), and those replies are fire-and-forget -- so a sort that runs
+    // before either lands computes a descriptor with some of these pinned to 0.
+    // OnlineLogisticRegression.isCompatible (ml-model.js) validates only `version` and
+    // `featureDim`; it does NOT check FEATURE_VERSION or TRAINING_CONFIG_VERSION, which makes
+    // featureVersion/trainingConfigVersion those two fields' SOLE invalidation mechanism. Treating
+    // an unsettled {0,0,0} as a real value would let two sessions with genuinely different
+    // feature/training-config versions collide on the same fingerprint and silently serve one's
+    // model against the other's inputs -- a stale model served as valid, not merely a wasted
+    // retrain.
+    describe('version gate (unsettled worker-reported versions)', () => {
+        const zeroVersions = { mlModelVersion: 0, featureCacheVersion: 4, featureVersion: 0, trainingConfigVersion: 0 };
+        const zeroVersionsConfig = () => ({
+            customLikeFolder: '/likes',
+            customDislikeFolder: '/dislikes',
+            enableClipFeatures: true,
+            versions: zeroVersions,
+        });
+
+        it('does not report "session" on a repeat call while a version is still unsettled', async () => {
+            const { m } = scenario({ managerOverrides: { getConfig: vi.fn(zeroVersionsConfig) } });
+            const first = await m.ensureTrainedModel({});
+            const second = await m.ensureTrainedModel({});
+            expect(first.source).toBe('trained');
+            // NOT 'session' -- an unsettled session must retrain every call, not just the first.
+            expect(second.source).toBe('trained');
+            expect(m.trainModel).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not cache a "trained" result while a version is still unsettled', async () => {
+            const { m, modelCacheStore } = scenario({ managerOverrides: { getConfig: vi.fn(zeroVersionsConfig) } });
+            await m.ensureTrainedModel({});
+            expect(m.modelCache.write).not.toHaveBeenCalled();
+            expect(modelCacheStore.value).toBeNull();
+        });
+
+        // Simulates an entry already sitting on a user's disk under a fingerprint whose worker-
+        // reported versions were all 0 when it was written (e.g. from before this gate existed,
+        // or -- pre-fix -- from a prior racy 'trained' call that cached itself). This is what
+        // makes the READ-side gate necessary on its own: awaiting the handshake before the NEXT
+        // call does not retroactively invalidate an entry a PAST call already wrote.
+        it('does not serve a pre-existing entry cached under an unsettled-versions fingerprint', async () => {
+            const staleDescriptor = buildDescriptor({
+                likeFolder: '/likes',
+                likeFiles: [
+                    { name: 'l1.jpg', size: 10, mtimeMs: 1 },
+                    { name: 'l2.jpg', size: 11, mtimeMs: 2 },
+                    { name: 'l3.jpg', size: 12, mtimeMs: 3 },
+                ],
+                dislikeFolder: '/dislikes',
+                dislikeFiles: [
+                    { name: 'd1.jpg', size: 20, mtimeMs: 4 },
+                    { name: 'd2.jpg', size: 21, mtimeMs: 5 },
+                    { name: 'd3.jpg', size: 22, mtimeMs: 6 },
+                ],
+                bulkRated: [],
+                enableClipFeatures: true,
+                versions: zeroVersions,
+            });
+            const staleStore = {
+                version: 1,
+                entries: [
+                    {
+                        fingerprint: fingerprintDescriptor(staleDescriptor),
+                        modelState: { weights: ['stale'] },
+                        stats: { isReady: true, positiveCount: 99, negativeCount: 99 },
+                    },
+                ],
+            };
+            const loadModelState = vi.fn(async () => ({
+                stats: { isReady: true, positiveCount: 99, negativeCount: 99 },
+            }));
+            const { m } = scenario({
+                store: staleStore,
+                managerOverrides: { getConfig: vi.fn(zeroVersionsConfig), loadModelState },
+            });
+
+            const res = await m.ensureTrainedModel({});
+
+            expect(res.source).toBe('trained'); // NOT 'model-cache' -- the stale entry is ignored
+            expect(loadModelState).not.toHaveBeenCalled();
+            expect(m.trainModel).toHaveBeenCalledTimes(1);
+        });
     });
 
     // Correction 4: _readCachedModel validates the STORE's version but not an individual entry's

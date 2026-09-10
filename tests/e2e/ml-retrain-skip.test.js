@@ -4,6 +4,7 @@ import {
     closeApp,
     loadFolder,
     waitForMedia,
+    waitForNotification,
     seedLocalStorage,
     createTempFixtureDir,
 } from './helpers/electron-app.js';
@@ -14,12 +15,35 @@ import {
 //   2. changing the LIKE folder MUST re-enter it. This is the one that proves retraining was not
 //      simply disabled: before the ml-training-pipeline work, a folder with a warm
 //      .ml_model.json never retrained no matter how many files were added to like/dislike.
-//   3. the Settings "Rebuild model" control (this task's escape hatch) forces a retrain even when
+//   3. bulk-rating a file in the SOURCE folder MUST also re-enter it, and the effect must revert
+//      correctly on folder switch. This is the source folder's one legitimate route into the
+//      descriptor (bulkRated) — without covering it, Property 1 alone is satisfiable by a
+//      fingerprint that ignores the source folder entirely (or is constant), since every other
+//      test here keeps bulkRated empty throughout.
+//   4. the Settings "Rebuild model" control (this task's escape hatch) forces a retrain even when
 //      the session is warm — the only way to recover from a fingerprint that ever misses an
 //      input, short of touching a training folder.
-//   4. the fingerprint-keyed model cache on disk survives an app restart. This is the only test
+//   5. the fingerprint-keyed model cache on disk survives an app restart. This is the only test
 //      in the suite that drives main.js's read-ml-model-cache / write-ml-model-cache handlers
 //      through their real fs.readFile/JSON.parse/fs.writeFile/fs.rename path.
+//
+// NOTE on shared state: this app has no --user-data-dir test isolation. Every 'trained' sort in
+// this file writes a real entry to the developer's own <userData>/ml-model-cache.json (capped at
+// MlTrainingManager.MODEL_CACHE_LIMIT = 5 entries, oldest evicted) and to the real localStorage.
+// Each fixture directory is `mkdtemp`-randomized per run, so every fingerprint here is novel —
+// there is no collision risk with other test files or with a developer's own real usage, only a
+// bounded, harmless accumulation of stale entries referencing now-deleted temp folders.
+//
+// NOTE on the version-handshake race: an earlier version of this file worked around a real
+// pre-existing race (initializeMlWorker/initializeFeaturePool's fire-and-forget version-probe
+// replies feeding ensureTrainedModel's fingerprint) with a `warmMlWorkers` test helper that
+// pre-warmed both handshakes before ever calling handleSortByPrediction. That race is now closed
+// in production code: handleSortByPrediction's lazy-init block awaits both handshakes directly
+// (see media-viewer.js), and ml-training.js's `versionsKnown` gate is the belt-and-suspenders
+// half (closes the read side too, which awaiting alone would not — see its own comment). With the
+// root cause fixed, `warmMlWorkers` was removed rather than kept: every test below now exercises
+// handleSortByPrediction's actual cold-start lazy-init path on its first sort, which is the path
+// the race lived in and the one a regression there would need to be caught on.
 
 /**
  * Force ML prediction on and CLIP off for the CURRENT live instance. seedLocalStorage only
@@ -43,41 +67,6 @@ async function seedTrainingState(page, likeDir, dislikeDir) {
     });
 }
 
-/**
- * Pre-warm the ML worker and feature-worker pool, and wait for their version handshakes to
- * land, BEFORE taking any training-source measurement.
- *
- * Root cause this works around: initializeMlWorker() posts {type:'init'} and
- * initializeFeaturePool() posts {type:'getVersion'} both fire-and-forget (never awaited); their
- * replies populate this._mlWorkerVersions.{mlModelVersion,trainingConfigVersion} and
- * this._featureExtractorVersion asynchronously, whenever the workers get around to it. Those
- * three fields are DESCRIPTOR_KEYS inputs (see ml-training.js buildDescriptor), so the very
- * first ensureTrainedModel() call in a session can fingerprint against their {0,0,0} defaults
- * while a LATER call in the same session — after the replies have had time to arrive —
- * fingerprints against the real {3,_,1}. That alone changes the fingerprint between two calls
- * with an otherwise byte-identical training set, independent of anything this suite is actually
- * testing. It reproduced as a real, non-deterministic failure of the 'a source-folder switch
- * does not re-enter the training phase' test under the load of the full 60-test suite (passed
- * in isolation, failed embedded) — confirmed by reading
- * initializeMlWorker/initializeFeaturePool/getConfig, not guessed. Waiting for both replies to
- * land before the FIRST measurement makes every later descriptor in the session use the same,
- * already-settled version numbers, which is the steady state these tests are actually about.
- * This does not touch the race itself (out of scope for Task 9 — see main.js/ml-worker.js in
- * the task's scope limit); it only makes the test's starting conditions deterministic.
- */
-async function warmMlWorkers(page) {
-    await page.evaluate(() => {
-        const viewer = window.mediaViewer;
-        if (!viewer.mlWorker) viewer.initializeMlWorker();
-        if (viewer.featureWorkers.length === 0) viewer.initializeFeaturePool();
-    });
-    await page.waitForFunction(
-        () =>
-            window.mediaViewer._mlWorkerVersions.mlModelVersion !== 0 &&
-            window.mediaViewer._featureExtractorVersion !== 0
-    );
-}
-
 /** Record every source ensureTrainedModel actually resolved to, by tapping the manager. */
 async function installTrainingProbe(page) {
     await page.evaluate(() => {
@@ -90,6 +79,17 @@ async function installTrainingProbe(page) {
             return res;
         };
     });
+}
+
+/** Sort, wait for the probe to record one more entry, and confirm a real sort completed (not
+ *  just that ensureTrainedModel was tapped) — isSortedByPrediction only flips once
+ *  mlStats.isReady gates pass, which requires the >=3-like/>=3-dislike fixtures this suite uses.
+ *  Without this check, a change to the default fixture count would fail as an opaque
+ *  waitForFunction timeout later, rather than here with a clear assertion. */
+async function sortAndExpectTrained(page, expectedLength) {
+    await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
+    await page.waitForFunction((n) => window.__trainSources.length === n, expectedLength);
+    expect(await page.evaluate(() => window.mediaViewer.isSortedByPrediction)).toBe(true);
 }
 
 test.describe('ML retrain skip', () => {
@@ -116,18 +116,15 @@ test.describe('ML retrain skip', () => {
     test('a source-folder switch does not re-enter the training phase', async () => {
         await loadFolder(page, srcA.dir);
         await waitForMedia(page);
-        await warmMlWorkers(page);
         await installTrainingProbe(page);
 
-        await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await page.waitForFunction(() => window.__trainSources.length === 1);
+        await sortAndExpectTrained(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
 
         // Only the VIEWED folder changes; likes/dislikes (the training set) do not.
         await loadFolder(page, srcB.dir);
         await waitForMedia(page);
-        await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await page.waitForFunction(() => window.__trainSources.length === 2);
+        await sortAndExpectTrained(page, 2);
 
         // This is the reported bug: a source-folder switch alone must be a free session hit.
         expect(await page.evaluate(() => window.__trainSources[1])).toBe('session');
@@ -136,33 +133,71 @@ test.describe('ML retrain skip', () => {
     test('a changed like folder does re-enter the training phase', async () => {
         await loadFolder(page, srcA.dir);
         await waitForMedia(page);
-        await warmMlWorkers(page);
         await installTrainingProbe(page);
 
-        await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await page.waitForFunction(() => window.__trainSources.length === 1);
+        await sortAndExpectTrained(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
 
         // Mutate the training set itself — this must change the fingerprint.
         await likes.addFile('extra-like.png');
 
         await page.evaluate(() => window.mediaViewer.handleSortByPrediction()); // toggle off
-        await page.evaluate(() => window.mediaViewer.handleSortByPrediction()); // sort again
-        await page.waitForFunction(() => window.__trainSources.length === 2);
+        await sortAndExpectTrained(page, 2); // sort again
 
         const sources = await page.evaluate(() => window.__trainSources);
         expect(sources).toHaveLength(2);
         expect(sources[1]).toBe('trained');
     });
 
+    test('a bulk rating in the source folder re-enters the training phase, and reverts on folder switch', async () => {
+        await loadFolder(page, srcA.dir);
+        await waitForMedia(page);
+        await installTrainingProbe(page);
+
+        await sortAndExpectTrained(page, 1);
+        expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
+
+        // The source folder's ONE legitimate route into the descriptor is `bulkRated` (corrective
+        // ratings, which stay in the source folder rather than moving to like/dislike). Set one
+        // directly and persist it exactly as the real bulk-rate UI does (saveBulkRatedFile),
+        // rather than driving compare mode — this test is about the fingerprint's sensitivity to
+        // that channel, not about the bulk-rating feature itself (covered elsewhere).
+        await page.evaluate(async () => {
+            const f = window.mediaViewer.mediaFiles[0];
+            window.mediaViewer.bulkRated.set(f.name, 'good');
+            await window.mediaViewer.saveBulkRatedFile();
+        });
+
+        await page.evaluate(() => window.mediaViewer.handleSortByPrediction()); // toggle off
+        await sortAndExpectTrained(page, 2); // sort again
+        expect(await page.evaluate(() => window.__trainSources[1])).toBe('trained');
+
+        // Reloading the SAME folder re-hydrates `bulkRated` from the .bulk_rated.json just
+        // written (loadFolder -> loadBulkRatedFile rehydrates per CURRENT folder on every call) —
+        // an identical descriptor, so this must still be free. Property 1 (folder reload is free)
+        // must hold with a populated, persisted bulkRated in the picture, not only an empty one.
+        await loadFolder(page, srcA.dir);
+        await waitForMedia(page);
+        await sortAndExpectTrained(page, 3);
+        expect(await page.evaluate(() => window.__trainSources[2])).toBe('session');
+
+        // Switching to a folder that was never bulk-rated drops bulkRated back to empty
+        // (loadBulkRatedFile hydrates from THAT folder's own, nonexistent .bulk_rated.json) —
+        // reverting the descriptor to what it was on the very first sort above, which that sort
+        // already cached to disk. Not 'session' (sessionFingerprint is currently the bulk-rated
+        // one) and not a fresh 'trained' (the original entry is still on disk) — 'model-cache'.
+        await loadFolder(page, srcB.dir);
+        await waitForMedia(page);
+        await sortAndExpectTrained(page, 4);
+        expect(await page.evaluate(() => window.__trainSources[3])).toBe('model-cache');
+    });
+
     test('Rebuild model forces a retrain even though the session was warm', async () => {
         await loadFolder(page, srcA.dir);
         await waitForMedia(page);
-        await warmMlWorkers(page);
         await installTrainingProbe(page);
 
-        await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await page.waitForFunction(() => window.__trainSources.length === 1);
+        await sortAndExpectTrained(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
 
         // Toggle off, then sort again with NOTHING changed, to prove the session is genuinely
@@ -170,8 +205,7 @@ test.describe('ML retrain skip', () => {
         // Rebuild click below mean the CLICK caused it, rather than an incidental fingerprint
         // change or a cache that was never actually populated.
         await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await page.waitForFunction(() => window.__trainSources.length === 2);
+        await sortAndExpectTrained(page, 2);
         expect(await page.evaluate(() => window.__trainSources[1])).toBe('session');
 
         // Toggle off so the next handleSortByPrediction() performs a real sort, not a restore.
@@ -183,12 +217,15 @@ test.describe('ML retrain skip', () => {
         await rebuildBtn.click();
         // The click handler is async (invalidateModelCache does a real IPC round trip); wait for
         // its own completion signal rather than assuming the click resolved before it finished.
-        await page.locator('.notification').filter({ hasText: 'rebuild' }).waitFor({ state: 'visible' });
+        // Filters on the SUCCESS message specifically ('Prediction model cleared') — a bare
+        // 'rebuild' substring also matches ensureTrainedModel's own unrelated non-cacheable
+        // warning ("...it will rebuild next sort"), which would either resolve on the wrong
+        // notification (a false pass) or trip Playwright strict mode if both were ever present
+        // (a false failure).
+        await waitForNotification(page, 'Prediction model cleared');
         await page.keyboard.press('F1'); // close the help overlay again
 
-        await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await page.waitForFunction(() => window.__trainSources.length === 3);
-
+        await sortAndExpectTrained(page, 3);
         const sources = await page.evaluate(() => window.__trainSources);
         expect(sources[2]).toBe('trained');
     });
@@ -198,11 +235,9 @@ test.describe('ML retrain skip', () => {
 
         await loadFolder(page, srcA.dir);
         await waitForMedia(page);
-        await warmMlWorkers(page);
         await installTrainingProbe(page);
 
-        await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await page.waitForFunction(() => window.__trainSources.length === 1);
+        await sortAndExpectTrained(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
 
         // Restart the app entirely. A fresh renderer means a fresh, empty sessionFingerprint, so
@@ -215,11 +250,9 @@ test.describe('ML retrain skip', () => {
         await seedTrainingState(page, likes.dir, dislikes.dir);
         await loadFolder(page, srcA.dir);
         await waitForMedia(page);
-        await warmMlWorkers(page);
         await installTrainingProbe(page);
 
-        await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await page.waitForFunction(() => window.__trainSources.length === 1);
+        await sortAndExpectTrained(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('model-cache');
     });
 });

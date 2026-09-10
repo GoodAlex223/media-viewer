@@ -2873,6 +2873,45 @@ describe('initializeFeaturePool version probe (G1)', () => {
     });
 });
 
+// Task 9 review, Important 2: invalidateModelCache() can fail its disk write and still leave a
+// stale entry being served as 'model-cache' on the next sort. Telling the user "it will rebuild"
+// unconditionally is false precisely then — this is the last-resort recovery control, and a user
+// told it worked has no reason to retry. These tests pin the branch that keeps the message honest.
+describe('handleRebuildModelClick (Task 9 review, Important 2)', () => {
+    const handleRebuildModelClick = extractAsyncMethod('handleRebuildModelClick');
+
+    function makeCtx(invalidateResult) {
+        return {
+            mlTraining: { invalidateModelCache: vi.fn(async () => invalidateResult) },
+            resetMlModel: vi.fn(),
+            showNotification: vi.fn(),
+        };
+    }
+
+    it('shows the success notification when invalidateModelCache resolves true', async () => {
+        const ctx = makeCtx(true);
+        await handleRebuildModelClick.call(ctx);
+        expect(ctx.mlTraining.invalidateModelCache).toHaveBeenCalledTimes(1);
+        expect(ctx.resetMlModel).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('info');
+        expect(message).toMatch(/cleared/i);
+    });
+
+    it('shows a warning, not the success message, when invalidateModelCache resolves false', async () => {
+        const ctx = makeCtx(false);
+        await handleRebuildModelClick.call(ctx);
+        // The live model must still be reset either way -- a failed DISK clear does not mean the
+        // in-memory session state is worth keeping.
+        expect(ctx.resetMlModel).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('warning');
+        expect(message).not.toMatch(/cleared/i);
+    });
+});
+
 // G5 item 2: initClipModel's only feedback was a toast every 10%, and handleSortByPrediction
 // fired it un-awaited — so a cold sort showed a motionless card AND fed the historical
 // training loop 576-dim vectors whose CLIP half was all zeros (extractClipEmbedding returns

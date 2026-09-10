@@ -145,6 +145,9 @@ class MediaViewer {
         // in handleMlWorkerMessage's trainComplete/initComplete cases.
         this._trainingCompleteCallback = null;
         this._initCompleteCallback = null;
+        // initializeMlWorker()'s own startup-handshake promise resolver — settled by ANY
+        // initComplete (see handleMlWorkerMessage), distinct from _initCompleteCallback above.
+        this._mlWorkerInitResolve = null;
 
         this.mlTraining = new MlTrainingManager({
             loadFolder: (p) => window.electronAPI.loadFolder(p),
@@ -2060,18 +2063,9 @@ class MediaViewer {
         // Escape hatch for the fingerprint-keyed model cache (Task 9). If a training-set
         // descriptor ever misses an input, this is the only way a user can force a rebuild short
         // of touching a training folder — so it exists on purpose, not as a convenience.
-        // invalidateModelCache() clears both mlTraining's in-memory sessionFingerprint and the
-        // on-disk model-cache store, so the very next ensureTrainedModel() call cannot hit
-        // session or model-cache and must retrain. resetMlModel() mirrors the CLIP-toggle
-        // handler above: it also clears predictionScores, so stale badges from the discarded
-        // model don't linger until the next sort recomputes them.
         const rebuildModelBtn = document.getElementById('rebuildModelBtn');
         if (rebuildModelBtn) {
-            rebuildModelBtn.addEventListener('click', async () => {
-                await this.mlTraining.invalidateModelCache();
-                this.resetMlModel();
-                this.showNotification('Prediction model cleared — it will rebuild on the next AI sort.', 'info');
-            });
+            rebuildModelBtn.addEventListener('click', () => this.handleRebuildModelClick());
         }
 
         // Folder settings
@@ -6707,42 +6701,65 @@ class MediaViewer {
 
     // ==================== ML PREDICTION METHODS ====================
 
+    /**
+     * Returns a promise that settles once this worker's OWN startup handshake is done -- either
+     * its 'initComplete' reply landed (see handleMlWorkerMessage, which resolves
+     * `_mlWorkerInitResolve` unconditionally on every initComplete, not just this one) or the
+     * worker never started at all. Task 9 review, Important 1(b): callers that don't need to
+     * wait (e.g. the mlPredictionToggle handler) can still fire-and-forget this; the only caller
+     * that awaits it is handleSortByPrediction's lazy-init block, which previously used a
+     * hard-coded 100ms sleep as a guess at how long this handshake takes. That guess is also a
+     * correctness gap, not just a timing one: ensureTrainedModel's fingerprint depends on
+     * `_mlWorkerVersions`, which this handshake populates -- see ml-training.js's `versionsKnown`
+     * gate for the other half of that fix. Every exit path here resolves so the caller can never
+     * hang: a disabled worker, a construction failure, and a hard runtime error all resolve
+     * immediately rather than waiting for a reply that will never come.
+     */
     initializeMlWorker() {
         console.log('[ML Debug] initializeMlWorker called, isMlEnabled:', this.isMlEnabled);
         if (!this.isMlEnabled) {
             console.log('[ML Debug] ML is disabled, skipping worker init');
-            return;
+            return Promise.resolve();
         }
 
         if (this.mlWorker) {
             this.mlWorker.terminate();
         }
 
-        try {
-            this.mlWorker = new Worker('ml-worker.js');
-            console.log('[ML Debug] ML Worker created');
+        return new Promise((resolve) => {
+            try {
+                this.mlWorker = new Worker('ml-worker.js');
+                console.log('[ML Debug] ML Worker created');
 
-            this.mlWorker.onmessage = (e) => {
-                this.handleMlWorkerMessage(e.data);
-            };
+                this.mlWorker.onmessage = (e) => {
+                    this.handleMlWorkerMessage(e.data);
+                };
 
-            this.mlWorker.onerror = (err) => {
-                console.error('[ML Debug] ML Worker error:', err);
+                this.mlWorker.onerror = (err) => {
+                    console.error('[ML Debug] ML Worker error:', err);
+                    this.isMlEnabled = false;
+                    // A hard worker crash must settle any pending runMlSort() promise (reject),
+                    // otherwise its awaiter (Task 3) hangs forever.
+                    const reject = this._mlSortReject;
+                    this._mlSortResolve = null;
+                    this._mlSortReject = null;
+                    if (reject) reject(new Error('ML worker crashed'));
+                    // No initComplete is coming from a worker that just errored — resolve here so
+                    // a crash during startup can't hang the caller. Harmless if initComplete
+                    // already resolved this same promise (a settled promise ignores later
+                    // settle attempts).
+                    resolve();
+                };
+
+                this._mlWorkerInitResolve = resolve;
+                // Initialize worker (will load saved model if exists)
+                this.mlWorker.postMessage({ type: 'init', data: {} });
+            } catch (err) {
+                console.warn('[ML Debug] ML Worker not available:', err);
                 this.isMlEnabled = false;
-                // A hard worker crash must settle any pending runMlSort() promise (reject),
-                // otherwise its awaiter (Task 3) hangs forever.
-                const reject = this._mlSortReject;
-                this._mlSortResolve = null;
-                this._mlSortReject = null;
-                if (reject) reject(new Error('ML worker crashed'));
-            };
-
-            // Initialize worker (will load saved model if exists)
-            this.mlWorker.postMessage({ type: 'init', data: {} });
-        } catch (err) {
-            console.warn('[ML Debug] ML Worker not available:', err);
-            this.isMlEnabled = false;
-        }
+                resolve(); // construction itself failed — nothing will ever reply
+            }
+        });
     }
 
     handleMlWorkerMessage(message) {
@@ -6759,6 +6776,18 @@ class MediaViewer {
                     const cb = this._initCompleteCallback;
                     this._initCompleteCallback = null;
                     cb({ stats: message.stats });
+                }
+                // Distinct from _initCompleteCallback above: that one is _runWorkerInit's
+                // per-call cache-hit-load mechanism (matched by reference identity); this one is
+                // initializeMlWorker's OWN startup handshake promise. Both can be pending at once
+                // only in the impossible case of two concurrent inits on one worker, so resolving
+                // unconditionally here — regardless of which call led to this initComplete — is
+                // correct: _mlWorkerVersions was just refreshed either way, which is the only
+                // thing this promise promises.
+                if (this._mlWorkerInitResolve) {
+                    const resolveInit = this._mlWorkerInitResolve;
+                    this._mlWorkerInitResolve = null;
+                    resolveInit();
                 }
                 this.updateSortPredictionButton();
                 // If worker reset the model (version/dim mismatch), clear stale state
@@ -6896,6 +6925,32 @@ class MediaViewer {
             this.mlWorker.postMessage({ type: 'reset' });
         }
         this.updateSortPredictionButton();
+    }
+
+    /**
+     * Settings "Rebuild model" click handler. invalidateModelCache() clears both mlTraining's
+     * in-memory sessionFingerprint and the on-disk model-cache store, so a SUCCESSFUL call means
+     * the very next ensureTrainedModel() call cannot hit session or model-cache and must retrain.
+     * resetMlModel() mirrors the CLIP-toggle handler: it also clears predictionScores, so stale
+     * badges from the discarded model don't linger until the next sort recomputes them.
+     *
+     * Task 9 review, Important 2: invalidateModelCache() can fail its disk write (already
+     * logged internally) and still leave the stale entry being served as 'model-cache' on the
+     * next sort — telling the user "it will rebuild" in that case is false precisely when this
+     * last-resort control matters, since a user who was told it worked has no reason to retry.
+     * Branching on the return value here is what keeps the message honest.
+     */
+    async handleRebuildModelClick() {
+        const cleared = await this.mlTraining.invalidateModelCache();
+        this.resetMlModel();
+        if (cleared) {
+            this.showNotification('Prediction model cleared — it will rebuild on the next AI sort.', 'info');
+        } else {
+            this.showNotification(
+                'Could not clear the cached prediction model — it may still serve a stale result. Try again.',
+                'warning'
+            );
+        }
     }
 
     // Feature cache version - must match FEATURE_VERSION in feature-extractor.js
@@ -7780,11 +7835,14 @@ class MediaViewer {
         this.updateSortProgress({ phase: 'Preparing…' }); // card visible before any await
 
         try {
-            // Lazy ML init on first use.
+            // Lazy ML init on first use. Awaiting both handshakes (rather than guessing at a
+            // fixed delay) closes a real correctness gap, not just a timing one: the descriptor
+            // ensureTrainedModel builds below depends on _mlWorkerVersions/
+            // _featureExtractorVersion, which these two calls' replies populate — see
+            // ml-training.js's `versionsKnown` gate for the belt-and-suspenders half of this fix,
+            // which still applies even if a worker replies unusually slowly.
             if (!this.mlWorker || this.featureWorkers.length === 0) {
-                this.initializeMlWorker();
-                this.initializeFeaturePool();
-                await new Promise((resolve) => setTimeout(resolve, 100));
+                await Promise.all([this.initializeMlWorker(), this.initializeFeaturePool()]);
             }
             // initializeMlWorker()'s own catch sets isMlEnabled=false and leaves mlWorker null
             // when Worker construction throws — the top-of-method guard already passed (ML was
@@ -8057,48 +8115,59 @@ class MediaViewer {
     // ==================== FEATURE EXTRACTION WORKER POOL ====================
 
     /**
-     * Initialize the feature extraction worker pool
+     * Initialize the feature extraction worker pool.
+     *
+     * Returns a promise that settles once the version probe's reply lands (or immediately if
+     * there is no probe to answer, or construction failed) — see initializeMlWorker's doc
+     * comment for why a caller needs this: `_featureExtractorVersion` feeds
+     * ensureTrainedModel's fingerprint, and this is the only place that ever sets it.
      */
     initializeFeaturePool() {
         console.log('[ML Debug] initializeFeaturePool called');
         // Terminate any existing workers
         this.shutdownFeaturePool();
 
-        try {
-            for (let i = 0; i < this.featureWorkerCount; i++) {
-                const worker = new Worker('feature-worker.js');
-                worker.busy = false;
-                worker.index = i;
+        return new Promise((resolve) => {
+            try {
+                for (let i = 0; i < this.featureWorkerCount; i++) {
+                    const worker = new Worker('feature-worker.js');
+                    worker.busy = false;
+                    worker.index = i;
 
-                worker.onmessage = (e) => this.handleFeatureWorkerMessage(i, e.data);
-                worker.onerror = (err) => this.handleFeatureWorkerError(i, err);
+                    worker.onmessage = (e) => this.handleFeatureWorkerMessage(i, e.data);
+                    worker.onerror = (err) => this.handleFeatureWorkerError(i, err);
 
-                this.featureWorkers.push(worker);
+                    this.featureWorkers.push(worker);
+                }
+
+                // One-shot version probe: feature-worker.js answers `getVersion` with the
+                // FEATURE_VERSION that feature-extractor.js actually compiled with, so the training
+                // fingerprint never re-declares it. (The FEATURE_CACHE_VERSION comment claiming the two
+                // constants must match is false — they are 4 and 2 — which is why both are fingerprinted.)
+                const probe = this.featureWorkers[0];
+                if (probe) {
+                    const onVersion = (e) => {
+                        if (e.data?.type === 'version') {
+                            this._featureExtractorVersion = e.data.version || 0;
+                            probe.removeEventListener('message', onVersion);
+                            resolve();
+                        }
+                    };
+                    probe.addEventListener('message', onVersion);
+                    probe.postMessage({ type: 'getVersion', data: {} });
+                } else {
+                    resolve(); // featureWorkerCount is 0 — nothing will ever reply
+                }
+
+                console.log(`[ML Debug] Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
+
+                // Start auto-save interval (every 30 seconds)
+                this.startFeatureCacheAutoSave();
+            } catch (err) {
+                console.warn('[ML Debug] Failed to initialize feature workers:', err);
+                resolve(); // construction failed — nothing will ever reply
             }
-
-            // One-shot version probe: feature-worker.js answers `getVersion` with the
-            // FEATURE_VERSION that feature-extractor.js actually compiled with, so the training
-            // fingerprint never re-declares it. (The FEATURE_CACHE_VERSION comment claiming the two
-            // constants must match is false — they are 4 and 2 — which is why both are fingerprinted.)
-            const probe = this.featureWorkers[0];
-            if (probe) {
-                const onVersion = (e) => {
-                    if (e.data?.type === 'version') {
-                        this._featureExtractorVersion = e.data.version || 0;
-                        probe.removeEventListener('message', onVersion);
-                    }
-                };
-                probe.addEventListener('message', onVersion);
-                probe.postMessage({ type: 'getVersion', data: {} });
-            }
-
-            console.log(`[ML Debug] Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
-
-            // Start auto-save interval (every 30 seconds)
-            this.startFeatureCacheAutoSave();
-        } catch (err) {
-            console.warn('[ML Debug] Failed to initialize feature workers:', err);
-        }
+        });
     }
 
     // ==================== CLIP FEATURES (Main Process IPC) ====================
