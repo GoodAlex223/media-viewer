@@ -5,7 +5,7 @@
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
 //   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
-//   2c. Browser renderer modules     — fullscreen.js (ES module, imported by media-viewer.js)
+//   2c. Browser renderer modules     — fullscreen.js, ml-training.js (ES modules, imported by media-viewer.js)
 //   3a. Web Workers                  — sorting-worker.js, ml-worker.js, feature-worker.js
 //   3a-jxl. Module Web Worker        — jxl-decode-worker.js (ES module worker)
 //   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js, media-formats.js
@@ -110,7 +110,7 @@ export default [
 
     // 2c. Browser renderer modules (ES module — imported by media-viewer.js)
     {
-        files: ['fullscreen.js', 'tournament-engine.js', 'tournament.js'],
+        files: ['fullscreen.js', 'tournament-engine.js', 'tournament.js', 'ml-training.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'module',
