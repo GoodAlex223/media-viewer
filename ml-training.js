@@ -134,6 +134,7 @@ export class MlTrainingManager {
         // Fingerprint the live worker was last trained on. Null until the first train or a
         // model-cache hit. This is what makes a repeat sort in one session free.
         this.sessionFingerprint = null;
+        this.sessionStats = null;
     }
 
     _cachePath(folderPath) {
@@ -371,6 +372,233 @@ export class MlTrainingManager {
         } catch (err) {
             this.logError(`ML model cache write failed: ${err.message}`);
         }
+    }
+
+    /** Merge a 64-dim feature half and an optional 512-dim CLIP half into one 576-dim row. */
+    _combine(feature, clip) {
+        const merged = new Float32Array(TRAINING_VECTOR_DIM);
+        merged.set(feature, 0);
+        if (clip) merged.set(clip, FEATURE_DIM);
+        return Array.from(merged);
+    }
+
+    /**
+     * Load one training folder's cached vectors, extract whatever is missing or stale, persist
+     * the result, and return the 576-dim rows. Only files absent from the cache cost CLIP
+     * inference — which is the whole retrain-skip win.
+     *
+     * `_loadVectorCache`'s own `aborted` flag is checked immediately: a load cancelled mid-stream
+     * hands back a PARTIAL entries map paired with the FULL on-disk diskCount, so it must be
+     * treated as a hard bail here, identically to `signal?.aborted` — never fed into extraction or
+     * `_saveVectorCache`.
+     */
+    async _collectFolderVectors(folderPath, files, phase, signal) {
+        const { entries, diskCount, aborted } = await this._loadVectorCache(folderPath, files, signal);
+        const rows = [];
+        let clipMissing = 0;
+        let extracted = 0;
+        if (aborted) return { rows, clipMissing, aborted: true };
+
+        for (let i = 0; i < files.length; i++) {
+            if (signal?.aborted) return { rows, clipMissing, aborted: true };
+            const file = files[i];
+            let hit = entries.get(file.name);
+
+            // Re-extract when absent, or when the CLIP half is missing while CLIP is on —
+            // the self-healing filter that keeps a degraded run from becoming permanent.
+            const needsClip = this.getConfig().enableClipFeatures && hit && !hit.clip;
+            if (!hit || needsClip) {
+                try {
+                    const feature = hit ? hit.feature : await this.computeFeatures(file.path, file);
+                    const clip = await this.extractClipEmbedding(file.path);
+                    hit = { feature, clip: clip || null, size: file.size, mtimeMs: file.mtimeMs };
+                    entries.set(file.name, hit);
+                    extracted++;
+                } catch (err) {
+                    console.warn(`Skipping ${file.name}:`, err.message);
+                    continue;
+                }
+            }
+
+            if (!hit.clip) clipMissing++;
+            rows.push(this._combine(hit.feature, hit.clip));
+            this.onProgress({ phase, current: i + 1, total: files.length });
+        }
+
+        // scanCount = files.length: the third shrink-guard conjunct that tells a genuine folder
+        // shrink apart from a partial/rejected load (`_saveVectorCache`'s own doc comment). diskCount
+        // is passed through UNCHANGED from `_loadVectorCache` -- never re-baselined from
+        // entries.size, which undercounts (entries whose stat could not be resolved are skipped on
+        // save, so entries.size is only an upper bound on what was actually written).
+        if (extracted > 0 && !signal?.aborted) {
+            await this._saveVectorCache(folderPath, entries, diskCount, files.length);
+        }
+        return { rows, clipMissing, aborted: false };
+    }
+
+    /**
+     * Corrective bulk ratings stay in the SOURCE folder and are never in the like/dislike
+     * folders, so a from-scratch rebuild cannot recover them from disk. Their vectors come from
+     * the source folder's own caches — reading those is correct; writing to them is not.
+     *
+     * Tracks `clipMissing` the same way `_collectFolderVectors` does: design doc § 7.1 defines
+     * CLIP coverage over "the fraction of training vectors carrying a real CLIP half," which
+     * includes this bulk-rated contribution. Omitting it here would let a bulk-rated file with no
+     * CLIP half slip a degraded row into training while the two folder scans alone (both fully
+     * covered) satisfy the gate — caching a degraded model under a CLIP-enabled fingerprint.
+     */
+    async _collectBulkRatedVectors(signal) {
+        const { bulkRated, mediaFiles, featureCache, clipCache } = this.getBulkRatedContext();
+        const liked = [];
+        const disliked = [];
+        const present = [];
+        let clipMissing = 0;
+        const total = bulkRated?.size || 0;
+        let processed = 0;
+
+        for (const [name, bucket] of bulkRated || []) {
+            if (signal?.aborted) break;
+            this.onProgress({ phase: 'Processing corrective ratings', current: ++processed, total });
+            const file = (mediaFiles || []).find((f) => f.name === name);
+            if (!file) continue;
+
+            let feature = featureCache?.get(file.path);
+            let clip = clipCache?.get(file.path) || null;
+            if (!feature) {
+                try {
+                    feature = await this.computeFeatures(file.path, file);
+                    clip = await this.extractClipEmbedding(file.path);
+                } catch (err) {
+                    console.warn(`Skipping bulk-rated ${name}:`, err.message);
+                    continue;
+                }
+            }
+            if (!clip) clipMissing++;
+            (bucket === 'good' ? liked : disliked).push(this._combine(feature, clip));
+            present.push({ name, bucket, size: file.size, mtimeMs: file.mtimeMs });
+        }
+        return { liked, disliked, present, clipMissing };
+    }
+
+    /**
+     * `_readCachedModel` validates the STORE's version but not an individual cached entry's
+     * internal shape. A rejecting or malformed `loadModelState` result must be treated as a model-
+     * cache miss (design doc § 7.2: "Model-cache read failure or malformed entry | Treated as a
+     * miss"), never as an escaped exception out of `ensureTrainedModel`.
+     */
+    async _safeLoadModelState(modelState, fingerprint) {
+        let loaded;
+        try {
+            loaded = await this.loadModelState(modelState);
+        } catch (err) {
+            this.logError(`Cached model load failed for ${fingerprint}: ${err.message}; rebuilding.`);
+            return null;
+        }
+        if (!loaded?.stats) {
+            this.logError(`Cached model for ${fingerprint} produced no usable stats; rebuilding.`);
+            return null;
+        }
+        return loaded;
+    }
+
+    /**
+     * Ensure the ML worker holds a model trained on the CURRENT training set, doing the least
+     * work that guarantees it. Resolution order: live session → persisted model cache → rebuild.
+     */
+    async ensureTrainedModel({ signal } = {}) {
+        const miss = { source: 'skipped', stats: null, fingerprint: null, descriptor: null };
+        const config = this.getConfig();
+        if (!config.customLikeFolder || !config.customDislikeFolder) return miss;
+        if (signal?.aborted) return miss;
+
+        this.onProgress({ phase: 'Checking training set…' });
+        const [likedResult, dislikedResult] = await Promise.all([
+            this.loadFolder(config.customLikeFolder),
+            this.loadFolder(config.customDislikeFolder),
+        ]);
+        if (signal?.aborted) return miss;
+
+        const likeFiles = likedResult?.success ? likedResult.files : [];
+        const dislikeFiles = dislikedResult?.success ? dislikedResult.files : [];
+        if (likeFiles.length === 0 && dislikeFiles.length === 0) return miss;
+
+        // The bulk-rated half must be resolved BEFORE the fingerprint: it is a descriptor input,
+        // and the vectors are cheap (they come from the source folder's warm caches).
+        const bulk = await this._collectBulkRatedVectors(signal);
+        if (signal?.aborted) return miss;
+
+        const descriptor = buildDescriptor({
+            likeFolder: config.customLikeFolder,
+            likeFiles,
+            dislikeFolder: config.customDislikeFolder,
+            dislikeFiles,
+            bulkRated: bulk.present,
+            enableClipFeatures: config.enableClipFeatures,
+            versions: config.versions,
+        });
+        const fingerprint = fingerprintDescriptor(descriptor);
+
+        if (this.sessionFingerprint === fingerprint) {
+            return { source: 'session', stats: this.sessionStats || null, fingerprint, descriptor };
+        }
+
+        const cached = await this._readCachedModel(fingerprint);
+        if (cached && !signal?.aborted) {
+            this.onProgress({ phase: 'Loading cached model…' });
+            const loaded = await this._safeLoadModelState(cached.modelState, fingerprint);
+            if (loaded) {
+                this.sessionFingerprint = fingerprint;
+                this.sessionStats = loaded.stats;
+                return { source: 'model-cache', stats: loaded.stats, fingerprint, descriptor };
+            }
+            // Malformed entry -- fall through to a rebuild instead of serving nothing.
+        }
+        if (signal?.aborted) return miss;
+
+        const likes = await this._collectFolderVectors(config.customLikeFolder, likeFiles, 'Processing likes', signal);
+        if (likes.aborted || signal?.aborted) return miss;
+        const dislikes = await this._collectFolderVectors(
+            config.customDislikeFolder,
+            dislikeFiles,
+            'Processing dislikes',
+            signal
+        );
+        if (dislikes.aborted || signal?.aborted) return miss;
+
+        const likedFeatures = [...likes.rows, ...bulk.liked];
+        const dislikedFeatures = [...dislikes.rows, ...bulk.disliked];
+        if (likedFeatures.length === 0 && dislikedFeatures.length === 0) return miss;
+
+        this.onProgress({ phase: 'Training model…' });
+        const seed = seedFromFingerprint(fingerprint);
+        const { stats, modelState } = await this.trainModel(likedFeatures, dislikedFeatures, seed);
+        this.sessionFingerprint = fingerprint;
+        this.sessionStats = stats;
+
+        // A model trained with a zero CLIP half while CLIP is ON is a degraded model wearing a
+        // CLIP-enabled fingerprint. Degraded operation stays supported; caching it does not,
+        // or the next session serves it as if it were the real thing. All three sources of
+        // training rows count toward coverage -- a bulk-rated file missing its CLIP half is just
+        // as disqualifying as a folder file missing one (design doc § 7.1).
+        const clipMissing = likes.clipMissing + dislikes.clipMissing + bulk.clipMissing;
+        if (config.enableClipFeatures && clipMissing > 0) {
+            this.notify(
+                `Model trained without CLIP for ${clipMissing} file(s) — not cached; it will rebuild next sort.`,
+                'warning'
+            );
+        } else {
+            await this._writeCachedModel(fingerprint, modelState, stats, {
+                likeFolder: config.customLikeFolder,
+                likeCount: likeFiles.length,
+                dislikeFolder: config.customDislikeFolder,
+                dislikeCount: dislikeFiles.length,
+                bulkRatedCount: bulk.present.length,
+                enableClipFeatures: config.enableClipFeatures,
+                versions: config.versions,
+            });
+        }
+
+        return { source: 'trained', stats, fingerprint, descriptor };
     }
 
     /** Escape hatch behind the Settings "Rebuild model" control. */

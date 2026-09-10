@@ -494,3 +494,247 @@ describe('model cache', () => {
         expect(logError).toHaveBeenCalled();
     });
 });
+
+describe('ensureTrainedModel', () => {
+    const versions = { mlModelVersion: 3, featureCacheVersion: 4, featureVersion: 2, trainingConfigVersion: 1 };
+
+    const scenario = (over = {}) => {
+        const likeFiles = over.likeFiles || [
+            { name: 'l1.jpg', path: '/likes/l1.jpg', size: 10, mtimeMs: 1 },
+            { name: 'l2.jpg', path: '/likes/l2.jpg', size: 11, mtimeMs: 2 },
+            { name: 'l3.jpg', path: '/likes/l3.jpg', size: 12, mtimeMs: 3 },
+        ];
+        const dislikeFiles = over.dislikeFiles || [
+            { name: 'd1.jpg', path: '/dislikes/d1.jpg', size: 20, mtimeMs: 4 },
+            { name: 'd2.jpg', path: '/dislikes/d2.jpg', size: 21, mtimeMs: 5 },
+            { name: 'd3.jpg', path: '/dislikes/d3.jpg', size: 22, mtimeMs: 6 },
+        ];
+        const modelCacheStore = { value: over.store ?? null };
+        const m = managerWith({
+            loadFolder: vi.fn(async (p) => ({
+                success: true,
+                files: p === '/likes' ? likeFiles : dislikeFiles,
+            })),
+            computeFeatures: vi.fn(async () => new Float32Array(64).fill(0.5)),
+            extractClipEmbedding: over.extractClipEmbedding || vi.fn(async () => new Float32Array(512).fill(0.25)),
+            trainModel: vi.fn(async () => ({
+                stats: { isReady: true, positiveCount: 3, negativeCount: 3 },
+                modelState: { weights: [1] },
+            })),
+            loadModelState: vi.fn(async () => ({ stats: { isReady: true, positiveCount: 3, negativeCount: 3 } })),
+            getConfig: vi.fn(() => ({
+                customLikeFolder: '/likes',
+                customDislikeFolder: '/dislikes',
+                enableClipFeatures: over.enableClipFeatures ?? true,
+                versions,
+            })),
+            getBulkRatedContext: vi.fn(() => ({
+                bulkRated: over.bulkRated || new Map(),
+                mediaFiles: over.mediaFiles || [],
+                featureCache: new Map(),
+                clipCache: new Map(),
+            })),
+            cacheIo: over.cacheIo || makeCacheIo(),
+            modelCache: {
+                read: vi.fn(async () => ({ success: true, store: modelCacheStore.value })),
+                write: vi.fn(async (s) => {
+                    modelCacheStore.value = s;
+                    return { success: true };
+                }),
+            },
+            ...(over.managerOverrides || {}),
+        });
+        return { m, modelCacheStore };
+    };
+
+    it('trains when nothing is cached', async () => {
+        const { m } = scenario();
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(res.stats.isReady).toBe(true);
+        expect(m.trainModel).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns source "session" on a repeat call with an unchanged training set', async () => {
+        const { m } = scenario();
+        await m.ensureTrainedModel({});
+        const second = await m.ensureTrainedModel({});
+        expect(second.source).toBe('session');
+        expect(m.trainModel).toHaveBeenCalledTimes(1);
+    });
+
+    it('retrains when the like folder changes', async () => {
+        const { m } = scenario();
+        await m.ensureTrainedModel({});
+        m.getConfig.mockReturnValue({
+            customLikeFolder: '/likes',
+            customDislikeFolder: '/dislikes',
+            enableClipFeatures: true,
+            versions,
+        });
+        m.loadFolder.mockImplementation(async (p) => ({
+            success: true,
+            files:
+                p === '/likes'
+                    ? [
+                          { name: 'l1.jpg', path: '/likes/l1.jpg', size: 10, mtimeMs: 1 },
+                          { name: 'l2.jpg', path: '/likes/l2.jpg', size: 11, mtimeMs: 2 },
+                          { name: 'l3.jpg', path: '/likes/l3.jpg', size: 12, mtimeMs: 3 },
+                          { name: 'NEW.jpg', path: '/likes/NEW.jpg', size: 99, mtimeMs: 99 },
+                      ]
+                    : [
+                          { name: 'd1.jpg', path: '/dislikes/d1.jpg', size: 20, mtimeMs: 4 },
+                          { name: 'd2.jpg', path: '/dislikes/d2.jpg', size: 21, mtimeMs: 5 },
+                          { name: 'd3.jpg', path: '/dislikes/d3.jpg', size: 22, mtimeMs: 6 },
+                      ],
+        }));
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(m.trainModel).toHaveBeenCalledTimes(2);
+    });
+
+    it('loads from the model cache in a fresh session instead of training', async () => {
+        const { m: first, modelCacheStore } = scenario();
+        await first.ensureTrainedModel({});
+
+        const { m: second } = scenario({ store: modelCacheStore.value });
+        const res = await second.ensureTrainedModel({});
+        expect(res.source).toBe('model-cache');
+        expect(second.trainModel).not.toHaveBeenCalled();
+        expect(second.loadModelState).toHaveBeenCalledTimes(1);
+    });
+
+    // Correction 4: _readCachedModel validates the STORE's version but not an individual entry's
+    // internal shape. A rejecting loadModelState (corrupt/incompatible modelState) must fall
+    // through to a rebuild rather than escaping ensureTrainedModel as an unhandled rejection.
+    // Design doc § 7.2: "Model-cache read failure or malformed entry | Treated as a miss."
+    it('falls through to a rebuild when the cached model load rejects', async () => {
+        const { m: first, modelCacheStore } = scenario();
+        await first.ensureTrainedModel({});
+
+        const { m: second } = scenario({
+            store: modelCacheStore.value,
+            managerOverrides: {
+                loadModelState: vi.fn(async () => {
+                    throw new Error('corrupt modelState');
+                }),
+            },
+        });
+        const res = await second.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(second.trainModel).toHaveBeenCalledTimes(1);
+    });
+
+    // Same rule, the other malformed shape: loadModelState resolves normally but with no usable
+    // stats (e.g. a future/foreign modelState shape it silently no-ops on).
+    it('falls through to a rebuild when the cached model load resolves without usable stats', async () => {
+        const { m: first, modelCacheStore } = scenario();
+        await first.ensureTrainedModel({});
+
+        const { m: second } = scenario({
+            store: modelCacheStore.value,
+            managerOverrides: {
+                loadModelState: vi.fn(async () => ({})),
+            },
+        });
+        const res = await second.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(second.trainModel).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips when a training folder is unset', async () => {
+        const { m } = scenario();
+        m.getConfig.mockReturnValue({
+            customLikeFolder: '',
+            customDislikeFolder: '/dislikes',
+            enableClipFeatures: true,
+            versions,
+        });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('skipped');
+        expect(m.trainModel).not.toHaveBeenCalled();
+    });
+
+    it('does not send a training message when aborted mid-extraction', async () => {
+        const controller = new AbortController();
+        const { m } = scenario({
+            extractClipEmbedding: vi.fn(async () => {
+                controller.abort();
+                return new Float32Array(512).fill(0.25);
+            }),
+        });
+        const res = await m.ensureTrainedModel({ signal: controller.signal });
+        expect(m.trainModel).not.toHaveBeenCalled();
+        expect(res.source).toBe('skipped');
+    });
+
+    it('trains but does not cache when CLIP is on and coverage is incomplete', async () => {
+        const { m, modelCacheStore } = scenario({ extractClipEmbedding: vi.fn(async () => null) });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(m.trainModel).toHaveBeenCalledTimes(1);
+        expect(modelCacheStore.value?.entries || []).toHaveLength(0);
+        expect(m.notify).toHaveBeenCalled();
+    });
+
+    it('caches normally when CLIP is off, since zero halves are then expected', async () => {
+        const { m, modelCacheStore } = scenario({
+            enableClipFeatures: false,
+            extractClipEmbedding: vi.fn(async () => null),
+        });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(modelCacheStore.value.entries).toHaveLength(1);
+    });
+
+    // Design doc § 7.1: clipCoverage is "the fraction of TRAINING VECTORS carrying a real CLIP
+    // half" -- that includes the bulk-rated contribution, not just the two folder scans. Only the
+    // bulk-rated file is missing its CLIP half here (the folder files all get a real vector), so
+    // this fails unless the bulk collector's own coverage is counted toward the gate.
+    it('does not cache when only a bulk-rated file is missing its CLIP half while CLIP is on', async () => {
+        const { m, modelCacheStore } = scenario({
+            bulkRated: new Map([['b1.jpg', 'good']]),
+            mediaFiles: [{ name: 'b1.jpg', path: '/src/b1.jpg', size: 30, mtimeMs: 7 }],
+            extractClipEmbedding: vi.fn(async (path) =>
+                path === '/src/b1.jpg' ? null : new Float32Array(512).fill(0.25)
+            ),
+        });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(modelCacheStore.value?.entries || []).toHaveLength(0);
+        expect(m.notify).toHaveBeenCalled();
+    });
+
+    it('reports progress through the injected sink', async () => {
+        const { m } = scenario();
+        await m.ensureTrainedModel({});
+        const phases = m.onProgress.mock.calls.map((c) => c[0].phase);
+        expect(phases).toContain('Processing likes');
+        expect(phases).toContain('Processing dislikes');
+        expect(phases).toContain('Training model…');
+    });
+
+    it('includes bulk-rated files still present in the source folder', async () => {
+        const { m } = scenario({
+            bulkRated: new Map([['b1.jpg', 'good']]),
+            mediaFiles: [{ name: 'b1.jpg', path: '/src/b1.jpg', size: 30, mtimeMs: 7 }],
+        });
+        await m.ensureTrainedModel({});
+        const [liked] = m.trainModel.mock.calls[0];
+        expect(liked).toHaveLength(4); // 3 likes + 1 bulk-rated good
+    });
+
+    it('ignores a bulk-rated name whose file has left the source folder', async () => {
+        const { m } = scenario({ bulkRated: new Map([['gone.jpg', 'good']]), mediaFiles: [] });
+        await m.ensureTrainedModel({});
+        const [liked] = m.trainModel.mock.calls[0];
+        expect(liked).toHaveLength(3);
+    });
+
+    it('passes a fingerprint-derived seed so the rebuild is reproducible', async () => {
+        const { m } = scenario();
+        const res = await m.ensureTrainedModel({});
+        const [, , seed] = m.trainModel.mock.calls[0];
+        expect(seed).toBe(seedFromFingerprint(res.fingerprint));
+    });
+});
