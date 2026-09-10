@@ -624,8 +624,18 @@ describe('_collectBulkRatedVectors (direct)', () => {
             { name: 'b2.jpg', bucket: 'bad', file: { path: '/src/b2.jpg', size: 2, mtimeMs: 2 } },
         ];
         const result = await m._collectBulkRatedVectors(resolved, true, undefined);
+        // Content-identifying, not just a length check (G1 task 6 review round 1, Important 3):
+        // b1 (bucket 'good', feature filled 0.5) and b2 (bucket 'bad', feature filled 0.6) are
+        // distinguishable fixtures specifically so this can prove which row landed in which
+        // array. Two toHaveLength(1) checks pass identically even if the
+        // `bucket === 'good' ? liked : disliked` ternary were inverted — nothing else in this
+        // file exercises a 'bad' bucket entry through the actual routing (the only other 'bad'
+        // usage is a fingerprint mutation-table entry, which proves the descriptor changes, not
+        // where the row lands).
         expect(result.liked).toHaveLength(1);
         expect(result.disliked).toHaveLength(1);
+        expect(result.liked[0][0]).toBeCloseTo(0.5);
+        expect(result.disliked[0][0]).toBeCloseTo(0.6);
     });
 
     // Relocated: collectBulkRatedTrainingExamples's "computes 576-dim features when the cache

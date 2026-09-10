@@ -141,6 +141,10 @@ class MediaViewer {
         // feature pool's getVersion probe.
         this._mlWorkerVersions = { mlModelVersion: 0, featureDim: 0, trainingConfigVersion: 0 };
         this._featureExtractorVersion = 0;
+        // Pending _runWorkerTraining/_runWorkerInit resolvers, settled (by reference identity)
+        // in handleMlWorkerMessage's trainComplete/initComplete cases.
+        this._trainingCompleteCallback = null;
+        this._initCompleteCallback = null;
 
         this.mlTraining = new MlTrainingManager({
             loadFolder: (p) => window.electronAPI.loadFolder(p),
@@ -7777,32 +7781,62 @@ class MediaViewer {
      * Post a trainHistorical job and resolve on trainComplete. Replaces
      * trainFromHistoricalRatingsAndWait's callback+30s-timeout pairing; the manager owns the
      * decision to train at all, this owns only the round trip.
+     *
+     * Rejects — never resolves with a fabricated payload — when the worker doesn't reply in
+     * time. ensureTrainedModel would otherwise record a crashed/hung worker's stale
+     * this.mlStats/this.mlModelState as "trained on the current set" and cache it under the NEW
+     * fingerprint: exactly the silently-wrong-model class this whole feature exists to prevent
+     * (review round 1, Important 2). _safeLoadModelState/trainModel's caller already treat a
+     * rejection as "rebuild" / an honest failure, so rejecting is a drop-in.
+     *
+     * The pending callback is matched by REFERENCE (`this._trainingCompleteCallback === cb`),
+     * not truthiness. Ensuring this runs on EVERY sort (not just the first, per the CLIP-await
+     * hoist) makes overlapping runs reachable: without the identity check, run A's stale 30s
+     * timer — armed before A's own trainComplete arrived — would see run B's callback as merely
+     * "truthy", null it, and resolve A's ALREADY-SETTLED promise a second time. B's genuine
+     * trainComplete then finds the field null and settles nothing, and B's own timer's `if` is
+     * now false too, so B's promise never settles — wedging isPredictionSorting permanently
+     * (review round 1, Important 1). Clearing the timer inside `cb` means a reply that arrives
+     * before the timeout leaves nothing dangling.
      */
     _runWorkerTraining(likedFeatures, dislikedFeatures, seed) {
-        return new Promise((resolve) => {
-            this._trainingCompleteCallback = (payload) => resolve(payload);
+        return new Promise((resolve, reject) => {
+            const cb = (payload) => {
+                clearTimeout(timer);
+                resolve(payload);
+            };
+            this._trainingCompleteCallback = cb;
             this.mlWorker.postMessage({
                 type: 'trainHistorical',
                 data: { likedFeatures, dislikedFeatures, seed },
             });
-            setTimeout(() => {
-                if (this._trainingCompleteCallback) {
+            const timer = setTimeout(() => {
+                if (this._trainingCompleteCallback === cb) {
                     this._trainingCompleteCallback = null;
-                    resolve({ stats: this.mlStats, modelState: this.mlModelState });
+                    reject(new Error('_runWorkerTraining: ML worker did not respond to trainHistorical within 30s'));
                 }
             }, 30000);
         });
     }
 
-    /** Post an init with a cached model and resolve on initComplete. */
+    /**
+     * Post an init with a cached model and resolve on initComplete. Same reject-on-timeout and
+     * reference-identity treatment as _runWorkerTraining, and for the same reasons — a hung
+     * worker must surface as a rebuild via _safeLoadModelState's catch, never as a fabricated
+     * "the cached model loaded fine" result.
+     */
     _runWorkerInit(modelState) {
-        return new Promise((resolve) => {
-            this._initCompleteCallback = (payload) => resolve(payload);
+        return new Promise((resolve, reject) => {
+            const cb = (payload) => {
+                clearTimeout(timer);
+                resolve(payload);
+            };
+            this._initCompleteCallback = cb;
             this.mlWorker.postMessage({ type: 'init', data: { savedModel: modelState } });
-            setTimeout(() => {
-                if (this._initCompleteCallback) {
+            const timer = setTimeout(() => {
+                if (this._initCompleteCallback === cb) {
                     this._initCompleteCallback = null;
-                    resolve({ stats: this.mlStats });
+                    reject(new Error('_runWorkerInit: ML worker did not respond to init within 10s'));
                 }
             }, 10000);
         });
@@ -8003,6 +8037,16 @@ class MediaViewer {
                 this.initializeFeaturePool();
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 await this.loadMlModel();
+            }
+            // initializeMlWorker()'s own catch sets isMlEnabled=false and leaves mlWorker null
+            // when Worker construction throws — the top-of-method guard already passed (ML was
+            // enabled when this call STARTED), so this is the only place that catches "became
+            // unavailable during lazy-init." Without this, ensureTrainedModel below would scan
+            // and feature-extract BOTH training folders in full before _runWorkerTraining threw
+            // on a null this.mlWorker.postMessage (review round 1, Minor).
+            if (!this.isMlEnabled || !this.mlWorker) {
+                this.showNotification('ML prediction is unavailable', 'warning');
+                return;
             }
             // AWAIT the model load. Fired un-awaited, extractClipEmbedding returns null for
             // every file processed before clipWorkerReady flips, so the training set collected
@@ -8468,6 +8512,15 @@ class MediaViewer {
         if (!this.enableClipFeatures) return;
         if (!window.electronAPI.loadClipModel) return;
 
+        // G1 task 6 review round 1 (Minor): this now runs before EVERY sort, not just the
+        // first (the CLIP-await hoist), and loadClipModel() resolves {success:true} immediately
+        // when the model is already loaded. Without this flag, a healthy multi-sort session
+        // would show "CLIP model loaded" on every single sort — and the sort-progress card is
+        // itself a `.notification` the 5-deep eviction cap can reclaim, so each redundant toast
+        // nudges the card closer to being evicted mid-sort. The failure/unavailable toasts below
+        // are left unconditional: those represent a NEW problem each time, not "still fine."
+        const alreadyReady = this.clipWorkerReady;
+
         // Listen for download progress (returns cleanup function)
         let removeProgressListener;
         if (window.electronAPI.onClipDownloadProgress) {
@@ -8487,7 +8540,9 @@ class MediaViewer {
             this.clipModelDownloading = false;
             if (result.success) {
                 this.clipWorkerReady = true;
-                this.showNotification('CLIP model loaded', 'success');
+                if (!alreadyReady) {
+                    this.showNotification('CLIP model loaded', 'success');
+                }
             } else {
                 this.clipWorkerReady = false;
                 console.error('CLIP model failed to load:', result.error);

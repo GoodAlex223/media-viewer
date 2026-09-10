@@ -1549,12 +1549,43 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ensureTrainedModel).toHaveBeenCalledTimes(1);
     });
 
+    it('bails after lazy-init if the ML worker never came up (G1 review round 1, Minor)', async () => {
+        // initializeMlWorker()'s own catch sets isMlEnabled=false and leaves mlWorker null when
+        // Worker construction throws — the top-of-method `!this.isMlEnabled` guard already
+        // passed (ML was enabled when this call STARTED), so only a re-check after lazy-init
+        // catches "became unavailable during THIS call." Without it, ensureTrainedModel would
+        // scan and feature-extract both training folders before _runWorkerTraining discovered
+        // there was no worker to post to.
+        const ensureTrainedModel = vi.fn();
+        const showNotification = vi.fn();
+        const ctx = makeCtx({
+            mlWorker: null, // forces entry into the lazy-init branch
+            initializeMlWorker: function () {
+                this.isMlEnabled = false;
+                this.mlWorker = null;
+            },
+            showNotification,
+            mlTraining: { ensureTrainedModel },
+        });
+
+        await handleSortByPrediction.call(ctx);
+
+        expect(ensureTrainedModel).not.toHaveBeenCalled();
+        expect(showNotification).toHaveBeenCalledWith(expect.stringContaining('unavailable'), 'warning');
+        expect(ctx.isSortedByPrediction).toBe(false);
+        expect(ctx.sortAbortController).toBeNull(); // finally still cleaned up
+        expect(ctx.isPredictionSorting).toBe(false);
+    });
+
     it('routes CLIP download progress into the sort card and clears the sink afterwards', async () => {
         const counted = [];
         const ctx = makeCtx({
             mlWorker: null,
             enableClipFeatures: true,
             clipProgressSink: null,
+            initializeMlWorker: function () {
+                this.mlWorker = {};
+            },
             updateSortProgress: function (p) {
                 this._phases.push(p.phase);
                 if (typeof p.current === 'number') counted.push(p);
@@ -1573,7 +1604,14 @@ describe('handleSortByPrediction lifecycle', () => {
 
     it('skips the CLIP wait entirely when CLIP features are disabled', async () => {
         const initClipModel = vi.fn(async () => {});
-        const ctx = makeCtx({ mlWorker: null, enableClipFeatures: false, initClipModel });
+        const ctx = makeCtx({
+            mlWorker: null,
+            enableClipFeatures: false,
+            initializeMlWorker: function () {
+                this.mlWorker = {};
+            },
+            initClipModel,
+        });
         await handleSortByPrediction.call(ctx);
         expect(initClipModel).not.toHaveBeenCalled();
         expect(ctx.isSortedByPrediction).toBe(true);
@@ -3097,7 +3135,15 @@ describe('_runWorkerTraining / _runWorkerInit (worker-promise helpers, G1)', () 
         await expect(promise).resolves.toEqual({ stats: { isReady: true }, modelState: { weights: [1] } });
     });
 
-    it('_runWorkerTraining falls back to the current stats/modelState after 30s with no reply', async () => {
+    // G1 task 6 review round 1, Important 2: a hung/crashed worker must surface as a FAILURE,
+    // never as a fabricated "trained successfully" result. Before this fix, the timeout resolved
+    // with {stats: this.mlStats, modelState: this.mlModelState} -- indistinguishable from a
+    // genuine trainComplete -- so ensureTrainedModel would cache whatever the worker's stats
+    // happened to be BEFORE this call, under the NEW fingerprint, recording a model as "trained
+    // on a set it never actually saw." Rejecting lets the existing call chain do the right thing:
+    // ensureTrainedModel has no try/catch around trainModel, so the rejection propagates to
+    // handleSortByPrediction's own catch, which reports it honestly and unwinds through finally.
+    it('_runWorkerTraining REJECTS (never resolves with a fabricated payload) after 30s with no reply', async () => {
         const ctx = {
             mlWorker: { postMessage: vi.fn() },
             mlStats: { isReady: false },
@@ -3105,8 +3151,52 @@ describe('_runWorkerTraining / _runWorkerInit (worker-promise helpers, G1)', () 
         };
         const promise = _runWorkerTraining.call(ctx, [], [], 1);
         vi.advanceTimersByTime(30000);
-        await expect(promise).resolves.toEqual({ stats: { isReady: false }, modelState: { weights: [0] } });
+        await expect(promise).rejects.toThrow(/did not respond to trainHistorical/);
         expect(ctx._trainingCompleteCallback).toBeNull();
+    });
+
+    // G1 task 6 review round 1, Important 1: match the pending callback by REFERENCE, not
+    // truthiness. Isolates the guard itself, independent of the "clear the timer on settle" fix
+    // below (which removes the timer entirely in the common case) -- if run A's OWN timer ever
+    // fires while a DIFFERENT callback occupies the field (however that came to be), a
+    // truthiness check ("is SOMETHING installed?") cannot tell that apart from "is MY OWN reply
+    // overdue?", and would null out and silently discard the other call's callback — which is
+    // exactly the A-strands-B sequence the finding describes (A's stale timer resolves A a
+    // second time and wipes out B's pending callback, so B's own genuine reply later finds
+    // nothing to settle and B hangs forever).
+    it("_runWorkerTraining: a stale timer cannot null out a DIFFERENT call's callback (reference identity, not truthiness)", () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        _runWorkerTraining.call(ctx, ['A'], [], 1);
+        // Stand in for "a later call has since installed its own callback" directly on ctx --
+        // isPredictionSorting's re-entrancy guard makes a SECOND real _runWorkerTraining call
+        // unreachable while this one is still pending, so this is the only way to construct the
+        // scenario at the unit level; the guard must hold regardless of how the field came to
+        // hold someone else's callback.
+        const cbB = vi.fn();
+        ctx._trainingCompleteCallback = cbB;
+
+        vi.advanceTimersByTime(30000); // run A's own timer fires
+
+        expect(ctx._trainingCompleteCallback).toBe(cbB); // untouched: not nulled, not replaced
+        expect(cbB).not.toHaveBeenCalled(); // and not invoked in A's place either
+    });
+
+    it('_runWorkerTraining clears its own timer once a reply arrives, so it cannot fire later at all', () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        _runWorkerTraining.call(ctx, [], [], 1);
+        const cb = ctx._trainingCompleteCallback;
+        ctx._trainingCompleteCallback = null; // mirrors handleMlWorkerMessage: null BEFORE invoking
+        cb({ stats: { isReady: true }, modelState: {} });
+
+        // If the original timer were still armed, installing a later callback and advancing
+        // past the original 30s mark would let it fire and clobber that callback too — the
+        // reference guard alone (previous test) is defense in depth, not a substitute for
+        // actually cancelling the timer.
+        const cbLater = vi.fn();
+        ctx._trainingCompleteCallback = cbLater;
+        vi.advanceTimersByTime(30000);
+        expect(ctx._trainingCompleteCallback).toBe(cbLater);
+        expect(cbLater).not.toHaveBeenCalled();
     });
 
     it('_runWorkerInit posts init with the given savedModel', () => {
@@ -3124,12 +3214,45 @@ describe('_runWorkerTraining / _runWorkerInit (worker-promise helpers, G1)', () 
         await expect(promise).resolves.toEqual({ stats: { isReady: true } });
     });
 
-    it('_runWorkerInit falls back to the current stats after 10s with no reply', async () => {
+    // Same reject-on-timeout treatment as _runWorkerTraining (Important 2): a hung worker must
+    // surface as a failure, never a fabricated "the cached model loaded fine" result.
+    // _safeLoadModelState's own catch already converts this rejection into "treat as a
+    // model-cache miss, rebuild" — see ml-training.js, untouched by this task.
+    it('_runWorkerInit REJECTS (never resolves with a fabricated payload) after 10s with no reply', async () => {
         const ctx = { mlWorker: { postMessage: vi.fn() }, mlStats: { isReady: false } };
         const promise = _runWorkerInit.call(ctx, { weights: [1] });
         vi.advanceTimersByTime(10000);
-        await expect(promise).resolves.toEqual({ stats: { isReady: false } });
+        await expect(promise).rejects.toThrow(/did not respond to init/);
         expect(ctx._initCompleteCallback).toBeNull();
+    });
+
+    // Same reference-identity guard as _runWorkerTraining (Important 1), and for the same
+    // reason: a stale timer must not be able to null out a callback that belongs to a
+    // differently-purposed later call.
+    it("_runWorkerInit: a stale timer cannot null out a DIFFERENT call's callback (reference identity, not truthiness)", () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        _runWorkerInit.call(ctx, { weights: [1] });
+        const cbB = vi.fn();
+        ctx._initCompleteCallback = cbB;
+
+        vi.advanceTimersByTime(10000);
+
+        expect(ctx._initCompleteCallback).toBe(cbB);
+        expect(cbB).not.toHaveBeenCalled();
+    });
+
+    it('_runWorkerInit clears its own timer once a reply arrives, so it cannot fire later at all', () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        _runWorkerInit.call(ctx, { weights: [1] });
+        const cb = ctx._initCompleteCallback;
+        ctx._initCompleteCallback = null;
+        cb({ stats: { isReady: true } });
+
+        const cbLater = vi.fn();
+        ctx._initCompleteCallback = cbLater;
+        vi.advanceTimersByTime(10000);
+        expect(ctx._initCompleteCallback).toBe(cbLater);
+        expect(cbLater).not.toHaveBeenCalled();
     });
 });
 
@@ -3265,6 +3388,44 @@ describe('initClipModel (progress sink)', () => {
 
         expect(ctx.clipWorkerReady).toBe(true);
         expect(ctx.showNotification).toHaveBeenCalledWith('Downloading CLIP model... 20%', 'info');
+    });
+
+    // G1 task 6 review round 1 (Minor): the CLIP-await hoist means this now runs before EVERY
+    // sort, not just the first. loadClipModel() resolves {success:true} immediately when already
+    // loaded, so without suppressing the toast a healthy multi-session would show "CLIP model
+    // loaded" on every single sort.
+    it('suppresses the "CLIP model loaded" toast when CLIP was already ready coming in', async () => {
+        globalThis.window = { electronAPI: { loadClipModel: vi.fn(async () => ({ success: true })) } };
+        const ctx = { enableClipFeatures: true, clipWorkerReady: true, showNotification: vi.fn() };
+
+        await initClipModel.call(ctx);
+
+        expect(ctx.clipWorkerReady).toBe(true);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('still shows the "CLIP model loaded" toast on a genuine first load', async () => {
+        globalThis.window = { electronAPI: { loadClipModel: vi.fn(async () => ({ success: true })) } };
+        const ctx = { enableClipFeatures: true, clipWorkerReady: false, showNotification: vi.fn() };
+
+        await initClipModel.call(ctx);
+
+        expect(ctx.showNotification).toHaveBeenCalledWith('CLIP model loaded', 'success');
+    });
+
+    it('still shows the unavailable toast on failure even when CLIP was previously ready (a regression, not "still fine")', async () => {
+        globalThis.window = {
+            electronAPI: { loadClipModel: vi.fn(async () => ({ success: false, error: 'boom' })) },
+        };
+        const ctx = { enableClipFeatures: true, clipWorkerReady: true, showNotification: vi.fn() };
+
+        await initClipModel.call(ctx);
+
+        expect(ctx.clipWorkerReady).toBe(false);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'CLIP model unavailable — using basic features only',
+            'warning'
+        );
     });
 });
 
@@ -5439,5 +5600,17 @@ describe('handleSortByPrediction delegates training to MlTrainingManager (G1)', 
 
     it('captures the worker-reported versions in initComplete', () => {
         expect(source).toContain('trainingConfigVersion');
+    });
+
+    // G1 task 6 review round 1 (Minor): the deleted trainFromHistoricalRatings/
+    // collectBulkRatedTrainingExamples describes carried `expect(updateProgressNotification)
+    // .not.toHaveBeenCalled()` on every loop, pinning the CLAUDE.md-documented invariant that
+    // anything reporting during a sort goes through updateSortProgress (the cancelable card),
+    // never the plain-text notification (which shares one DOM element and destroys the bar +
+    // Cancel button). That invariant now rests entirely on this one constructor wiring line —
+    // there is no other test that would fail if onProgress were pointed at
+    // updateProgressNotification (or dropped) instead.
+    it("wires the manager's onProgress to updateSortProgress, never the plain-text notification", () => {
+        expect(source).toContain('onProgress: (p) => this.updateSortProgress(p),');
     });
 });
