@@ -375,3 +375,46 @@ rewritten is not protected from eviction the way genuine LRU (which refreshes re
 hit) would protect it. Caught during the Task 10 fix round, not during implementation review;
 inconsequential at five slots for a single-user desktop app, but the wording
 asserted a mechanism the code does not have.
+
+**§ 9.1 — the prescribed isolation test is satisfiable by a mock, and that is why the
+isolation rule shipped violated.** § 9.1 asks for "**Isolation**: after a training run, no
+training-folder path appears in `featureCache`, `clipCache` or `featureMetadata`." As written that
+is a property of the MANAGER ALONE, and `tests/ml-training.test.js` implemented it faithfully
+against a `vi.fn()` `computeFeatures` — which made it structurally incapable of failing, because
+the whole violation lives in the HOST collaborator the mock replaced. `media-viewer.js`'s real
+`computeFeatures` does `this.featureCache.set(filePath, features)` unconditionally, so every
+like/dislike-folder file the manager extracted was written into the source folder's map on every
+rebuild, with a green suite throughout. Ruled at the final whole-branch review: an isolation
+property is a property of a COMPOSITION, so a spec that prescribes one must name the real
+collaborator the test has to bind (here, `computeFeatures` via this repo's
+`extractMethod`/`extractAsyncMethod` harness) — otherwise the prescription is satisfied and the
+property is not. Fixed by a `useHostCache` option on `computeFeatures`, passed `false` from the
+manager's injected callback, with the test re-pointed at the real method and mutation-verified.
+
+**§ 5.3 — control 1 ("Structural") overstates what the code enforces.** The text reads
+"training reads the descriptor, not ambient state, so an input absent from the descriptor cannot
+influence the model at all." Measured: training reads the descriptor for its *fingerprint*, but the
+vectors it trains on are produced by host callbacks that consult ambient state the descriptor never
+covers. Two instances were live at the final review — `computeFeatures`'s host-cache
+short-circuit (above), which could hand back a pre-modification vector for a file the manager's own
+`size`/`mtime` check had just rejected as stale; and face detection, which `computeFeatures` runs
+whenever `window.FaceDetector && this.enableFaceDetection !== false` while `enableFaceDetection` is
+**never assigned anywhere**, so the gate is really "has face-api finished loading yet" and a vector
+extracted before it loads differs from one extracted after, with both caching identically. The
+first is fixed; the second is filed in BACKLOG. Control 1 is therefore a design intent that
+individual call paths can violate, not a structural guarantee — controls 2–4 (tested,
+diagnosable, escapable) are what actually hold, which is the argument for keeping the "Rebuild
+model" escape hatch prominent.
+
+**§ 7.2 — the corrected "vectors stay in memory" note has a performance consequence that
+was never carried anywhere.** The correction above (the `entries` Map being local to a single
+`_collectFolderVectors` call) is accurate, but it was recorded only as an erratum about a failed
+write. The general form is bigger: `MlTrainingManager` keeps **no** vectors across calls at all, so
+every rebuild re-streams both training folders' `.feature_cache.json` in full — and in the
+rate→sort workflow every sort *is* a rebuild, because rating a file moves it into a training
+folder and changes the descriptor. CLAUDE.md documents a comparable load as ~40 s for a 24k-entry
+cache. Nothing in § 8's progress phases covered it either, so the card sat on 'Checking training
+set…' for the whole stretch. The final review fixed the reporting half only — the vector load
+now reports `'Loading cached likes'` / `'Loading cached dislikes'`, determinate against the on-disk
+count — and filed cross-call vector retention to BACKLOG, deliberately unimplemented until it is
+measured against real folder sizes.
