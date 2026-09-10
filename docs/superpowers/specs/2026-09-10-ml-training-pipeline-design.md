@@ -141,7 +141,9 @@ The fingerprint is computed from a single declared `TrainingSetDescriptor`. Noth
 | 2 | Dislike folder path + per-file `(name, size, mtime)` | The training set itself |
 | 3 | Bulk-rated examples actually used: `(name, bucket, size, mtime)` for entries present in the current source folder | `collectBulkRatedTrainingExamples` filters to files still in `mediaFiles`; only those enter training |
 | 4 | `enableClipFeatures` | With CLIP off, vectors are 576-dim with a zero top half — a different model |
-| 5 | `ML_MODEL_VERSION` (`ml-model.js:5`), `FEATURE_CACHE_VERSION` (`media-viewer.js:7090`), `TRAINING_CONFIG_VERSION` | Model shape, vector shape, and hyperparameters/epoch schedule respectively. `TRAINING_CONFIG_VERSION` is **new**: declare it in `ml-model.js` beside `ML_MODEL_VERSION`, export it on the same object, and bump it whenever the learning rate, regularisation, epoch schedule or class-weight rule changes. |
+| 5 | `ML_MODEL_VERSION` (`ml-model.js:5`), `FEATURE_CACHE_VERSION` (`media-viewer.js:7090`), `FEATURE_VERSION` (`feature-extractor.js:5`), `TRAINING_CONFIG_VERSION` | Model shape, cache format, extractor semantics, and hyperparameters/epoch schedule respectively. `TRAINING_CONFIG_VERSION` is **new**: declare it in `ml-model.js` beside `ML_MODEL_VERSION`, export it on the same object, and bump it whenever the learning rate, regularisation, epoch schedule or class-weight rule changes. |
+
+**`FEATURE_VERSION` is listed separately on purpose.** The comment at `media-viewer.js:7089` asserts that `FEATURE_CACHE_VERSION` "must match `FEATURE_VERSION` in feature-extractor.js" — measured 2026-09-10, they are **4 and 2**. The documented invariant is false, so `FEATURE_CACHE_VERSION` cannot be trusted to move when the 64-dim extractor's semantics change; a changed extractor would otherwise leave both the cached vectors and the cached model valid-looking and silently stale. Fingerprinting both constants directly is the control; reconciling the two constants (or deleting the false comment) is filed separately and is **not** a prerequisite for this work.
 
 ### 5.2 Storage
 
