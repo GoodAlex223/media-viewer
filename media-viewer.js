@@ -2057,6 +2057,23 @@ class MediaViewer {
             });
         }
 
+        // Escape hatch for the fingerprint-keyed model cache (Task 9). If a training-set
+        // descriptor ever misses an input, this is the only way a user can force a rebuild short
+        // of touching a training folder — so it exists on purpose, not as a convenience.
+        // invalidateModelCache() clears both mlTraining's in-memory sessionFingerprint and the
+        // on-disk model-cache store, so the very next ensureTrainedModel() call cannot hit
+        // session or model-cache and must retrain. resetMlModel() mirrors the CLIP-toggle
+        // handler above: it also clears predictionScores, so stale badges from the discarded
+        // model don't linger until the next sort recomputes them.
+        const rebuildModelBtn = document.getElementById('rebuildModelBtn');
+        if (rebuildModelBtn) {
+            rebuildModelBtn.addEventListener('click', async () => {
+                await this.mlTraining.invalidateModelCache();
+                this.resetMlModel();
+                this.showNotification('Prediction model cleared — it will rebuild on the next AI sort.', 'info');
+            });
+        }
+
         // Folder settings
         this.setupFolderSettings();
 
