@@ -837,7 +837,14 @@ describe('_collectFolderVectors (direct)', () => {
             { name: 'b.png', path: '/l/b.png', size: 2, mtimeMs: 2 },
             { name: 'c.png', path: '/l/c.png', size: 3, mtimeMs: 3 },
         ];
-        await m._collectFolderVectors('/l', files, 'Processing likes', true, undefined);
+        // Full 6-arg shape. `loadPhase` was inserted BETWEEN `phase` and `enableClipFeatures`
+        // when the vector-load progress phase landed, and this call was not updated with it --
+        // it bound `loadPhase = true` and `enableClipFeatures = undefined`, and stayed green only
+        // because makeCacheIo()'s default reports count:0 (so the load reporter is never built)
+        // and this scenario has no cache hits (so the `needsClip` branch it silently disabled was
+        // unreachable here anyway). The toEqual below doubles as the control for that first half:
+        // with a real label passed, an unguarded load-phase emission would break it.
+        await m._collectFolderVectors('/l', files, 'Processing likes', 'Loading cached likes', true, undefined);
         expect(m.onProgress.mock.calls.map(([a]) => a)).toEqual([
             { phase: 'Processing likes', current: 1, total: 3 },
             { phase: 'Processing likes', current: 2, total: 3 },

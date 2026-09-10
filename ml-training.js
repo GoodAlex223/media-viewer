@@ -658,9 +658,16 @@ export class MlTrainingManager {
         // this order, so the fingerprint-derived seed only makes training reproducible if the row
         // order is reproducible too -- otherwise two runs over a byte-identical training set can
         // produce different weights, and § 5.4's "a cache hit is verifiable" claim (the cached
-        // model is the model a rebuild would produce) does not hold. `main.js`'s load-folder now
-        // sorts as well; this sorts again rather than trusting it, because the property belongs to
-        // training and must not depend on an IPC contract that has no reason to guarantee it.
+        // model is the model a rebuild would produce) does not hold.
+        //
+        // This is the ONLY place the order is normalised, deliberately. `main.js`'s load-folder
+        // returns raw `fs.readdir` order and keeps doing so: on NTFS that is case-INSENSITIVE
+        // alphabetical (measured: apple, banana, img_1, IMG_2, Photo1, Zebra), and imposing this
+        // code-unit comparator there would reorder the app's user-visible browse order for any
+        // mixed-case library (IMG_2, Photo1, Zebra, apple, banana, img_1) for a reason that has
+        // nothing to do with browsing. Sorting here instead keeps the determinism guarantee where
+        // it is actually needed, unit-tested, and independent of an IPC contract that has no
+        // reason to promise an order at all.
         const likeFiles = (likedResult?.success ? likedResult.files : []).slice().sort(byFileName);
         const dislikeFiles = (dislikedResult?.success ? dislikedResult.files : []).slice().sort(byFileName);
         if (likeFiles.length === 0 && dislikeFiles.length === 0) return miss;
