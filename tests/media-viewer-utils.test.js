@@ -1146,6 +1146,67 @@ describe('sortComplete stale-guard + runMlSort resolution', () => {
     });
 });
 
+describe('initComplete / trainComplete — version capture + worker-promise callbacks (G1)', () => {
+    const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+
+    it('captures mlModelVersion/featureDim/trainingConfigVersion from initComplete', () => {
+        const ctx = { mediaFiles: [], updateSortPredictionButton: () => {} };
+        handleMlWorkerMessage.call(ctx, {
+            type: 'initComplete',
+            stats: { isReady: false },
+            modelVersion: 3,
+            featureDim: 576,
+            trainingConfigVersion: 1,
+        });
+        expect(ctx._mlWorkerVersions).toEqual({ mlModelVersion: 3, featureDim: 576, trainingConfigVersion: 1 });
+    });
+
+    it('defaults each captured version to 0 when the worker omits it', () => {
+        const ctx = { mediaFiles: [], updateSortPredictionButton: () => {} };
+        handleMlWorkerMessage.call(ctx, { type: 'initComplete', stats: { isReady: false } });
+        expect(ctx._mlWorkerVersions).toEqual({ mlModelVersion: 0, featureDim: 0, trainingConfigVersion: 0 });
+    });
+
+    it('settles a pending _runWorkerInit callback with {stats} and clears it', () => {
+        let resolved = null;
+        const ctx = {
+            mediaFiles: [],
+            updateSortPredictionButton: () => {},
+            _initCompleteCallback: (payload) => (resolved = payload),
+        };
+        handleMlWorkerMessage.call(ctx, { type: 'initComplete', stats: { isReady: true, positiveCount: 3 } });
+        expect(resolved).toEqual({ stats: { isReady: true, positiveCount: 3 } });
+        expect(ctx._initCompleteCallback).toBeNull();
+    });
+
+    it('does not throw when no _initCompleteCallback is pending', () => {
+        const ctx = { mediaFiles: [], updateSortPredictionButton: () => {} };
+        expect(() =>
+            handleMlWorkerMessage.call(ctx, { type: 'initComplete', stats: { isReady: false } })
+        ).not.toThrow();
+    });
+
+    it('settles a pending _runWorkerTraining callback with {stats, modelState} and clears it', () => {
+        let resolved = null;
+        const ctx = {
+            saveMlModel: () => {},
+            requestPredictionScores: () => {},
+            _trainingCompleteCallback: (payload) => (resolved = payload),
+        };
+        const stats = { isReady: true, totalSamples: 0, positiveCount: 0, negativeCount: 0 };
+        const modelState = { weights: [1] };
+        handleMlWorkerMessage.call(ctx, { type: 'trainComplete', stats, modelState });
+        expect(resolved).toEqual({ stats, modelState });
+        expect(ctx._trainingCompleteCallback).toBeNull();
+    });
+
+    it('does not throw when no _trainingCompleteCallback is pending', () => {
+        const ctx = { saveMlModel: () => {}, requestPredictionScores: () => {} };
+        const stats = { isReady: false, totalSamples: 0 };
+        expect(() => handleMlWorkerMessage.call(ctx, { type: 'trainComplete', stats, modelState: {} })).not.toThrow();
+    });
+});
+
 describe('runMlSort', () => {
     const runMlSort = extractMethod('runMlSort');
 
@@ -1252,7 +1313,11 @@ describe('handleSortByPrediction lifecycle', () => {
             startBackgroundFeatureExtraction: () => Promise.resolve(),
             cancelBackgroundExtraction: () => {},
             getCombinedFeatures: (_p) => new Float32Array(576),
-            trainFromHistoricalRatingsAndWait: () => Promise.resolve(),
+            mlTraining: {
+                ensureTrainedModel: () =>
+                    Promise.resolve({ source: 'trained', stats: { isReady: true }, fingerprint: 'fp', descriptor: {} }),
+            },
+            showMlLearningIndicator: () => {},
             loadMlModel: () => Promise.resolve(),
             initializeMlWorker: () => {},
             initializeFeaturePool: () => {},
@@ -1278,6 +1343,10 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['b.png', 'a.png']);
         expect(ctx.sortAbortController).toBeNull(); // finally cleaned up
         expect(ctx.isPredictionSorting).toBe(false);
+        // ensureTrainedModel itself never tears the card down (it has no clearProgressNotification
+        // dependency at all) — handleSortByPrediction's finally is the single owner, on the
+        // success path too, not just on cancel.
+        expect(ctx.clearProgressNotification).toHaveBeenCalled();
     });
 
     it('bails unsorted when aborted during the load phase', async () => {
@@ -1316,10 +1385,14 @@ describe('handleSortByPrediction lifecycle', () => {
             // training-phase guard.
             featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
             loadFeatureCache: () => Promise.resolve(), // resolves without populating the cache
-            trainFromHistoricalRatingsAndWait: function () {
-                this.sortAbortController.abort(); // user cancels mid-training
-                this.mlStats = { isReady: true }; // training would have made the model ready
-                return Promise.resolve();
+            mlTraining: {
+                ensureTrainedModel: () => {
+                    ctx.sortAbortController.abort(); // user cancels mid-training
+                    // Mirrors ensureTrainedModel's own real behavior: every abort check inside
+                    // it returns the {source:'skipped', stats:null} miss shape, never a trained
+                    // result — an aborted call cannot also report a usable model.
+                    return Promise.resolve({ source: 'skipped', stats: null, fingerprint: null, descriptor: null });
+                },
             },
             startBackgroundFeatureExtraction,
             runMlSort,
@@ -1330,7 +1403,7 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(ctx.sortAbortController).toBeNull();
         expect(ctx.isPredictionSorting).toBe(false);
-        // trainFromHistoricalRatings deliberately clears nothing on any path; this finally is
+        // ensureTrainedModel deliberately clears nothing on any path; this finally is
         // the single owner of card teardown, so the cancel path must be covered HERE or a
         // cancelled sort leaves its card on screen forever.
         expect(ctx.clearProgressNotification).toHaveBeenCalled();
@@ -1405,10 +1478,10 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx._phases.length).toBe(0); // returned immediately
     });
 
-    it('waits for the CLIP model before training on historical ratings', async () => {
-        // The un-awaited initClipModel() left clipWorkerReady false for the head of the
-        // training loop, where extractClipEmbedding returns null — so those files trained the
-        // model on 576-dim vectors whose CLIP half (dims 64..576) was all zeros, silently.
+    it('waits for the CLIP model before calling ensureTrainedModel', async () => {
+        // The un-awaited initClipModel() left clipWorkerReady false for extractClipEmbedding
+        // calls made while ensureTrainedModel collects the training set — those files would
+        // silently get a 576-dim vector whose CLIP half (dims 64..576) was all zeros.
         const order = [];
         const ctx = makeCtx({
             mlWorker: null, // forces the lazy-init branch
@@ -1421,16 +1494,18 @@ describe('handleSortByPrediction lifecycle', () => {
                 order.push('clip:start');
                 // Must outlast the lazy-init block's own 100ms settle sleep. Both timers are
                 // registered before either fires and setTimeout preserves delay order, so this
-                // is deterministic, not a race: with the call left un-awaited, `train` is
+                // is deterministic, not a race: with the call left un-awaited, `train` would be
                 // reached on the 100ms timer while this one is still pending.
                 await new Promise((r) => setTimeout(r, 400));
                 this.clipWorkerReady = true;
                 order.push('clip:done');
             },
-            trainFromHistoricalRatingsAndWait: function () {
-                order.push(`train(clipReady=${this.clipWorkerReady === true})`);
-                this.mlStats = { isReady: true };
-                return Promise.resolve();
+            mlTraining: {
+                ensureTrainedModel: () => {
+                    order.push(`train(clipReady=${ctx.clipWorkerReady === true})`);
+                    ctx.mlStats = { isReady: true };
+                    return Promise.resolve({ source: 'trained', stats: ctx.mlStats });
+                },
             },
         });
 
@@ -1438,6 +1513,40 @@ describe('handleSortByPrediction lifecycle', () => {
 
         expect(order).toEqual(['clip:start', 'clip:done', 'train(clipReady=true)']);
         expect(ctx._phases).toContain('Loading CLIP model…');
+    });
+
+    it('awaits the CLIP model on a second sort too, not just the first lazy-init (G1 — load-bearing)', async () => {
+        // initClipModel() used to sit INSIDE the lazy-init `if`, so a repeat sort within the
+        // same session (mlWorker/featureWorkers already set) skipped the await entirely.
+        // clipUnloadTimer nulls the CLIP model after 30s idle, so a second sort could reach
+        // ensureTrainedModel (which now runs on EVERY sort) with clipWorkerReady already flipped
+        // back to false — silently degrading the training set. Hoisting the await out of the
+        // lazy-init `if` is what this test pins down.
+        const order = [];
+        const ensureTrainedModel = vi.fn(() => {
+            order.push(`train(clipReady=${ctx.clipWorkerReady === true})`);
+            return Promise.resolve({ source: 'trained', stats: { isReady: true } });
+        });
+        const ctx = makeCtx({
+            mlWorker: {}, // already initialized — the lazy-init `if` must be skipped entirely
+            featureWorkers: [{}],
+            enableClipFeatures: true,
+            clipWorkerReady: false, // e.g. clipUnloadTimer nulled it after the prior sort's idle window
+            initializeMlWorker: () => {
+                throw new Error('must not re-run lazy init on an already-warm session');
+            },
+            initClipModel: async function () {
+                order.push('clip:start');
+                this.clipWorkerReady = true;
+                order.push('clip:done');
+            },
+            mlTraining: { ensureTrainedModel },
+        });
+
+        await handleSortByPrediction.call(ctx);
+
+        expect(order).toEqual(['clip:start', 'clip:done', 'train(clipReady=true)']);
+        expect(ensureTrainedModel).toHaveBeenCalledTimes(1);
     });
 
     it('routes CLIP download progress into the sort card and clears the sink afterwards', async () => {
@@ -1479,6 +1588,38 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.sortAbortController).toBeNull(); // never created — similarity sort's is untouched
         expect(ctx.isPredictionSorting).toBe(false);
         expect(ctx.isSortedByPrediction).toBe(false); // sort never applied
+    });
+
+    it('reports the training source to showMlLearningIndicator after ensureTrainedModel resolves', async () => {
+        const showMlLearningIndicator = vi.fn();
+        const stats = { isReady: true, positiveCount: 5, negativeCount: 5 };
+        const ctx = makeCtx({
+            showMlLearningIndicator,
+            mlTraining: {
+                ensureTrainedModel: () =>
+                    Promise.resolve({ source: 'model-cache', stats, fingerprint: 'fp', descriptor: {} }),
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(showMlLearningIndicator).toHaveBeenCalledWith(stats, 'model-cache');
+    });
+
+    it('does not show the learning indicator, and stops the sort, when ensureTrainedModel is skipped', async () => {
+        const showMlLearningIndicator = vi.fn();
+        const showNotification = vi.fn();
+        const ctx = makeCtx({
+            mlStats: { isReady: false, positiveCount: 0, negativeCount: 0 },
+            showMlLearningIndicator,
+            showNotification,
+            mlTraining: {
+                ensureTrainedModel: () =>
+                    Promise.resolve({ source: 'skipped', stats: null, fingerprint: null, descriptor: null }),
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(showMlLearningIndicator).not.toHaveBeenCalled();
+        expect(ctx.isSortedByPrediction).toBe(false);
+        expect(showNotification).toHaveBeenCalledWith(expect.stringContaining('Need more ratings'), 'warning');
     });
 });
 
@@ -2912,237 +3053,149 @@ describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
     });
 });
 
-describe('collectBulkRatedTrainingExamples', () => {
-    const collect = extractAsyncMethod('collectBulkRatedTrainingExamples');
+// G1: collectBulkRatedTrainingExamples, trainFromHistoricalRatings and
+// trainFromHistoricalRatingsAndWait are gone — ownership moved to MlTrainingManager
+// (ml-training.js). Their properties either moved with them (see tests/ml-training.test.js:
+// `_collectBulkRatedVectors (direct)` for the bucket-split/full-miss/progress properties,
+// `_collectFolderVectors (direct)` for the per-file likes/dislikes progress sequence, and
+// `ensureTrainedModel` for the pre-abort bail and the "Checking training set…" indeterminate
+// phase) or are now trivially true by construction and covered here instead: the manager has
+// no `clearProgressNotification` dependency at all, so it structurally cannot tear the card
+// down on any path — `handleSortByPrediction`'s `finally` owning teardown on both the success
+// and cancel paths is asserted directly in the `handleSortByPrediction lifecycle` tests above.
+// The one property with no surviving analog is the old "advances the count for a bulk-rated
+// name whose file has left the folder" test: `_resolveBulkRatedFiles` now filters gone files
+// out BEFORE the progress-reporting loop even starts, so `total` never counts them and the
+// stall-short-of-100% risk that test guarded against cannot occur in the new architecture.
 
-    it('splits cached combined features into liked/disliked by bucket', async () => {
-        const ctx = {
-            bulkRated: new Map([
-                ['a.jpg', 'good'],
-                ['b.jpg', 'bad'],
-            ]),
-            mediaFiles: [
-                { name: 'a.jpg', path: '/f/a.jpg' },
-                { name: 'b.jpg', path: '/f/b.jpg' },
-            ],
-            getCombinedFeatures: (p) => (p === '/f/a.jpg' ? [1, 1] : [2, 2]),
-            updateSortProgress: () => {},
-        };
-        const result = await collect.call(ctx);
-        expect(result.liked).toEqual([[1, 1]]);
-        expect(result.disliked).toEqual([[2, 2]]);
-    });
-
-    it('skips bulk-rated names no longer present in mediaFiles', async () => {
-        const ctx = {
-            bulkRated: new Map([['gone.jpg', 'good']]),
-            mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
-            getCombinedFeatures: () => [9, 9],
-            updateSortProgress: () => {},
-        };
-        const result = await collect.call(ctx);
-        expect(result.liked).toEqual([]);
-        expect(result.disliked).toEqual([]);
-    });
-
-    it('computes 576-dim features when the cache misses', async () => {
-        const ctx = {
-            bulkRated: new Map([['a.jpg', 'good']]),
-            mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
-            getCombinedFeatures: () => null,
-            computeFeatures: async () => new Float32Array(64).fill(0.5),
-            extractClipEmbedding: async () => new Float32Array(512).fill(0.1),
-            updateSortProgress: () => {},
-        };
-        const result = await collect.call(ctx);
-        expect(result.liked).toHaveLength(1);
-        expect(result.liked[0]).toHaveLength(576);
-        expect(result.disliked).toEqual([]);
-    });
-
-    it('reports corrective ratings through the sort card so the phase is not silent', async () => {
-        const ctx = {
-            bulkRated: new Map([
-                ['a.jpg', 'good'],
-                ['b.jpg', 'bad'],
-            ]),
-            mediaFiles: [
-                { name: 'a.jpg', path: '/f/a.jpg' },
-                { name: 'b.jpg', path: '/f/b.jpg' },
-            ],
-            getCombinedFeatures: () => [1, 1],
-            updateSortProgress: vi.fn(),
-        };
-
-        await collect.call(ctx);
-
-        expect(ctx.updateSortProgress.mock.calls.map(([a]) => a)).toEqual([
-            { phase: 'Processing corrective ratings', current: 1, total: 2 },
-            { phase: 'Processing corrective ratings', current: 2, total: 2 },
-        ]);
-    });
-
-    it('advances the count for bulk-rated names whose file has left the folder', async () => {
-        // Reported before the `continue`, or the bar stalls short of 100% on a folder where
-        // some rated files have since been moved out.
-        const ctx = {
-            bulkRated: new Map([
-                ['gone.jpg', 'good'],
-                ['a.jpg', 'good'],
-            ]),
-            mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
-            getCombinedFeatures: () => [1, 1],
-            updateSortProgress: vi.fn(),
-        };
-
-        await collect.call(ctx);
-
-        expect(ctx.updateSortProgress.mock.calls.at(-1)[0]).toEqual({
-            phase: 'Processing corrective ratings',
-            current: 2,
-            total: 2,
-        });
-    });
-});
-
-describe('trainFromHistoricalRatings (signal-aware bail)', () => {
-    const trainFromHistoricalRatings = extractAsyncMethod('trainFromHistoricalRatings');
-    let origWindow;
+describe('_runWorkerTraining / _runWorkerInit (worker-promise helpers, G1)', () => {
+    const _runWorkerTraining = extractMethod('_runWorkerTraining');
+    const _runWorkerInit = extractMethod('_runWorkerInit');
 
     beforeEach(() => {
-        origWindow = globalThis.window;
-        globalThis.window = {
-            electronAPI: {
-                loadFolder: vi.fn(async () => ({ success: true, files: [] })),
-            },
-        };
+        vi.useFakeTimers();
     });
     afterEach(() => {
-        globalThis.window = origWindow;
+        vi.useRealTimers();
     });
 
-    it('bails before loading historical folders when the signal is already aborted', async () => {
-        const controller = new AbortController();
-        controller.abort();
+    it('_runWorkerTraining posts trainHistorical with the given features and seed', () => {
+        const postMessage = vi.fn();
+        const ctx = { mlWorker: { postMessage } };
+        _runWorkerTraining.call(ctx, ['liked'], ['disliked'], 42);
+        expect(postMessage).toHaveBeenCalledWith({
+            type: 'trainHistorical',
+            data: { likedFeatures: ['liked'], dislikedFeatures: ['disliked'], seed: 42 },
+        });
+    });
+
+    it('_runWorkerTraining resolves with the trainComplete payload when the worker replies', async () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        const promise = _runWorkerTraining.call(ctx, [], [], 1);
+        expect(typeof ctx._trainingCompleteCallback).toBe('function');
+        ctx._trainingCompleteCallback({ stats: { isReady: true }, modelState: { weights: [1] } });
+        await expect(promise).resolves.toEqual({ stats: { isReady: true }, modelState: { weights: [1] } });
+    });
+
+    it('_runWorkerTraining falls back to the current stats/modelState after 30s with no reply', async () => {
         const ctx = {
-            isMlEnabled: true,
             mlWorker: { postMessage: vi.fn() },
-            customLikeFolder: '/liked',
-            customDislikeFolder: '/disliked',
-            updateProgressNotification: vi.fn(),
-            clearProgressNotification: vi.fn(),
+            mlStats: { isReady: false },
+            mlModelState: { weights: [0] },
         };
-        await trainFromHistoricalRatings.call(ctx, controller.signal);
-        // Not just "returns early" in the abstract — proves the expensive per-file work (which
-        // starts with loading the like/dislike folders) never starts, and no partial-training
-        // message reaches the ML worker.
-        expect(globalThis.window.electronAPI.loadFolder).not.toHaveBeenCalled();
-        expect(ctx.mlWorker.postMessage).not.toHaveBeenCalled();
+        const promise = _runWorkerTraining.call(ctx, [], [], 1);
+        vi.advanceTimersByTime(30000);
+        await expect(promise).resolves.toEqual({ stats: { isReady: false }, modelState: { weights: [0] } });
+        expect(ctx._trainingCompleteCallback).toBeNull();
+    });
+
+    it('_runWorkerInit posts init with the given savedModel', () => {
+        const postMessage = vi.fn();
+        const ctx = { mlWorker: { postMessage } };
+        _runWorkerInit.call(ctx, { weights: [1] });
+        expect(postMessage).toHaveBeenCalledWith({ type: 'init', data: { savedModel: { weights: [1] } } });
+    });
+
+    it('_runWorkerInit resolves with the initComplete payload when the worker replies', async () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        const promise = _runWorkerInit.call(ctx, { weights: [1] });
+        expect(typeof ctx._initCompleteCallback).toBe('function');
+        ctx._initCompleteCallback({ stats: { isReady: true } });
+        await expect(promise).resolves.toEqual({ stats: { isReady: true } });
+    });
+
+    it('_runWorkerInit falls back to the current stats after 10s with no reply', async () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() }, mlStats: { isReady: false } };
+        const promise = _runWorkerInit.call(ctx, { weights: [1] });
+        vi.advanceTimersByTime(10000);
+        await expect(promise).resolves.toEqual({ stats: { isReady: false } });
+        expect(ctx._initCompleteCallback).toBeNull();
     });
 });
 
-// G5 item 1: the historical-ratings phase is the LONGEST phase of an AI sort, and it was the
-// one phase that lost the Cancel button — updateProgressNotification() rebuilds the shared
-// element into its plain-text form, destroying the sort card's bar and Cancel button. These
-// tests pin the card form (updateSortProgress) and per-file reporting for every loop in the
-// phase; asserting "updateProgressNotification was never called" is what makes them fail if
-// any single loop is left on the old call.
-describe('trainFromHistoricalRatings (progress reporting)', () => {
-    const trainFromHistoricalRatings = extractAsyncMethod('trainFromHistoricalRatings');
-    let origWindow;
+describe('initializeFeaturePool version probe (G1)', () => {
+    const initializeFeaturePool = extractMethod('initializeFeaturePool');
+    let OrigWorker;
 
-    const filesNamed = (...names) => names.map((n) => ({ name: n, path: `/h/${n}` }));
+    class FakeWorker {
+        constructor() {
+            this.listeners = [];
+        }
+        addEventListener(type, cb) {
+            this.listeners.push([type, cb]);
+        }
+        removeEventListener(type, cb) {
+            this.listeners = this.listeners.filter(([t, c]) => !(t === type && c === cb));
+        }
+        postMessage(msg) {
+            this.lastMessage = msg;
+        }
+    }
 
-    function makeTrainCtx({ liked = [], disliked = [] } = {}) {
-        globalThis.window = {
-            electronAPI: {
-                loadFolder: vi.fn(async (folder) => ({
-                    success: true,
-                    files: folder === '/liked' ? liked : disliked,
-                })),
-            },
-        };
+    function emit(worker, data) {
+        for (const [type, cb] of worker.listeners.slice()) {
+            if (type === 'message') cb({ data });
+        }
+    }
+
+    function makeCtx() {
         return {
-            isMlEnabled: true,
-            mlWorker: { postMessage: vi.fn() },
-            customLikeFolder: '/liked',
-            customDislikeFolder: '/disliked',
-            updateProgressNotification: vi.fn(),
-            updateSortProgress: vi.fn(),
-            clearProgressNotification: vi.fn(),
-            computeFeatures: vi.fn(async () => new Float32Array(64)),
-            extractClipEmbedding: vi.fn(async () => new Float32Array(512)),
-            collectBulkRatedTrainingExamples: vi.fn(async () => ({ liked: [], disliked: [] })),
+            featureWorkerCount: 1,
+            featureWorkers: [],
+            _featureExtractorVersion: 0,
+            shutdownFeaturePool: () => {},
+            startFeatureCacheAutoSave: () => {},
+            handleFeatureWorkerMessage: () => {},
+            handleFeatureWorkerError: () => {},
         };
     }
 
-    const countedCalls = (spy, phase) =>
-        spy.mock.calls.map(([arg]) => arg).filter((a) => a.phase === phase && typeof a.current === 'number');
-
     beforeEach(() => {
-        origWindow = globalThis.window;
+        OrigWorker = globalThis.Worker;
+        globalThis.Worker = FakeWorker;
     });
     afterEach(() => {
-        globalThis.window = origWindow;
+        globalThis.Worker = OrigWorker;
     });
 
-    it('reports every liked file through the cancelable sort card, starting at file 1', async () => {
-        const ctx = makeTrainCtx({ liked: filesNamed('a.png', 'b.png', 'c.png') });
+    it('posts getVersion to the first worker and captures FEATURE_VERSION from its reply', () => {
+        const ctx = makeCtx();
+        initializeFeaturePool.call(ctx);
 
-        await trainFromHistoricalRatings.call(ctx, undefined);
-
-        // The old code reported only every 10th file, so 3 files produced ZERO updates.
-        expect(countedCalls(ctx.updateSortProgress, 'Processing likes')).toEqual([
-            { phase: 'Processing likes', current: 1, total: 3 },
-            { phase: 'Processing likes', current: 2, total: 3 },
-            { phase: 'Processing likes', current: 3, total: 3 },
-        ]);
-        expect(ctx.updateProgressNotification).not.toHaveBeenCalled();
+        expect(ctx.featureWorkers[0].lastMessage).toEqual({ type: 'getVersion', data: {} });
+        emit(ctx.featureWorkers[0], { type: 'version', version: 2, dim: 64 });
+        expect(ctx._featureExtractorVersion).toBe(2);
+        // One-shot: the probe's own listener is removed once it has its answer.
+        expect(ctx.featureWorkers[0].listeners).toHaveLength(0);
     });
 
-    it('reports every disliked file through the cancelable sort card, starting at file 1', async () => {
-        const ctx = makeTrainCtx({ disliked: filesNamed('x.png', 'y.png') });
+    it('ignores an unrelated message type without touching _featureExtractorVersion', () => {
+        const ctx = makeCtx();
+        initializeFeaturePool.call(ctx);
 
-        await trainFromHistoricalRatings.call(ctx, undefined);
-
-        expect(countedCalls(ctx.updateSortProgress, 'Processing dislikes')).toEqual([
-            { phase: 'Processing dislikes', current: 1, total: 2 },
-            { phase: 'Processing dislikes', current: 2, total: 2 },
-        ]);
-        expect(ctx.updateProgressNotification).not.toHaveBeenCalled();
-    });
-
-    it('announces the folder-load wait as an indeterminate card phase, not plain text', async () => {
-        const ctx = makeTrainCtx({ liked: filesNamed('a.png') });
-
-        await trainFromHistoricalRatings.call(ctx, undefined);
-
-        // No current/total => the card's existing `indeterminate` mode (animated bar + Cancel).
-        const phases = ctx.updateSortProgress.mock.calls.map(([a]) => a);
-        expect(phases).toContainEqual({ phase: 'Loading historical ratings…' });
-    });
-
-    it('never tears the card down itself on the success path — the caller owns teardown', async () => {
-        const ctx = makeTrainCtx({ liked: filesNamed('a.png') });
-
-        await trainFromHistoricalRatings.call(ctx, undefined);
-
-        expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
-        expect(ctx.mlWorker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'trainHistorical' }));
-    });
-
-    it('leaves teardown to the caller on the cancel path too, and posts no partial training', async () => {
-        const controller = new AbortController();
-        const ctx = makeTrainCtx({ liked: filesNamed('a.png', 'b.png') });
-        ctx.computeFeatures = vi.fn(async () => {
-            controller.abort();
-            return new Float32Array(64);
-        });
-
-        await trainFromHistoricalRatings.call(ctx, controller.signal);
-
-        expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
-        expect(ctx.mlWorker.postMessage).not.toHaveBeenCalled();
+        emit(ctx.featureWorkers[0], { type: 'result', features: [] });
+        expect(ctx._featureExtractorVersion).toBe(0);
+        expect(ctx.featureWorkers[0].listeners).toHaveLength(1); // still waiting for the real reply
     });
 });
 
@@ -5372,5 +5425,19 @@ describe('empty-state undo guard (canUndo predicate)', () => {
     it('the replica matches the predicate in media-viewer.js', () => {
         // Guards against the replica drifting from the source it stands in for.
         expect(source).toContain('this.isTournamentMode && this.tournament?.engine?.peekUndoKind() != null');
+    });
+});
+
+describe('handleSortByPrediction delegates training to MlTrainingManager (G1)', () => {
+    it('calls ensureTrainedModel instead of the removed retrain gate', () => {
+        expect(source).toContain('this.mlTraining.ensureTrainedModel(');
+        // The three functions the module now owns must be gone from the renderer.
+        expect(source).not.toContain('async trainFromHistoricalRatings(');
+        expect(source).not.toContain('async trainFromHistoricalRatingsAndWait(');
+        expect(source).not.toContain('async collectBulkRatedTrainingExamples(');
+    });
+
+    it('captures the worker-reported versions in initComplete', () => {
+        expect(source).toContain('trainingConfigVersion');
     });
 });

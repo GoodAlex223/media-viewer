@@ -601,6 +601,102 @@ describe('_collectBulkRatedVectors (direct)', () => {
         expect(result.failed).toBe(1);
         expect(result.liked).toHaveLength(0);
     });
+
+    // Relocated from the deleted renderer method collectBulkRatedTrainingExamples's test suite
+    // (G1 task 6): "splits cached combined features into liked/disliked by bucket" — the direct
+    // tests above only ever exercise a 'good' bucket entry, so none of them actually prove a 'bad'
+    // one lands in `disliked` rather than `liked`.
+    it('splits resolved entries into liked/disliked by bucket', async () => {
+        const m = managerWith({
+            getBulkRatedContext: vi.fn(() => ({
+                featureCache: new Map([
+                    ['/src/b1.jpg', new Float32Array(64).fill(0.5)],
+                    ['/src/b2.jpg', new Float32Array(64).fill(0.6)],
+                ]),
+                clipCache: new Map([
+                    ['/src/b1.jpg', new Float32Array(512).fill(0.1)],
+                    ['/src/b2.jpg', new Float32Array(512).fill(0.2)],
+                ]),
+            })),
+        });
+        const resolved = [
+            { name: 'b1.jpg', bucket: 'good', file: { path: '/src/b1.jpg', size: 1, mtimeMs: 1 } },
+            { name: 'b2.jpg', bucket: 'bad', file: { path: '/src/b2.jpg', size: 2, mtimeMs: 2 } },
+        ];
+        const result = await m._collectBulkRatedVectors(resolved, true, undefined);
+        expect(result.liked).toHaveLength(1);
+        expect(result.disliked).toHaveLength(1);
+    });
+
+    // Relocated: collectBulkRatedTrainingExamples's "computes 576-dim features when the cache
+    // misses". The direct tests above only cover a PARTIAL miss (feature warm, CLIP absent); none
+    // exercise a file absent from both featureCache and clipCache, which is what actually proves
+    // _combine produces a full 576-dim row from computeFeatures + extractClipEmbedding.
+    it('computes a full 576-dim row via computeFeatures + extractClipEmbedding on a total cache miss', async () => {
+        const m = managerWith({
+            computeFeatures: vi.fn(async () => new Float32Array(64).fill(0.5)),
+            extractClipEmbedding: vi.fn(async () => new Float32Array(512).fill(0.1)),
+            getBulkRatedContext: vi.fn(() => ({ featureCache: new Map(), clipCache: new Map() })),
+        });
+        const result = await m._collectBulkRatedVectors(resolvedOf(), true, undefined);
+        expect(result.liked).toHaveLength(1);
+        expect(result.liked[0]).toHaveLength(576);
+    });
+
+    // Relocated: collectBulkRatedTrainingExamples's "reports corrective ratings through the sort
+    // card so the phase is not silent". ensureTrainedModel's own progress test only checks
+    // `.toContain` for the likes/dislikes/training phases with an EMPTY bulkRated, so it never
+    // actually exercises this phase string or its per-entry current/total sequence.
+    it('reports progress through onProgress for each resolved entry', async () => {
+        const m = managerWith({
+            getBulkRatedContext: vi.fn(() => ({
+                featureCache: new Map([
+                    ['/src/b1.jpg', new Float32Array(64)],
+                    ['/src/b2.jpg', new Float32Array(64)],
+                ]),
+                clipCache: new Map([
+                    ['/src/b1.jpg', new Float32Array(512)],
+                    ['/src/b2.jpg', new Float32Array(512)],
+                ]),
+            })),
+        });
+        const resolved = [
+            { name: 'b1.jpg', bucket: 'good', file: { path: '/src/b1.jpg', size: 1, mtimeMs: 1 } },
+            { name: 'b2.jpg', bucket: 'bad', file: { path: '/src/b2.jpg', size: 2, mtimeMs: 2 } },
+        ];
+        await m._collectBulkRatedVectors(resolved, true, undefined);
+        expect(m.onProgress.mock.calls.map(([a]) => a)).toEqual([
+            { phase: 'Processing corrective ratings', current: 1, total: 2 },
+            { phase: 'Processing corrective ratings', current: 2, total: 2 },
+        ]);
+    });
+});
+
+// Relocated from the deleted renderer method trainFromHistoricalRatings's test suite (G1 task 6):
+// "reports every liked/disliked file through the cancelable sort card, starting at file 1".
+// ensureTrainedModel's own progress test only checks `.toContain('Processing likes')` /
+// `.toContain('Processing dislikes')`, which would still pass even if only every 10th file were
+// reported — the exact per-file sequence is what actually proves that property. _collectFolderVectors
+// is phase-agnostic (the phase string is a parameter), so one direct test covers both callers;
+// ensureTrainedModel's `.toContain` test already proves the CALLER passes the right phase name.
+describe('_collectFolderVectors (direct)', () => {
+    it('reports every file through onProgress, starting at 1 (not just every Nth)', async () => {
+        const m = managerWith({
+            computeFeatures: vi.fn(async () => new Float32Array(64)),
+            extractClipEmbedding: vi.fn(async () => new Float32Array(512)),
+        });
+        const files = [
+            { name: 'a.png', path: '/l/a.png', size: 1, mtimeMs: 1 },
+            { name: 'b.png', path: '/l/b.png', size: 2, mtimeMs: 2 },
+            { name: 'c.png', path: '/l/c.png', size: 3, mtimeMs: 3 },
+        ];
+        await m._collectFolderVectors('/l', files, 'Processing likes', true, undefined);
+        expect(m.onProgress.mock.calls.map(([a]) => a)).toEqual([
+            { phase: 'Processing likes', current: 1, total: 3 },
+            { phase: 'Processing likes', current: 2, total: 3 },
+            { phase: 'Processing likes', current: 3, total: 3 },
+        ]);
+    });
 });
 
 describe('ensureTrainedModel', () => {
@@ -786,6 +882,21 @@ describe('ensureTrainedModel', () => {
         });
         const res = await m.ensureTrainedModel({});
         expect(res.source).toBe('skipped');
+        expect(m.trainModel).not.toHaveBeenCalled();
+    });
+
+    // Relocated from the deleted renderer method trainFromHistoricalRatings's test suite (G1 task
+    // 6): "bails before loading historical folders when the signal is already aborted". Distinct
+    // from the mid-extraction abort test below — this proves the PRE-flight `signal?.aborted`
+    // check (before the folder scan even starts) actually short-circuits, not just that some
+    // later check catches it.
+    it('bails before loading folders when the signal is already aborted', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const { m } = scenario();
+        const res = await m.ensureTrainedModel({ signal: controller.signal });
+        expect(res.source).toBe('skipped');
+        expect(m.loadFolder).not.toHaveBeenCalled();
         expect(m.trainModel).not.toHaveBeenCalled();
     });
 
@@ -1096,6 +1207,16 @@ describe('ensureTrainedModel', () => {
         expect(phases).toContain('Processing likes');
         expect(phases).toContain('Processing dislikes');
         expect(phases).toContain('Training model…');
+    });
+
+    // Relocated from the deleted renderer method trainFromHistoricalRatings's test suite (G1 task
+    // 6): "announces the folder-load wait as an indeterminate card phase, not plain text" — the
+    // phase string changed ('Loading historical ratings…' -> 'Checking training set…') but the
+    // no-current/total indeterminate-mode property survives unchanged.
+    it('announces the training-set check as an indeterminate progress call', async () => {
+        const { m } = scenario();
+        await m.ensureTrainedModel({});
+        expect(m.onProgress.mock.calls.map(([a]) => a)).toContainEqual({ phase: 'Checking training set…' });
     });
 
     it('includes bulk-rated files still present in the source folder', async () => {

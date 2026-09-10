@@ -1,5 +1,6 @@
 import { FullscreenManager } from './fullscreen.js';
 import { TournamentManager } from './tournament.js';
+import { MlTrainingManager } from './ml-training.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -134,6 +135,54 @@ class MediaViewer {
         this.showPredictionBadges = localStorage.getItem('showPredictionBadges') !== 'false';
         this.isSortedByPrediction = false;
         this.mlStats = null; // Current model statistics
+
+        // Versions reported by the workers that own them — never re-declared here, so they
+        // cannot drift from the code they describe. Populated by initComplete and by the
+        // feature pool's getVersion probe.
+        this._mlWorkerVersions = { mlModelVersion: 0, featureDim: 0, trainingConfigVersion: 0 };
+        this._featureExtractorVersion = 0;
+
+        this.mlTraining = new MlTrainingManager({
+            loadFolder: (p) => window.electronAPI.loadFolder(p),
+            computeFeatures: (p, info) => this.computeFeatures(p, info),
+            extractClipEmbedding: (p) => this.extractClipEmbedding(p),
+            trainModel: (liked, disliked, seed) => this._runWorkerTraining(liked, disliked, seed),
+            loadModelState: (modelState) => this._runWorkerInit(modelState),
+            getConfig: () => ({
+                customLikeFolder: this.customLikeFolder,
+                customDislikeFolder: this.customDislikeFolder,
+                enableClipFeatures: this.enableClipFeatures,
+                versions: {
+                    mlModelVersion: this._mlWorkerVersions.mlModelVersion,
+                    featureCacheVersion: MediaViewer.FEATURE_CACHE_VERSION,
+                    featureVersion: this._featureExtractorVersion,
+                    trainingConfigVersion: this._mlWorkerVersions.trainingConfigVersion,
+                },
+            }),
+            getBulkRatedContext: () => ({
+                bulkRated: this.bulkRated,
+                mediaFiles: this.mediaFiles,
+                featureCache: this.featureCache,
+                clipCache: this.clipCache,
+            }),
+            cacheIo: {
+                acquireLock: () => this._acquireCacheIoLock(),
+                open: (p) => window.electronAPI.featureCacheOpen(p),
+                chunk: (o, l) => window.electronAPI.featureCacheChunk(o, l),
+                close: () => window.electronAPI.featureCacheClose(),
+                writeOpen: (p, h) => window.electronAPI.featureCacheWriteOpen(p, h),
+                writeChunk: (e) => window.electronAPI.featureCacheWriteChunk(e),
+                writeClose: () => window.electronAPI.featureCacheWriteClose(),
+            },
+            modelCache: {
+                read: () => window.electronAPI.readMlModelCache(),
+                write: (store) => window.electronAPI.writeMlModelCache(store),
+            },
+            onProgress: (p) => this.updateSortProgress(p),
+            logError: (msg) => window.electronAPI?.logError?.(msg),
+            notify: (msg, level) => this.showNotification(msg, level),
+        });
+
         this.compareLeftFile = null; // Current left file in compare mode (highest score)
         this.compareRightFile = null; // Current right file in compare mode (lowest score)
         this.mlComparePairIndex = 0; // Index for ML pair selection (0 = highest vs lowest)
@@ -6783,6 +6832,16 @@ class MediaViewer {
             case 'initComplete':
                 console.log('[ML Debug] ML Model initialized:', message.stats);
                 this.mlStats = message.stats;
+                this._mlWorkerVersions = {
+                    mlModelVersion: message.modelVersion || 0,
+                    featureDim: message.featureDim || 0,
+                    trainingConfigVersion: message.trainingConfigVersion || 0,
+                };
+                if (this._initCompleteCallback) {
+                    const cb = this._initCompleteCallback;
+                    this._initCompleteCallback = null;
+                    cb({ stats: message.stats });
+                }
                 this.updateSortPredictionButton();
                 // If worker reset the model (version/dim mismatch), clear stale state
                 if (message.modelWasReset) {
@@ -6807,10 +6866,10 @@ class MediaViewer {
                         'success'
                     );
                 }
-                // Call training complete callback if waiting
                 if (this._trainingCompleteCallback) {
-                    this._trainingCompleteCallback();
+                    const cb = this._trainingCompleteCallback;
                     this._trainingCompleteCallback = null;
+                    cb({ stats: message.stats, modelState: message.modelState });
                 }
                 // Trigger re-scoring
                 this.requestPredictionScores();
@@ -7617,181 +7676,6 @@ class MediaViewer {
         });
     }
 
-    async collectBulkRatedTrainingExamples(signal) {
-        const liked = [];
-        const disliked = [];
-        const total = this.bulkRated.size;
-        let processed = 0;
-        for (const [name, bucket] of this.bulkRated) {
-            if (signal?.aborted) break; // cancelled — stop processing ratings
-            // Reported before the `continue` below so the count still advances for entries
-            // whose file has left the folder — otherwise the bar stalls short of 100%.
-            this.updateSortProgress({ phase: 'Processing corrective ratings', current: ++processed, total });
-            const file = this.mediaFiles.find((f) => f.name === name);
-            if (!file) continue;
-            let combined = this.getCombinedFeatures(file.path);
-            if (!combined) {
-                try {
-                    const features = await this.computeFeatures(file.path);
-                    const clipVector = await this.extractClipEmbedding(file.path);
-                    const merged = new Float32Array(576);
-                    merged.set(features, 0);
-                    if (clipVector) merged.set(clipVector, 64);
-                    combined = Array.from(merged);
-                } catch (err) {
-                    console.warn(`Skipping bulk-rated ${name}:`, err.message);
-                    continue;
-                }
-            }
-            (bucket === 'good' ? liked : disliked).push(combined);
-        }
-        return { liked, disliked };
-    }
-
-    async trainFromHistoricalRatings(signal) {
-        if (!this.isMlEnabled || !this.mlWorker) return;
-        if (!this.customLikeFolder || !this.customDislikeFolder) return;
-        if (signal?.aborted) return; // cancelled before training started
-
-        try {
-            // Load files from like folder
-            const likedResult = await window.electronAPI.loadFolder(this.customLikeFolder);
-            const dislikedResult = await window.electronAPI.loadFolder(this.customDislikeFolder);
-
-            if (signal?.aborted) return; // cancelled while loading historical folders
-
-            if (!likedResult.success && !dislikedResult.success) {
-                console.log('No historical ratings found');
-                return;
-            }
-
-            const likedFiles = likedResult.success ? likedResult.files : [];
-            const dislikedFiles = dislikedResult.success ? dislikedResult.files : [];
-
-            if (likedFiles.length === 0 && dislikedFiles.length === 0) {
-                console.log('No historical ratings to train from');
-                return;
-            }
-
-            // Report through the sort card (not updateProgressNotification, which rebuilds the
-            // shared element into its plain-text form and destroys the Cancel button for what
-            // is the longest phase of the sort). No counts => the card's indeterminate mode.
-            this.updateSortProgress({ phase: 'Loading historical ratings…' });
-
-            const likedFeatures = [];
-            const dislikedFeatures = [];
-
-            // Extract features from liked files
-            for (let i = 0; i < likedFiles.length; i++) {
-                if (signal?.aborted) break; // cancelled — stop processing ratings
-                const file = likedFiles[i];
-                try {
-                    const features = await this.computeFeatures(file.path);
-                    const clipVector = await this.extractClipEmbedding(file.path);
-                    const combined = new Float32Array(576);
-                    combined.set(features, 0);
-                    if (clipVector) combined.set(clipVector, 64);
-                    likedFeatures.push(Array.from(combined));
-
-                    // Every file, not every 10th: per-file CLIP + ffprobe means a small
-                    // like folder could finish with the bar never having moved at all.
-                    this.updateSortProgress({
-                        phase: 'Processing likes',
-                        current: i + 1,
-                        total: likedFiles.length,
-                    });
-                } catch (err) {
-                    console.warn(`Skipping ${file.name}:`, err.message);
-                }
-            }
-
-            // Extract features from disliked files
-            for (let i = 0; i < dislikedFiles.length; i++) {
-                if (signal?.aborted) break; // cancelled — stop processing ratings
-                const file = dislikedFiles[i];
-                try {
-                    const features = await this.computeFeatures(file.path);
-                    const clipVector = await this.extractClipEmbedding(file.path);
-                    const combined = new Float32Array(576);
-                    combined.set(features, 0);
-                    if (clipVector) combined.set(clipVector, 64);
-                    dislikedFeatures.push(Array.from(combined));
-
-                    this.updateSortProgress({
-                        phase: 'Processing dislikes',
-                        current: i + 1,
-                        total: dislikedFiles.length,
-                    });
-                } catch (err) {
-                    console.warn(`Skipping ${file.name}:`, err.message);
-                }
-            }
-
-            if (signal?.aborted) {
-                // Cancelled mid-loop — do not send a partial-training message to the ML worker
-                // (it would train a misleadingly incomplete model on whatever was collected so
-                // far). Teardown of the progress UI is the caller's, not ours: see the
-                // ownership note at the end of this method.
-                return;
-            }
-
-            // Re-apply corrective bulk ratings (these files stay in the source folder and are
-            // never in the like/dislike folders, so a from-scratch rebuild can't recover them).
-            const bulkExamples = await this.collectBulkRatedTrainingExamples(signal);
-            likedFeatures.push(...bulkExamples.liked);
-            dislikedFeatures.push(...bulkExamples.disliked);
-
-            if (signal?.aborted) {
-                return;
-            }
-
-            // Send to ML worker for training
-            if (likedFeatures.length > 0 || dislikedFeatures.length > 0) {
-                this.mlWorker.postMessage({
-                    type: 'trainHistorical',
-                    data: { likedFeatures, dislikedFeatures },
-                });
-            }
-
-            // Progress-UI ownership: this method never tears the card down, on any path.
-            // handleSortByPrediction's finally is the single owner, and every exit from here
-            // — success, cancel, throw — unwinds through it. Clearing here as well was
-            // redundant, and doing it on only some paths made the asymmetry look meaningful.
-        } catch (error) {
-            console.error('Error training from historical:', error);
-        }
-    }
-
-    /**
-     * Train from historical ratings and wait for completion
-     * Returns a promise that resolves when training is complete
-     */
-    async trainFromHistoricalRatingsAndWait(signal) {
-        return new Promise(async (resolve) => {
-            // Store resolve callback to be called when trainReady is received
-            this._trainingCompleteCallback = resolve;
-
-            await this.trainFromHistoricalRatings(signal);
-
-            // If no training happened (no files) or the caller cancelled mid-flight, resolve
-            // immediately. A cancelled bail means no trainHistorical message was sent, so there
-            // is no trainComplete reply coming — without this the caller would otherwise wait
-            // out the full 30s fallback below even though the expensive work already stopped.
-            if (!this.customLikeFolder || !this.customDislikeFolder || signal?.aborted) {
-                this._trainingCompleteCallback = null;
-                resolve();
-            }
-
-            // Set a timeout in case training never responds
-            setTimeout(() => {
-                if (this._trainingCompleteCallback) {
-                    this._trainingCompleteCallback = null;
-                    resolve();
-                }
-            }, 30000); // 30 second timeout
-        });
-    }
-
     getCombinedFeatures(filePath) {
         const features = this.featureCache.get(filePath);
         if (!features) return null;
@@ -7887,6 +7771,41 @@ class MediaViewer {
         this._mlSortResolve = null;
         this._mlSortReject = null;
         if (pendingReject) pendingReject(new Error(reason));
+    }
+
+    /**
+     * Post a trainHistorical job and resolve on trainComplete. Replaces
+     * trainFromHistoricalRatingsAndWait's callback+30s-timeout pairing; the manager owns the
+     * decision to train at all, this owns only the round trip.
+     */
+    _runWorkerTraining(likedFeatures, dislikedFeatures, seed) {
+        return new Promise((resolve) => {
+            this._trainingCompleteCallback = (payload) => resolve(payload);
+            this.mlWorker.postMessage({
+                type: 'trainHistorical',
+                data: { likedFeatures, dislikedFeatures, seed },
+            });
+            setTimeout(() => {
+                if (this._trainingCompleteCallback) {
+                    this._trainingCompleteCallback = null;
+                    resolve({ stats: this.mlStats, modelState: this.mlModelState });
+                }
+            }, 30000);
+        });
+    }
+
+    /** Post an init with a cached model and resolve on initComplete. */
+    _runWorkerInit(modelState) {
+        return new Promise((resolve) => {
+            this._initCompleteCallback = (payload) => resolve(payload);
+            this.mlWorker.postMessage({ type: 'init', data: { savedModel: modelState } });
+            setTimeout(() => {
+                if (this._initCompleteCallback) {
+                    this._initCompleteCallback = null;
+                    resolve({ stats: this.mlStats });
+                }
+            }, 10000);
+        });
     }
 
     async requestPredictionScores() {
@@ -8084,23 +8003,29 @@ class MediaViewer {
                 this.initializeFeaturePool();
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 await this.loadMlModel();
-                // AWAIT the model load. Fired un-awaited, extractClipEmbedding returns null
-                // for every file processed before clipWorkerReady flips, so the historical
-                // training loop below trained on 576-dim vectors whose CLIP half was all
-                // zeros — silently, since a null embedding is a supported degraded mode.
-                if (this.enableClipFeatures) {
-                    this.updateSortProgress({ phase: 'Loading CLIP model…' });
-                    this.clipProgressSink = (percent) =>
-                        this.updateSortProgress({
-                            phase: 'Downloading CLIP model…',
-                            current: percent,
-                            total: 100,
-                        });
-                    try {
-                        await this.initClipModel();
-                    } finally {
-                        this.clipProgressSink = null;
-                    }
+            }
+            // AWAIT the model load. Fired un-awaited, extractClipEmbedding returns null for
+            // every file processed before clipWorkerReady flips, so the training set collected
+            // below (now via ensureTrainedModel) would silently train on 576-dim vectors whose
+            // CLIP half was all zeros. This now runs on EVERY sort, not just the first lazy-init:
+            // clipUnloadTimer nulls the CLIP model after 30s idle, so a second sort in the same
+            // session could otherwise find clipWorkerReady false again — and since
+            // ensureTrainedModel now runs unconditionally, that would silently degrade (and
+            // refuse to cache) an otherwise healthy session's model on every sort after the
+            // first. initClipModel() is documented lazy and concurrent-safe, so re-awaiting an
+            // already-loaded model here is cheap.
+            if (this.enableClipFeatures) {
+                this.updateSortProgress({ phase: 'Loading CLIP model…' });
+                this.clipProgressSink = (percent) =>
+                    this.updateSortProgress({
+                        phase: 'Downloading CLIP model…',
+                        current: percent,
+                        total: 100,
+                    });
+                try {
+                    await this.initClipModel();
+                } finally {
+                    this.clipProgressSink = null;
                 }
             }
             // Cancel stays clickable throughout the load above; it cannot interrupt the
@@ -8120,11 +8045,14 @@ class MediaViewer {
             }
             if (signal.aborted) throw new Error('cancelled');
 
-            // Train from historical ratings if needed.
-            if (!this.mlStats?.isReady) {
-                this.updateSortProgress({ phase: 'Training model…' });
-                await this.trainFromHistoricalRatingsAndWait(signal);
-                this.updateSortPredictionButton();
+            // Ensure the worker holds a model trained on the CURRENT training set. The manager
+            // decides whether that costs nothing (same session), a small read (model cache) or a
+            // rebuild from cached vectors — the gate is the training set, not the source folder.
+            const training = await this.mlTraining.ensureTrainedModel({ signal });
+            if (training.stats) this.mlStats = training.stats;
+            this.updateSortPredictionButton();
+            if (training.source !== 'skipped' && this.mlStats?.isReady) {
+                this.showMlLearningIndicator(this.mlStats, training.source);
             }
             if (signal.aborted) throw new Error('cancelled');
             if (!this.mlStats?.isReady) {
@@ -8507,6 +8435,22 @@ class MediaViewer {
                 worker.onerror = (err) => this.handleFeatureWorkerError(i, err);
 
                 this.featureWorkers.push(worker);
+            }
+
+            // One-shot version probe: feature-worker.js answers `getVersion` with the
+            // FEATURE_VERSION that feature-extractor.js actually compiled with, so the training
+            // fingerprint never re-declares it. (The FEATURE_CACHE_VERSION comment claiming the two
+            // constants must match is false — they are 4 and 2 — which is why both are fingerprinted.)
+            const probe = this.featureWorkers[0];
+            if (probe) {
+                const onVersion = (e) => {
+                    if (e.data?.type === 'version') {
+                        this._featureExtractorVersion = e.data.version || 0;
+                        probe.removeEventListener('message', onVersion);
+                    }
+                };
+                probe.addEventListener('message', onVersion);
+                probe.postMessage({ type: 'getVersion', data: {} });
             }
 
             console.log(`[ML Debug] Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
