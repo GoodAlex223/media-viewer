@@ -66,6 +66,27 @@ describe('ml-worker trainHistorical (G1)', () => {
         const b = lastOfType('trainComplete').modelState.weights;
         expect(b).toEqual(a);
     });
+
+    it('honors an explicit seed of 0 instead of silently falling back to 1', () => {
+        // 0 is falsy in JS. seedFromFingerprint(fingerprint) (Task 2) is defined as
+        // parseInt(String(fingerprint).slice(0, 8), 16) >>> 0, whose range includes 0 — a
+        // `data.seed || 1` fallback would silently retrain a fingerprint-0 seed as seed 1,
+        // breaking the cache's seed-determinism guarantee for that one fingerprint.
+        const liked = [vec(576, 0.4), vec(576, 0.5), vec(576, 0.6)];
+        const disliked = [vec(576, -0.4), vec(576, -0.5), vec(576, -0.6)];
+
+        send({ type: 'trainHistorical', data: { likedFeatures: liked, dislikedFeatures: disliked, seed: 0 } });
+        const seedZeroA = lastOfType('trainComplete').modelState.weights;
+
+        send({ type: 'trainHistorical', data: { likedFeatures: liked, dislikedFeatures: disliked, seed: 0 } });
+        const seedZeroB = lastOfType('trainComplete').modelState.weights;
+
+        send({ type: 'trainHistorical', data: { likedFeatures: liked, dislikedFeatures: disliked, seed: 1 } });
+        const seedOne = lastOfType('trainComplete').modelState.weights;
+
+        expect(seedZeroB).toEqual(seedZeroA);
+        expect(seedOne).not.toEqual(seedZeroA);
+    });
 });
 
 describe('ml-worker initComplete (G1)', () => {

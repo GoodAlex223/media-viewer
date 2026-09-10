@@ -287,7 +287,7 @@ self.onmessage = function (e) {
                 const trainResult = trainFromHistorical(
                     data.likedFeatures || [],
                     data.dislikedFeatures || [],
-                    data.seed || 1
+                    data.seed ?? 1
                 );
                 self.postMessage(trainResult);
             } catch (error) {
