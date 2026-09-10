@@ -498,11 +498,12 @@ export class MlTrainingManager {
         const liked = [];
         const disliked = [];
         let clipMissing = 0;
+        let failed = 0;
         const total = resolved.length;
         let processed = 0;
 
         for (const { name, bucket, file } of resolved) {
-            if (signal?.aborted) return { liked, disliked, clipMissing, aborted: true };
+            if (signal?.aborted) return { liked, disliked, clipMissing, failed, aborted: true };
             this.onProgress({ phase: 'Processing corrective ratings', current: ++processed, total });
 
             let feature = featureCache?.get(file.path);
@@ -512,6 +513,12 @@ export class MlTrainingManager {
                     feature = feature || (await this.computeFeatures(file.path, file));
                     clip = await this.extractClipEmbedding(file.path);
                 } catch (err) {
+                    failed++;
+                    // review round 2, item 1: this is what makes the failure diagnosable AND what
+                    // now gates caching (see `rowsFailed` in ensureTrainedModel) -- before this,
+                    // the file was silently dropped from the rows while _resolveBulkRatedFiles had
+                    // already counted it into the fingerprint (the Important-4 split introduced
+                    // this gap: membership and vector extraction used to share one try/continue).
                     this.logError(`Skipping bulk-rated ${name}: ${err.message}`);
                     continue;
                 }
@@ -519,7 +526,7 @@ export class MlTrainingManager {
             if (!hasClip(clip)) clipMissing++;
             (bucket === 'good' ? liked : disliked).push(this._combine(feature, clip));
         }
-        return { liked, disliked, clipMissing, aborted: false };
+        return { liked, disliked, clipMissing, failed, aborted: false };
     }
 
     /**
@@ -669,7 +676,7 @@ export class MlTrainingManager {
         // still counts a file/folder the trained model never actually saw -- so they gate caching
         // exactly like incomplete CLIP coverage does.
         const clipMissing = likes.clipMissing + dislikes.clipMissing + bulk.clipMissing;
-        const rowsFailed = likes.failed + dislikes.failed;
+        const rowsFailed = likes.failed + dislikes.failed + bulk.failed;
         const cacheable = !scanFailed && rowsFailed === 0 && !(config.enableClipFeatures && clipMissing > 0);
 
         if (cacheable) {

@@ -587,6 +587,20 @@ describe('_collectBulkRatedVectors (direct)', () => {
         expect(result.aborted).toBe(true);
         expect(result.liked).toHaveLength(1); // the loop stopped before the second entry
     });
+
+    // Review round 2, item 1: mirrors _collectFolderVectors's `failed` tracking, added at the
+    // same call site the Important-4 split broke (see the ensureTrainedModel-level test).
+    it('reports failed and excludes the row when extraction throws', async () => {
+        const m = managerWith({
+            computeFeatures: vi.fn(async () => {
+                throw new Error('decode failed');
+            }),
+            getBulkRatedContext: vi.fn(() => ({ featureCache: new Map(), clipCache: new Map() })),
+        });
+        const result = await m._collectBulkRatedVectors(resolvedOf(), true, undefined);
+        expect(result.failed).toBe(1);
+        expect(result.liked).toHaveLength(0);
+    });
 });
 
 describe('ensureTrainedModel', () => {
@@ -832,6 +846,53 @@ describe('ensureTrainedModel', () => {
         expect(modelCacheStore.value?.entries || []).toHaveLength(0);
         expect(m.notify).toHaveBeenCalled();
         expect(m.logError).toHaveBeenCalled();
+    });
+
+    // Review round 2, item 1: the Important-4 split introduced this. Before the split, a bulk-
+    // rated file's row push and its `present` entry sat in the SAME try block -- a throw skipped
+    // both, so no mismatch was possible. After the split, _resolveBulkRatedFiles() resolves
+    // membership from metadata alone (feeding the descriptor) BEFORE the vector pass runs, so a
+    // file whose extraction throws is still counted in the fingerprint while its row is silently
+    // dropped -- and `bulk.failed` didn't exist, so `rowsFailed` never saw it. The existing
+    // folder-side throw fixture (targeting /likes/l2.jpg with an empty bulk set) cannot cover this.
+    it('trains but does not cache when a bulk-rated file throws during extraction', async () => {
+        const { m, modelCacheStore } = scenario({
+            bulkRated: new Map([['b1.jpg', 'good']]),
+            mediaFiles: [{ name: 'b1.jpg', path: '/src/b1.jpg', size: 30, mtimeMs: 7 }],
+            managerOverrides: {
+                computeFeatures: vi.fn(async (path) => {
+                    if (path === '/src/b1.jpg') throw new Error('decode failed');
+                    return new Float32Array(64).fill(0.5);
+                }),
+            },
+        });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(modelCacheStore.value?.entries || []).toHaveLength(0);
+        expect(m.notify).toHaveBeenCalled();
+        expect(m.logError).toHaveBeenCalled();
+    });
+
+    // Spec gap A residual (review round 2): the warm-cache tests below all end with extracted===0,
+    // so _saveVectorCache is never reached through the collector in the guard-relevant state
+    // (diskCount>0, entries.size < diskCount*0.5) -- the granularity test's one save has
+    // entries.size=4 against diskCount=6, where the second conjunct is already false. This is the
+    // only scenario where scanCount (files.length) actually decides the outcome: a large diskCount
+    // whose entries don't match any live file (so entries.size ends up small after a full re-
+    // extract), while the live scan is ALSO small -- a genuine shrink, which the guard must let
+    // through. Verified by mutation: fails if `files.length` is dropped from the call site inside
+    // _collectFolderVectors (see fix report for the exact mutation and result).
+    it('persists a genuine shrink reached through the collector, not refused by the guard', async () => {
+        // 100 disk entries that match NONE of the live like/dislike files -- every one is pruned
+        // on load, so entries.size starts at 0 and ends at each folder's own (small) file count
+        // after a full re-extract, while diskCount stays 100.
+        const ghostPairs = Array.from({ length: 100 }, (_, i) => entry(`ghost${i}.jpg`, 1, 1));
+        const io = makeCacheIo(ghostPairs);
+        const { m } = scenario({ cacheIo: io });
+        const res = await m.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(io.writeOpen).toHaveBeenCalled();
+        expect(io.written.length).toBeGreaterThan(0);
     });
 
     // Minor 2 (review round 1): a clip that is truthy but the WRONG length (e.g. a corrupt or
