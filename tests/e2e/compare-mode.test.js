@@ -206,10 +206,16 @@ test.describe('Compare Mode', () => {
         expect(afterUndo.good).toBe(0);
     });
 
-    test('bulk rating and its undo defer the re-render until the REAL ML worker re-scores (D2/D4)', async () => {
+    test('bulk rating and its undo render immediately against a REAL ML worker — no online-update messages posted (G1)', async () => {
         // mlWorker is lazy in production (first AI sort / settings toggle) — bring the real
-        // ml-worker.js up explicitly. No stub: the point is that the worker's own replies drive
-        // the deferred-refresh protocol.
+        // ml-worker.js up explicitly and warm it to a trained, ready state via the SAME
+        // trainHistorical round trip ensureTrainedModel uses in production (Task 6's
+        // _runWorkerTraining) — the per-rating online update that used to warm a model up here is
+        // gone (G1), and posting raw 'update' messages no longer does anything observable: the
+        // renderer stopped listening for updateComplete. Using a REAL worker (not a stub) proves a
+        // negative against it: a bulk rating and its undo must post NEITHER 'update' NOR
+        // 'reverseUpdate' — even though a live, warmed-up worker is sitting right there and would
+        // happily answer them.
         await seedLocalStorage(page, { mlPredictionEnabled: 'true' });
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
@@ -231,65 +237,46 @@ test.describe('Compare Mode', () => {
             };
             mv.initializeMlWorker();
 
-            // Instrument BEFORE warm-up so every worker exchange is observable: replies (minus
-            // 'progress') go to __mlEvents, and scoreAll posts are counted so the test can wait for
-            // the worker to be QUIESCENT (every scoreAll answered) before asserting. Warm-up
-            // updateComplete replies straggling >100 ms apart re-arm the score debounce, which can
-            // leave a second scoreAll in flight after the first reply has already populated
-            // predictionScores — its late scoreComplete would then prepend to the event list.
-            window.__mlEvents = [];
-            window.__scoreAllPosted = 0;
-            window.__scoreCompleteSeen = 0;
+            // Instrument BEFORE warm-up. __postedTypes records every message type actually POSTED
+            // to the worker — this is what proves the online-update senders are gone (a stale
+            // sender would show up here even if its reply arrived too late for anything else to
+            // observe).
+            window.__postedTypes = [];
+            window.__showMediaCalls = 0;
             const origPost = mv.mlWorker.postMessage.bind(mv.mlWorker);
             mv.mlWorker.postMessage = (m) => {
-                if (m.type === 'scoreAll') window.__scoreAllPosted++;
+                window.__postedTypes.push(m.type);
                 return origPost(m);
             };
-            const origHandle = mv.handleMlWorkerMessage.bind(mv);
-            mv.handleMlWorkerMessage = (m) => {
-                if (m.type === 'scoreComplete') window.__scoreCompleteSeen++;
-                if (m.type !== 'progress') {
-                    window.__mlEvents.push(
-                        m.type === 'scoreComplete' ? `scoreComplete:${m.scores ? 'scores' : 'null'}` : m.type
-                    );
-                }
-                return origHandle(m);
+            const origShow = mv.showMedia.bind(mv);
+            mv.showMedia = (...args) => {
+                window.__showMediaCalls++;
+                return origShow(...args);
             };
         });
         await page.waitForFunction(() => window.mediaViewer.mlStats != null); // initComplete
-        const samplesBefore = await page.evaluate(() => window.mediaViewer.mlStats.totalSamples);
 
-        // scoreAll replies scores:null until the model has >=3 likes and >=3 dislikes — warm it up.
-        await page.evaluate(() => {
+        // Warm up via _runWorkerTraining (trainHistorical): resets the model and full-batch
+        // trains it on 3 likes + 3 dislikes, exactly like ensureTrainedModel does. scoreAll
+        // replies scores:null until the model has >=3 likes and >=3 dislikes.
+        await page.evaluate(async () => {
             const mv = window.mediaViewer;
-            for (let i = 0; i < 3; i++) {
-                mv.updateMlModelWithFeatures(mv.getCombinedFeatures(`warm-like-${i}`), 'like');
-                mv.updateMlModelWithFeatures(mv.getCombinedFeatures(`warm-dislike-${i}`), 'dislike');
-            }
+            const likedFeatures = [0, 1, 2].map((i) => Array.from(mv.getCombinedFeatures(`warm-like-${i}`)));
+            const dislikedFeatures = [0, 1, 2].map((i) => Array.from(mv.getCombinedFeatures(`warm-dislike-${i}`)));
+            await mv._runWorkerTraining(likedFeatures, dislikedFeatures, 1);
         });
-        // Quiescence: all six warm-up replies landed, the score debounce is idle, and every scoreAll it
-        // posted has been answered (with real scores — the model is ready by then).
-        await page.waitForFunction((before) => {
+        // trainComplete sets mlStats synchronously and fires requestPredictionScores() in the same
+        // turn, so only the scoreAll round trip (predictionScores population) is left to wait for.
+        await page.waitForFunction(() => {
             const mv = window.mediaViewer;
-            return (
-                mv.mlStats?.isReady === true &&
-                mv.mlStats.totalSamples === before + 6 &&
-                !mv._scoreDebounceTimer &&
-                window.__scoreAllPosted > 0 &&
-                window.__scoreCompleteSeen === window.__scoreAllPosted &&
-                mv.predictionScores.size >= 2
-            );
-        }, samplesBefore);
+            return mv.mlStats?.isReady === true && mv.mlStats.totalSamples === 6 && mv.predictionScores.size >= 2;
+        });
 
-        // Record showMedia() calls too, then start the assertions from a clean event list.
+        // Start the assertions from a clean slate — the warm-up's own posts don't count.
         await page.evaluate(() => {
             const mv = window.mediaViewer;
-            const origShow = mv.showMedia.bind(mv);
-            mv.showMedia = (...args) => {
-                window.__mlEvents.push('showMedia');
-                return origShow(...args);
-            };
-            window.__mlEvents.length = 0;
+            window.__postedTypes.length = 0;
+            window.__showMediaCalls = 0;
             // Same forced AI-sorted compare state the persistence test uses.
             mv.isCompareMode = true;
             mv.isSortedByPrediction = true;
@@ -297,77 +284,44 @@ test.describe('Compare Mode', () => {
             mv.compareRightFile = mv.mediaFiles[1];
         });
 
-        // --- Rating (D2): the window is armed and NOTHING has rendered yet.
-        const armed = await page.evaluate(async () => {
-            const mv = window.mediaViewer;
-            await mv.applyBulkRating('good');
-            return {
-                pending: mv.pendingCompareRefresh,
-                updates: mv.pendingCompareUpdates,
-                nav: mv.mediaNavigationInProgress,
-                events: [...window.__mlEvents],
-            };
-        });
-        expect(armed.pending).toBe(true);
-        expect(armed.updates).toBe(2);
-        expect(armed.nav).toBe(true);
-        expect(armed.events).not.toContain('showMedia');
-
+        // --- Rating (G1): renders immediately, with no 'update' message posted to the (real,
+        // ready, warmed-up) worker — there is no deferred window left to wait out.
+        await page.evaluate(() => window.mediaViewer.applyBulkRating('good'));
         await page.waitForFunction(
-            () => !window.mediaViewer.mediaNavigationInProgress && !window.mediaViewer.isLoading
+            () => !window.mediaViewer.mediaNavigationInProgress && !window.mediaViewer.isLoading,
+            null,
+            { timeout: 2000 } // comfortably under the old 3 s deferred-refresh fallback
         );
-        const settled = await page.evaluate(() => {
-            const mv = window.mediaViewer;
-            return {
-                events: [...window.__mlEvents],
-                pending: mv.pendingCompareRefresh,
-                updates: mv.pendingCompareUpdates,
-                timeout: mv.pendingCompareTimeout,
-            };
-        });
-        // One render, AFTER a scoreComplete that carried real scores — settled by the reply,
-        // not by the 3 s fallback (which would leave pendingCompareTimeout non-null until it fired).
-        expect(settled.events).toEqual(['updateComplete', 'updateComplete', 'scoreComplete:scores', 'showMedia']);
-        expect(settled.pending).toBe(false);
-        expect(settled.updates).toBe(0);
-        expect(settled.timeout).toBeNull();
+        const afterRating = await page.evaluate(() => ({
+            posted: [...window.__postedTypes],
+            showMediaCalls: window.__showMediaCalls,
+        }));
+        // applyBulkRating never re-scores (it doesn't touch the model at all any more), so
+        // nothing is posted to the worker for a rating — not even a scoreAll.
+        expect(afterRating.posted).toEqual([]);
+        expect(afterRating.showMediaCalls).toBe(1); // rendered once, immediately
 
-        // --- Undo (D4): same protocol, driven by reverseUpdateComplete.
-        const undoArmed = await page.evaluate(async () => {
-            const mv = window.mediaViewer;
-            window.__mlEvents.length = 0;
-            await mv.handleCancel();
-            return {
-                pending: mv.pendingCompareRefresh,
-                updates: mv.pendingCompareUpdates,
-                nav: mv.mediaNavigationInProgress,
-                events: [...window.__mlEvents],
-            };
+        // --- Undo (G1): same immediate-render contract, but handleCancel's bulk-undo branch DOES
+        // call requestPredictionScores() (must-NOT-delete: badges/pair-selection still re-score
+        // after training changes) — so a 'scoreAll' is expected here. What must still be absent is
+        // 'update' / 'reverseUpdate': the online-update senders themselves.
+        await page.evaluate(() => {
+            window.__postedTypes.length = 0;
+            window.__showMediaCalls = 0;
+            return window.mediaViewer.handleCancel();
         });
-        expect(undoArmed.pending).toBe(true);
-        expect(undoArmed.updates).toBe(2);
-        expect(undoArmed.nav).toBe(true);
-        expect(undoArmed.events).not.toContain('showMedia');
-
         await page.waitForFunction(
-            () => !window.mediaViewer.mediaNavigationInProgress && !window.mediaViewer.isLoading
+            () => !window.mediaViewer.mediaNavigationInProgress && !window.mediaViewer.isLoading,
+            null,
+            { timeout: 2000 }
         );
-        const undoSettled = await page.evaluate(() => {
-            const mv = window.mediaViewer;
-            return {
-                events: [...window.__mlEvents],
-                pending: mv.pendingCompareRefresh,
-                timeout: mv.pendingCompareTimeout,
-            };
-        });
-        expect(undoSettled.events).toEqual([
-            'reverseUpdateComplete',
-            'reverseUpdateComplete',
-            'scoreComplete:scores',
-            'showMedia',
-        ]);
-        expect(undoSettled.pending).toBe(false);
-        expect(undoSettled.timeout).toBeNull();
+        const afterUndo = await page.evaluate(() => ({
+            posted: [...window.__postedTypes],
+            showMediaCalls: window.__showMediaCalls,
+        }));
+        expect(afterUndo.posted).not.toContain('update');
+        expect(afterUndo.posted).not.toContain('reverseUpdate');
+        expect(afterUndo.showMediaCalls).toBe(1);
     });
 
     test('resets to single mode when switching folders in compare mode', async () => {

@@ -1699,12 +1699,6 @@ describe('handleCancel feature restore', () => {
             requestPredictionScores: vi.fn(),
             // Helper under test — extracted as a real method so the handler can call it
             restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
-            reverseMlModelUpdate(features, actionType) {
-                this.mlWorker.postMessage({
-                    type: 'reverseUpdate',
-                    data: { features: Array.from(features), label: actionType === 'like' ? 1 : 0 },
-                });
-            },
             ...overrides,
         };
     }
@@ -1730,7 +1724,7 @@ describe('handleCancel feature restore', () => {
         globalThis.window = origWindow;
     });
 
-    it('single-mode like-undo restores featureCache, clipCache, and triggers reverseMlModelUpdate', async () => {
+    it('single-mode like-undo restores featureCache, clipCache, and featureMetadata', async () => {
         const ctx = commonMocks({
             moveHistory: [
                 {
@@ -1752,12 +1746,8 @@ describe('handleCancel feature restore', () => {
         expect(ctx.clipCache.has('/folder/a.png')).toBe(true);
         expect(ctx.clipCache.get('/folder/a.png').length).toBe(512);
         expect(ctx.featureMetadata.get('/folder/a.png')).toEqual({ size: 100, mtime: 0 });
-        // reverseMlModelUpdate posts via mlWorker.postMessage
-        const reverseCall = ctx.mlWorker.postMessage.mock.calls.find((c) => c[0].type === 'reverseUpdate');
-        expect(reverseCall).toBeDefined();
-        expect(reverseCall[0].data.label).toBe(1); // like
-        // requestPredictionScores is NOT explicitly called in like/dislike undo
-        // (it's triggered downstream via reverseUpdateComplete debounce in the live app)
+        // G1: the model is no longer updated per-rating, so a like/dislike undo has nothing to
+        // request new scores for — requestPredictionScores is not called on this path.
         expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
     });
 
@@ -1796,9 +1786,6 @@ describe('handleCancel feature restore', () => {
         // Only a.png had 576-dim → clipCache should be present for it but not for b.png (64-dim only)
         expect(ctx.clipCache.has('/folder/a.png')).toBe(true);
         expect(ctx.clipCache.has('/folder/b.png')).toBe(false);
-        // Two reverseUpdate calls
-        const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
-        expect(reverseCalls.length).toBe(2);
     });
 
     it('does NOT take the compare-pair branch when the last move lacks compareMode (leftover single move)', async () => {
@@ -1865,19 +1852,17 @@ describe('handleCancel feature restore', () => {
         await handleCancel.call(ctx);
 
         expect(ctx.featureCache.has('/folder/special.png')).toBe(true);
-        // No reverseUpdate (special is unrated)
-        const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
-        expect(reverseCalls.length).toBe(0);
-        // Special branch needs explicit requestPredictionScores since no reverseUpdateComplete debounce
+        // Special-move undo is the only handleCancel branch that requests fresh scores explicitly —
+        // like/dislike undo branches don't (see the sibling test above).
         expect(ctx.requestPredictionScores).toHaveBeenCalledTimes(1);
     });
 
-    it('bulk-rating undo reverses ML, returns to the rated pair, and refreshes the UI', async () => {
+    it('bulk-rating undo returns to the rated pair and refreshes the UI immediately (G1: no deferred window)', async () => {
         const ctx = commonMocks({
             isCompareMode: true,
             isSortedByPrediction: true,
             mlComparePairIndex: 5, // set high; handleCancel restores prevPairIndex on undo
-            undoBulkRating: vi.fn(async () => 0), // no worker posts -> render immediately
+            undoBulkRating: vi.fn(async () => {}),
             moveHistory: [
                 {
                     bothGood: true,
@@ -1893,41 +1878,10 @@ describe('handleCancel feature restore', () => {
         expect(ctx.undoBulkRating).toHaveBeenCalledOnce();
         expect(ctx.moveHistory).toHaveLength(0); // entry popped
         expect(ctx.mlComparePairIndex).toBe(3); // returned to the bulk-rated pair
-        // undoBulkRating is stubbed to return 0 posts, so this takes the immediate-render path.
-        expect(ctx.requestPredictionScores).toHaveBeenCalledOnce(); // badges re-scored after ML revert
+        // The model is no longer updated per-rating, so there is nothing left to defer for —
+        // handleCancel always re-scores and renders in the same synchronous continuation now.
+        expect(ctx.requestPredictionScores).toHaveBeenCalledOnce();
         expect(ctx.showMedia).toHaveBeenCalledOnce(); // re-render (refreshes the floating Undo button)
-    });
-
-    it('bulk-rating undo defers the re-render when reverse updates were posted', async () => {
-        vi.useFakeTimers();
-        try {
-            const ctx = commonMocks({
-                isCompareMode: true,
-                isSortedByPrediction: true,
-                mlComparePairIndex: 5,
-                undoBulkRating: vi.fn(async () => 2), // two reverseUpdate messages posted
-                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
-                moveHistory: [
-                    {
-                        bothGood: true,
-                        bothBad: false,
-                        bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
-                        prevPairIndex: 3,
-                    },
-                ],
-            });
-
-            await handleCancel.call(ctx);
-
-            expect(ctx.mlComparePairIndex).toBe(3); // still restored before deferring
-            expect(ctx.pendingCompareRefresh).toBe(true);
-            expect(ctx.pendingCompareUpdates).toBe(2);
-            // reverseUpdateComplete drives the re-score; handleCancel must not do either itself.
-            expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
-            expect(ctx.showMedia).not.toHaveBeenCalled();
-        } finally {
-            vi.useRealTimers();
-        }
     });
 
     it('applyBulkRating records the exact pair key and re-renders in place (no advance)', async () => {
@@ -1940,8 +1894,7 @@ describe('handleCancel feature restore', () => {
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
             compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-            getCombinedFeatures: () => null, // skips updateMlModelWithFeatures
-            updateMlModelWithFeatures: vi.fn(),
+            getCombinedFeatures: () => null, // cache miss
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             bulkPairKey,
@@ -1963,42 +1916,7 @@ describe('handleCancel feature restore', () => {
         expect(ctx.moveHistory[0].bothBad).toBe(true);
     });
 
-    it('applyBulkRating defers the re-render until the model re-scores', async () => {
-        vi.useFakeTimers();
-        try {
-            const applyBulkRating = extractAsyncMethod('applyBulkRating');
-            const bulkPairKey = extractMethod('bulkPairKey');
-            const showMedia = vi.fn();
-            const ctx = {
-                isSortedByPrediction: true,
-                isCompareMode: true,
-                compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
-                compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-                getCombinedFeatures: () => [1, 2, 3],
-                updateMlModelWithFeatures: vi.fn(() => true), // both posts succeed
-                bulkRated: new Map(),
-                bulkRatedPairs: new Set(),
-                bulkPairKey,
-                saveBulkRatedFile: async () => {},
-                moveHistory: [],
-                mlComparePairIndex: 0,
-                computeValidComparePairs: () => [{}, {}],
-                showNotification: () => {},
-                showMedia,
-                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
-            };
-            await applyBulkRating.call(ctx, 'bad');
-
-            expect(ctx.pendingCompareRefresh).toBe(true);
-            expect(ctx.pendingCompareUpdates).toBe(2); // one per posted update
-            expect(ctx.mediaNavigationInProgress).toBe(true);
-            expect(showMedia).not.toHaveBeenCalled(); // scoreComplete renders, not us
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('applyBulkRating renders immediately when no model update was posted', async () => {
+    it('applyBulkRating renders immediately — no deferred window (G1)', async () => {
         const applyBulkRating = extractAsyncMethod('applyBulkRating');
         const bulkPairKey = extractMethod('bulkPairKey');
         const showMedia = vi.fn();
@@ -2008,7 +1926,6 @@ describe('handleCancel feature restore', () => {
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
             compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
             getCombinedFeatures: () => [1, 2, 3],
-            updateMlModelWithFeatures: vi.fn(() => false), // ML off / no worker
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             bulkPairKey,
@@ -2018,53 +1935,29 @@ describe('handleCancel feature restore', () => {
             computeValidComparePairs: () => [{}, {}],
             showNotification: () => {},
             showMedia,
-            _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
         };
         await applyBulkRating.call(ctx, 'bad');
 
-        // Nothing will come back from the worker — rendering must not be deferred.
-        expect(ctx.pendingCompareRefresh).toBeFalsy();
+        // The model is no longer updated per-rating, so there is no worker round trip to wait
+        // for — applyBulkRating renders synchronously within the same call, every time.
         expect(showMedia).toHaveBeenCalledTimes(1);
+        // The captured features still land on the history entry (not posted anywhere) — see
+        // media-viewer.js applyBulkRating's bulkFiles capture.
+        expect(ctx.moveHistory[0].bulkFiles[0].features).toEqual([1, 2, 3]);
     });
 
-    it('the deferred-refresh fallback renders with stale scores after 3s', async () => {
-        vi.useFakeTimers();
-        try {
-            const beginDeferred = extractMethod('_beginDeferredCompareRefresh');
-            const showMedia = vi.fn();
-            // Seed a stale pre-rating snapshot, as moveComparePair's mirror-image fallback would
-            // have left behind — the fallback must null it so a delta notification never computes
-            // against out-of-date scores after showMedia() re-renders with the pair still unscored.
-            const ctx = { showMedia, previousScores: new Map([['stale.jpg', 0.5]]) };
-            beginDeferred.call(ctx, 2);
-            expect(showMedia).not.toHaveBeenCalled();
-
-            vi.advanceTimersByTime(3000);
-
-            expect(showMedia).toHaveBeenCalledTimes(1);
-            expect(ctx.pendingCompareRefresh).toBe(false);
-            expect(ctx.pendingCompareUpdates).toBe(0);
-            expect(ctx.mediaNavigationInProgress).toBe(false);
-            expect(ctx.previousScores).toBeNull();
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('applyBulkRating drops a re-entrant press while a deferred refresh is pending', async () => {
+    it('applyBulkRating drops a re-entrant press while navigation is already in flight', async () => {
         const applyBulkRating = extractAsyncMethod('applyBulkRating');
         const bulkPairKey = extractMethod('bulkPairKey');
-        const updateMlModelWithFeatures = vi.fn(() => true);
         const saveBulkRatedFile = vi.fn(async () => {});
         const showMedia = vi.fn();
         const ctx = {
             isSortedByPrediction: true,
             isCompareMode: true,
-            mediaNavigationInProgress: true, // a prior rating's deferred refresh is still in flight
+            mediaNavigationInProgress: true, // e.g. the previous rating's showMedia() render is still in flight
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
             compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
             getCombinedFeatures: () => [1, 2, 3],
-            updateMlModelWithFeatures,
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             bulkPairKey,
@@ -2077,9 +1970,8 @@ describe('handleCancel feature restore', () => {
         };
         await applyBulkRating.call(ctx, 'good');
 
-        // The whole method must be a no-op — the in-flight rating from the first press owns this
-        // pair until scoreComplete (or the 3s fallback) clears mediaNavigationInProgress.
-        expect(updateMlModelWithFeatures).not.toHaveBeenCalled();
+        // The whole method must be a no-op — the in-flight render from the first press owns this
+        // pair until it clears mediaNavigationInProgress.
         expect(saveBulkRatedFile).not.toHaveBeenCalled();
         expect(ctx.bulkRated.size).toBe(0);
         expect(ctx.bulkRatedPairs.size).toBe(0);
@@ -2087,52 +1979,11 @@ describe('handleCancel feature restore', () => {
         expect(showMedia).not.toHaveBeenCalled();
     });
 
-    it('applyBulkRating counts exactly one posted update when only one file actually posts', async () => {
-        vi.useFakeTimers();
-        try {
-            const applyBulkRating = extractAsyncMethod('applyBulkRating');
-            const bulkPairKey = extractMethod('bulkPairKey');
-            const showMedia = vi.fn();
-            let calls = 0;
-            const ctx = {
-                isSortedByPrediction: true,
-                isCompareMode: true,
-                compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
-                compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-                getCombinedFeatures: () => [1, 2, 3], // both files "have" cached features
-                // First file (left) posts to the worker; second (right) does not — e.g. the worker
-                // was unloaded mid-loop. postedUpdates must track the true count (1), never assume 2.
-                updateMlModelWithFeatures: vi.fn(() => {
-                    calls++;
-                    return calls === 1;
-                }),
-                bulkRated: new Map(),
-                bulkRatedPairs: new Set(),
-                bulkPairKey,
-                saveBulkRatedFile: async () => {},
-                moveHistory: [],
-                mlComparePairIndex: 0,
-                computeValidComparePairs: () => [{}, {}],
-                showNotification: () => {},
-                showMedia,
-                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
-            };
-            await applyBulkRating.call(ctx, 'bad');
-
-            expect(ctx.pendingCompareRefresh).toBe(true);
-            expect(ctx.pendingCompareUpdates).toBe(1); // exactly one message was actually posted
-            expect(showMedia).not.toHaveBeenCalled();
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
     it('undoBulkRating deletes the exact pair key', async () => {
         const undoBulkRating = extractAsyncMethod('undoBulkRating');
         const bulkPairKey = extractMethod('bulkPairKey');
         const key = bulkPairKey('a.jpg', 'z.jpg');
         const ctx = {
-            reverseMlModelUpdate: vi.fn(),
             bulkRated: new Map([
                 ['a.jpg', 'bad'],
                 ['z.jpg', 'bad'],
@@ -2171,15 +2022,14 @@ describe('handleCancel feature restore', () => {
         expect(ctx.showMedia).toHaveBeenCalledOnce();
     });
 
-    it('returns early when a deferred-refresh window is already open (mediaNavigationInProgress)', async () => {
-        // Nothing sets isLoading during a deferred window, so mediaNavigationInProgress is the
-        // only signal a second Ctrl+Z has landed inside one. Without this guard, handleCancel would
-        // arm a SECOND window and an earlier scoreComplete could satisfy it — rendering from
-        // prediction scores that have not finished reverting (FIX 1).
+    it('returns early when navigation is already in flight (mediaNavigationInProgress)', async () => {
+        // mediaNavigationInProgress is held for the whole of an in-flight showMedia() render.
+        // Without this guard, a second Ctrl+Z landing mid-render could pop a moveHistory entry
+        // and re-render on top of a render that's still in progress (FIX 1).
         const ctx = commonMocks({
             isCompareMode: true,
             isSortedByPrediction: true,
-            mediaNavigationInProgress: true, // an earlier deferred-refresh window is still open
+            mediaNavigationInProgress: true, // e.g. a showMedia() render is still in flight
             undoBulkRating: vi.fn(),
             moveHistory: [
                 {
@@ -2268,7 +2118,6 @@ describe('applyBulkRating', () => {
             bulkRated: new Map(),
             moveHistory: [],
             getCombinedFeatures: () => [1, 2, 3],
-            updateMlModelWithFeatures: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
             nextMedia: vi.fn(),
@@ -2281,41 +2130,23 @@ describe('applyBulkRating', () => {
         };
     }
 
-    it('trains both files as like and records them as good, then defers the re-render', async () => {
-        vi.useFakeTimers();
-        try {
-            // Override the shared makeCtx() default (a bare vi.fn() returning undefined) with a
-            // realistic "both files actually posted" mock — the shared default would silently take
-            // the immediate-render branch and this test would stop exercising the deferred path.
-            // Overridden here rather than in makeCtx() itself: the shared default is relied on by
-            // sibling tests below (e.g. the mlComparePairIndex clamp test) that don't stub
-            // _beginDeferredCompareRefresh and would break if the default started posting.
-            const ctx = makeCtx({
-                updateMlModelWithFeatures: vi.fn(() => true),
-                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
-            });
-            await applyBulkRating.call(ctx, 'good');
-            expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledTimes(2);
-            expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'like');
-            expect(ctx.bulkRated.get('a.jpg')).toBe('good');
-            expect(ctx.bulkRated.get('b.jpg')).toBe('good');
-            expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
-            expect(ctx.moveHistory).toHaveLength(1);
-            expect(ctx.moveHistory[0].bothGood).toBe(true);
-            expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
-            // Both posts succeeded — the render must be deferred until scoreComplete, not immediate.
-            expect(ctx.pendingCompareRefresh).toBe(true);
-            expect(ctx.pendingCompareUpdates).toBe(2);
-            expect(ctx.showMedia).not.toHaveBeenCalled();
-        } finally {
-            vi.useRealTimers();
-        }
+    it('records both files as good and renders immediately (G1: no deferred window)', async () => {
+        const ctx = makeCtx();
+        await applyBulkRating.call(ctx, 'good');
+        expect(ctx.bulkRated.get('a.jpg')).toBe('good');
+        expect(ctx.bulkRated.get('b.jpg')).toBe('good');
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.moveHistory[0].bothGood).toBe(true);
+        expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
+        // The model is no longer updated per-rating — nothing to wait for, so the render is
+        // synchronous within this same call.
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
     });
 
-    it('trains both files as dislike for the bad bucket', async () => {
+    it('records both files as bad for the bad bucket', async () => {
         const ctx = makeCtx();
         await applyBulkRating.call(ctx, 'bad');
-        expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'dislike');
         expect(ctx.bulkRated.get('a.jpg')).toBe('bad');
         expect(ctx.moveHistory[0].bothBad).toBe(true);
     });
@@ -2323,7 +2154,6 @@ describe('applyBulkRating', () => {
     it('no-ops outside AI-sorted compare mode', async () => {
         const ctx = makeCtx({ isSortedByPrediction: false });
         await applyBulkRating.call(ctx, 'good');
-        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
         expect(ctx.moveHistory).toHaveLength(0);
         expect(ctx.nextMedia).not.toHaveBeenCalled();
         expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
@@ -2332,13 +2162,14 @@ describe('applyBulkRating', () => {
     it('no-ops when a compare file is missing', async () => {
         const ctx = makeCtx({ compareRightFile: null });
         await applyBulkRating.call(ctx, 'good');
-        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toHaveLength(0);
+        expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
     });
 
-    it('stores null features (no training) when the cache misses', async () => {
+    it('stores a null features value on the bulk-file entry when the cache misses', async () => {
         const ctx = makeCtx({ getCombinedFeatures: () => null });
         await applyBulkRating.call(ctx, 'good');
-        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
         expect(ctx.bulkRated.get('a.jpg')).toBe('good');
         expect(ctx.moveHistory[0].bulkFiles[0].features).toBeNull();
     });
@@ -2356,45 +2187,13 @@ describe('applyBulkRating', () => {
         expect(ctx.moveHistory[0].prevPairIndex).toBe(2); // original index recorded for undo
         expect(ctx.mlComparePairIndex).toBe(1); // clamped to valid max (length - 1)
     });
-
-    it('posts model updates only after saveBulkRatedFile resolves (FIX 2 ordering invariant)', async () => {
-        // A worker round trip is usually FASTER than the saveBulkRatedFile disk write. If the posts
-        // went out before the await settled (the pre-FIX-2 bug), updateComplete could land before
-        // anything is armed to receive it. Use a controllable promise to prove the posts wait.
-        let resolveSave;
-        const savePromise = new Promise((resolve) => {
-            resolveSave = resolve;
-        });
-        const callOrder = [];
-        const ctx = makeCtx({
-            saveBulkRatedFile: vi.fn(() => {
-                callOrder.push('save-start');
-                return savePromise;
-            }),
-            updateMlModelWithFeatures: vi.fn(() => {
-                callOrder.push('post');
-                return true;
-            }),
-            _beginDeferredCompareRefresh: vi.fn(),
-        });
-
-        const applyPromise = applyBulkRating.call(ctx, 'bad');
-        // Everything up to and including the `await saveBulkRatedFile()` call runs synchronously;
-        // nothing past it (the posts) may have run yet.
-        expect(callOrder).toEqual(['save-start']);
-        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
-
-        resolveSave();
-        await applyPromise;
-        expect(callOrder).toEqual(['save-start', 'post', 'post']);
-    });
 });
 
 describe('undoBulkRating', () => {
     const undoBulkRating = extractAsyncMethod('undoBulkRating');
     const bulkPairKey = extractMethod('bulkPairKey');
 
-    it('reverses both updates and clears both files from bulkRated', async () => {
+    it('clears both files from bulkRated and re-admits the pair key', async () => {
         const ctx = {
             bulkRated: new Map([
                 ['a.jpg', 'good'],
@@ -2402,7 +2201,6 @@ describe('undoBulkRating', () => {
             ]),
             bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
             bulkPairKey,
-            reverseMlModelUpdate: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
         };
@@ -2415,16 +2213,13 @@ describe('undoBulkRating', () => {
             ],
         };
         await undoBulkRating.call(ctx, lastMove);
-        expect(ctx.reverseMlModelUpdate).toHaveBeenCalledTimes(2);
-        expect(ctx.reverseMlModelUpdate).toHaveBeenCalledWith([1, 2, 3], 'like');
-        expect(ctx.reverseMlModelUpdate).toHaveBeenNthCalledWith(2, [4, 5, 6], 'like');
         expect(ctx.showNotification).toHaveBeenCalledWith('↩️ Bulk rating undone', 'info');
         expect(ctx.bulkRated.size).toBe(0);
         expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'b.jpg'))).toBe(false);
         expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
     });
 
-    it('skips ML reversal for files stored with null features', async () => {
+    it('clears bulkRated for entries stored with null features (nothing to reverse — it never touches the model)', async () => {
         const ctx = {
             bulkRated: new Map([
                 ['a.jpg', 'bad'],
@@ -2432,7 +2227,6 @@ describe('undoBulkRating', () => {
             ]),
             bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
             bulkPairKey,
-            reverseMlModelUpdate: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
         };
@@ -2445,105 +2239,9 @@ describe('undoBulkRating', () => {
             ],
         };
         await undoBulkRating.call(ctx, lastMove);
-        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
         expect(ctx.bulkRated.has('a.jpg')).toBe(false);
         expect(ctx.bulkRated.has('b.jpg')).toBe(false);
         expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'b.jpg'))).toBe(false);
-    });
-
-    it('posts reverse-update messages only after saveBulkRatedFile resolves (FIX 2 ordering invariant)', async () => {
-        // Mirrors the applyBulkRating ordering test: a worker round trip is usually faster than the
-        // disk write, so if the reverse-update posts went out before the await settled, handleCancel
-        // could arm the deferred window against a reply that already arrived.
-        let resolveSave;
-        const savePromise = new Promise((resolve) => {
-            resolveSave = resolve;
-        });
-        const callOrder = [];
-        const ctx = {
-            bulkRated: new Map([
-                ['a.jpg', 'good'],
-                ['b.jpg', 'good'],
-            ]),
-            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
-            bulkPairKey,
-            reverseMlModelUpdate: vi.fn(() => {
-                callOrder.push('post');
-                return true;
-            }),
-            saveBulkRatedFile: vi.fn(() => {
-                callOrder.push('save-start');
-                return savePromise;
-            }),
-            showNotification: vi.fn(),
-        };
-        const lastMove = {
-            bothGood: true,
-            bothBad: false,
-            bulkFiles: [
-                { name: 'a.jpg', features: [1, 2, 3] },
-                { name: 'b.jpg', features: [4, 5, 6] },
-            ],
-        };
-
-        const undoPromise = undoBulkRating.call(ctx, lastMove);
-        expect(callOrder).toEqual(['save-start']);
-        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
-
-        resolveSave();
-        await undoPromise;
-        expect(callOrder).toEqual(['save-start', 'post', 'post']);
-    });
-
-    it('returns the number of reverse updates actually posted (true/true -> 2, true/false -> 1, false/false -> 0)', async () => {
-        // Every other mock here returns undefined, which left the posted-count arithmetic untested —
-        // and that count is what handleCancel arms the deferred-refresh window with.
-        const make = (replies) => ({
-            bulkRated: new Map([
-                ['a.jpg', 'good'],
-                ['b.jpg', 'good'],
-            ]),
-            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
-            bulkPairKey,
-            reverseMlModelUpdate: vi.fn().mockReturnValueOnce(replies[0]).mockReturnValueOnce(replies[1]),
-            saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
-            showNotification: vi.fn(),
-        });
-        const lastMove = {
-            bothGood: true,
-            bothBad: false,
-            bulkFiles: [
-                { name: 'a.jpg', features: [1, 2, 3] },
-                { name: 'b.jpg', features: [4, 5, 6] },
-            ],
-        };
-        await expect(undoBulkRating.call(make([true, true]), lastMove)).resolves.toBe(2);
-        await expect(undoBulkRating.call(make([true, false]), lastMove)).resolves.toBe(1);
-        await expect(undoBulkRating.call(make([false, false]), lastMove)).resolves.toBe(0);
-    });
-
-    it('returns 0 when both files have null features (nothing posted)', async () => {
-        const ctx = {
-            bulkRated: new Map([
-                ['a.jpg', 'bad'],
-                ['b.jpg', 'bad'],
-            ]),
-            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
-            bulkPairKey,
-            reverseMlModelUpdate: vi.fn(() => true),
-            saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
-            showNotification: vi.fn(),
-        };
-        const lastMove = {
-            bothGood: false,
-            bothBad: true,
-            bulkFiles: [
-                { name: 'a.jpg', features: null },
-                { name: 'b.jpg', features: null },
-            ],
-        };
-        await expect(undoBulkRating.call(ctx, lastMove)).resolves.toBe(0);
-        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
     });
 });
 
@@ -2716,133 +2414,6 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
     });
 });
 
-describe('_cancelDeferredCompareRefresh', () => {
-    const cancel = extractMethod('_cancelDeferredCompareRefresh');
-
-    it('clears an open window (timer, flags, snapshot) and releases mediaNavigationInProgress', () => {
-        vi.useFakeTimers();
-        try {
-            const fallback = vi.fn();
-            const ctx = {
-                pendingCompareRefresh: true,
-                pendingCompareUpdates: 2,
-                pendingCompareTimeout: setTimeout(fallback, 3000),
-                previousScores: new Map([['/f/a', 0.5]]),
-                mediaNavigationInProgress: true,
-            };
-            cancel.call(ctx);
-            expect(ctx.pendingCompareRefresh).toBe(false);
-            expect(ctx.pendingCompareUpdates).toBe(0);
-            expect(ctx.pendingCompareTimeout).toBeNull();
-            expect(ctx.previousScores).toBeNull();
-            expect(ctx.mediaNavigationInProgress).toBe(false);
-            vi.advanceTimersByTime(3500);
-            expect(fallback).not.toHaveBeenCalled(); // the 3 s fallback can no longer fire showMedia()
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('leaves mediaNavigationInProgress alone when no window was open', () => {
-        // The flag is also held by ordinary in-flight navigation — a no-op cancel must not release it.
-        const ctx = {
-            pendingCompareRefresh: false,
-            pendingCompareUpdates: 0,
-            pendingCompareTimeout: null,
-            previousScores: null,
-            mediaNavigationInProgress: true,
-        };
-        cancel.call(ctx);
-        expect(ctx.mediaNavigationInProgress).toBe(true);
-        expect(ctx.pendingCompareRefresh).toBe(false);
-    });
-});
-
-describe('loadFolder drops an open deferred compare refresh (G1 T2)', () => {
-    const loadFolder = extractAsyncMethod('loadFolder');
-    const cancelImpl = extractMethod('_cancelDeferredCompareRefresh');
-    const abortImpl = extractMethod('_abortInFlightPredictionSort');
-    let origWindow;
-
-    beforeEach(() => {
-        origWindow = globalThis.window;
-        globalThis.window = {
-            electronAPI: {
-                loadFolder: vi.fn(async () => ({ success: true, files: [] })),
-                path: { basename: (p) => p.split(/[\\/]/).pop() },
-            },
-        };
-    });
-    afterEach(() => {
-        globalThis.window = origWindow;
-    });
-
-    it('cancels the window BEFORE a scan that outlives the 3 s fallback, and again on the empty-folder branch', async () => {
-        vi.useFakeTimers();
-        try {
-            const fallback = vi.fn();
-            // A 24k-file scan takes longer than the fallback: advance past it INSIDE the await.
-            globalThis.window.electronAPI.loadFolder = vi.fn(async () => {
-                vi.advanceTimersByTime(3500);
-                return { success: true, files: [] };
-            });
-            const ctx = {
-                isTournamentMode: false,
-                tournament: { engine: null },
-                mediaFiles: [{ name: 'stale.png', path: '/old/stale.png' }],
-                baseFolderPath: '/old',
-                currentFolderPath: 'old',
-                currentIndex: 0,
-                moveHistory: [],
-                sortRunId: 0,
-                sortAbortController: null,
-                _mlSortResolve: null,
-                _mlSortReject: null,
-                _featureCacheDiskCount: 0,
-                // An open deferred window from a bulk rating in the OLD folder:
-                pendingCompareRefresh: true,
-                pendingCompareUpdates: 2,
-                pendingCompareTimeout: setTimeout(fallback, 3000),
-                previousScores: null,
-                mediaNavigationInProgress: true,
-                showLoadingSpinner: vi.fn(),
-                hideLoadingSpinner: vi.fn(),
-                showDropZone: vi.fn(),
-                showError: vi.fn(),
-                exitTournamentMode: vi.fn(),
-                cancelBackgroundExtraction: vi.fn(),
-                _abortInFlightPredictionSort: vi.fn(abortImpl),
-                _cancelDeferredCompareRefresh: vi.fn(cancelImpl),
-            };
-            await loadFolder.call(ctx, '/new/empty-folder');
-            expect(ctx._cancelDeferredCompareRefresh).toHaveBeenCalledTimes(2); // pre-scan + post-scan
-            expect(ctx.pendingCompareRefresh).toBe(false);
-            expect(ctx.pendingCompareTimeout).toBeNull();
-            expect(ctx.mediaNavigationInProgress).toBe(false);
-            vi.advanceTimersByTime(3500);
-            expect(fallback).not.toHaveBeenCalled(); // neither mid-scan nor against the new folder
-            expect(ctx.mediaFiles).toEqual([]); // sanity: the empty branch was taken
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('is called before the scan AND before the empty/non-empty split (non-empty branch covered too)', () => {
-        const body = methodSource('loadFolder');
-        const call = 'this._cancelDeferredCompareRefresh();';
-        const first = body.indexOf(call);
-        const second = body.indexOf(call, first + 1);
-        const scan = body.indexOf('await window.electronAPI.loadFolder(');
-        const split = body.indexOf('if (result.files.length === 0)');
-        const abort = body.indexOf('this._abortInFlightPredictionSort();');
-        expect(first).toBeGreaterThan(-1);
-        expect(first).toBeLessThan(scan); // the fallback cannot fire mid-await
-        expect(second).toBeGreaterThan(abort); // a window armed DURING the scan is dropped too
-        expect(second).toBeLessThan(split);
-        expect(body.indexOf(call, second + 1)).toBe(-1); // exactly two
-    });
-});
-
 describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
     const bulkPairKey = extractMethod('bulkPairKey');
     const keysReferencing = extractMethod('_bulkPairKeysReferencing');
@@ -2880,7 +2451,6 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             areFoldersConfigured: () => true,
             getCombinedFeatures: () => null,
             removeFileFromList,
-            updateMlModelWithFeatures: vi.fn(),
             updateFolderInfo: vi.fn(),
             showMedia: vi.fn(),
             showNotification: vi.fn(),
@@ -3058,7 +2628,6 @@ describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
         showMedia: vi.fn(async () => {}),
         requestPredictionScores: vi.fn(),
         restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
-        reverseMlModelUpdate: vi.fn(),
         ...overrides,
     });
 
@@ -4149,7 +3718,6 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
             _abortInFlightPredictionSort: vi.fn(abortInFlightPredictionSortImpl),
-            _cancelDeferredCompareRefresh: vi.fn(),
         };
     }
 
@@ -5612,5 +5180,28 @@ describe('handleSortByPrediction delegates training to MlTrainingManager (G1)', 
     // updateProgressNotification (or dropped) instead.
     it("wires the manager's onProgress to updateSortProgress, never the plain-text notification", () => {
         expect(source).toContain('onProgress: (p) => this.updateSortProgress(p),');
+    });
+});
+
+describe('online-update protocol removed (G1)', () => {
+    it('no longer defines the online update or reverse-update helpers', () => {
+        expect(source).not.toContain('updateMlModelWithFeatures(');
+        expect(source).not.toContain('reverseMlModelUpdate(');
+    });
+
+    it('no longer defines the deferred compare-refresh protocol', () => {
+        expect(source).not.toContain('_beginDeferredCompareRefresh');
+        expect(source).not.toContain('_cancelDeferredCompareRefresh');
+        expect(source).not.toContain('pendingCompareUpdates');
+        expect(source).not.toContain('pendingCompareRefresh');
+    });
+
+    it('keeps mlFeatures on history entries — undo restores caches from it', () => {
+        expect(source).toContain('restoreFeatureCachesFromHistory');
+        expect(source).toContain('mlFeatures');
+    });
+
+    it('reports the training source in the learning indicator', () => {
+        expect(source).toContain('showMlLearningIndicator(stats, source');
     });
 });
