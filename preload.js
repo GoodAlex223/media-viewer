@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     featureCacheWriteOpen: (filePath, header) => ipcRenderer.invoke('feature-cache-write-open', filePath, header),
     featureCacheWriteChunk: (entries) => ipcRenderer.invoke('feature-cache-write-chunk', entries),
     featureCacheWriteClose: () => ipcRenderer.invoke('feature-cache-write-close'),
+    // ML model cache (app data, keyed by training-set fingerprint)
+    readMlModelCache: () => ipcRenderer.invoke('read-ml-model-cache'),
+    writeMlModelCache: (store) => ipcRenderer.invoke('write-ml-model-cache', store),
 
     // Folder operations
     openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'),

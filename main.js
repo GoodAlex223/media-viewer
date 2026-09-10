@@ -291,6 +291,37 @@ app.whenReady().then(() => {
         }
     });
 
+    // ---- ML model cache (app data, keyed by training-set fingerprint) ----
+    // Lives in userData, NOT in a media folder: the model is a function of the like/dislike
+    // folders and is reusable from every source folder, which is the whole point of the
+    // fingerprint. See docs/superpowers/specs/2026-09-10-ml-training-pipeline-design.md.
+    const mlModelCachePath = () => path.join(app.getPath('userData'), 'ml-model-cache.json');
+
+    ipcMain.handle('read-ml-model-cache', async () => {
+        try {
+            const text = await fs.readFile(mlModelCachePath(), 'utf-8');
+            return { success: true, store: JSON.parse(text) };
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return { success: true, store: null };
+            }
+            return { success: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('write-ml-model-cache', async (_event, store) => {
+        const target = mlModelCachePath();
+        const tmpPath = target + '.tmp';
+        try {
+            await fs.writeFile(tmpPath, JSON.stringify(store), 'utf-8');
+            await fs.rename(tmpPath, target); // atomic replace — no torn file on crash mid-write
+            return { success: true };
+        } catch (err) {
+            await fs.unlink(tmpPath).catch(() => {}); // best-effort cleanup
+            return { success: false, error: err.message };
+        }
+    });
+
     ipcMain.handle('readBulkRatedFile', async (_event, folderPath) => {
         try {
             const filePath = path.join(folderPath, '.bulk_rated.json');

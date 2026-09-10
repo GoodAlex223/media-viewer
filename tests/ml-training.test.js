@@ -389,3 +389,97 @@ describe('training-vector cache save', () => {
         expect(m.logError).toHaveBeenCalled();
     });
 });
+
+describe('model cache', () => {
+    const makeModelCache = (initial = null) => {
+        let store = initial;
+        return {
+            read: vi.fn(async () => ({ success: true, store })),
+            write: vi.fn(async (s) => {
+                store = s;
+                return { success: true };
+            }),
+            get current() {
+                return store;
+            },
+        };
+    };
+
+    it('returns null on an empty cache', async () => {
+        const mc = makeModelCache();
+        const m = managerWith({ modelCache: mc });
+        expect(await m._readCachedModel('abc')).toBeNull();
+    });
+
+    it('returns the entry whose fingerprint matches', async () => {
+        const mc = makeModelCache({
+            version: 1,
+            entries: [{ fingerprint: 'abc', modelState: { weights: [1] }, stats: { isReady: true }, savedAt: 1 }],
+        });
+        const m = managerWith({ modelCache: mc });
+        const hit = await m._readCachedModel('abc');
+        expect(hit.modelState.weights).toEqual([1]);
+    });
+
+    it('returns null for a non-matching fingerprint', async () => {
+        const mc = makeModelCache({
+            version: 1,
+            entries: [{ fingerprint: 'abc', modelState: { weights: [1] }, stats: {}, savedAt: 1 }],
+        });
+        const m = managerWith({ modelCache: mc });
+        expect(await m._readCachedModel('zzz')).toBeNull();
+    });
+
+    it('ignores a store written by a future version', async () => {
+        const mc = makeModelCache({ version: 99, entries: [{ fingerprint: 'abc', modelState: {}, stats: {} }] });
+        const m = managerWith({ modelCache: mc });
+        expect(await m._readCachedModel('abc')).toBeNull();
+    });
+
+    it('writes newest first and evicts past the limit', async () => {
+        const mc = makeModelCache();
+        const m = managerWith({ modelCache: mc });
+        for (let i = 0; i < MlTrainingManager.MODEL_CACHE_LIMIT + 2; i++) {
+            await m._writeCachedModel(`fp${i}`, { weights: [i] }, { isReady: true }, { likeFiles: i });
+        }
+        expect(mc.current.entries).toHaveLength(MlTrainingManager.MODEL_CACHE_LIMIT);
+        expect(mc.current.entries[0].fingerprint).toBe(`fp${MlTrainingManager.MODEL_CACHE_LIMIT + 1}`);
+        expect(mc.current.entries.some((e) => e.fingerprint === 'fp0')).toBe(false);
+    });
+
+    it('replaces an existing fingerprint rather than duplicating it', async () => {
+        const mc = makeModelCache();
+        const m = managerWith({ modelCache: mc });
+        await m._writeCachedModel('same', { weights: [1] }, {}, {});
+        await m._writeCachedModel('same', { weights: [2] }, {}, {});
+        expect(mc.current.entries).toHaveLength(1);
+        expect(mc.current.entries[0].modelState.weights).toEqual([2]);
+    });
+
+    it('persists the descriptor summary so a wrong hit is diagnosable', async () => {
+        const mc = makeModelCache();
+        const m = managerWith({ modelCache: mc });
+        await m._writeCachedModel('fp', { weights: [1] }, {}, { likeFolder: '/likes', likeCount: 12 });
+        expect(mc.current.entries[0].descriptorSummary).toEqual({ likeFolder: '/likes', likeCount: 12 });
+    });
+
+    it('a write failure is logged, not thrown', async () => {
+        const logError = vi.fn();
+        const mc = {
+            read: vi.fn(async () => ({ success: true, store: null })),
+            write: vi.fn(async () => ({ success: false, error: 'EACCES' })),
+        };
+        const m = managerWith({ modelCache: mc, logError });
+        await expect(m._writeCachedModel('fp', {}, {}, {})).resolves.toBeUndefined();
+        expect(logError).toHaveBeenCalled();
+    });
+
+    it('invalidateModelCache empties the store and the session fingerprint', async () => {
+        const mc = makeModelCache({ version: 1, entries: [{ fingerprint: 'abc', modelState: {}, stats: {} }] });
+        const m = managerWith({ modelCache: mc });
+        m.sessionFingerprint = 'abc';
+        await m.invalidateModelCache();
+        expect(mc.current.entries).toEqual([]);
+        expect(m.sessionFingerprint).toBeNull();
+    });
+});

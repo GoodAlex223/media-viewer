@@ -335,4 +335,51 @@ export class MlTrainingManager {
             release();
         }
     }
+
+    static MODEL_CACHE_VERSION = 1;
+    static MODEL_CACHE_LIMIT = 5;
+
+    async _readCachedModel(fingerprint) {
+        try {
+            const res = await this.modelCache.read();
+            const store = res?.store;
+            if (!store || store.version !== MlTrainingManager.MODEL_CACHE_VERSION) return null;
+            return (store.entries || []).find((e) => e.fingerprint === fingerprint) || null;
+        } catch (err) {
+            this.logError(`ML model cache read failed: ${err.message}`);
+            return null;
+        }
+    }
+
+    async _writeCachedModel(fingerprint, modelState, stats, descriptorSummary) {
+        try {
+            const res = await this.modelCache.read();
+            const existing =
+                res?.store?.version === MlTrainingManager.MODEL_CACHE_VERSION ? res.store.entries || [] : [];
+            const kept = existing.filter((e) => e.fingerprint !== fingerprint);
+            const entries = [{ fingerprint, modelState, stats, descriptorSummary, savedAt: Date.now() }, ...kept].slice(
+                0,
+                MlTrainingManager.MODEL_CACHE_LIMIT
+            );
+            const write = await this.modelCache.write({
+                version: MlTrainingManager.MODEL_CACHE_VERSION,
+                entries,
+            });
+            if (!write?.success) {
+                this.logError(`ML model cache write failed: ${write?.error || 'unknown error'}`);
+            }
+        } catch (err) {
+            this.logError(`ML model cache write failed: ${err.message}`);
+        }
+    }
+
+    /** Escape hatch behind the Settings "Rebuild model" control. */
+    async invalidateModelCache() {
+        this.sessionFingerprint = null;
+        try {
+            await this.modelCache.write({ version: MlTrainingManager.MODEL_CACHE_VERSION, entries: [] });
+        } catch (err) {
+            this.logError(`ML model cache clear failed: ${err.message}`);
+        }
+    }
 }
