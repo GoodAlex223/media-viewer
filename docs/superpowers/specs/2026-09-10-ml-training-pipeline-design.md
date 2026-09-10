@@ -318,9 +318,10 @@ grep -n "updateMlModelWithFeatures\|reverseMlModelUpdate\|_beginDeferredCompareR
 ## 13. Superseded during implementation (dated 2026-09-10, closeout of Task 10)
 
 This is a frozen design doc — implementation is recorded here as corrections, not silent rewrites.
-Four claims above diverged from what shipped. Three were caught and ruled on during per-task
-review; the fourth (§ 5.2's "LRU") was caught during the Task 10 fix round. This section
-propagates those rulings back into the spec text they correct.
+The claims below diverged from what shipped, caught at different times — most during per-task
+review; at least one (§ 5.2's "LRU") only during a Task 10 fix round, after closeout. This section
+propagates those rulings back into the spec text they correct; it grows across fix rounds, so
+nothing here restates how many entries it holds.
 
 **§ 7.1 — the descriptor does not record `clipCoverage`, by deliberate ruling, not omission.**
 The text above says "The descriptor records `clipCoverage`." It does not, and the controller ruled

@@ -16,10 +16,10 @@ Completed tasks with implementation details and learnings.
 
 ### 2026-09-10 — Group G1: ML training pipeline — design pass + retrain skip 🔵 🏆 — 10/10 tasks, review complete, **merge pending**
 
-**Spec**: [2026-09-10-ml-training-pipeline-design.md](../superpowers/specs/2026-09-10-ml-training-pipeline-design.md) (3 claims superseded in § 13 during implementation)
+**Spec**: [2026-09-10-ml-training-pipeline-design.md](../superpowers/specs/2026-09-10-ml-training-pipeline-design.md) (see its § 13 for claims superseded during implementation)
 **Plan**: [archived](../archive/plans/2026-09-10_ml-training-pipeline.md) — 10-task subagent-driven SDD plan, executed via a controller ledger (`.superpowers/sdd/2026-09-10_ml-training-pipeline/progress.md`) rather than in-plan checkbox tracking
 **Branch**: `g1-ml-training-pipeline`, cut from `main` at `357800d`. **Not yet merged as of this entry** — every task shipped with its own per-task review round (several with fix rounds), but the whole-branch merge is a separate, later decision. No PR by task-brief instruction; reviewed locally, task-by-task, instead.
-**Commits**: `0a3aace`/`231e19d` (spec) → `1f540e3` (plan) → `bcd6fa9`..`e6a37f9` (Tasks 1–9, 18 commits) → this closeout commit (Task 10) — 21 commits above `357800d` through `e6a37f9`, plus this one.
+**Commits**: `0a3aace`/`231e19d` (spec) → `1f540e3` (plan) → `bcd6fa9`..`e6a37f9` (Tasks 1–9, 18 commits — a closed range, permanently 18) → Task 10's closeout plus its fix-round commits (still landing as of this entry; see `git log 357800d..HEAD` for the current total rather than a count here).
 **Tests**: unit 613 → **735** (every commit green); E2E 56 → **61**, run three times clean on the final revision.
 
 **Summary**: The root cause recorded in TODO.md and the WEEKLY.md group note was wrong, and the
@@ -65,7 +65,7 @@ against the other's inputs; fixed with a `versionsKnown` gate plus replacing a r
 `setTimeout(100)` with a real awaited handshake (whose own fix, in turn, introduced and then
 closed a hang in `initializeFeaturePool` on a probe-worker error — round 2's own review finding).
 
-**Key changes** (highlights; see the branch's 21 commits for the full history):
+**Key changes** (highlights; see `git log 357800d..HEAD` for the full history):
 
 - **`ml-training.js`** (new, 791 lines) — `MlTrainingManager`: `buildDescriptor`/`fingerprintDescriptor`/`seedFromFingerprint`, `_loadVectorCache`/`_saveVectorCache`, `_readCachedModel`/`_writeCachedModel`/`invalidateModelCache`, `ensureTrainedModel`.
 - **`media-viewer.js`** — 9,642 → **9,393** lines net across the branch (Global Constraints required the new module to remove more than it added; Task 7 alone: 156 insertions / 983 deletions): `trainFromHistoricalRatings`, `trainFromHistoricalRatingsAndWait`, `collectBulkRatedTrainingExamples`, `updateMlModelWithFeatures`, `reverseMlModelUpdate`, `_beginDeferredCompareRefresh`/`_cancelDeferredCompareRefresh`, `loadMlModel`/`saveMlModel`/`deleteMlModelCache` all deleted; `handleSortByPrediction` now calls `mlTraining.ensureTrainedModel()`; Settings gains a "Rebuild model" control (`handleRebuildModelClick`).
@@ -74,9 +74,9 @@ closed a hang in `initializeFeaturePool` on a probe-worker error — round 2's o
 - **`tests/`** — new `tests/ml-training.test.js` and `tests/ml-worker.test.js`; `tests/e2e/compare-mode.test.js` gains a real-`ml-worker.js` regression test proving a bulk rating and its undo post **no** messages to the worker; new E2E properties proving the retrain-skip/retrain-on-change pair and the Settings rebuild escape hatch.
 - **`CLAUDE.md`** — Architecture (`ml-training.js` added), Code Conventions → Patterns (`MlTrainingManager` added), State Management (`resetMlModel()` bullet rewritten), Cache Management (training-vector cache + model cache bullets added, bulk-rated cache bullet corrected), Async Patterns (the "ML compare refresh" paragraph deleted), Active gotchas (`deleteMlModelCache()` bullet replaced with the `FEATURE_CACHE_VERSION`/`FEATURE_VERSION` mismatch gotcha), plus two E2E-testing bullets corrected by the closeout's concept-level sweep (not literal-identifier matches).
 - **`PROJECT.md`** — module list now includes `MlTrainingManager`.
-- **`BACKLOG.md`** — 19 existing entries flipped/annotated (3 done, 1 decided-and-implemented, 2 annotated-not-closed, 8 reaped, 2 re-scoped/stays-open, 3 moot); 13 new 🟤 entries filed from the execution ledger's surviving deferred findings.
+- **`BACKLOG.md`** — existing entries across the online-update/deferred-refresh and adjacent clusters flipped or annotated with an inline outcome each (done, decided-and-implemented, annotated-not-closed, reaped, re-scoped-and-left-open, or moot) — the set grew across the fix rounds, so see the entries themselves rather than a count here; plus 13 new 🟤 entries filed under `[2026-09-10] From: G1 ML training pipeline — execution review follow-ups`.
 - **`TODO.md`** — the canonical 🟠 promoted item marked done with the corrected root cause.
-- **`docs/superpowers/specs/2026-09-10-ml-training-pipeline-design.md`** — § 13 "Superseded during implementation" added, correcting three claims (no `clipCoverage` in the descriptor, by ruling; the actual emitted progress phases; a vector-cache write failure discards in-memory vectors rather than retaining them for the session).
+- **`docs/superpowers/specs/2026-09-10-ml-training-pipeline-design.md`** — § 13 "Superseded during implementation" added, and extended again during the fix rounds; see that section for the claims it corrects rather than a count here.
 
 **Key decisions / learnings**:
 
@@ -87,7 +87,7 @@ closed a hang in `initializeFeaturePool` on a probe-worker error — round 2's o
 - ⭐ **A doc-only closeout task still needs its own concept-level grep, not just an identifier grep.** Six CLAUDE.md lines were pre-flagged by symbol name; a prose sweep for concepts ("deferred window", "3s fallback", "postedUpdates") found two more (the E2E-testing bullets) that no identifier grep would have matched — the same lesson this branch's own `git log` already carries from Task 7's review round.
 - ⚠️ **This entry is written before the branch is merged, by design, not by oversight.** WEEKLY.md's G1 row uses `◐ Branch complete, unmerged` rather than `✅ <merge-SHA>` for exactly the reason BACKLOG `[2026-08-31]` item 2 records: writing a merge-complete status before the merge happens is a real, previously-observed failure mode in this project ("closeout is written before the merge, and the merge falsifies it"). Flip both to `✅ <merge-SHA>` in the commit that actually merges this branch.
 
-**Follow-up tasks**: BACKLOG 🟤 `[2026-09-10] From: G1 ML training pipeline — execution review follow-ups` (13 entries — 4 explicitly mandated by the closeout dispatch, 2 brief-specified, 1 pre-existing-observation, 6 from the closeout's own judgment pass over the execution ledger); 19 pre-existing BACKLOG entries plus 1 TODO entry (20 total) ruled on in the same commit.
+**Follow-up tasks**: BACKLOG 🟤 `[2026-09-10] From: G1 ML training pipeline — execution review follow-ups` (13 entries — 4 explicitly mandated by the closeout dispatch, 2 brief-specified, 1 pre-existing-observation, 6 from the closeout's own judgment pass over the execution ledger); additional pre-existing BACKLOG and TODO entries were also ruled on across the closeout commit and its fix rounds — see those entries for which, not a restated total here.
 
 ### 2026-09-02 — Group G6: Weekly Reviews (2026-09-02 run) ⚪ Overhead — **5/5, + G4's terminal read-out**
 
