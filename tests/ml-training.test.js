@@ -115,6 +115,10 @@ describe('seedFromFingerprint', () => {
 // these tests fail instead of silently agreeing with a stale assumption. `pairs` are
 // [filename, { vector, clipVector, size, mtime }], matching what feature-cache-write-chunk
 // destructures and what feature-cache-chunk packs. There is no `success` field on a chunk reply.
+// `writeChunk` mirrors the real handler's own destructuring (main.js:547
+// `for (const [key, value] of entries)`) rather than a lenient spread, so a flat-object batch
+// throws "is not iterable" here exactly as it would in production, instead of only being
+// caught incidentally by a later shape assertion on `written`.
 function makeCacheIo(pairs = [], version = 4) {
     const written = [];
     return {
@@ -127,7 +131,7 @@ function makeCacheIo(pairs = [], version = 4) {
         close: vi.fn().mockResolvedValue({ success: true }),
         writeOpen: vi.fn().mockResolvedValue({ success: true }),
         writeChunk: vi.fn().mockImplementation(async (entries) => {
-            written.push(...entries);
+            for (const [key, value] of entries) written.push([key, value]);
             return { success: true };
         }),
         writeClose: vi.fn().mockResolvedValue({ success: true }),
@@ -241,6 +245,51 @@ describe('training-vector cache', () => {
         expect(entries.get('a.jpg').clip.length).toBe(512);
         expect(diskCount).toBe(1);
     });
+
+    // With n=1 (every test above), slice(i*64, ...) is indistinguishable from slice(0, ...) and
+    // hasClip[i] from hasClip[0] -- the exact stride arithmetic this task exists to get right is
+    // never exercised at i > 0. A 2-entry chunk with distinct per-entry values (and one entry
+    // WITHOUT clip) makes a stride/mask bug fail loudly instead of agreeing with a single-entry test.
+    it('preserves per-entry stride and the CLIP mask across a multi-entry chunk', async () => {
+        const a = entry('a.jpg', 100, 1000); // feature 0.5, clip present (from the shared helper)
+        const b = entry('b.jpg', 200, 2000);
+        b[1].vector = Array.from({ length: 64 }, () => 0.75);
+        b[1].clipVector = null;
+        const io = makeCacheIo([a, b]);
+        const m = managerWith({ cacheIo: io });
+        const { entries } = await m._loadVectorCache('/likes', [
+            { name: 'a.jpg', size: 100, mtimeMs: 1000 },
+            { name: 'b.jpg', size: 200, mtimeMs: 2000 },
+        ]);
+        expect(entries.get('a.jpg').feature[0]).toBeCloseTo(0.5);
+        expect(entries.get('b.jpg').feature[0]).toBeCloseTo(0.75);
+        expect(entries.get('a.jpg').clip).not.toBeNull();
+        expect(entries.get('a.jpg').clip.length).toBe(512);
+        expect(entries.get('b.jpg').clip).toBeNull();
+    });
+
+    it('reports aborted:true for a cancelled load, keeping diskCount at the full on-disk count', async () => {
+        // .length is all `open` reads off this; `chunk` is overridden below, so its contents
+        // (or lack thereof) don't matter. A count > CHUNK_SIZE forces a second loop iteration,
+        // which is where the `signal?.aborted` check actually gets a chance to fire.
+        const io = makeCacheIo(new Array(600).fill(null));
+        const controller = new AbortController();
+        io.chunk = vi.fn().mockImplementation(async () => {
+            controller.abort(); // takes effect on the loop's NEXT iteration check, not this one
+            return packFeatureChunk([entry('a.jpg', 100, 1000)]);
+        });
+        const m = managerWith({ cacheIo: io });
+        const { entries, diskCount, aborted } = await m._loadVectorCache(
+            '/likes',
+            [{ name: 'a.jpg', size: 100, mtimeMs: 1000 }],
+            controller.signal
+        );
+        expect(aborted).toBe(true);
+        expect(diskCount).toBe(600);
+        // The chunk already in flight when the abort landed was still ingested -- `entries` is
+        // PARTIAL, which is exactly why callers must check `aborted` rather than infer it.
+        expect(entries.size).toBe(1);
+    });
 });
 
 describe('training-vector cache save', () => {
@@ -296,5 +345,47 @@ describe('training-vector cache save', () => {
         // /likes legitimately shrank to 1 from a baseline of 1; /dislikes has a 1000 baseline.
         expect(await m._saveVectorCache('/likes', new Map([built('a.jpg', 100, 1000)]), 1)).toBe(true);
         expect(await m._saveVectorCache('/dislikes', new Map([built('b.jpg', 100, 1000)]), 1000)).toBe(false);
+    });
+
+    const buildMany = (n, size = 100, mtimeMs = 1000) =>
+        new Map(Array.from({ length: n }, (_, i) => built(`f${i}.jpg`, size, mtimeMs)));
+
+    it('allows a genuine shrink when the live folder scan is also small', async () => {
+        const io = makeCacheIo();
+        const m = managerWith({ cacheIo: io });
+        // 100 entries vs a 1000-entry disk baseline looks like a rejected/partial load in
+        // isolation -- but a live scan of only 100 files means nothing was actually rejected;
+        // the folder itself shrank. The third guard conjunct must let this one through.
+        const ok = await m._saveVectorCache('/likes', buildMany(100), 1000, 100);
+        expect(ok).toBe(true);
+    });
+
+    it('still refuses when the live folder scan is large (partial/rejected load, not a real shrink)', async () => {
+        const io = makeCacheIo();
+        const m = managerWith({ cacheIo: io });
+        const ok = await m._saveVectorCache('/likes', buildMany(100), 1000, 5000);
+        expect(ok).toBe(false);
+    });
+
+    it('returns false and logs, without closing the writer, when a write-chunk reply reports failure', async () => {
+        const io = makeCacheIo();
+        io.writeChunk = vi.fn().mockResolvedValue({ success: false, error: 'disk full' });
+        const m = managerWith({ cacheIo: io });
+        const ok = await m._saveVectorCache('/likes', new Map([built('a.jpg', 100, 1000)]), 0);
+        expect(ok).toBe(false);
+        expect(m.logError).toHaveBeenCalled();
+        // writeClose() is NOT an abort: feature-cache-write-close atomically renames the
+        // (truncated) temp file over the live cache. The catch must log and stop -- calling it
+        // here would commit a truncated cache over a good one.
+        expect(io.writeClose).not.toHaveBeenCalled();
+    });
+
+    it('returns false and logs when the write-close reply reports failure', async () => {
+        const io = makeCacheIo();
+        io.writeClose = vi.fn().mockResolvedValue({ success: false, error: 'rename failed' });
+        const m = managerWith({ cacheIo: io });
+        const ok = await m._saveVectorCache('/likes', new Map([built('a.jpg', 100, 1000)]), 0);
+        expect(ok).toBe(false);
+        expect(m.logError).toHaveBeenCalled();
     });
 });

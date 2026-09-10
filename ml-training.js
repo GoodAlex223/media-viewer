@@ -147,6 +147,12 @@ export class MlTrainingManager {
      * featureCache/clipCache/featureMetadata, which belong to the source folder and are
      * persisted by its own 30 s auto-save.
      *
+     * Returns `{ entries, diskCount, aborted }`. `aborted` is true only when the load loop
+     * broke because `signal` was already tripped by the time it reached its next iteration --
+     * in that case `entries` is PARTIAL (whatever was ingested before the abort was noticed)
+     * while `diskCount` is still the FULL on-disk count, not the partial amount actually read.
+     * Callers must check `aborted` before treating a partial load as complete.
+     *
      * Transport: feature-cache-chunk (main.js) returns packFeatureChunk's output --
      * { names, sizes, mtimes, hasClip, vecBuf, clipBuf } -- with NO `success` field, or the
      * legacy { entries: [[filename, entry]] } shape for a pre-binary on-disk cache. Mirrors
@@ -154,24 +160,34 @@ export class MlTrainingManager {
      */
     async _loadVectorCache(folderPath, files, signal) {
         const entries = new Map();
-        if (!folderPath || !files || files.length === 0) return { entries, diskCount: 0 };
+        if (!folderPath || !files || files.length === 0) return { entries, diskCount: 0, aborted: false };
 
         const current = new Map(files.map((f) => [f.name, f]));
-        const expectedVersion = this.getConfig?.().versions?.featureCacheVersion;
+        // `?.()?.` (not just `?.()`): a call through an optional-chaining `?.` only short-circuits
+        // when the FUNCTION reference is nullish, not when calling it returns undefined -- and
+        // getConfig existing but returning undefined is exactly the harness's own bare-vi.fn()
+        // failure mode. This sits before acquireLock(), so an unguarded `.versions` here would
+        // escape as an unhandled rejection rather than degrade like the save path's (which is at
+        // least inside its try).
+        const expectedVersion = this.getConfig?.()?.versions?.featureCacheVersion;
 
         const release = await this.cacheIo.acquireLock();
         let diskCount = 0;
+        let aborted = false;
         try {
             const opened = await this.cacheIo.open(this._cachePath(folderPath));
-            if (!opened?.success) return { entries, diskCount: 0 };
+            if (!opened?.success) return { entries, diskCount: 0, aborted: false };
             if (expectedVersion !== undefined && opened.version !== expectedVersion) {
                 await this.cacheIo.close();
-                return { entries, diskCount: 0 };
+                return { entries, diskCount: 0, aborted: false };
             }
             diskCount = opened.count || 0;
 
             for (let offset = 0; offset < diskCount; offset += CHUNK_SIZE) {
-                if (signal?.aborted) break;
+                if (signal?.aborted) {
+                    aborted = true;
+                    break;
+                }
                 const chunk = await this.cacheIo.chunk(offset, CHUNK_SIZE);
                 if (chunk.vecBuf) {
                     // Binary shape: .slice() gives each entry its own compact 64/512 copy --
@@ -220,26 +236,38 @@ export class MlTrainingManager {
         } finally {
             release();
         }
-        return { entries, diskCount };
+        return { entries, diskCount, aborted };
     }
 
     /**
      * Persist one training folder's vectors. Returns false when the shrink guard refused.
      * @param {number} diskCount entries last seen on disk FOR THIS FOLDER — the guard is
      *   per-cache, so a legitimately small like folder cannot be blocked by a large dislike one.
+     * @param {number} [scanCount=Infinity] file count from the live folder scan this save
+     *   follows. Mirrors _saveFeatureCacheLocked's third guard conjunct
+     *   (`this.mediaFiles.length > this.featureCache.size * 2`) -- this module holds no folder
+     *   state of its own, so the caller passes the count instead of it being read off `this`.
+     *   The Infinity default always satisfies the conjunct (the conservative direction: the
+     *   guard still fires on the first two alone), so a caller that omits it keeps the
+     *   two-conjunct behavior rather than silently bypassing the guard. Task 5 passes
+     *   `files.length`.
      *
      * Transport: feature-cache-write-chunk (main.js) destructures each element as a
      * [key, value] pair (`for (const [key, value] of entries)`) -- a flat {name, ...} object is
      * not iterable and throws. Mirrors media-viewer.js _saveFeatureCacheLocked's
      * `batch.push([filename, entry])`.
      */
-    async _saveVectorCache(folderPath, entries, diskCount) {
+    async _saveVectorCache(folderPath, entries, diskCount, scanCount = Infinity) {
         if (!folderPath || !entries || entries.size === 0) return false;
 
         // DATA-LOSS GUARD: never replace a substantially populated on-disk cache with a
-        // drastically smaller in-memory one. Mirrors _saveFeatureCacheLocked; a real incident
-        // overwrote a 23,559-entry cache with 32 entries.
-        if (diskCount > 0 && entries.size < diskCount * 0.5) {
+        // drastically smaller in-memory one -- UNLESS the live folder scan is ALSO small, which
+        // is what tells a genuine shrink (few entries, few files) apart from a partial/rejected
+        // load (few entries, but the folder still has many files). Three conjuncts, mirroring
+        // _saveFeatureCacheLocked's guard exactly (real incident: a 23,559-entry cache was
+        // overwritten by 32 entries) -- that guard reads `this.mediaFiles.length` directly; this
+        // module holds no folder state, so `scanCount` arrives as a parameter instead.
+        if (diskCount > 0 && entries.size < diskCount * 0.5 && scanCount > entries.size * 2) {
             this.logError(
                 `Training-cache save SKIPPED (shrink guard) for ${folderPath}: ` +
                     `in-memory ${entries.size} entries vs ${diskCount} on disk.`
@@ -249,7 +277,10 @@ export class MlTrainingManager {
 
         const release = await this.cacheIo.acquireLock();
         try {
-            const version = this.getConfig?.().versions?.featureCacheVersion;
+            // See _loadVectorCache's matching comment: `?.()?.`, not `?.().` -- getConfig can
+            // exist but return undefined (the harness's bare-vi.fn() failure mode), and only the
+            // second `?.` guards that.
+            const version = this.getConfig?.()?.versions?.featureCacheVersion;
             const opened = await this.cacheIo.writeOpen(this._cachePath(folderPath), {
                 version,
                 featureDim: FEATURE_DIM,
@@ -258,6 +289,17 @@ export class MlTrainingManager {
             if (!opened?.success) return false;
 
             let batch = [];
+            // Mirrors _saveFeatureCacheLocked's `flush`: both writeChunk and writeClose report
+            // failure by RETURNING {success:false}, not by throwing (write-close does this even
+            // after exhausting its own EPERM/EACCES/EBUSY rename retries, at which point nothing
+            // was persisted at all) -- an unchecked result silently reports success on a save
+            // that did nothing.
+            const flush = async () => {
+                if (batch.length === 0) return;
+                const res = await this.cacheIo.writeChunk(batch);
+                if (!res?.success) throw new Error(res?.error || 'write-chunk failed');
+                batch = [];
+            };
             for (const [name, value] of entries) {
                 // Skip rather than poison: size 0 / mtime 0 never matches a real stat, so such
                 // an entry would be rejected as stale forever.
@@ -271,17 +313,23 @@ export class MlTrainingManager {
                         mtime: value.mtimeMs,
                     },
                 ]);
-                if (batch.length >= CHUNK_SIZE) {
-                    await this.cacheIo.writeChunk(batch);
-                    batch = [];
-                }
+                if (batch.length >= CHUNK_SIZE) await flush();
             }
-            if (batch.length > 0) await this.cacheIo.writeChunk(batch);
-            await this.cacheIo.writeClose();
+            await flush();
+            const closed = await this.cacheIo.writeClose();
+            if (!closed?.success) throw new Error(closed?.error || 'write-close failed');
             return true;
         } catch (err) {
+            // Do NOT call writeClose() here -- it is not an abort. feature-cache-write-close
+            // writes the closing brace, flushes the stream, and ATOMICALLY RENAMES the (possibly
+            // truncated) temp file over the live cache: calling it after a mid-write failure
+            // would commit a truncated cache over a good one, and the well-formed-but-partial
+            // result would pass the next load's parse and re-baseline the next save's shrink
+            // guard off the truncated count -- silent, permanent, undetectable data loss.
+            // Logging only and leaving the writer dangling is correct and matches
+            // _saveFeatureCacheLocked's own catch: the next write-open destroys any leftover
+            // writer, so a stray .tmp file is the only cost.
             this.logError(`Training vector cache save failed for ${folderPath}: ${err.message}`);
-            await this.cacheIo.writeClose().catch(() => {});
             return false;
         } finally {
             release();
