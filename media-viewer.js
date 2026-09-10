@@ -6714,6 +6714,16 @@ class MediaViewer {
      * gate for the other half of that fix. Every exit path here resolves so the caller can never
      * hang: a disabled worker, a construction failure, and a hard runtime error all resolve
      * immediately rather than waiting for a reply that will never come.
+     *
+     * `_mlWorkerInitResolve` is a single slot, and this method is explicitly re-entrant (it
+     * terminates an existing worker below) -- a second call before the first's promise settles
+     * would otherwise silently ABANDON the first caller's resolver (nothing would ever invoke
+     * it, since the slot now points at the second call's resolver instead). Unreachable via any
+     * current call site today (all three guard on `!this.mlWorker`, assigned synchronously
+     * inside the executor below), but settling any stale resolver before it can be overwritten --
+     * and identity-guarding the `onerror` path so it only clears a slot it still owns -- makes
+     * that hold regardless of caller discipline, mirroring the reference-identity pattern
+     * _runWorkerTraining/_runWorkerInit use for their own single-slot callbacks.
      */
     initializeMlWorker() {
         console.log('[ML Debug] initializeMlWorker called, isMlEnabled:', this.isMlEnabled);
@@ -6724,6 +6734,11 @@ class MediaViewer {
 
         if (this.mlWorker) {
             this.mlWorker.terminate();
+        }
+        if (this._mlWorkerInitResolve) {
+            const stale = this._mlWorkerInitResolve;
+            this._mlWorkerInitResolve = null;
+            stale(); // settle the abandoned call's promise instead of losing it silently
         }
 
         return new Promise((resolve) => {
@@ -6747,7 +6762,12 @@ class MediaViewer {
                     // No initComplete is coming from a worker that just errored — resolve here so
                     // a crash during startup can't hang the caller. Harmless if initComplete
                     // already resolved this same promise (a settled promise ignores later
-                    // settle attempts).
+                    // settle attempts). Identity-guarded: only clear the slot if it still belongs
+                    // to THIS call — a newer initializeMlWorker() call may have already taken it
+                    // over (and already settled this call via the stale-resolver check above).
+                    if (this._mlWorkerInitResolve === resolve) {
+                        this._mlWorkerInitResolve = null;
+                    }
                     resolve();
                 };
 
@@ -8117,10 +8137,27 @@ class MediaViewer {
     /**
      * Initialize the feature extraction worker pool.
      *
-     * Returns a promise that settles once the version probe's reply lands (or immediately if
-     * there is no probe to answer, or construction failed) — see initializeMlWorker's doc
-     * comment for why a caller needs this: `_featureExtractorVersion` feeds
-     * ensureTrainedModel's fingerprint, and this is the only place that ever sets it.
+     * Returns a promise that settles once the version probe's reply lands, the probe worker
+     * errors, or a timeout elapses (or immediately if there is no probe to answer, or
+     * construction failed) — see initializeMlWorker's doc comment for why a caller needs this:
+     * `_featureExtractorVersion` feeds ensureTrainedModel's fingerprint, and this is the only
+     * place that ever sets it.
+     *
+     * Task 9 review round 2 (the Important finding in that round): the FIRST version of this fix
+     * only resolved on a real reply or an immediate setup failure. If the probe worker
+     * (featureWorkers[0]) raised a runtime `error` before answering `getVersion` — a script
+     * fetch/parse failure, a top-level throw in feature-worker.js/feature-extractor.js — nothing
+     * ever settled this promise: handleFeatureWorkerError respawns a NEW worker object but never
+     * re-arms the version probe, and the probe's own message listener stays bound to the now-
+     * terminated one. That hung handleSortByPrediction's `await Promise.all([...])` forever,
+     * wedging isPredictionSorting so every LATER AI-sort press became a silent no-op — strictly
+     * worse than the pre-fix 100ms guess, which at least let the sort proceed in the degraded
+     * (uncached) mode this class already supports elsewhere. Fixed by settling on the probe's
+     * OWN error too (see _probeFeatureVersion) and by an overall timeout below (covers a worker
+     * that hangs without ever raising `error`), while still making one best-effort attempt to
+     * re-probe the respawned worker so a LATER sort in the same session can still pick up a real
+     * version instead of being stuck at the degraded default (uncached, every sort retrains —
+     * see ml-training.js's `versionsKnown` gate) for the rest of the session.
      */
     initializeFeaturePool() {
         console.log('[ML Debug] initializeFeaturePool called');
@@ -8128,6 +8165,19 @@ class MediaViewer {
         this.shutdownFeaturePool();
 
         return new Promise((resolve) => {
+            let settled = false;
+            const settle = () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                resolve();
+            };
+            // Backstop for a probe that neither replies NOR raises `error` (e.g. it hangs before
+            // its own message handler is ready). 5s is generous for a trivial, no-computation
+            // reply — this never gates the happy path, which settles on the real reply whenever
+            // it arrives, however long that legitimately takes.
+            const timeoutId = setTimeout(settle, 5000);
+
             try {
                 for (let i = 0; i < this.featureWorkerCount; i++) {
                     const worker = new Worker('feature-worker.js');
@@ -8146,17 +8196,9 @@ class MediaViewer {
                 // constants must match is false — they are 4 and 2 — which is why both are fingerprinted.)
                 const probe = this.featureWorkers[0];
                 if (probe) {
-                    const onVersion = (e) => {
-                        if (e.data?.type === 'version') {
-                            this._featureExtractorVersion = e.data.version || 0;
-                            probe.removeEventListener('message', onVersion);
-                            resolve();
-                        }
-                    };
-                    probe.addEventListener('message', onVersion);
-                    probe.postMessage({ type: 'getVersion', data: {} });
+                    this._probeFeatureVersion(probe, settle, false);
                 } else {
-                    resolve(); // featureWorkerCount is 0 — nothing will ever reply
+                    settle(); // featureWorkerCount is 0 — nothing will ever reply
                 }
 
                 console.log(`[ML Debug] Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
@@ -8165,9 +8207,55 @@ class MediaViewer {
                 this.startFeatureCacheAutoSave();
             } catch (err) {
                 console.warn('[ML Debug] Failed to initialize feature workers:', err);
-                resolve(); // construction failed — nothing will ever reply
+                settle(); // construction failed — nothing will ever reply
             }
         });
+    }
+
+    /**
+     * One probe attempt for FEATURE_VERSION against `worker` (normally featureWorkers[0], or its
+     * respawn). `settle` always runs when `worker` raises `error` — a crashed probe must never
+     * hang initializeFeaturePool's promise. `isRetry` bounds the recovery attempt to exactly one
+     * extra try against a respawned worker, not unbounded recursion tailing
+     * handleFeatureWorkerError's own (separately owned, intentionally untouched) respawn loop: if
+     * the retry ALSO errors, `settle` has already run and the overall timeout in
+     * initializeFeaturePool is the only remaining backstop. Does not modify
+     * handleFeatureWorkerError itself — only observes its result (the `this.featureWorkers[0]`
+     * it leaves behind) and, once, re-arms the probe against whatever that is.
+     */
+    _probeFeatureVersion(worker, settle, isRetry) {
+        const onVersion = (e) => {
+            if (e.data?.type === 'version') {
+                this._featureExtractorVersion = e.data.version || 0;
+                worker.removeEventListener('message', onVersion);
+                settle();
+            }
+        };
+        worker.addEventListener('message', onVersion);
+        worker.postMessage({ type: 'getVersion', data: {} });
+
+        const outerOnError = worker.onerror;
+        worker.onerror = (err) => {
+            outerOnError?.(err); // preserve the normal respawn (handleFeatureWorkerError)
+            worker.removeEventListener('message', onVersion);
+            settle(); // idempotent — never hang the caller on a crashed probe
+            if (!isRetry) {
+                // Best-effort recovery for the common case (a one-off crash that respawns
+                // cleanly): give the respawned worker ONE chance to answer, purely so a LATER
+                // sort in this same session can capture a real _featureExtractorVersion instead
+                // of being stuck at the degraded default. Does not affect this call's own
+                // settlement, already triggered above.
+                const respawned = this.featureWorkers[0];
+                if (respawned && respawned !== worker) this._probeFeatureVersion(respawned, settle, true);
+            }
+            // Deliberately not restored to `outerOnError` afterward: on any FUTURE crash of this
+            // exact worker object (rare — only reachable if this retry's own target survives and
+            // later errors again), this same handler runs again, but every step in it is already
+            // idempotent (settle(), a redundant removeEventListener, `isRetry` gating out a
+            // further retry) except outerOnError itself, which is exactly the respawn every OTHER
+            // worker's crash already gets. Benign, not a correctness issue — simpler than
+            // rewinding onerror mid-dispatch to save a handful of no-op calls in a rare path.
+        };
     }
 
     // ==================== CLIP FEATURES (Main Process IPC) ====================

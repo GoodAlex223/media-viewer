@@ -732,6 +732,20 @@ export class MlTrainingManager {
                 );
             }
             // A failed folder scan was already logged/notified above, at detection time.
+            // Task 9 review round 2 (folded-in minor): this is the one non-cacheable reason with
+            // no user-facing notify -- by design, a single unsettled sort is transient and not
+            // worth a toast. But it is ALSO the branch a permanently-degraded session falls into
+            // forever (e.g. a feature-worker version probe that crashes and never recovers a real
+            // version -- see media-viewer.js initializeFeaturePool), in which case EVERY sort
+            // retrains and nothing is ever cached, silently. A log line is the only trace of that
+            // condition existing at all.
+            if (!versionsKnown) {
+                this.logError(
+                    `Model trained but not cached: worker-reported versions still unsettled ` +
+                        `(mlModelVersion=${descriptor.mlModelVersion}, featureVersion=${descriptor.featureVersion}, ` +
+                        `trainingConfigVersion=${descriptor.trainingConfigVersion}) — will retrain every sort until settled.`
+                );
+            }
         }
 
         return { source: 'trained', stats, fingerprint, descriptor };

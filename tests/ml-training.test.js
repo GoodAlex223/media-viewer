@@ -912,6 +912,18 @@ describe('ensureTrainedModel', () => {
             expect(modelCacheStore.value).toBeNull();
         });
 
+        // Task 9 review round 2 (folded-in minor): this is the ONE non-cacheable reason with no
+        // user-facing notify (a single unsettled sort is transient, not worth a toast) -- but it
+        // is also the branch a permanently-degraded session (e.g. a feature-worker version probe
+        // that crashes and never recovers) falls into FOREVER, retraining on every sort with
+        // nothing ever cached. A logError call is the only trace that condition leaves anywhere.
+        it('logs when a "trained" result goes uncached because a version is still unsettled', async () => {
+            const logError = vi.fn();
+            const { m } = scenario({ managerOverrides: { getConfig: vi.fn(zeroVersionsConfig), logError } });
+            await m.ensureTrainedModel({});
+            expect(logError).toHaveBeenCalledWith(expect.stringMatching(/unsettled/i));
+        });
+
         // Simulates an entry already sitting on a user's disk under a fingerprint whose worker-
         // reported versions were all 0 when it was written (e.g. from before this gate existed,
         // or -- pre-fix -- from a prior racy 'trained' call that cached itself). This is what

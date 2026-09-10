@@ -86,7 +86,7 @@ async function installTrainingProbe(page) {
  *  mlStats.isReady gates pass, which requires the >=3-like/>=3-dislike fixtures this suite uses.
  *  Without this check, a change to the default fixture count would fail as an opaque
  *  waitForFunction timeout later, rather than here with a clear assertion. */
-async function sortAndExpectTrained(page, expectedLength) {
+async function sortAndConfirmCompleted(page, expectedLength) {
     await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
     await page.waitForFunction((n) => window.__trainSources.length === n, expectedLength);
     expect(await page.evaluate(() => window.mediaViewer.isSortedByPrediction)).toBe(true);
@@ -118,13 +118,13 @@ test.describe('ML retrain skip', () => {
         await waitForMedia(page);
         await installTrainingProbe(page);
 
-        await sortAndExpectTrained(page, 1);
+        await sortAndConfirmCompleted(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
 
         // Only the VIEWED folder changes; likes/dislikes (the training set) do not.
         await loadFolder(page, srcB.dir);
         await waitForMedia(page);
-        await sortAndExpectTrained(page, 2);
+        await sortAndConfirmCompleted(page, 2);
 
         // This is the reported bug: a source-folder switch alone must be a free session hit.
         expect(await page.evaluate(() => window.__trainSources[1])).toBe('session');
@@ -135,14 +135,14 @@ test.describe('ML retrain skip', () => {
         await waitForMedia(page);
         await installTrainingProbe(page);
 
-        await sortAndExpectTrained(page, 1);
+        await sortAndConfirmCompleted(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
 
         // Mutate the training set itself — this must change the fingerprint.
         await likes.addFile('extra-like.png');
 
         await page.evaluate(() => window.mediaViewer.handleSortByPrediction()); // toggle off
-        await sortAndExpectTrained(page, 2); // sort again
+        await sortAndConfirmCompleted(page, 2); // sort again
 
         const sources = await page.evaluate(() => window.__trainSources);
         expect(sources).toHaveLength(2);
@@ -154,7 +154,7 @@ test.describe('ML retrain skip', () => {
         await waitForMedia(page);
         await installTrainingProbe(page);
 
-        await sortAndExpectTrained(page, 1);
+        await sortAndConfirmCompleted(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
 
         // The source folder's ONE legitimate route into the descriptor is `bulkRated` (corrective
@@ -169,7 +169,7 @@ test.describe('ML retrain skip', () => {
         });
 
         await page.evaluate(() => window.mediaViewer.handleSortByPrediction()); // toggle off
-        await sortAndExpectTrained(page, 2); // sort again
+        await sortAndConfirmCompleted(page, 2); // sort again
         expect(await page.evaluate(() => window.__trainSources[1])).toBe('trained');
 
         // Reloading the SAME folder re-hydrates `bulkRated` from the .bulk_rated.json just
@@ -178,7 +178,7 @@ test.describe('ML retrain skip', () => {
         // must hold with a populated, persisted bulkRated in the picture, not only an empty one.
         await loadFolder(page, srcA.dir);
         await waitForMedia(page);
-        await sortAndExpectTrained(page, 3);
+        await sortAndConfirmCompleted(page, 3);
         expect(await page.evaluate(() => window.__trainSources[2])).toBe('session');
 
         // Switching to a folder that was never bulk-rated drops bulkRated back to empty
@@ -188,7 +188,7 @@ test.describe('ML retrain skip', () => {
         // one) and not a fresh 'trained' (the original entry is still on disk) — 'model-cache'.
         await loadFolder(page, srcB.dir);
         await waitForMedia(page);
-        await sortAndExpectTrained(page, 4);
+        await sortAndConfirmCompleted(page, 4);
         expect(await page.evaluate(() => window.__trainSources[3])).toBe('model-cache');
     });
 
@@ -197,7 +197,7 @@ test.describe('ML retrain skip', () => {
         await waitForMedia(page);
         await installTrainingProbe(page);
 
-        await sortAndExpectTrained(page, 1);
+        await sortAndConfirmCompleted(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
 
         // Toggle off, then sort again with NOTHING changed, to prove the session is genuinely
@@ -205,7 +205,7 @@ test.describe('ML retrain skip', () => {
         // Rebuild click below mean the CLICK caused it, rather than an incidental fingerprint
         // change or a cache that was never actually populated.
         await page.evaluate(() => window.mediaViewer.handleSortByPrediction());
-        await sortAndExpectTrained(page, 2);
+        await sortAndConfirmCompleted(page, 2);
         expect(await page.evaluate(() => window.__trainSources[1])).toBe('session');
 
         // Toggle off so the next handleSortByPrediction() performs a real sort, not a restore.
@@ -225,7 +225,7 @@ test.describe('ML retrain skip', () => {
         await waitForNotification(page, 'Prediction model cleared');
         await page.keyboard.press('F1'); // close the help overlay again
 
-        await sortAndExpectTrained(page, 3);
+        await sortAndConfirmCompleted(page, 3);
         const sources = await page.evaluate(() => window.__trainSources);
         expect(sources[2]).toBe('trained');
     });
@@ -237,7 +237,7 @@ test.describe('ML retrain skip', () => {
         await waitForMedia(page);
         await installTrainingProbe(page);
 
-        await sortAndExpectTrained(page, 1);
+        await sortAndConfirmCompleted(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('trained');
 
         // Restart the app entirely. A fresh renderer means a fresh, empty sessionFingerprint, so
@@ -252,7 +252,7 @@ test.describe('ML retrain skip', () => {
         await waitForMedia(page);
         await installTrainingProbe(page);
 
-        await sortAndExpectTrained(page, 1);
+        await sortAndConfirmCompleted(page, 1);
         expect(await page.evaluate(() => window.__trainSources[0])).toBe('model-cache');
     });
 });

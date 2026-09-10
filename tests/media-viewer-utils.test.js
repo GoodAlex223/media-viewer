@@ -2809,6 +2809,10 @@ describe('_runWorkerTraining / _runWorkerInit (worker-promise helpers, G1)', () 
 
 describe('initializeFeaturePool version probe (G1)', () => {
     const initializeFeaturePool = extractMethod('initializeFeaturePool');
+    // initializeFeaturePool's body calls `this._probeFeatureVersion(...)` -- the mock ctx must
+    // supply a real implementation (not a stub) for these tests to exercise the actual
+    // retry/error-settlement logic under test, not a no-op standing in for it.
+    const _probeFeatureVersion = extractMethod('_probeFeatureVersion');
     let OrigWorker;
 
     class FakeWorker {
@@ -2837,6 +2841,7 @@ describe('initializeFeaturePool version probe (G1)', () => {
             featureWorkerCount: 1,
             featureWorkers: [],
             _featureExtractorVersion: 0,
+            _probeFeatureVersion,
             shutdownFeaturePool: () => {},
             startFeatureCacheAutoSave: () => {},
             handleFeatureWorkerMessage: () => {},
@@ -2870,6 +2875,191 @@ describe('initializeFeaturePool version probe (G1)', () => {
         emit(ctx.featureWorkers[0], { type: 'result', features: [] });
         expect(ctx._featureExtractorVersion).toBe(0);
         expect(ctx.featureWorkers[0].listeners).toHaveLength(1); // still waiting for the real reply
+    });
+
+    it('resolves the returned promise once the version reply lands', async () => {
+        const ctx = makeCtx();
+        const promise = initializeFeaturePool.call(ctx);
+        emit(ctx.featureWorkers[0], { type: 'version', version: 2, dim: 64 });
+        await expect(promise).resolves.toBeUndefined();
+    });
+
+    // Task 9 review round 2, Important: the first version of this fix only resolved on a real
+    // reply or an immediate setup failure. If the probe worker raised `error` before answering
+    // getVersion, nothing ever settled the promise -- handleSortByPrediction's
+    // `await Promise.all([...])` hung forever, wedging isPredictionSorting so every LATER
+    // AI-sort press silently no-op'd. This exercises the actual fix (a real FakeWorker.onerror
+    // call reaching the real, unmocked _probeFeatureVersion), not a reasoned-about claim.
+    it('resolves the returned promise when the probe worker errors before replying', async () => {
+        const ctx = makeCtx();
+        const promise = initializeFeaturePool.call(ctx);
+        const probe = ctx.featureWorkers[0];
+        expect(typeof probe.onerror).toBe('function');
+
+        probe.onerror(new Error('probe crashed before replying'));
+
+        await expect(promise).resolves.toBeUndefined();
+    });
+
+    it('resolves via the timeout if the probe neither replies nor errors', async () => {
+        vi.useFakeTimers();
+        try {
+            const ctx = makeCtx();
+            const promise = initializeFeaturePool.call(ctx);
+            vi.advanceTimersByTime(5000);
+            await expect(promise).resolves.toBeUndefined();
+            expect(ctx._featureExtractorVersion).toBe(0); // never actually answered
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('retries against the respawned worker after one error, capturing a real version if it replies', async () => {
+        const respawned = new FakeWorker();
+        const ctx = makeCtx();
+        // Mirrors handleFeatureWorkerError's real effect (replace featureWorkers[i] in place)
+        // without its unrelated respawn-loop mechanics, which this test isn't about.
+        ctx.handleFeatureWorkerError = (i) => {
+            ctx.featureWorkers[i] = respawned;
+        };
+        const promise = initializeFeaturePool.call(ctx);
+        const originalProbe = ctx.featureWorkers[0];
+
+        originalProbe.onerror(new Error('probe crashed before replying'));
+        // The crash already settled the promise -- it must never hang on the retry.
+        await expect(promise).resolves.toBeUndefined();
+
+        // The retry against the respawned worker is independent of that settlement and can
+        // still capture a real version, benefiting a LATER sort in this same session.
+        expect(respawned.lastMessage).toEqual({ type: 'getVersion', data: {} });
+        emit(respawned, { type: 'version', version: 2, dim: 64 });
+        expect(ctx._featureExtractorVersion).toBe(2);
+    });
+
+    it('does not attempt a second retry if the respawned worker also errors before replying', async () => {
+        const respawnedOnce = new FakeWorker();
+        const respawnedTwice = new FakeWorker();
+        let respawnCount = 0;
+        const ctx = makeCtx();
+        ctx.handleFeatureWorkerError = (i) => {
+            respawnCount++;
+            ctx.featureWorkers[i] = respawnCount === 1 ? respawnedOnce : respawnedTwice;
+        };
+        const promise = initializeFeaturePool.call(ctx);
+        ctx.featureWorkers[0].onerror(new Error('first crash'));
+        await expect(promise).resolves.toBeUndefined();
+
+        respawnedOnce.onerror(new Error('second crash, on the retry target'));
+        // Bounded to exactly one retry: nothing ever arms a probe against respawnedTwice, so a
+        // version reply to it must be a no-op, not silently accepted.
+        emit(respawnedTwice, { type: 'version', version: 9, dim: 64 });
+        expect(ctx._featureExtractorVersion).toBe(0);
+    });
+});
+
+// Task 9 review round 2 (folded-in minor): part (b) of the original round-1 fix (both worker
+// initializers returning promises settled by their real replies, instead of a fixed sleep) had
+// zero unit coverage -- exactly the gap that let the pool's hang-on-error bug through review
+// once already. These pin the promise-settlement CONTRACT of initializeMlWorker directly,
+// using the real handleMlWorkerMessage (not a stub) so the initComplete -> resolve wiring is
+// genuinely exercised, not just asserted about.
+describe('initializeMlWorker promise contract (Task 9 review round 2)', () => {
+    const initializeMlWorker = extractMethod('initializeMlWorker');
+    const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+    let OrigWorker;
+
+    class FakeMlWorker {
+        constructor() {
+            this.messages = [];
+        }
+        postMessage(msg) {
+            this.messages.push(msg);
+        }
+        terminate() {}
+    }
+
+    function makeCtx(overrides = {}) {
+        return {
+            isMlEnabled: true,
+            mlWorker: null,
+            mlStats: null,
+            _mlSortResolve: null,
+            _mlSortReject: null,
+            _mlWorkerInitResolve: null,
+            _initCompleteCallback: null,
+            mediaFiles: [],
+            updateSortPredictionButton: () => {},
+            handleMlWorkerMessage,
+            ...overrides,
+        };
+    }
+
+    beforeEach(() => {
+        OrigWorker = globalThis.Worker;
+        globalThis.Worker = FakeMlWorker;
+    });
+    afterEach(() => {
+        globalThis.Worker = OrigWorker;
+    });
+
+    it('resolves immediately when ML prediction is disabled', async () => {
+        const ctx = makeCtx({ isMlEnabled: false });
+        await expect(initializeMlWorker.call(ctx)).resolves.toBeUndefined();
+        expect(ctx.mlWorker).toBeNull();
+    });
+
+    it('resolves immediately when Worker construction throws', async () => {
+        globalThis.Worker = class {
+            constructor() {
+                throw new Error('script fetch failed');
+            }
+        };
+        const ctx = makeCtx();
+        await expect(initializeMlWorker.call(ctx)).resolves.toBeUndefined();
+        expect(ctx.isMlEnabled).toBe(false);
+    });
+
+    it('resolves once initComplete arrives, via the real handleMlWorkerMessage', async () => {
+        const ctx = makeCtx();
+        const promise = initializeMlWorker.call(ctx);
+        expect(ctx.mlWorker.messages).toEqual([{ type: 'init', data: {} }]);
+
+        ctx.mlWorker.onmessage({
+            data: { type: 'initComplete', stats: { isReady: false }, modelVersion: 3, trainingConfigVersion: 1 },
+        });
+
+        await expect(promise).resolves.toBeUndefined();
+        expect(ctx._mlWorkerInitResolve).toBeNull();
+    });
+
+    it('resolves on a hard worker error, without waiting for initComplete', async () => {
+        const ctx = makeCtx();
+        const promise = initializeMlWorker.call(ctx);
+
+        ctx.mlWorker.onerror(new Error('worker crashed'));
+
+        await expect(promise).resolves.toBeUndefined();
+        expect(ctx.isMlEnabled).toBe(false);
+        expect(ctx._mlWorkerInitResolve).toBeNull();
+    });
+
+    // The identity-guard fix: a second call before the first settles must not silently abandon
+    // the first caller's resolver (nothing would ever have invoked it otherwise).
+    it("settles an earlier call's promise instead of abandoning it when called again first", async () => {
+        const ctx = makeCtx();
+        const first = initializeMlWorker.call(ctx);
+        const firstWorker = ctx.mlWorker;
+
+        const second = initializeMlWorker.call(ctx); // re-entrant re-init, before `first` settled
+        // The stale-resolver check settles `first` synchronously, as soon as a newer call is
+        // about to take over the slot -- no message needed for this half.
+        await expect(first).resolves.toBeUndefined();
+        expect(firstWorker).not.toBe(ctx.mlWorker);
+
+        ctx.mlWorker.onmessage({
+            data: { type: 'initComplete', stats: { isReady: false }, modelVersion: 3, trainingConfigVersion: 1 },
+        });
+        await expect(second).resolves.toBeUndefined();
     });
 });
 
