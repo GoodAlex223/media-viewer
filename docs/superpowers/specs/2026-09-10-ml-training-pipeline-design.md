@@ -143,6 +143,15 @@ The fingerprint is computed from a single declared `TrainingSetDescriptor`. Noth
 | 4 | `enableClipFeatures` | With CLIP off, vectors are 576-dim with a zero top half — a different model |
 | 5 | `ML_MODEL_VERSION` (`ml-model.js:5`), `FEATURE_CACHE_VERSION` (`media-viewer.js:7090`), `FEATURE_VERSION` (`feature-extractor.js:5`), `TRAINING_CONFIG_VERSION` | Model shape, cache format, extractor semantics, and hyperparameters/epoch schedule respectively. `TRAINING_CONFIG_VERSION` is **new**: declare it in `ml-model.js` beside `ML_MODEL_VERSION`, export it on the same object, and bump it whenever the learning rate, regularisation, epoch schedule or class-weight rule changes. |
 
+**How the renderer obtains these four values** (refined while writing the plan, 2026-09-10). `ml-model.js` and `feature-extractor.js` are both `importScripts`-loaded into workers and cannot be imported by the renderer, so re-declaring their constants in `ml-training.js` would be a fourth copy governed only by convention. Instead each value is **reported by the code that owns it**:
+
+- `ML_MODEL_VERSION` and `featureDim` — already carried by the worker's `initComplete` reply (`ml-worker.js:271`); the renderer's `initComplete` handler captures them.
+- `TRAINING_CONFIG_VERSION` — declared in `ml-model.js` beside `ML_MODEL_VERSION` (where the hyperparameters live), exported, and echoed in `initComplete` alongside them.
+- `FEATURE_VERSION` — `feature-worker.js` already answers `getVersion` with `{ version, dim }` (`:23`); the renderer probes once when the feature pool initialises and stores the result.
+- `FEATURE_CACHE_VERSION` — read directly from the `MediaViewer.FEATURE_CACHE_VERSION` static.
+
+No constant is duplicated, so none can drift.
+
 **`FEATURE_VERSION` is listed separately on purpose.** The comment at `media-viewer.js:7089` asserts that `FEATURE_CACHE_VERSION` "must match `FEATURE_VERSION` in feature-extractor.js" — measured 2026-09-10, they are **4 and 2**. The documented invariant is false, so `FEATURE_CACHE_VERSION` cannot be trusted to move when the 64-dim extractor's semantics change; a changed extractor would otherwise leave both the cached vectors and the cached model valid-looking and silently stale. Fingerprinting both constants directly is the control; reconciling the two constants (or deleting the false comment) is filed separately and is **not** a prerequisite for this work.
 
 ### 5.2 Storage
