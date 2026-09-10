@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
+import { MlTrainingManager } from '../ml-training.js';
 const require = createRequire(import.meta.url);
 
 // MediaViewer methods are instance methods on an ES module class.
@@ -1150,7 +1151,11 @@ describe('sortComplete stale-guard + runMlSort resolution', () => {
 describe('initComplete / trainComplete — version capture + worker-promise callbacks (G1)', () => {
     const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
 
-    it('captures mlModelVersion/featureDim/trainingConfigVersion from initComplete', () => {
+    // `featureDim` was captured here and read by nothing (final whole-branch review, minor); it
+    // is dropped. The `toEqual` (not `toMatchObject`) is what keeps that true: a re-added but
+    // unused field fails this test rather than accumulating silently. The worker still SENDS it,
+    // and OnlineLogisticRegression.isCompatible still enforces it on load.
+    it('captures mlModelVersion/trainingConfigVersion from initComplete and nothing else', () => {
         const ctx = { mediaFiles: [], updateSortPredictionButton: () => {} };
         handleMlWorkerMessage.call(ctx, {
             type: 'initComplete',
@@ -1159,16 +1164,40 @@ describe('initComplete / trainComplete — version capture + worker-promise call
             featureDim: 576,
             trainingConfigVersion: 1,
         });
-        expect(ctx._mlWorkerVersions).toEqual({ mlModelVersion: 3, featureDim: 576, trainingConfigVersion: 1 });
+        expect(ctx._mlWorkerVersions).toEqual({ mlModelVersion: 3, trainingConfigVersion: 1 });
     });
 
     it('defaults each captured version to 0 when the worker omits it', () => {
         const ctx = { mediaFiles: [], updateSortPredictionButton: () => {} };
         handleMlWorkerMessage.call(ctx, { type: 'initComplete', stats: { isReady: false } });
-        expect(ctx._mlWorkerVersions).toEqual({ mlModelVersion: 0, featureDim: 0, trainingConfigVersion: 0 });
+        expect(ctx._mlWorkerVersions).toEqual({ mlModelVersion: 0, trainingConfigVersion: 0 });
     });
 
-    it('settles a pending _runWorkerInit callback with {stats} and clears it', () => {
+    // Decision D6 made showMlLearningIndicator the once-per-sort training report; the
+    // trainComplete toast said the same two numbers moments earlier. It is removed — and the
+    // removal matters beyond redundancy, because showNotification evicts the oldest element once
+    // five stack and the sort progress card is itself a notification element.
+    it('does not raise a training toast on trainComplete', () => {
+        const showNotification = vi.fn();
+        const ctx = {
+            mediaFiles: [],
+            showNotification,
+            requestPredictionScores: vi.fn(),
+            updateSortPredictionButton: () => {},
+        };
+        handleMlWorkerMessage.call(ctx, {
+            type: 'trainComplete',
+            modelState: { weights: [1] },
+            stats: { isReady: true, positiveCount: 412, negativeCount: 380, totalSamples: 792 },
+        });
+        expect(showNotification).not.toHaveBeenCalled();
+        expect(ctx.mlStats).toMatchObject({ positiveCount: 412 }); // sentinel: the case DID run
+    });
+
+    // `modelWasReset` joined the payload in the final whole-branch review (Important 2): a worker
+    // that could not restore the saved model still replies here with valid-shaped all-zero stats,
+    // so it is the only thing distinguishing a real load from a silently fabricated empty model.
+    it('settles a pending _runWorkerInit callback with {stats, modelWasReset} and clears it', () => {
         let resolved = null;
         const ctx = {
             mediaFiles: [],
@@ -1176,7 +1205,7 @@ describe('initComplete / trainComplete — version capture + worker-promise call
             _initCompleteCallback: (payload) => (resolved = payload),
         };
         handleMlWorkerMessage.call(ctx, { type: 'initComplete', stats: { isReady: true, positiveCount: 3 } });
-        expect(resolved).toEqual({ stats: { isReady: true, positiveCount: 3 } });
+        expect(resolved).toEqual({ stats: { isReady: true, positiveCount: 3 }, modelWasReset: false });
         expect(ctx._initCompleteCallback).toBeNull();
     });
 
@@ -5423,5 +5452,203 @@ describe('online-update protocol removed (G1)', () => {
 
     it('reports the training source in the learning indicator', () => {
         expect(source).toContain('showMlLearningIndicator(stats, source');
+    });
+});
+
+// Final whole-branch review, CRITICAL 1. resetMlModel() zeroes the LIVE worker's weights and both
+// class counts, but before this it touched nothing on `this.mlTraining` — so the manager still
+// believed the worker held a model trained on `sessionFingerprint`. ensureTrainedModel compares
+// fingerprints only, so the next sort returned `source: 'session'` against an EMPTY model: the
+// stale ready-looking stats were written back into mlStats, the indicator claimed
+// "🧠 Model reused — N👍 M👎", the readiness gate passed, and scoreFiles then replied
+// `scores: null, reason: 'Need more samples (0 likes, 0 dislikes)'`. Every later sort repeated it.
+// Reachable from ordinary UI (CLIP toggle off/on, or re-picking the SAME like/dislike folder),
+// and a REGRESSION: before this branch resetMlModel() nulling mlStats re-armed the
+// `!this.mlStats?.isReady` retrain gate, so the reset was self-healing.
+describe('resetMlModel clears the training-manager session tier (G1 final review, Critical 1)', () => {
+    const makeManager = () =>
+        new MlTrainingManager({
+            loadFolder: vi.fn(),
+            computeFeatures: vi.fn(),
+            extractClipEmbedding: vi.fn(),
+            trainModel: vi.fn(),
+            loadModelState: vi.fn(),
+            getConfig: vi.fn(() => ({})),
+            getBulkRatedContext: vi.fn(() => ({})),
+            cacheIo: {},
+            modelCache: { read: vi.fn(), write: vi.fn() },
+        });
+
+    it('nulls sessionFingerprint and sessionStats alongside the worker reset', () => {
+        const resetMlModel = extractMethod('resetMlModel');
+        const mlTraining = makeManager();
+        mlTraining.sessionFingerprint = 'deadbeefdeadbeefdeadbeefdeadbeef';
+        mlTraining.sessionStats = { positiveCount: 412, negativeCount: 380, isReady: true, totalSamples: 792 };
+
+        const posted = [];
+        const ctx = {
+            mlTraining,
+            mlModelState: { weights: [1, 2, 3] },
+            mlStats: { positiveCount: 412, negativeCount: 380, isReady: true },
+            predictionScores: new Map([['/a.jpg', 0.9]]),
+            mlWorker: { postMessage: (m) => posted.push(m) },
+            updateSortPredictionButton: vi.fn(),
+        };
+
+        resetMlModel.call(ctx);
+
+        expect(posted).toEqual([{ type: 'reset' }]);
+        expect(ctx.mlStats).toBeNull();
+        expect(ctx.mlModelState).toBeNull();
+        expect(ctx.predictionScores.size).toBe(0);
+        // The half that was missing: the worker no longer holds what this fingerprint describes.
+        expect(mlTraining.sessionFingerprint).toBeNull();
+        expect(mlTraining.sessionStats).toBeNull();
+    });
+
+    it('is safe when the worker was never constructed', () => {
+        const resetMlModel = extractMethod('resetMlModel');
+        const mlTraining = makeManager();
+        mlTraining.sessionFingerprint = 'f'.repeat(32);
+        mlTraining.sessionStats = { positiveCount: 3, negativeCount: 3, isReady: true };
+        const ctx = { mlTraining, predictionScores: new Map(), mlWorker: null, updateSortPredictionButton: vi.fn() };
+
+        expect(() => resetMlModel.call(ctx)).not.toThrow();
+        expect(mlTraining.sessionFingerprint).toBeNull();
+        expect(mlTraining.sessionStats).toBeNull();
+    });
+});
+
+// Final whole-branch review, IMPORTANT 1 + 2 — the two renderer-side halves.
+describe('renderer wiring for the model-cache load and training-vector isolation (G1 final review)', () => {
+    // IMPORTANT 2. ml-worker.js's initializeModel replies `initComplete` with valid-shaped
+    // all-zero stats whenever it could not restore the saved model, flagging `modelWasReset`.
+    // _runWorkerInit's callback used to forward only `{stats}`, so ml-training.js's
+    // _safeLoadModelState (whose only malformation check was `!loaded?.stats`, and an empty
+    // model's stats object is truthy) accepted a never-loaded model as a 'model-cache' hit.
+    it('forwards modelWasReset from initComplete to the _runWorkerInit callback', () => {
+        const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+        const received = [];
+        const ctx = {
+            _initCompleteCallback: (payload) => received.push(payload),
+            _mlWorkerInitResolve: null,
+            _mlWorkerVersions: {},
+            mediaFiles: [],
+            predictionScores: new Map(),
+            mlModelState: { weights: [1] },
+            updateSortPredictionButton: vi.fn(),
+            requestPredictionScores: vi.fn(),
+        };
+
+        handleMlWorkerMessage.call(ctx, {
+            type: 'initComplete',
+            stats: { isReady: false, positiveCount: 0, negativeCount: 0, totalSamples: 0 },
+            modelWasReset: true,
+            modelVersion: 3,
+            trainingConfigVersion: 1,
+        });
+
+        expect(received).toHaveLength(1);
+        expect(received[0].modelWasReset).toBe(true);
+        expect(received[0].stats).toMatchObject({ positiveCount: 0 });
+        expect(ctx._initCompleteCallback).toBeNull();
+    });
+
+    it('reports modelWasReset false for a genuine restore', () => {
+        const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+        const received = [];
+        const ctx = {
+            _initCompleteCallback: (payload) => received.push(payload),
+            _mlWorkerInitResolve: null,
+            _mlWorkerVersions: {},
+            mediaFiles: [],
+            predictionScores: new Map(),
+            updateSortPredictionButton: vi.fn(),
+            requestPredictionScores: vi.fn(),
+        };
+        handleMlWorkerMessage.call(ctx, {
+            type: 'initComplete',
+            stats: { isReady: true, positiveCount: 12, negativeCount: 9, totalSamples: 21 },
+            modelVersion: 3,
+            trainingConfigVersion: 1,
+        });
+        expect(received[0].modelWasReset).toBe(false); // never undefined — the manager reads it
+    });
+
+    // IMPORTANT 1's production half, asserted at the source level as well as behaviourally in
+    // tests/ml-training.test.js: `computeFeatures` must expose the opt-out and the manager's
+    // injected callback must use it. The behavioural test binds this same line, so this pair is
+    // the readable statement of intent rather than the load-bearing check.
+    it('opts the training manager out of the source folder feature cache', () => {
+        expect(source).toContain('async computeFeatures(filePath, fileInfo = null, { useHostCache = true } = {})');
+        expect(source).toContain('this.computeFeatures(p, info, { useHostCache: false })');
+    });
+});
+
+// Final whole-branch review, IMPORTANT 3. initializeFeaturePool was given a 5s backstop in an
+// earlier round precisely because a non-settling initializer latches isPredictionSorting, kills
+// AI sort for the rest of the session and pins the progress card — handleSortByPrediction awaits
+// `Promise.all([initializeMlWorker(), initializeFeaturePool()])`, so either one hanging hangs
+// both. initializeMlWorker settled only on `initComplete` or `onerror`; the earlier justification
+// ("it resolves on onerror, on construction failure and when ML is disabled") enumerates settle
+// PATHS rather than excluding non-settling ones — a worker that starts, parses, and then never
+// replies without raising `error` is not on that list.
+describe('initializeMlWorker backstop timeout (G1 final review, Important 3)', () => {
+    const withFakeWorker = async (fn, WorkerImpl) => {
+        const savedWorker = globalThis.Worker;
+        const savedLog = console.log;
+        console.log = () => {};
+        globalThis.Worker =
+            WorkerImpl ||
+            class SilentWorker {
+                postMessage() {}
+                terminate() {}
+            };
+        vi.useFakeTimers();
+        try {
+            await fn();
+        } finally {
+            vi.useRealTimers();
+            console.log = savedLog;
+            if (savedWorker === undefined) delete globalThis.Worker;
+            else globalThis.Worker = savedWorker;
+        }
+    };
+
+    const makeCtx = () => ({
+        isMlEnabled: true,
+        mlWorker: null,
+        _mlWorkerInitResolve: null,
+        handleMlWorkerMessage: vi.fn(),
+    });
+
+    it('settles when the worker neither replies nor raises error', async () => {
+        await withFakeWorker(async () => {
+            const initializeMlWorker = extractMethod('initializeMlWorker');
+            const ctx = makeCtx();
+            let settled = false;
+            initializeMlWorker.call(ctx).then(() => (settled = true));
+
+            await vi.advanceTimersByTimeAsync(4999);
+            expect(settled, 'settled before the backstop elapsed').toBe(false);
+            await vi.advanceTimersByTimeAsync(2);
+            expect(settled, 'still hung after the backstop should have fired').toBe(true);
+        });
+    });
+
+    it('clears the backstop when initComplete arrives, leaving no dangling timer', async () => {
+        await withFakeWorker(async () => {
+            const initializeMlWorker = extractMethod('initializeMlWorker');
+            const ctx = makeCtx();
+            let settled = false;
+            initializeMlWorker.call(ctx).then(() => (settled = true));
+
+            // handleMlWorkerMessage's initComplete case invokes this slot.
+            expect(typeof ctx._mlWorkerInitResolve).toBe('function');
+            ctx._mlWorkerInitResolve();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(settled).toBe(true);
+            expect(vi.getTimerCount(), 'the 5s backstop was left armed').toBe(0);
+        });
     });
 });

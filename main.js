@@ -227,6 +227,14 @@ app.whenReady().then(() => {
                 }
             }
 
+            // Sorted by name (code-unit order — locale-independent, so two machines agree).
+            // `fs.readdir` order is filesystem-defined and not stable across machines or after
+            // renames; the ML training pipeline derives its row order from this list and then
+            // shuffles it from a fingerprint-derived seed, so an unsorted scan meant two runs
+            // over a byte-identical training set could produce different weights (design doc
+            // § 5.4). ml-training.js sorts again for itself rather than depending on this.
+            mediaFiles.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
             console.log(`Found ${mediaFiles.length} media files`);
             return { success: true, files: mediaFiles };
         } catch (error) {

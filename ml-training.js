@@ -28,7 +28,11 @@ export const DESCRIPTOR_KEYS = Object.freeze([
 // folder is already a descriptor key, and including absolute paths would make the fingerprint
 // machine-specific for no gain.
 const fileTriple = (f) => [String(f.name), Number(f.size) || 0, Number(f.mtimeMs) || 0];
-const byName = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const byName = (a, b) => cmp(a[0], b[0]);
+// Code-unit order, never localeCompare: the point is a machine-independent, locale-independent
+// order that two runs of the same training set always agree on.
+const byFileName = (a, b) => cmp(String(a.name), String(b.name));
 
 export function buildDescriptor({
     likeFolder,
@@ -163,8 +167,15 @@ export class MlTrainingManager {
      * { names, sizes, mtimes, hasClip, vecBuf, clipBuf } -- with NO `success` field, or the
      * legacy { entries: [[filename, entry]] } shape for a pre-binary on-disk cache. Mirrors
      * media-viewer.js _loadFeatureCacheLocked's `if (chunk.vecBuf) { ... } else { ... }` branch.
+     *
+     * `loadPhase` labels the streaming read on the sort card. This read is the longest silent
+     * stretch of a rebuild -- the source folder's comparable load is documented at ~40s for a 24k
+     * entry cache, and this manager holds no vectors across calls, so every rebuild pays it in
+     * full for BOTH folders. Reported per chunk, determinate against the on-disk count. Omitted
+     * (or a folder with nothing on disk) reports nothing, so a cache-less folder does not flash a
+     * phase that instantly completes.
      */
-    async _loadVectorCache(folderPath, files, signal) {
+    async _loadVectorCache(folderPath, files, signal, loadPhase = null) {
         const entries = new Map();
         if (!folderPath || !files || files.length === 0) return { entries, diskCount: 0, aborted: false };
 
@@ -188,6 +199,11 @@ export class MlTrainingManager {
                 return { entries, diskCount: 0, aborted: false };
             }
             diskCount = opened.count || 0;
+            const report =
+                loadPhase && diskCount > 0
+                    ? (done) => this.onProgress({ phase: loadPhase, current: done, total: diskCount })
+                    : null;
+            report?.(0);
 
             for (let offset = 0; offset < diskCount; offset += CHUNK_SIZE) {
                 if (signal?.aborted) {
@@ -195,6 +211,7 @@ export class MlTrainingManager {
                     break;
                 }
                 const chunk = await this.cacheIo.chunk(offset, CHUNK_SIZE);
+                report?.(Math.min(offset + CHUNK_SIZE, diskCount));
                 if (chunk.vecBuf) {
                     // Binary shape: .slice() gives each entry its own compact 64/512 copy --
                     // NOT .subarray() (a view would pin the whole n*64 / n*512 chunk buffer).
@@ -402,8 +419,8 @@ export class MlTrainingManager {
      * treated as a hard bail here, identically to `signal?.aborted` — never fed into extraction or
      * `_saveVectorCache`.
      */
-    async _collectFolderVectors(folderPath, files, phase, enableClipFeatures, signal) {
-        const { entries, diskCount, aborted } = await this._loadVectorCache(folderPath, files, signal);
+    async _collectFolderVectors(folderPath, files, phase, loadPhase, enableClipFeatures, signal) {
+        const { entries, diskCount, aborted } = await this._loadVectorCache(folderPath, files, signal, loadPhase);
         const rows = [];
         let clipMissing = 0;
         let failed = 0;
@@ -473,7 +490,10 @@ export class MlTrainingManager {
             const file = mediaByName.get(name);
             if (file) resolved.push({ name, bucket, file });
         }
-        return resolved;
+        // Same reason the folder scans are sorted: `bulkRated` is a Map in hydration order (from
+        // `.bulk_rated.json`'s good/bad arrays), which is not a property of the training set, and
+        // these rows are appended to the folder rows that trainBatch's seeded shuffle indexes.
+        return resolved.sort(byFileName);
     }
 
     /**
@@ -534,8 +554,27 @@ export class MlTrainingManager {
      * internal shape. A rejecting or malformed `loadModelState` result must be treated as a model-
      * cache miss (design doc § 7.2: "Model-cache read failure or malformed entry | Treated as a
      * miss"), never as an escaped exception out of `ensureTrainedModel`.
+     *
+     * Final whole-branch review, Important 2: "resolved with a stats object" is NOT the same as
+     * "the cached weights were loaded." `ml-worker.js`'s `initializeModel` falls through to
+     * `new OnlineLogisticRegression(DEFAULT_FEATURE_DIM)` for every unusable saved model and still
+     * replies `initComplete` with valid-shaped (all-zero) stats, so the `!loaded?.stats` check
+     * above passes for a model that was never restored — committing `sessionFingerprint` against
+     * an empty worker and wedging the session exactly as Critical 1 did. Two checks close it:
+     *
+     * - `modelWasReset` — the worker's own verdict, now forwarded by `_runWorkerInit`. Covers a
+     *   version/dim mismatch and a throwing/failing `fromJSON`.
+     * - agreement with the entry's persisted `stats` — covers what `modelWasReset` structurally
+     *   cannot: when `savedModel` is truthy but `savedModel.weights` is ABSENT, `initializeModel`
+     *   never enters its compatibility branch, so `modelWasReset` stays FALSE while a fresh empty
+     *   model is still built and replied with. `_writeCachedModel` has always persisted `stats`
+     *   and nothing read them; this is what they are for.
+     *
+     * Deliberately NOT gated on `stats.isReady`: a legitimately cached 2-like/5-dislike model is
+     * not ready and never will be until the training set grows, and rejecting it here would make
+     * it rebuild on every single sort forever.
      */
-    async _safeLoadModelState(modelState, fingerprint) {
+    async _safeLoadModelState(modelState, fingerprint, expectedStats = null) {
         let loaded;
         try {
             loaded = await this.loadModelState(modelState);
@@ -546,6 +585,26 @@ export class MlTrainingManager {
         if (!loaded?.stats) {
             this.logError(`Cached model for ${fingerprint} produced no usable stats; rebuilding.`);
             return null;
+        }
+        if (loaded.modelWasReset) {
+            this.logError(`Cached model for ${fingerprint} was reset by the worker, not loaded; rebuilding.`);
+            return null;
+        }
+        // `expectedStats` absent (an entry from a store written before stats were persisted)
+        // leaves the modelWasReset check as the only verification, rather than failing closed on
+        // a cache entry that is otherwise fine.
+        if (expectedStats) {
+            const n = (v) => Number(v) || 0;
+            const mismatched = ['positiveCount', 'negativeCount', 'totalSamples'].filter(
+                (k) => n(loaded.stats[k]) !== n(expectedStats[k])
+            );
+            if (mismatched.length > 0) {
+                this.logError(
+                    `Cached model for ${fingerprint} loaded with stats that disagree with the cache entry ` +
+                        `(${mismatched.join(', ')}); rebuilding.`
+                );
+                return null;
+            }
         }
         return loaded;
     }
@@ -595,8 +654,15 @@ export class MlTrainingManager {
             this.notify(`Could not read the dislike folder — training on partial data.`, 'warning');
         }
 
-        const likeFiles = likedResult?.success ? likedResult.files : [];
-        const dislikeFiles = dislikedResult?.success ? dislikedResult.files : [];
+        // Sorted, not merely taken as scanned. `trainBatch` shuffles an index array DERIVED from
+        // this order, so the fingerprint-derived seed only makes training reproducible if the row
+        // order is reproducible too -- otherwise two runs over a byte-identical training set can
+        // produce different weights, and § 5.4's "a cache hit is verifiable" claim (the cached
+        // model is the model a rebuild would produce) does not hold. `main.js`'s load-folder now
+        // sorts as well; this sorts again rather than trusting it, because the property belongs to
+        // training and must not depend on an IPC contract that has no reason to guarantee it.
+        const likeFiles = (likedResult?.success ? likedResult.files : []).slice().sort(byFileName);
+        const dislikeFiles = (dislikedResult?.success ? dislikedResult.files : []).slice().sort(byFileName);
         if (likeFiles.length === 0 && dislikeFiles.length === 0) return miss;
 
         // Cheap, synchronous metadata only -- a descriptor input, so it must be resolved before
@@ -609,6 +675,30 @@ export class MlTrainingManager {
             size: r.file.size,
             mtimeMs: r.file.mtimeMs,
         }));
+
+        // A class with NO source can never produce a usable model: isReady is
+        // `positiveCount >= 3 && negativeCount >= 3` (ml-model.js), so an empty class pins it
+        // false forever. Bail here, before the fingerprint and before the expensive scan/extract
+        // pass, rather than spending a full extraction and a slot in the 5-entry model cache on a
+        // dead-end model, on every sort, until the user populates the missing side.
+        //
+        // Deliberately NOT `likeFiles.length === 0 || dislikeFiles.length === 0` (which is what
+        // the BACKLOG entry for this proposed): bulk-rated corrections stay in the SOURCE folder
+        // and are never in the like/dislike folders, so an empty dislike FOLDER whose 'bad' class
+        // is supplied entirely by bulk-rated files is a legitimate, working configuration that the
+        // folder-only form would silently disable. The test is per CLASS, over all of that class's
+        // sources -- which is also why it sits after `bulkPresent` rather than beside the
+        // both-empty check above.
+        //
+        // `scanFailed` suppresses the guard on purpose. Design doc § 7.2 rules that a folder that
+        // will not scan is "Report; train on whatever is available," and that row is still the
+        // contract -- a failed scan is not evidence that the class is empty. It is also where the
+        // guard's own justification stops applying: `cacheable` already excludes a failed scan, so
+        // no dead-end model can reach the model cache down that path, leaving only the wasted
+        // extraction, which § 7.2 deliberately accepts.
+        const hasLikeSource = likeFiles.length > 0 || bulkPresent.some((b) => b.bucket === 'good');
+        const hasDislikeSource = dislikeFiles.length > 0 || bulkPresent.some((b) => b.bucket === 'bad');
+        if (!scanFailed && (!hasLikeSource || !hasDislikeSource)) return miss;
 
         const descriptor = buildDescriptor({
             likeFolder: config.customLikeFolder,
@@ -650,7 +740,7 @@ export class MlTrainingManager {
             const cached = await this._readCachedModel(fingerprint);
             if (cached && !signal?.aborted) {
                 this.onProgress({ phase: 'Loading cached model…' });
-                const loaded = await this._safeLoadModelState(cached.modelState, fingerprint);
+                const loaded = await this._safeLoadModelState(cached.modelState, fingerprint, cached.stats);
                 if (loaded) {
                     this.sessionFingerprint = fingerprint;
                     this.sessionStats = loaded.stats;
@@ -665,6 +755,7 @@ export class MlTrainingManager {
             config.customLikeFolder,
             likeFiles,
             'Processing likes',
+            'Loading cached likes',
             config.enableClipFeatures,
             signal
         );
@@ -673,6 +764,7 @@ export class MlTrainingManager {
             config.customDislikeFolder,
             dislikeFiles,
             'Processing dislikes',
+            'Loading cached dislikes',
             config.enableClipFeatures,
             signal
         );
@@ -773,6 +865,7 @@ export class MlTrainingManager {
         // suppress this method's *only* other effect on a failed write, compounding one silent
         // no-op into two.
         this.sessionFingerprint = null;
+        this.sessionStats = null; // never read with a null fingerprint, but never left orphaned either
         try {
             const write = await this.modelCache.write({
                 version: MlTrainingManager.MODEL_CACHE_VERSION,

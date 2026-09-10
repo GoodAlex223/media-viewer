@@ -13,6 +13,112 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { packFeatureChunk } = require('../feature-cache-transport.js');
 
+// ---------------------------------------------------------------------------------------------
+// Real-MediaViewer harness (house pattern — same shape as tests/media-viewer-utils.test.js and
+// tests/ml-pair-selection.test.js: read the source, extract a method body by brace-counting, and
+// invoke it against a mock `this`). Needed here for the ISOLATION test only: § 4.1's rule is a
+// property of MANAGER + HOST COLLABORATOR, and asserting it against a `vi.fn()` computeFeatures
+// is structurally incapable of failing — which is exactly how the real violation shipped green.
+const nodeFs = require('fs');
+const nodePath = require('path');
+const viewerSource = nodeFs.readFileSync(nodePath.join(__dirname, '..', 'media-viewer.js'), 'utf-8');
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+
+function extractAsyncMethod(methodName) {
+    const regex = new RegExp(`^\\s{4}async\\s+${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
+    const match = viewerSource.match(regex);
+    if (!match) throw new Error(`Could not find async method: ${methodName}`);
+    const searchStart = match.index + match[0].length - 1; // position of the opening {
+    let braceCount = 0;
+    let methodEnd = -1;
+    for (let i = searchStart; i < viewerSource.length; i++) {
+        if (viewerSource[i] === '{') braceCount++;
+        if (viewerSource[i] === '}') braceCount--;
+        if (braceCount === 0) {
+            methodEnd = i + 1;
+            break;
+        }
+    }
+    return new AsyncFunction(match[1], viewerSource.substring(searchStart + 1, methodEnd - 1));
+}
+
+/**
+ * The `computeFeatures:` callback MediaViewer's constructor injects into MlTrainingManager, read
+ * from media-viewer.js rather than re-typed here — so if a future edit drops the isolation flag
+ * from that one line, the isolation test below fails instead of silently re-passing against a
+ * re-typed copy of what the test author wished the line said.
+ *
+ * The arrow captures `this` lexically from the wrapper, so `.call(host)` binds it to the host ctx
+ * exactly as `new MediaViewer()` would.
+ */
+function injectedComputeFeaturesCallback(host) {
+    const m = viewerSource.match(/^\s+computeFeatures: (\(.*\) =>.*),$/m);
+    if (!m) throw new Error("Could not find the constructor's injected computeFeatures callback");
+    return new Function(`return ${m[1]};`).call(host);
+}
+
+/**
+ * Minimal renderer globals for the REAL `computeFeatures` image path: a `window` (its
+ * `FaceDetector` probe runs for every image), a `document` whose canvas hands back a 256x256
+ * ImageData stand-in, an `Image` whose `src` setter fires `load`, and the `extractFeatures`
+ * global that feature-extractor.js provides via a script tag in the renderer.
+ *
+ * Returns `{ restore, calls }`. `calls` is the sentinel: the isolation assertion below is a
+ * "nothing was written" shape, which a computeFeatures that silently failed to run would also
+ * satisfy, so the test asserts the real extraction body was reached the expected number of times.
+ */
+function installRendererGlobals() {
+    const saved = {
+        window: globalThis.window,
+        document: globalThis.document,
+        Image: globalThis.Image,
+        extractFeatures: globalThis.extractFeatures,
+    };
+    const calls = [];
+    globalThis.window = { electronAPI: {} }; // no FaceDetector, no probeVideo
+    globalThis.document = {
+        createElement: () => ({
+            width: 0,
+            height: 0,
+            getContext: () => ({
+                drawImage: () => {},
+                putImageData: () => {},
+                getImageData: () => ({ width: 256, height: 256, data: new Uint8ClampedArray(256 * 256 * 4) }),
+            }),
+        }),
+    };
+    globalThis.Image = class FakeImage {
+        constructor() {
+            this._listeners = {};
+            this.naturalWidth = 256;
+            this.naturalHeight = 256;
+        }
+        addEventListener(type, fn) {
+            (this._listeners[type] ||= []).push(fn);
+        }
+        set src(value) {
+            this._src = value;
+            queueMicrotask(() => (this._listeners.load || []).forEach((fn) => fn()));
+        }
+        get src() {
+            return this._src;
+        }
+    };
+    globalThis.extractFeatures = (imageData, metadata) => {
+        calls.push({ imageData, metadata });
+        return new Float32Array(64).fill(0.7);
+    };
+    return {
+        calls,
+        restore: () => {
+            for (const [k, v] of Object.entries(saved)) {
+                if (v === undefined) delete globalThis[k];
+                else globalThis[k] = v;
+            }
+        },
+    };
+}
+
 const baseInput = () => ({
     likeFolder: '/likes',
     likeFiles: [
@@ -1011,6 +1117,230 @@ describe('ensureTrainedModel', () => {
         expect(second.trainModel).toHaveBeenCalledTimes(1);
     });
 
+    // Final whole-branch review, IMPORTANT 2. ml-worker.js's `initializeModel` falls through to
+    // `new OnlineLogisticRegression(DEFAULT_FEATURE_DIM)` whenever the saved model is unusable and
+    // STILL replies `initComplete` with valid-shaped stats, flagging `modelWasReset: true`. Before
+    // this, `_runWorkerInit` dropped that flag and `_safeLoadModelState`'s only malformation check
+    // was `!loaded?.stats` — an empty model's stats object is truthy — so the manager committed
+    // sessionFingerprint/sessionStats and returned `source: 'model-cache'` for a model that was
+    // never loaded, wedging the session exactly like Critical 1.
+    it('treats a worker-reported reset (modelWasReset) as a model-cache miss', async () => {
+        const { m: first, modelCacheStore } = scenario();
+        await first.ensureTrainedModel({});
+
+        const { m: second } = scenario({
+            store: modelCacheStore.value,
+            managerOverrides: {
+                loadModelState: vi.fn(async () => ({
+                    // Valid-SHAPED stats from a freshly constructed, empty model.
+                    stats: { isReady: false, positiveCount: 0, negativeCount: 0, totalSamples: 0 },
+                    modelWasReset: true,
+                })),
+            },
+        });
+        const res = await second.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(second.trainModel).toHaveBeenCalledTimes(1);
+        expect(second.sessionFingerprint).toBe(res.fingerprint); // rebuilt, not the phantom load
+        expect(second.logError).toHaveBeenCalledWith(expect.stringMatching(/reset|rebuild/i));
+    });
+
+    // The gap `modelWasReset` alone does NOT close, measured against ml-worker.js: when
+    // `savedModel` is truthy but `savedModel.weights` is absent, `initializeModel` never enters
+    // the compatibility branch at all, so `modelWasReset` stays FALSE while a fresh empty model is
+    // still created and replied with. The persisted `cached.stats` (written by _writeCachedModel
+    // and, before this, read by nothing) is what catches it.
+    it('treats stats that disagree with the persisted cache entry as a model-cache miss', async () => {
+        const { m: first, modelCacheStore } = scenario();
+        await first.ensureTrainedModel({});
+        expect(modelCacheStore.value.entries[0].stats).toMatchObject({ positiveCount: 3, negativeCount: 3 });
+
+        const { m: second } = scenario({
+            store: modelCacheStore.value,
+            managerOverrides: {
+                loadModelState: vi.fn(async () => ({
+                    stats: { isReady: false, positiveCount: 0, negativeCount: 0, totalSamples: 0 },
+                    modelWasReset: false, // the worker genuinely did not consider this a "reset"
+                })),
+            },
+        });
+        const res = await second.ensureTrainedModel({});
+        expect(res.source).toBe('trained');
+        expect(second.trainModel).toHaveBeenCalledTimes(1);
+    });
+
+    // The guard must not fire on a legitimate hit. Explicitly includes a NOT-ready 2-like /
+    // 5-dislike model: gating the verification on `stats.isReady` instead of on agreement with
+    // the persisted entry would make that model rebuild forever.
+    it('still serves a legitimate hit, including a cached model that is not yet isReady', async () => {
+        const notReady = { isReady: false, positiveCount: 2, negativeCount: 5, totalSamples: 7 };
+        const { m: first, modelCacheStore } = scenario({
+            managerOverrides: {
+                trainModel: vi.fn(async () => ({ stats: notReady, modelState: { weights: [1] } })),
+            },
+        });
+        await first.ensureTrainedModel({});
+
+        const { m: second } = scenario({
+            store: modelCacheStore.value,
+            managerOverrides: {
+                loadModelState: vi.fn(async () => ({ stats: { ...notReady }, modelWasReset: false })),
+            },
+        });
+        const res = await second.ensureTrainedModel({});
+        expect(res.source).toBe('model-cache');
+        expect(second.trainModel).not.toHaveBeenCalled();
+    });
+
+    // Final whole-branch review, the deferred BACKLOG item. The guard used `&&` on the two folder
+    // file lists, so a one-sided training set ran a FULL scan + extraction pass and then cached a
+    // model that can never satisfy isReady (positiveCount >= 3 && negativeCount >= 3), burning a
+    // slot in the 5-entry cache on every sort until the empty folder is populated.
+    //
+    // The BACKLOG entry proposed changing `&&` to `||`. That is WRONG and the pair of tests below
+    // is what pins it: the guard runs BEFORE _resolveBulkRatedFiles, so an empty dislike FOLDER
+    // whose 'bad' class is supplied by bulk-rated corrections in the source folder is a
+    // legitimate, currently-working configuration that `||` would silently disable. The guard has
+    // to be over the CLASS's sources, not over one of its two sources.
+    describe('one-sided training set', () => {
+        it('skips before any extraction when a class has no source at all', async () => {
+            const { m, modelCacheStore } = scenario({ dislikeFiles: [] });
+            const res = await m.ensureTrainedModel({});
+            expect(res.source).toBe('skipped');
+            expect(m.trainModel).not.toHaveBeenCalled();
+            expect(m.computeFeatures).not.toHaveBeenCalled(); // the whole extraction pass, avoided
+            expect(m.cacheIo.open).not.toHaveBeenCalled();
+            expect(modelCacheStore.value).toBeNull(); // no dead-end model in the 5-slot cache
+        });
+
+        it('skips when the LIKE side is the empty one', async () => {
+            const { m } = scenario({ likeFiles: [] });
+            const res = await m.ensureTrainedModel({});
+            expect(res.source).toBe('skipped');
+            expect(m.trainModel).not.toHaveBeenCalled();
+        });
+
+        // The configuration `||` would have broken. Bulk-rated 'bad' corrections live in the
+        // SOURCE folder, never in the dislike folder, so they are the class's only source here.
+        it('still trains with an empty dislike FOLDER when bulk-rated corrections supply that class', async () => {
+            const { m } = scenario({
+                dislikeFiles: [],
+                bulkRated: new Map([
+                    ['b1.jpg', 'bad'],
+                    ['b2.jpg', 'bad'],
+                ]),
+                mediaFiles: [
+                    { name: 'b1.jpg', path: '/src/b1.jpg', size: 30, mtimeMs: 7 },
+                    { name: 'b2.jpg', path: '/src/b2.jpg', size: 31, mtimeMs: 8 },
+                ],
+            });
+            const res = await m.ensureTrainedModel({});
+            expect(res.source).toBe('trained');
+            const [liked, disliked] = m.trainModel.mock.calls[0];
+            expect(liked).toHaveLength(3);
+            expect(disliked).toHaveLength(2);
+        });
+
+        // The guard is suppressed by a FAILED scan, deliberately: design doc § 7.2 rules that a
+        // folder that will not scan is "Report; train on whatever is available", and a failed scan
+        // is not evidence the class is empty. `cacheable` already excludes a failed scan, so the
+        // dead-end-model-in-the-cache harm this guard exists to prevent cannot occur there anyway.
+        it('does not suppress the § 7.2 partial-data path — a FAILED scan still trains', async () => {
+            const { m, modelCacheStore } = scenario({
+                managerOverrides: {
+                    loadFolder: vi.fn(async (p) =>
+                        p === '/likes'
+                            ? { success: false, error: 'ENOENT' }
+                            : {
+                                  success: true,
+                                  files: [{ name: 'd1.jpg', path: '/dislikes/d1.jpg', size: 20, mtimeMs: 4 }],
+                              }
+                    ),
+                },
+            });
+            const res = await m.ensureTrainedModel({});
+            expect(res.source).toBe('trained');
+            expect(modelCacheStore.value?.entries || []).toHaveLength(0); // reported, never cached
+        });
+
+        it('still trains with an empty LIKE folder when bulk-rated corrections supply that class', async () => {
+            const { m } = scenario({
+                likeFiles: [],
+                bulkRated: new Map([['b1.jpg', 'good']]),
+                mediaFiles: [{ name: 'b1.jpg', path: '/src/b1.jpg', size: 30, mtimeMs: 7 }],
+            });
+            const res = await m.ensureTrainedModel({});
+            expect(res.source).toBe('trained');
+            const [liked, disliked] = m.trainModel.mock.calls[0];
+            expect(liked).toHaveLength(1);
+            expect(disliked).toHaveLength(3);
+        });
+    });
+
+    // Final whole-branch review, minor: `main.js`'s load-folder returns raw `fs.readdir` order,
+    // `_collectFolderVectors` preserved it, and `trainBatch` shuffles an index array DERIVED from
+    // that order — so the fingerprint seed alone did not make weights reproducible, and two runs
+    // over an identical descriptor could produce different weights. That is a real hole in § 5.4's
+    // "a cache hit is verifiable" claim (the cached model is supposed to be the model a rebuild
+    // would produce). The descriptor already sorts; the rows now sort too.
+    it('feeds training rows in a stable name order regardless of the scan order', async () => {
+        const perName = (name) =>
+            ({
+                l1: 0.1,
+                l2: 0.2,
+                l3: 0.3,
+                d1: 0.4,
+                d2: 0.5,
+                d3: 0.6,
+                b1: 0.7,
+                b2: 0.8,
+            })[name.replace('.jpg', '')];
+        const run = async (reverse) => {
+            const like = [
+                { name: 'l1.jpg', path: '/likes/l1.jpg', size: 10, mtimeMs: 1 },
+                { name: 'l2.jpg', path: '/likes/l2.jpg', size: 11, mtimeMs: 2 },
+                { name: 'l3.jpg', path: '/likes/l3.jpg', size: 12, mtimeMs: 3 },
+            ];
+            const dislike = [
+                { name: 'd1.jpg', path: '/dislikes/d1.jpg', size: 20, mtimeMs: 4 },
+                { name: 'd2.jpg', path: '/dislikes/d2.jpg', size: 21, mtimeMs: 5 },
+                { name: 'd3.jpg', path: '/dislikes/d3.jpg', size: 22, mtimeMs: 6 },
+            ];
+            const bulkEntries = [
+                ['b1.jpg', 'good'],
+                ['b2.jpg', 'bad'],
+            ];
+            const { m } = scenario({
+                likeFiles: reverse ? [...like].reverse() : like,
+                dislikeFiles: reverse ? [...dislike].reverse() : dislike,
+                bulkRated: new Map(reverse ? [...bulkEntries].reverse() : bulkEntries),
+                mediaFiles: [
+                    { name: 'b1.jpg', path: '/src/b1.jpg', size: 30, mtimeMs: 7 },
+                    { name: 'b2.jpg', path: '/src/b2.jpg', size: 31, mtimeMs: 8 },
+                ],
+                managerOverrides: {
+                    // A per-file marker so the row ORDER is observable in what trainModel receives.
+                    computeFeatures: vi.fn(async (p) => new Float32Array(64).fill(perName(p.split('/').pop()))),
+                },
+            });
+            const res = await m.ensureTrainedModel({});
+            const [liked, disliked] = m.trainModel.mock.calls[0];
+            return {
+                fingerprint: res.fingerprint,
+                liked: liked.map((r) => Math.round(r[0] * 10) / 10),
+                disliked: disliked.map((r) => Math.round(r[0] * 10) / 10),
+            };
+        };
+
+        const forward = await run(false);
+        const backward = await run(true);
+        expect(backward.fingerprint).toBe(forward.fingerprint); // same training set, by definition
+        expect(backward.liked).toEqual(forward.liked);
+        expect(backward.disliked).toEqual(forward.disliked);
+        expect(forward.liked).toEqual([0.1, 0.2, 0.3, 0.7]); // folder rows sorted, then bulk-rated
+        expect(forward.disliked).toEqual([0.4, 0.5, 0.6, 0.8]);
+    });
+
     it('skips when a training folder is unset', async () => {
         const { m } = scenario();
         m.getConfig.mockReturnValue({
@@ -1255,25 +1585,99 @@ describe('ensureTrainedModel', () => {
 
     // Spec gap B (review round 1): design doc § 9.1 prescribes these two properties explicitly;
     // neither existed.
-    it('never writes a training-folder path into the host featureCache or clipCache (isolation)', async () => {
-        // Pre-populate with an EXISTING source-folder entry so the assertion is a real isolation
-        // check, not just "an empty Map stayed empty because nothing here ever touches it."
-        const hostFeatureCache = new Map([['/src/existing.jpg', new Float32Array(64)]]);
-        const hostClipCache = new Map([['/src/existing.jpg', new Float32Array(512)]]);
-        const { m } = scenario({
-            managerOverrides: {
-                getBulkRatedContext: vi.fn(() => ({
-                    bulkRated: new Map(),
-                    mediaFiles: [],
-                    featureCache: hostFeatureCache,
-                    clipCache: hostClipCache,
-                })),
-            },
-        });
-        const res = await m.ensureTrainedModel({});
-        expect(res.source).toBe('trained');
-        expect([...hostFeatureCache.keys()]).toEqual(['/src/existing.jpg']);
-        expect([...hostClipCache.keys()]).toEqual(['/src/existing.jpg']);
+    // Design doc § 4.1, and the final whole-branch review's IMPORTANT 1. This test used to run
+    // against a `vi.fn()` computeFeatures, which made it structurally incapable of failing: the
+    // violation is entirely inside the HOST's real `computeFeatures`
+    // (`this.featureCache.set(filePath, features)` with a like/dislike-folder path), so a mock
+    // collaborator meant the suite was green while production wrote training-folder entries into
+    // the source folder's map on every rebuild. It is re-pointed at the real method here, wired
+    // through the same injected callback media-viewer.js's constructor actually installs.
+    it('never writes a training-folder path into the host featureCache/clipCache/featureMetadata (isolation, real computeFeatures)', async () => {
+        const globals = installRendererGlobals();
+        try {
+            // Pre-populate with an EXISTING source-folder entry so the assertion is a real
+            // isolation check, not just "an empty Map stayed empty because nothing touched it."
+            const hostFeatureCache = new Map([['/src/existing.jpg', new Float32Array(64)]]);
+            const hostClipCache = new Map([['/src/existing.jpg', new Float32Array(512)]]);
+            const hostFeatureMetadata = new Map([['/src/existing.jpg', { size: 1, mtime: 1 }]]);
+            const host = {
+                featureCache: hostFeatureCache,
+                clipCache: hostClipCache,
+                featureMetadata: hostFeatureMetadata,
+                mediaFiles: [],
+                isJxl: (p) => /\.jxl$/i.test(p),
+            };
+            host.computeFeatures = extractAsyncMethod('computeFeatures');
+
+            const { m } = scenario({
+                managerOverrides: {
+                    computeFeatures: injectedComputeFeaturesCallback(host),
+                    getBulkRatedContext: vi.fn(() => ({
+                        bulkRated: new Map(),
+                        mediaFiles: [],
+                        featureCache: hostFeatureCache,
+                        clipCache: hostClipCache,
+                    })),
+                },
+            });
+            const res = await m.ensureTrainedModel({});
+
+            expect(res.source).toBe('trained');
+            // Sentinel FIRST: prove the real extraction body actually ran for all six training
+            // files. Without this, a computeFeatures that threw or short-circuited would produce
+            // the same "nothing was written" pass this assertion is looking for.
+            expect(globals.calls).toHaveLength(6);
+            expect(m.trainModel).toHaveBeenCalledTimes(1);
+            const [liked, disliked] = m.trainModel.mock.calls[0];
+            expect(liked).toHaveLength(3);
+            expect(disliked).toHaveLength(3);
+            expect(liked[0].slice(0, 64)).toEqual(new Array(64).fill(0.699999988079071)); // real 0.7 f32 row
+
+            // The property itself: not one training-folder path reached the source folder's maps.
+            expect([...hostFeatureCache.keys()]).toEqual(['/src/existing.jpg']);
+            expect([...hostClipCache.keys()]).toEqual(['/src/existing.jpg']);
+            // featureMetadata has a second, independent guard (it is only written for a path
+            // found in `mediaFiles`, which a training-folder path never is), so this assertion
+            // is belt-and-braces rather than the load-bearing one.
+            expect([...hostFeatureMetadata.keys()]).toEqual(['/src/existing.jpg']);
+        } finally {
+            globals.restore();
+        }
+    });
+
+    // The other half of § 4.1's isolation rule, and the second cost the review traced: with the
+    // host cache in play, `computeFeatures` short-circuits on `featureCache.has(filePath)` and
+    // hands back a PRE-MODIFICATION vector for a training file the manager's own `size`/`mtime`
+    // check just correctly rejected as stale — which is then stored under the NEW size/mtime,
+    // persisted, and trained into a model cached under the new fingerprint. A durable stale-model
+    // path, arriving through ambient state outside DESCRIPTOR_KEYS.
+    it('re-extracts a stale training file instead of returning the host cache’s pre-modification vector', async () => {
+        const globals = installRendererGlobals();
+        try {
+            const STALE = new Float32Array(64).fill(0.11);
+            // The host cache is warm for a like-folder file whose size/mtime have since changed.
+            const hostFeatureCache = new Map([['/likes/l1.jpg', STALE]]);
+            const host = {
+                featureCache: hostFeatureCache,
+                clipCache: new Map(),
+                featureMetadata: new Map(),
+                mediaFiles: [],
+                isJxl: () => false,
+            };
+            host.computeFeatures = extractAsyncMethod('computeFeatures');
+
+            const { m } = scenario({
+                managerOverrides: { computeFeatures: injectedComputeFeaturesCallback(host) },
+            });
+            await m.ensureTrainedModel({});
+
+            const [liked] = m.trainModel.mock.calls[0];
+            const l1 = liked.find((row) => Math.abs(row[0] - 0.11) < 1e-6);
+            expect(l1, 'a stale host-cache vector reached the training rows').toBeUndefined();
+            expect(globals.calls).toHaveLength(6); // every file genuinely extracted
+        } finally {
+            globals.restore();
+        }
     });
 
     it('leaves every likes-folder entry a cache hit when only the dislikes folder changes (per-folder granularity)', async () => {
@@ -1346,6 +1750,46 @@ describe('ensureTrainedModel', () => {
         expect(phases).toContain('Processing likes');
         expect(phases).toContain('Processing dislikes');
         expect(phases).toContain('Training model…');
+    });
+
+    // Final whole-branch review, IMPORTANT 4 (reporting half). MlTrainingManager keeps no vectors
+    // across calls, so every rebuild re-streams both training folders' .feature_cache.json in
+    // full — and in the rate→sort workflow every sort IS a rebuild, because rating a file moves it
+    // into a training folder and changes the descriptor. CLAUDE.md documents a comparable load as
+    // ~40s for a 24k-entry cache, during which the card previously sat frozen on 'Checking
+    // training set…' with no phase of its own (spec § 13 records the omission). Only the reporting
+    // is fixed here; cross-call vector retention needs measurement first and is filed in BACKLOG.
+    it('reports a determinate per-folder phase while streaming each training folder’s vector cache', async () => {
+        const io = makeCacheIo([
+            entry('l1.jpg', 10, 1),
+            entry('l2.jpg', 11, 2),
+            entry('l3.jpg', 12, 3),
+            entry('d1.jpg', 20, 4),
+            entry('d2.jpg', 21, 5),
+            entry('d3.jpg', 22, 6),
+        ]);
+        const { m } = scenario({ cacheIo: io });
+        await m.ensureTrainedModel({});
+
+        const calls = m.onProgress.mock.calls.map(([a]) => a);
+        const likeLoad = calls.filter((c) => c.phase === 'Loading cached likes');
+        const dislikeLoad = calls.filter((c) => c.phase === 'Loading cached dislikes');
+        expect(likeLoad.length).toBeGreaterThan(0);
+        expect(dislikeLoad.length).toBeGreaterThan(0);
+        // Determinate: computeSortProgressView needs a numeric current AND total > 0 to draw a bar.
+        expect(likeLoad.every((c) => typeof c.current === 'number' && c.total === 6)).toBe(true);
+        // And it must be reported BEFORE the per-file processing phase for that folder, which is
+        // the whole point — the silent window is the load, not the loop after it.
+        expect(calls.findIndex((c) => c.phase === 'Loading cached likes')).toBeLessThan(
+            calls.findIndex((c) => c.phase === 'Processing likes')
+        );
+    });
+
+    it('reports no vector-load phase when the folder has no on-disk cache to stream', async () => {
+        const { m } = scenario(); // makeCacheIo() default: count 0
+        await m.ensureTrainedModel({});
+        const phases = m.onProgress.mock.calls.map(([a]) => a.phase);
+        expect(phases).not.toContain('Loading cached likes');
     });
 
     // Relocated from the deleted renderer method trainFromHistoricalRatings's test suite (G1 task

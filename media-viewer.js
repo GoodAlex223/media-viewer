@@ -139,7 +139,7 @@ class MediaViewer {
         // Versions reported by the workers that own them — never re-declared here, so they
         // cannot drift from the code they describe. Populated by initComplete and by the
         // feature pool's getVersion probe.
-        this._mlWorkerVersions = { mlModelVersion: 0, featureDim: 0, trainingConfigVersion: 0 };
+        this._mlWorkerVersions = { mlModelVersion: 0, trainingConfigVersion: 0 };
         this._featureExtractorVersion = 0;
         // Pending _runWorkerTraining/_runWorkerInit resolvers, settled (by reference identity)
         // in handleMlWorkerMessage's trainComplete/initComplete cases.
@@ -151,7 +151,15 @@ class MediaViewer {
 
         this.mlTraining = new MlTrainingManager({
             loadFolder: (p) => window.electronAPI.loadFolder(p),
-            computeFeatures: (p, info) => this.computeFeatures(p, info),
+            // useHostCache:false — the manager extracts LIKE/DISLIKE-folder files, which must
+            // never enter the source folder's featureCache/featureMetadata (design doc § 4.1).
+            // Applied at the injection point rather than per call site so the invariant is
+            // "the manager never writes the host's maps," with no exceptions to audit. The one
+            // thing this gives up is warming the host cache for a bulk-rated SOURCE file the
+            // manager happens to extract (a legitimate direction, per § 3.1) — in practice a
+            // no-op, since the sort's Phase 1 hydrates featureCache before ensureTrainedModel
+            // runs and Phase 2 extracts anything still missing.
+            computeFeatures: (p, info) => this.computeFeatures(p, info, { useHostCache: false }),
             extractClipEmbedding: (p) => this.extractClipEmbedding(p),
             trainModel: (liked, disliked, seed) => this._runWorkerTraining(liked, disliked, seed),
             loadModelState: (modelState) => this._runWorkerInit(modelState),
@@ -6724,6 +6732,14 @@ class MediaViewer {
      * and identity-guarding the `onerror` path so it only clears a slot it still owns -- makes
      * that hold regardless of caller discipline, mirroring the reference-identity pattern
      * _runWorkerTraining/_runWorkerInit use for their own single-slot callbacks.
+     *
+     * Final whole-branch review, Important 3: the settle paths enumerated above do not exclude
+     * the non-settling one — a worker that constructs, parses, and then never replies without
+     * raising `error`. handleSortByPrediction awaits `Promise.all([initializeMlWorker(),
+     * initializeFeaturePool()])`, so that hangs the sort exactly as a hung version probe did,
+     * latching `isPredictionSorting` and pinning the progress card for the session. The 5s
+     * backstop below is the same three lines initializeFeaturePool already carries, for the same
+     * reason; it never gates the happy path, which settles on the real reply whenever it lands.
      */
     initializeMlWorker() {
         console.log('[ML Debug] initializeMlWorker called, isMlEnabled:', this.isMlEnabled);
@@ -6742,6 +6758,23 @@ class MediaViewer {
         }
 
         return new Promise((resolve) => {
+            let settled = false;
+            const settle = () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                resolve();
+            };
+            // Backstop for a worker that neither replies NOR raises `error`. Deliberately does
+            // NOT set isMlEnabled=false: a merely slow worker's initComplete still lands later and
+            // still refreshes _mlWorkerVersions, and ml-training.js's `versionsKnown` gate already
+            // degrades an unsettled sort honestly (trains, does not cache, logs why).
+            const timeoutId = setTimeout(() => {
+                console.warn('[ML Debug] ML worker init did not reply within 5s — continuing degraded');
+                if (this._mlWorkerInitResolve === settle) this._mlWorkerInitResolve = null;
+                settle();
+            }, 5000);
+
             try {
                 this.mlWorker = new Worker('ml-worker.js');
                 console.log('[ML Debug] ML Worker created');
@@ -6765,19 +6798,19 @@ class MediaViewer {
                     // settle attempts). Identity-guarded: only clear the slot if it still belongs
                     // to THIS call — a newer initializeMlWorker() call may have already taken it
                     // over (and already settled this call via the stale-resolver check above).
-                    if (this._mlWorkerInitResolve === resolve) {
+                    if (this._mlWorkerInitResolve === settle) {
                         this._mlWorkerInitResolve = null;
                     }
-                    resolve();
+                    settle();
                 };
 
-                this._mlWorkerInitResolve = resolve;
+                this._mlWorkerInitResolve = settle;
                 // Initialize worker (will load saved model if exists)
                 this.mlWorker.postMessage({ type: 'init', data: {} });
             } catch (err) {
                 console.warn('[ML Debug] ML Worker not available:', err);
                 this.isMlEnabled = false;
-                resolve(); // construction itself failed — nothing will ever reply
+                settle(); // construction itself failed — nothing will ever reply
             }
         });
     }
@@ -6787,15 +6820,23 @@ class MediaViewer {
             case 'initComplete':
                 console.log('[ML Debug] ML Model initialized:', message.stats);
                 this.mlStats = message.stats;
+                // `message.featureDim` is deliberately not captured: nothing read it, and it
+                // is already implied for descriptor purposes by mlModelVersion (ML_MODEL_VERSION
+                // bumps with the model's shape) and enforced on load by
+                // OnlineLogisticRegression.isCompatible, which checks it directly.
                 this._mlWorkerVersions = {
                     mlModelVersion: message.modelVersion || 0,
-                    featureDim: message.featureDim || 0,
                     trainingConfigVersion: message.trainingConfigVersion || 0,
                 };
                 if (this._initCompleteCallback) {
                     const cb = this._initCompleteCallback;
                     this._initCompleteCallback = null;
-                    cb({ stats: message.stats });
+                    // `modelWasReset` MUST be forwarded: an init that could not restore the saved
+                    // model still replies here with valid-shaped (all-zero) stats, so it is the
+                    // only signal that distinguishes "your cached model is loaded" from "I threw
+                    // it away and built an empty one." _safeLoadModelState treats true as a
+                    // model-cache miss (ml-training.js).
+                    cb({ stats: message.stats, modelWasReset: !!message.modelWasReset });
                 }
                 // Distinct from _initCompleteCallback above: that one is _runWorkerInit's
                 // per-call cache-hit-load mechanism (matched by reference identity); this one is
@@ -6825,12 +6866,13 @@ class MediaViewer {
             case 'trainComplete':
                 this.mlModelState = message.modelState;
                 this.mlStats = message.stats;
-                if (message.stats.totalSamples > 0) {
-                    this.showNotification(
-                        `ML trained: ${message.stats.positiveCount} likes, ${message.stats.negativeCount} dislikes`,
-                        'success'
-                    );
-                }
+                // No toast here. Decision D6 made showMlLearningIndicator the once-per-sort
+                // report ("🧠 Trained on N👍 M👎"), which fires moments later with the same two
+                // numbers. Beyond the redundancy this was an active hazard: showNotification
+                // evicts the oldest element once five stack, and the sort progress card IS a
+                // notification element — so on a degraded run (up to four `notify` warnings from
+                // ml-training.js) this could evict the card mid-sort, taking its Cancel button
+                // with it. Same failure an earlier task fixed for the CLIP toast.
                 if (this._trainingCompleteCallback) {
                     const cb = this._trainingCompleteCallback;
                     this._trainingCompleteCallback = null;
@@ -6937,10 +6979,28 @@ class MediaViewer {
         return true;
     }
 
+    /**
+     * Discard the live model. `{type:'reset'}` zeroes the worker's weights AND both class counts,
+     * so after this call the worker holds an empty model no matter what it was trained on.
+     *
+     * The manager's session tier must be cleared in the same breath. `ensureTrainedModel` resolves
+     * its `session` hit by fingerprint equality alone — it has no way to notice that the worker was
+     * emptied behind its back — and every call site here returns the descriptor to the SAME
+     * fingerprint (a CLIP toggle off-then-on, or re-picking the same like/dislike folder), so a
+     * stale `sessionFingerprint` would be re-matched immediately: `sessionStats` (ready-looking,
+     * e.g. 412👍/380👎) would flow back into `mlStats`, the indicator would claim "Model reused",
+     * the readiness gate would pass, and the zeroed worker would answer the sort with
+     * `scores: null, reason: 'Need more samples (0 likes, 0 dislikes)'` — for the rest of the
+     * session, since the session tier keeps hitting. Clearing it here (the one place that already
+     * owns this state transition) is what keeps the reset self-healing, as it was before the model
+     * cache existed and `mlStats = null` alone re-armed the retrain gate.
+     */
     resetMlModel() {
         this.mlModelState = null;
         this.mlStats = null;
         this.predictionScores = new Map();
+        this.mlTraining.sessionFingerprint = null; // the live worker no longer holds
+        this.mlTraining.sessionStats = null; // what this fingerprint describes
         if (this.mlWorker) {
             this.mlWorker.postMessage({ type: 'reset' });
         }
@@ -7327,11 +7387,24 @@ class MediaViewer {
      * Compute features for a file with full metadata support (v2)
      * @param {string} filePath - Path to the file
      * @param {Object} fileInfo - Optional file info from mediaFiles array
+     * @param {Object} [options]
+     * @param {boolean} [options.useHostCache=true] Read from and write to `this.featureCache` /
+     *   `this.featureMetadata`. Those maps belong to the SOURCE folder, so a caller extracting a
+     *   file that is not a source-folder file must pass `false` — `MlTrainingManager`'s injected
+     *   callback does, for the like/dislike folders it scans (design doc § 4.1). Two concrete
+     *   costs of not doing so, both traced by the final whole-branch review:
+     *   (1) `_saveFeatureCacheLocked`'s shrink guard reads `this.featureCache.size`, so training
+     *   entries inflate it and its second conjunct can stop firing after a partial or aborted
+     *   load — that is the guard that caught a real 23,559-entry → 32-entry overwrite; and
+     *   (2) the `has()` short-circuit below hands back a PRE-modification vector for a training
+     *   file the manager's own `size`/`mtime` check just rejected as stale, which is then stored
+     *   under the new stat and trained into a model cached under the new fingerprint — a stale
+     *   model reached through ambient state that no descriptor key covers.
      * @returns {Promise<Float32Array>} 64-dimensional feature vector
      */
-    async computeFeatures(filePath, fileInfo = null) {
+    async computeFeatures(filePath, fileInfo = null, { useHostCache = true } = {}) {
         // Check cache first
-        if (this.featureCache.has(filePath)) {
+        if (useHostCache && this.featureCache.has(filePath)) {
             return this.featureCache.get(filePath);
         }
 
@@ -7412,13 +7485,18 @@ class MediaViewer {
 
                     // Feature extraction using extractFeatures from feature-extractor.js (v2 with metadata)
                     const features = extractFeatures(imageData, metadata);
-                    this.featureCache.set(filePath, features);
-                    const computeFileInfo = this.mediaFiles.find((f) => f.path === filePath);
-                    if (computeFileInfo) {
-                        this.featureMetadata.set(filePath, {
-                            size: computeFileInfo.size,
-                            mtime: computeFileInfo.mtimeMs || 0,
-                        });
+                    // Both writes are gated together so featureCache and featureMetadata can never
+                    // disagree about which paths they cover (_saveFeatureCacheLocked's buildEntry
+                    // walks featureCache and looks each path up in featureMetadata).
+                    if (useHostCache) {
+                        this.featureCache.set(filePath, features);
+                        const computeFileInfo = this.mediaFiles.find((f) => f.path === filePath);
+                        if (computeFileInfo) {
+                            this.featureMetadata.set(filePath, {
+                                size: computeFileInfo.size,
+                                mtime: computeFileInfo.mtimeMs || 0,
+                            });
+                        }
                     }
                     cleanup();
                     resolve(features);
