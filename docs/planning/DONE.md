@@ -18,7 +18,7 @@ Completed tasks with implementation details and learnings.
 
 **Spec**: [2026-09-10-ml-training-pipeline-design.md](../superpowers/specs/2026-09-10-ml-training-pipeline-design.md) (see its § 13 for claims superseded during implementation)
 **Plan**: [archived](../archive/plans/2026-09-10_ml-training-pipeline.md) — 10-task subagent-driven SDD plan, executed via a controller ledger (`.superpowers/sdd/2026-09-10_ml-training-pipeline/progress.md`) rather than in-plan checkbox tracking
-**Branch**: `g1-ml-training-pipeline`, cut from `main` at `357800d`. **Not yet merged as of this entry** — every task shipped with its own per-task review round (several with fix rounds), but the whole-branch merge is a separate, later decision. No PR by task-brief instruction; reviewed locally, task-by-task, instead.
+**Branch**: `g1-ml-training-pipeline`, cut from `main` at `357800d`. **Not yet merged as of this entry** — every task shipped with its own per-task review round (several with fix rounds), but the whole-branch merge is a separate, later decision. The task brief said **no PR** and review ran locally, task-by-task, instead; at handover the user chose "push and create a Pull Request", so the branch is on [PR #68](https://github.com/GoodAlex223/media-viewer/pull/68).
 **Commits**: `0a3aace`/`231e19d` (spec) → `1f540e3` (plan) → `bcd6fa9` through `e6a37f9` inclusive (Tasks 1–9, 18 commits — a closed range, permanently 18) → Task 10's closeout plus its fix-round commits (still landing as of this entry; see `git log 357800d..HEAD` for the current total rather than a count here).
 **Tests**: unit 613 → **755** (every commit green); E2E 56 → **61**, run clean on the final revision. The last 20 unit tests come from the whole-branch review fix wave below.
 

@@ -130,7 +130,7 @@
 
 | ID  | Group                                                  | Domain                                        | Source      | Tasks | Total SP | Day     | Status     |
 | --- | ------------------------------------------------------ | --------------------------------------------- | ----------- | ----- | -------- | ------- | ---------- |
-| G1  | ML training pipeline — design pass + retrain skip [solo] 🏆 | JS logic (ML training / feature cache) + new module | 🔵 User     | 3     | 8        | Mon–Wed | ◐ Branch complete, unmerged (`g1-ml-training-pipeline`, no PR) |
+| G1  | ML training pipeline — design pass + retrain skip [solo] 🏆 | JS logic (ML training / feature cache) + new module | 🔵 User     | 3     | 8        | Mon–Wed | ◐ Branch complete, unmerged (`g1-ml-training-pipeline`, PR #68) |
 | G2  | Reachable overlay controls [batch]                     | CSS layout + renderer DOM + E2E evidence      | 🔵 User     | 3 (closes 4 🔵 + 1 🟤) | 5 | Thu | ☐ Planned  |
 | G3  | Compare-mode special hotkeys + tooltips [batch]        | Shortcuts + tooltips                          | 🔵 User     | 2     | 3        | Thu–Fri | ☐ Planned  |
 | G4  | ML pipeline integrity [batch]                          | JS logic (CLIP lifecycle) + test infra        | 🟤 Auto     | 3 (+1 housekeeping) | 5 | Mon–Tue | ☐ Planned  |
