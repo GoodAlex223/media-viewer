@@ -630,6 +630,64 @@ describe('model cache', () => {
         const m = managerWith({ modelCache: mc });
         await expect(m.invalidateModelCache()).resolves.toBe(false);
     });
+
+    // PR #68 review, finding 1: _writeCachedModel is a read-modify-write across two IPC round
+    // trips. invalidateModelCache writes {entries: []} to the SAME file. With no mutex, a clear
+    // that lands inside that window is silently undone -- the write re-persists the `kept` list
+    // it snapshotted before the clear, so the user is told the model was cleared while the very
+    // entries they discarded are put back. The read is deliberately snapshotted at call entry
+    // here, which is what the real IPC does: the file content is fixed when the handler runs,
+    // not when the promise settles.
+    const deferredModelCache = (initial) => {
+        let store = initial;
+        let releaseFirstRead;
+        let reads = 0;
+        const firstReadGate = new Promise((r) => (releaseFirstRead = r));
+        return {
+            read: vi.fn(async () => {
+                const snapshot = store;
+                if (reads++ === 0) await firstReadGate;
+                return { success: true, store: snapshot };
+            }),
+            write: vi.fn(async (s) => {
+                store = s;
+                return { success: true };
+            }),
+            releaseFirstRead: () => releaseFirstRead(),
+            get current() {
+                return store;
+            },
+        };
+    };
+
+    it('does not resurrect cleared entries when a clear lands inside a cache write', async () => {
+        const mc = deferredModelCache({
+            version: 1,
+            entries: [{ fingerprint: 'old', modelState: { weights: [9] }, stats: {}, savedAt: 1 }],
+        });
+        const m = managerWith({ modelCache: mc });
+
+        const writing = m._writeCachedModel('fresh', { weights: [1] }, { isReady: true }, {});
+        const clearing = m.invalidateModelCache();
+        mc.releaseFirstRead();
+        await Promise.all([writing, clearing]);
+
+        // The clear was requested last, so it must win outright -- not merely lose the race.
+        expect(mc.current.entries).toHaveLength(0);
+    });
+
+    it('applies two concurrent cache writes in series rather than losing one', async () => {
+        const mc = deferredModelCache({ version: 1, entries: [] });
+        const m = managerWith({ modelCache: mc });
+
+        const a = m._writeCachedModel('fp-a', { weights: [1] }, { isReady: true }, {});
+        const b = m._writeCachedModel('fp-b', { weights: [2] }, { isReady: true }, {});
+        mc.releaseFirstRead();
+        await Promise.all([a, b]);
+
+        // Unserialized, b's read snapshots the pre-a store and its write drops fp-a entirely.
+        expect(mc.current.entries.map((e) => e.fingerprint).sort()).toEqual(['fp-a', 'fp-b']);
+    });
 });
 
 // Direct, low-level tests for the bulk-rated vector-extraction phase, mirroring how

@@ -117,7 +117,12 @@ export class MlTrainingManager {
      * @param {(path: string, fileInfo: Object) => Promise<Float32Array>} o.computeFeatures
      * @param {(path: string) => Promise<Float32Array|null>} o.extractClipEmbedding
      * @param {(liked: Array, disliked: Array, seed: number) => Promise<{stats: Object, modelState: Object}>} o.trainModel
-     * @param {(modelState: Object) => Promise<{stats: Object}>} o.loadModelState
+     * @param {(modelState: Object) => Promise<{stats: Object, modelWasReset?: boolean}>} o.loadModelState
+     *        `modelWasReset` is load-bearing, not incidental: `_safeLoadModelState` treats true as
+     *        a cache MISS, because a worker that could not restore the saved model still replies
+     *        with valid-shaped all-zero stats. Note this is NARROWER than the worker's own
+     *        `initComplete` message (which also carries modelState/modelVersion/featureDim/
+     *        trainingConfigVersion) -- the renderer's handler forwards only these two fields.
      * @param {() => Object} o.getConfig
      * @param {() => Object} o.getBulkRatedContext
      * @param {Object} o.cacheIo    Streaming feature-cache IO, all calls serialized by acquireLock
@@ -362,6 +367,33 @@ export class MlTrainingManager {
     static MODEL_CACHE_VERSION = 1;
     static MODEL_CACHE_LIMIT = 5;
 
+    /**
+     * Async mutex serializing every MUTATION of the fingerprint-keyed model store. Mirrors the
+     * host's `_acquireCacheIoLock` (media-viewer.js) in shape, but is deliberately a SEPARATE
+     * lock: the host mutex can be held for tens of seconds by a streaming feature-cache read,
+     * and parking the model-cache lookup behind that would forfeit the very cache hit this
+     * branch exists to make instant.
+     *
+     * `_writeCachedModel` is a read-modify-write across two IPC round trips and
+     * `invalidateModelCache` writes the same file, so without this the later of two overlapping
+     * callers silently discards the other's result -- and when the loser is the user's "Rebuild
+     * model" click, the entries they were told had been discarded are put straight back
+     * (PR #68 review, finding 1).
+     *
+     * `_readCachedModel` deliberately does NOT take this lock: the main-process writer renames a
+     * fully-written temp file into place, so a concurrent read observes either the old store or
+     * the new one, never a torn one, and the fast path stays lock-free.
+     */
+    async _acquireModelCacheLock() {
+        const prev = this._modelCacheLock || Promise.resolve();
+        let release;
+        this._modelCacheLock = new Promise((resolve) => {
+            release = resolve;
+        });
+        await prev; // wait for the previous holder to release
+        return release;
+    }
+
     async _readCachedModel(fingerprint) {
         try {
             const res = await this.modelCache.read();
@@ -375,6 +407,7 @@ export class MlTrainingManager {
     }
 
     async _writeCachedModel(fingerprint, modelState, stats, descriptorSummary) {
+        const release = await this._acquireModelCacheLock();
         try {
             const res = await this.modelCache.read();
             const existing =
@@ -393,6 +426,8 @@ export class MlTrainingManager {
             }
         } catch (err) {
             this.logError(`ML model cache write failed: ${err.message}`);
+        } finally {
+            release();
         }
     }
 
@@ -873,6 +908,9 @@ export class MlTrainingManager {
         // no-op into two.
         this.sessionFingerprint = null;
         this.sessionStats = null; // never read with a null fingerprint, but never left orphaned either
+        // Taken AFTER the in-memory clear above: forgetting the session fingerprint is pure
+        // bookkeeping that cannot fail, and must not be made to wait on another holder's IO.
+        const release = await this._acquireModelCacheLock();
         try {
             const write = await this.modelCache.write({
                 version: MlTrainingManager.MODEL_CACHE_VERSION,
@@ -886,6 +924,8 @@ export class MlTrainingManager {
         } catch (err) {
             this.logError(`ML model cache clear failed: ${err.message}`);
             return false;
+        } finally {
+            release();
         }
     }
 }

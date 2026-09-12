@@ -103,7 +103,7 @@
 
 ### Wednesday, September 9 — G1 finish
 
-- **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — tests, review, merge, closeout rulings on the deferred-refresh cluster (part 3 of 3) ✅ tests + per-task review rounds + closeout rulings done (unit 613→735); **merge still pending** — see Summary Table Status
+- **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — tests, review, merge, closeout rulings on the deferred-refresh cluster (part 3 of 3) ✅ tests + per-task review rounds + closeout rulings done (test delta recorded in [DONE.md](DONE.md), not restated here); **merge still pending** — see Summary Table Status
 
 **Daily total**: ~4 SP (+ review)
 

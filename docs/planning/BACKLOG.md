@@ -298,10 +298,31 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 
 ## 🟤 Auto-Generated Tech Debt
 
+### [2026-09-12] From: PR #68 review
+
+**Origin**: Code review of PR #68 (G1 ML training pipeline). Four of five findings and both
+below-threshold items were fixed in the review wave; this is the one sub-item that was pushed
+back on, recorded rather than fixed because the right scope is wider than that PR.
+
+- [ ] **Three atomic-write IPC handlers share one fixed `.tmp` path** — `writeTournamentState`
+  (`main.js:269`), the feature-cache writer (`main.js:555`) and `write-ml-model-cache`
+  (`main.js:314`) each write `<target>.tmp` then rename. None uses a per-call unique name, so two
+  overlapping calls to the *same* handler would interleave their `writeFile` chunks and rename a
+  torn file over a good one — defeating the atomicity the rename is there to provide. All three
+  are safe today only because their renderer-side callers are serialized (tournament writes are
+  debounced single-flight, the feature cache holds `_acquireCacheIoLock`, and the model cache
+  holds `_acquireModelCacheLock` as of PR #68). That makes main-process durability depend on
+  renderer-side discipline that nothing enforces or tests. Raised as a compounding factor of PR
+  #68 finding 1 and pushed back there: fixing one writer in isolation would have diverged it from
+  its two siblings while the lock already closed the reachable race. Decide once, for all three —
+  either unique temp names (plus an orphan-`.tmp` sweep, since the current `unlink` cleanup only
+  covers the error path of the call that created it) or an explicit, documented "callers must
+  serialize" contract with a test per writer. Effort: S. Affected: `main.js`.
+
 ### [2026-09-10] From: G1 ML training pipeline — execution review follow-ups
 
 **Origin**: Closeout of Group G1 ML training pipeline (branch `g1-ml-training-pipeline`, 10 tasks,
-each with its own per-task review round; pending merge, no PR by task-brief instruction). Items
+each with its own per-task review round; pending merge — the task brief said no PR, but the branch was pushed to [PR #68](https://github.com/GoodAlex223/media-viewer/pull/68) on user direction at handover). Items
 below are deferred findings recorded in the branch's execution ledger
 (`.superpowers/sdd/2026-09-10_ml-training-pipeline/progress.md`) that survived every fix round —
 each was judged real but out of scope for the round that found it — plus items the closeout task

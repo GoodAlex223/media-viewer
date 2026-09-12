@@ -7021,6 +7021,20 @@ class MediaViewer {
      * Branching on the return value here is what keeps the message honest.
      */
     async handleRebuildModelClick() {
+        // PR #68 review, finding 1: this control was reachable mid-sort. resetMlModel() below
+        // posts {type:'reset'} to mlWorker, which zeroes the weights AND both class counts --
+        // so clicking during an in-flight sort throws away the model that sort just trained,
+        // and the scoreFiles reply that follows is `scores: null` ("Need more samples (0 likes,
+        // 0 dislikes)"). The sort then finishes having reordered nothing, silently. Refusing is
+        // right rather than queueing: the user's intent is "discard the model", and the sort
+        // they are already waiting on would still be scored by the discarded weights.
+        if (this.isPredictionSorting) {
+            this.showNotification(
+                'An AI sort is still running — cancel it or let it finish before rebuilding the model.',
+                'warning'
+            );
+            return;
+        }
         const cleared = await this.mlTraining.invalidateModelCache();
         this.resetMlModel();
         if (cleared) {

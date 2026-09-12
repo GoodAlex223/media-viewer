@@ -3129,6 +3129,23 @@ describe('handleRebuildModelClick (Task 9 review, Important 2)', () => {
         expect(type).toBe('warning');
         expect(message).not.toMatch(/cleared/i);
     });
+
+    // PR #68 review, finding 1: this control was reachable during an in-flight prediction sort.
+    // resetMlModel() posts {type:'reset'} to mlWorker, which zeroes the weights AND both class
+    // counts -- so a click mid-sort wipes the model the sort just finished training, and the
+    // scoreFiles reply that follows is `scores: null, reason: 'Need more samples (0 likes, 0
+    // dislikes)'`. The sort then completes having reordered nothing, with no error shown.
+    it('refuses while a prediction sort is in flight, touching neither the cache nor the model', async () => {
+        const ctx = makeCtx(true);
+        ctx.isPredictionSorting = true;
+        await handleRebuildModelClick.call(ctx);
+        expect(ctx.mlTraining.invalidateModelCache).not.toHaveBeenCalled();
+        expect(ctx.resetMlModel).not.toHaveBeenCalled();
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('warning');
+        expect(message).toMatch(/sort/i);
+    });
 });
 
 // G5 item 2: initClipModel's only feedback was a toast every 10%, and handleSortByPrediction
