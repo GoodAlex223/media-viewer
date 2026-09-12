@@ -8,9 +8,6 @@ importScripts('ml-model.js');
 // Model instance
 let model = null;
 
-// Abort flag for cancellable operations
-let abortFlag = false;
-
 // Track if model was reset due to version mismatch
 let modelWasReset = false;
 
@@ -134,14 +131,6 @@ function scoreFiles(allFeatures) {
     updateProgress('Scoring files...', 0, filenames.length);
 
     for (let i = 0; i < filenames.length; i++) {
-        if (abortFlag) {
-            return {
-                type: 'scoreComplete',
-                scores: null,
-                reason: 'Scoring cancelled',
-            };
-        }
-
         const filename = filenames[i];
         const features = allFeatures[filename];
 
@@ -217,17 +206,22 @@ function resetModel() {
 
 /**
  * Message handler for worker
+ *
+ * There is deliberately no 'abort' message. The one that used to live here could not fire from
+ * either end: nothing in the renderer ever sent it (every mlWorker.postMessage is init / reset /
+ * trainHistorical / scoreAll / getSortedOrder), and every work case reset the flag at its head
+ * anyway — and since scoreFiles' loop is synchronous, a message that arrived mid-run would sit in
+ * the queue until the handler returned regardless. Prediction-sort cancellation is renderer-side:
+ * handleSortByPrediction bumps sortRunId and settles the pending runMlSort promise, so a reply
+ * from a superseded run is discarded rather than interrupted. Making the worker genuinely
+ * cancellable would mean chunking scoreFiles so it yields to the event loop — a real change, not
+ * a flag. An 'abort' message now answers with the unknown-type error, like any other stray type.
  */
 self.onmessage = function (e) {
     const { type, data } = e.data;
 
     switch (type) {
-        case 'abort':
-            abortFlag = true;
-            break;
-
-        case 'init':
-            abortFlag = false;
+        case 'init': {
             const wasReset = initializeModel(data?.savedModel);
             self.postMessage({
                 type: 'initComplete',
@@ -239,9 +233,9 @@ self.onmessage = function (e) {
                 trainingConfigVersion: TRAINING_CONFIG_VERSION,
             });
             break;
+        }
 
         case 'trainHistorical':
-            abortFlag = false;
             try {
                 const trainResult = trainFromHistorical(
                     data.likedFeatures || [],
@@ -258,7 +252,6 @@ self.onmessage = function (e) {
             break;
 
         case 'scoreAll':
-            abortFlag = false;
             try {
                 const scoreResult = scoreFiles(data.allFeatures || {});
                 self.postMessage(scoreResult);
@@ -271,7 +264,6 @@ self.onmessage = function (e) {
             break;
 
         case 'getSortedOrder':
-            abortFlag = false;
             try {
                 const sortResult = getSortedOrder(data.allFeatures || {}, data.sortRunId);
                 self.postMessage(sortResult);

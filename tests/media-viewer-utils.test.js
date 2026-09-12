@@ -1309,6 +1309,25 @@ describe('_abortInFlightPredictionSort', () => {
 describe('handleSortByPrediction lifecycle', () => {
     const handleSortByPrediction = extractAsyncMethod('handleSortByPrediction');
 
+    // Every ctx makeCtx() hands out, checked by the afterEach below. PR #69 review round 2: the
+    // lease counter was scaffolded here with a rationale ("assert the release happens on every
+    // exit path") that no test actually executed. Enforced as a blanket invariant rather than an
+    // assertion per bail-path test, so a future exit path added to handleSortByPrediction is
+    // covered by whatever test exercises it, without anyone remembering to opt in — the four
+    // cancel/abort branches this reaches are exactly the ones the source-text ordering test
+    // cannot see.
+    const leaseCtxs = [];
+
+    afterEach(() => {
+        // Drain BEFORE asserting: a failing expect() throws out of the hook, so clearing
+        // afterwards would leave the leaked ctx in the array and fail every later test's
+        // afterEach too — turning one leak into sixteen failures that name the wrong tests.
+        const seen = leaseCtxs.splice(0, leaseCtxs.length);
+        for (const ctx of seen) {
+            expect(ctx.clipLeases, 'a lease outlived the sort — the release is not on every exit path').toBe(0);
+        }
+    });
+
     function makeCtx(overrides = {}) {
         const phases = [];
         const ctx = {
@@ -1350,6 +1369,16 @@ describe('handleSortByPrediction lifecycle', () => {
             initializeMlWorker: () => {},
             initializeFeaturePool: () => {},
             initClipModel: () => {},
+            // G4: the sort holds a CLIP lease for its whole body. Counted here, and checked back
+            // to zero by this block's afterEach on every exit path — success, early return,
+            // cancel and throw alike.
+            clipLeases: 0,
+            _acquireClipLease: function () {
+                this.clipLeases++;
+            },
+            _releaseClipLease: function () {
+                this.clipLeases--;
+            },
             runMlSort: () => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} }),
             applyPredictionSortResult: function (r) {
                 this.mediaFiles = r.sortedFilenames.map((n) => this.mediaFiles.find((f) => f.name === n));
@@ -1360,6 +1389,7 @@ describe('handleSortByPrediction lifecycle', () => {
             ...overrides,
         };
         ctx._phases = phases;
+        leaseCtxs.push(ctx);
         return ctx;
     }
 
@@ -5706,6 +5736,246 @@ describe('initializeMlWorker backstop timeout (G1 final review, Important 3)', (
             await vi.advanceTimersByTimeAsync(0);
             expect(settled).toBe(true);
             expect(vi.getTimerCount(), 'the 5s backstop was left armed').toBe(0);
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// G4 — CLIP unload lease
+//
+// G5 closed the zero-CLIP training door at the entry point (handleSortByPrediction awaits
+// initClipModel()). That fixes clipWorkerReady at the instant the sort STARTS. It does nothing
+// about clipUnloadTimer, which is armed at the tail of background extraction and, when it fires,
+// flips clipWorkerReady false — so extractClipEmbedding returns null for the rest of the sort and
+// the training set silently gains zero CLIP halves.
+//
+// Two arming orders have to be covered, and the filed fix ("clear the timer in initClipModel()")
+// only covers the first:
+//   1. armed BEFORE the sort — an extraction that finished <30 s earlier
+//   2. armed DURING the sort — an extraction that completes while the sort is running
+// A lease covers both: while one is held, nothing arms and nothing fires.
+// ---------------------------------------------------------------------------
+describe('CLIP unload lease (G4)', () => {
+    const scheduleClipUnload = extractMethod('_scheduleClipUnload');
+    const acquireClipLease = extractMethod('_acquireClipLease');
+    const releaseClipLease = extractMethod('_releaseClipLease');
+    const handleClipUnloadTimer = extractAsyncMethod('_handleClipUnloadTimer');
+    const initClipModel = extractAsyncMethod('initClipModel');
+
+    let origWindow;
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        origWindow = globalThis.window;
+        globalThis.CLIP_UNLOAD_DELAY_MS = extractModuleConstant('CLIP_UNLOAD_DELAY_MS');
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+        globalThis.window = origWindow;
+        delete globalThis.CLIP_UNLOAD_DELAY_MS;
+    });
+
+    const baseCtx = (over = {}) => {
+        const ctx = {
+            enableClipFeatures: true,
+            clipWorkerReady: true,
+            clipUnloadTimer: null,
+            clipLeases: 0,
+            _handleClipUnloadTimer: vi.fn(),
+            ...over,
+        };
+        // _releaseClipLease delegates the arming decision to _scheduleClipUnload; wire the real
+        // extracted one so the pair is tested together rather than against a stub of itself.
+        ctx._scheduleClipUnload = () => scheduleClipUnload.call(ctx);
+        return ctx;
+    };
+
+    describe('_scheduleClipUnload', () => {
+        it('arms the idle timer when no lease is held', () => {
+            const ctx = baseCtx();
+            scheduleClipUnload.call(ctx);
+            expect(ctx.clipUnloadTimer).not.toBeNull();
+            expect(vi.getTimerCount()).toBe(1);
+        });
+
+        it('does not arm while a lease is held — the armed-DURING-sort order', () => {
+            const ctx = baseCtx({ clipLeases: 1 });
+            scheduleClipUnload.call(ctx);
+            expect(ctx.clipUnloadTimer).toBeNull();
+            expect(vi.getTimerCount()).toBe(0);
+        });
+
+        it('does not arm when CLIP features are off', () => {
+            const ctx = baseCtx({ enableClipFeatures: false });
+            scheduleClipUnload.call(ctx);
+            expect(ctx.clipUnloadTimer).toBeNull();
+        });
+
+        it('replaces an already-pending timer instead of stacking a second one', () => {
+            const ctx = baseCtx();
+            scheduleClipUnload.call(ctx);
+            const first = ctx.clipUnloadTimer;
+            scheduleClipUnload.call(ctx);
+            expect(ctx.clipUnloadTimer).not.toBe(first);
+            expect(vi.getTimerCount()).toBe(1);
+        });
+    });
+
+    describe('_acquireClipLease / _releaseClipLease', () => {
+        it('acquiring clears a pending timer — the armed-BEFORE-sort order', () => {
+            const ctx = baseCtx();
+            scheduleClipUnload.call(ctx);
+            expect(vi.getTimerCount()).toBe(1);
+
+            acquireClipLease.call(ctx);
+
+            expect(ctx.clipLeases).toBe(1);
+            expect(ctx.clipUnloadTimer).toBeNull();
+            expect(vi.getTimerCount(), 'the pending unload survived the lease').toBe(0);
+        });
+
+        it('releasing the last lease re-arms the timer, so the model is still reclaimed', () => {
+            const ctx = baseCtx();
+            acquireClipLease.call(ctx);
+            releaseClipLease.call(ctx);
+            expect(ctx.clipLeases).toBe(0);
+            expect(ctx.clipUnloadTimer).not.toBeNull();
+        });
+
+        it('nested leases only arm on the LAST release', () => {
+            const ctx = baseCtx();
+            acquireClipLease.call(ctx);
+            acquireClipLease.call(ctx);
+
+            releaseClipLease.call(ctx);
+            expect(ctx.clipLeases).toBe(1);
+            expect(ctx.clipUnloadTimer).toBeNull();
+
+            releaseClipLease.call(ctx);
+            expect(ctx.clipLeases).toBe(0);
+            expect(ctx.clipUnloadTimer).not.toBeNull();
+        });
+
+        it('an unbalanced release cannot drive the count negative', () => {
+            const ctx = baseCtx();
+            releaseClipLease.call(ctx);
+            releaseClipLease.call(ctx);
+            expect(ctx.clipLeases).toBe(0);
+        });
+    });
+
+    describe('_handleClipUnloadTimer', () => {
+        it('does not unload while a lease is held — clipWorkerReady survives the whole sort', async () => {
+            const unloadClipModel = vi.fn(async () => ({ success: true }));
+            globalThis.window = { electronAPI: { unloadClipModel, logError: vi.fn() } };
+            const ctx = baseCtx({ clipLeases: 1 });
+
+            await handleClipUnloadTimer.call(ctx);
+
+            expect(unloadClipModel).not.toHaveBeenCalled();
+            expect(ctx.clipWorkerReady).toBe(true);
+        });
+
+        it('still unloads when no lease is held', async () => {
+            const unloadClipModel = vi.fn(async () => ({ success: true }));
+            globalThis.window = { electronAPI: { unloadClipModel, logError: vi.fn() } };
+            const ctx = baseCtx();
+
+            await handleClipUnloadTimer.call(ctx);
+
+            expect(unloadClipModel).toHaveBeenCalledTimes(1);
+            expect(ctx.clipWorkerReady).toBe(false);
+        });
+
+        it('end to end: a timer armed before the sort cannot flip clipWorkerReady during it', async () => {
+            const unloadClipModel = vi.fn(async () => ({ success: true }));
+            globalThis.window = { electronAPI: { unloadClipModel, logError: vi.fn() } };
+            const ctx = baseCtx();
+            ctx._handleClipUnloadTimer = () => handleClipUnloadTimer.call(ctx);
+
+            scheduleClipUnload.call(ctx); // extraction finished; 30 s grace begins
+            acquireClipLease.call(ctx); // a sort starts inside the grace window
+
+            await vi.advanceTimersByTimeAsync(globalThis.CLIP_UNLOAD_DELAY_MS * 3);
+
+            expect(unloadClipModel).not.toHaveBeenCalled();
+            expect(ctx.clipWorkerReady, 'CLIP went away mid-sort').toBe(true);
+        });
+
+        it('end to end: an extraction finishing DURING the sort cannot arm a firing timer either', async () => {
+            const unloadClipModel = vi.fn(async () => ({ success: true }));
+            globalThis.window = { electronAPI: { unloadClipModel, logError: vi.fn() } };
+            const ctx = baseCtx();
+            ctx._handleClipUnloadTimer = () => handleClipUnloadTimer.call(ctx);
+
+            acquireClipLease.call(ctx); // sort starts
+            scheduleClipUnload.call(ctx); // background extraction completes mid-sort
+
+            await vi.advanceTimersByTimeAsync(globalThis.CLIP_UNLOAD_DELAY_MS * 3);
+
+            expect(unloadClipModel).not.toHaveBeenCalled();
+            expect(ctx.clipWorkerReady).toBe(true);
+
+            releaseClipLease.call(ctx); // sort ends — the grace window starts over
+            await vi.advanceTimersByTimeAsync(globalThis.CLIP_UNLOAD_DELAY_MS);
+            expect(unloadClipModel, 'the model was never reclaimed after the sort').toHaveBeenCalledTimes(1);
+            expect(ctx.clipWorkerReady).toBe(false);
+        });
+    });
+
+    describe('initClipModel', () => {
+        it('clears a pending unload timer — the model is being demanded here', async () => {
+            globalThis.window = { electronAPI: { loadClipModel: vi.fn(async () => ({ success: true })) } };
+            const ctx = baseCtx({ clipWorkerReady: false, showNotification: vi.fn() });
+            scheduleClipUnload.call(ctx);
+            expect(vi.getTimerCount()).toBe(1);
+
+            await initClipModel.call(ctx);
+
+            expect(ctx.clipUnloadTimer).toBeNull();
+            expect(vi.getTimerCount(), 'a stale unload outlived the model being demanded').toBe(0);
+            expect(ctx.clipWorkerReady).toBe(true);
+        });
+    });
+
+    // The lease is only worth anything if the production call sites actually use it. These read
+    // the source rather than driving the two methods, both of which are far too DOM-heavy to
+    // extract: startBackgroundFeatureExtraction owns the whole batched extraction loop and
+    // handleSortByPrediction owns the three sort phases.
+    describe('production wiring', () => {
+        it('startBackgroundFeatureExtraction arms via _scheduleClipUnload, never a bare setTimeout', () => {
+            const body = methodSource('startBackgroundFeatureExtraction');
+            expect(body).toContain('this._scheduleClipUnload()');
+            expect(body, 'the tail still arms the unload timer directly, bypassing the lease check').not.toMatch(
+                /clipUnloadTimer\s*=\s*setTimeout/
+            );
+        });
+
+        it('handleSortByPrediction takes a lease and releases it in finally', () => {
+            const body = methodSource('handleSortByPrediction');
+            expect(body).toContain('this._acquireClipLease()');
+            const finallyBody = body.slice(body.lastIndexOf('} finally {'));
+            expect(finallyBody, 'the release is not in the finally — a thrown sort leaks the lease').toContain(
+                'this._releaseClipLease()'
+            );
+        });
+
+        // PR #69 review residual: the lease cannot un-issue an unload already in flight, so a
+        // taker is only safe if it ALSO awaits the load. That safety is currently a property of
+        // this one caller's structure; pin the ordering so a reorder (or a second taker copying
+        // this one) cannot silently drop it — the failure mode is a zero CLIP half, which is
+        // invisible at runtime.
+        it('handleSortByPrediction awaits initClipModel AFTER acquiring the lease', () => {
+            const body = methodSource('handleSortByPrediction');
+            const acquireAt = body.indexOf('this._acquireClipLease()');
+            const initAt = body.indexOf('await this.initClipModel()');
+            expect(acquireAt, 'no _acquireClipLease() call in handleSortByPrediction').toBeGreaterThan(-1);
+            expect(initAt, 'the sort no longer awaits initClipModel()').toBeGreaterThan(-1);
+            expect(
+                acquireAt,
+                'acquire must precede the awaited load — acquiring after it leaves a window where ' +
+                    'an unload issued before the acquire resolves and drops the model under the lease'
+            ).toBeLessThan(initAt);
         });
     });
 });

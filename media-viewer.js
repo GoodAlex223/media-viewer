@@ -239,6 +239,7 @@ class MediaViewer {
         this.extractionResumeResolve = null; // Resolves awaitExtractionGate() when paused
         this.extractionResumeTimer = null; // setTimeout handle for 2s idle resume
         this.clipUnloadTimer = null; // setTimeout handle for 30s CLIP model unload after extraction
+        this.clipLeases = 0; // >0 while a CLIP-consuming operation is in flight; blocks the unload
         this._extractionLastCurrent = 0; // Last known current count for paused redisplay
         this._extractionLastTotal = 0; // Last known total count for paused redisplay
         this._extractionCachedCount = 0; // Cached file count for progress display
@@ -7962,6 +7963,12 @@ class MediaViewer {
         signal.addEventListener('abort', () => this.cancelBackgroundExtraction(), { once: true });
         this.updateSortProgress({ phase: 'Preparing…' }); // card visible before any await
 
+        // Hold the CLIP model for the whole sort. The initClipModel() await below fixes
+        // clipWorkerReady at the instant the sort starts; the lease is what keeps it true across
+        // the training loop and the feature collection that follow, both of which call
+        // extractClipEmbedding and both of which silently degrade to a zero CLIP half when an
+        // idle-unload lands mid-flight. Released in the finally at the bottom.
+        this._acquireClipLease();
         try {
             // Lazy ML init on first use. Awaiting both handshakes (rather than guessing at a
             // fixed delay) closes a real correctness gap, not just a timing one: the descriptor
@@ -8088,6 +8095,9 @@ class MediaViewer {
             this.isPredictionSorting = false;
             this.extractionProgressSink = null;
             this.clipProgressSink = null;
+            // Last out restarts the 30 s idle window, so a cancelled or thrown sort reclaims the
+            // model exactly like a completed one.
+            this._releaseClipLease();
         }
     }
 
@@ -8371,6 +8381,17 @@ class MediaViewer {
     async initClipModel() {
         if (!this.enableClipFeatures) return;
         if (!window.electronAPI.loadClipModel) return;
+
+        // The model is being DEMANDED here, so any pending idle-unload is stale by definition.
+        // This is what makes the await at the head of a prediction sort mean something: without
+        // it, a timer armed by an extraction that finished <30 s earlier survives this call and
+        // fires mid-sort, flipping clipWorkerReady false for the rest of the training loop.
+        // Clearing here covers every demand site at once; the lease below covers a timer armed
+        // AFTER this point (an extraction that completes while the sort is still running).
+        if (this.clipUnloadTimer !== null) {
+            clearTimeout(this.clipUnloadTimer);
+            this.clipUnloadTimer = null;
+        }
 
         // G1 task 6 review round 1 (Minor): this now runs before EVERY sort, not just the
         // first (the CLIP-await hoist), and loadClipModel() resolves {success:true} immediately
@@ -8976,9 +8997,51 @@ class MediaViewer {
         // If extraction restarts within the grace window, the timer is cleared
         // at the start of startBackgroundFeatureExtraction(). The existing
         // loadClipModel() lazy path re-loads transparently on next CLIP IPC.
-        if (this.enableClipFeatures) {
-            this.clipUnloadTimer = setTimeout(() => this._handleClipUnloadTimer(), CLIP_UNLOAD_DELAY_MS);
+        // Routed through _scheduleClipUnload() rather than arming directly so the lease check
+        // lives in exactly one place: this tail can run WHILE a prediction sort is in flight.
+        this._scheduleClipUnload();
+    }
+
+    // Arm the CLIP idle-unload timer, unless a CLIP consumer currently holds a lease. Sole owner
+    // of the arming decision — both callers (background extraction's tail and _releaseClipLease)
+    // route through here, so the lease check cannot be forgotten at one of them.
+    _scheduleClipUnload() {
+        if (this.clipUnloadTimer !== null) {
+            clearTimeout(this.clipUnloadTimer);
+            this.clipUnloadTimer = null;
         }
+        if (!this.enableClipFeatures) return;
+        if (this.clipLeases > 0) return;
+        this.clipUnloadTimer = setTimeout(() => this._handleClipUnloadTimer(), CLIP_UNLOAD_DELAY_MS);
+    }
+
+    // Hold the loaded CLIP model for the duration of one CLIP-consuming operation. Counted, not
+    // boolean, so one consumer releasing does not disarm another's protection. MUST be paired
+    // with _releaseClipLease() from a `finally` — a leaked lease pins ~200-400 MB for the rest
+    // of the session, since nothing else arms the timer.
+    //
+    // ACQUIRE DOES NOT ENSURE. A lease taker MUST `await this.initClipModel()` after acquiring,
+    // because this cannot un-issue an unload already in flight: _handleClipUnloadTimer() decides
+    // to unload before its IPC await, so a lease taken during that round trip arrives after the
+    // model is already gone in the main process. The lease guarantees no unload starts from here
+    // on; the awaited init guarantees the model is actually resident. handleSortByPrediction is
+    // the only taker today and does both, in that order — pinned by a test, not left to habit,
+    // because the whole point of this mechanism is that the degraded path is silent.
+    _acquireClipLease() {
+        this.clipLeases++;
+        if (this.clipUnloadTimer !== null) {
+            clearTimeout(this.clipUnloadTimer);
+            this.clipUnloadTimer = null;
+        }
+    }
+
+    // Release one lease; the last one out restarts the idle grace window. Starting a fresh
+    // window here (rather than restoring whatever was pending on acquire) is deliberate: the
+    // grace period should count from last use, and it is the only path that reclaims the model
+    // after a sort that outlived the original timer.
+    _releaseClipLease() {
+        if (this.clipLeases > 0) this.clipLeases--;
+        if (this.clipLeases === 0) this._scheduleClipUnload();
     }
 
     // Timer callback: unload the CLIP model after the idle grace window. Re-checks
@@ -8989,9 +9052,22 @@ class MediaViewer {
     async _handleClipUnloadTimer() {
         this.clipUnloadTimer = null;
         if (!this.enableClipFeatures) return;
+        // A lease taken after this timer was armed must not lose the model mid-operation. Drop
+        // the timer rather than re-arming it: _releaseClipLease() opens a fresh grace window
+        // when the last lease goes, so the model is still reclaimed, and a re-arm here would
+        // only burn a timer every 30 s for the length of the operation.
+        if (this.clipLeases > 0) return;
         try {
             const result = await window.electronAPI.unloadClipModel();
             if (result && result.success) {
+                // Deliberately NOT re-checking clipLeases here. A success reply means the main
+                // process has already nulled its refs, so the model IS gone and false is the
+                // truthful mirror of that. Suppressing the write under a late lease would make
+                // the flag claim a resident model that does not exist — and kickoff's
+                // `if (!this.clipWorkerReady) await this.initClipModel()` (the PR #34 guard) is
+                // gated on exactly this flag, so it would then skip its load await. The window
+                // is closed at the other end instead: see the acquire contract on
+                // _acquireClipLease(). PR #69 review, recorded as a non-blocking residual.
                 this.clipWorkerReady = false;
             }
         } catch (err) {
