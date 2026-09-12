@@ -159,6 +159,30 @@ is cheap, and `initClipModel()` is the one place that unambiguously means "the m
 
 ## 4. Implementation Log
 
+### [2026-09-12] — PHASE: Review round 1 (PR #69)
+
+- Verdict: **no issues found**; one below-threshold observation recorded as non-blocking. No
+  blocking finding, so the branch did not change shape.
+- The observation: `_handleClipUnloadTimer()` reads the lease only *before* its `await`, so a lease
+  acquired during the `unloadClipModel()` round trip still gets `clipWorkerReady = false` written
+  when the reply lands. Confirmed as a real state inconsistency and confirmed unreachable today —
+  `handleSortByPrediction` is the only taker and is parked in `await initClipModel()` at that
+  instant, the unload IPC is issued first, and its main-process handler is synchronous, so the stale
+  write always lands before the init resolves and sets the flag back.
+- **Pushed back on the implied remedy.** A post-await re-check that *suppresses* the write would be
+  wrong: a `{success:true}` reply means main has already nulled `clipProcessor`/`clipVisionModel`, so
+  `false` is the truthful mirror of real state, and `kickoffBackgroundExtractionIfEnabled`'s
+  `if (!this.clipWorkerReady) await this.initClipModel()` — the PR #34 guard — is gated on exactly
+  this flag, so suppressing it would make that site skip its load await.
+- **Fixed differently**, at the acquire end: the contract *acquire does not ensure — a taker must
+  `await initClipModel()` after acquiring* is now stated on `_acquireClipLease()`, the deliberate
+  post-await write is explained at its site so the next reviewer does not re-file it, and the
+  ordering is **pinned by a test** (mutation-verified: moving the acquire below the init await fails
+  it). What the reviewer correctly called "a property of the single taker, not of the guard" is now
+  a property enforced mechanically.
+- Residual filed as a third 🟤 in `### [2026-09-12] From: G4 closeout`, cross-referenced from the
+  existing "lease has exactly one taker" item, which must carry the contract when it lands.
+
 ### [2026-09-12] — PHASE: Complete
 
 - Final approach: as designed. Four commits — `ddd8340` (housekeeping flip), `c7e93ff` (CLIP lease),
@@ -266,7 +290,8 @@ is cheap, and `initClipModel()` is the one place that unambiguously means "the m
 | Production wiring (source assertions)                    | Pass   | Both call sites use the lease; the release is inside the `finally`                         |
 | `ml-worker` progress sites / reply shapes                | Pass   | 8 → 24 cases                                                                              |
 | `abort` now answers unknown-type                         | Pass   | Fails with the deleted `case 'abort'` restored                                             |
-| Full unit suite                                          | Pass   | 792 passed, 20 files                                                                       |
+| Acquire precedes the awaited `initClipModel()`           | Pass   | Added in review round 1; fails when the acquire is moved below the await (sentinel probe)  |
+| Full unit suite                                          | Pass   | 793 passed, 20 files                                                                       |
 
 ---
 
@@ -304,6 +329,7 @@ implements, and its omissions read as completeness.
 ### Review status
 
 - [x] Self-review complete
-- [ ] Peer review requested
-- [ ] Review comments addressed
+- [x] Peer review requested — `/code-review` on PR #69, 2026-09-12
+- [x] Review comments addressed — no blocking findings; the one non-blocking observation is
+      answered in § 4 (remedy pushed back on, underlying fragility fixed differently, residual filed)
 - [ ] Approved

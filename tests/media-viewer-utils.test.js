@@ -5938,5 +5938,23 @@ describe('CLIP unload lease (G4)', () => {
                 'this._releaseClipLease()'
             );
         });
+
+        // PR #69 review residual: the lease cannot un-issue an unload already in flight, so a
+        // taker is only safe if it ALSO awaits the load. That safety is currently a property of
+        // this one caller's structure; pin the ordering so a reorder (or a second taker copying
+        // this one) cannot silently drop it — the failure mode is a zero CLIP half, which is
+        // invisible at runtime.
+        it('handleSortByPrediction awaits initClipModel AFTER acquiring the lease', () => {
+            const body = methodSource('handleSortByPrediction');
+            const acquireAt = body.indexOf('this._acquireClipLease()');
+            const initAt = body.indexOf('await this.initClipModel()');
+            expect(acquireAt, 'no _acquireClipLease() call in handleSortByPrediction').toBeGreaterThan(-1);
+            expect(initAt, 'the sort no longer awaits initClipModel()').toBeGreaterThan(-1);
+            expect(
+                acquireAt,
+                'acquire must precede the awaited load — acquiring after it leaves a window where ' +
+                    'an unload issued before the acquire resolves and drops the model under the lease'
+            ).toBeLessThan(initAt);
+        });
     });
 });

@@ -9019,6 +9019,14 @@ class MediaViewer {
     // boolean, so one consumer releasing does not disarm another's protection. MUST be paired
     // with _releaseClipLease() from a `finally` — a leaked lease pins ~200-400 MB for the rest
     // of the session, since nothing else arms the timer.
+    //
+    // ACQUIRE DOES NOT ENSURE. A lease taker MUST `await this.initClipModel()` after acquiring,
+    // because this cannot un-issue an unload already in flight: _handleClipUnloadTimer() decides
+    // to unload before its IPC await, so a lease taken during that round trip arrives after the
+    // model is already gone in the main process. The lease guarantees no unload starts from here
+    // on; the awaited init guarantees the model is actually resident. handleSortByPrediction is
+    // the only taker today and does both, in that order — pinned by a test, not left to habit,
+    // because the whole point of this mechanism is that the degraded path is silent.
     _acquireClipLease() {
         this.clipLeases++;
         if (this.clipUnloadTimer !== null) {
@@ -9052,6 +9060,14 @@ class MediaViewer {
         try {
             const result = await window.electronAPI.unloadClipModel();
             if (result && result.success) {
+                // Deliberately NOT re-checking clipLeases here. A success reply means the main
+                // process has already nulled its refs, so the model IS gone and false is the
+                // truthful mirror of that. Suppressing the write under a late lease would make
+                // the flag claim a resident model that does not exist — and kickoff's
+                // `if (!this.clipWorkerReady) await this.initClipModel()` (the PR #34 guard) is
+                // gated on exactly this flag, so it would then skip its load await. The window
+                // is closed at the other end instead: see the acquire contract on
+                // _acquireClipLease(). PR #69 review, recorded as a non-blocking residual.
                 this.clipWorkerReady = false;
             }
         } catch (err) {
