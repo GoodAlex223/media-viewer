@@ -1414,7 +1414,7 @@ git commit -m "feat(controls): Like before Dislike on every rating surface; CLAU
 Per `~/.claude/rules/planning-closeout.md`: **Extract → Archive → Transition → Commit → Capture learnings**. The plan must carry **minimum 2** improvements before Extract runs.
 
 - [ ] **Extract**: file any residual as BACKLOG 🟤 under `### [2026-09-13] From: G2 closeout`. Known candidates: the two 🔵 [2026-05-25] control-system entries this group deliberately did not close; whether `.compare-controls` should be deleted outright now that it is dead outside the empty state.
-- [ ] **Archive**: `git mv docs/planning/plans/2026-09-13_g2-reachable-overlay-controls.md docs/archive/plans/`, mark `Status: Complete — merged <SHA>`, and index it in `docs/README.md` (the pre-commit guard enforces this).
+- [ ] **Archive**: remove the Active Plans row from `docs/README.md`, then `git mv docs/planning/plans/2026-09-13_g2-reachable-overlay-controls.md docs/archive/plans/`, mark `Status: Complete — merged <SHA>`, and index it in `docs/README.md` (the pre-commit guard enforces this).
 - [ ] **Transition**: WEEKLY G2's three checkboxes + Summary-Table row `✅ <merge-SHA>`; note that a fourth item (the zoom regression) was folded, not planned.
 - [ ] **Commit**: check off the four 🔵 `[2026-08-28]` BACKLOG entries and 🟤 `[2026-03-21]` TASK-021 **in the same commit as the closeout** — the miss this rule exists to prevent has now recurred five times.
 - [ ] **Capture learnings**: write a session memory file + a one-line `MEMORY.md` pointer.

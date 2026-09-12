@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_ | — |
+| [G2 Reachable Overlay Controls Plan](planning/plans/2026-09-13_g2-reachable-overlay-controls.md) | Container-anchored overlay bar, badge anchoring, Like/Dislike order, tournament zoom fix (Group G2, Sep 7–11) |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
