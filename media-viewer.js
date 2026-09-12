@@ -7055,7 +7055,7 @@ class MediaViewer {
             );
         } else if (sortStarted) {
             this.showNotification(
-                'Prediction model cleared — an AI sort started meanwhile and keeps the current model; the next sort will rebuild.',
+                'Prediction model cleared — an AI sort is already running and was left alone; the model retrains on that sort or the next one.',
                 'info'
             );
         } else {

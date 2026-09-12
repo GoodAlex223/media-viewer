@@ -380,9 +380,15 @@ export class MlTrainingManager {
      * model" click, the entries they were told had been discarded are put straight back
      * (PR #68 review, finding 1).
      *
-     * `_readCachedModel` deliberately does NOT take this lock: the main-process writer renames a
-     * fully-written temp file into place, so a concurrent read observes either the old store or
-     * the new one, never a torn one, and the fast path stays lock-free.
+     * The READ takes it too (review round 3, correcting round 1's own reasoning). Round 1 left
+     * `_readCachedModel` lock-free on the argument that the writer renames a fully-written temp
+     * file, so a concurrent read sees "the old store or the new one, never a torn one." That is
+     * sound about tearing and silent about ORDERING -- and immediately after a user-requested
+     * clear, seeing the old store is precisely the defect: a sort racing the clear is served the
+     * entry the user asked to discard and then pins it as `sessionFingerprint` for the rest of
+     * the session. The lock is only ever held across one small read or write of this file, so
+     * making the read wait costs a microtask when uncontended and is exactly what is wanted when
+     * it is not.
      */
     async _acquireModelCacheLock() {
         const prev = this._modelCacheLock || Promise.resolve();
@@ -395,6 +401,7 @@ export class MlTrainingManager {
     }
 
     async _readCachedModel(fingerprint) {
+        const release = await this._acquireModelCacheLock();
         try {
             const res = await this.modelCache.read();
             const store = res?.store;
@@ -403,6 +410,8 @@ export class MlTrainingManager {
         } catch (err) {
             this.logError(`ML model cache read failed: ${err.message}`);
             return null;
+        } finally {
+            release();
         }
     }
 

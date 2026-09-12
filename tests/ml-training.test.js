@@ -676,6 +676,43 @@ describe('model cache', () => {
         expect(mc.current.entries).toHaveLength(0);
     });
 
+    // PR #68 review round 3: closing the WRITE side alone left the read side ordered by luck.
+    // _readCachedModel was deliberately lock-free on the argument that the main-process writer
+    // renames a complete temp file, so a reader sees "the old store or the new one, never a torn
+    // one" -- true about tearing, and silent about ordering. Immediately after a user-requested
+    // clear, seeing the old store IS the bug: the racing sort is served the very entry the user
+    // asked to discard and then pins it as sessionFingerprint for the rest of the session.
+    const gatedWriteModelCache = (initial) => {
+        let store = initial;
+        let releaseWrite;
+        let writes = 0;
+        const writeGate = new Promise((r) => (releaseWrite = r));
+        return {
+            read: vi.fn(async () => ({ success: true, store })),
+            write: vi.fn(async (s) => {
+                if (writes++ === 0) await writeGate; // the rename has not landed yet
+                store = s;
+                return { success: true };
+            }),
+            releaseWrite: () => releaseWrite(),
+        };
+    };
+
+    it('does not serve an entry that a clear already in flight is about to remove', async () => {
+        const mc = gatedWriteModelCache({
+            version: 1,
+            entries: [{ fingerprint: 'fp', modelState: { weights: [7] }, stats: {}, savedAt: 1 }],
+        });
+        const m = managerWith({ modelCache: mc });
+
+        const clearing = m.invalidateModelCache(); // in flight; its write has not committed
+        const reading = m._readCachedModel('fp'); // a racing sort's cache lookup
+        mc.releaseWrite();
+        const [, hit] = await Promise.all([clearing, reading]);
+
+        expect(hit).toBeNull();
+    });
+
     it('applies two concurrent cache writes in series rather than losing one', async () => {
         const mc = deferredModelCache({ version: 1, entries: [] });
         const m = managerWith({ modelCache: mc });
