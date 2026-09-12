@@ -155,6 +155,24 @@ replaces the grid must preserve it or re-derive the numbers.
 `updateCompareUndoButton`, the tournament hide rule). Only its positioning properties are dropped — it
 becomes a grid cell instead of an absolutely-positioned child.
 
+**D1a — tournament-mode vertical offset (found while planning, 2026-09-13).** `bottom: 30px` is free in
+compare mode but **not** in tournament mode: `.tournament-controls` is `position: absolute; bottom: 16px;
+left: 50%` (`styles.css:2315-2326`) holding `.control-btn`s, which are column-flex (icon over label) and
+so ~65px tall — occupying roughly 16–81px from the bottom edge, centred. The new bar at `bottom: 30px`
+would overlap it both vertically and, at 1200px width, horizontally (the side groups span ≈181–419 and
+≈781–1019; the tournament band is centred and wider than the gap between them). The band auto-hides, so
+the collision is intermittent — which is worse than constant, not better.
+
+```css
+.media-container.tournament-mode .compare-overlay-bar {
+    bottom: 96px;
+}
+```
+
+`96px` is a derived value, not a measured one, so it is **not trusted**: § 6 adds an E2E that reveals the
+tournament chrome and asserts the two bounding boxes do not intersect. If the constant is wrong the test
+says so, rather than a screenshot reviewer having to notice it.
+
 **Persistence.** The bar is static markup and survives every render: `.media-container` is never cleared
 with `innerHTML`; wrappers are removed individually via `.remove()` (`media-viewer.js:2813`, `3147`,
 `5200`). Verified rather than assumed — a re-render that wiped the bar would delete the controls silently.
@@ -310,6 +328,7 @@ cheap — the default fixtures are already 1×1.
 | tournament: zoom survives pair 2 | the zoom button exists after one pick                      | F4 — deleted by `removeZoomPopover`      |
 | badge in viewport on short media | badge box inside the viewport, `pointer-events: none`      | clipped by `overflow: hidden`            |
 | badge clears on mode switch     | no stale left/right badge after leaving compare             | new risk from D4's persistence           |
+| tournament: bar clears the chrome | `.compare-overlay-bar` and `#tournamentControls` bounding boxes do not intersect, chrome revealed | D1a — verifies the derived `bottom: 96px` |
 
 Per CLAUDE.md: E2E stubs the Lucide CDN, so assert on `[data-lucide]` attributes, not rendered `<svg>`.
 
