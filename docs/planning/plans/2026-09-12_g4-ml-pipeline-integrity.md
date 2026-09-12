@@ -159,6 +159,23 @@ is cheap, and `initClipModel()` is the one place that unambiguously means "the m
 
 ## 4. Implementation Log
 
+### [2026-09-12] — PHASE: Review rounds 3 & final (PR #69)
+
+- Verdict: **no issues found.** Every response bullet from rounds 1–2 was ruled on with evidence;
+  the reviewer reproduced both probes independently (the ordering predicate and the `afterEach`
+  registry, same 14/2 split) and re-ran the full E2E suite rather than trusting the pre-push gate.
+- One item re-raised, non-blocking and correct: **the backlog cross-reference pointed one way
+  only.** Item 3 (the acquire-contract residual) referenced item 1 twice, item 1 referenced item 3
+  zero times — and because item 3 folds its effort into item 1, item 1 is the unit of work someone
+  will actually pick up. Whoever pushes the lease down into `extractClipEmbedding` would have read
+  an entry saying nothing about the contract a per-call lease has to preserve.
+- **Fixed in the closeout as asked.** Item 1 now opens its remedy paragraph with the contract and
+  points at item 3 by position. Verified bidirectional by line-scoped grep, not by reading.
+- Worth recording: this is the **third** instance in one PR of *"the rationale exists, in a place
+  nobody executing the work will read it"* — the acquire contract (round 1), the lease-pairing
+  promise in the test mocks (round 2), and now the backlog entry. Same defect class, three
+  surfaces, all mine.
+
 ### [2026-09-12] — PHASE: Review round 2 (PR #69)
 
 - Verdict: **no blocking issues.** The round-1 pushback was accepted, and the reviewer verified the
