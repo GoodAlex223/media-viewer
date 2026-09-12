@@ -5,6 +5,26 @@
 const ML_MODEL_VERSION = 3;
 const DEFAULT_FEATURE_DIM = 576; // 64 hand-crafted + 512 CLIP semantic
 
+// Bumped whenever the learning rate, regularization, epoch schedule or class-weight rule
+// changes. The training-set fingerprint includes it, so a hyperparameter change invalidates
+// every cached model. Echoed to the renderer in the worker's initComplete reply so the value
+// is never duplicated outside this file.
+const TRAINING_CONFIG_VERSION = 1;
+
+// Deterministic PRNG (mulberry32). trainBatch shuffles with it instead of Math.random() so a
+// given training set always produces the same weights — that is what makes a cached model
+// verifiable rather than merely plausible.
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+        a = (a + 0x6d2b79f5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
 /**
  * Online Logistic Regression classifier with SGD updates
  * Supports weighted loss for handling class imbalance (more dislikes than likes)
@@ -69,16 +89,21 @@ class OnlineLogisticRegression {
      * Uses weighted loss to handle class imbalance
      * @param {Float32Array|number[]} features - Feature vector
      * @param {number} label - True label (1 = like, 0 = dislike)
+     * @param {boolean} [countSample=true] - Whether to count this sample toward
+     *   positiveCount/negativeCount/totalSamples. trainBatch passes false for epochs after the
+     *   first so re-visiting the same data across epochs doesn't inflate the counts.
      * @returns {number} Prediction made before update
      */
-    update(features, label) {
+    update(features, label, countSample = true) {
         // Update class counts
-        if (label === 1) {
-            this.positiveCount++;
-        } else {
-            this.negativeCount++;
+        if (countSample) {
+            if (label === 1) {
+                this.positiveCount++;
+            } else {
+                this.negativeCount++;
+            }
+            this.totalSamples++;
         }
-        this.totalSamples++;
 
         // Compute class weight for imbalance handling
         // Rare class gets higher weight
@@ -119,69 +144,33 @@ class OnlineLogisticRegression {
     }
 
     /**
-     * Reverse a previous update (for undo functionality)
-     * Applies negative gradient to approximately reverse the effect
-     * @param {Float32Array|number[]} features - Feature vector of the sample to reverse
-     * @param {number} label - Original label (1 = like, 0 = dislike)
-     */
-    reverseUpdate(features, label) {
-        // Decrement class counts
-        if (label === 1) {
-            this.positiveCount = Math.max(0, this.positiveCount - 1);
-        } else {
-            this.negativeCount = Math.max(0, this.negativeCount - 1);
-        }
-        this.totalSamples = Math.max(0, this.totalSamples - 1);
-
-        // Apply reverse gradient (same logic as update but with negative error)
-        const totalClasses = this.positiveCount + this.negativeCount;
-        let sampleWeight = 1.0;
-
-        if (totalClasses > 10) {
-            if (label === 1 && this.positiveCount > 0) {
-                sampleWeight = totalClasses / (2 * this.positiveCount);
-            } else if (label === 0 && this.negativeCount > 0) {
-                sampleWeight = totalClasses / (2 * this.negativeCount);
-            }
-            sampleWeight = Math.min(5.0, Math.max(0.2, sampleWeight));
-        }
-
-        const prediction = this.predict(features);
-        // Reverse: use negative error direction
-        const error = -(label - prediction);
-
-        // Use slightly higher learning rate for reversal to ensure effect is undone
-        const adaptiveLR = (this.learningRate * 1.2) / (1 + this.totalSamples * this.decayRate);
-
-        for (let i = 0; i < this.featureDim; i++) {
-            const featureVal = features[i] || 0;
-            const gradient = sampleWeight * error * featureVal - this.regularization * this.weights[i];
-            this.weights[i] += adaptiveLR * gradient;
-        }
-
-        this.weights[this.featureDim] += adaptiveLR * sampleWeight * error;
-    }
-
-    /**
      * Batch training for initial model fitting
      * @param {Array<Float32Array|number[]>} featuresArray - Array of feature vectors
      * @param {number[]} labelsArray - Array of labels
      * @param {number} epochs - Number of training epochs (default: 5)
+     * @param {number} seed - Seed for the deterministic shuffle PRNG (default: 1); the same
+     *   seed over the same data always produces the same weights.
      */
-    trainBatch(featuresArray, labelsArray, epochs = 5) {
+    trainBatch(featuresArray, labelsArray, epochs = 5, seed = 1) {
         if (featuresArray.length === 0) return;
 
+        const random = mulberry32(seed);
+
         for (let epoch = 0; epoch < epochs; epoch++) {
-            // Shuffle indices for SGD
+            // Shuffle indices for SGD (seeded — see mulberry32 above)
             const indices = Array.from({ length: featuresArray.length }, (_, i) => i);
             for (let i = indices.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
+                const j = Math.floor(random() * (i + 1));
                 [indices[i], indices[j]] = [indices[j], indices[i]];
             }
 
-            // Process samples in shuffled order
+            // Process samples in shuffled order. Only the first epoch counts each sample —
+            // later epochs are additional passes over the SAME data, so counting them again
+            // inflated positiveCount/negativeCount by a factor of `epochs`, which drove both
+            // the class-imbalance weight and the user-facing "N likes, M dislikes" figures.
+            const countThisPass = epoch === 0;
             for (const idx of indices) {
-                this.update(featuresArray[idx], labelsArray[idx]);
+                this.update(featuresArray[idx], labelsArray[idx], countThisPass);
             }
         }
     }
@@ -294,5 +283,6 @@ if (typeof module !== 'undefined' && module.exports) {
         OnlineLogisticRegression,
         ML_MODEL_VERSION,
         DEFAULT_FEATURE_DIM,
+        TRAINING_CONFIG_VERSION,
     };
 }

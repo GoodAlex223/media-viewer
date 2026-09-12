@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const { OnlineLogisticRegression, ML_MODEL_VERSION, DEFAULT_FEATURE_DIM } = require('../ml-model');
+const {
+    OnlineLogisticRegression,
+    ML_MODEL_VERSION,
+    DEFAULT_FEATURE_DIM,
+    TRAINING_CONFIG_VERSION,
+} = require('../ml-model');
 
 describe('OnlineLogisticRegression', () => {
     describe('constructor', () => {
@@ -130,26 +135,6 @@ describe('OnlineLogisticRegression', () => {
             const features = [1, 0.5, 0.3, 0.1];
             model.update(features, 0);
             expect(model.predict(features)).toBeLessThan(0.5);
-        });
-    });
-
-    describe('reverseUpdate', () => {
-        it('approximately reverses a prior update', () => {
-            const model = new OnlineLogisticRegression(4);
-            const features = [1, 0.5, 0.3, 0.1];
-            const beforePrediction = model.predict(features);
-            model.update(features, 1);
-            model.reverseUpdate(features, 1);
-            const afterPrediction = model.predict(features);
-            // Not exact reversal due to 1.2x LR multiplier, but should be close
-            expect(Math.abs(afterPrediction - beforePrediction)).toBeLessThan(0.05);
-        });
-
-        it('floors class counts at 0', () => {
-            const model = new OnlineLogisticRegression(4);
-            model.reverseUpdate([1, 0, 0, 0], 1);
-            expect(model.positiveCount).toBe(0);
-            expect(model.totalSamples).toBe(0);
         });
     });
 
@@ -292,5 +277,44 @@ describe('OnlineLogisticRegression', () => {
             model.trainBatch(features, labels, 1);
             expect(model.totalSamples).toBe(2);
         });
+    });
+});
+
+describe('trainBatch determinism and counts (G1)', () => {
+    const makeSet = (n) => Array.from({ length: n }, (_, i) => Array.from({ length: 576 }, (_, d) => (i + d) % 7));
+
+    it('counts each sample once regardless of epoch count', () => {
+        const model = new OnlineLogisticRegression(576);
+        const features = makeSet(6);
+        const labels = [1, 1, 1, 0, 0, 0];
+        model.trainBatch(features, labels, 5, 12345);
+        expect(model.positiveCount).toBe(3);
+        expect(model.negativeCount).toBe(3);
+        expect(model.totalSamples).toBe(6);
+    });
+
+    it('produces identical weights for the same seed', () => {
+        const features = makeSet(8);
+        const labels = [1, 0, 1, 0, 1, 0, 1, 0];
+        const a = new OnlineLogisticRegression(576);
+        const b = new OnlineLogisticRegression(576);
+        a.trainBatch(features, labels, 4, 999);
+        b.trainBatch(features, labels, 4, 999);
+        expect(Array.from(a.weights)).toEqual(Array.from(b.weights));
+    });
+
+    it('produces different weights for different seeds', () => {
+        const features = makeSet(8);
+        const labels = [1, 0, 1, 0, 1, 0, 1, 0];
+        const a = new OnlineLogisticRegression(576);
+        const b = new OnlineLogisticRegression(576);
+        a.trainBatch(features, labels, 4, 1);
+        b.trainBatch(features, labels, 4, 2);
+        expect(Array.from(a.weights)).not.toEqual(Array.from(b.weights));
+    });
+
+    it('exports TRAINING_CONFIG_VERSION', () => {
+        expect(typeof TRAINING_CONFIG_VERSION).toBe('number');
+        expect(TRAINING_CONFIG_VERSION).toBeGreaterThanOrEqual(1);
     });
 });

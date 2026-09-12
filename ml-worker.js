@@ -63,12 +63,19 @@ function initializeModel(savedModel) {
  * Train model from historical data (files in like/dislike folders)
  * @param {Array<number[]>} likedFeatures - Features of liked files
  * @param {Array<number[]>} dislikedFeatures - Features of disliked files
+ * @param {number} seed - Seed for trainBatch's deterministic shuffle (default: 1)
  * @returns {Object} Training result
  */
-function trainFromHistorical(likedFeatures, dislikedFeatures) {
+function trainFromHistorical(likedFeatures, dislikedFeatures, seed = 1) {
     if (!model) {
         initializeModel(null);
     }
+
+    // Reset before training. Without this, trainBatch warm-starts onto the previous weights,
+    // so a file removed from the like folder could never be unlearned and totalSamples grew
+    // without bound (dragging adaptiveLR toward zero). A rebuild must reproduce the model a
+    // fresh install would produce, or the fingerprint cache is keyed on a lie.
+    model.reset();
 
     const totalSamples = likedFeatures.length + dislikedFeatures.length;
 
@@ -88,53 +95,12 @@ function trainFromHistorical(likedFeatures, dislikedFeatures) {
 
     // Batch train with multiple epochs
     const epochs = Math.min(10, Math.max(3, Math.floor(50 / totalSamples)));
-    model.trainBatch(features, labels, epochs);
+    model.trainBatch(features, labels, epochs, seed);
 
     updateProgress('Training complete', totalSamples, totalSamples);
 
     return {
         type: 'trainComplete',
-        stats: model.getStats(),
-        modelState: model.toJSON(),
-    };
-}
-
-/**
- * Incremental model update after new rating
- * @param {number[]} features - Feature vector of rated file
- * @param {number} label - Rating (1 = like, 0 = dislike)
- * @returns {Object} Update result
- */
-function updateModel(features, label) {
-    if (!model) {
-        return { type: 'error', message: 'Model not initialized' };
-    }
-
-    const prediction = model.update(features, label);
-
-    return {
-        type: 'updateComplete',
-        prediction,
-        stats: model.getStats(),
-        modelState: model.toJSON(),
-    };
-}
-
-/**
- * Reverse a previous model update (for undo functionality)
- * @param {number[]} features - Feature vector of the sample to reverse
- * @param {number} label - Original label (1 = like, 0 = dislike)
- * @returns {Object} Reverse update result
- */
-function reverseUpdateModel(features, label) {
-    if (!model) {
-        return { type: 'error', message: 'Model not initialized' };
-    }
-
-    model.reverseUpdate(features, label);
-
-    return {
-        type: 'reverseUpdateComplete',
         stats: model.getStats(),
         modelState: model.toJSON(),
     };
@@ -270,42 +236,23 @@ self.onmessage = function (e) {
                 modelWasReset: wasReset,
                 modelVersion: ML_MODEL_VERSION,
                 featureDim: DEFAULT_FEATURE_DIM,
+                trainingConfigVersion: TRAINING_CONFIG_VERSION,
             });
             break;
 
         case 'trainHistorical':
             abortFlag = false;
             try {
-                const trainResult = trainFromHistorical(data.likedFeatures || [], data.dislikedFeatures || []);
+                const trainResult = trainFromHistorical(
+                    data.likedFeatures || [],
+                    data.dislikedFeatures || [],
+                    data.seed ?? 1
+                );
                 self.postMessage(trainResult);
             } catch (error) {
                 self.postMessage({
                     type: 'error',
                     message: 'Training failed: ' + error.message,
-                });
-            }
-            break;
-
-        case 'update':
-            try {
-                const updateResult = updateModel(data.features, data.label);
-                self.postMessage(updateResult);
-            } catch (error) {
-                self.postMessage({
-                    type: 'error',
-                    message: 'Update failed: ' + error.message,
-                });
-            }
-            break;
-
-        case 'reverseUpdate':
-            try {
-                const reverseResult = reverseUpdateModel(data.features, data.label);
-                self.postMessage(reverseResult);
-            } catch (error) {
-                self.postMessage({
-                    type: 'error',
-                    message: 'Reverse update failed: ' + error.message,
                 });
             }
             break;

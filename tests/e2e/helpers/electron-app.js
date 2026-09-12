@@ -177,7 +177,9 @@ export async function waitForNotification(page, textPattern) {
 /**
  * Copy named fixtures to a new temp directory.
  * Creates 'liked' and 'disliked' subdirs for rating tests.
- * Returns { dir, likeDir, dislikeDir, specialDir, cleanup }.
+ * Returns { dir, likeDir, dislikeDir, specialDir, cleanup, addFile }.
+ * addFile(name) copies a fixed fixture (red-1x1.png) into `dir` under `name` — see its own
+ * comment below for why.
  */
 export async function createTempFixtureDir(fixtureNames = ['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']) {
     const dir = await mkdtemp(join(tmpdir(), 'mv-e2e-'));
@@ -197,5 +199,13 @@ export async function createTempFixtureDir(fixtureNames = ['red-1x1.png', 'green
         await rm(dir, { recursive: true, force: true });
     };
 
-    return { dir, likeDir, dislikeDir, specialDir, cleanup };
+    // Copies a fixed fixture (red-1x1.png) into this directory under `name`. Lets a test mutate
+    // a training folder mid-run (e.g. adding a file to change its fingerprint) without needing a
+    // distinct fixture per call — the pixel content is irrelevant, only that it is a real,
+    // decodable image the feature extractor can process.
+    const addFile = async (name) => {
+        await cp(join(FIXTURES_DIR, 'red-1x1.png'), join(dir, name));
+    };
+
+    return { dir, likeDir, dislikeDir, specialDir, cleanup, addFile };
 }

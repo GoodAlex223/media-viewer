@@ -1,5 +1,6 @@
 import { FullscreenManager } from './fullscreen.js';
 import { TournamentManager } from './tournament.js';
+import { MlTrainingManager } from './ml-training.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -134,13 +135,72 @@ class MediaViewer {
         this.showPredictionBadges = localStorage.getItem('showPredictionBadges') !== 'false';
         this.isSortedByPrediction = false;
         this.mlStats = null; // Current model statistics
+
+        // Versions reported by the workers that own them — never re-declared here, so they
+        // cannot drift from the code they describe. Populated by initComplete and by the
+        // feature pool's getVersion probe.
+        this._mlWorkerVersions = { mlModelVersion: 0, trainingConfigVersion: 0 };
+        this._featureExtractorVersion = 0;
+        // Pending _runWorkerTraining/_runWorkerInit resolvers, settled (by reference identity)
+        // in handleMlWorkerMessage's trainComplete/initComplete cases.
+        this._trainingCompleteCallback = null;
+        this._initCompleteCallback = null;
+        // initializeMlWorker()'s own startup-handshake promise resolver — settled by ANY
+        // initComplete (see handleMlWorkerMessage), distinct from _initCompleteCallback above.
+        this._mlWorkerInitResolve = null;
+
+        this.mlTraining = new MlTrainingManager({
+            loadFolder: (p) => window.electronAPI.loadFolder(p),
+            // useHostCache:false — the manager extracts LIKE/DISLIKE-folder files, which must
+            // never enter the source folder's featureCache/featureMetadata (design doc § 4.1).
+            // Applied at the injection point rather than per call site so the invariant is
+            // "the manager never writes the host's maps," with no exceptions to audit. The one
+            // thing this gives up is warming the host cache for a bulk-rated SOURCE file the
+            // manager happens to extract (a legitimate direction, per § 3.1) — in practice a
+            // no-op, since the sort's Phase 1 hydrates featureCache before ensureTrainedModel
+            // runs and Phase 2 extracts anything still missing.
+            computeFeatures: (p, info) => this.computeFeatures(p, info, { useHostCache: false }),
+            extractClipEmbedding: (p) => this.extractClipEmbedding(p),
+            trainModel: (liked, disliked, seed) => this._runWorkerTraining(liked, disliked, seed),
+            loadModelState: (modelState) => this._runWorkerInit(modelState),
+            getConfig: () => ({
+                customLikeFolder: this.customLikeFolder,
+                customDislikeFolder: this.customDislikeFolder,
+                enableClipFeatures: this.enableClipFeatures,
+                versions: {
+                    mlModelVersion: this._mlWorkerVersions.mlModelVersion,
+                    featureCacheVersion: MediaViewer.FEATURE_CACHE_VERSION,
+                    featureVersion: this._featureExtractorVersion,
+                    trainingConfigVersion: this._mlWorkerVersions.trainingConfigVersion,
+                },
+            }),
+            getBulkRatedContext: () => ({
+                bulkRated: this.bulkRated,
+                mediaFiles: this.mediaFiles,
+                featureCache: this.featureCache,
+                clipCache: this.clipCache,
+            }),
+            cacheIo: {
+                acquireLock: () => this._acquireCacheIoLock(),
+                open: (p) => window.electronAPI.featureCacheOpen(p),
+                chunk: (o, l) => window.electronAPI.featureCacheChunk(o, l),
+                close: () => window.electronAPI.featureCacheClose(),
+                writeOpen: (p, h) => window.electronAPI.featureCacheWriteOpen(p, h),
+                writeChunk: (e) => window.electronAPI.featureCacheWriteChunk(e),
+                writeClose: () => window.electronAPI.featureCacheWriteClose(),
+            },
+            modelCache: {
+                read: () => window.electronAPI.readMlModelCache(),
+                write: (store) => window.electronAPI.writeMlModelCache(store),
+            },
+            onProgress: (p) => this.updateSortProgress(p),
+            logError: (msg) => window.electronAPI?.logError?.(msg),
+            notify: (msg, level) => this.showNotification(msg, level),
+        });
+
         this.compareLeftFile = null; // Current left file in compare mode (highest score)
         this.compareRightFile = null; // Current right file in compare mode (lowest score)
         this.mlComparePairIndex = 0; // Index for ML pair selection (0 = highest vs lowest)
-        this.pendingCompareRefresh = false; // Awaiting ML re-score before showing next compare pair
-        this.pendingCompareUpdates = 0; // Counter for expected updateComplete messages (2 for rating, 1 for undo)
-        this.pendingCompareTimeout = null; // Fallback timeout ID
-        this.previousScores = null; // Snapshot of predictionScores for delta notification
         // Corrective training: filename -> 'good' | 'bad' (mirrors per-folder .bulk_rated.json)
         this.bulkRated = new Map();
 
@@ -1051,7 +1111,7 @@ class MediaViewer {
     /**
      * Show subtle ML learning indicator (bottom-left, auto-dismiss)
      */
-    showMlLearningIndicator(stats) {
+    showMlLearningIndicator(stats, source = 'trained') {
         // Remove existing indicator
         const existing = document.getElementById('ml-learning-indicator');
         if (existing) existing.remove();
@@ -1071,15 +1131,17 @@ class MediaViewer {
             opacity: 1;
             transition: opacity 0.3s ease;
         `;
-        indicator.textContent = `🧠 ML: ${stats.positiveCount}👍 ${stats.negativeCount}👎`;
+        const label = source === 'trained' ? 'Trained on' : 'Model reused —';
+        indicator.textContent = `🧠 ${label} ${stats.positiveCount}👍 ${stats.negativeCount}👎`;
 
         document.body.appendChild(indicator);
 
-        // Auto-dismiss after 1.5s
+        // Auto-dismiss after 2.5s — this now fires once per AI sort rather than once per
+        // rating, so it needs to be readable rather than glanceable.
         setTimeout(() => {
             indicator.style.opacity = '0';
             setTimeout(() => indicator.remove(), 300);
-        }, 1500);
+        }, 2500);
     }
 
     /**
@@ -1235,9 +1297,10 @@ class MediaViewer {
             // Guard: if the element was taken over by updateSortProgress (which builds a
             // different DOM structure without .progress-message), rebuild the simple text
             // structure so we don't dereference null. The remaining caller is ML worker
-            // progress arriving while no prediction sort owns the card (deferred
-            // compare-refresh re-scoring) — which can still overlap a similarity sort's
-            // card, so the guard stays load-bearing.
+            // progress arriving while no prediction sort owns the card — background scoring's
+            // requestPredictionScores() firing on its own when extraction finishes with a ready
+            // model (see the 'progress' case below) — which can still land while a sort's card is
+            // up, so the guard stays load-bearing.
             let messageSpan = this.progressNotification.querySelector('.progress-message');
             if (!messageSpan) {
                 // Element was in sort-progress card form — reset to simple text form.
@@ -1431,7 +1494,8 @@ class MediaViewer {
                 throw new Error(moveResult.error);
             }
 
-            // Store move in history for undo functionality (include ML features for reversal)
+            // Store move in history for undo functionality (mlFeatures feeds
+            // restoreFeatureCachesFromHistory's cache restoration on undo)
             const historyEntry = {
                 fileName: currentFile.name,
                 originalPath: currentFile.path,
@@ -1454,11 +1518,6 @@ class MediaViewer {
                     `${actionType === 'like' ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
                     actionType === 'like' ? 'success' : 'dislike'
                 );
-            }
-
-            // Update ML model with this rating (using pre-extracted features)
-            if (mlFeatures) {
-                this.updateMlModelWithFeatures(mlFeatures, actionType);
             }
 
             // Remove current file from array and clean up caches
@@ -2007,6 +2066,14 @@ class MediaViewer {
                 // Toggle-on is intentionally lazy (Group P3): enabling CLIP only advertises the
                 // capability; vectors are produced on first use of an AI feature, not on toggle.
             });
+        }
+
+        // Escape hatch for the fingerprint-keyed model cache (Task 9). If a training-set
+        // descriptor ever misses an input, this is the only way a user can force a rebuild short
+        // of touching a training folder — so it exists on purpose, not as a convenience.
+        const rebuildModelBtn = document.getElementById('rebuildModelBtn');
+        if (rebuildModelBtn) {
+            rebuildModelBtn.addEventListener('click', () => this.handleRebuildModelClick());
         }
 
         // Folder settings
@@ -2585,13 +2652,6 @@ class MediaViewer {
             console.log('Loading folder:', folderPath);
             this.showLoadingSpinner();
 
-            // Drop an open deferred compare refresh BEFORE the scan: a 24k-file folder takes longer
-            // than the window's 3 s fallback, which would otherwise showMedia() the OLD pair mid-await
-            // (and could still be rendering when mediaFiles is swapped below). Repeated after the
-            // await — showLoadingSpinner() does not set isLoading, so the old folder stays interactive
-            // during the scan and a bulk rating landing there can arm a fresh window.
-            this._cancelDeferredCompareRefresh();
-
             const result = await window.electronAPI.loadFolder(folderPath);
             console.log('Load result:', result);
 
@@ -2619,9 +2679,6 @@ class MediaViewer {
             this.cancelBackgroundExtraction();
             this._abortInFlightPredictionSort();
             this._featureCacheDiskCount = 0;
-            // Second cancel (see the pre-await one): a deferred compare refresh armed DURING the scan
-            // would otherwise fire showMedia() against the NEW folder when its 3 s fallback lands.
-            this._cancelDeferredCompareRefresh();
 
             if (result.files.length === 0) {
                 this.mediaFiles = [];
@@ -3936,17 +3993,7 @@ class MediaViewer {
         await this.moveCurrentFile('dislike');
     }
 
-    // Returns the number of reverseUpdate messages actually posted, so handleCancel knows whether
-    // to wait for a re-score or render immediately.
-    //
-    // Ordering matters: every await here must resolve BEFORE the reverse-update messages are
-    // posted. handleCancel arms the deferred-refresh window in the synchronous continuation right
-    // after this method returns, and the invariant that protocol depends on is "no await between
-    // posting worker messages and arming the window" — a worker round trip is usually faster than
-    // the saveBulkRatedFile() disk write, so posting before it lets updateComplete/scoreComplete
-    // race the write and land before anything is armed to receive it.
     async undoBulkRating(lastMove) {
-        const actionType = lastMove.bothGood ? 'like' : 'dislike';
         for (const f of lastMove.bulkFiles) {
             this.bulkRated.delete(f.name);
         }
@@ -3954,16 +4001,6 @@ class MediaViewer {
         // Re-admit the exact combo so it can reappear at its natural extreme position on re-render.
         this.bulkRatedPairs.delete(this.bulkPairKey(lastMove.bulkFiles[0].name, lastMove.bulkFiles[1].name));
         this.showNotification('↩️ Bulk rating undone', 'info');
-
-        // Post the reverse-update messages LAST, with only synchronous code between here and the
-        // caller arming the deferred-refresh window.
-        let postedUpdates = 0;
-        for (const f of lastMove.bulkFiles) {
-            if (f.features && this.reverseMlModelUpdate(f.features, actionType)) {
-                postedUpdates++;
-            }
-        }
-        return postedUpdates;
     }
 
     async handleCancel() {
@@ -3972,37 +4009,29 @@ class MediaViewer {
             return;
         }
 
-        // mediaNavigationInProgress is also true for the whole of an OPEN deferred-refresh window
-        // (applyBulkRating / undoBulkRating's re-score wait). The protocol has no epoch token, so a
-        // Ctrl+Z landing inside that window would arm a SECOND window on top of the first — the
-        // earlier scoreComplete would then satisfy the later one and render from prediction scores
-        // that haven't finished reverting. Block re-entry here, same as isLoading.
+        // mediaNavigationInProgress is held for the whole of an in-flight showMedia() render
+        // (showSingleMedia/showCompareMedia set it at the top, clear it once the media has
+        // loaded). Block re-entry here, same as isLoading, so a Ctrl+Z landing mid-render can't
+        // pop moveHistory out from under a render that's still reading it.
         if (this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
 
         // Check if last move was a special move in compare mode
         const lastMove = this.moveHistory[this.moveHistory.length - 1];
 
-        // Bulk rating (Both good / Both bad): no file move to reverse — just undo the ML updates,
-        // then refresh the UI like the other handleCancel branches do. Return to the pair that was
-        // bulk-rated (applyBulkRating clamped the cursor when the rated pair dropped out of the valid
-        // list; prevPairIndex holds the original index), re-score prediction badges (the ML model was
-        // just reverted), and re-render so the floating Undo button visibility updates.
+        // Bulk rating (Both good / Both bad): no file move to reverse, and no model update to
+        // reverse either — undoBulkRating only clears the bulkRated/bulkRatedPairs bookkeeping and
+        // re-saves. Return to the pair that was bulk-rated (applyBulkRating clamped the cursor when
+        // the rated pair dropped out of the valid list; prevPairIndex holds the original index),
+        // refresh prediction badges, and re-render so the floating Undo button visibility updates.
         if (lastMove.bothGood || lastMove.bothBad) {
             this.moveHistory.pop();
-            const postedUpdates = await this.undoBulkRating(lastMove);
+            await this.undoBulkRating(lastMove);
             if (typeof lastMove.prevPairIndex === 'number') {
                 this.mlComparePairIndex = lastMove.prevPairIndex;
             }
-            // Same deferred protocol as applyBulkRating: rendering now would pair from the
-            // POST-rating scores we are in the middle of reverting, so the pair we restore could be
-            // the wrong one. reverseUpdateComplete drives requestPredictionScores from here.
-            if (this.isSortedByPrediction && postedUpdates > 0) {
-                this._beginDeferredCompareRefresh(postedUpdates);
-            } else {
-                if (this.isSortedByPrediction) this.requestPredictionScores();
-                await this.showMedia();
-            }
+            if (this.isSortedByPrediction) this.requestPredictionScores();
+            await this.showMedia();
             return;
         }
 
@@ -4109,14 +4138,6 @@ class MediaViewer {
                     type: secondMove.fileType,
                 });
 
-                // Reverse ML model updates for both files
-                if (firstMove.mlFeatures && firstMove.actionType !== 'special') {
-                    this.reverseMlModelUpdate(firstMove.mlFeatures, firstMove.actionType);
-                }
-                if (secondMove.mlFeatures && secondMove.actionType !== 'special') {
-                    this.reverseMlModelUpdate(secondMove.mlFeatures, secondMove.actionType);
-                }
-
                 this.restoreFeatureCachesFromHistory(firstMove);
                 this.restoreFeatureCachesFromHistory(secondMove);
                 this.showNotification(`✅ Restored ${firstMove.fileName}`, 'success');
@@ -4184,13 +4205,6 @@ class MediaViewer {
                     type: secondMove.fileType,
                 });
 
-                if (firstMove.mlFeatures && firstMove.actionType !== 'special') {
-                    this.reverseMlModelUpdate(firstMove.mlFeatures, firstMove.actionType);
-                }
-                if (secondMove.mlFeatures && secondMove.actionType !== 'special') {
-                    this.reverseMlModelUpdate(secondMove.mlFeatures, secondMove.actionType);
-                }
-
                 this.restoreFeatureCachesFromHistory(firstMove);
                 this.restoreFeatureCachesFromHistory(secondMove);
                 this.showNotification(`Restored ${firstMove.fileName}`, 'success');
@@ -4227,11 +4241,6 @@ class MediaViewer {
                     size: undoMove.fileSize,
                     type: undoMove.fileType,
                 });
-
-                // Reverse ML model update
-                if (undoMove.mlFeatures && undoMove.actionType !== 'special') {
-                    this.reverseMlModelUpdate(undoMove.mlFeatures, undoMove.actionType);
-                }
 
                 this.restoreFeatureCachesFromHistory(undoMove);
                 this.showNotification(`✅ Restored ${undoMove.fileName}`, 'success');
@@ -5393,7 +5402,8 @@ class MediaViewer {
                 throw new Error(primaryMoveResult.error);
             }
 
-            // Store primary move in history (include ML features for reversal)
+            // Store primary move in history (mlFeatures feeds restoreFeatureCachesFromHistory's
+            // cache restoration on undo)
             const primaryFeatures = primarySide === 'left' ? leftFeatures : rightFeatures;
             const primaryEntry = {
                 fileName: primaryFile.name,
@@ -5433,7 +5443,8 @@ class MediaViewer {
                 throw new Error(secondaryMoveResult.error);
             }
 
-            // Store secondary move in history (include ML features for reversal)
+            // Store secondary move in history (mlFeatures feeds restoreFeatureCachesFromHistory's
+            // cache restoration on undo)
             const secondaryFeatures = primarySide === 'left' ? rightFeatures : leftFeatures;
             const secondaryEntry = {
                 fileName: secondaryFile.name,
@@ -5466,16 +5477,6 @@ class MediaViewer {
                 );
             }
 
-            // Update ML model with both ratings (using pre-extracted features from earlier)
-            const mlSortedCompare = this.isSortedByPrediction && this.isCompareMode;
-
-            if (primaryFeatures) {
-                this.updateMlModelWithFeatures(primaryFeatures, primaryAction);
-            }
-            if (secondaryFeatures) {
-                this.updateMlModelWithFeatures(secondaryFeatures, secondaryAction);
-            }
-
             // Remove both files from current view and clean up caches
             this.removeFileFromList(leftFile.path);
             this.removeFileFromList(rightFile.path);
@@ -5493,9 +5494,6 @@ class MediaViewer {
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
                 this.hideLoadingSpinner();
-
-                // Clear pending ML state
-                this._cancelDeferredCompareRefresh();
 
                 // switchToSingleModeUI() tears down the stale compare wrappers.
                 this.switchToSingleModeUI();
@@ -5519,36 +5517,7 @@ class MediaViewer {
 
             this.updateFolderInfo();
 
-            // If ML-sorted compare mode, defer showMedia() until re-score completes
-            if (mlSortedCompare && primaryFeatures && secondaryFeatures) {
-                // Clear any existing pending state from a prior rating
-                if (this.pendingCompareTimeout) {
-                    clearTimeout(this.pendingCompareTimeout);
-                    this.pendingCompareTimeout = null;
-                }
-                // Snapshot scores BEFORE re-score for delta notification
-                if (this.predictionScores.size > 0) {
-                    this.previousScores = new Map(this.predictionScores);
-                }
-                this.pendingCompareRefresh = true;
-                this.pendingCompareUpdates = 2;
-                // Keep mediaNavigationInProgress true to block spurious showMedia() calls
-                this.mediaNavigationInProgress = true;
-                // Fallback timeout: show with stale scores after 3s rather than blocking forever
-                this.pendingCompareTimeout = setTimeout(() => {
-                    if (this.pendingCompareRefresh) {
-                        console.warn('[ML Debug] Re-score timeout — showing pair with stale scores');
-                        this.pendingCompareRefresh = false;
-                        this.pendingCompareUpdates = 0;
-                        this.pendingCompareTimeout = null;
-                        this.previousScores = null;
-                        this.mediaNavigationInProgress = false;
-                        this.showMedia();
-                    }
-                }, 3000);
-            } else {
-                await this.showMedia();
-            }
+            await this.showMedia();
         } catch (error) {
             console.error('Error moving compare files:', error);
             this.showError(`Failed to move files: ${error.message}`);
@@ -6740,42 +6709,110 @@ class MediaViewer {
 
     // ==================== ML PREDICTION METHODS ====================
 
+    /**
+     * Returns a promise that settles once this worker's OWN startup handshake is done -- either
+     * its 'initComplete' reply landed (see handleMlWorkerMessage, which resolves
+     * `_mlWorkerInitResolve` unconditionally on every initComplete, not just this one) or the
+     * worker never started at all. Task 9 review, Important 1(b): callers that don't need to
+     * wait (e.g. the mlPredictionToggle handler) can still fire-and-forget this; the only caller
+     * that awaits it is handleSortByPrediction's lazy-init block, which previously used a
+     * hard-coded 100ms sleep as a guess at how long this handshake takes. That guess is also a
+     * correctness gap, not just a timing one: ensureTrainedModel's fingerprint depends on
+     * `_mlWorkerVersions`, which this handshake populates -- see ml-training.js's `versionsKnown`
+     * gate for the other half of that fix. Every exit path here resolves so the caller can never
+     * hang: a disabled worker, a construction failure, and a hard runtime error all resolve
+     * immediately rather than waiting for a reply that will never come.
+     *
+     * `_mlWorkerInitResolve` is a single slot, and this method is explicitly re-entrant (it
+     * terminates an existing worker below) -- a second call before the first's promise settles
+     * would otherwise silently ABANDON the first caller's resolver (nothing would ever invoke
+     * it, since the slot now points at the second call's resolver instead). Unreachable via any
+     * current call site today (all three guard on `!this.mlWorker`, assigned synchronously
+     * inside the executor below), but settling any stale resolver before it can be overwritten --
+     * and identity-guarding the `onerror` path so it only clears a slot it still owns -- makes
+     * that hold regardless of caller discipline, mirroring the reference-identity pattern
+     * _runWorkerTraining/_runWorkerInit use for their own single-slot callbacks.
+     *
+     * Final whole-branch review, Important 3: the settle paths enumerated above do not exclude
+     * the non-settling one — a worker that constructs, parses, and then never replies without
+     * raising `error`. handleSortByPrediction awaits `Promise.all([initializeMlWorker(),
+     * initializeFeaturePool()])`, so that hangs the sort exactly as a hung version probe did,
+     * latching `isPredictionSorting` and pinning the progress card for the session. The 5s
+     * backstop below is the same three lines initializeFeaturePool already carries, for the same
+     * reason; it never gates the happy path, which settles on the real reply whenever it lands.
+     */
     initializeMlWorker() {
         console.log('[ML Debug] initializeMlWorker called, isMlEnabled:', this.isMlEnabled);
         if (!this.isMlEnabled) {
             console.log('[ML Debug] ML is disabled, skipping worker init');
-            return;
+            return Promise.resolve();
         }
 
         if (this.mlWorker) {
             this.mlWorker.terminate();
         }
-
-        try {
-            this.mlWorker = new Worker('ml-worker.js');
-            console.log('[ML Debug] ML Worker created');
-
-            this.mlWorker.onmessage = (e) => {
-                this.handleMlWorkerMessage(e.data);
-            };
-
-            this.mlWorker.onerror = (err) => {
-                console.error('[ML Debug] ML Worker error:', err);
-                this.isMlEnabled = false;
-                // A hard worker crash must settle any pending runMlSort() promise (reject),
-                // otherwise its awaiter (Task 3) hangs forever.
-                const reject = this._mlSortReject;
-                this._mlSortResolve = null;
-                this._mlSortReject = null;
-                if (reject) reject(new Error('ML worker crashed'));
-            };
-
-            // Initialize worker (will load saved model if exists)
-            this.mlWorker.postMessage({ type: 'init', data: {} });
-        } catch (err) {
-            console.warn('[ML Debug] ML Worker not available:', err);
-            this.isMlEnabled = false;
+        if (this._mlWorkerInitResolve) {
+            const stale = this._mlWorkerInitResolve;
+            this._mlWorkerInitResolve = null;
+            stale(); // settle the abandoned call's promise instead of losing it silently
         }
+
+        return new Promise((resolve) => {
+            let settled = false;
+            const settle = () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                resolve();
+            };
+            // Backstop for a worker that neither replies NOR raises `error`. Deliberately does
+            // NOT set isMlEnabled=false: a merely slow worker's initComplete still lands later and
+            // still refreshes _mlWorkerVersions, and ml-training.js's `versionsKnown` gate already
+            // degrades an unsettled sort honestly (trains, does not cache, logs why).
+            const timeoutId = setTimeout(() => {
+                console.warn('[ML Debug] ML worker init did not reply within 5s — continuing degraded');
+                if (this._mlWorkerInitResolve === settle) this._mlWorkerInitResolve = null;
+                settle();
+            }, 5000);
+
+            try {
+                this.mlWorker = new Worker('ml-worker.js');
+                console.log('[ML Debug] ML Worker created');
+
+                this.mlWorker.onmessage = (e) => {
+                    this.handleMlWorkerMessage(e.data);
+                };
+
+                this.mlWorker.onerror = (err) => {
+                    console.error('[ML Debug] ML Worker error:', err);
+                    this.isMlEnabled = false;
+                    // A hard worker crash must settle any pending runMlSort() promise (reject),
+                    // otherwise its awaiter (Task 3) hangs forever.
+                    const reject = this._mlSortReject;
+                    this._mlSortResolve = null;
+                    this._mlSortReject = null;
+                    if (reject) reject(new Error('ML worker crashed'));
+                    // No initComplete is coming from a worker that just errored — resolve here so
+                    // a crash during startup can't hang the caller. Harmless if initComplete
+                    // already resolved this same promise (a settled promise ignores later
+                    // settle attempts). Identity-guarded: only clear the slot if it still belongs
+                    // to THIS call — a newer initializeMlWorker() call may have already taken it
+                    // over (and already settled this call via the stale-resolver check above).
+                    if (this._mlWorkerInitResolve === settle) {
+                        this._mlWorkerInitResolve = null;
+                    }
+                    settle();
+                };
+
+                this._mlWorkerInitResolve = settle;
+                // Initialize worker (will load saved model if exists)
+                this.mlWorker.postMessage({ type: 'init', data: {} });
+            } catch (err) {
+                console.warn('[ML Debug] ML Worker not available:', err);
+                this.isMlEnabled = false;
+                settle(); // construction itself failed — nothing will ever reply
+            }
+        });
     }
 
     handleMlWorkerMessage(message) {
@@ -6783,13 +6820,42 @@ class MediaViewer {
             case 'initComplete':
                 console.log('[ML Debug] ML Model initialized:', message.stats);
                 this.mlStats = message.stats;
+                // `message.featureDim` is deliberately not captured: nothing read it, and it
+                // is already implied for descriptor purposes by mlModelVersion (ML_MODEL_VERSION
+                // bumps with the model's shape) and enforced on load by
+                // OnlineLogisticRegression.isCompatible, which checks it directly.
+                this._mlWorkerVersions = {
+                    mlModelVersion: message.modelVersion || 0,
+                    trainingConfigVersion: message.trainingConfigVersion || 0,
+                };
+                if (this._initCompleteCallback) {
+                    const cb = this._initCompleteCallback;
+                    this._initCompleteCallback = null;
+                    // `modelWasReset` MUST be forwarded: an init that could not restore the saved
+                    // model still replies here with valid-shaped (all-zero) stats, so it is the
+                    // only signal that distinguishes "your cached model is loaded" from "I threw
+                    // it away and built an empty one." _safeLoadModelState treats true as a
+                    // model-cache miss (ml-training.js).
+                    cb({ stats: message.stats, modelWasReset: !!message.modelWasReset });
+                }
+                // Distinct from _initCompleteCallback above: that one is _runWorkerInit's
+                // per-call cache-hit-load mechanism (matched by reference identity); this one is
+                // initializeMlWorker's OWN startup handshake promise. Both can be pending at once
+                // only in the impossible case of two concurrent inits on one worker, so resolving
+                // unconditionally here — regardless of which call led to this initComplete — is
+                // correct: _mlWorkerVersions was just refreshed either way, which is the only
+                // thing this promise promises.
+                if (this._mlWorkerInitResolve) {
+                    const resolveInit = this._mlWorkerInitResolve;
+                    this._mlWorkerInitResolve = null;
+                    resolveInit();
+                }
                 this.updateSortPredictionButton();
                 // If worker reset the model (version/dim mismatch), clear stale state
                 if (message.modelWasReset) {
                     console.warn('ML model was reset (version/dim mismatch) — clearing stale cache');
                     this.mlModelState = null;
                     this.predictionScores = new Map();
-                    this.deleteMlModelCache();
                 }
                 // If model was restored with samples, request scores
                 if (message.stats?.isReady && this.mediaFiles.length > 0) {
@@ -6800,95 +6866,20 @@ class MediaViewer {
             case 'trainComplete':
                 this.mlModelState = message.modelState;
                 this.mlStats = message.stats;
-                this.saveMlModel();
-                if (message.stats.totalSamples > 0) {
-                    this.showNotification(
-                        `ML trained: ${message.stats.positiveCount} likes, ${message.stats.negativeCount} dislikes`,
-                        'success'
-                    );
-                }
-                // Call training complete callback if waiting
+                // No toast here. Decision D6 made showMlLearningIndicator the once-per-sort
+                // report ("🧠 Trained on N👍 M👎"), which fires moments later with the same two
+                // numbers. Beyond the redundancy this was an active hazard: showNotification
+                // evicts the oldest element once five stack, and the sort progress card IS a
+                // notification element — so on a degraded run (up to four `notify` warnings from
+                // ml-training.js) this could evict the card mid-sort, taking its Cancel button
+                // with it. Same failure an earlier task fixed for the CLIP toast.
                 if (this._trainingCompleteCallback) {
-                    this._trainingCompleteCallback();
+                    const cb = this._trainingCompleteCallback;
                     this._trainingCompleteCallback = null;
+                    cb({ stats: message.stats, modelState: message.modelState });
                 }
                 // Trigger re-scoring
                 this.requestPredictionScores();
-                break;
-
-            case 'updateComplete':
-                this.mlModelState = message.modelState;
-                this.mlStats = message.stats;
-                console.log(
-                    `[ML Debug] Model updated! Total: ${message.stats.totalSamples} samples ` +
-                        `(${message.stats.positiveCount} likes, ${message.stats.negativeCount} dislikes) ` +
-                        `| Ready: ${message.stats.isReady}`
-                );
-                // Show visual feedback that ML learned (subtle, bottom-left)
-                this.showMlLearningIndicator(message.stats);
-                // Debounce model saving to avoid multiple writes
-                if (this._saveModelTimer) {
-                    clearTimeout(this._saveModelTimer);
-                }
-                this._saveModelTimer = setTimeout(() => {
-                    this.saveMlModel();
-                    this._saveModelTimer = null;
-                }, 500);
-
-                // If awaiting compare refresh, bypass debounce
-                if (this.pendingCompareRefresh) {
-                    this.pendingCompareUpdates--;
-                    if (this.pendingCompareUpdates <= 0) {
-                        // Both updates received — immediately request re-score
-                        this.requestPredictionScores();
-                        this.updateSortPredictionButton();
-                    }
-                    // Don't debounce — we'll handle showMedia() in scoreComplete
-                } else {
-                    // Normal path: debounce re-scoring
-                    if (this._scoreDebounceTimer) {
-                        clearTimeout(this._scoreDebounceTimer);
-                    }
-                    this._scoreDebounceTimer = setTimeout(() => {
-                        this.requestPredictionScores();
-                        this.updateSortPredictionButton();
-                        this._scoreDebounceTimer = null;
-                    }, 100);
-                }
-                break;
-
-            // Handle reversed ML update (undo functionality)
-            case 'reverseUpdateComplete':
-                console.log('[ML Debug] Model reverse update complete');
-                this.mlModelState = message.modelState;
-                this.mlStats = message.stats;
-                // Debounce model saving
-                if (this._saveModelTimer) {
-                    clearTimeout(this._saveModelTimer);
-                }
-                this._saveModelTimer = setTimeout(() => {
-                    this.saveMlModel();
-                    this._saveModelTimer = null;
-                }, 500);
-
-                // If awaiting compare refresh, bypass debounce
-                if (this.pendingCompareRefresh) {
-                    this.pendingCompareUpdates--;
-                    if (this.pendingCompareUpdates <= 0) {
-                        this.requestPredictionScores();
-                        this.updateSortPredictionButton();
-                    }
-                } else {
-                    // Normal path: debounce re-scoring
-                    if (this._scoreDebounceTimer) {
-                        clearTimeout(this._scoreDebounceTimer);
-                    }
-                    this._scoreDebounceTimer = setTimeout(() => {
-                        this.requestPredictionScores();
-                        this.updateSortPredictionButton();
-                        this._scoreDebounceTimer = null;
-                    }, 100);
-                }
                 break;
 
             case 'scoreComplete':
@@ -6903,44 +6894,6 @@ class MediaViewer {
                         }
                     }
                     this.updatePredictionBadges();
-
-                    // Score delta notification (only after rating-triggered re-scores)
-                    if (this.previousScores) {
-                        let upCount = 0;
-                        let downCount = 0;
-                        for (const [filePath, newScore] of this.predictionScores) {
-                            const oldScore = this.previousScores.get(filePath);
-                            if (oldScore !== undefined) {
-                                const delta = newScore - oldScore;
-                                if (delta > 0.05) {
-                                    upCount++;
-                                } else if (delta < -0.05) {
-                                    downCount++;
-                                }
-                            }
-                        }
-                        const total = upCount + downCount;
-                        if (total > 0) {
-                            this.showNotification(
-                                `ML updated: ${total} files rescored (${upCount}↑ ${downCount}↓)`,
-                                'info',
-                                2000
-                            );
-                        } else {
-                            this.showNotification('ML updated: scores stable', 'info', 2000);
-                        }
-                        this.previousScores = null;
-                    }
-
-                    // If deferred compare pair rendering, show next pair now
-                    if (this.pendingCompareRefresh) {
-                        clearTimeout(this.pendingCompareTimeout);
-                        this.pendingCompareRefresh = false;
-                        this.pendingCompareUpdates = 0;
-                        this.pendingCompareTimeout = null;
-                        this.mediaNavigationInProgress = false;
-                        this.showMedia();
-                    }
                 }
                 break;
 
@@ -6978,8 +6931,9 @@ class MediaViewer {
                         total: message.total,
                     });
                 } else if (!this.isComputingHashes) {
-                    // No card (e.g. deferred compare-refresh re-scoring) — keep the counts
-                    // the plain-text form would otherwise lose.
+                    // No card (e.g. requestPredictionScores() firing from handleCancel's undo
+                    // branches, initComplete, or background extraction finishing while no sort is
+                    // active) — keep the counts the plain-text form would otherwise lose.
                     this.updateProgressNotification(
                         hasCounts ? `${message.message} ${message.current}/${message.total}` : message.message
                     );
@@ -7025,65 +6979,88 @@ class MediaViewer {
         return true;
     }
 
-    async loadMlModel() {
-        if (!this.baseFolderPath || !this.isMlEnabled) return;
-
-        try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
-            const data = await window.electronAPI.readFile(cacheFile);
-
-            if (data) {
-                const parsed = JSON.parse(data);
-                this.mlModelState = parsed.modelState;
-
-                if (this.mlWorker) {
-                    this.mlWorker.postMessage({
-                        type: 'init',
-                        data: { savedModel: this.mlModelState },
-                    });
-                }
-                console.log('ML model loaded from cache');
-            }
-        } catch (_error) {
-            console.log('No ML model cache found');
-        }
-    }
-
-    async saveMlModel() {
-        if (!this.baseFolderPath || !this.mlModelState) return;
-
-        try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
-            await window.electronAPI.writeFile(
-                cacheFile,
-                JSON.stringify({
-                    modelState: this.mlModelState,
-                    timestamp: Date.now(),
-                })
-            );
-        } catch (error) {
-            console.error('Failed to save ML model:', error);
-        }
-    }
-
-    async deleteMlModelCache() {
-        if (!this.baseFolderPath) return;
-        try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.ml_model.json');
-            await window.electronAPI.writeFile(cacheFile, '');
-        } catch (_error) {
-            // Ignore — file may not exist
-        }
-    }
-
+    /**
+     * Discard the live model. `{type:'reset'}` zeroes the worker's weights AND both class counts,
+     * so after this call the worker holds an empty model no matter what it was trained on.
+     *
+     * The manager's session tier must be cleared in the same breath. `ensureTrainedModel` resolves
+     * its `session` hit by fingerprint equality alone — it has no way to notice that the worker was
+     * emptied behind its back — and every call site here returns the descriptor to the SAME
+     * fingerprint (a CLIP toggle off-then-on, or re-picking the same like/dislike folder), so a
+     * stale `sessionFingerprint` would be re-matched immediately: `sessionStats` (ready-looking,
+     * e.g. 412👍/380👎) would flow back into `mlStats`, the indicator would claim "Model reused",
+     * the readiness gate would pass, and the zeroed worker would answer the sort with
+     * `scores: null, reason: 'Need more samples (0 likes, 0 dislikes)'` — for the rest of the
+     * session, since the session tier keeps hitting. Clearing it here (the one place that already
+     * owns this state transition) is what keeps the reset self-healing, as it was before the model
+     * cache existed and `mlStats = null` alone re-armed the retrain gate.
+     */
     resetMlModel() {
         this.mlModelState = null;
         this.mlStats = null;
         this.predictionScores = new Map();
+        this.mlTraining.sessionFingerprint = null; // the live worker no longer holds
+        this.mlTraining.sessionStats = null; // what this fingerprint describes
         if (this.mlWorker) {
             this.mlWorker.postMessage({ type: 'reset' });
         }
         this.updateSortPredictionButton();
+    }
+
+    /**
+     * Settings "Rebuild model" click handler. invalidateModelCache() clears both mlTraining's
+     * in-memory sessionFingerprint and the on-disk model-cache store, so a SUCCESSFUL call means
+     * the very next ensureTrainedModel() call cannot hit session or model-cache and must retrain.
+     * resetMlModel() mirrors the CLIP-toggle handler: it also clears predictionScores, so stale
+     * badges from the discarded model don't linger until the next sort recomputes them.
+     *
+     * Task 9 review, Important 2: invalidateModelCache() can fail its disk write (already
+     * logged internally) and still leave the stale entry being served as 'model-cache' on the
+     * next sort — telling the user "it will rebuild" in that case is false precisely when this
+     * last-resort control matters, since a user who was told it worked has no reason to retry.
+     * Branching on the return value here is what keeps the message honest.
+     */
+    async handleRebuildModelClick() {
+        // PR #68 review, finding 1: this control was reachable mid-sort. resetMlModel() below
+        // posts {type:'reset'} to mlWorker, which zeroes the weights AND both class counts --
+        // so clicking during an in-flight sort throws away the model that sort just trained,
+        // and the scoreFiles reply that follows is `scores: null` ("Need more samples (0 likes,
+        // 0 dislikes)"). The sort then finishes having reordered nothing, silently. Refusing is
+        // right rather than queueing: the user's intent is "discard the model", and the sort
+        // they are already waiting on would still be scored by the discarded weights.
+        if (this.isPredictionSorting) {
+            this.showNotification(
+                'An AI sort is still running — cancel it or let it finish before rebuilding the model.',
+                'warning'
+            );
+            return;
+        }
+        const cleared = await this.mlTraining.invalidateModelCache();
+        // Re-checked AFTER the await, not only at entry (review round 2): invalidateModelCache()
+        // is an IPC round trip, and a sort started inside it reaches resetMlModel() below — the
+        // identical worker-zeroing failure the gate above prevents, with the two clicks in the
+        // other order. Skipping the reset is safe as well as necessary: invalidateModelCache()
+        // has already nulled the session fingerprint and cleared the store, so the next
+        // ensureTrainedModel() cannot hit session or model-cache and must retrain regardless —
+        // which is the whole of what this control promises. The in-memory mlModelState and
+        // predictionScores that resetMlModel() would also drop belong to the sort now running.
+        const sortStarted = this.isPredictionSorting;
+        if (!sortStarted) {
+            this.resetMlModel();
+        }
+        if (!cleared) {
+            this.showNotification(
+                'Could not clear the cached prediction model — it may still serve a stale result. Try again.',
+                'warning'
+            );
+        } else if (sortStarted) {
+            this.showNotification(
+                'Prediction model cleared — an AI sort is already running and was left alone; the model retrains on that sort or the next one.',
+                'info'
+            );
+        } else {
+            this.showNotification('Prediction model cleared — it will rebuild on the next AI sort.', 'info');
+        }
     }
 
     // Feature cache version - must match FEATURE_VERSION in feature-extractor.js
@@ -7440,11 +7417,24 @@ class MediaViewer {
      * Compute features for a file with full metadata support (v2)
      * @param {string} filePath - Path to the file
      * @param {Object} fileInfo - Optional file info from mediaFiles array
+     * @param {Object} [options]
+     * @param {boolean} [options.useHostCache=true] Read from and write to `this.featureCache` /
+     *   `this.featureMetadata`. Those maps belong to the SOURCE folder, so a caller extracting a
+     *   file that is not a source-folder file must pass `false` — `MlTrainingManager`'s injected
+     *   callback does, for the like/dislike folders it scans (design doc § 4.1). Two concrete
+     *   costs of not doing so, both traced by the final whole-branch review:
+     *   (1) `_saveFeatureCacheLocked`'s shrink guard reads `this.featureCache.size`, so training
+     *   entries inflate it and its second conjunct can stop firing after a partial or aborted
+     *   load — that is the guard that caught a real 23,559-entry → 32-entry overwrite; and
+     *   (2) the `has()` short-circuit below hands back a PRE-modification vector for a training
+     *   file the manager's own `size`/`mtime` check just rejected as stale, which is then stored
+     *   under the new stat and trained into a model cached under the new fingerprint — a stale
+     *   model reached through ambient state that no descriptor key covers.
      * @returns {Promise<Float32Array>} 64-dimensional feature vector
      */
-    async computeFeatures(filePath, fileInfo = null) {
+    async computeFeatures(filePath, fileInfo = null, { useHostCache = true } = {}) {
         // Check cache first
-        if (this.featureCache.has(filePath)) {
+        if (useHostCache && this.featureCache.has(filePath)) {
             return this.featureCache.get(filePath);
         }
 
@@ -7525,13 +7515,18 @@ class MediaViewer {
 
                     // Feature extraction using extractFeatures from feature-extractor.js (v2 with metadata)
                     const features = extractFeatures(imageData, metadata);
-                    this.featureCache.set(filePath, features);
-                    const computeFileInfo = this.mediaFiles.find((f) => f.path === filePath);
-                    if (computeFileInfo) {
-                        this.featureMetadata.set(filePath, {
-                            size: computeFileInfo.size,
-                            mtime: computeFileInfo.mtimeMs || 0,
-                        });
+                    // Both writes are gated together so featureCache and featureMetadata can never
+                    // disagree about which paths they cover (_saveFeatureCacheLocked's buildEntry
+                    // walks featureCache and looks each path up in featureMetadata).
+                    if (useHostCache) {
+                        this.featureCache.set(filePath, features);
+                        const computeFileInfo = this.mediaFiles.find((f) => f.path === filePath);
+                        if (computeFileInfo) {
+                            this.featureMetadata.set(filePath, {
+                                size: computeFileInfo.size,
+                                mtime: computeFileInfo.mtimeMs || 0,
+                            });
+                        }
                     }
                     cleanup();
                     resolve(features);
@@ -7614,181 +7609,6 @@ class MediaViewer {
                     img.src = filePath;
                 }
             }
-        });
-    }
-
-    async collectBulkRatedTrainingExamples(signal) {
-        const liked = [];
-        const disliked = [];
-        const total = this.bulkRated.size;
-        let processed = 0;
-        for (const [name, bucket] of this.bulkRated) {
-            if (signal?.aborted) break; // cancelled — stop processing ratings
-            // Reported before the `continue` below so the count still advances for entries
-            // whose file has left the folder — otherwise the bar stalls short of 100%.
-            this.updateSortProgress({ phase: 'Processing corrective ratings', current: ++processed, total });
-            const file = this.mediaFiles.find((f) => f.name === name);
-            if (!file) continue;
-            let combined = this.getCombinedFeatures(file.path);
-            if (!combined) {
-                try {
-                    const features = await this.computeFeatures(file.path);
-                    const clipVector = await this.extractClipEmbedding(file.path);
-                    const merged = new Float32Array(576);
-                    merged.set(features, 0);
-                    if (clipVector) merged.set(clipVector, 64);
-                    combined = Array.from(merged);
-                } catch (err) {
-                    console.warn(`Skipping bulk-rated ${name}:`, err.message);
-                    continue;
-                }
-            }
-            (bucket === 'good' ? liked : disliked).push(combined);
-        }
-        return { liked, disliked };
-    }
-
-    async trainFromHistoricalRatings(signal) {
-        if (!this.isMlEnabled || !this.mlWorker) return;
-        if (!this.customLikeFolder || !this.customDislikeFolder) return;
-        if (signal?.aborted) return; // cancelled before training started
-
-        try {
-            // Load files from like folder
-            const likedResult = await window.electronAPI.loadFolder(this.customLikeFolder);
-            const dislikedResult = await window.electronAPI.loadFolder(this.customDislikeFolder);
-
-            if (signal?.aborted) return; // cancelled while loading historical folders
-
-            if (!likedResult.success && !dislikedResult.success) {
-                console.log('No historical ratings found');
-                return;
-            }
-
-            const likedFiles = likedResult.success ? likedResult.files : [];
-            const dislikedFiles = dislikedResult.success ? dislikedResult.files : [];
-
-            if (likedFiles.length === 0 && dislikedFiles.length === 0) {
-                console.log('No historical ratings to train from');
-                return;
-            }
-
-            // Report through the sort card (not updateProgressNotification, which rebuilds the
-            // shared element into its plain-text form and destroys the Cancel button for what
-            // is the longest phase of the sort). No counts => the card's indeterminate mode.
-            this.updateSortProgress({ phase: 'Loading historical ratings…' });
-
-            const likedFeatures = [];
-            const dislikedFeatures = [];
-
-            // Extract features from liked files
-            for (let i = 0; i < likedFiles.length; i++) {
-                if (signal?.aborted) break; // cancelled — stop processing ratings
-                const file = likedFiles[i];
-                try {
-                    const features = await this.computeFeatures(file.path);
-                    const clipVector = await this.extractClipEmbedding(file.path);
-                    const combined = new Float32Array(576);
-                    combined.set(features, 0);
-                    if (clipVector) combined.set(clipVector, 64);
-                    likedFeatures.push(Array.from(combined));
-
-                    // Every file, not every 10th: per-file CLIP + ffprobe means a small
-                    // like folder could finish with the bar never having moved at all.
-                    this.updateSortProgress({
-                        phase: 'Processing likes',
-                        current: i + 1,
-                        total: likedFiles.length,
-                    });
-                } catch (err) {
-                    console.warn(`Skipping ${file.name}:`, err.message);
-                }
-            }
-
-            // Extract features from disliked files
-            for (let i = 0; i < dislikedFiles.length; i++) {
-                if (signal?.aborted) break; // cancelled — stop processing ratings
-                const file = dislikedFiles[i];
-                try {
-                    const features = await this.computeFeatures(file.path);
-                    const clipVector = await this.extractClipEmbedding(file.path);
-                    const combined = new Float32Array(576);
-                    combined.set(features, 0);
-                    if (clipVector) combined.set(clipVector, 64);
-                    dislikedFeatures.push(Array.from(combined));
-
-                    this.updateSortProgress({
-                        phase: 'Processing dislikes',
-                        current: i + 1,
-                        total: dislikedFiles.length,
-                    });
-                } catch (err) {
-                    console.warn(`Skipping ${file.name}:`, err.message);
-                }
-            }
-
-            if (signal?.aborted) {
-                // Cancelled mid-loop — do not send a partial-training message to the ML worker
-                // (it would train a misleadingly incomplete model on whatever was collected so
-                // far). Teardown of the progress UI is the caller's, not ours: see the
-                // ownership note at the end of this method.
-                return;
-            }
-
-            // Re-apply corrective bulk ratings (these files stay in the source folder and are
-            // never in the like/dislike folders, so a from-scratch rebuild can't recover them).
-            const bulkExamples = await this.collectBulkRatedTrainingExamples(signal);
-            likedFeatures.push(...bulkExamples.liked);
-            dislikedFeatures.push(...bulkExamples.disliked);
-
-            if (signal?.aborted) {
-                return;
-            }
-
-            // Send to ML worker for training
-            if (likedFeatures.length > 0 || dislikedFeatures.length > 0) {
-                this.mlWorker.postMessage({
-                    type: 'trainHistorical',
-                    data: { likedFeatures, dislikedFeatures },
-                });
-            }
-
-            // Progress-UI ownership: this method never tears the card down, on any path.
-            // handleSortByPrediction's finally is the single owner, and every exit from here
-            // — success, cancel, throw — unwinds through it. Clearing here as well was
-            // redundant, and doing it on only some paths made the asymmetry look meaningful.
-        } catch (error) {
-            console.error('Error training from historical:', error);
-        }
-    }
-
-    /**
-     * Train from historical ratings and wait for completion
-     * Returns a promise that resolves when training is complete
-     */
-    async trainFromHistoricalRatingsAndWait(signal) {
-        return new Promise(async (resolve) => {
-            // Store resolve callback to be called when trainReady is received
-            this._trainingCompleteCallback = resolve;
-
-            await this.trainFromHistoricalRatings(signal);
-
-            // If no training happened (no files) or the caller cancelled mid-flight, resolve
-            // immediately. A cancelled bail means no trainHistorical message was sent, so there
-            // is no trainComplete reply coming — without this the caller would otherwise wait
-            // out the full 30s fallback below even though the expensive work already stopped.
-            if (!this.customLikeFolder || !this.customDislikeFolder || signal?.aborted) {
-                this._trainingCompleteCallback = null;
-                resolve();
-            }
-
-            // Set a timeout in case training never responds
-            setTimeout(() => {
-                if (this._trainingCompleteCallback) {
-                    this._trainingCompleteCallback = null;
-                    resolve();
-                }
-            }, 30000); // 30 second timeout
         });
     }
 
@@ -7887,6 +7707,71 @@ class MediaViewer {
         this._mlSortResolve = null;
         this._mlSortReject = null;
         if (pendingReject) pendingReject(new Error(reason));
+    }
+
+    /**
+     * Post a trainHistorical job and resolve on trainComplete. Replaces
+     * trainFromHistoricalRatingsAndWait's callback+30s-timeout pairing; the manager owns the
+     * decision to train at all, this owns only the round trip.
+     *
+     * Rejects — never resolves with a fabricated payload — when the worker doesn't reply in
+     * time. ensureTrainedModel would otherwise record a crashed/hung worker's stale
+     * this.mlStats/this.mlModelState as "trained on the current set" and cache it under the NEW
+     * fingerprint: exactly the silently-wrong-model class this whole feature exists to prevent
+     * (review round 1, Important 2). _safeLoadModelState/trainModel's caller already treat a
+     * rejection as "rebuild" / an honest failure, so rejecting is a drop-in.
+     *
+     * The pending callback is matched by REFERENCE (`this._trainingCompleteCallback === cb`),
+     * not truthiness. Ensuring this runs on EVERY sort (not just the first, per the CLIP-await
+     * hoist) makes overlapping runs reachable: without the identity check, run A's stale 30s
+     * timer — armed before A's own trainComplete arrived — would see run B's callback as merely
+     * "truthy", null it, and resolve A's ALREADY-SETTLED promise a second time. B's genuine
+     * trainComplete then finds the field null and settles nothing, and B's own timer's `if` is
+     * now false too, so B's promise never settles — wedging isPredictionSorting permanently
+     * (review round 1, Important 1). Clearing the timer inside `cb` means a reply that arrives
+     * before the timeout leaves nothing dangling.
+     */
+    _runWorkerTraining(likedFeatures, dislikedFeatures, seed) {
+        return new Promise((resolve, reject) => {
+            const cb = (payload) => {
+                clearTimeout(timer);
+                resolve(payload);
+            };
+            this._trainingCompleteCallback = cb;
+            this.mlWorker.postMessage({
+                type: 'trainHistorical',
+                data: { likedFeatures, dislikedFeatures, seed },
+            });
+            const timer = setTimeout(() => {
+                if (this._trainingCompleteCallback === cb) {
+                    this._trainingCompleteCallback = null;
+                    reject(new Error('_runWorkerTraining: ML worker did not respond to trainHistorical within 30s'));
+                }
+            }, 30000);
+        });
+    }
+
+    /**
+     * Post an init with a cached model and resolve on initComplete. Same reject-on-timeout and
+     * reference-identity treatment as _runWorkerTraining, and for the same reasons — a hung
+     * worker must surface as a rebuild via _safeLoadModelState's catch, never as a fabricated
+     * "the cached model loaded fine" result.
+     */
+    _runWorkerInit(modelState) {
+        return new Promise((resolve, reject) => {
+            const cb = (payload) => {
+                clearTimeout(timer);
+                resolve(payload);
+            };
+            this._initCompleteCallback = cb;
+            this.mlWorker.postMessage({ type: 'init', data: { savedModel: modelState } });
+            const timer = setTimeout(() => {
+                if (this._initCompleteCallback === cb) {
+                    this._initCompleteCallback = null;
+                    reject(new Error('_runWorkerInit: ML worker did not respond to init within 10s'));
+                }
+            }, 10000);
+        });
     }
 
     async requestPredictionScores() {
@@ -8078,29 +7963,47 @@ class MediaViewer {
         this.updateSortProgress({ phase: 'Preparing…' }); // card visible before any await
 
         try {
-            // Lazy ML init on first use.
+            // Lazy ML init on first use. Awaiting both handshakes (rather than guessing at a
+            // fixed delay) closes a real correctness gap, not just a timing one: the descriptor
+            // ensureTrainedModel builds below depends on _mlWorkerVersions/
+            // _featureExtractorVersion, which these two calls' replies populate — see
+            // ml-training.js's `versionsKnown` gate for the belt-and-suspenders half of this fix,
+            // which still applies even if a worker replies unusually slowly.
             if (!this.mlWorker || this.featureWorkers.length === 0) {
-                this.initializeMlWorker();
-                this.initializeFeaturePool();
-                await new Promise((resolve) => setTimeout(resolve, 100));
-                await this.loadMlModel();
-                // AWAIT the model load. Fired un-awaited, extractClipEmbedding returns null
-                // for every file processed before clipWorkerReady flips, so the historical
-                // training loop below trained on 576-dim vectors whose CLIP half was all
-                // zeros — silently, since a null embedding is a supported degraded mode.
-                if (this.enableClipFeatures) {
-                    this.updateSortProgress({ phase: 'Loading CLIP model…' });
-                    this.clipProgressSink = (percent) =>
-                        this.updateSortProgress({
-                            phase: 'Downloading CLIP model…',
-                            current: percent,
-                            total: 100,
-                        });
-                    try {
-                        await this.initClipModel();
-                    } finally {
-                        this.clipProgressSink = null;
-                    }
+                await Promise.all([this.initializeMlWorker(), this.initializeFeaturePool()]);
+            }
+            // initializeMlWorker()'s own catch sets isMlEnabled=false and leaves mlWorker null
+            // when Worker construction throws — the top-of-method guard already passed (ML was
+            // enabled when this call STARTED), so this is the only place that catches "became
+            // unavailable during lazy-init." Without this, ensureTrainedModel below would scan
+            // and feature-extract BOTH training folders in full before _runWorkerTraining threw
+            // on a null this.mlWorker.postMessage (review round 1, Minor).
+            if (!this.isMlEnabled || !this.mlWorker) {
+                this.showNotification('ML prediction is unavailable', 'warning');
+                return;
+            }
+            // AWAIT the model load. Fired un-awaited, extractClipEmbedding returns null for
+            // every file processed before clipWorkerReady flips, so the training set collected
+            // below (now via ensureTrainedModel) would silently train on 576-dim vectors whose
+            // CLIP half was all zeros. This now runs on EVERY sort, not just the first lazy-init:
+            // clipUnloadTimer nulls the CLIP model after 30s idle, so a second sort in the same
+            // session could otherwise find clipWorkerReady false again — and since
+            // ensureTrainedModel now runs unconditionally, that would silently degrade (and
+            // refuse to cache) an otherwise healthy session's model on every sort after the
+            // first. initClipModel() is documented lazy and concurrent-safe, so re-awaiting an
+            // already-loaded model here is cheap.
+            if (this.enableClipFeatures) {
+                this.updateSortProgress({ phase: 'Loading CLIP model…' });
+                this.clipProgressSink = (percent) =>
+                    this.updateSortProgress({
+                        phase: 'Downloading CLIP model…',
+                        current: percent,
+                        total: 100,
+                    });
+                try {
+                    await this.initClipModel();
+                } finally {
+                    this.clipProgressSink = null;
                 }
             }
             // Cancel stays clickable throughout the load above; it cannot interrupt the
@@ -8120,11 +8023,14 @@ class MediaViewer {
             }
             if (signal.aborted) throw new Error('cancelled');
 
-            // Train from historical ratings if needed.
-            if (!this.mlStats?.isReady) {
-                this.updateSortProgress({ phase: 'Training model…' });
-                await this.trainFromHistoricalRatingsAndWait(signal);
-                this.updateSortPredictionButton();
+            // Ensure the worker holds a model trained on the CURRENT training set. The manager
+            // decides whether that costs nothing (same session), a small read (model cache) or a
+            // rebuild from cached vectors — the gate is the training set, not the source folder.
+            const training = await this.mlTraining.ensureTrainedModel({ signal });
+            if (training.stats) this.mlStats = training.stats;
+            this.updateSortPredictionButton();
+            if (training.source !== 'skipped' && this.mlStats?.isReady) {
+                this.showMlLearningIndicator(this.mlStats, training.source);
             }
             if (signal.aborted) throw new Error('cancelled');
             if (!this.mlStats?.isReady) {
@@ -8185,142 +8091,23 @@ class MediaViewer {
         }
     }
 
-    async updateMlModelAfterRating(filePath, actionType) {
-        if (!this.isMlEnabled || !this.mlWorker) return;
-
-        let features = this.featureCache.get(filePath);
-        if (!features) {
-            try {
-                features = await this.computeFeatures(filePath);
-            } catch (err) {
-                console.warn('Could not extract features for ML update:', err);
-                return;
-            }
-        }
-
-        const combined = this.getCombinedFeatures(filePath);
-        if (!combined) return;
-
-        this.mlWorker.postMessage({
-            type: 'update',
-            data: {
-                features: combined,
-                label: actionType === 'like' ? 1 : 0,
-            },
-        });
-    }
-
-    /**
-     * Update ML model with pre-extracted features (used when file will be moved).
-     * Returns true only when a message was actually posted to the worker — callers that await a
-     * matching updateComplete must count real posts, not assume one per file.
-     */
-    updateMlModelWithFeatures(features, actionType) {
-        if (!this.isMlEnabled || !this.mlWorker) {
-            console.log('[ML Debug] Update skipped: ML disabled or worker not ready');
-            return false;
-        }
-        if (!features) {
-            console.warn('[ML Debug] Update skipped: No features provided!');
-            return false;
-        }
-
-        const label = actionType === 'like' ? 1 : 0;
-        console.log(
-            `[ML Debug] Sending model update: ${actionType} (label=${label}), features length=${features.length}`
-        );
-
-        this.mlWorker.postMessage({
-            type: 'update',
-            data: {
-                features: Array.from(features),
-                label: label,
-            },
-        });
-        return true;
-    }
-
-    // Hold the compare re-render until the ML worker finishes re-scoring, then let scoreComplete
-    // render from fresh scores (mirrors moveComparePair). The pairing is derived from
-    // predictionScores, so rendering now would re-pair from pre-update scores and the pairs would
-    // never re-mix. `expectedUpdates` MUST be the number of worker messages actually posted, or the
-    // counter never reaches 0 and the view waits out the fallback.
-    _beginDeferredCompareRefresh(expectedUpdates) {
-        if (this.pendingCompareTimeout) {
-            clearTimeout(this.pendingCompareTimeout);
-            this.pendingCompareTimeout = null;
-        }
-        this.pendingCompareRefresh = true;
-        this.pendingCompareUpdates = expectedUpdates;
-        // Block spurious showMedia() calls while we wait; scoreComplete clears it.
-        this.mediaNavigationInProgress = true;
-        this.pendingCompareTimeout = setTimeout(() => {
-            if (this.pendingCompareRefresh) {
-                console.warn('[ML Debug] Compare re-score timeout — showing pair with stale scores');
-                this.pendingCompareRefresh = false;
-                this.pendingCompareUpdates = 0;
-                this.pendingCompareTimeout = null;
-                this.previousScores = null;
-                this.mediaNavigationInProgress = false;
-                this.showMedia();
-            }
-        }, 3000);
-    }
-
-    // Drop an open deferred compare refresh (armed by applyBulkRating, handleCancel's bulk-undo
-    // branch and moveComparePair). Releases mediaNavigationInProgress ONLY when a window was
-    // actually open — that flag is also held by ordinary in-flight navigation, which this must
-    // not clobber.
-    _cancelDeferredCompareRefresh() {
-        const wasPending = this.pendingCompareRefresh;
-        if (this.pendingCompareTimeout) {
-            clearTimeout(this.pendingCompareTimeout);
-            this.pendingCompareTimeout = null;
-        }
-        this.pendingCompareRefresh = false;
-        this.pendingCompareUpdates = 0;
-        this.previousScores = null;
-        if (wasPending) this.mediaNavigationInProgress = false;
-    }
-
-    // Ordering matters here — see undoBulkRating's header comment for the invariant this
-    // enforces. Feature extraction and the bulkRated bucket are settled BEFORE the
-    // `await saveBulkRatedFile()`; the worker posts happen only after it resolves, with nothing
-    // but synchronous code between posting and this method's caller arming the deferred-refresh
-    // window. Do NOT hoist the posts (or the arm) any earlier: an updateComplete landing before
-    // `bulkRatedPairs`/`moveHistory` are updated below would let scoreComplete re-render the pair
-    // that was just rated.
     async applyBulkRating(bucket) {
-        // Drop a re-entrant press while a prior rating's deferred refresh is still pending (up to
-        // 3s): otherwise a fast double D/F or a double-click re-rates the SAME on-screen pair before
-        // it changes — duplicate ML posts plus two moveHistory entries for one user action.
+        // Drop a re-entrant press while the previous rating's render is still in flight
+        // (mediaNavigationInProgress, set by showMedia() and cleared once it settles): otherwise
+        // a fast double D/F or a double-click re-rates the SAME on-screen pair before it
+        // changes — duplicate bulkRated writes plus two moveHistory entries for one user action.
         if (!this.isSortedByPrediction || !this.isCompareMode || this.mediaNavigationInProgress) return;
         const left = this.compareLeftFile;
         const right = this.compareRightFile;
         if (!left || !right) return;
 
-        const actionType = bucket === 'good' ? 'like' : 'dislike';
-
-        // Feature extraction (a synchronous cache lookup) and the bulkRated bucket are settled
-        // BEFORE the disk write below — the worker posts are deferred until after it resolves.
         const bulkFiles = [];
         for (const f of [left, right]) {
-            const features = this.getCombinedFeatures(f.path);
-            bulkFiles.push({ name: f.name, features });
+            bulkFiles.push({ name: f.name });
             this.bulkRated.set(f.name, bucket);
         }
 
         await this.saveBulkRatedFile();
-
-        // Post the model updates now — synchronously from here through the arm call at the bottom
-        // of this method, so a worker reply can never arrive before the pair key / moveHistory
-        // entry it implicitly depends on exist.
-        let postedUpdates = 0;
-        for (const f of bulkFiles) {
-            if (f.features && this.updateMlModelWithFeatures(f.features, actionType)) {
-                postedUpdates++;
-            }
-        }
 
         // Suppress re-showing this exact combo (spec G3 D1). Session-only.
         this.bulkRatedPairs.add(this.bulkPairKey(left.name, right.name));
@@ -8343,22 +8130,9 @@ class MediaViewer {
             Math.max(0, this.computeValidComparePairs().length - 1)
         );
 
-        this.showNotification(
-            bucket === 'good'
-                ? '👍 Both files marked good (model updated)'
-                : '👎 Both files marked bad (model updated)',
-            'success'
-        );
+        this.showNotification(bucket === 'good' ? '👍 Both files marked good' : '👎 Both files marked bad', 'success');
 
-        // Defer the re-render until the model re-scores — otherwise the next pair is derived from
-        // PRE-rating scores and the extremes never re-mix (the rated pair just drops out and its
-        // neighbour slides in). scoreComplete calls showMedia() with fresh scores.
-        if (postedUpdates > 0) {
-            this._beginDeferredCompareRefresh(postedUpdates);
-        } else {
-            // No worker message was posted, so no scoreComplete is coming — render now.
-            this.showMedia();
-        }
+        this.showMedia();
     }
 
     async handleBothGood() {
@@ -8367,27 +8141,6 @@ class MediaViewer {
 
     async handleBothBad() {
         await this.applyBulkRating('bad');
-    }
-
-    /**
-     * Reverse a previous ML model update (for undo functionality)
-     * @param {Float32Array|number[]} features - Feature vector of the sample
-     * @param {string} actionType - Original action ('like' or 'dislike')
-     * @returns {boolean} true only when a message was actually posted to the worker — callers that
-     *   count expected reverseUpdateComplete replies (e.g. the deferred-refresh protocol) must count
-     *   real posts, not assume one per file.
-     */
-    reverseMlModelUpdate(features, actionType) {
-        if (!this.isMlEnabled || !this.mlWorker || !features) return false;
-
-        this.mlWorker.postMessage({
-            type: 'reverseUpdate',
-            data: {
-                features: Array.from(features),
-                label: actionType === 'like' ? 1 : 0,
-            },
-        });
-        return true;
     }
 
     /**
@@ -8490,32 +8243,127 @@ class MediaViewer {
     // ==================== FEATURE EXTRACTION WORKER POOL ====================
 
     /**
-     * Initialize the feature extraction worker pool
+     * Initialize the feature extraction worker pool.
+     *
+     * Returns a promise that settles once the version probe's reply lands, the probe worker
+     * errors, or a timeout elapses (or immediately if there is no probe to answer, or
+     * construction failed) — see initializeMlWorker's doc comment for why a caller needs this:
+     * `_featureExtractorVersion` feeds ensureTrainedModel's fingerprint, and this is the only
+     * place that ever sets it.
+     *
+     * Task 9 review round 2 (the Important finding in that round): the FIRST version of this fix
+     * only resolved on a real reply or an immediate setup failure. If the probe worker
+     * (featureWorkers[0]) raised a runtime `error` before answering `getVersion` — a script
+     * fetch/parse failure, a top-level throw in feature-worker.js/feature-extractor.js — nothing
+     * ever settled this promise: handleFeatureWorkerError respawns a NEW worker object but never
+     * re-arms the version probe, and the probe's own message listener stays bound to the now-
+     * terminated one. That hung handleSortByPrediction's `await Promise.all([...])` forever,
+     * wedging isPredictionSorting so every LATER AI-sort press became a silent no-op — strictly
+     * worse than the pre-fix 100ms guess, which at least let the sort proceed in the degraded
+     * (uncached) mode this class already supports elsewhere. Fixed by settling on the probe's
+     * OWN error too (see _probeFeatureVersion) and by an overall timeout below (covers a worker
+     * that hangs without ever raising `error`), while still making one best-effort attempt to
+     * re-probe the respawned worker so a LATER sort in the same session can still pick up a real
+     * version instead of being stuck at the degraded default (uncached, every sort retrains —
+     * see ml-training.js's `versionsKnown` gate) for the rest of the session.
      */
     initializeFeaturePool() {
         console.log('[ML Debug] initializeFeaturePool called');
         // Terminate any existing workers
         this.shutdownFeaturePool();
 
-        try {
-            for (let i = 0; i < this.featureWorkerCount; i++) {
-                const worker = new Worker('feature-worker.js');
-                worker.busy = false;
-                worker.index = i;
+        return new Promise((resolve) => {
+            let settled = false;
+            const settle = () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                resolve();
+            };
+            // Backstop for a probe that neither replies NOR raises `error` (e.g. it hangs before
+            // its own message handler is ready). 5s is generous for a trivial, no-computation
+            // reply — this never gates the happy path, which settles on the real reply whenever
+            // it arrives, however long that legitimately takes.
+            const timeoutId = setTimeout(settle, 5000);
 
-                worker.onmessage = (e) => this.handleFeatureWorkerMessage(i, e.data);
-                worker.onerror = (err) => this.handleFeatureWorkerError(i, err);
+            try {
+                for (let i = 0; i < this.featureWorkerCount; i++) {
+                    const worker = new Worker('feature-worker.js');
+                    worker.busy = false;
+                    worker.index = i;
 
-                this.featureWorkers.push(worker);
+                    worker.onmessage = (e) => this.handleFeatureWorkerMessage(i, e.data);
+                    worker.onerror = (err) => this.handleFeatureWorkerError(i, err);
+
+                    this.featureWorkers.push(worker);
+                }
+
+                // One-shot version probe: feature-worker.js answers `getVersion` with the
+                // FEATURE_VERSION that feature-extractor.js actually compiled with, so the training
+                // fingerprint never re-declares it. (The FEATURE_CACHE_VERSION comment claiming the two
+                // constants must match is false — they are 4 and 2 — which is why both are fingerprinted.)
+                const probe = this.featureWorkers[0];
+                if (probe) {
+                    this._probeFeatureVersion(probe, settle, false);
+                } else {
+                    settle(); // featureWorkerCount is 0 — nothing will ever reply
+                }
+
+                console.log(`[ML Debug] Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
+
+                // Start auto-save interval (every 30 seconds)
+                this.startFeatureCacheAutoSave();
+            } catch (err) {
+                console.warn('[ML Debug] Failed to initialize feature workers:', err);
+                settle(); // construction failed — nothing will ever reply
             }
+        });
+    }
 
-            console.log(`[ML Debug] Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
+    /**
+     * One probe attempt for FEATURE_VERSION against `worker` (normally featureWorkers[0], or its
+     * respawn). `settle` always runs when `worker` raises `error` — a crashed probe must never
+     * hang initializeFeaturePool's promise. `isRetry` bounds the recovery attempt to exactly one
+     * extra try against a respawned worker, not unbounded recursion tailing
+     * handleFeatureWorkerError's own (separately owned, intentionally untouched) respawn loop: if
+     * the retry ALSO errors, `settle` has already run and the overall timeout in
+     * initializeFeaturePool is the only remaining backstop. Does not modify
+     * handleFeatureWorkerError itself — only observes its result (the `this.featureWorkers[0]`
+     * it leaves behind) and, once, re-arms the probe against whatever that is.
+     */
+    _probeFeatureVersion(worker, settle, isRetry) {
+        const onVersion = (e) => {
+            if (e.data?.type === 'version') {
+                this._featureExtractorVersion = e.data.version || 0;
+                worker.removeEventListener('message', onVersion);
+                settle();
+            }
+        };
+        worker.addEventListener('message', onVersion);
+        worker.postMessage({ type: 'getVersion', data: {} });
 
-            // Start auto-save interval (every 30 seconds)
-            this.startFeatureCacheAutoSave();
-        } catch (err) {
-            console.warn('[ML Debug] Failed to initialize feature workers:', err);
-        }
+        const outerOnError = worker.onerror;
+        worker.onerror = (err) => {
+            outerOnError?.(err); // preserve the normal respawn (handleFeatureWorkerError)
+            worker.removeEventListener('message', onVersion);
+            settle(); // idempotent — never hang the caller on a crashed probe
+            if (!isRetry) {
+                // Best-effort recovery for the common case (a one-off crash that respawns
+                // cleanly): give the respawned worker ONE chance to answer, purely so a LATER
+                // sort in this same session can capture a real _featureExtractorVersion instead
+                // of being stuck at the degraded default. Does not affect this call's own
+                // settlement, already triggered above.
+                const respawned = this.featureWorkers[0];
+                if (respawned && respawned !== worker) this._probeFeatureVersion(respawned, settle, true);
+            }
+            // Deliberately not restored to `outerOnError` afterward: on any FUTURE crash of this
+            // exact worker object (rare — only reachable if this retry's own target survives and
+            // later errors again), this same handler runs again, but every step in it is already
+            // idempotent (settle(), a redundant removeEventListener, `isRetry` gating out a
+            // further retry) except outerOnError itself, which is exactly the respawn every OTHER
+            // worker's crash already gets. Benign, not a correctness issue — simpler than
+            // rewinding onerror mid-dispatch to save a handful of no-op calls in a rare path.
+        };
     }
 
     // ==================== CLIP FEATURES (Main Process IPC) ====================
@@ -8523,6 +8371,15 @@ class MediaViewer {
     async initClipModel() {
         if (!this.enableClipFeatures) return;
         if (!window.electronAPI.loadClipModel) return;
+
+        // G1 task 6 review round 1 (Minor): this now runs before EVERY sort, not just the
+        // first (the CLIP-await hoist), and loadClipModel() resolves {success:true} immediately
+        // when the model is already loaded. Without this flag, a healthy multi-sort session
+        // would show "CLIP model loaded" on every single sort — and the sort-progress card is
+        // itself a `.notification` the 5-deep eviction cap can reclaim, so each redundant toast
+        // nudges the card closer to being evicted mid-sort. The failure/unavailable toasts below
+        // are left unconditional: those represent a NEW problem each time, not "still fine."
+        const alreadyReady = this.clipWorkerReady;
 
         // Listen for download progress (returns cleanup function)
         let removeProgressListener;
@@ -8543,7 +8400,9 @@ class MediaViewer {
             this.clipModelDownloading = false;
             if (result.success) {
                 this.clipWorkerReady = true;
-                this.showNotification('CLIP model loaded', 'success');
+                if (!alreadyReady) {
+                    this.showNotification('CLIP model loaded', 'success');
+                }
             } else {
                 this.clipWorkerReady = false;
                 console.error('CLIP model failed to load:', result.error);

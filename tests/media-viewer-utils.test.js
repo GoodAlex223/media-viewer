@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
+import { MlTrainingManager } from '../ml-training.js';
 const require = createRequire(import.meta.url);
 
 // MediaViewer methods are instance methods on an ES module class.
@@ -1092,7 +1093,8 @@ describe('sortComplete stale-guard + runMlSort resolution', () => {
     });
 
     it('keeps the plain-text notification, with counts, when no sort owns the element', () => {
-        // e.g. the deferred compare-refresh re-scoring, which has no card and no Cancel.
+        // e.g. requestPredictionScores() firing outside an active sort (handleCancel's undo
+        // branches, initComplete, background extraction) — no card, no Cancel.
         const ctx = {
             isPredictionSorting: false,
             updateSortProgress: vi.fn(),
@@ -1143,6 +1145,94 @@ describe('sortComplete stale-guard + runMlSort resolution', () => {
         handleMlWorkerMessage.call(ctx, { type: 'progress', message: 'Training complete' });
 
         expect(ctx.updateProgressNotification).toHaveBeenCalledWith('Training complete');
+    });
+});
+
+describe('initComplete / trainComplete — version capture + worker-promise callbacks (G1)', () => {
+    const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+
+    // `featureDim` was captured here and read by nothing (final whole-branch review, minor); it
+    // is dropped. The `toEqual` (not `toMatchObject`) is what keeps that true: a re-added but
+    // unused field fails this test rather than accumulating silently. The worker still SENDS it,
+    // and OnlineLogisticRegression.isCompatible still enforces it on load.
+    it('captures mlModelVersion/trainingConfigVersion from initComplete and nothing else', () => {
+        const ctx = { mediaFiles: [], updateSortPredictionButton: () => {} };
+        handleMlWorkerMessage.call(ctx, {
+            type: 'initComplete',
+            stats: { isReady: false },
+            modelVersion: 3,
+            featureDim: 576,
+            trainingConfigVersion: 1,
+        });
+        expect(ctx._mlWorkerVersions).toEqual({ mlModelVersion: 3, trainingConfigVersion: 1 });
+    });
+
+    it('defaults each captured version to 0 when the worker omits it', () => {
+        const ctx = { mediaFiles: [], updateSortPredictionButton: () => {} };
+        handleMlWorkerMessage.call(ctx, { type: 'initComplete', stats: { isReady: false } });
+        expect(ctx._mlWorkerVersions).toEqual({ mlModelVersion: 0, trainingConfigVersion: 0 });
+    });
+
+    // Decision D6 made showMlLearningIndicator the once-per-sort training report; the
+    // trainComplete toast said the same two numbers moments earlier. It is removed — and the
+    // removal matters beyond redundancy, because showNotification evicts the oldest element once
+    // five stack and the sort progress card is itself a notification element.
+    it('does not raise a training toast on trainComplete', () => {
+        const showNotification = vi.fn();
+        const ctx = {
+            mediaFiles: [],
+            showNotification,
+            requestPredictionScores: vi.fn(),
+            updateSortPredictionButton: () => {},
+        };
+        handleMlWorkerMessage.call(ctx, {
+            type: 'trainComplete',
+            modelState: { weights: [1] },
+            stats: { isReady: true, positiveCount: 412, negativeCount: 380, totalSamples: 792 },
+        });
+        expect(showNotification).not.toHaveBeenCalled();
+        expect(ctx.mlStats).toMatchObject({ positiveCount: 412 }); // sentinel: the case DID run
+    });
+
+    // `modelWasReset` joined the payload in the final whole-branch review (Important 2): a worker
+    // that could not restore the saved model still replies here with valid-shaped all-zero stats,
+    // so it is the only thing distinguishing a real load from a silently fabricated empty model.
+    it('settles a pending _runWorkerInit callback with {stats, modelWasReset} and clears it', () => {
+        let resolved = null;
+        const ctx = {
+            mediaFiles: [],
+            updateSortPredictionButton: () => {},
+            _initCompleteCallback: (payload) => (resolved = payload),
+        };
+        handleMlWorkerMessage.call(ctx, { type: 'initComplete', stats: { isReady: true, positiveCount: 3 } });
+        expect(resolved).toEqual({ stats: { isReady: true, positiveCount: 3 }, modelWasReset: false });
+        expect(ctx._initCompleteCallback).toBeNull();
+    });
+
+    it('does not throw when no _initCompleteCallback is pending', () => {
+        const ctx = { mediaFiles: [], updateSortPredictionButton: () => {} };
+        expect(() =>
+            handleMlWorkerMessage.call(ctx, { type: 'initComplete', stats: { isReady: false } })
+        ).not.toThrow();
+    });
+
+    it('settles a pending _runWorkerTraining callback with {stats, modelState} and clears it', () => {
+        let resolved = null;
+        const ctx = {
+            requestPredictionScores: () => {},
+            _trainingCompleteCallback: (payload) => (resolved = payload),
+        };
+        const stats = { isReady: true, totalSamples: 0, positiveCount: 0, negativeCount: 0 };
+        const modelState = { weights: [1] };
+        handleMlWorkerMessage.call(ctx, { type: 'trainComplete', stats, modelState });
+        expect(resolved).toEqual({ stats, modelState });
+        expect(ctx._trainingCompleteCallback).toBeNull();
+    });
+
+    it('does not throw when no _trainingCompleteCallback is pending', () => {
+        const ctx = { requestPredictionScores: () => {} };
+        const stats = { isReady: false, totalSamples: 0 };
+        expect(() => handleMlWorkerMessage.call(ctx, { type: 'trainComplete', stats, modelState: {} })).not.toThrow();
     });
 });
 
@@ -1252,8 +1342,11 @@ describe('handleSortByPrediction lifecycle', () => {
             startBackgroundFeatureExtraction: () => Promise.resolve(),
             cancelBackgroundExtraction: () => {},
             getCombinedFeatures: (_p) => new Float32Array(576),
-            trainFromHistoricalRatingsAndWait: () => Promise.resolve(),
-            loadMlModel: () => Promise.resolve(),
+            mlTraining: {
+                ensureTrainedModel: () =>
+                    Promise.resolve({ source: 'trained', stats: { isReady: true }, fingerprint: 'fp', descriptor: {} }),
+            },
+            showMlLearningIndicator: () => {},
             initializeMlWorker: () => {},
             initializeFeaturePool: () => {},
             initClipModel: () => {},
@@ -1278,6 +1371,10 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['b.png', 'a.png']);
         expect(ctx.sortAbortController).toBeNull(); // finally cleaned up
         expect(ctx.isPredictionSorting).toBe(false);
+        // ensureTrainedModel itself never tears the card down (it has no clearProgressNotification
+        // dependency at all) — handleSortByPrediction's finally is the single owner, on the
+        // success path too, not just on cancel.
+        expect(ctx.clearProgressNotification).toHaveBeenCalled();
     });
 
     it('bails unsorted when aborted during the load phase', async () => {
@@ -1316,10 +1413,14 @@ describe('handleSortByPrediction lifecycle', () => {
             // training-phase guard.
             featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
             loadFeatureCache: () => Promise.resolve(), // resolves without populating the cache
-            trainFromHistoricalRatingsAndWait: function () {
-                this.sortAbortController.abort(); // user cancels mid-training
-                this.mlStats = { isReady: true }; // training would have made the model ready
-                return Promise.resolve();
+            mlTraining: {
+                ensureTrainedModel: () => {
+                    ctx.sortAbortController.abort(); // user cancels mid-training
+                    // Mirrors ensureTrainedModel's own real behavior: every abort check inside
+                    // it returns the {source:'skipped', stats:null} miss shape, never a trained
+                    // result — an aborted call cannot also report a usable model.
+                    return Promise.resolve({ source: 'skipped', stats: null, fingerprint: null, descriptor: null });
+                },
             },
             startBackgroundFeatureExtraction,
             runMlSort,
@@ -1330,7 +1431,7 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(ctx.sortAbortController).toBeNull();
         expect(ctx.isPredictionSorting).toBe(false);
-        // trainFromHistoricalRatings deliberately clears nothing on any path; this finally is
+        // ensureTrainedModel deliberately clears nothing on any path; this finally is
         // the single owner of card teardown, so the cancel path must be covered HERE or a
         // cancelled sort leaves its card on screen forever.
         expect(ctx.clearProgressNotification).toHaveBeenCalled();
@@ -1405,10 +1506,10 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx._phases.length).toBe(0); // returned immediately
     });
 
-    it('waits for the CLIP model before training on historical ratings', async () => {
-        // The un-awaited initClipModel() left clipWorkerReady false for the head of the
-        // training loop, where extractClipEmbedding returns null — so those files trained the
-        // model on 576-dim vectors whose CLIP half (dims 64..576) was all zeros, silently.
+    it('waits for the CLIP model before calling ensureTrainedModel', async () => {
+        // The un-awaited initClipModel() left clipWorkerReady false for extractClipEmbedding
+        // calls made while ensureTrainedModel collects the training set — those files would
+        // silently get a 576-dim vector whose CLIP half (dims 64..576) was all zeros.
         const order = [];
         const ctx = makeCtx({
             mlWorker: null, // forces the lazy-init branch
@@ -1421,16 +1522,18 @@ describe('handleSortByPrediction lifecycle', () => {
                 order.push('clip:start');
                 // Must outlast the lazy-init block's own 100ms settle sleep. Both timers are
                 // registered before either fires and setTimeout preserves delay order, so this
-                // is deterministic, not a race: with the call left un-awaited, `train` is
+                // is deterministic, not a race: with the call left un-awaited, `train` would be
                 // reached on the 100ms timer while this one is still pending.
                 await new Promise((r) => setTimeout(r, 400));
                 this.clipWorkerReady = true;
                 order.push('clip:done');
             },
-            trainFromHistoricalRatingsAndWait: function () {
-                order.push(`train(clipReady=${this.clipWorkerReady === true})`);
-                this.mlStats = { isReady: true };
-                return Promise.resolve();
+            mlTraining: {
+                ensureTrainedModel: () => {
+                    order.push(`train(clipReady=${ctx.clipWorkerReady === true})`);
+                    ctx.mlStats = { isReady: true };
+                    return Promise.resolve({ source: 'trained', stats: ctx.mlStats });
+                },
             },
         });
 
@@ -1440,12 +1543,77 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx._phases).toContain('Loading CLIP model…');
     });
 
+    it('awaits the CLIP model on a second sort too, not just the first lazy-init (G1 — load-bearing)', async () => {
+        // initClipModel() used to sit INSIDE the lazy-init `if`, so a repeat sort within the
+        // same session (mlWorker/featureWorkers already set) skipped the await entirely.
+        // clipUnloadTimer nulls the CLIP model after 30s idle, so a second sort could reach
+        // ensureTrainedModel (which now runs on EVERY sort) with clipWorkerReady already flipped
+        // back to false — silently degrading the training set. Hoisting the await out of the
+        // lazy-init `if` is what this test pins down.
+        const order = [];
+        const ensureTrainedModel = vi.fn(() => {
+            order.push(`train(clipReady=${ctx.clipWorkerReady === true})`);
+            return Promise.resolve({ source: 'trained', stats: { isReady: true } });
+        });
+        const ctx = makeCtx({
+            mlWorker: {}, // already initialized — the lazy-init `if` must be skipped entirely
+            featureWorkers: [{}],
+            enableClipFeatures: true,
+            clipWorkerReady: false, // e.g. clipUnloadTimer nulled it after the prior sort's idle window
+            initializeMlWorker: () => {
+                throw new Error('must not re-run lazy init on an already-warm session');
+            },
+            initClipModel: async function () {
+                order.push('clip:start');
+                this.clipWorkerReady = true;
+                order.push('clip:done');
+            },
+            mlTraining: { ensureTrainedModel },
+        });
+
+        await handleSortByPrediction.call(ctx);
+
+        expect(order).toEqual(['clip:start', 'clip:done', 'train(clipReady=true)']);
+        expect(ensureTrainedModel).toHaveBeenCalledTimes(1);
+    });
+
+    it('bails after lazy-init if the ML worker never came up (G1 review round 1, Minor)', async () => {
+        // initializeMlWorker()'s own catch sets isMlEnabled=false and leaves mlWorker null when
+        // Worker construction throws — the top-of-method `!this.isMlEnabled` guard already
+        // passed (ML was enabled when this call STARTED), so only a re-check after lazy-init
+        // catches "became unavailable during THIS call." Without it, ensureTrainedModel would
+        // scan and feature-extract both training folders before _runWorkerTraining discovered
+        // there was no worker to post to.
+        const ensureTrainedModel = vi.fn();
+        const showNotification = vi.fn();
+        const ctx = makeCtx({
+            mlWorker: null, // forces entry into the lazy-init branch
+            initializeMlWorker: function () {
+                this.isMlEnabled = false;
+                this.mlWorker = null;
+            },
+            showNotification,
+            mlTraining: { ensureTrainedModel },
+        });
+
+        await handleSortByPrediction.call(ctx);
+
+        expect(ensureTrainedModel).not.toHaveBeenCalled();
+        expect(showNotification).toHaveBeenCalledWith(expect.stringContaining('unavailable'), 'warning');
+        expect(ctx.isSortedByPrediction).toBe(false);
+        expect(ctx.sortAbortController).toBeNull(); // finally still cleaned up
+        expect(ctx.isPredictionSorting).toBe(false);
+    });
+
     it('routes CLIP download progress into the sort card and clears the sink afterwards', async () => {
         const counted = [];
         const ctx = makeCtx({
             mlWorker: null,
             enableClipFeatures: true,
             clipProgressSink: null,
+            initializeMlWorker: function () {
+                this.mlWorker = {};
+            },
             updateSortProgress: function (p) {
                 this._phases.push(p.phase);
                 if (typeof p.current === 'number') counted.push(p);
@@ -1464,7 +1632,14 @@ describe('handleSortByPrediction lifecycle', () => {
 
     it('skips the CLIP wait entirely when CLIP features are disabled', async () => {
         const initClipModel = vi.fn(async () => {});
-        const ctx = makeCtx({ mlWorker: null, enableClipFeatures: false, initClipModel });
+        const ctx = makeCtx({
+            mlWorker: null,
+            enableClipFeatures: false,
+            initializeMlWorker: function () {
+                this.mlWorker = {};
+            },
+            initClipModel,
+        });
         await handleSortByPrediction.call(ctx);
         expect(initClipModel).not.toHaveBeenCalled();
         expect(ctx.isSortedByPrediction).toBe(true);
@@ -1479,6 +1654,38 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.sortAbortController).toBeNull(); // never created — similarity sort's is untouched
         expect(ctx.isPredictionSorting).toBe(false);
         expect(ctx.isSortedByPrediction).toBe(false); // sort never applied
+    });
+
+    it('reports the training source to showMlLearningIndicator after ensureTrainedModel resolves', async () => {
+        const showMlLearningIndicator = vi.fn();
+        const stats = { isReady: true, positiveCount: 5, negativeCount: 5 };
+        const ctx = makeCtx({
+            showMlLearningIndicator,
+            mlTraining: {
+                ensureTrainedModel: () =>
+                    Promise.resolve({ source: 'model-cache', stats, fingerprint: 'fp', descriptor: {} }),
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(showMlLearningIndicator).toHaveBeenCalledWith(stats, 'model-cache');
+    });
+
+    it('does not show the learning indicator, and stops the sort, when ensureTrainedModel is skipped', async () => {
+        const showMlLearningIndicator = vi.fn();
+        const showNotification = vi.fn();
+        const ctx = makeCtx({
+            mlStats: { isReady: false, positiveCount: 0, negativeCount: 0 },
+            showMlLearningIndicator,
+            showNotification,
+            mlTraining: {
+                ensureTrainedModel: () =>
+                    Promise.resolve({ source: 'skipped', stats: null, fingerprint: null, descriptor: null }),
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(showMlLearningIndicator).not.toHaveBeenCalled();
+        expect(ctx.isSortedByPrediction).toBe(false);
+        expect(showNotification).toHaveBeenCalledWith(expect.stringContaining('Need more ratings'), 'warning');
     });
 });
 
@@ -1520,12 +1727,6 @@ describe('handleCancel feature restore', () => {
             requestPredictionScores: vi.fn(),
             // Helper under test — extracted as a real method so the handler can call it
             restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
-            reverseMlModelUpdate(features, actionType) {
-                this.mlWorker.postMessage({
-                    type: 'reverseUpdate',
-                    data: { features: Array.from(features), label: actionType === 'like' ? 1 : 0 },
-                });
-            },
             ...overrides,
         };
     }
@@ -1551,7 +1752,7 @@ describe('handleCancel feature restore', () => {
         globalThis.window = origWindow;
     });
 
-    it('single-mode like-undo restores featureCache, clipCache, and triggers reverseMlModelUpdate', async () => {
+    it('single-mode like-undo restores featureCache, clipCache, and featureMetadata', async () => {
         const ctx = commonMocks({
             moveHistory: [
                 {
@@ -1573,12 +1774,8 @@ describe('handleCancel feature restore', () => {
         expect(ctx.clipCache.has('/folder/a.png')).toBe(true);
         expect(ctx.clipCache.get('/folder/a.png').length).toBe(512);
         expect(ctx.featureMetadata.get('/folder/a.png')).toEqual({ size: 100, mtime: 0 });
-        // reverseMlModelUpdate posts via mlWorker.postMessage
-        const reverseCall = ctx.mlWorker.postMessage.mock.calls.find((c) => c[0].type === 'reverseUpdate');
-        expect(reverseCall).toBeDefined();
-        expect(reverseCall[0].data.label).toBe(1); // like
-        // requestPredictionScores is NOT explicitly called in like/dislike undo
-        // (it's triggered downstream via reverseUpdateComplete debounce in the live app)
+        // G1: the model is no longer updated per-rating, so a like/dislike undo has nothing to
+        // request new scores for — requestPredictionScores is not called on this path.
         expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
     });
 
@@ -1617,9 +1814,6 @@ describe('handleCancel feature restore', () => {
         // Only a.png had 576-dim → clipCache should be present for it but not for b.png (64-dim only)
         expect(ctx.clipCache.has('/folder/a.png')).toBe(true);
         expect(ctx.clipCache.has('/folder/b.png')).toBe(false);
-        // Two reverseUpdate calls
-        const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
-        expect(reverseCalls.length).toBe(2);
     });
 
     it('does NOT take the compare-pair branch when the last move lacks compareMode (leftover single move)', async () => {
@@ -1686,24 +1880,22 @@ describe('handleCancel feature restore', () => {
         await handleCancel.call(ctx);
 
         expect(ctx.featureCache.has('/folder/special.png')).toBe(true);
-        // No reverseUpdate (special is unrated)
-        const reverseCalls = ctx.mlWorker.postMessage.mock.calls.filter((c) => c[0].type === 'reverseUpdate');
-        expect(reverseCalls.length).toBe(0);
-        // Special branch needs explicit requestPredictionScores since no reverseUpdateComplete debounce
+        // Special-move undo is the only handleCancel branch that requests fresh scores explicitly —
+        // like/dislike undo branches don't (see the sibling test above).
         expect(ctx.requestPredictionScores).toHaveBeenCalledTimes(1);
     });
 
-    it('bulk-rating undo reverses ML, returns to the rated pair, and refreshes the UI', async () => {
+    it('bulk-rating undo returns to the rated pair and refreshes the UI immediately (G1: no deferred window)', async () => {
         const ctx = commonMocks({
             isCompareMode: true,
             isSortedByPrediction: true,
             mlComparePairIndex: 5, // set high; handleCancel restores prevPairIndex on undo
-            undoBulkRating: vi.fn(async () => 0), // no worker posts -> render immediately
+            undoBulkRating: vi.fn(async () => {}),
             moveHistory: [
                 {
                     bothGood: true,
                     bothBad: false,
-                    bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
+                    bulkFiles: [{ name: 'a.jpg' }],
                     prevPairIndex: 3,
                 },
             ],
@@ -1714,41 +1906,10 @@ describe('handleCancel feature restore', () => {
         expect(ctx.undoBulkRating).toHaveBeenCalledOnce();
         expect(ctx.moveHistory).toHaveLength(0); // entry popped
         expect(ctx.mlComparePairIndex).toBe(3); // returned to the bulk-rated pair
-        // undoBulkRating is stubbed to return 0 posts, so this takes the immediate-render path.
-        expect(ctx.requestPredictionScores).toHaveBeenCalledOnce(); // badges re-scored after ML revert
+        // The model is no longer updated per-rating, so there is nothing left to defer for —
+        // handleCancel always re-scores and renders in the same synchronous continuation now.
+        expect(ctx.requestPredictionScores).toHaveBeenCalledOnce();
         expect(ctx.showMedia).toHaveBeenCalledOnce(); // re-render (refreshes the floating Undo button)
-    });
-
-    it('bulk-rating undo defers the re-render when reverse updates were posted', async () => {
-        vi.useFakeTimers();
-        try {
-            const ctx = commonMocks({
-                isCompareMode: true,
-                isSortedByPrediction: true,
-                mlComparePairIndex: 5,
-                undoBulkRating: vi.fn(async () => 2), // two reverseUpdate messages posted
-                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
-                moveHistory: [
-                    {
-                        bothGood: true,
-                        bothBad: false,
-                        bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
-                        prevPairIndex: 3,
-                    },
-                ],
-            });
-
-            await handleCancel.call(ctx);
-
-            expect(ctx.mlComparePairIndex).toBe(3); // still restored before deferring
-            expect(ctx.pendingCompareRefresh).toBe(true);
-            expect(ctx.pendingCompareUpdates).toBe(2);
-            // reverseUpdateComplete drives the re-score; handleCancel must not do either itself.
-            expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
-            expect(ctx.showMedia).not.toHaveBeenCalled();
-        } finally {
-            vi.useRealTimers();
-        }
     });
 
     it('applyBulkRating records the exact pair key and re-renders in place (no advance)', async () => {
@@ -1761,8 +1922,6 @@ describe('handleCancel feature restore', () => {
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
             compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-            getCombinedFeatures: () => null, // skips updateMlModelWithFeatures
-            updateMlModelWithFeatures: vi.fn(),
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             bulkPairKey,
@@ -1784,42 +1943,7 @@ describe('handleCancel feature restore', () => {
         expect(ctx.moveHistory[0].bothBad).toBe(true);
     });
 
-    it('applyBulkRating defers the re-render until the model re-scores', async () => {
-        vi.useFakeTimers();
-        try {
-            const applyBulkRating = extractAsyncMethod('applyBulkRating');
-            const bulkPairKey = extractMethod('bulkPairKey');
-            const showMedia = vi.fn();
-            const ctx = {
-                isSortedByPrediction: true,
-                isCompareMode: true,
-                compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
-                compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-                getCombinedFeatures: () => [1, 2, 3],
-                updateMlModelWithFeatures: vi.fn(() => true), // both posts succeed
-                bulkRated: new Map(),
-                bulkRatedPairs: new Set(),
-                bulkPairKey,
-                saveBulkRatedFile: async () => {},
-                moveHistory: [],
-                mlComparePairIndex: 0,
-                computeValidComparePairs: () => [{}, {}],
-                showNotification: () => {},
-                showMedia,
-                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
-            };
-            await applyBulkRating.call(ctx, 'bad');
-
-            expect(ctx.pendingCompareRefresh).toBe(true);
-            expect(ctx.pendingCompareUpdates).toBe(2); // one per posted update
-            expect(ctx.mediaNavigationInProgress).toBe(true);
-            expect(showMedia).not.toHaveBeenCalled(); // scoreComplete renders, not us
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('applyBulkRating renders immediately when no model update was posted', async () => {
+    it('applyBulkRating renders immediately — no deferred window (G1)', async () => {
         const applyBulkRating = extractAsyncMethod('applyBulkRating');
         const bulkPairKey = extractMethod('bulkPairKey');
         const showMedia = vi.fn();
@@ -1828,8 +1952,6 @@ describe('handleCancel feature restore', () => {
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
             compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-            getCombinedFeatures: () => [1, 2, 3],
-            updateMlModelWithFeatures: vi.fn(() => false), // ML off / no worker
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             bulkPairKey,
@@ -1839,53 +1961,28 @@ describe('handleCancel feature restore', () => {
             computeValidComparePairs: () => [{}, {}],
             showNotification: () => {},
             showMedia,
-            _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
         };
         await applyBulkRating.call(ctx, 'bad');
 
-        // Nothing will come back from the worker — rendering must not be deferred.
-        expect(ctx.pendingCompareRefresh).toBeFalsy();
+        // The model is no longer updated per-rating, so there is no worker round trip to wait
+        // for — applyBulkRating renders synchronously within the same call, every time.
         expect(showMedia).toHaveBeenCalledTimes(1);
+        // bulkFiles carries only the name now — nothing computes or stores features for it
+        // (getCombinedFeatures is never called from applyBulkRating any more).
+        expect(ctx.moveHistory[0].bulkFiles).toEqual([{ name: 'a.jpg' }, { name: 'z.jpg' }]);
     });
 
-    it('the deferred-refresh fallback renders with stale scores after 3s', async () => {
-        vi.useFakeTimers();
-        try {
-            const beginDeferred = extractMethod('_beginDeferredCompareRefresh');
-            const showMedia = vi.fn();
-            // Seed a stale pre-rating snapshot, as moveComparePair's mirror-image fallback would
-            // have left behind — the fallback must null it so a delta notification never computes
-            // against out-of-date scores after showMedia() re-renders with the pair still unscored.
-            const ctx = { showMedia, previousScores: new Map([['stale.jpg', 0.5]]) };
-            beginDeferred.call(ctx, 2);
-            expect(showMedia).not.toHaveBeenCalled();
-
-            vi.advanceTimersByTime(3000);
-
-            expect(showMedia).toHaveBeenCalledTimes(1);
-            expect(ctx.pendingCompareRefresh).toBe(false);
-            expect(ctx.pendingCompareUpdates).toBe(0);
-            expect(ctx.mediaNavigationInProgress).toBe(false);
-            expect(ctx.previousScores).toBeNull();
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('applyBulkRating drops a re-entrant press while a deferred refresh is pending', async () => {
+    it('applyBulkRating drops a re-entrant press while navigation is already in flight', async () => {
         const applyBulkRating = extractAsyncMethod('applyBulkRating');
         const bulkPairKey = extractMethod('bulkPairKey');
-        const updateMlModelWithFeatures = vi.fn(() => true);
         const saveBulkRatedFile = vi.fn(async () => {});
         const showMedia = vi.fn();
         const ctx = {
             isSortedByPrediction: true,
             isCompareMode: true,
-            mediaNavigationInProgress: true, // a prior rating's deferred refresh is still in flight
+            mediaNavigationInProgress: true, // e.g. the previous rating's showMedia() render is still in flight
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
             compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-            getCombinedFeatures: () => [1, 2, 3],
-            updateMlModelWithFeatures,
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             bulkPairKey,
@@ -1898,9 +1995,8 @@ describe('handleCancel feature restore', () => {
         };
         await applyBulkRating.call(ctx, 'good');
 
-        // The whole method must be a no-op — the in-flight rating from the first press owns this
-        // pair until scoreComplete (or the 3s fallback) clears mediaNavigationInProgress.
-        expect(updateMlModelWithFeatures).not.toHaveBeenCalled();
+        // The whole method must be a no-op — the in-flight render from the first press owns this
+        // pair until it clears mediaNavigationInProgress.
         expect(saveBulkRatedFile).not.toHaveBeenCalled();
         expect(ctx.bulkRated.size).toBe(0);
         expect(ctx.bulkRatedPairs.size).toBe(0);
@@ -1908,52 +2004,11 @@ describe('handleCancel feature restore', () => {
         expect(showMedia).not.toHaveBeenCalled();
     });
 
-    it('applyBulkRating counts exactly one posted update when only one file actually posts', async () => {
-        vi.useFakeTimers();
-        try {
-            const applyBulkRating = extractAsyncMethod('applyBulkRating');
-            const bulkPairKey = extractMethod('bulkPairKey');
-            const showMedia = vi.fn();
-            let calls = 0;
-            const ctx = {
-                isSortedByPrediction: true,
-                isCompareMode: true,
-                compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
-                compareRightFile: { name: 'z.jpg', path: '/f/z.jpg' },
-                getCombinedFeatures: () => [1, 2, 3], // both files "have" cached features
-                // First file (left) posts to the worker; second (right) does not — e.g. the worker
-                // was unloaded mid-loop. postedUpdates must track the true count (1), never assume 2.
-                updateMlModelWithFeatures: vi.fn(() => {
-                    calls++;
-                    return calls === 1;
-                }),
-                bulkRated: new Map(),
-                bulkRatedPairs: new Set(),
-                bulkPairKey,
-                saveBulkRatedFile: async () => {},
-                moveHistory: [],
-                mlComparePairIndex: 0,
-                computeValidComparePairs: () => [{}, {}],
-                showNotification: () => {},
-                showMedia,
-                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
-            };
-            await applyBulkRating.call(ctx, 'bad');
-
-            expect(ctx.pendingCompareRefresh).toBe(true);
-            expect(ctx.pendingCompareUpdates).toBe(1); // exactly one message was actually posted
-            expect(showMedia).not.toHaveBeenCalled();
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
     it('undoBulkRating deletes the exact pair key', async () => {
         const undoBulkRating = extractAsyncMethod('undoBulkRating');
         const bulkPairKey = extractMethod('bulkPairKey');
         const key = bulkPairKey('a.jpg', 'z.jpg');
         const ctx = {
-            reverseMlModelUpdate: vi.fn(),
             bulkRated: new Map([
                 ['a.jpg', 'bad'],
                 ['z.jpg', 'bad'],
@@ -1983,7 +2038,7 @@ describe('handleCancel feature restore', () => {
             isSortedByPrediction: true,
             mlComparePairIndex: 4,
             undoBulkRating: vi.fn(async () => {}),
-            moveHistory: [{ bothBad: true, bulkFiles: [{ name: 'a.jpg', features: null }] }],
+            moveHistory: [{ bothBad: true, bulkFiles: [{ name: 'a.jpg' }] }],
         });
 
         await handleCancel.call(ctx);
@@ -1992,21 +2047,20 @@ describe('handleCancel feature restore', () => {
         expect(ctx.showMedia).toHaveBeenCalledOnce();
     });
 
-    it('returns early when a deferred-refresh window is already open (mediaNavigationInProgress)', async () => {
-        // Nothing sets isLoading during a deferred window, so mediaNavigationInProgress is the
-        // only signal a second Ctrl+Z has landed inside one. Without this guard, handleCancel would
-        // arm a SECOND window and an earlier scoreComplete could satisfy it — rendering from
-        // prediction scores that have not finished reverting (FIX 1).
+    it('returns early when navigation is already in flight (mediaNavigationInProgress)', async () => {
+        // mediaNavigationInProgress is held for the whole of an in-flight showMedia() render.
+        // Without this guard, a second Ctrl+Z landing mid-render could pop a moveHistory entry
+        // and re-render on top of a render that's still in progress (FIX 1).
         const ctx = commonMocks({
             isCompareMode: true,
             isSortedByPrediction: true,
-            mediaNavigationInProgress: true, // an earlier deferred-refresh window is still open
+            mediaNavigationInProgress: true, // e.g. a showMedia() render is still in flight
             undoBulkRating: vi.fn(),
             moveHistory: [
                 {
                     bothGood: true,
                     bothBad: false,
-                    bulkFiles: [{ name: 'a.jpg', features: [1, 2, 3] }],
+                    bulkFiles: [{ name: 'a.jpg' }],
                     prevPairIndex: 3,
                 },
             ],
@@ -2088,8 +2142,6 @@ describe('applyBulkRating', () => {
             compareRightFile: { name: 'b.jpg', path: '/f/b.jpg' },
             bulkRated: new Map(),
             moveHistory: [],
-            getCombinedFeatures: () => [1, 2, 3],
-            updateMlModelWithFeatures: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
             nextMedia: vi.fn(),
@@ -2102,41 +2154,23 @@ describe('applyBulkRating', () => {
         };
     }
 
-    it('trains both files as like and records them as good, then defers the re-render', async () => {
-        vi.useFakeTimers();
-        try {
-            // Override the shared makeCtx() default (a bare vi.fn() returning undefined) with a
-            // realistic "both files actually posted" mock — the shared default would silently take
-            // the immediate-render branch and this test would stop exercising the deferred path.
-            // Overridden here rather than in makeCtx() itself: the shared default is relied on by
-            // sibling tests below (e.g. the mlComparePairIndex clamp test) that don't stub
-            // _beginDeferredCompareRefresh and would break if the default started posting.
-            const ctx = makeCtx({
-                updateMlModelWithFeatures: vi.fn(() => true),
-                _beginDeferredCompareRefresh: extractMethod('_beginDeferredCompareRefresh'),
-            });
-            await applyBulkRating.call(ctx, 'good');
-            expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledTimes(2);
-            expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'like');
-            expect(ctx.bulkRated.get('a.jpg')).toBe('good');
-            expect(ctx.bulkRated.get('b.jpg')).toBe('good');
-            expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
-            expect(ctx.moveHistory).toHaveLength(1);
-            expect(ctx.moveHistory[0].bothGood).toBe(true);
-            expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
-            // Both posts succeeded — the render must be deferred until scoreComplete, not immediate.
-            expect(ctx.pendingCompareRefresh).toBe(true);
-            expect(ctx.pendingCompareUpdates).toBe(2);
-            expect(ctx.showMedia).not.toHaveBeenCalled();
-        } finally {
-            vi.useRealTimers();
-        }
+    it('records both files as good and renders immediately (G1: no deferred window)', async () => {
+        const ctx = makeCtx();
+        await applyBulkRating.call(ctx, 'good');
+        expect(ctx.bulkRated.get('a.jpg')).toBe('good');
+        expect(ctx.bulkRated.get('b.jpg')).toBe('good');
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.moveHistory[0].bothGood).toBe(true);
+        expect(ctx.moveHistory[0].bulkFiles).toHaveLength(2);
+        // The model is no longer updated per-rating — nothing to wait for, so the render is
+        // synchronous within this same call.
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
     });
 
-    it('trains both files as dislike for the bad bucket', async () => {
+    it('records both files as bad for the bad bucket', async () => {
         const ctx = makeCtx();
         await applyBulkRating.call(ctx, 'bad');
-        expect(ctx.updateMlModelWithFeatures).toHaveBeenCalledWith([1, 2, 3], 'dislike');
         expect(ctx.bulkRated.get('a.jpg')).toBe('bad');
         expect(ctx.moveHistory[0].bothBad).toBe(true);
     });
@@ -2144,7 +2178,6 @@ describe('applyBulkRating', () => {
     it('no-ops outside AI-sorted compare mode', async () => {
         const ctx = makeCtx({ isSortedByPrediction: false });
         await applyBulkRating.call(ctx, 'good');
-        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
         expect(ctx.moveHistory).toHaveLength(0);
         expect(ctx.nextMedia).not.toHaveBeenCalled();
         expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
@@ -2153,15 +2186,9 @@ describe('applyBulkRating', () => {
     it('no-ops when a compare file is missing', async () => {
         const ctx = makeCtx({ compareRightFile: null });
         await applyBulkRating.call(ctx, 'good');
-        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
-    });
-
-    it('stores null features (no training) when the cache misses', async () => {
-        const ctx = makeCtx({ getCombinedFeatures: () => null });
-        await applyBulkRating.call(ctx, 'good');
-        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
-        expect(ctx.bulkRated.get('a.jpg')).toBe('good');
-        expect(ctx.moveHistory[0].bulkFiles[0].features).toBeNull();
+        expect(ctx.moveHistory).toHaveLength(0);
+        expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
     });
 
     it('clamps mlComparePairIndex into the shrunk valid list (keeps the count coherent), preserving prevPairIndex', async () => {
@@ -2177,45 +2204,13 @@ describe('applyBulkRating', () => {
         expect(ctx.moveHistory[0].prevPairIndex).toBe(2); // original index recorded for undo
         expect(ctx.mlComparePairIndex).toBe(1); // clamped to valid max (length - 1)
     });
-
-    it('posts model updates only after saveBulkRatedFile resolves (FIX 2 ordering invariant)', async () => {
-        // A worker round trip is usually FASTER than the saveBulkRatedFile disk write. If the posts
-        // went out before the await settled (the pre-FIX-2 bug), updateComplete could land before
-        // anything is armed to receive it. Use a controllable promise to prove the posts wait.
-        let resolveSave;
-        const savePromise = new Promise((resolve) => {
-            resolveSave = resolve;
-        });
-        const callOrder = [];
-        const ctx = makeCtx({
-            saveBulkRatedFile: vi.fn(() => {
-                callOrder.push('save-start');
-                return savePromise;
-            }),
-            updateMlModelWithFeatures: vi.fn(() => {
-                callOrder.push('post');
-                return true;
-            }),
-            _beginDeferredCompareRefresh: vi.fn(),
-        });
-
-        const applyPromise = applyBulkRating.call(ctx, 'bad');
-        // Everything up to and including the `await saveBulkRatedFile()` call runs synchronously;
-        // nothing past it (the posts) may have run yet.
-        expect(callOrder).toEqual(['save-start']);
-        expect(ctx.updateMlModelWithFeatures).not.toHaveBeenCalled();
-
-        resolveSave();
-        await applyPromise;
-        expect(callOrder).toEqual(['save-start', 'post', 'post']);
-    });
 });
 
 describe('undoBulkRating', () => {
     const undoBulkRating = extractAsyncMethod('undoBulkRating');
     const bulkPairKey = extractMethod('bulkPairKey');
 
-    it('reverses both updates and clears both files from bulkRated', async () => {
+    it('clears both files from bulkRated and re-admits the pair key', async () => {
         const ctx = {
             bulkRated: new Map([
                 ['a.jpg', 'good'],
@@ -2223,29 +2218,22 @@ describe('undoBulkRating', () => {
             ]),
             bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
             bulkPairKey,
-            reverseMlModelUpdate: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
         };
         const lastMove = {
             bothGood: true,
             bothBad: false,
-            bulkFiles: [
-                { name: 'a.jpg', features: [1, 2, 3] },
-                { name: 'b.jpg', features: [4, 5, 6] },
-            ],
+            bulkFiles: [{ name: 'a.jpg' }, { name: 'b.jpg' }],
         };
         await undoBulkRating.call(ctx, lastMove);
-        expect(ctx.reverseMlModelUpdate).toHaveBeenCalledTimes(2);
-        expect(ctx.reverseMlModelUpdate).toHaveBeenCalledWith([1, 2, 3], 'like');
-        expect(ctx.reverseMlModelUpdate).toHaveBeenNthCalledWith(2, [4, 5, 6], 'like');
         expect(ctx.showNotification).toHaveBeenCalledWith('↩️ Bulk rating undone', 'info');
         expect(ctx.bulkRated.size).toBe(0);
         expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'b.jpg'))).toBe(false);
         expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
     });
 
-    it('skips ML reversal for files stored with null features', async () => {
+    it('clears bulkRated for the bad bucket too', async () => {
         const ctx = {
             bulkRated: new Map([
                 ['a.jpg', 'bad'],
@@ -2253,118 +2241,18 @@ describe('undoBulkRating', () => {
             ]),
             bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
             bulkPairKey,
-            reverseMlModelUpdate: vi.fn(),
             saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
             showNotification: vi.fn(),
         };
         const lastMove = {
             bothGood: false,
             bothBad: true,
-            bulkFiles: [
-                { name: 'a.jpg', features: null },
-                { name: 'b.jpg', features: null },
-            ],
+            bulkFiles: [{ name: 'a.jpg' }, { name: 'b.jpg' }],
         };
         await undoBulkRating.call(ctx, lastMove);
-        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
         expect(ctx.bulkRated.has('a.jpg')).toBe(false);
         expect(ctx.bulkRated.has('b.jpg')).toBe(false);
         expect(ctx.bulkRatedPairs.has(bulkPairKey('a.jpg', 'b.jpg'))).toBe(false);
-    });
-
-    it('posts reverse-update messages only after saveBulkRatedFile resolves (FIX 2 ordering invariant)', async () => {
-        // Mirrors the applyBulkRating ordering test: a worker round trip is usually faster than the
-        // disk write, so if the reverse-update posts went out before the await settled, handleCancel
-        // could arm the deferred window against a reply that already arrived.
-        let resolveSave;
-        const savePromise = new Promise((resolve) => {
-            resolveSave = resolve;
-        });
-        const callOrder = [];
-        const ctx = {
-            bulkRated: new Map([
-                ['a.jpg', 'good'],
-                ['b.jpg', 'good'],
-            ]),
-            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
-            bulkPairKey,
-            reverseMlModelUpdate: vi.fn(() => {
-                callOrder.push('post');
-                return true;
-            }),
-            saveBulkRatedFile: vi.fn(() => {
-                callOrder.push('save-start');
-                return savePromise;
-            }),
-            showNotification: vi.fn(),
-        };
-        const lastMove = {
-            bothGood: true,
-            bothBad: false,
-            bulkFiles: [
-                { name: 'a.jpg', features: [1, 2, 3] },
-                { name: 'b.jpg', features: [4, 5, 6] },
-            ],
-        };
-
-        const undoPromise = undoBulkRating.call(ctx, lastMove);
-        expect(callOrder).toEqual(['save-start']);
-        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
-
-        resolveSave();
-        await undoPromise;
-        expect(callOrder).toEqual(['save-start', 'post', 'post']);
-    });
-
-    it('returns the number of reverse updates actually posted (true/true -> 2, true/false -> 1, false/false -> 0)', async () => {
-        // Every other mock here returns undefined, which left the posted-count arithmetic untested —
-        // and that count is what handleCancel arms the deferred-refresh window with.
-        const make = (replies) => ({
-            bulkRated: new Map([
-                ['a.jpg', 'good'],
-                ['b.jpg', 'good'],
-            ]),
-            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
-            bulkPairKey,
-            reverseMlModelUpdate: vi.fn().mockReturnValueOnce(replies[0]).mockReturnValueOnce(replies[1]),
-            saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
-            showNotification: vi.fn(),
-        });
-        const lastMove = {
-            bothGood: true,
-            bothBad: false,
-            bulkFiles: [
-                { name: 'a.jpg', features: [1, 2, 3] },
-                { name: 'b.jpg', features: [4, 5, 6] },
-            ],
-        };
-        await expect(undoBulkRating.call(make([true, true]), lastMove)).resolves.toBe(2);
-        await expect(undoBulkRating.call(make([true, false]), lastMove)).resolves.toBe(1);
-        await expect(undoBulkRating.call(make([false, false]), lastMove)).resolves.toBe(0);
-    });
-
-    it('returns 0 when both files have null features (nothing posted)', async () => {
-        const ctx = {
-            bulkRated: new Map([
-                ['a.jpg', 'bad'],
-                ['b.jpg', 'bad'],
-            ]),
-            bulkRatedPairs: new Set([bulkPairKey('a.jpg', 'b.jpg')]),
-            bulkPairKey,
-            reverseMlModelUpdate: vi.fn(() => true),
-            saveBulkRatedFile: vi.fn().mockResolvedValue(undefined),
-            showNotification: vi.fn(),
-        };
-        const lastMove = {
-            bothGood: false,
-            bothBad: true,
-            bulkFiles: [
-                { name: 'a.jpg', features: null },
-                { name: 'b.jpg', features: null },
-            ],
-        };
-        await expect(undoBulkRating.call(ctx, lastMove)).resolves.toBe(0);
-        expect(ctx.reverseMlModelUpdate).not.toHaveBeenCalled();
     });
 });
 
@@ -2537,133 +2425,6 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
     });
 });
 
-describe('_cancelDeferredCompareRefresh', () => {
-    const cancel = extractMethod('_cancelDeferredCompareRefresh');
-
-    it('clears an open window (timer, flags, snapshot) and releases mediaNavigationInProgress', () => {
-        vi.useFakeTimers();
-        try {
-            const fallback = vi.fn();
-            const ctx = {
-                pendingCompareRefresh: true,
-                pendingCompareUpdates: 2,
-                pendingCompareTimeout: setTimeout(fallback, 3000),
-                previousScores: new Map([['/f/a', 0.5]]),
-                mediaNavigationInProgress: true,
-            };
-            cancel.call(ctx);
-            expect(ctx.pendingCompareRefresh).toBe(false);
-            expect(ctx.pendingCompareUpdates).toBe(0);
-            expect(ctx.pendingCompareTimeout).toBeNull();
-            expect(ctx.previousScores).toBeNull();
-            expect(ctx.mediaNavigationInProgress).toBe(false);
-            vi.advanceTimersByTime(3500);
-            expect(fallback).not.toHaveBeenCalled(); // the 3 s fallback can no longer fire showMedia()
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('leaves mediaNavigationInProgress alone when no window was open', () => {
-        // The flag is also held by ordinary in-flight navigation — a no-op cancel must not release it.
-        const ctx = {
-            pendingCompareRefresh: false,
-            pendingCompareUpdates: 0,
-            pendingCompareTimeout: null,
-            previousScores: null,
-            mediaNavigationInProgress: true,
-        };
-        cancel.call(ctx);
-        expect(ctx.mediaNavigationInProgress).toBe(true);
-        expect(ctx.pendingCompareRefresh).toBe(false);
-    });
-});
-
-describe('loadFolder drops an open deferred compare refresh (G1 T2)', () => {
-    const loadFolder = extractAsyncMethod('loadFolder');
-    const cancelImpl = extractMethod('_cancelDeferredCompareRefresh');
-    const abortImpl = extractMethod('_abortInFlightPredictionSort');
-    let origWindow;
-
-    beforeEach(() => {
-        origWindow = globalThis.window;
-        globalThis.window = {
-            electronAPI: {
-                loadFolder: vi.fn(async () => ({ success: true, files: [] })),
-                path: { basename: (p) => p.split(/[\\/]/).pop() },
-            },
-        };
-    });
-    afterEach(() => {
-        globalThis.window = origWindow;
-    });
-
-    it('cancels the window BEFORE a scan that outlives the 3 s fallback, and again on the empty-folder branch', async () => {
-        vi.useFakeTimers();
-        try {
-            const fallback = vi.fn();
-            // A 24k-file scan takes longer than the fallback: advance past it INSIDE the await.
-            globalThis.window.electronAPI.loadFolder = vi.fn(async () => {
-                vi.advanceTimersByTime(3500);
-                return { success: true, files: [] };
-            });
-            const ctx = {
-                isTournamentMode: false,
-                tournament: { engine: null },
-                mediaFiles: [{ name: 'stale.png', path: '/old/stale.png' }],
-                baseFolderPath: '/old',
-                currentFolderPath: 'old',
-                currentIndex: 0,
-                moveHistory: [],
-                sortRunId: 0,
-                sortAbortController: null,
-                _mlSortResolve: null,
-                _mlSortReject: null,
-                _featureCacheDiskCount: 0,
-                // An open deferred window from a bulk rating in the OLD folder:
-                pendingCompareRefresh: true,
-                pendingCompareUpdates: 2,
-                pendingCompareTimeout: setTimeout(fallback, 3000),
-                previousScores: null,
-                mediaNavigationInProgress: true,
-                showLoadingSpinner: vi.fn(),
-                hideLoadingSpinner: vi.fn(),
-                showDropZone: vi.fn(),
-                showError: vi.fn(),
-                exitTournamentMode: vi.fn(),
-                cancelBackgroundExtraction: vi.fn(),
-                _abortInFlightPredictionSort: vi.fn(abortImpl),
-                _cancelDeferredCompareRefresh: vi.fn(cancelImpl),
-            };
-            await loadFolder.call(ctx, '/new/empty-folder');
-            expect(ctx._cancelDeferredCompareRefresh).toHaveBeenCalledTimes(2); // pre-scan + post-scan
-            expect(ctx.pendingCompareRefresh).toBe(false);
-            expect(ctx.pendingCompareTimeout).toBeNull();
-            expect(ctx.mediaNavigationInProgress).toBe(false);
-            vi.advanceTimersByTime(3500);
-            expect(fallback).not.toHaveBeenCalled(); // neither mid-scan nor against the new folder
-            expect(ctx.mediaFiles).toEqual([]); // sanity: the empty branch was taken
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('is called before the scan AND before the empty/non-empty split (non-empty branch covered too)', () => {
-        const body = methodSource('loadFolder');
-        const call = 'this._cancelDeferredCompareRefresh();';
-        const first = body.indexOf(call);
-        const second = body.indexOf(call, first + 1);
-        const scan = body.indexOf('await window.electronAPI.loadFolder(');
-        const split = body.indexOf('if (result.files.length === 0)');
-        const abort = body.indexOf('this._abortInFlightPredictionSort();');
-        expect(first).toBeGreaterThan(-1);
-        expect(first).toBeLessThan(scan); // the fallback cannot fire mid-await
-        expect(second).toBeGreaterThan(abort); // a window armed DURING the scan is dropped too
-        expect(second).toBeLessThan(split);
-        expect(body.indexOf(call, second + 1)).toBe(-1); // exactly two
-    });
-});
-
 describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
     const bulkPairKey = extractMethod('bulkPairKey');
     const keysReferencing = extractMethod('_bulkPairKeysReferencing');
@@ -2701,7 +2462,6 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             areFoldersConfigured: () => true,
             getCombinedFeatures: () => null,
             removeFileFromList,
-            updateMlModelWithFeatures: vi.fn(),
             updateFolderInfo: vi.fn(),
             showMedia: vi.fn(),
             showNotification: vi.fn(),
@@ -2879,7 +2639,6 @@ describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
         showMedia: vi.fn(async () => {}),
         requestPredictionScores: vi.fn(),
         restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
-        reverseMlModelUpdate: vi.fn(),
         ...overrides,
     });
 
@@ -2912,237 +2671,520 @@ describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
     });
 });
 
-describe('collectBulkRatedTrainingExamples', () => {
-    const collect = extractAsyncMethod('collectBulkRatedTrainingExamples');
+// G1: collectBulkRatedTrainingExamples, trainFromHistoricalRatings and
+// trainFromHistoricalRatingsAndWait are gone — ownership moved to MlTrainingManager
+// (ml-training.js). Their properties either moved with them (see tests/ml-training.test.js:
+// `_collectBulkRatedVectors (direct)` for the bucket-split/full-miss/progress properties,
+// `_collectFolderVectors (direct)` for the per-file likes/dislikes progress sequence, and
+// `ensureTrainedModel` for the pre-abort bail and the "Checking training set…" indeterminate
+// phase) or are now trivially true by construction and covered here instead: the manager has
+// no `clearProgressNotification` dependency at all, so it structurally cannot tear the card
+// down on any path — `handleSortByPrediction`'s `finally` owning teardown on both the success
+// and cancel paths is asserted directly in the `handleSortByPrediction lifecycle` tests above.
+// The one property with no surviving analog is the old "advances the count for a bulk-rated
+// name whose file has left the folder" test: `_resolveBulkRatedFiles` now filters gone files
+// out BEFORE the progress-reporting loop even starts, so `total` never counts them and the
+// stall-short-of-100% risk that test guarded against cannot occur in the new architecture.
 
-    it('splits cached combined features into liked/disliked by bucket', async () => {
-        const ctx = {
-            bulkRated: new Map([
-                ['a.jpg', 'good'],
-                ['b.jpg', 'bad'],
-            ]),
-            mediaFiles: [
-                { name: 'a.jpg', path: '/f/a.jpg' },
-                { name: 'b.jpg', path: '/f/b.jpg' },
-            ],
-            getCombinedFeatures: (p) => (p === '/f/a.jpg' ? [1, 1] : [2, 2]),
-            updateSortProgress: () => {},
-        };
-        const result = await collect.call(ctx);
-        expect(result.liked).toEqual([[1, 1]]);
-        expect(result.disliked).toEqual([[2, 2]]);
-    });
-
-    it('skips bulk-rated names no longer present in mediaFiles', async () => {
-        const ctx = {
-            bulkRated: new Map([['gone.jpg', 'good']]),
-            mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
-            getCombinedFeatures: () => [9, 9],
-            updateSortProgress: () => {},
-        };
-        const result = await collect.call(ctx);
-        expect(result.liked).toEqual([]);
-        expect(result.disliked).toEqual([]);
-    });
-
-    it('computes 576-dim features when the cache misses', async () => {
-        const ctx = {
-            bulkRated: new Map([['a.jpg', 'good']]),
-            mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
-            getCombinedFeatures: () => null,
-            computeFeatures: async () => new Float32Array(64).fill(0.5),
-            extractClipEmbedding: async () => new Float32Array(512).fill(0.1),
-            updateSortProgress: () => {},
-        };
-        const result = await collect.call(ctx);
-        expect(result.liked).toHaveLength(1);
-        expect(result.liked[0]).toHaveLength(576);
-        expect(result.disliked).toEqual([]);
-    });
-
-    it('reports corrective ratings through the sort card so the phase is not silent', async () => {
-        const ctx = {
-            bulkRated: new Map([
-                ['a.jpg', 'good'],
-                ['b.jpg', 'bad'],
-            ]),
-            mediaFiles: [
-                { name: 'a.jpg', path: '/f/a.jpg' },
-                { name: 'b.jpg', path: '/f/b.jpg' },
-            ],
-            getCombinedFeatures: () => [1, 1],
-            updateSortProgress: vi.fn(),
-        };
-
-        await collect.call(ctx);
-
-        expect(ctx.updateSortProgress.mock.calls.map(([a]) => a)).toEqual([
-            { phase: 'Processing corrective ratings', current: 1, total: 2 },
-            { phase: 'Processing corrective ratings', current: 2, total: 2 },
-        ]);
-    });
-
-    it('advances the count for bulk-rated names whose file has left the folder', async () => {
-        // Reported before the `continue`, or the bar stalls short of 100% on a folder where
-        // some rated files have since been moved out.
-        const ctx = {
-            bulkRated: new Map([
-                ['gone.jpg', 'good'],
-                ['a.jpg', 'good'],
-            ]),
-            mediaFiles: [{ name: 'a.jpg', path: '/f/a.jpg' }],
-            getCombinedFeatures: () => [1, 1],
-            updateSortProgress: vi.fn(),
-        };
-
-        await collect.call(ctx);
-
-        expect(ctx.updateSortProgress.mock.calls.at(-1)[0]).toEqual({
-            phase: 'Processing corrective ratings',
-            current: 2,
-            total: 2,
-        });
-    });
-});
-
-describe('trainFromHistoricalRatings (signal-aware bail)', () => {
-    const trainFromHistoricalRatings = extractAsyncMethod('trainFromHistoricalRatings');
-    let origWindow;
+describe('_runWorkerTraining / _runWorkerInit (worker-promise helpers, G1)', () => {
+    const _runWorkerTraining = extractMethod('_runWorkerTraining');
+    const _runWorkerInit = extractMethod('_runWorkerInit');
 
     beforeEach(() => {
-        origWindow = globalThis.window;
-        globalThis.window = {
-            electronAPI: {
-                loadFolder: vi.fn(async () => ({ success: true, files: [] })),
-            },
-        };
+        vi.useFakeTimers();
     });
     afterEach(() => {
-        globalThis.window = origWindow;
+        vi.useRealTimers();
     });
 
-    it('bails before loading historical folders when the signal is already aborted', async () => {
-        const controller = new AbortController();
-        controller.abort();
+    it('_runWorkerTraining posts trainHistorical with the given features and seed', () => {
+        const postMessage = vi.fn();
+        const ctx = { mlWorker: { postMessage } };
+        _runWorkerTraining.call(ctx, ['liked'], ['disliked'], 42);
+        expect(postMessage).toHaveBeenCalledWith({
+            type: 'trainHistorical',
+            data: { likedFeatures: ['liked'], dislikedFeatures: ['disliked'], seed: 42 },
+        });
+    });
+
+    it('_runWorkerTraining resolves with the trainComplete payload when the worker replies', async () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        const promise = _runWorkerTraining.call(ctx, [], [], 1);
+        expect(typeof ctx._trainingCompleteCallback).toBe('function');
+        ctx._trainingCompleteCallback({ stats: { isReady: true }, modelState: { weights: [1] } });
+        await expect(promise).resolves.toEqual({ stats: { isReady: true }, modelState: { weights: [1] } });
+    });
+
+    // G1 task 6 review round 1, Important 2: a hung/crashed worker must surface as a FAILURE,
+    // never as a fabricated "trained successfully" result. Before this fix, the timeout resolved
+    // with {stats: this.mlStats, modelState: this.mlModelState} -- indistinguishable from a
+    // genuine trainComplete -- so ensureTrainedModel would cache whatever the worker's stats
+    // happened to be BEFORE this call, under the NEW fingerprint, recording a model as "trained
+    // on a set it never actually saw." Rejecting lets the existing call chain do the right thing:
+    // ensureTrainedModel has no try/catch around trainModel, so the rejection propagates to
+    // handleSortByPrediction's own catch, which reports it honestly and unwinds through finally.
+    it('_runWorkerTraining REJECTS (never resolves with a fabricated payload) after 30s with no reply', async () => {
         const ctx = {
-            isMlEnabled: true,
             mlWorker: { postMessage: vi.fn() },
-            customLikeFolder: '/liked',
-            customDislikeFolder: '/disliked',
-            updateProgressNotification: vi.fn(),
-            clearProgressNotification: vi.fn(),
+            mlStats: { isReady: false },
+            mlModelState: { weights: [0] },
         };
-        await trainFromHistoricalRatings.call(ctx, controller.signal);
-        // Not just "returns early" in the abstract — proves the expensive per-file work (which
-        // starts with loading the like/dislike folders) never starts, and no partial-training
-        // message reaches the ML worker.
-        expect(globalThis.window.electronAPI.loadFolder).not.toHaveBeenCalled();
-        expect(ctx.mlWorker.postMessage).not.toHaveBeenCalled();
+        const promise = _runWorkerTraining.call(ctx, [], [], 1);
+        vi.advanceTimersByTime(30000);
+        await expect(promise).rejects.toThrow(/did not respond to trainHistorical/);
+        expect(ctx._trainingCompleteCallback).toBeNull();
+    });
+
+    // G1 task 6 review round 1, Important 1: match the pending callback by REFERENCE, not
+    // truthiness. Isolates the guard itself, independent of the "clear the timer on settle" fix
+    // below (which removes the timer entirely in the common case) -- if run A's OWN timer ever
+    // fires while a DIFFERENT callback occupies the field (however that came to be), a
+    // truthiness check ("is SOMETHING installed?") cannot tell that apart from "is MY OWN reply
+    // overdue?", and would null out and silently discard the other call's callback — which is
+    // exactly the A-strands-B sequence the finding describes (A's stale timer resolves A a
+    // second time and wipes out B's pending callback, so B's own genuine reply later finds
+    // nothing to settle and B hangs forever).
+    it("_runWorkerTraining: a stale timer cannot null out a DIFFERENT call's callback (reference identity, not truthiness)", () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        _runWorkerTraining.call(ctx, ['A'], [], 1);
+        // Stand in for "a later call has since installed its own callback" directly on ctx --
+        // isPredictionSorting's re-entrancy guard makes a SECOND real _runWorkerTraining call
+        // unreachable while this one is still pending, so this is the only way to construct the
+        // scenario at the unit level; the guard must hold regardless of how the field came to
+        // hold someone else's callback.
+        const cbB = vi.fn();
+        ctx._trainingCompleteCallback = cbB;
+
+        vi.advanceTimersByTime(30000); // run A's own timer fires
+
+        expect(ctx._trainingCompleteCallback).toBe(cbB); // untouched: not nulled, not replaced
+        expect(cbB).not.toHaveBeenCalled(); // and not invoked in A's place either
+    });
+
+    it('_runWorkerTraining clears its own timer once a reply arrives, so it cannot fire later at all', () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        _runWorkerTraining.call(ctx, [], [], 1);
+        const cb = ctx._trainingCompleteCallback;
+        ctx._trainingCompleteCallback = null; // mirrors handleMlWorkerMessage: null BEFORE invoking
+        cb({ stats: { isReady: true }, modelState: {} });
+
+        // If the original timer were still armed, installing a later callback and advancing
+        // past the original 30s mark would let it fire and clobber that callback too — the
+        // reference guard alone (previous test) is defense in depth, not a substitute for
+        // actually cancelling the timer.
+        const cbLater = vi.fn();
+        ctx._trainingCompleteCallback = cbLater;
+        vi.advanceTimersByTime(30000);
+        expect(ctx._trainingCompleteCallback).toBe(cbLater);
+        expect(cbLater).not.toHaveBeenCalled();
+    });
+
+    it('_runWorkerInit posts init with the given savedModel', () => {
+        const postMessage = vi.fn();
+        const ctx = { mlWorker: { postMessage } };
+        _runWorkerInit.call(ctx, { weights: [1] });
+        expect(postMessage).toHaveBeenCalledWith({ type: 'init', data: { savedModel: { weights: [1] } } });
+    });
+
+    it('_runWorkerInit resolves with the initComplete payload when the worker replies', async () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        const promise = _runWorkerInit.call(ctx, { weights: [1] });
+        expect(typeof ctx._initCompleteCallback).toBe('function');
+        ctx._initCompleteCallback({ stats: { isReady: true } });
+        await expect(promise).resolves.toEqual({ stats: { isReady: true } });
+    });
+
+    // Same reject-on-timeout treatment as _runWorkerTraining (Important 2): a hung worker must
+    // surface as a failure, never a fabricated "the cached model loaded fine" result.
+    // _safeLoadModelState's own catch already converts this rejection into "treat as a
+    // model-cache miss, rebuild" — see ml-training.js, untouched by this task.
+    it('_runWorkerInit REJECTS (never resolves with a fabricated payload) after 10s with no reply', async () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() }, mlStats: { isReady: false } };
+        const promise = _runWorkerInit.call(ctx, { weights: [1] });
+        vi.advanceTimersByTime(10000);
+        await expect(promise).rejects.toThrow(/did not respond to init/);
+        expect(ctx._initCompleteCallback).toBeNull();
+    });
+
+    // Same reference-identity guard as _runWorkerTraining (Important 1), and for the same
+    // reason: a stale timer must not be able to null out a callback that belongs to a
+    // differently-purposed later call.
+    it("_runWorkerInit: a stale timer cannot null out a DIFFERENT call's callback (reference identity, not truthiness)", () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        _runWorkerInit.call(ctx, { weights: [1] });
+        const cbB = vi.fn();
+        ctx._initCompleteCallback = cbB;
+
+        vi.advanceTimersByTime(10000);
+
+        expect(ctx._initCompleteCallback).toBe(cbB);
+        expect(cbB).not.toHaveBeenCalled();
+    });
+
+    it('_runWorkerInit clears its own timer once a reply arrives, so it cannot fire later at all', () => {
+        const ctx = { mlWorker: { postMessage: vi.fn() } };
+        _runWorkerInit.call(ctx, { weights: [1] });
+        const cb = ctx._initCompleteCallback;
+        ctx._initCompleteCallback = null;
+        cb({ stats: { isReady: true } });
+
+        const cbLater = vi.fn();
+        ctx._initCompleteCallback = cbLater;
+        vi.advanceTimersByTime(10000);
+        expect(ctx._initCompleteCallback).toBe(cbLater);
+        expect(cbLater).not.toHaveBeenCalled();
     });
 });
 
-// G5 item 1: the historical-ratings phase is the LONGEST phase of an AI sort, and it was the
-// one phase that lost the Cancel button — updateProgressNotification() rebuilds the shared
-// element into its plain-text form, destroying the sort card's bar and Cancel button. These
-// tests pin the card form (updateSortProgress) and per-file reporting for every loop in the
-// phase; asserting "updateProgressNotification was never called" is what makes them fail if
-// any single loop is left on the old call.
-describe('trainFromHistoricalRatings (progress reporting)', () => {
-    const trainFromHistoricalRatings = extractAsyncMethod('trainFromHistoricalRatings');
-    let origWindow;
+describe('initializeFeaturePool version probe (G1)', () => {
+    const initializeFeaturePool = extractMethod('initializeFeaturePool');
+    // initializeFeaturePool's body calls `this._probeFeatureVersion(...)` -- the mock ctx must
+    // supply a real implementation (not a stub) for these tests to exercise the actual
+    // retry/error-settlement logic under test, not a no-op standing in for it.
+    const _probeFeatureVersion = extractMethod('_probeFeatureVersion');
+    let OrigWorker;
 
-    const filesNamed = (...names) => names.map((n) => ({ name: n, path: `/h/${n}` }));
+    class FakeWorker {
+        constructor() {
+            this.listeners = [];
+        }
+        addEventListener(type, cb) {
+            this.listeners.push([type, cb]);
+        }
+        removeEventListener(type, cb) {
+            this.listeners = this.listeners.filter(([t, c]) => !(t === type && c === cb));
+        }
+        postMessage(msg) {
+            this.lastMessage = msg;
+        }
+    }
 
-    function makeTrainCtx({ liked = [], disliked = [] } = {}) {
-        globalThis.window = {
-            electronAPI: {
-                loadFolder: vi.fn(async (folder) => ({
-                    success: true,
-                    files: folder === '/liked' ? liked : disliked,
-                })),
-            },
-        };
+    function emit(worker, data) {
+        for (const [type, cb] of worker.listeners.slice()) {
+            if (type === 'message') cb({ data });
+        }
+    }
+
+    function makeCtx() {
         return {
-            isMlEnabled: true,
-            mlWorker: { postMessage: vi.fn() },
-            customLikeFolder: '/liked',
-            customDislikeFolder: '/disliked',
-            updateProgressNotification: vi.fn(),
-            updateSortProgress: vi.fn(),
-            clearProgressNotification: vi.fn(),
-            computeFeatures: vi.fn(async () => new Float32Array(64)),
-            extractClipEmbedding: vi.fn(async () => new Float32Array(512)),
-            collectBulkRatedTrainingExamples: vi.fn(async () => ({ liked: [], disliked: [] })),
+            featureWorkerCount: 1,
+            featureWorkers: [],
+            _featureExtractorVersion: 0,
+            _probeFeatureVersion,
+            shutdownFeaturePool: () => {},
+            startFeatureCacheAutoSave: () => {},
+            handleFeatureWorkerMessage: () => {},
+            handleFeatureWorkerError: () => {},
         };
     }
 
-    const countedCalls = (spy, phase) =>
-        spy.mock.calls.map(([arg]) => arg).filter((a) => a.phase === phase && typeof a.current === 'number');
-
     beforeEach(() => {
-        origWindow = globalThis.window;
+        OrigWorker = globalThis.Worker;
+        globalThis.Worker = FakeWorker;
     });
     afterEach(() => {
-        globalThis.window = origWindow;
+        globalThis.Worker = OrigWorker;
     });
 
-    it('reports every liked file through the cancelable sort card, starting at file 1', async () => {
-        const ctx = makeTrainCtx({ liked: filesNamed('a.png', 'b.png', 'c.png') });
+    it('posts getVersion to the first worker and captures FEATURE_VERSION from its reply', () => {
+        const ctx = makeCtx();
+        initializeFeaturePool.call(ctx);
 
-        await trainFromHistoricalRatings.call(ctx, undefined);
-
-        // The old code reported only every 10th file, so 3 files produced ZERO updates.
-        expect(countedCalls(ctx.updateSortProgress, 'Processing likes')).toEqual([
-            { phase: 'Processing likes', current: 1, total: 3 },
-            { phase: 'Processing likes', current: 2, total: 3 },
-            { phase: 'Processing likes', current: 3, total: 3 },
-        ]);
-        expect(ctx.updateProgressNotification).not.toHaveBeenCalled();
+        expect(ctx.featureWorkers[0].lastMessage).toEqual({ type: 'getVersion', data: {} });
+        emit(ctx.featureWorkers[0], { type: 'version', version: 2, dim: 64 });
+        expect(ctx._featureExtractorVersion).toBe(2);
+        // One-shot: the probe's own listener is removed once it has its answer.
+        expect(ctx.featureWorkers[0].listeners).toHaveLength(0);
     });
 
-    it('reports every disliked file through the cancelable sort card, starting at file 1', async () => {
-        const ctx = makeTrainCtx({ disliked: filesNamed('x.png', 'y.png') });
+    it('ignores an unrelated message type without touching _featureExtractorVersion', () => {
+        const ctx = makeCtx();
+        initializeFeaturePool.call(ctx);
 
-        await trainFromHistoricalRatings.call(ctx, undefined);
-
-        expect(countedCalls(ctx.updateSortProgress, 'Processing dislikes')).toEqual([
-            { phase: 'Processing dislikes', current: 1, total: 2 },
-            { phase: 'Processing dislikes', current: 2, total: 2 },
-        ]);
-        expect(ctx.updateProgressNotification).not.toHaveBeenCalled();
+        emit(ctx.featureWorkers[0], { type: 'result', features: [] });
+        expect(ctx._featureExtractorVersion).toBe(0);
+        expect(ctx.featureWorkers[0].listeners).toHaveLength(1); // still waiting for the real reply
     });
 
-    it('announces the folder-load wait as an indeterminate card phase, not plain text', async () => {
-        const ctx = makeTrainCtx({ liked: filesNamed('a.png') });
-
-        await trainFromHistoricalRatings.call(ctx, undefined);
-
-        // No current/total => the card's existing `indeterminate` mode (animated bar + Cancel).
-        const phases = ctx.updateSortProgress.mock.calls.map(([a]) => a);
-        expect(phases).toContainEqual({ phase: 'Loading historical ratings…' });
+    it('resolves the returned promise once the version reply lands', async () => {
+        const ctx = makeCtx();
+        const promise = initializeFeaturePool.call(ctx);
+        emit(ctx.featureWorkers[0], { type: 'version', version: 2, dim: 64 });
+        await expect(promise).resolves.toBeUndefined();
     });
 
-    it('never tears the card down itself on the success path — the caller owns teardown', async () => {
-        const ctx = makeTrainCtx({ liked: filesNamed('a.png') });
+    // Task 9 review round 2, Important: the first version of this fix only resolved on a real
+    // reply or an immediate setup failure. If the probe worker raised `error` before answering
+    // getVersion, nothing ever settled the promise -- handleSortByPrediction's
+    // `await Promise.all([...])` hung forever, wedging isPredictionSorting so every LATER
+    // AI-sort press silently no-op'd. This exercises the actual fix (a real FakeWorker.onerror
+    // call reaching the real, unmocked _probeFeatureVersion), not a reasoned-about claim.
+    it('resolves the returned promise when the probe worker errors before replying', async () => {
+        const ctx = makeCtx();
+        const promise = initializeFeaturePool.call(ctx);
+        const probe = ctx.featureWorkers[0];
+        expect(typeof probe.onerror).toBe('function');
 
-        await trainFromHistoricalRatings.call(ctx, undefined);
+        probe.onerror(new Error('probe crashed before replying'));
 
-        expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
-        expect(ctx.mlWorker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'trainHistorical' }));
+        await expect(promise).resolves.toBeUndefined();
     });
 
-    it('leaves teardown to the caller on the cancel path too, and posts no partial training', async () => {
-        const controller = new AbortController();
-        const ctx = makeTrainCtx({ liked: filesNamed('a.png', 'b.png') });
-        ctx.computeFeatures = vi.fn(async () => {
-            controller.abort();
-            return new Float32Array(64);
+    it('resolves via the timeout if the probe neither replies nor errors', async () => {
+        vi.useFakeTimers();
+        try {
+            const ctx = makeCtx();
+            const promise = initializeFeaturePool.call(ctx);
+            vi.advanceTimersByTime(5000);
+            await expect(promise).resolves.toBeUndefined();
+            expect(ctx._featureExtractorVersion).toBe(0); // never actually answered
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('retries against the respawned worker after one error, capturing a real version if it replies', async () => {
+        const respawned = new FakeWorker();
+        const ctx = makeCtx();
+        // Mirrors handleFeatureWorkerError's real effect (replace featureWorkers[i] in place)
+        // without its unrelated respawn-loop mechanics, which this test isn't about.
+        ctx.handleFeatureWorkerError = (i) => {
+            ctx.featureWorkers[i] = respawned;
+        };
+        const promise = initializeFeaturePool.call(ctx);
+        const originalProbe = ctx.featureWorkers[0];
+
+        originalProbe.onerror(new Error('probe crashed before replying'));
+        // The crash already settled the promise -- it must never hang on the retry.
+        await expect(promise).resolves.toBeUndefined();
+
+        // The retry against the respawned worker is independent of that settlement and can
+        // still capture a real version, benefiting a LATER sort in this same session.
+        expect(respawned.lastMessage).toEqual({ type: 'getVersion', data: {} });
+        emit(respawned, { type: 'version', version: 2, dim: 64 });
+        expect(ctx._featureExtractorVersion).toBe(2);
+    });
+
+    it('does not attempt a second retry if the respawned worker also errors before replying', async () => {
+        const respawnedOnce = new FakeWorker();
+        const respawnedTwice = new FakeWorker();
+        let respawnCount = 0;
+        const ctx = makeCtx();
+        ctx.handleFeatureWorkerError = (i) => {
+            respawnCount++;
+            ctx.featureWorkers[i] = respawnCount === 1 ? respawnedOnce : respawnedTwice;
+        };
+        const promise = initializeFeaturePool.call(ctx);
+        ctx.featureWorkers[0].onerror(new Error('first crash'));
+        await expect(promise).resolves.toBeUndefined();
+
+        respawnedOnce.onerror(new Error('second crash, on the retry target'));
+        // Bounded to exactly one retry: nothing ever arms a probe against respawnedTwice, so a
+        // version reply to it must be a no-op, not silently accepted.
+        emit(respawnedTwice, { type: 'version', version: 9, dim: 64 });
+        expect(ctx._featureExtractorVersion).toBe(0);
+    });
+});
+
+// Task 9 review round 2 (folded-in minor): part (b) of the original round-1 fix (both worker
+// initializers returning promises settled by their real replies, instead of a fixed sleep) had
+// zero unit coverage -- exactly the gap that let the pool's hang-on-error bug through review
+// once already. These pin the promise-settlement CONTRACT of initializeMlWorker directly,
+// using the real handleMlWorkerMessage (not a stub) so the initComplete -> resolve wiring is
+// genuinely exercised, not just asserted about.
+describe('initializeMlWorker promise contract (Task 9 review round 2)', () => {
+    const initializeMlWorker = extractMethod('initializeMlWorker');
+    const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+    let OrigWorker;
+
+    class FakeMlWorker {
+        constructor() {
+            this.messages = [];
+        }
+        postMessage(msg) {
+            this.messages.push(msg);
+        }
+        terminate() {}
+    }
+
+    function makeCtx(overrides = {}) {
+        return {
+            isMlEnabled: true,
+            mlWorker: null,
+            mlStats: null,
+            _mlSortResolve: null,
+            _mlSortReject: null,
+            _mlWorkerInitResolve: null,
+            _initCompleteCallback: null,
+            mediaFiles: [],
+            updateSortPredictionButton: () => {},
+            handleMlWorkerMessage,
+            ...overrides,
+        };
+    }
+
+    beforeEach(() => {
+        OrigWorker = globalThis.Worker;
+        globalThis.Worker = FakeMlWorker;
+    });
+    afterEach(() => {
+        globalThis.Worker = OrigWorker;
+    });
+
+    it('resolves immediately when ML prediction is disabled', async () => {
+        const ctx = makeCtx({ isMlEnabled: false });
+        await expect(initializeMlWorker.call(ctx)).resolves.toBeUndefined();
+        expect(ctx.mlWorker).toBeNull();
+    });
+
+    it('resolves immediately when Worker construction throws', async () => {
+        globalThis.Worker = class {
+            constructor() {
+                throw new Error('script fetch failed');
+            }
+        };
+        const ctx = makeCtx();
+        await expect(initializeMlWorker.call(ctx)).resolves.toBeUndefined();
+        expect(ctx.isMlEnabled).toBe(false);
+    });
+
+    it('resolves once initComplete arrives, via the real handleMlWorkerMessage', async () => {
+        const ctx = makeCtx();
+        const promise = initializeMlWorker.call(ctx);
+        expect(ctx.mlWorker.messages).toEqual([{ type: 'init', data: {} }]);
+
+        ctx.mlWorker.onmessage({
+            data: { type: 'initComplete', stats: { isReady: false }, modelVersion: 3, trainingConfigVersion: 1 },
         });
 
-        await trainFromHistoricalRatings.call(ctx, controller.signal);
+        await expect(promise).resolves.toBeUndefined();
+        expect(ctx._mlWorkerInitResolve).toBeNull();
+    });
 
-        expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
-        expect(ctx.mlWorker.postMessage).not.toHaveBeenCalled();
+    it('resolves on a hard worker error, without waiting for initComplete', async () => {
+        const ctx = makeCtx();
+        const promise = initializeMlWorker.call(ctx);
+
+        ctx.mlWorker.onerror(new Error('worker crashed'));
+
+        await expect(promise).resolves.toBeUndefined();
+        expect(ctx.isMlEnabled).toBe(false);
+        expect(ctx._mlWorkerInitResolve).toBeNull();
+    });
+
+    // The identity-guard fix: a second call before the first settles must not silently abandon
+    // the first caller's resolver (nothing would ever have invoked it otherwise).
+    it("settles an earlier call's promise instead of abandoning it when called again first", async () => {
+        const ctx = makeCtx();
+        const first = initializeMlWorker.call(ctx);
+        const firstWorker = ctx.mlWorker;
+
+        const second = initializeMlWorker.call(ctx); // re-entrant re-init, before `first` settled
+        // The stale-resolver check settles `first` synchronously, as soon as a newer call is
+        // about to take over the slot -- no message needed for this half.
+        await expect(first).resolves.toBeUndefined();
+        expect(firstWorker).not.toBe(ctx.mlWorker);
+
+        ctx.mlWorker.onmessage({
+            data: { type: 'initComplete', stats: { isReady: false }, modelVersion: 3, trainingConfigVersion: 1 },
+        });
+        await expect(second).resolves.toBeUndefined();
+    });
+});
+
+// Task 9 review, Important 2: invalidateModelCache() can fail its disk write and still leave a
+// stale entry being served as 'model-cache' on the next sort. Telling the user "it will rebuild"
+// unconditionally is false precisely then — this is the last-resort recovery control, and a user
+// told it worked has no reason to retry. These tests pin the branch that keeps the message honest.
+describe('handleRebuildModelClick (Task 9 review, Important 2)', () => {
+    const handleRebuildModelClick = extractAsyncMethod('handleRebuildModelClick');
+
+    function makeCtx(invalidateResult) {
+        return {
+            mlTraining: { invalidateModelCache: vi.fn(async () => invalidateResult) },
+            resetMlModel: vi.fn(),
+            showNotification: vi.fn(),
+        };
+    }
+
+    it('shows the success notification when invalidateModelCache resolves true', async () => {
+        const ctx = makeCtx(true);
+        await handleRebuildModelClick.call(ctx);
+        expect(ctx.mlTraining.invalidateModelCache).toHaveBeenCalledTimes(1);
+        expect(ctx.resetMlModel).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('info');
+        expect(message).toMatch(/cleared/i);
+    });
+
+    it('shows a warning, not the success message, when invalidateModelCache resolves false', async () => {
+        const ctx = makeCtx(false);
+        await handleRebuildModelClick.call(ctx);
+        // The live model must still be reset either way -- a failed DISK clear does not mean the
+        // in-memory session state is worth keeping.
+        expect(ctx.resetMlModel).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('warning');
+        expect(message).not.toMatch(/cleared/i);
+    });
+
+    // PR #68 review, finding 1: this control was reachable during an in-flight prediction sort.
+    // resetMlModel() posts {type:'reset'} to mlWorker, which zeroes the weights AND both class
+    // counts -- so a click mid-sort wipes the model the sort just finished training, and the
+    // scoreFiles reply that follows is `scores: null, reason: 'Need more samples (0 likes, 0
+    // dislikes)'`. The sort then completes having reordered nothing, with no error shown.
+    it('refuses while a prediction sort is in flight, touching neither the cache nor the model', async () => {
+        const ctx = makeCtx(true);
+        ctx.isPredictionSorting = true;
+        await handleRebuildModelClick.call(ctx);
+        expect(ctx.mlTraining.invalidateModelCache).not.toHaveBeenCalled();
+        expect(ctx.resetMlModel).not.toHaveBeenCalled();
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('warning');
+        expect(message).toMatch(/sort/i);
+    });
+
+    // PR #68 review round 2: the entry gate above only covers a sort already running when the
+    // button is clicked. invalidateModelCache() is an IPC round trip, and a sort started INSIDE
+    // it reaches the unconditional resetMlModel() below -- the identical worker-zeroing failure,
+    // with the two clicks in the other order. Skipping the reset is safe as well as necessary:
+    // invalidateModelCache() has already nulled the session fingerprint and cleared the store,
+    // so the next ensureTrainedModel() cannot hit either warm tier and must retrain anyway.
+    it('leaves a sort that started during the clear alone, instead of zeroing its worker', async () => {
+        const ctx = makeCtx(true);
+        ctx.isPredictionSorting = false;
+        ctx.mlTraining.invalidateModelCache = vi.fn(async () => {
+            ctx.isPredictionSorting = true; // a "Sort by Prediction" click lands inside the round trip
+            return true;
+        });
+
+        await handleRebuildModelClick.call(ctx);
+
+        expect(ctx.mlTraining.invalidateModelCache).toHaveBeenCalledTimes(1); // the clear still happens
+        expect(ctx.resetMlModel).not.toHaveBeenCalled(); // ...but the running sort keeps its model
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('info');
+        expect(message).toMatch(/cleared/i);
+        expect(message).toMatch(/sort/i);
+    });
+
+    it('still reports a failed clear even when a sort started during it', async () => {
+        const ctx = makeCtx(false);
+        ctx.isPredictionSorting = false;
+        ctx.mlTraining.invalidateModelCache = vi.fn(async () => {
+            ctx.isPredictionSorting = true;
+            return false;
+        });
+
+        await handleRebuildModelClick.call(ctx);
+
+        expect(ctx.resetMlModel).not.toHaveBeenCalled();
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('warning'); // the failure is the more important of the two facts
+        expect(message).not.toMatch(/cleared/i);
     });
 });
 
@@ -3212,6 +3254,44 @@ describe('initClipModel (progress sink)', () => {
 
         expect(ctx.clipWorkerReady).toBe(true);
         expect(ctx.showNotification).toHaveBeenCalledWith('Downloading CLIP model... 20%', 'info');
+    });
+
+    // G1 task 6 review round 1 (Minor): the CLIP-await hoist means this now runs before EVERY
+    // sort, not just the first. loadClipModel() resolves {success:true} immediately when already
+    // loaded, so without suppressing the toast a healthy multi-session would show "CLIP model
+    // loaded" on every single sort.
+    it('suppresses the "CLIP model loaded" toast when CLIP was already ready coming in', async () => {
+        globalThis.window = { electronAPI: { loadClipModel: vi.fn(async () => ({ success: true })) } };
+        const ctx = { enableClipFeatures: true, clipWorkerReady: true, showNotification: vi.fn() };
+
+        await initClipModel.call(ctx);
+
+        expect(ctx.clipWorkerReady).toBe(true);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('still shows the "CLIP model loaded" toast on a genuine first load', async () => {
+        globalThis.window = { electronAPI: { loadClipModel: vi.fn(async () => ({ success: true })) } };
+        const ctx = { enableClipFeatures: true, clipWorkerReady: false, showNotification: vi.fn() };
+
+        await initClipModel.call(ctx);
+
+        expect(ctx.showNotification).toHaveBeenCalledWith('CLIP model loaded', 'success');
+    });
+
+    it('still shows the unavailable toast on failure even when CLIP was previously ready (a regression, not "still fine")', async () => {
+        globalThis.window = {
+            electronAPI: { loadClipModel: vi.fn(async () => ({ success: false, error: 'boom' })) },
+        };
+        const ctx = { enableClipFeatures: true, clipWorkerReady: true, showNotification: vi.fn() };
+
+        await initClipModel.call(ctx);
+
+        expect(ctx.clipWorkerReady).toBe(false);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'CLIP model unavailable — using basic features only',
+            'warning'
+        );
     });
 });
 
@@ -3935,7 +4015,6 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
             _abortInFlightPredictionSort: vi.fn(abortInFlightPredictionSortImpl),
-            _cancelDeferredCompareRefresh: vi.fn(),
         };
     }
 
@@ -5372,5 +5451,261 @@ describe('empty-state undo guard (canUndo predicate)', () => {
     it('the replica matches the predicate in media-viewer.js', () => {
         // Guards against the replica drifting from the source it stands in for.
         expect(source).toContain('this.isTournamentMode && this.tournament?.engine?.peekUndoKind() != null');
+    });
+});
+
+describe('handleSortByPrediction delegates training to MlTrainingManager (G1)', () => {
+    it('calls ensureTrainedModel instead of the removed retrain gate', () => {
+        expect(source).toContain('this.mlTraining.ensureTrainedModel(');
+        // The three functions the module now owns must be gone from the renderer.
+        expect(source).not.toContain('async trainFromHistoricalRatings(');
+        expect(source).not.toContain('async trainFromHistoricalRatingsAndWait(');
+        expect(source).not.toContain('async collectBulkRatedTrainingExamples(');
+    });
+
+    it('captures the worker-reported versions in initComplete', () => {
+        expect(source).toContain('trainingConfigVersion');
+    });
+
+    // G1 task 6 review round 1 (Minor): the deleted trainFromHistoricalRatings/
+    // collectBulkRatedTrainingExamples describes carried `expect(updateProgressNotification)
+    // .not.toHaveBeenCalled()` on every loop, pinning the CLAUDE.md-documented invariant that
+    // anything reporting during a sort goes through updateSortProgress (the cancelable card),
+    // never the plain-text notification (which shares one DOM element and destroys the bar +
+    // Cancel button). That invariant now rests entirely on this one constructor wiring line —
+    // there is no other test that would fail if onProgress were pointed at
+    // updateProgressNotification (or dropped) instead.
+    it("wires the manager's onProgress to updateSortProgress, never the plain-text notification", () => {
+        expect(source).toContain('onProgress: (p) => this.updateSortProgress(p),');
+    });
+});
+
+describe('online-update protocol removed (G1)', () => {
+    it('no longer defines the online update or reverse-update helpers', () => {
+        expect(source).not.toContain('updateMlModelWithFeatures(');
+        expect(source).not.toContain('reverseMlModelUpdate(');
+    });
+
+    // Task 8: the per-source-folder model file these helpers used to feed is gone too — the
+    // fingerprint-keyed cache in app data (ml-training.js) replaced it.
+    it('no longer defines the per-source-folder model file helpers', () => {
+        expect(source).not.toContain('async loadMlModel(');
+        expect(source).not.toContain('async saveMlModel(');
+        expect(source).not.toContain('async deleteMlModelCache(');
+        expect(source).not.toContain('.ml_model.json');
+    });
+
+    it('no longer defines the deferred compare-refresh protocol', () => {
+        expect(source).not.toContain('_beginDeferredCompareRefresh');
+        expect(source).not.toContain('_cancelDeferredCompareRefresh');
+        expect(source).not.toContain('pendingCompareUpdates');
+        expect(source).not.toContain('pendingCompareRefresh');
+    });
+
+    it('keeps mlFeatures on history entries — undo restores caches from it', () => {
+        expect(source).toContain('restoreFeatureCachesFromHistory');
+        expect(source).toContain('mlFeatures');
+    });
+
+    it('reports the training source in the learning indicator', () => {
+        expect(source).toContain('showMlLearningIndicator(stats, source');
+    });
+});
+
+// Final whole-branch review, CRITICAL 1. resetMlModel() zeroes the LIVE worker's weights and both
+// class counts, but before this it touched nothing on `this.mlTraining` — so the manager still
+// believed the worker held a model trained on `sessionFingerprint`. ensureTrainedModel compares
+// fingerprints only, so the next sort returned `source: 'session'` against an EMPTY model: the
+// stale ready-looking stats were written back into mlStats, the indicator claimed
+// "🧠 Model reused — N👍 M👎", the readiness gate passed, and scoreFiles then replied
+// `scores: null, reason: 'Need more samples (0 likes, 0 dislikes)'`. Every later sort repeated it.
+// Reachable from ordinary UI (CLIP toggle off/on, or re-picking the SAME like/dislike folder),
+// and a REGRESSION: before this branch resetMlModel() nulling mlStats re-armed the
+// `!this.mlStats?.isReady` retrain gate, so the reset was self-healing.
+describe('resetMlModel clears the training-manager session tier (G1 final review, Critical 1)', () => {
+    const makeManager = () =>
+        new MlTrainingManager({
+            loadFolder: vi.fn(),
+            computeFeatures: vi.fn(),
+            extractClipEmbedding: vi.fn(),
+            trainModel: vi.fn(),
+            loadModelState: vi.fn(),
+            getConfig: vi.fn(() => ({})),
+            getBulkRatedContext: vi.fn(() => ({})),
+            cacheIo: {},
+            modelCache: { read: vi.fn(), write: vi.fn() },
+        });
+
+    it('nulls sessionFingerprint and sessionStats alongside the worker reset', () => {
+        const resetMlModel = extractMethod('resetMlModel');
+        const mlTraining = makeManager();
+        mlTraining.sessionFingerprint = 'deadbeefdeadbeefdeadbeefdeadbeef';
+        mlTraining.sessionStats = { positiveCount: 412, negativeCount: 380, isReady: true, totalSamples: 792 };
+
+        const posted = [];
+        const ctx = {
+            mlTraining,
+            mlModelState: { weights: [1, 2, 3] },
+            mlStats: { positiveCount: 412, negativeCount: 380, isReady: true },
+            predictionScores: new Map([['/a.jpg', 0.9]]),
+            mlWorker: { postMessage: (m) => posted.push(m) },
+            updateSortPredictionButton: vi.fn(),
+        };
+
+        resetMlModel.call(ctx);
+
+        expect(posted).toEqual([{ type: 'reset' }]);
+        expect(ctx.mlStats).toBeNull();
+        expect(ctx.mlModelState).toBeNull();
+        expect(ctx.predictionScores.size).toBe(0);
+        // The half that was missing: the worker no longer holds what this fingerprint describes.
+        expect(mlTraining.sessionFingerprint).toBeNull();
+        expect(mlTraining.sessionStats).toBeNull();
+    });
+
+    it('is safe when the worker was never constructed', () => {
+        const resetMlModel = extractMethod('resetMlModel');
+        const mlTraining = makeManager();
+        mlTraining.sessionFingerprint = 'f'.repeat(32);
+        mlTraining.sessionStats = { positiveCount: 3, negativeCount: 3, isReady: true };
+        const ctx = { mlTraining, predictionScores: new Map(), mlWorker: null, updateSortPredictionButton: vi.fn() };
+
+        expect(() => resetMlModel.call(ctx)).not.toThrow();
+        expect(mlTraining.sessionFingerprint).toBeNull();
+        expect(mlTraining.sessionStats).toBeNull();
+    });
+});
+
+// Final whole-branch review, IMPORTANT 1 + 2 — the two renderer-side halves.
+describe('renderer wiring for the model-cache load and training-vector isolation (G1 final review)', () => {
+    // IMPORTANT 2. ml-worker.js's initializeModel replies `initComplete` with valid-shaped
+    // all-zero stats whenever it could not restore the saved model, flagging `modelWasReset`.
+    // _runWorkerInit's callback used to forward only `{stats}`, so ml-training.js's
+    // _safeLoadModelState (whose only malformation check was `!loaded?.stats`, and an empty
+    // model's stats object is truthy) accepted a never-loaded model as a 'model-cache' hit.
+    it('forwards modelWasReset from initComplete to the _runWorkerInit callback', () => {
+        const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+        const received = [];
+        const ctx = {
+            _initCompleteCallback: (payload) => received.push(payload),
+            _mlWorkerInitResolve: null,
+            _mlWorkerVersions: {},
+            mediaFiles: [],
+            predictionScores: new Map(),
+            mlModelState: { weights: [1] },
+            updateSortPredictionButton: vi.fn(),
+            requestPredictionScores: vi.fn(),
+        };
+
+        handleMlWorkerMessage.call(ctx, {
+            type: 'initComplete',
+            stats: { isReady: false, positiveCount: 0, negativeCount: 0, totalSamples: 0 },
+            modelWasReset: true,
+            modelVersion: 3,
+            trainingConfigVersion: 1,
+        });
+
+        expect(received).toHaveLength(1);
+        expect(received[0].modelWasReset).toBe(true);
+        expect(received[0].stats).toMatchObject({ positiveCount: 0 });
+        expect(ctx._initCompleteCallback).toBeNull();
+    });
+
+    it('reports modelWasReset false for a genuine restore', () => {
+        const handleMlWorkerMessage = extractMethod('handleMlWorkerMessage');
+        const received = [];
+        const ctx = {
+            _initCompleteCallback: (payload) => received.push(payload),
+            _mlWorkerInitResolve: null,
+            _mlWorkerVersions: {},
+            mediaFiles: [],
+            predictionScores: new Map(),
+            updateSortPredictionButton: vi.fn(),
+            requestPredictionScores: vi.fn(),
+        };
+        handleMlWorkerMessage.call(ctx, {
+            type: 'initComplete',
+            stats: { isReady: true, positiveCount: 12, negativeCount: 9, totalSamples: 21 },
+            modelVersion: 3,
+            trainingConfigVersion: 1,
+        });
+        expect(received[0].modelWasReset).toBe(false); // never undefined — the manager reads it
+    });
+
+    // IMPORTANT 1's production half, asserted at the source level as well as behaviourally in
+    // tests/ml-training.test.js: `computeFeatures` must expose the opt-out and the manager's
+    // injected callback must use it. The behavioural test binds this same line, so this pair is
+    // the readable statement of intent rather than the load-bearing check.
+    it('opts the training manager out of the source folder feature cache', () => {
+        expect(source).toContain('async computeFeatures(filePath, fileInfo = null, { useHostCache = true } = {})');
+        expect(source).toContain('this.computeFeatures(p, info, { useHostCache: false })');
+    });
+});
+
+// Final whole-branch review, IMPORTANT 3. initializeFeaturePool was given a 5s backstop in an
+// earlier round precisely because a non-settling initializer latches isPredictionSorting, kills
+// AI sort for the rest of the session and pins the progress card — handleSortByPrediction awaits
+// `Promise.all([initializeMlWorker(), initializeFeaturePool()])`, so either one hanging hangs
+// both. initializeMlWorker settled only on `initComplete` or `onerror`; the earlier justification
+// ("it resolves on onerror, on construction failure and when ML is disabled") enumerates settle
+// PATHS rather than excluding non-settling ones — a worker that starts, parses, and then never
+// replies without raising `error` is not on that list.
+describe('initializeMlWorker backstop timeout (G1 final review, Important 3)', () => {
+    const withFakeWorker = async (fn, WorkerImpl) => {
+        const savedWorker = globalThis.Worker;
+        const savedLog = console.log;
+        console.log = () => {};
+        globalThis.Worker =
+            WorkerImpl ||
+            class SilentWorker {
+                postMessage() {}
+                terminate() {}
+            };
+        vi.useFakeTimers();
+        try {
+            await fn();
+        } finally {
+            vi.useRealTimers();
+            console.log = savedLog;
+            if (savedWorker === undefined) delete globalThis.Worker;
+            else globalThis.Worker = savedWorker;
+        }
+    };
+
+    const makeCtx = () => ({
+        isMlEnabled: true,
+        mlWorker: null,
+        _mlWorkerInitResolve: null,
+        handleMlWorkerMessage: vi.fn(),
+    });
+
+    it('settles when the worker neither replies nor raises error', async () => {
+        await withFakeWorker(async () => {
+            const initializeMlWorker = extractMethod('initializeMlWorker');
+            const ctx = makeCtx();
+            let settled = false;
+            initializeMlWorker.call(ctx).then(() => (settled = true));
+
+            await vi.advanceTimersByTimeAsync(4999);
+            expect(settled, 'settled before the backstop elapsed').toBe(false);
+            await vi.advanceTimersByTimeAsync(2);
+            expect(settled, 'still hung after the backstop should have fired').toBe(true);
+        });
+    });
+
+    it('clears the backstop when initComplete arrives, leaving no dangling timer', async () => {
+        await withFakeWorker(async () => {
+            const initializeMlWorker = extractMethod('initializeMlWorker');
+            const ctx = makeCtx();
+            let settled = false;
+            initializeMlWorker.call(ctx).then(() => (settled = true));
+
+            // handleMlWorkerMessage's initComplete case invokes this slot.
+            expect(typeof ctx._mlWorkerInitResolve).toBe('function');
+            ctx._mlWorkerInitResolve();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(settled).toBe(true);
+            expect(vi.getTimerCount(), 'the 5s backstop was left armed').toBe(0);
+        });
     });
 });
