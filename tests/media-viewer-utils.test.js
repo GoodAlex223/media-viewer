@@ -3146,6 +3146,46 @@ describe('handleRebuildModelClick (Task 9 review, Important 2)', () => {
         expect(type).toBe('warning');
         expect(message).toMatch(/sort/i);
     });
+
+    // PR #68 review round 2: the entry gate above only covers a sort already running when the
+    // button is clicked. invalidateModelCache() is an IPC round trip, and a sort started INSIDE
+    // it reaches the unconditional resetMlModel() below -- the identical worker-zeroing failure,
+    // with the two clicks in the other order. Skipping the reset is safe as well as necessary:
+    // invalidateModelCache() has already nulled the session fingerprint and cleared the store,
+    // so the next ensureTrainedModel() cannot hit either warm tier and must retrain anyway.
+    it('leaves a sort that started during the clear alone, instead of zeroing its worker', async () => {
+        const ctx = makeCtx(true);
+        ctx.isPredictionSorting = false;
+        ctx.mlTraining.invalidateModelCache = vi.fn(async () => {
+            ctx.isPredictionSorting = true; // a "Sort by Prediction" click lands inside the round trip
+            return true;
+        });
+
+        await handleRebuildModelClick.call(ctx);
+
+        expect(ctx.mlTraining.invalidateModelCache).toHaveBeenCalledTimes(1); // the clear still happens
+        expect(ctx.resetMlModel).not.toHaveBeenCalled(); // ...but the running sort keeps its model
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('info');
+        expect(message).toMatch(/cleared/i);
+        expect(message).toMatch(/sort/i);
+    });
+
+    it('still reports a failed clear even when a sort started during it', async () => {
+        const ctx = makeCtx(false);
+        ctx.isPredictionSorting = false;
+        ctx.mlTraining.invalidateModelCache = vi.fn(async () => {
+            ctx.isPredictionSorting = true;
+            return false;
+        });
+
+        await handleRebuildModelClick.call(ctx);
+
+        expect(ctx.resetMlModel).not.toHaveBeenCalled();
+        const [message, type] = ctx.showNotification.mock.calls[0];
+        expect(type).toBe('warning'); // the failure is the more important of the two facts
+        expect(message).not.toMatch(/cleared/i);
+    });
 });
 
 // G5 item 2: initClipModel's only feedback was a toast every 10%, and handleSortByPrediction

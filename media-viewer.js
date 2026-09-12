@@ -7036,14 +7036,30 @@ class MediaViewer {
             return;
         }
         const cleared = await this.mlTraining.invalidateModelCache();
-        this.resetMlModel();
-        if (cleared) {
-            this.showNotification('Prediction model cleared — it will rebuild on the next AI sort.', 'info');
-        } else {
+        // Re-checked AFTER the await, not only at entry (review round 2): invalidateModelCache()
+        // is an IPC round trip, and a sort started inside it reaches resetMlModel() below — the
+        // identical worker-zeroing failure the gate above prevents, with the two clicks in the
+        // other order. Skipping the reset is safe as well as necessary: invalidateModelCache()
+        // has already nulled the session fingerprint and cleared the store, so the next
+        // ensureTrainedModel() cannot hit session or model-cache and must retrain regardless —
+        // which is the whole of what this control promises. The in-memory mlModelState and
+        // predictionScores that resetMlModel() would also drop belong to the sort now running.
+        const sortStarted = this.isPredictionSorting;
+        if (!sortStarted) {
+            this.resetMlModel();
+        }
+        if (!cleared) {
             this.showNotification(
                 'Could not clear the cached prediction model — it may still serve a stale result. Try again.',
                 'warning'
             );
+        } else if (sortStarted) {
+            this.showNotification(
+                'Prediction model cleared — an AI sort started meanwhile and keeps the current model; the next sort will rebuild.',
+                'info'
+            );
+        } else {
+            this.showNotification('Prediction model cleared — it will rebuild on the next AI sort.', 'info');
         }
     }
 
