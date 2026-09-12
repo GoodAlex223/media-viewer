@@ -1309,6 +1309,25 @@ describe('_abortInFlightPredictionSort', () => {
 describe('handleSortByPrediction lifecycle', () => {
     const handleSortByPrediction = extractAsyncMethod('handleSortByPrediction');
 
+    // Every ctx makeCtx() hands out, checked by the afterEach below. PR #69 review round 2: the
+    // lease counter was scaffolded here with a rationale ("assert the release happens on every
+    // exit path") that no test actually executed. Enforced as a blanket invariant rather than an
+    // assertion per bail-path test, so a future exit path added to handleSortByPrediction is
+    // covered by whatever test exercises it, without anyone remembering to opt in — the four
+    // cancel/abort branches this reaches are exactly the ones the source-text ordering test
+    // cannot see.
+    const leaseCtxs = [];
+
+    afterEach(() => {
+        // Drain BEFORE asserting: a failing expect() throws out of the hook, so clearing
+        // afterwards would leave the leaked ctx in the array and fail every later test's
+        // afterEach too — turning one leak into sixteen failures that name the wrong tests.
+        const seen = leaseCtxs.splice(0, leaseCtxs.length);
+        for (const ctx of seen) {
+            expect(ctx.clipLeases, 'a lease outlived the sort — the release is not on every exit path').toBe(0);
+        }
+    });
+
     function makeCtx(overrides = {}) {
         const phases = [];
         const ctx = {
@@ -1350,8 +1369,9 @@ describe('handleSortByPrediction lifecycle', () => {
             initializeMlWorker: () => {},
             initializeFeaturePool: () => {},
             initClipModel: () => {},
-            // G4: the sort holds a CLIP lease for its whole body. Counted here so the lifecycle
-            // tests can assert the release happens on every exit path, not just the happy one.
+            // G4: the sort holds a CLIP lease for its whole body. Counted here, and checked back
+            // to zero by this block's afterEach on every exit path — success, early return,
+            // cancel and throw alike.
             clipLeases: 0,
             _acquireClipLease: function () {
                 this.clipLeases++;
@@ -1369,6 +1389,7 @@ describe('handleSortByPrediction lifecycle', () => {
             ...overrides,
         };
         ctx._phases = phases;
+        leaseCtxs.push(ctx);
         return ctx;
     }
 

@@ -159,6 +159,27 @@ is cheap, and `initClipModel()` is the one place that unambiguously means "the m
 
 ## 4. Implementation Log
 
+### [2026-09-12] — PHASE: Review round 2 (PR #69)
+
+- Verdict: **no blocking issues.** The round-1 pushback was accepted, and the reviewer verified the
+  new ordering test independently (replicated the `methodSource` predicate against a mutated
+  in-memory copy) rather than taking it.
+- The second below-threshold candidate — which round 1 counted but did not state — was written out
+  on request: the lease scaffolding in the `handleSortByPrediction lifecycle` `makeCtx` carried the
+  rationale *"so the lifecycle tests can assert the release happens on every exit path"*, and no
+  test in that block ever read `ctx.clipLeases`. Correct, and the same
+  **a convention is not a control** shape as the contract fixed in round 1: a promise written in a
+  comment that nothing executes.
+- **Fixed, and more broadly than proposed.** Rather than adding `expect(ctx.clipLeases).toBe(0)` to
+  the four bail-path tests, the block now drains a registry of every ctx `makeCtx()` hands out and
+  asserts the invariant in one `afterEach` — so a future exit path is covered by whatever test
+  exercises it, with no opt-in to forget.
+- **The check needed checking.** The first version asserted before clearing the registry, so a
+  throw left the leaked ctx in the array and failed every later test's `afterEach` — one leak
+  reported as sixteen failures naming the wrong tests. Drained first, the probe (release deleted
+  from the `finally`) fails exactly 14 of 16 and passes the two whose early return sits above the
+  acquire, which independently confirms round 1's "every early return sits above the acquire."
+
 ### [2026-09-12] — PHASE: Review round 1 (PR #69)
 
 - Verdict: **no issues found**; one below-threshold observation recorded as non-blocking. No
@@ -291,6 +312,7 @@ is cheap, and `initClipModel()` is the one place that unambiguously means "the m
 | `ml-worker` progress sites / reply shapes                | Pass   | 8 → 24 cases                                                                              |
 | `abort` now answers unknown-type                         | Pass   | Fails with the deleted `case 'abort'` restored                                             |
 | Acquire precedes the awaited `initClipModel()`           | Pass   | Added in review round 1; fails when the acquire is moved below the await (sentinel probe)  |
+| Lease nets to zero on every lifecycle exit path          | Pass   | Added in round 2 as an `afterEach` invariant; deleting the `finally` release fails 14 of 16, the 2 survivors being the early returns above the acquire |
 | Full unit suite                                          | Pass   | 793 passed, 20 files                                                                       |
 
 ---
