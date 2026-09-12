@@ -69,7 +69,7 @@
 
 ### G4. ML pipeline integrity [batch] 🟤
 
-**Domain**: JS logic (CLIP lifecycle) + test infrastructure — `media-viewer.js` (`initClipModel`, `_handleClipUnloadTimer`, `startBackgroundFeatureExtraction`, `handleSortByPrediction` Phase 1), `ml-worker.js`, new `tests/ml-worker.test.js`
+**Domain**: JS logic (CLIP lifecycle) + test infrastructure — `media-viewer.js` (`initClipModel`, `_handleClipUnloadTimer`, `startBackgroundFeatureExtraction`, `handleSortByPrediction` Phase 1), `ml-worker.js`, ~~new~~ `tests/ml-worker.test.js` ⚠️ **corrected at implementation — the file already existed**: G1 built it on 2026-09-09 (`bfcc881`), with exactly the shim this group predicted needing, so task 3 was _extend_ (8 → 24 cases), not create. One of three premises PR #68 moved between this plan's scoping and G4's execution; the other two are in the plan's § 2 premise-corrections table.
 **Source**: 🟤 Auto-Generated — `### [2026-09-02] From: G5 closeout` ×3 (the week's **single** 🟤 group)
 **Total SP**: 5 — one branch, one review (Mon–Tue, **before** G1's implementation touches the worker)
 
@@ -102,14 +102,14 @@
 > Front-load the one user-dependent step: the G1 brainstorm (Monday morning if the user is available; otherwise G4 leads the day and G1 shifts to Tue–Thu). G4 starts with the worker harness so it lands before G1's implementation touches `ml-worker.js`.
 
 - **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — brainstorm + spec (part 1 of 3) ✅ done — spec: [2026-09-10-ml-training-pipeline-design.md](../superpowers/specs/2026-09-10-ml-training-pipeline-design.md)
-- **[G4](#g4-ml-pipeline-integrity-batch-)** 🟤 — housekeeping flip + worker harness (part 1 of 2)
+- **[G4](#g4-ml-pipeline-integrity-batch-)** 🟤 — housekeeping flip + worker harness (part 1 of 2) ✅ done — housekeeping flipped in `ddd8340` (four shipped, one qualified — see the group note); harness extended 8 → 24 cases in `edcbf23`, which also deleted the abort protocol it was scheduled to pin
 
 **Daily total**: ~6 SP
 
 ### Tuesday, September 8 — G1 plan → implement; G4 lands
 
 - **[G1](#g1-ml-training-pipeline--design-pass--retrain-skip-solo--)** 🔵 🏆 — plan + implementation start (part 2 of 3) ✅ done — plan executed as a 10-task subagent-driven SDD run on branch `g1-ml-training-pipeline`
-- **[G4](#g4-ml-pipeline-integrity-batch-)** 🟤 — zero-CLIP doors; review; merge (part 2 of 2)
+- **[G4](#g4-ml-pipeline-integrity-batch-)** 🟤 — zero-CLIP doors; review; merge (part 2 of 2) ✅ done — CLIP lease `c7e93ff`; door (b) ruled ACCEPTED-no-code (G1's coverage gate already closed the training consequence); three PR review rounds, no blocking findings, two fixes taken (`2da7bfd`, `2c8887e`, `67bbec8`); **merged `7df03b8` via PR #69** (test delta in [DONE.md](DONE.md), not restated here)
 
 **Daily total**: ~6 SP
 
@@ -145,7 +145,7 @@
 | G1  | ML training pipeline — design pass + retrain skip [solo] 🏆 | JS logic (ML training / feature cache) + new module | 🔵 User     | 3     | 8        | Mon–Wed | ✅ PR #68 (merge `bfcc881`) |
 | G2  | Reachable overlay controls [batch]                     | CSS layout + renderer DOM + E2E evidence      | 🔵 User     | 3 (closes 4 🔵 + 1 🟤) | 5 | Thu | ☐ Planned  |
 | G3  | Compare-mode special hotkeys + tooltips [batch]        | Shortcuts + tooltips                          | 🔵 User     | 2     | 3        | Thu–Fri | ☐ Planned  |
-| G4  | ML pipeline integrity [batch]                          | JS logic (CLIP lifecycle) + test infra        | 🟤 Auto     | 3 (+1 housekeeping) | 5 | Mon–Tue | ☐ Planned  |
+| G4  | ML pipeline integrity [batch]                          | JS logic (CLIP lifecycle) + test infra        | 🟤 Auto     | 3 (+1 housekeeping) | 5 | Mon–Tue | ✅ PR #69 (merge `7df03b8`) |
 | G5  | Weekly Reviews [batch]                                 | Research / process                            | ⚪ Overhead | 5     | 5        | Fri     | ☐ Planned  |
 |     | **Total (quota-counted)**                              |                                               |             | **11** | **21**  |         |            |
 |     | **Total (incl. ⚪ overhead)**                          |                                               |             | **16** | **26**  |         |            |

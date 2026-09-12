@@ -101,6 +101,7 @@ Central index for all project documentation.
 | [G3 Re-Score & Counter Fixes Plan][] | Deferred re-score + stable "Pair X of Y" counter — the two PR #66 manual-smoke defects (Group G3) |
 | [G3 Docs & Process Guardrails Plan][] | Docs-index pre-commit guard (index-sourced, both directions) + 24-row backfill + closeout conventions + `pool: 'threads'`; 5-reviewer round fixed 2 blocking defects in the guard itself (Group G3, Cleanup Week #3) |
 | [G1 ML Training Pipeline Plan][] | 10-task subagent-driven plan: training-set fingerprint + per-training-folder vector caches + fingerprint-keyed model cache in `ml-training.js`; drops the online per-rating update protocol; corrects the recorded root cause (Group G1, Sep 7–11) |
+| [G4 ML Pipeline Integrity Plan][] | CLIP unload lease (the filed one-line remedy closed only one of two arming orders); deletes `ml-worker.js`'s unreachable abort protocol rather than pinning it; harness 8 → 24 cases. Three of its four premises had expired between scoping and execution (Group G4, Sep 7–11) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -161,6 +162,7 @@ Central index for all project documentation.
 [G3 Re-Score & Counter Fixes Plan]: archive/plans/2026-07-25_g3-rescore-and-counter-fixes.md
 [G3 Docs & Process Guardrails Plan]: archive/plans/2026-09-02_g3-docs-process-guardrails.md
 [G1 ML Training Pipeline Plan]: archive/plans/2026-09-10_ml-training-pipeline.md
+[G4 ML Pipeline Integrity Plan]: archive/plans/2026-09-12_g4-ml-pipeline-integrity.md
 
 ## Design Specs
 

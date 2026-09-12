@@ -76,9 +76,13 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 ## Current Plans
 
-| Plan                                                                                    | Task                           | Status                        | Started    |
-| ---------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------- | ---------- |
-| [2026-09-12_g4-ml-pipeline-integrity.md](2026-09-12_g4-ml-pipeline-integrity.md)         | WEEKLY § G4 ML pipeline integrity | Implementation complete; awaiting review + merge | 2026-09-12 |
+_None currently active._
+
+<!-- 2026-09-12 (Group G4 closeout): 2026-09-12_g4-ml-pipeline-integrity.md left this table on
+     archive — merged `7df03b8` via PR #69, moved to docs/archive/plans/ with `git mv` and indexed
+     in docs/README.md as "G4 ML Pipeline Integrity Plan" in the same commit. Recorded because the
+     note below documents this row going stale the last two times a plan archived. -->
+
 
 <!-- 2026-09-10 (Group G1 closeout): the previous row here, 2026-09-02_g3-docs-process-guardrails.md,
      was stale — that plan was archived on 2026-09-02 (see docs/README.md's "G3 Docs & Process

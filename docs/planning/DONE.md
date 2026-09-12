@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-09-02 <!-- Group G6: Weekly Reviews (2026-09-02 run, ⚪ Overhead) — **MERGED 2026-09-03 via PR #67, merge `de4bdac`**, after 3 review rounds and 8 findings, all resolved — 5/5 items plus G4's terminal `dead-rules-audit` read-out, which closes G4 at 3/3. Run held two days ahead of its Friday Sep 4 slot. Five verdict rows (§1a `github`/External-integrations pass · §1b fracalo/electron-playwright-mcp pass · §2 plugin context-cost audit adopt · §3 loop-engineering evidence-gating adopt · §4 reviewer-negative-finding propagate) plus the first two § 5 trial read-outs, BOTH failures: `dead-rules-audit` drop (its judge scores compliant edits as violations — 10 of 43 rules flagged, led by rules G2 had just enforced) and visual verification inconclusive (G5 shipped a progress card with zero visual evidence). Both adopts trace to those failures rather than to the web; the six-day window produced no plugin adopt, as predicted. Also surfaced: §4 `propagate` has the same zero-burn-down problem § 5 was built to fix for adopts — 2 filed, 0 applied, the 2026-08-27 `realness` propagation still absent at its target. -->
+**Last Updated**: 2026-09-12 <!-- Group G4: ML pipeline integrity (🟤 Auto) — **MERGED 2026-09-12 via PR #69, merge `7df03b8`**, after three review rounds plus a final ruling pass with no blocking findings. 3/3 tasks + the 0-SP housekeeping flip. The CLIP unload lease closes the last reachable zero-CLIP training door (the filed one-line remedy was half of it — it closes only the armed-before-the-sort order); `ml-worker.js`'s abort protocol was **deleted rather than pinned**, having no sender, a self-clearing flag and a synchronous loop that could not observe it; the harness went 8 → 24 cases. Three of the group's four premises had expired because PR #68 merged between scoping and execution. Two closeout misses found and repaired (G2 shipped four of five PR #65 entries, not five; G1's own task checkboxes were never flipped). Three review remarks, all one defect class — a rationale living only where nobody executing the work will read it — in code, in a test mock, and in a backlog cross-reference. Unit 761 → **793**; E2E 61/61 unchanged. NOTE: this stamp had been stale since 2026-09-02 — G1's closeout (entry dated 2026-09-10) did not bump it. -->
+<!-- Previous: Group G6: Weekly Reviews (2026-09-02 run, ⚪ Overhead) — **MERGED 2026-09-03 via PR #67, merge `de4bdac`**, after 3 review rounds and 8 findings, all resolved — 5/5 items plus G4's terminal `dead-rules-audit` read-out, which closes G4 at 3/3. Run held two days ahead of its Friday Sep 4 slot. Five verdict rows (§1a `github`/External-integrations pass · §1b fracalo/electron-playwright-mcp pass · §2 plugin context-cost audit adopt · §3 loop-engineering evidence-gating adopt · §4 reviewer-negative-finding propagate) plus the first two § 5 trial read-outs, BOTH failures: `dead-rules-audit` drop (its judge scores compliant edits as violations — 10 of 43 rules flagged, led by rules G2 had just enforced) and visual verification inconclusive (G5 shipped a progress card with zero visual evidence). Both adopts trace to those failures rather than to the web; the six-day window produced no plugin adopt, as predicted. Also surfaced: §4 `propagate` has the same zero-burn-down problem § 5 was built to fix for adopts — 2 filed, 0 applied, the 2026-08-27 `realness` propagation still absent at its target. -->
 
 **Purpose**: Historical record of completed work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -13,6 +14,96 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-09 (September)
+
+### 2026-09-12 — Group G4: ML pipeline integrity 🟤 — 3/3 tasks + 0-SP housekeeping, **MERGED `7df03b8`** (PR #69)
+
+**Plan**: [archived](../archive/plans/2026-09-12_g4-ml-pipeline-integrity.md) — bounded task, no spec (brainstorming classified it bounded; the design was presented in chat and recorded in the plan's § 2)
+**Branch**: `g4-ml-pipeline-integrity`, cut from `main` at `68a7a91`. **Merged 2026-09-12 as `7df03b8`** (`--merge`, [PR #69](https://github.com/GoodAlex223/media-viewer/pull/69); branch deleted local + remote). Three PR review rounds plus a final ruling pass, **no blocking findings in any round**; two of the three substantive remarks were taken as fixes, one remedy was pushed back on and closed differently.
+**Commits**: `ddd8340` (housekeeping flip) → `c7e93ff` (CLIP lease) → `edcbf23` (abort deletion + harness extension) → `84b85ee` (rulings + propagation) → `2da7bfd` / `2c8887e` / `67bbec8` (review responses). All seven verified ancestors of `main` with `git merge-base --is-ancestor`.
+**Tests**: unit 761 → **793** (+15 lease, +16 worker, +1 ordering, plus a lifecycle `afterEach` invariant that adds assertions to 16 existing cases rather than a case). E2E **61/61**, unchanged — no new E2E, deliberately: the lease is deterministic under fake timers and the sort E2E is expensive. This entry is the only place the delta is stated; WEEKLY points here.
+
+**Summary**: Three residuals filed by G5's closeout, re-measured before execution — and **three of
+the group's four premises had expired**, because PR #68 (G1) merged on 2026-09-09, between this
+group's scoping on 2026-09-03 and its execution on 2026-09-12. `tests/ml-worker.test.js` already
+existed (G1 built it, with exactly the `importScripts` shim this group predicted needing), so task 3
+became *extend*, not *create*; `handleSortByPrediction` no longer skipped its `initClipModel()` await,
+so the start-of-sort half of door (a) was already closed; and G1's CLIP-coverage gate
+(`ml-training.js` ~L849) already made a CLIP-incomplete model non-`cacheable`, which closed the
+*training* consequence of door (b) and left only a self-healing cache residual. Re-measuring cost
+about fifteen minutes and changed what two of the three tasks were.
+
+**The CLIP lease.** G5 closed the zero-CLIP training door at the entry point by awaiting
+`initClipModel()` — a guard that holds at **one instant**. `clipUnloadTimer` is armed at the tail of
+background extraction and was cleared in only two places, neither of them the sort, so a timer armed
+under 30 s before a sort survives the await, fires mid-training-loop, and flips `clipWorkerReady`
+false for every remaining file. The BACKLOG's own proposed remedy (clear the timer in
+`initClipModel()`) was **half the fix**: it closes the armed-*before* order and is blind to an
+extraction that completes *during* the sort — and since G1 made the await unconditional, the
+armed-during order is the only one that survives. The fix is state that **spans** the operation:
+`_scheduleClipUnload()` is the sole arming site and refuses under a lease; counted
+`_acquireClipLease()`/`_releaseClipLease()` bracket `handleSortByPrediction` (release in its existing
+single-owner `finally`); `_handleClipUnloadTimer()` drops the timer rather than unloading under a
+lease and deliberately does not re-arm; `initClipModel()` clears any pending unload.
+
+**The abort protocol, deleted rather than pinned.** The scheduled task said "pin the abort-flag
+protocol" — unexecutable, because the protocol could not fire, three ways over: no sender existed
+(every `mlWorker.postMessage` is `init`/`reset`/`trainHistorical`/`scoreAll`/`getSortedOrder`), every
+work case reset the flag at its own head, and `scoreFiles`' loop is synchronous so a queued `abort`
+could not be observed mid-run regardless. Pinning it would have converted dead code into apparent
+contract. The dispatch comment now records why there is no abort **and what a real one would cost**
+(chunking `scoreFiles` so it yields). The user-facing tail is worth stating: Cancel on a 24k-file
+scoring pass stops you *waiting* but does not stop the *work* — always true, previously disguised by
+machinery that looked like cancellation.
+
+**Two closeout misses found.** (1) The one this group existed to repair: WEEKLY said G2 shipped five
+PR #65 BACKLOG entries; **four had**. The fifth (the CLAUDE.md line-191 split) was never performed —
+its own text deferred it to a quarterly audit — so it was flipped on a different, *measured* ground
+(the bullet went 964 → 595 chars as a side effect of G2's content corrections), with the live
+successor condition (longest bullet now 1501 chars, file 211 lines against a 205 soft cap) handed to
+the open path-scoped-rules entry rather than re-filed. (2) **G1's own three task checkboxes still
+read `- [ ]`** after PR #68 merged, while its Summary-Table row and all three Daily rows read done —
+the same miss, one group later, in the same file. Flipped after verifying each deliverable rather
+than the claim. Fifth instance of "a late fact invalidating a doc written earlier"; 🟤 `[2026-08-31]`
+item 2's post-merge reconcile script is overdue.
+
+**Review (3 rounds + final).** Round 1's only observation was that `_handleClipUnloadTimer()` reads
+the lease before its `await`, so a lease acquired during the `unloadClipModel()` round trip still
+gets `clipWorkerReady = false` written. Real as a state inconsistency, unreachable today — and the
+**remedy it implied was wrong**: a `{success:true}` reply means the main process has already nulled
+its refs, so `false` is the truthful mirror, and `kickoffBackgroundExtractionIfEnabled`'s
+`if (!this.clipWorkerReady) await this.initClipModel()` (the PR #34 guard) reads that same flag, so
+suppressing the write would make that site skip its load await — a worse bug in the same silent
+class. Closed at the acquire end instead (**acquire does not ensure**: a taker must also `await
+initClipModel()`), pinned by a source-ordering test. Rounds 2 and final found the same defect class
+twice more, in two further surfaces: a test mock whose comment promised lease coverage no test
+executed (fixed as an `afterEach` invariant over every ctx the factory hands out, which also covers
+the non-bail tests the proposed four assertions would have missed), and a backlog residual that
+referenced the item folding its effort into it while that item referenced it zero times. **Three
+instances, one class — a rationale that exists only where nobody executing the work will read it.**
+
+**Key changes**:
+
+- `media-viewer.js` — `_scheduleClipUnload()` / `_acquireClipLease()` / `_releaseClipLease()` added; `_handleClipUnloadTimer()` lease-guarded; `initClipModel()` clears a pending unload; `handleSortByPrediction` brackets its body with the lease; the extraction tail routes through `_scheduleClipUnload()` instead of a bare `setTimeout`. The acquire contract is stated on `_acquireClipLease()` and the deliberate post-await write is explained at its own site.
+- `ml-worker.js` — `case 'abort'`, `abortFlag`, its four resets and the unreachable in-loop check deleted; the dispatch comment records why, and what re-adding one would cost.
+- `tests/ml-worker.test.js` — 8 → 24 cases: all four `updateProgress` sites, `scoreComplete`'s four shapes (including the exact `Need more samples (N likes, M dislikes)` text and the neutral `0.5` for a featureless file), `sortComplete`'s ordering / `sortRunId` echo / its refusal still arriving **as a `sortComplete`**, plus `getModel`, `reset`, and the unknown-type default now including `'abort'`.
+- `tests/media-viewer-utils.test.js` — a `CLIP unload lease (G4)` block (both arming orders over three grace windows of fake time, each guard mutation-verified to fail with that guard alone removed), the acquire-before-init ordering assertion, and the lifecycle lease invariant.
+- `CLAUDE.md` — the zero-CLIP gotcha's closing clause was **false** as of `c7e93ff` and now describes the lease, the `finally`-pairing rule and the acquire contract; the worker-abort testing bullet scoped to `sorting-worker.js`.
+- `docs/planning/BACKLOG.md` — 5 flips (`[2026-07-21]`), 3 rulings (`[2026-09-02]` — item 1 ACCEPTED-no-code, item 2 FIXED noting the filed fix was half, item 3 DONE noting the harness already existed and the abort could not be pinned), 3 new 🟤 (`[2026-09-12] From: G4 closeout`).
+
+**Improvements extracted** (🟤 `### [2026-09-12] From: G4 closeout`): push the lease down into
+`extractClipEmbedding` so it cannot be forgotten at a call site — it has exactly one taker today, so
+a future CLIP consumer inherits the bug this fixed; chunk `scoreFiles` so cancellation is real rather
+than a button that stops waiting; and the acquire-contract residual, cross-linked **both ways** with
+the first so whoever executes it meets the constraint.
+
+**Learnings**: a guard that holds at one instant is not a guard across awaits — especially when the
+hazard is a **timer** that fires on its own schedule; a task that says "pin protocol X" is
+unexecutable when X has no sender, and a test over dead code reads as a contract that blocks its
+deletion; an isolating probe proves a **mechanism**, never the harm — name the consumer and trace the
+only real caller, but name **every** consumer before proposing the remedy; a mutation probe must
+assert its edit landed (a `str.replace` that matched nothing reported "this guard is redundant"), and
+the inverse tell matters too — a probe failing in **more** places than the mechanism can reach means
+the harness is dirty, not that the finding is strong.
 
 ### 2026-09-10 — Group G1: ML training pipeline — design pass + retrain skip 🔵 🏆 — 10/10 tasks, review complete, **MERGED `bfcc881`** (PR #68)
 

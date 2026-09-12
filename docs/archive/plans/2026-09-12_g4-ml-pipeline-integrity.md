@@ -1,8 +1,8 @@
 # G4. ML Pipeline Integrity - Implementation Plan
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G4 (🟤, 5 SP, Mon–Tue); BACKLOG `### [2026-09-02] From: G5 closeout` items 1–3
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G4 (🟤, 5 SP, Mon–Tue); BACKLOG `### [2026-09-02] From: G5 closeout` items 1–3
 **Created**: 2026-09-12
-**Status**: Complete
+**Status**: Complete — merged `7df03b8` (PR #69), archived
 **Last Updated**: 2026-09-12
 
 ---
@@ -113,7 +113,7 @@ is cheap, and `initClipModel()` is the one place that unambiguously means "the m
 
 | File                                                            | Action | Purpose                                                                                                                                    |
 | ---------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| [BACKLOG.md](../BACKLOG.md)                                      | Modify | Phase 1 flips; Phase 4 rulings                                                                                                             |
+| [BACKLOG.md](../../planning/BACKLOG.md)                                      | Modify | Phase 1 flips; Phase 4 rulings                                                                                                             |
 | [media-viewer.js](../../../media-viewer.js)                      | Modify | CLIP lease: `_scheduleClipUnload`, `_acquireClipLease`, `_releaseClipLease`, `initClipModel`, `_handleClipUnloadTimer`, extraction tail, `handleSortByPrediction` |
 | [tests/media-viewer-utils.test.js](../../../tests/media-viewer-utils.test.js) | Modify | Lease unit tests (fake timers)                                                                                                             |
 | [ml-worker.js](../../../ml-worker.js)                            | Modify | Delete the abort protocol                                                                                                                  |
@@ -338,20 +338,20 @@ is cheap, and `initClipModel()` is the one place that unambiguously means "the m
 
 Derived from the global `CLAUDE.md` § Task Completion rule (Extract → Archive → Transition →
 Commit → Capture learnings), **not** from this plan's own section list — per
-[plans/README.md](README.md), a hand-written Outputs list gets executed instead of the rule it
+[plans/README.md](../../planning/plans/README.md), a hand-written Outputs list gets executed instead of the rule it
 implements, and its omissions read as completeness.
 
 | Artifact | Done / N/A + reason |
 | --- | --- |
 | `BACKLOG.md` — improvements extracted (min 2, routed by source) | **Done** — 2 filed as 🟤 `### [2026-09-12] From: G4 closeout`; plus 5 flips (`[2026-07-21]`) and 3 rulings (`[2026-09-02]`) |
 | `TODO.md` — actionable items / § Spawned Tasks rows | **N/A** — both improvements are speculative-until-triggered (one waits on the next CLIP consumer, one on large-folder sort work), so BACKLOG is the correct home; nothing out-of-tree was produced |
-| `DONE.md` — entry with plan link, summary, key changes | **Pending merge** — written in the post-merge commit, with the merge identifier, so it is not falsified the way `[2026-08-31]` item 2 describes |
-| `WEEKLY.md` — Summary-Table Status **and** the Daily-Schedule entry | **Partly done** — both G4 task checkboxes flipped, and the housekeeping item corrected in place; the Status/Daily identifiers wait for the merge SHA (never a bare ✅) |
-| `docs/README.md` — plan under Archived Plans | **Pending archive** — this plan is still active; `scripts/check-docs-index.js` only guards `docs/archive/plans/` + `docs/superpowers/specs/`, so the index row lands with the move |
+| `DONE.md` — entry with plan link, summary, key changes | **Done** — `### 2026-09-12 — Group G4`, written after merge `7df03b8` so it names the merge rather than a branch SHA. Also bumped the file's `Last Updated`, stale since 2026-09-02 because G1's closeout did not touch it |
+| `WEEKLY.md` — Summary-Table Status **and** the Daily-Schedule entry | **Done** — Status `✅ PR #69 (merge `7df03b8`)`, the form this table's own rule reserves for groups that opened one; both Daily rows carry what shipped; the **Domain** line's "new `tests/ml-worker.test.js`" corrected in place, since leaving it would freeze an expired premise into the record |
+| `docs/README.md` — plan under Archived Plans | **Done** — row added with the move; the pre-commit `check-docs-index.js` guard enforces it in both directions |
 | `docs/superpowers/specs/` — spec under Design Specs | **N/A** — bounded task, no spec written (brainstorming classified it bounded; design presented in chat and recorded in § 2 here) |
-| `docs/archive/plans/` — plan moved, original deleted | **Pending** — after review sign-off and merge |
-| Cited commit SHAs verified as ancestors of `main` | **Pending merge** — `ddd8340` / `c7e93ff` / `edcbf23` are branch-local until then; the SHAs cited as *evidence* (`6305a7a`, `762714a`, `3eff3eb`, `b352360`, `19e6762`, `bfcc881`, `0d3fed5`) are all on `main` |
-| Capture learnings → memory files | **Pending** — at session close |
+| `docs/archive/plans/` — plan moved, original deleted | **Done** — moved with `git mv`, so the original cannot survive the way it has before; `plans/README.md`'s Current Plans row removed in the same commit |
+| Cited commit SHAs verified as ancestors of `main` | **Done** — all seven branch commits (`ddd8340`, `c7e93ff`, `edcbf23`, `84b85ee`, `2da7bfd`, `2c8887e`, `67bbec8`) plus the merge `7df03b8` checked with `git merge-base --is-ancestor`; the evidence SHAs (`6305a7a`, `762714a`, `3eff3eb`, `b352360`, `19e6762`, `bfcc881`, `0d3fed5`) were already on `main` |
+| Capture learnings → memory files | **Done** — one new durable rule (`feedback_verify_mechanism_can_fire`), three existing rules extended with this PR's instances (`feedback_partial_guards`, `feedback_probe_must_execute_target`, `feedback_convention_is_not_a_control`), and the session file |
 
 ---
 
@@ -371,4 +371,4 @@ implements, and its omissions read as completeness.
 - [x] Peer review requested — `/code-review` on PR #69, 2026-09-12
 - [x] Review comments addressed — no blocking findings; the one non-blocking observation is
       answered in § 4 (remedy pushed back on, underlying fragility fixed differently, residual filed)
-- [ ] Approved
+- [x] Approved — three review rounds plus a final ruling pass, no blocking findings; merged `7df03b8` via PR #69 on user direction
