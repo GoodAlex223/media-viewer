@@ -216,6 +216,49 @@ test.describe('Overlay controls reachability (G2)', () => {
         expect(await isInViewport(page, leftBox)).toBe(true);
     });
 
+    // Regression guard (G2 Task 7 fix round 2): #compareActionBar is display:none in tournament
+    // mode, and a display:none grid item is skipped by auto-placement entirely — without explicit
+    // grid-column on all three children, the right slot auto-places into the centre (auto) track
+    // instead of the right (1fr) one, landing the right-hand group near the viewport's horizontal
+    // MIDPOINT instead of centred in the right half. The chrome-clearance test above does not
+    // catch this: it only asserts the bar avoids the tournament controls, never where within the
+    // bar each group lands. Centre, not edges, because the group's own width could otherwise mask
+    // a shift (an edge could stay put while the group grows/shrinks around a moved centre).
+    //
+    // The threshold is a 20%-wide dead zone (40%-60% of viewport width), not a bare midpoint
+    // split: measured against the actual bug, the right group's centre landed at 50.02% of a
+    // 1188px viewport (594.23px vs the exact midpoint of 594.00px) — a 0.23px margin past a bare
+    // `> viewportWidth / 2` check, which passed when it should have failed. The fixed layout
+    // measures 25.0% / 75.0% (left/right), so 40%/60% cuts cleanly and with a wide margin between
+    // both observed states in both directions.
+    test('tournament: the two overlay groups stay centred on their own halves', async () => {
+        await page.evaluate(() => window.mediaViewer.switchMode('tournament'));
+        await expect(page.locator('#tournamentConfigModal')).toBeVisible();
+        await page.locator('#tournamentRoundsSelect').fill('1');
+        await page.locator('#tournamentConfigStart').click();
+        await page.waitForFunction(
+            () =>
+                window.mediaViewer.isTournamentMode &&
+                window.mediaViewer.tournament.engine &&
+                !window.mediaViewer.isLoading
+        );
+        await expect(page.locator('.left-media-wrapper')).toBeAttached();
+
+        const viewportWidth = await page.evaluate(() => window.innerWidth);
+        const leftBox = await boxOf(page, '.overlay-bar-slot[data-side="left"] .media-overlay-controls');
+        const rightBox = await boxOf(page, '.overlay-bar-slot[data-side="right"] .media-overlay-controls');
+        expect(leftBox, 'left group has no bounding box').not.toBeNull();
+        expect(rightBox, 'right group has no bounding box').not.toBeNull();
+
+        const leftCentre = leftBox.x + leftBox.width / 2;
+        const rightCentre = rightBox.x + rightBox.width / 2;
+
+        expect(leftCentre, 'left group centre should be well inside the left half').toBeLessThan(viewportWidth * 0.4);
+        expect(rightCentre, 'right group centre should be well inside the right half').toBeGreaterThan(
+            viewportWidth * 0.6
+        );
+    });
+
     test('tournament: the zoom button survives past the first pair', async () => {
         await page.evaluate(() => window.mediaViewer.switchMode('tournament'));
         await expect(page.locator('#tournamentConfigModal')).toBeVisible();
