@@ -1671,33 +1671,50 @@ body {
 
 /* G2 finding 1 (PR #70 review): native video controls paint INSIDE the video element's own
    box, anchored to its bottom (~40px tall in Chromium). A max-height video's bottom edge
-   sits exactly 20px above the window bottom (the container's own 20px padding, per the
-   calc(100vh - 40px) above) — which lands under #compareOverlayBar (bottom: 30px in compare
-   mode, 96px in tournament; see .compare-overlay-bar below) for any video tall enough to
-   reach it. Moving the bar cannot fix this: media is vertically CENTRED in a content box of
-   height (100vh - 40), so a media of rendered height h has
-       bottom_offset(h) = 20 + ((100vh - 40) - h) / 2 = 50vh - h / 2
-   which covers [20, 50vh) as h ranges over (0, its max] — some band of heights collides with
-   a bar at ANY fixed position. The fix instead reserves the strip the bar occupies: requiring
-   bottom_offset(h) >= R, where R = the bar's own bottom offset + 48px button height + 10px
-   breathing room, solves to h <= 100vh - 2R (NOT 100vh - (20 + R) — mind the factor of 2: the
-   gaps above AND below the centred media shrink together, so freeing up R more space below
-   costs 2R off the max height, not R). Compare: R = 30 + 48 + 10 = 88 -> max-height:
-   calc(100vh - 176px). Tournament: R = 96 + 48 + 10 = 154 -> calc(100vh - 308px). Applied to
-   ALL media, not just <video> — a `:has(video)` scope would out-specificity the tournament
-   rule below it and break the tournament bar offset (see the comment above
-   .media-container.tournament-mode .compare-overlay-bar); uniform costs nothing since both
-   real use and the committed evidence fixtures (64x4, 320x240) sit far below either ceiling.
-   TRAP: tournament mode leaves the compare-mode class set too (showTournamentPairFast never
-   removes it), so both rules below can match the same element at once. They have EQUAL
-   specificity (4 classes each) — the tournament rule MUST stay after the compare rule in
+   sits exactly 20px above the window bottom. Round-2 review correction: an earlier version of
+   this comment attributed that 20px to "the container's own 20px padding" — false.
+   .media-container.compare-mode's actual padding is --space-3 (12px), not 20px. The 20px
+   falls out purely from the pre-existing calc(100vh - 40px) ceiling above, via the formula
+   below — and that formula is padding-independent, which is exactly what makes it robust to
+   the real padding not being 20px. Moving the bar cannot fix the collision: media is
+   vertically CENTRED in a content box of height (100vh - 2P), where P is whatever the
+   container's padding actually is, so a media of rendered height h has
+       bottom_offset(h) = P + ((100vh - 2P) - h) / 2 = 50vh - h / 2
+   — P cancels out entirely. bottom_offset covers [20, 50vh) as h ranges over (0, its max] (the
+   20 comes from the pre-existing 40px ceiling — h_max_original = 100vh - 40 — not from P) —
+   some band of heights collides with a bar at ANY fixed position. The fix instead reserves the
+   strip the bar occupies: requiring bottom_offset(h) >= R, where R = the bar's own bottom
+   offset + 48px button height + 10px breathing room, solves to h <= 100vh - 2R (NOT
+   100vh - (20 + R) — mind the factor of 2: the gaps above AND below the centred media shrink
+   together, so freeing up R more space below costs 2R off the max height, not R). Compare:
+   R = 30 + 48 + 10 = 88 -> max-height: calc(100vh - 176px). Tournament: R = 96 + 48 + 10 = 154
+   -> calc(100vh - 308px). Applied to ALL media, not just <video> — a `:has(video)` scope would
+   out-specificity the tournament rule below it and break the tournament bar offset (see the
+   comment above .media-container.tournament-mode .compare-overlay-bar); uniform costs nothing
+   since both real use and the committed evidence fixtures (64x4, 320x240) sit far below either
+   ceiling.
+   TRAP 1 (source order): tournament mode leaves the compare-mode class set too
+   (showTournamentPairFast never removes it), so both rules below can match the same element at
+   once. They have EQUAL specificity — the tournament rule MUST stay after the compare rule in
    source order or tournament media would get the smaller (compare) reserve, same reasoning as
-   the .compare-overlay-bar bottom-offset pair below. Verified by "compare: a max-height media
-   element does not overlap the overlay bar" in tests/e2e/overlay-controls.test.js. */
-.media-container.compare-mode .media-wrapper .media-display {
+   the .compare-overlay-bar bottom-offset pair below.
+   TRAP 2 (fullscreen — missed in round 1, fixed in round 2): ".media-wrapper.fullscreen
+   .media-display" (below, "Fullscreen mode") sets max-height: 100vh at specificity (0,3,0).
+   Without :not(.fullscreen) on the wrapper here, these two rules would be (0,4,0) — higher —
+   so a fullscreened video would stay clamped to this reserve (pointless there: the bar itself
+   is hidden in fullscreen, see .media-container:has(.media-wrapper.fullscreen)
+   .compare-overlay-bar) instead of filling the viewport. :not(.fullscreen) removes a
+   fullscreen wrapper's media from these rules entirely, so the fullscreen rule is the only one
+   left matching and wins outright. :not()'s specificity equals its argument's (one class), so
+   both rules below are now (0,5,0) — still equal to EACH OTHER, so TRAP 1 still holds exactly
+   as stated.
+   Verified by "compare: a max-height media element does not overlap the overlay bar" and
+   "compare: fullscreen escapes the overlay-bar reserve and fills the viewport height", both in
+   tests/e2e/overlay-controls.test.js. */
+.media-container.compare-mode .media-wrapper:not(.fullscreen) .media-display {
     max-height: calc(100vh - 176px);
 }
-.media-container.tournament-mode .media-wrapper .media-display {
+.media-container.tournament-mode .media-wrapper:not(.fullscreen) .media-display {
     max-height: calc(100vh - 308px);
 }
 

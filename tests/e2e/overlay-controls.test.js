@@ -222,6 +222,54 @@ test.describe('Overlay controls reachability (G2)', () => {
         }
     });
 
+    test('compare: fullscreen escapes the overlay-bar reserve and fills the viewport height', async () => {
+        await enterCompare(page);
+
+        // Same forcing technique as the test above: explicit width+height so the rendered
+        // height is governed purely by max-height, independent of the fixture's own aspect
+        // ratio — this would hit the (much smaller) overlay-bar reserve ceiling if
+        // `.media-wrapper.fullscreen .media-display` (max-height: 100vh) lost the specificity
+        // fight to the reserve rules, which is exactly the round-2 regression this pins.
+        await page.evaluate(() => {
+            for (const el of document.querySelectorAll('.media-wrapper .media-display')) {
+                el.style.width = '10px';
+                el.style.height = '5000px';
+            }
+        });
+
+        // 'z' toggles fullscreen on the left pane (see tests/e2e/fullscreen.test.js).
+        await page.keyboard.press('z');
+        await expect(page.locator('.left-media-wrapper')).toHaveClass(/fullscreen/);
+
+        const viewportHeight = await page.evaluate(() => window.innerHeight);
+        const mediaBox = await boxOf(page, '.left-media-wrapper .media-display');
+        expect(mediaBox, 'fullscreen media has no bounding box').not.toBeNull();
+
+        // The property the fix guarantees: fullscreen media fills the full viewport height.
+        // The overlay-bar reserve is pointless in fullscreen anyway — the bar itself is
+        // hidden there (.media-container:has(.media-wrapper.fullscreen) .compare-overlay-bar,
+        // opacity: 0; pointer-events: none) — but without :not(.fullscreen) on the wrapper in
+        // the reserve rules, their higher specificity would still override
+        // .media-wrapper.fullscreen .media-display and clamp the media well short of 100vh.
+        // Polled, not read once: `.media-display`'s own `transition: 0.3s ...` (all
+        // properties) animates the max-height change from the compare-mode reserve ceiling to
+        // fullscreen's 100vh, so a single immediate read can catch the very start of that
+        // animation and report the pre-toggle height — which looks identical to the actual
+        // regression and would make this test flaky in exactly the direction that hides bugs.
+        await expect
+            .poll(
+                async () => {
+                    const box = await boxOf(page, '.left-media-wrapper .media-display');
+                    return box ? box.height : null;
+                },
+                {
+                    message:
+                        'fullscreen media is still clamped to the overlay-bar reserve instead of filling the viewport',
+                }
+            )
+            .toBeGreaterThan(viewportHeight - 10);
+    });
+
     test('tournament: the overlay bar clears the tournament chrome', async () => {
         await page.evaluate(() => window.mediaViewer.switchMode('tournament'));
         await expect(page.locator('#tournamentConfigModal')).toBeVisible();
