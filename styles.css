@@ -260,6 +260,12 @@ body {
     padding: 20px;
 }
 
+/* transition: all (below) fires on ANY property change, including a max-height swap from a
+   class toggle (e.g. entering fullscreen) — a geometry/computed-style read taken right after
+   such a change can catch a mid-animation value instead of the settled one. This has already
+   produced two false readings: an E2E test that could not fail, and a review cascade probe
+   returning a mid-animation number. Poll (expect.poll(), as the E2E suite does for the
+   opacity-transition assertion) rather than reading once. */
 .media-display {
     max-width: calc(100vw - 40px);
     max-height: calc(100vh - 120px);
