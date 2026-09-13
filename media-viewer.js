@@ -2592,12 +2592,18 @@ class MediaViewer {
         }
     }
 
+    // Dismiss a zoom popover and drop its listeners. Deliberately does NOT remove the toggle
+    // button: the button belongs to whoever built it (addMediaOverlayControls rebuilds the whole
+    // group, single mode's #zoomBtnWrapper is static markup). Removing it here used to delete
+    // the zoom control from every tournament pair after the first — showTournamentPairFast calls
+    // cleanupCompareMedia, which calls this, and (before this fix) never rebuilt the group (G2).
+    // showTournamentPairFast now rebuilds both groups itself right after the cleanup phase (see
+    // its own comment above) — this method stays a pure "dismiss the popover" op either way.
     removeZoomPopover(target) {
         const entry = this.zoomControlsMap[target];
         if (!entry) return;
         if (entry.abortController) entry.abortController.abort();
         if (entry.container.parentNode) entry.container.remove();
-        if (entry.toggleBtn && entry.toggleBtn.parentNode) entry.toggleBtn.parentNode.remove();
         delete this.zoomControlsMap[target];
     }
 
@@ -3337,20 +3343,21 @@ class MediaViewer {
         this.leftMediaWrapper.appendChild(this.leftMedia);
         this.rightMediaWrapper.appendChild(this.rightMedia);
 
-        // Add overlay controls to each media wrapper
-        this.addMediaOverlayControls(this.leftMediaWrapper, 'left');
-        this.addMediaOverlayControls(this.rightMediaWrapper, 'right');
+        // Add overlay controls to the container-anchored bar (not the wrappers — G2)
+        this.addMediaOverlayControls('left');
+        this.addMediaOverlayControls('right');
 
         this.mediaContainer.appendChild(this.leftMediaWrapper);
         this.mediaContainer.appendChild(this.rightMediaWrapper);
 
         this.closeAllZoomPopovers();
 
-        // Initialize Lucide icons for overlay controls (must be after DOM append)
-        // Use root param to scope icon creation — avoids re-replacing global icons
+        // Initialize Lucide icons for overlay controls (must be after DOM append).
+        // Scope to the bar, not the wrappers: the control groups moved there in G2, and a
+        // {root} pointing at a subtree that no longer contains them silently renders nothing.
         if (typeof lucide !== 'undefined') {
-            lucide.createIcons({ root: this.leftMediaWrapper });
-            lucide.createIcons({ root: this.rightMediaWrapper });
+            const bar = document.getElementById('compareOverlayBar');
+            if (bar) lucide.createIcons({ root: bar });
         }
 
         // Update file info for both media
@@ -3361,7 +3368,14 @@ class MediaViewer {
         setTimeout(() => this.prioritizeDisplayedFilesExtraction(), 200);
     }
 
-    addMediaOverlayControls(wrapper, side) {
+    // The control group lives in #compareOverlayBar's side slot, never inside .media-wrapper:
+    // the wrapper is content-sized and overflow:hidden, which clipped these buttons out of
+    // reach on short media (G2). Rebuilding is idempotent — the old group is dropped first,
+    // which also detaches the old zoom button with it.
+    addMediaOverlayControls(side) {
+        const slot = document.querySelector(`#compareOverlayBar .overlay-bar-slot[data-side="${side}"]`);
+        if (!slot) return;
+
         const controls = document.createElement('div');
         controls.className = 'media-overlay-controls';
 
@@ -3408,9 +3422,12 @@ class MediaViewer {
 
         controls.appendChild(zoomWrapper);
         controls.appendChild(specialBtn);
-        controls.appendChild(dislikeBtn);
         controls.appendChild(likeBtn);
-        wrapper.appendChild(controls);
+        controls.appendChild(dislikeBtn);
+
+        // Drop any previous group for this side before appending the new one.
+        slot.replaceChildren();
+        slot.appendChild(controls);
 
         // Clean up old zoom popover for this side and create new one
         this.removeZoomPopover(side);
@@ -4805,11 +4822,13 @@ class MediaViewer {
         await this.showTournamentPairFast(this.mediaFiles[leftIdx], this.mediaFiles[rightIdx]);
     }
 
-    // Fast per-pair render for tournament mode: reuse the existing compare wrappers + overlay
-    // controls, swapping only the inner media element. Avoids showCompareMedia's full teardown
-    // (.remove() + 50ms reflow grace + 2× checkFileExists IPC + 2× lucide.createIcons), which
-    // makes pair changes sluggish at 24k. Falls back to showCompareMedia for the first pair
-    // (no wrappers yet). Both sides re-render atomically (shared-_jxlObjectURLs invariant).
+    // Fast per-pair render for tournament mode: reuse the existing compare wrappers, swapping
+    // only the inner media element. The overlay controls are REBUILT, not reused as-is — see
+    // the addMediaOverlayControls calls below and _buildTournamentSide's header for why. Avoids
+    // showCompareMedia's full teardown (.remove() + 50ms reflow grace + 2× checkFileExists IPC +
+    // 2× lucide.createIcons), which makes pair changes sluggish at 24k. Falls back to
+    // showCompareMedia for the first pair (no wrappers yet). Both sides re-render atomically
+    // (shared-_jxlObjectURLs invariant).
     async showTournamentPairFast(leftFile, rightFile) {
         if (!this.leftMediaWrapper || !this.rightMediaWrapper) {
             this._restoredPairFiles = { left: leftFile, right: rightFile };
@@ -4828,16 +4847,29 @@ class MediaViewer {
         // interleaved per-side (as in the old _swapTournamentSide), side B's cleanup could revoke
         // the object URL side A just assigned, blanking it.
         await Promise.all([this.cleanupCompareMedia('left'), this.cleanupCompareMedia('right')]);
+        // cleanupCompareMedia dismissed both zoom popovers. Rebuild the control groups so the
+        // zoom button gets a live popover again — this path never ran addMediaOverlayControls,
+        // which is why the zoom control vanished after the first pair (G2). Rebuilding the whole
+        // group (4 buttons) rather than just the popover also re-derives specialBtn.disabled
+        // from the current customSpecialFolder.
+        this.addMediaOverlayControls('left');
+        this.addMediaOverlayControls('right');
+        if (typeof lucide !== 'undefined') {
+            const bar = document.getElementById('compareOverlayBar');
+            if (bar) lucide.createIcons({ root: bar });
+        }
         await Promise.all([this._buildTournamentSide('left', leftFile), this._buildTournamentSide('right', rightFile)]);
         this.updateCompareFileInfo(leftFile, rightFile);
         this.updateNavigationInfo();
         this._logSlowPhase('tournament pair render (fast)', t0);
     }
 
-    // Build one side's media element in place, keeping the wrapper + overlay controls. Assumes
-    // cleanupCompareMedia(side) has already run for this side (see showTournamentPairFast's
-    // phase separation). A missing or undecodable file is purged (mirrors showCompareMedia) and
-    // the engine pair re-rendered.
+    // Build one side's media element in place, keeping the wrapper. Overlay controls live in
+    // #compareOverlayBar's slots, not the wrapper (G2) — showTournamentPairFast rebuilds them
+    // itself, between its cleanup and build phases, so this method no longer needs to preserve
+    // them. Assumes cleanupCompareMedia(side) has already run for this side (see
+    // showTournamentPairFast's phase separation). A missing or undecodable file is purged
+    // (mirrors showCompareMedia) and the engine pair re-rendered.
     async _buildTournamentSide(side, file) {
         const wrapper = side === 'left' ? this.leftMediaWrapper : this.rightMediaWrapper;
 
@@ -7862,19 +7894,13 @@ class MediaViewer {
             badge.id = containerId;
             badge.className = 'prediction-badge';
 
-            // Add to appropriate container
-            let container;
-            if (position === 'single') {
-                container = this.mediaContainer;
-            } else if (position === 'left') {
-                container = document.querySelector('.left-media-wrapper');
-            } else if (position === 'right') {
-                container = document.querySelector('.right-media-wrapper');
-            }
-
-            if (container) {
-                container.appendChild(badge);
-            }
+            // All three badges hang off .media-container (G2). They used to be appended into
+            // the compare wrappers, which are content-sized and overflow:hidden — so on short
+            // media the badge was clipped or covered the picture. Consequence to know: these
+            // elements now OUTLIVE a render instead of being destroyed with the wrapper, so
+            // every hide path must be explicit (updatePredictionBadges / hidePredictionBadges
+            // already are).
+            this.mediaContainer.appendChild(badge);
         }
 
         const percentage = Math.round(score * 100);

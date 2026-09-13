@@ -209,3 +209,21 @@ export async function createTempFixtureDir(fixtureNames = ['red-1x1.png', 'green
 
     return { dir, likeDir, dislikeDir, specialDir, cleanup, addFile };
 }
+
+// Absolute path of the committed visual-evidence directory. Screenshots taken here are
+// deliberately checked into git: WEEKLY G2's acceptance check is that they exist, not that
+// a reviewer saw them once in a CI artifact.
+const EVIDENCE_DIR = join(__dirname, '..', '..', '..', 'docs', 'superpowers', 'specs', 'assets');
+
+/**
+ * Capture a full-page screenshot into the committed evidence directory.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} name - file stem, e.g. 'g2-compare-short-after'
+ * @returns {Promise<string>} the path written
+ */
+export async function captureScreenshot(page, name) {
+    await mkdir(EVIDENCE_DIR, { recursive: true });
+    const target = join(EVIDENCE_DIR, `${name}.png`);
+    await page.screenshot({ path: target });
+    return target;
+}

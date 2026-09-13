@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_ | — |
+| [G2 Reachable Overlay Controls Plan](planning/plans/2026-09-13_g2-reachable-overlay-controls.md) | Container-anchored overlay bar, badge anchoring, Like/Dislike order, tournament zoom fix (Group G2, Sep 7–11) |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
@@ -217,6 +217,7 @@ Central index for all project documentation.
 | [G2 Tournament Undo Hardening][] | Undo-stack lifecycle hardening design: DEC-1 **reverted, not shipped** — a dedicated `_tournamentRenderBusy` flag replaced the specified `isLoading` mutex (which cannot hold: the compare handlers clear it at first paint), but E2E measurement showed the flag silently drops user input, because `_buildTournamentSide` re-enters the render from a DOM error callback that bypasses every handler; the guard is blocked on that and re-filed to BACKLOG [2026-08-31]. DEC-2 drop a `special` entry after 2 **cumulative** restore failures — counted per entry for its whole lifetime, with nothing resetting the count except the entry leaving the stack (`dropEntry` + `moveHistory` twin + `clearHistory` for the entries beneath it), DEC-3 `reconcileWithFiles` drops the session-only history in O(1) and notifies (per-file `trackUndo` would undo the PR #55 24k win); plus the empty-state keydown `canUndo` guard and the `exitTournamentMode` invariant comment (Group G2, Aug 31–Sep 4) |
 | [G2 Tournament Bug Fixes][] | Tournament-mode bug fixes design: D1 unified LIFO undo stack, D2 `engine.history` IS that stack (reverses PR #59 `trackUndo:false`), D3 engine stays dumb (`meta` opaque), D4 system prunes auto-consumed, D5 undo stays session-only, D6 auto-hide mirrors `.header` (edge band + 3s), D7 reveal chrome on entry (Group G2) |
 | [G1 ML Training Pipeline][] | ML training-pipeline design: corrects the recorded root cause (`resetMlModel()` never fires on a source-folder change — the model is cached per source folder while trained from globally-configured like/dislike folders), plus the inverse defect that an already-sorted folder never retrains at all. D1 drop the online per-rating updates, D2 cache training vectors per training folder, D3 cache the model behind a training-set fingerprint in app data, D4 no bulk-deltas layer, D5 new `ml-training.js` module, D6 keep `showMlLearningIndicator` repurposed per-sort, D7 reset before training + seeded shuffle (Group G1, Sep 7–11) |
+| [G2 Reachable Overlay Controls][] | Overlay-control geometry: the per-media buttons and the prediction badge leave the content-sized `.media-wrapper` for a container-anchored `#compareOverlayBar` (`1fr auto 1fr` grid, so the side groups stay column-centred when tournament mode collapses the action bar), fixing the low-height clipping by construction. D3 ghosted-at-rest buttons + `:has()` fullscreen rule + a deliberate dead-guard deletion in `fullscreen.js`, D4 badge anchored per column in CSS only, D5 Like-left/Dislike-right on every surface, D6 folds in a found defect — `removeZoomPopover` deletes the zoom button and the tournament fast path never rebuilds it (Group G2, Sep 7–11) |
 | [TASK-018 UI Polish][] | Button press effects + `cleanupFullscreen()` guard design |
 | [Tournament Mode][] | Swiss-style tournament engine + `TournamentManager` + 3-way mode selector (Groups E + F) |
 | [CW-V Test & Tooling Backfill][] | Test-only backfill design: comment-aware `methodSource` brace guard + `src` seam; `extractAddedLines` real-git-diff coverage (Group CW-V) |
@@ -272,6 +273,7 @@ Central index for all project documentation.
 [G1 Bulk-Rate Follow-ups Design]: superpowers/specs/2026-08-29-g1-bulk-rate-followups-design.md
 [G2 Tournament Undo Hardening]: superpowers/specs/2026-08-30-g2-tournament-undo-hardening-design.md
 [G1 ML Training Pipeline]: superpowers/specs/2026-09-10-ml-training-pipeline-design.md
+[G2 Reachable Overlay Controls]: superpowers/specs/2026-09-13-g2-reachable-overlay-controls-design.md
 [TASK-018 UI Polish]: superpowers/specs/2026-03-20-task-018-ui-polish-design.md
 [Tournament Mode]: superpowers/specs/2026-05-25-tournament-mode-design.md
 [CW-V Test & Tooling Backfill]: superpowers/specs/2026-07-04-cw-v-test-tooling-backfill-design.md

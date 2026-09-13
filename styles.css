@@ -260,6 +260,12 @@ body {
     padding: 20px;
 }
 
+/* transition: all (below) fires on ANY property change, including a max-height swap from a
+   class toggle (e.g. entering fullscreen) — a geometry/computed-style read taken right after
+   such a change can catch a mid-animation value instead of the settled one. This has already
+   produced two false readings: an E2E test that could not fail, and a review cascade probe
+   returning a mid-animation number. Poll (expect.poll(), as the E2E suite does for the
+   opacity-transition assertion) rather than reading once. */
 .media-display {
     max-width: calc(100vw - 40px);
     max-height: calc(100vh - 120px);
@@ -998,15 +1004,18 @@ body {
     border: 1px solid rgba(239, 68, 68, 0.6);
 }
 
-/* Compare mode badge positioning */
-.left-media-wrapper .prediction-badge {
-    top: 10px;
-    right: 10px;
+/* Compare/tournament badge positioning — anchored to the top-right of each column half of
+   .media-container, so placement no longer depends on the media's rendered height (G2). */
+.media-container.compare-mode .prediction-badge {
+    top: 70px;
 }
 
-.right-media-wrapper .prediction-badge {
-    top: 10px;
-    right: 10px;
+#prediction-badge-left {
+    right: calc(50% + 8px);
+}
+
+#prediction-badge-right {
+    right: 16px;
 }
 
 /* Help button */
@@ -1666,31 +1675,78 @@ body {
     object-fit: contain;
 }
 
+/* G2 finding 1 (PR #70 review): native video controls paint INSIDE the video element's own
+   box, anchored to its bottom (~40px tall in Chromium). A max-height video's bottom edge
+   sits exactly 20px above the window bottom. Round-2 review correction: an earlier version of
+   this comment attributed that 20px to "the container's own 20px padding" — false.
+   .media-container.compare-mode's actual padding is --space-3 (12px), not 20px. The 20px
+   falls out purely from the pre-existing calc(100vh - 40px) ceiling above, via the formula
+   below — and that formula is padding-independent, which is exactly what makes it robust to
+   the real padding not being 20px. Moving the bar cannot fix the collision: media is
+   vertically CENTRED in a content box of height (100vh - 2P), where P is whatever the
+   container's padding actually is, so a media of rendered height h has
+       bottom_offset(h) = P + ((100vh - 2P) - h) / 2 = 50vh - h / 2
+   — P cancels out entirely. bottom_offset covers [20, 50vh) as h ranges over (0, its max] (the
+   20 comes from the pre-existing 40px ceiling — h_max_original = 100vh - 40 — not from P) —
+   some band of heights collides with a bar at ANY fixed position. The fix instead reserves the
+   strip the bar occupies: requiring bottom_offset(h) >= R, where R = the bar's own bottom
+   offset + 48px button height + 10px breathing room, solves to h <= 100vh - 2R (NOT
+   100vh - (20 + R) — mind the factor of 2: the gaps above AND below the centred media shrink
+   together, so freeing up R more space below costs 2R off the max height, not R). Compare:
+   R = 30 + 48 + 10 = 88 -> max-height: calc(100vh - 176px). Tournament: R = 96 + 48 + 10 = 154
+   -> calc(100vh - 308px). Applied to ALL media, not just <video> — a `:has(video)` scope would
+   out-specificity the tournament rule below it and break the tournament bar offset (see the
+   comment above .media-container.tournament-mode .compare-overlay-bar); uniform costs nothing
+   since both real use and the committed evidence fixtures (64x4, 320x240) sit far below either
+   ceiling.
+   TRAP 1 (source order): tournament mode leaves the compare-mode class set too
+   (showTournamentPairFast never removes it), so both rules below can match the same element at
+   once. They have EQUAL specificity — the tournament rule MUST stay after the compare rule in
+   source order or tournament media would get the smaller (compare) reserve, same reasoning as
+   the .compare-overlay-bar bottom-offset pair below.
+   TRAP 2 (fullscreen — missed in round 1, fixed in round 2): ".media-wrapper.fullscreen
+   .media-display" (below, "Fullscreen mode") sets max-height: 100vh at specificity (0,3,0).
+   Without :not(.fullscreen) on the wrapper here, these two rules would be (0,4,0) — higher —
+   so a fullscreened video would stay clamped to this reserve (pointless there: the bar itself
+   is hidden in fullscreen, see .media-container:has(.media-wrapper.fullscreen)
+   .compare-overlay-bar) instead of filling the viewport. :not(.fullscreen) removes a
+   fullscreen wrapper's media from these rules entirely, so the fullscreen rule is the only one
+   left matching and wins outright. :not()'s specificity equals its argument's (one class), so
+   both rules below are now (0,5,0) — still equal to EACH OTHER, so TRAP 1 still holds exactly
+   as stated.
+   Verified by "compare: a max-height media element does not overlap the overlay bar" and
+   "compare: fullscreen escapes the overlay-bar reserve and fills the viewport height", both in
+   tests/e2e/overlay-controls.test.js. */
+.media-container.compare-mode .media-wrapper:not(.fullscreen) .media-display {
+    max-height: calc(100vh - 176px);
+}
+.media-container.tournament-mode .media-wrapper:not(.fullscreen) .media-display {
+    max-height: calc(100vh - 308px);
+}
+
 /* Media overlay controls */
+/* Media overlay controls — G2: these live in #compareOverlayBar's side slots, NOT inside
+   .media-wrapper. That is the whole point of the group: the wrapper is content-sized
+   (.media-container is align-items:center) and overflow:hidden, so anything inside it is
+   clipped on short media. */
 .media-overlay-controls {
-    position: absolute;
-    bottom: 56px;
-    left: 50%;
-    transform: translateX(-50%);
     display: flex;
     gap: 15px;
-    opacity: 0;
+    opacity: 0.35;
     transition: opacity 0.3s ease;
-    transition-delay: 500ms;
-    pointer-events: none;
-    z-index: 10;
-}
-
-.media-wrapper:hover .media-overlay-controls {
-    opacity: 1;
     pointer-events: auto;
-    transition-delay: 0s;
 }
 
-.media-wrapper.fullscreen .media-overlay-controls {
+.media-overlay-controls:hover {
+    opacity: 1;
+}
+
+/* A fullscreen side covers the viewport (z-index 1500), so this is about not leaving a
+   half-visible artefact rather than about click-through. Behavioural parity with the old
+   .media-wrapper.fullscreen rule should not depend on stacking order. */
+.media-container:has(.media-wrapper.fullscreen) .compare-overlay-bar {
     opacity: 0;
     pointer-events: none;
-    transition-delay: 0s;
 }
 
 .overlay-btn {
@@ -2361,9 +2417,10 @@ body {
 }
 
 /* Hide deprecated compare-mode bottom button rows in tournament mode.
-   The per-wrapper overlay controls (.media-overlay-controls — Like/Dislike/Special/Zoom)
-   stay visible: their handlers are tournament-aware (Like = "this side wins",
-   Dislike = "other side wins", Special = remove from tournament + move to special folder).
+   The overlay controls (.media-overlay-controls — Like/Dislike/Special/Zoom, rendered into
+   #compareOverlayBar's side slots since G2, not per-wrapper) stay visible: their handlers
+   are tournament-aware (Like = "this side wins", Dislike = "other side wins", Special =
+   remove from tournament + move to special folder).
    Nav arrows + the compare action bar are hidden — manual prev/next would desync the display
    from the tournament engine's chosen pair (Swiss pairing controls progression, not currentIndex);
    tournament has its own undo (#tournamentUndoBtn). The fixed top-center navigation-info banner
@@ -2469,18 +2526,65 @@ body {
     height: 100%;
     background: var(--accent-color, #4a9eff);
 }
-/* Compare-mode bottom-center action cluster: Both Good / Undo / Both Bad as square overlay
-   buttons. Positioned relative to .media-container (which is position: relative). The container
-   ignores pointer events so the gaps don't block media interaction; each button opts back in. */
-.compare-action-bar {
+/* G2: container-anchored bottom row. `1fr auto 1fr` sizes the two side columns evenly around
+   the centre action bar. Absolute 25%/75% positioning would overlap the action bar below
+   ~850px window width (side group ~237px, action bar ~180px) against an app minWidth of 800.
+   Correction (G2 Task 7 fix round 2): explicit `grid-column` on all three children (below) is
+   load-bearing, not decorative — a prior version of this comment claimed hiding
+   #compareActionBar in tournament mode "collapses the centre column so the two 1fr columns
+   become 50% each." That is false: a `display: none` grid item does not occupy a cell at all,
+   so auto-placement slid the right slot into the centre (`auto`) track and left the third
+   (`1fr`) track empty, landing the right group at ~50% instead of ~75%. The committed
+   before/after screenshots (docs/superpowers/specs/assets/) caught this visually — the E2E
+   suite did not, because it only asserts the bar clears the tournament chrome, never where
+   within the bar each group lands. */
+.compare-overlay-bar {
     position: absolute;
     bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    display: none;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 0 var(--space-4);
+    z-index: 50;
+    pointer-events: none;
+}
+
+.media-container.compare-mode .compare-overlay-bar {
+    display: grid;
+}
+
+/* .tournament-controls sits at bottom:16px and is ~65px tall (column-flex .control-btn:
+   icon over label), so bottom:30px would collide with it. Verified by the
+   "overlay bar clears the tournament chrome" E2E, not by this comment. */
+.media-container.tournament-mode .compare-overlay-bar {
+    bottom: 96px;
+}
+
+.overlay-bar-slot {
     display: flex;
+    justify-content: center;
+}
+
+/* Pin each child to its own track. #compareActionBar is display:none in tournament mode, and a
+   display:none grid item is skipped by auto-placement entirely — without these, the right slot
+   would auto-place into the centre (auto) track instead of the right (1fr) one, landing the
+   right-hand group at ~50% of the bar instead of ~75%. See the comment above .compare-overlay-bar. */
+.overlay-bar-slot[data-side='left'] {
+    grid-column: 1;
+}
+.overlay-bar-slot[data-side='right'] {
+    grid-column: 3;
+}
+
+/* Positioning now comes from the #compareOverlayBar grid (G2). */
+.compare-action-bar {
+    display: flex;
+    grid-column: 2;
     gap: var(--space-4);
     align-items: center;
-    z-index: 50;
     pointer-events: none;
 }
 .compare-action-bar .overlay-btn {
