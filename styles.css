@@ -998,15 +998,18 @@ body {
     border: 1px solid rgba(239, 68, 68, 0.6);
 }
 
-/* Compare mode badge positioning */
-.left-media-wrapper .prediction-badge {
-    top: 10px;
-    right: 10px;
+/* Compare/tournament badge positioning — anchored to the top-right of each column half of
+   .media-container, so placement no longer depends on the media's rendered height (G2). */
+.media-container.compare-mode .prediction-badge {
+    top: 70px;
 }
 
-.right-media-wrapper .prediction-badge {
-    top: 10px;
-    right: 10px;
+#prediction-badge-left {
+    right: calc(50% + 8px);
+}
+
+#prediction-badge-right {
+    right: 16px;
 }
 
 /* Help button */

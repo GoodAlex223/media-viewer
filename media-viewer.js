@@ -7873,19 +7873,13 @@ class MediaViewer {
             badge.id = containerId;
             badge.className = 'prediction-badge';
 
-            // Add to appropriate container
-            let container;
-            if (position === 'single') {
-                container = this.mediaContainer;
-            } else if (position === 'left') {
-                container = document.querySelector('.left-media-wrapper');
-            } else if (position === 'right') {
-                container = document.querySelector('.right-media-wrapper');
-            }
-
-            if (container) {
-                container.appendChild(badge);
-            }
+            // All three badges hang off .media-container (G2). They used to be appended into
+            // the compare wrappers, which are content-sized and overflow:hidden — so on short
+            // media the badge was clipped or covered the picture. Consequence to know: these
+            // elements now OUTLIVE a render instead of being destroyed with the wrapper, so
+            // every hide path must be explicit (updatePredictionBadges / hidePredictionBadges
+            // already are).
+            this.mediaContainer.appendChild(badge);
         }
 
         const percentage = Math.round(score * 100);

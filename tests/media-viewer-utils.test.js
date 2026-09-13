@@ -6086,3 +6086,53 @@ describe('addMediaOverlayControls — slot targeting and button order (G2)', () 
         expect(special.title).toContain('Settings');
     });
 });
+
+describe('displayPredictionBadge — container anchoring (G2)', () => {
+    let origDocument, created, displayPredictionBadge;
+
+    beforeEach(() => {
+        displayPredictionBadge = extractMethod('displayPredictionBadge');
+        created = [];
+        origDocument = globalThis.document;
+        globalThis.document = {
+            getElementById: () => null,
+            createElement: () => {
+                const el = { id: '', className: '', textContent: '', style: {} };
+                created.push(el);
+                return el;
+            },
+            querySelector: () => {
+                throw new Error('displayPredictionBadge must not query for a wrapper');
+            },
+        };
+    });
+
+    afterEach(() => {
+        globalThis.document = origDocument;
+    });
+
+    function ctx() {
+        const appended = [];
+        return {
+            appended,
+            mlStats: { isReady: true },
+            mediaContainer: { appendChild: (el) => appended.push(el) },
+        };
+    }
+
+    it.each(['left', 'right', 'single'])('anchors the %s badge to the media container', (position) => {
+        const c = ctx();
+        displayPredictionBadge.call(c, 0.87, position);
+
+        expect(c.appended).toHaveLength(1);
+        expect(c.appended[0].id).toBe(`prediction-badge-${position}`);
+    });
+
+    it('renders the score as a whole percentage with a severity class', () => {
+        const c = ctx();
+        displayPredictionBadge.call(c, 0.87, 'left');
+
+        expect(c.appended[0].textContent).toBe('87%');
+        expect(c.appended[0].className).toBe('prediction-badge high');
+    });
+});

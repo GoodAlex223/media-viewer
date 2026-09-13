@@ -63,11 +63,13 @@ export class FullscreenManager {
             if (existing) existing.abort();
             const abortController = new AbortController();
             this.abortControllers.set(wrapper, abortController);
-            const exitHandler = (e) => {
-                // Don't exit if clicking on overlay buttons (like/dislike/special)
-                if (e.target.closest('.overlay-btn') || e.target.closest('.media-overlay-controls')) {
-                    return;
-                }
+            const exitHandler = (_e) => {
+                // NOTE: this used to also skip exit for clicks on .overlay-btn /
+                // .media-overlay-controls. Those controls moved out of the wrapper into
+                // #compareOverlayBar (G2), so their clicks cannot reach this wrapper-bound
+                // listener at all and the guard could never match. Deleted rather than kept:
+                // a guard that reads as live but cannot fire makes the next reader budget for
+                // protection that is not there.
                 // Don't exit if media is zoomed (use ESC to exit when zoomed)
                 if (this.isZoomed(wrapper)) {
                     return;
