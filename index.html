@@ -278,32 +278,39 @@
 
             <!-- Compare Mode bottom action bar: corrective bulk-rate buttons (AI-sorted compare only)
                  flanking the Undo button. Each button self-gates via JS — Both Good/Bad through
-                 updateBulkRateButtonsVisibility(), Undo through updateCompareUndoButton(). -->
-            <div class="compare-action-bar" id="compareActionBar">
-                <button
-                    class="overlay-btn overlay-like-btn"
-                    id="bothGoodBtn"
-                    title="Both good (D)"
-                    style="display: none"
-                >
-                    <i data-lucide="thumbs-up"></i>
-                </button>
-                <button
-                    class="overlay-btn compare-undo-btn"
-                    id="compareUndoBtn"
-                    title="Undo last action (Ctrl+A)"
-                    style="display: none"
-                >
-                    <i data-lucide="undo-2"></i>
-                </button>
-                <button
-                    class="overlay-btn overlay-dislike-btn"
-                    id="bothBadBtn"
-                    title="Both bad (F)"
-                    style="display: none"
-                >
-                    <i data-lucide="thumbs-down"></i>
-                </button>
+                 updateBulkRateButtonsVisibility(), Undo through updateCompareUndoButton().
+                 Wrapped in #compareOverlayBar (G2): the per-media control groups are appended into
+                 the side slots by addMediaOverlayControls(), so the whole bottom row is laid out by
+                 one grid and the groups can never overlap the action bar. -->
+            <div class="compare-overlay-bar" id="compareOverlayBar">
+                <div class="overlay-bar-slot" data-side="left"></div>
+                <div class="compare-action-bar" id="compareActionBar">
+                    <button
+                        class="overlay-btn overlay-like-btn"
+                        id="bothGoodBtn"
+                        title="Both good (D)"
+                        style="display: none"
+                    >
+                        <i data-lucide="thumbs-up"></i>
+                    </button>
+                    <button
+                        class="overlay-btn compare-undo-btn"
+                        id="compareUndoBtn"
+                        title="Undo last action (Ctrl+A)"
+                        style="display: none"
+                    >
+                        <i data-lucide="undo-2"></i>
+                    </button>
+                    <button
+                        class="overlay-btn overlay-dislike-btn"
+                        id="bothBadBtn"
+                        title="Both bad (F)"
+                        style="display: none"
+                    >
+                        <i data-lucide="thumbs-down"></i>
+                    </button>
+                </div>
+                <div class="overlay-bar-slot" data-side="right"></div>
             </div>
         </div>
 

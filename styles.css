@@ -1667,30 +1667,28 @@ body {
 }
 
 /* Media overlay controls */
+/* Media overlay controls — G2: these live in #compareOverlayBar's side slots, NOT inside
+   .media-wrapper. That is the whole point of the group: the wrapper is content-sized
+   (.media-container is align-items:center) and overflow:hidden, so anything inside it is
+   clipped on short media. */
 .media-overlay-controls {
-    position: absolute;
-    bottom: 56px;
-    left: 50%;
-    transform: translateX(-50%);
     display: flex;
     gap: 15px;
-    opacity: 0;
+    opacity: 0.35;
     transition: opacity 0.3s ease;
-    transition-delay: 500ms;
-    pointer-events: none;
-    z-index: 10;
-}
-
-.media-wrapper:hover .media-overlay-controls {
-    opacity: 1;
     pointer-events: auto;
-    transition-delay: 0s;
 }
 
-.media-wrapper.fullscreen .media-overlay-controls {
+.media-overlay-controls:hover {
+    opacity: 1;
+}
+
+/* A fullscreen side covers the viewport (z-index 1500), so this is about not leaving a
+   half-visible artefact rather than about click-through. Behavioural parity with the old
+   .media-wrapper.fullscreen rule should not depend on stacking order. */
+.media-container:has(.media-wrapper.fullscreen) .compare-overlay-bar {
     opacity: 0;
     pointer-events: none;
-    transition-delay: 0s;
 }
 
 .overlay-btn {
@@ -2469,18 +2467,46 @@ body {
     height: 100%;
     background: var(--accent-color, #4a9eff);
 }
-/* Compare-mode bottom-center action cluster: Both Good / Undo / Both Bad as square overlay
-   buttons. Positioned relative to .media-container (which is position: relative). The container
-   ignores pointer events so the gaps don't block media interaction; each button opts back in. */
-.compare-action-bar {
+/* G2: container-anchored bottom row. `1fr auto 1fr` is load-bearing — tournament mode hides
+   #compareActionBar (display:none), which collapses the centre column so the two 1fr columns
+   become 50% each and the side groups stay centred on their own halves in BOTH modes with one
+   rule. Absolute 25%/75% positioning would overlap the action bar below ~850px window width
+   (side group ~237px, action bar ~180px) against an app minWidth of 800. */
+.compare-overlay-bar {
     position: absolute;
     bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    display: none;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 0 var(--space-4);
+    z-index: 50;
+    pointer-events: none;
+}
+
+.media-container.compare-mode .compare-overlay-bar {
+    display: grid;
+}
+
+/* .tournament-controls sits at bottom:16px and is ~65px tall (column-flex .control-btn:
+   icon over label), so bottom:30px would collide with it. Verified by the
+   "overlay bar clears the tournament chrome" E2E, not by this comment. */
+.media-container.tournament-mode .compare-overlay-bar {
+    bottom: 96px;
+}
+
+.overlay-bar-slot {
+    display: flex;
+    justify-content: center;
+}
+
+/* Positioning now comes from the #compareOverlayBar grid (G2). */
+.compare-action-bar {
     display: flex;
     gap: var(--space-4);
     align-items: center;
-    z-index: 50;
     pointer-events: none;
 }
 .compare-action-bar .overlay-btn {
