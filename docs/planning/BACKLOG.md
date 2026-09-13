@@ -298,7 +298,7 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 
 ## 🟤 Auto-Generated Tech Debt
 
-### [2026-09-13] From: G2 closeout (reachable overlay controls) (6 items)
+### [2026-09-13] From: G2 closeout (reachable overlay controls)
 
 **Origin**: Closeout of Group G2 (Reachable Overlay Controls; branch `g2-reachable-overlay-controls`,
 **MERGED via PR #70, merge `f874f93`**). All six items are gaps the group's own review rounds or its
