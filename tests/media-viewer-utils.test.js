@@ -6158,10 +6158,11 @@ describe('removeZoomPopover — dismisses the popover, keeps the button (G2)', (
 
         removeZoomPopover.call(ctx, 'left');
 
-        // This is the G2 contract: deleting the BUTTON is the caller's job. Doing it here is
-        // what stripped the zoom control from every tournament pair after the first, because
-        // showTournamentPairFast calls cleanupCompareMedia (which calls this) and never
-        // re-runs addMediaOverlayControls.
+        // This is the G2 contract: deleting the BUTTON is the caller's job. Doing it here used
+        // to strip the zoom control from every tournament pair after the first, because
+        // showTournamentPairFast calls cleanupCompareMedia (which calls this) and — before this
+        // fix — never re-ran addMediaOverlayControls. It now does, right after the cleanup
+        // phase, so this method stays free to be a pure "dismiss the popover" op.
         expect(parentRemove).not.toHaveBeenCalled();
     });
 

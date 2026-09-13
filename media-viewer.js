@@ -2594,9 +2594,11 @@ class MediaViewer {
 
     // Dismiss a zoom popover and drop its listeners. Deliberately does NOT remove the toggle
     // button: the button belongs to whoever built it (addMediaOverlayControls rebuilds the whole
-    // group, single mode's #zoomBtnWrapper is static markup). Removing it here deleted the zoom
-    // control from every tournament pair after the first — showTournamentPairFast calls
-    // cleanupCompareMedia, which calls this, and never rebuilds the group (G2).
+    // group, single mode's #zoomBtnWrapper is static markup). Removing it here used to delete
+    // the zoom control from every tournament pair after the first — showTournamentPairFast calls
+    // cleanupCompareMedia, which calls this, and (before this fix) never rebuilt the group (G2).
+    // showTournamentPairFast now rebuilds both groups itself right after the cleanup phase (see
+    // its own comment above) — this method stays a pure "dismiss the popover" op either way.
     removeZoomPopover(target) {
         const entry = this.zoomControlsMap[target];
         if (!entry) return;
@@ -4820,11 +4822,13 @@ class MediaViewer {
         await this.showTournamentPairFast(this.mediaFiles[leftIdx], this.mediaFiles[rightIdx]);
     }
 
-    // Fast per-pair render for tournament mode: reuse the existing compare wrappers + overlay
-    // controls, swapping only the inner media element. Avoids showCompareMedia's full teardown
-    // (.remove() + 50ms reflow grace + 2× checkFileExists IPC + 2× lucide.createIcons), which
-    // makes pair changes sluggish at 24k. Falls back to showCompareMedia for the first pair
-    // (no wrappers yet). Both sides re-render atomically (shared-_jxlObjectURLs invariant).
+    // Fast per-pair render for tournament mode: reuse the existing compare wrappers, swapping
+    // only the inner media element. The overlay controls are REBUILT, not reused as-is — see
+    // the addMediaOverlayControls calls below and _buildTournamentSide's header for why. Avoids
+    // showCompareMedia's full teardown (.remove() + 50ms reflow grace + 2× checkFileExists IPC +
+    // 2× lucide.createIcons), which makes pair changes sluggish at 24k. Falls back to
+    // showCompareMedia for the first pair (no wrappers yet). Both sides re-render atomically
+    // (shared-_jxlObjectURLs invariant).
     async showTournamentPairFast(leftFile, rightFile) {
         if (!this.leftMediaWrapper || !this.rightMediaWrapper) {
             this._restoredPairFiles = { left: leftFile, right: rightFile };

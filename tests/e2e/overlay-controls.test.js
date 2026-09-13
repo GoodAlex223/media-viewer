@@ -187,6 +187,41 @@ test.describe('Overlay controls reachability (G2)', () => {
         await expect(page.locator('#prediction-badge-left')).toBeHidden();
     });
 
+    test('compare: a max-height media element does not overlap the overlay bar', async () => {
+        await enterCompare(page);
+
+        // Force each media element to its max-height ceiling regardless of the fixture's own
+        // aspect ratio: with BOTH width and height set to explicit (non-auto) inline values,
+        // CSS never derives one axis from the other via the intrinsic ratio, so each is
+        // clamped independently by its own max-width / max-height — landing height exactly at
+        // the stylesheet's max-height ceiling instead of wherever the aspect ratio happens to
+        // put it. That ceiling is the geometry a native video-controls panel actually sees
+        // (painted inside the video's own box, anchored to its bottom) — see the derivation
+        // comment above `.media-wrapper .media-display` in styles.css.
+        await page.evaluate(() => {
+            for (const el of document.querySelectorAll('.media-wrapper .media-display')) {
+                el.style.width = '10px';
+                el.style.height = '5000px';
+            }
+        });
+
+        for (const side of ['left', 'right']) {
+            const mediaBox = await boxOf(page, `.${side}-media-wrapper .media-display`);
+            const barBox = await boxOf(page, '.compare-overlay-bar');
+            expect(mediaBox, `${side} media has no bounding box`).not.toBeNull();
+            expect(barBox, 'overlay bar has no bounding box').not.toBeNull();
+
+            // The property the fix guarantees: the media element's bottom edge sits at or
+            // above the bar's top edge, so a video's native controls (painted inside its own
+            // box) can never reach into the bar's band. Checked as real geometry, not CSS
+            // text — and not on the control panel's own visibility, since the tiny.mp4
+            // fixture is an ftyp box only and never renders a real one.
+            expect(mediaBox.y + mediaBox.height, `${side} media overlaps the overlay bar`).toBeLessThanOrEqual(
+                barBox.y
+            );
+        }
+    });
+
     test('tournament: the overlay bar clears the tournament chrome', async () => {
         await page.evaluate(() => window.mediaViewer.switchMode('tournament'));
         await expect(page.locator('#tournamentConfigModal')).toBeVisible();
@@ -273,8 +308,10 @@ test.describe('Overlay controls reachability (G2)', () => {
 
         await expect(page.locator('.overlay-bar-slot[data-side="left"] .overlay-zoom-btn')).toBeAttached();
 
-        // One pick re-renders the pair through showTournamentPairFast — the path that
-        // deletes the zoom button today.
+        // One pick re-renders the pair through showTournamentPairFast — the path that used to
+        // delete the zoom button on every pair after the first (F4 / G2 Task 4), before its
+        // fix (D6) had showTournamentPairFast rebuild both overlay groups after cleanup. This
+        // test pins that fix.
         await page.evaluate(() => {
             const pair = window.mediaViewer.tournament.engine.getCurrentPair();
             return window.mediaViewer.handleTournamentPick(pair[0], pair[1]);

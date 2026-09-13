@@ -56,7 +56,8 @@ export class FullscreenManager {
                 }, 100);
             }
 
-            // Click to exit (but not on overlay buttons or when zoomed)
+            // Click to exit (but not when zoomed — the old "or on overlay buttons" exclusion
+            // was deleted; see the NOTE below for why)
             // Use AbortController so cleanup() can remove this listener
             // regardless of which exit path is taken (click, ESC, Z/X keys)
             const existing = this.abortControllers.get(wrapper);
