@@ -2592,12 +2592,16 @@ class MediaViewer {
         }
     }
 
+    // Dismiss a zoom popover and drop its listeners. Deliberately does NOT remove the toggle
+    // button: the button belongs to whoever built it (addMediaOverlayControls rebuilds the whole
+    // group, single mode's #zoomBtnWrapper is static markup). Removing it here deleted the zoom
+    // control from every tournament pair after the first — showTournamentPairFast calls
+    // cleanupCompareMedia, which calls this, and never rebuilds the group (G2).
     removeZoomPopover(target) {
         const entry = this.zoomControlsMap[target];
         if (!entry) return;
         if (entry.abortController) entry.abortController.abort();
         if (entry.container.parentNode) entry.container.remove();
-        if (entry.toggleBtn && entry.toggleBtn.parentNode) entry.toggleBtn.parentNode.remove();
         delete this.zoomControlsMap[target];
     }
 
@@ -4839,16 +4843,29 @@ class MediaViewer {
         // interleaved per-side (as in the old _swapTournamentSide), side B's cleanup could revoke
         // the object URL side A just assigned, blanking it.
         await Promise.all([this.cleanupCompareMedia('left'), this.cleanupCompareMedia('right')]);
+        // cleanupCompareMedia dismissed both zoom popovers. Rebuild the control groups so the
+        // zoom button gets a live popover again — this path never ran addMediaOverlayControls,
+        // which is why the zoom control vanished after the first pair (G2). Rebuilding the whole
+        // group (4 buttons) rather than just the popover also re-derives specialBtn.disabled
+        // from the current customSpecialFolder.
+        this.addMediaOverlayControls('left');
+        this.addMediaOverlayControls('right');
+        if (typeof lucide !== 'undefined') {
+            const bar = document.getElementById('compareOverlayBar');
+            if (bar) lucide.createIcons({ root: bar });
+        }
         await Promise.all([this._buildTournamentSide('left', leftFile), this._buildTournamentSide('right', rightFile)]);
         this.updateCompareFileInfo(leftFile, rightFile);
         this.updateNavigationInfo();
         this._logSlowPhase('tournament pair render (fast)', t0);
     }
 
-    // Build one side's media element in place, keeping the wrapper + overlay controls. Assumes
-    // cleanupCompareMedia(side) has already run for this side (see showTournamentPairFast's
-    // phase separation). A missing or undecodable file is purged (mirrors showCompareMedia) and
-    // the engine pair re-rendered.
+    // Build one side's media element in place, keeping the wrapper. Overlay controls live in
+    // #compareOverlayBar's slots, not the wrapper (G2) — showTournamentPairFast rebuilds them
+    // itself, between its cleanup and build phases, so this method no longer needs to preserve
+    // them. Assumes cleanupCompareMedia(side) has already run for this side (see
+    // showTournamentPairFast's phase separation). A missing or undecodable file is purged
+    // (mirrors showCompareMedia) and the engine pair re-rendered.
     async _buildTournamentSide(side, file) {
         const wrapper = side === 'left' ? this.leftMediaWrapper : this.rightMediaWrapper;
 

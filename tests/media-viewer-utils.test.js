@@ -6136,3 +6136,48 @@ describe('displayPredictionBadge — container anchoring (G2)', () => {
         expect(c.appended[0].className).toBe('prediction-badge high');
     });
 });
+
+describe('removeZoomPopover — dismisses the popover, keeps the button (G2)', () => {
+    let removeZoomPopover;
+
+    beforeEach(() => {
+        removeZoomPopover = extractMethod('removeZoomPopover');
+    });
+
+    function entryFor(parentRemove) {
+        return {
+            abortController: { abort: vi.fn() },
+            container: { parentNode: {}, remove: vi.fn() },
+            toggleBtn: { parentNode: { remove: parentRemove } },
+        };
+    }
+
+    it('does NOT remove the toggle button wrapper', () => {
+        const parentRemove = vi.fn();
+        const ctx = { zoomControlsMap: { left: entryFor(parentRemove) } };
+
+        removeZoomPopover.call(ctx, 'left');
+
+        // This is the G2 contract: deleting the BUTTON is the caller's job. Doing it here is
+        // what stripped the zoom control from every tournament pair after the first, because
+        // showTournamentPairFast calls cleanupCompareMedia (which calls this) and never
+        // re-runs addMediaOverlayControls.
+        expect(parentRemove).not.toHaveBeenCalled();
+    });
+
+    it('still aborts listeners, removes the popover and forgets the entry', () => {
+        const entry = entryFor(vi.fn());
+        const ctx = { zoomControlsMap: { left: entry } };
+
+        removeZoomPopover.call(ctx, 'left');
+
+        expect(entry.abortController.abort).toHaveBeenCalled();
+        expect(entry.container.remove).toHaveBeenCalled();
+        expect(ctx.zoomControlsMap.left).toBeUndefined();
+    });
+
+    it('is a no-op for a target with no popover', () => {
+        const ctx = { zoomControlsMap: {} };
+        expect(() => removeZoomPopover.call(ctx, 'right')).not.toThrow();
+    });
+});
