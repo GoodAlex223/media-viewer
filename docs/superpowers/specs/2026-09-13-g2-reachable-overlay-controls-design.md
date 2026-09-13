@@ -352,17 +352,27 @@ than a detail to wave through.
 
 | Fixture | Before | After |
 | --- | --- | --- |
-| `wide-short-64x4.png` | [before](assets/g2-compare-short-before.png) | [after](assets/g2-compare-short-after.png) |
-| `normal-320x240.png` | [before](assets/g2-compare-normal-before.png) | [after](assets/g2-compare-normal-after.png) |
+| `wide-short-64x4.png` (compare) | [before](assets/g2-compare-short-before.png) | [after](assets/g2-compare-short-after.png) |
+| `normal-320x240.png` (compare) | [before](assets/g2-compare-normal-before.png) | [after](assets/g2-compare-normal-after.png) |
+| `normal-320x240.png` (compare, badge + action bar) | — | [after](assets/g2-compare-badge-after.png) |
+| `wide-short-64x4.png` (tournament) | — | [after](assets/g2-tournament-after.png) |
 
-Compare mode only (the capture test does not exercise tournament mode). Confirmed by direct inspection:
-the before pair shows zero overlay buttons on either fixture (not just the short one — the old
-wrapper-relative positioning cleared no media at rest); the after pair shows both left/right groups
-(zoom, special, like, dislike) fully visible at the bottom of the viewport on both fixtures. Neither
-after-image exercises the prediction badge or the center `#compareActionBar` — both are gated on
-`isSortedByPrediction` / non-empty `moveHistory`, neither of which this capture scenario triggers — so
-this evidence does not cover D4 (badge) or the bulk-rate/undo buttons; see the task report for the full
-four-question record.
+Compare **and** tournament are both covered. The first two rows are true before/after pairs (plain
+compare-mode load, no sort, no rating) and confirm the D1-D3/D5 button-visibility fix directly: the
+before pair shows zero overlay buttons on either fixture (not just the short one — the old
+wrapper-relative positioning cleared no media at rest, regardless of size); the after pair shows both
+left/right groups (zoom, special, like, dislike) fully visible at the bottom of the viewport. The third
+row is after-only (the badge and center action bar do not exist in this form on `main`, so there is no
+comparable before-state) — it forces `isSortedByPrediction` true and seeds real `predictionScores`
+entries so `updatePredictionBadges()` / `updateBulkRateButtonsVisibility()` render for real rather than
+being faked at the DOM level, and shows both badges clearing the header and sitting over their own
+side's media, plus the center `#compareActionBar`'s three buttons (bothGood, undo, bothBad) rendering
+visibly between the two flanking groups — covering D4 and the bulk-rate/undo buttons the first capture
+pass left unverified. The fourth row is also after-only (same reason) — it enters a real one-round
+tournament and reveals the auto-hiding chrome band, showing the per-media overlay bar (`bottom: 96px`
+in tournament mode, D1a) sitting with clear visible daylight above `#tournamentControls`: direct visual
+confirmation of a derived offset that previously had only a bounding-box assertion behind it. Full
+seven-question record (the original four plus these three) in the task report.
 
 ---
 
