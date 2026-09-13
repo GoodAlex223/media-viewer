@@ -151,6 +151,19 @@ group is 4 buttons (≈237px) and the bar 3 (≈180px), which collide below ~850
 permitted window size**. This is the load-bearing reason for the layout choice; a later change that
 replaces the grid must preserve it or re-derive the numbers.
 
+⚠️ **Correction (G2 closeout, 2026-09-13) — the "column collapses" claim above is false, and was the
+direct cause of a shipped bug.** A `display: none` grid item is skipped by auto-placement *entirely* —
+it does not free its track for the neighboring columns to expand into. Hiding `#compareActionBar` in
+tournament mode therefore did **not** shrink the centre column to nothing; it left the centre (`auto`)
+track empty and let the right slot auto-place *into* it, landing the right-hand group at ~50% of the
+bar's width instead of the intended ~75%. The extended visual-evidence pass (Task 7) caught this on the
+tournament screenshot; the E2E suite did not, because it only asserted the bar clears the tournament
+chrome, never where within the bar each group lands (fixed in `b4aa3d5`). The shipped fix does not rely
+on auto-placement at all: it pins explicit `grid-column` tracks on all three children
+(`.overlay-bar-slot[data-side='left']` → 1, `#compareActionBar` → 2, `.overlay-bar-slot[data-side='right']`
+→ 3) — see the comment above `.compare-overlay-bar` in `styles.css` for the corrected derivation. The
+`space-between` and absolute-25%/75% rejections above are independent of this error and still hold.
+
 `#compareActionBar` keeps its id, its class and every JS reference (`updateBulkRateButtonsVisibility`,
 `updateCompareUndoButton`, the tournament hide rule). Only its positioning properties are dropped — it
 becomes a grid cell instead of an absolutely-positioned child.

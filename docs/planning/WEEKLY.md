@@ -51,9 +51,9 @@
 
 > One geometry fix closes three reports: anchoring the per-media buttons to the window/column (level with the shared `#compareActionBar`, revealed by hovering the **buttons**, not the wrapper) removes the wrapper-height dependency that clips both the buttons and the badge on short media. Tournament mode reuses the same wrappers (`showTournamentPairFast`), so it is fixed by the same change — verify the `.media-overlay-controls` visibility rules at `styles.css:~2364–2380` still hold there. ⚠️ **Acceptance includes visual evidence — a control, not a norm.** REVIEW-QUEUE § 5 measured that G5 shipped a progress-card change with zero visual evidence past five reviewers. This group is not done until **before/after screenshots** captured through the existing E2E harness (`launchApp()` + `page.screenshot()` — the capability §1b established is already in `tests/e2e/helpers/`) for a normal fixture **and a low-height fixture** are committed (e.g. `docs/superpowers/specs/assets/`), and a computed-visibility E2E asserts the short-media buttons are inside the viewport and clickable. The deterministic _gate_ (🟤 [2026-09-02]) is not built this week — see Notes; this group performs the practice under a plan-level check instead.
 
-- [ ] **Window-anchored per-media overlay buttons** in compare + tournament, reveal on hovering the buttons, level with the shared controls — fixes the low-height clipping by construction; add a wide-and-short PNG fixture (e.g. 64×4) to `tests/e2e/fixtures/`; screenshots before/after on both fixtures. `styles.css`, `media-viewer.js` (`addMediaOverlayControls`), `tests/e2e/` (3) — 🔵 [2026-08-28] ×2 + folds 🟤 [2026-03-21]
-- [ ] **Prediction badge out of the wrapper** — anchor `.prediction-badge` to the column/window with the buttons so it stays in view on short media; keep `pointer-events:none`. `styles.css:~964–1010`, `media-viewer.js` (`displayPredictionBadge`) (1) — 🔵 [2026-08-28]
-- [ ] **Like on the left, Dislike on the right on all four surfaces** — single bottom bar, compare left/right static controls, the dynamic overlay's append order (zoom → special → like → dislike); the action bar already models it. `index.html:~185–232`, `media-viewer.js:~3290–3293` (1) — 🔵 [2026-08-28]
+- [x] **Window-anchored per-media overlay buttons** in compare + tournament, reveal on hovering the buttons, level with the shared controls — fixes the low-height clipping by construction; add a wide-and-short PNG fixture (e.g. 64×4) to `tests/e2e/fixtures/`; screenshots before/after on both fixtures. `styles.css`, `media-viewer.js` (`addMediaOverlayControls`), `tests/e2e/` (3) — 🔵 [2026-08-28] ×2 + folds 🟤 [2026-03-21]
+- [x] **Prediction badge out of the wrapper** — anchor `.prediction-badge` to the column/window with the buttons so it stays in view on short media; keep `pointer-events:none`. `styles.css:~964–1010`, `media-viewer.js` (`displayPredictionBadge`) (1) — 🔵 [2026-08-28]
+- [x] **Like on the left, Dislike on the right on all four surfaces** — single bottom bar, compare left/right static controls, the dynamic overlay's append order (zoom → special → like → dislike); the action bar already models it. `index.html:~185–232`, `media-viewer.js:~3290–3293` (1) — 🔵 [2026-08-28]
 
 ### G3. Compare-mode special hotkeys + tooltips [batch] 🔵
 
@@ -123,7 +123,7 @@
 
 > G2 first (it owns the shared `index.html` / `addMediaOverlayControls` touch points); G3 branches from `main` after G2 merges. G2's screenshots are captured before the review, not after.
 
-- **[G2](#g2-reachable-overlay-controls-batch-)** 🔵 — all three items + visual evidence
+- **[G2](#g2-reachable-overlay-controls-batch-)** 🔵 — all three items + visual evidence ✅ done — merged `f874f93` via PR #70; a fourth item not in the plan — the F4 zoom regression (`removeZoomPopover` deleting the zoom button's own parent, which stripped the tournament fast path's zoom control from pair 2 onward) — was found during scoping and folded in, taking the group to 6 SP against the 5 planned
 - **[G3](#g3-compare-mode-special-hotkeys--tooltips-batch-)** 🔵 — start (hotkeys)
 
 **Daily total**: ~6 SP
@@ -143,7 +143,7 @@
 | ID  | Group                                                  | Domain                                        | Source      | Tasks | Total SP | Day     | Status     |
 | --- | ------------------------------------------------------ | --------------------------------------------- | ----------- | ----- | -------- | ------- | ---------- |
 | G1  | ML training pipeline — design pass + retrain skip [solo] 🏆 | JS logic (ML training / feature cache) + new module | 🔵 User     | 3     | 8        | Mon–Wed | ✅ PR #68 (merge `bfcc881`) |
-| G2  | Reachable overlay controls [batch]                     | CSS layout + renderer DOM + E2E evidence      | 🔵 User     | 3 (closes 4 🔵 + 1 🟤) | 5 | Thu | ☐ Planned  |
+| G2  | Reachable overlay controls [batch]                     | CSS layout + renderer DOM + E2E evidence      | 🔵 User     | 3 (closes 4 🔵 + 1 🟤) | 5 | Thu | ✅ PR #70 (merge `f874f93`) |
 | G3  | Compare-mode special hotkeys + tooltips [batch]        | Shortcuts + tooltips                          | 🔵 User     | 2     | 3        | Thu–Fri | ☐ Planned  |
 | G4  | ML pipeline integrity [batch]                          | JS logic (CLIP lifecycle) + test infra        | 🟤 Auto     | 3 (+1 housekeeping) | 5 | Mon–Tue | ✅ PR #69 (merge `7df03b8`) |
 | G5  | Weekly Reviews [batch]                                 | Research / process                            | ⚪ Overhead | 5     | 5        | Fri     | ☐ Planned  |

@@ -2,10 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵, 5 SP → 6 SP); BACKLOG 🔵 `### [2026-08-28] From: manual testing` (4 entries) + 🟤 `### [2026-03-21] TASK-021`
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G2 (🔵, 5 SP → 6 SP); BACKLOG 🔵 `### [2026-08-28] From: manual testing` (4 entries) + 🟤 `### [2026-03-21] TASK-021`
 **Spec**: [2026-09-13-g2-reachable-overlay-controls-design.md](../../superpowers/specs/2026-09-13-g2-reachable-overlay-controls-design.md)
 **Created**: 2026-09-13
-**Status**: Ready to execute
+**Status**: Complete — merged `f874f93` (PR #70)
 **Last Updated**: 2026-09-13
 **Branch**: `g2-reachable-overlay-controls`
 
@@ -1413,10 +1413,10 @@ git commit -m "feat(controls): Like before Dislike on every rating surface; CLAU
 
 Per `~/.claude/rules/planning-closeout.md`: **Extract → Archive → Transition → Commit → Capture learnings**. The plan must carry **minimum 2** improvements before Extract runs.
 
-- [ ] **Extract**: file any residual as BACKLOG 🟤 under `### [2026-09-13] From: G2 closeout`. Known candidates: the two 🔵 [2026-05-25] control-system entries this group deliberately did not close; whether `.compare-controls` should be deleted outright now that it is dead outside the empty state.
-- [ ] **Archive**: remove the Active Plans row from `docs/README.md`, then `git mv docs/planning/plans/2026-09-13_g2-reachable-overlay-controls.md docs/archive/plans/`, mark `Status: Complete — merged <SHA>`, and index it in `docs/README.md` (the pre-commit guard enforces this).
-- [ ] **Transition**: WEEKLY G2's three checkboxes + Summary-Table row `✅ <merge-SHA>`; note that a fourth item (the zoom regression) was folded, not planned.
-- [ ] **Commit**: check off the four 🔵 `[2026-08-28]` BACKLOG entries and 🟤 `[2026-03-21]` TASK-021 **in the same commit as the closeout** — the miss this rule exists to prevent has now recurred five times.
+- [x] **Extract**: file any residual as BACKLOG 🟤 under `### [2026-09-13] From: G2 closeout`. Known candidates: the two 🔵 [2026-05-25] control-system entries this group deliberately did not close; whether `.compare-controls` should be deleted outright now that it is dead outside the empty state.
+- [x] **Archive**: remove the Active Plans row from `docs/README.md`, then `git mv docs/planning/plans/2026-09-13_g2-reachable-overlay-controls.md docs/archive/plans/`, mark `Status: Complete — merged <SHA>`, and index it in `docs/README.md` (the pre-commit guard enforces this).
+- [x] **Transition**: WEEKLY G2's three checkboxes + Summary-Table row `✅ <merge-SHA>`; note that a fourth item (the zoom regression) was folded, not planned.
+- [x] **Commit**: check off the four 🔵 `[2026-08-28]` BACKLOG entries and 🟤 `[2026-03-21]` TASK-021 **in the same commit as the closeout** — the miss this rule exists to prevent has now recurred five times.
 - [ ] **Capture learnings**: write a session memory file + a one-line `MEMORY.md` pointer.
 
 ---
