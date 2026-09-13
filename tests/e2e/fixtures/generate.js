@@ -7,6 +7,7 @@
 import { writeFile, access } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { deflateSync } from 'zlib';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -72,11 +73,66 @@ const TINY_MP4 = Buffer.from(
     'hex'
 );
 
+// CRC-32 over a Buffer, per the PNG spec (ISO 3309 / ITU-T V.42).
+function crc32(buf) {
+    let crc = 0xffffffff;
+    for (let i = 0; i < buf.length; i++) {
+        crc ^= buf[i];
+        for (let bit = 0; bit < 8; bit++) {
+            crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+        }
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length, 0);
+    const typeAndData = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(typeAndData), 0);
+    return Buffer.concat([len, typeAndData, crc]);
+}
+
+// Solid-colour RGB PNG of the given size. Each scanline is prefixed with filter byte 0 (None).
+function solidPng(width, height, [r, g, b]) {
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr[8] = 8; // bit depth
+    ihdr[9] = 2; // colour type 2 = truecolour RGB
+    // bytes 10-12 (compression, filter, interlace) stay 0
+
+    const raw = Buffer.alloc(height * (1 + width * 3));
+    for (let y = 0; y < height; y++) {
+        const rowStart = y * (1 + width * 3);
+        raw[rowStart] = 0; // filter: None
+        for (let x = 0; x < width; x++) {
+            const px = rowStart + 1 + x * 3;
+            raw[px] = r;
+            raw[px + 1] = g;
+            raw[px + 2] = b;
+        }
+    }
+
+    return Buffer.concat([
+        Buffer.from('89504e470d0a1a0a', 'hex'),
+        pngChunk('IHDR', ihdr),
+        pngChunk('IDAT', deflateSync(raw)),
+        pngChunk('IEND', Buffer.alloc(0)),
+    ]);
+}
+
 const fixtures = [
     { name: 'red-1x1.png', data: RED_PNG },
     { name: 'green-1x1.png', data: GREEN_PNG },
     { name: 'blue-1x1.png', data: BLUE_PNG },
     { name: 'tiny.mp4', data: TINY_MP4 },
+    // Wide-and-short: the low-height case this group exists to fix. Tall enough to be visible
+    // in a screenshot, short enough that the old wrapper clipped its overlay controls.
+    { name: 'wide-short-64x4.png', data: solidPng(64, 4, [255, 140, 0]) },
+    // The control. The 1x1 fixtures are too degenerate to serve as "normal" visual evidence.
+    { name: 'normal-320x240.png', data: solidPng(320, 240, [40, 90, 200]) },
 ];
 
 let created = 0;
