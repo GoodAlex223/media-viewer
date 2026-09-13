@@ -14,6 +14,17 @@ import {
 const STAGE = process.env.G2_EVIDENCE_STAGE || 'after';
 
 test.describe('G2 visual evidence', () => {
+    // Opt-in only. STAGE's `|| 'after'` fallback above means a plain `npm run test:e2e` (and
+    // therefore the pre-push hook) would otherwise capture on every run and silently overwrite
+    // the committed *-after.png files with whatever window size happened to render last — which
+    // is exactly what defeats committed visual evidence as a reviewed gate rather than noise no
+    // one looks at. Run explicitly to (re)capture: G2_EVIDENCE_STAGE=before|after npx playwright
+    // test tests/e2e/visual-evidence.test.js
+    test.skip(
+        !process.env.G2_EVIDENCE_STAGE,
+        'Opt-in only — set G2_EVIDENCE_STAGE=before|after to (re)capture visual evidence'
+    );
+
     let electronApp, page, tmpFixtures;
 
     test.afterEach(async () => {
