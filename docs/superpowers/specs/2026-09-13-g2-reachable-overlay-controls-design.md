@@ -348,6 +348,22 @@ from this spec. Per WEEKLY, **the group is not done until they are committed** �
 trial of the visual-verification practice, and their absence is the signal to drop the practice rather
 than a detail to wave through.
 
+**Captured 2026-09-13** (`tests/e2e/visual-evidence.test.js`, `G2_EVIDENCE_STAGE=before|after`):
+
+| Fixture | Before | After |
+| --- | --- | --- |
+| `wide-short-64x4.png` | [before](assets/g2-compare-short-before.png) | [after](assets/g2-compare-short-after.png) |
+| `normal-320x240.png` | [before](assets/g2-compare-normal-before.png) | [after](assets/g2-compare-normal-after.png) |
+
+Compare mode only (the capture test does not exercise tournament mode). Confirmed by direct inspection:
+the before pair shows zero overlay buttons on either fixture (not just the short one — the old
+wrapper-relative positioning cleared no media at rest); the after pair shows both left/right groups
+(zoom, special, like, dislike) fully visible at the bottom of the viewport on both fixtures. Neither
+after-image exercises the prediction badge or the center `#compareActionBar` — both are gated on
+`isSortedByPrediction` / non-empty `moveHistory`, neither of which this capture scenario triggers — so
+this evidence does not cover D4 (badge) or the bulk-rate/undo buttons; see the task report for the full
+four-question record.
+
 ---
 
 ## 7. Scope & story points
