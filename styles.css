@@ -2359,9 +2359,10 @@ body {
 }
 
 /* Hide deprecated compare-mode bottom button rows in tournament mode.
-   The per-wrapper overlay controls (.media-overlay-controls — Like/Dislike/Special/Zoom)
-   stay visible: their handlers are tournament-aware (Like = "this side wins",
-   Dislike = "other side wins", Special = remove from tournament + move to special folder).
+   The overlay controls (.media-overlay-controls — Like/Dislike/Special/Zoom, rendered into
+   #compareOverlayBar's side slots since G2, not per-wrapper) stay visible: their handlers
+   are tournament-aware (Like = "this side wins", Dislike = "other side wins", Special =
+   remove from tournament + move to special folder).
    Nav arrows + the compare action bar are hidden — manual prev/next would desync the display
    from the tournament engine's chosen pair (Swiss pairing controls progression, not currentIndex);
    tournament has its own undo (#tournamentUndoBtn). The fixed top-center navigation-info banner

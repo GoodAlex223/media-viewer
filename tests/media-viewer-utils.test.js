@@ -5979,3 +5979,110 @@ describe('CLIP unload lease (G4)', () => {
         });
     });
 });
+
+describe('addMediaOverlayControls — slot targeting and button order (G2)', () => {
+    let origDocument, slots, addMediaOverlayControls;
+
+    // Minimal element stand-in: enough surface for the method under test, nothing more.
+    function makeEl(tag) {
+        return {
+            tagName: tag.toUpperCase(),
+            className: '',
+            title: '',
+            disabled: false,
+            innerHTML: '',
+            dataset: {},
+            children: [],
+            parentNode: null,
+            appendChild(child) {
+                child.parentNode = this;
+                this.children.push(child);
+                return child;
+            },
+            replaceChildren() {
+                this.children = [];
+            },
+            addEventListener() {},
+            querySelector() {
+                return null;
+            },
+        };
+    }
+
+    beforeEach(() => {
+        addMediaOverlayControls = extractMethod('addMediaOverlayControls');
+        slots = {
+            left: makeEl('div'),
+            right: makeEl('div'),
+        };
+        origDocument = globalThis.document;
+        globalThis.document = {
+            createElement: makeEl,
+            querySelector: (sel) => {
+                if (sel.includes('data-side="left"')) return slots.left;
+                if (sel.includes('data-side="right"')) return slots.right;
+                return null;
+            },
+        };
+    });
+
+    afterEach(() => {
+        globalThis.document = origDocument;
+    });
+
+    function ctx() {
+        return {
+            customSpecialFolder: 'C:/special',
+            removeZoomPopover: vi.fn(),
+            createZoomPopover: vi.fn(),
+            handleLeftLike: vi.fn(),
+            handleRightLike: vi.fn(),
+            handleLeftDislike: vi.fn(),
+            handleRightDislike: vi.fn(),
+            moveToSpecialFolder: vi.fn(),
+        };
+    }
+
+    it('appends the group into the matching slot, not into a wrapper', () => {
+        addMediaOverlayControls.call(ctx(), 'left');
+
+        expect(slots.left.children).toHaveLength(1);
+        expect(slots.left.children[0].className).toBe('media-overlay-controls');
+        expect(slots.right.children).toHaveLength(0);
+    });
+
+    it('orders the buttons zoom, special, like, dislike — Like left of Dislike', () => {
+        addMediaOverlayControls.call(ctx(), 'left');
+
+        const classes = slots.left.children[0].children.map((c) => c.className);
+        expect(classes).toEqual([
+            'control-btn-wrapper',
+            'overlay-btn overlay-special-btn',
+            'overlay-btn overlay-like-btn',
+            'overlay-btn overlay-dislike-btn',
+        ]);
+    });
+
+    it('replaces a previous group instead of stacking a second one', () => {
+        const c = ctx();
+        addMediaOverlayControls.call(c, 'left');
+        addMediaOverlayControls.call(c, 'left');
+
+        expect(slots.left.children).toHaveLength(1);
+    });
+
+    it('no-ops when the slot is absent rather than throwing into the render path', () => {
+        globalThis.document.querySelector = () => null;
+        expect(() => addMediaOverlayControls.call(ctx(), 'left')).not.toThrow();
+    });
+
+    it('disables the special button when no special folder is configured', () => {
+        const c = ctx();
+        c.customSpecialFolder = null;
+        addMediaOverlayControls.call(c, 'left');
+
+        const special = slots.left.children[0].children[1];
+        expect(special.disabled).toBe(true);
+        expect(special.title).toContain('Settings');
+    });
+});

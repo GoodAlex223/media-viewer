@@ -3337,20 +3337,21 @@ class MediaViewer {
         this.leftMediaWrapper.appendChild(this.leftMedia);
         this.rightMediaWrapper.appendChild(this.rightMedia);
 
-        // Add overlay controls to each media wrapper
-        this.addMediaOverlayControls(this.leftMediaWrapper, 'left');
-        this.addMediaOverlayControls(this.rightMediaWrapper, 'right');
+        // Add overlay controls to the container-anchored bar (not the wrappers — G2)
+        this.addMediaOverlayControls('left');
+        this.addMediaOverlayControls('right');
 
         this.mediaContainer.appendChild(this.leftMediaWrapper);
         this.mediaContainer.appendChild(this.rightMediaWrapper);
 
         this.closeAllZoomPopovers();
 
-        // Initialize Lucide icons for overlay controls (must be after DOM append)
-        // Use root param to scope icon creation — avoids re-replacing global icons
+        // Initialize Lucide icons for overlay controls (must be after DOM append).
+        // Scope to the bar, not the wrappers: the control groups moved there in G2, and a
+        // {root} pointing at a subtree that no longer contains them silently renders nothing.
         if (typeof lucide !== 'undefined') {
-            lucide.createIcons({ root: this.leftMediaWrapper });
-            lucide.createIcons({ root: this.rightMediaWrapper });
+            const bar = document.getElementById('compareOverlayBar');
+            if (bar) lucide.createIcons({ root: bar });
         }
 
         // Update file info for both media
@@ -3361,7 +3362,14 @@ class MediaViewer {
         setTimeout(() => this.prioritizeDisplayedFilesExtraction(), 200);
     }
 
-    addMediaOverlayControls(wrapper, side) {
+    // The control group lives in #compareOverlayBar's side slot, never inside .media-wrapper:
+    // the wrapper is content-sized and overflow:hidden, which clipped these buttons out of
+    // reach on short media (G2). Rebuilding is idempotent — the old group is dropped first,
+    // which also detaches the old zoom button with it.
+    addMediaOverlayControls(side) {
+        const slot = document.querySelector(`#compareOverlayBar .overlay-bar-slot[data-side="${side}"]`);
+        if (!slot) return;
+
         const controls = document.createElement('div');
         controls.className = 'media-overlay-controls';
 
@@ -3408,9 +3416,12 @@ class MediaViewer {
 
         controls.appendChild(zoomWrapper);
         controls.appendChild(specialBtn);
-        controls.appendChild(dislikeBtn);
         controls.appendChild(likeBtn);
-        wrapper.appendChild(controls);
+        controls.appendChild(dislikeBtn);
+
+        // Drop any previous group for this side before appending the new one.
+        slot.replaceChildren();
+        slot.appendChild(controls);
 
         // Clean up old zoom popover for this side and create new one
         this.removeZoomPopover(side);
