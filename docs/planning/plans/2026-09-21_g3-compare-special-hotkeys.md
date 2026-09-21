@@ -93,11 +93,12 @@ Task 1 (bindings + dispatch) first — it turns an existing exact-`toEqual` asse
 
 ## Residuals for Extract (🟤 candidates, found while reading — not fixed here)
 
-1. **`saveShortcut()` drops `tournament`** (`media-viewer.js:~9434-9441`) — it persists only `single` and `compare`, so a tournament remap never survives a reload. Adjacent to this work, not caused by it.
+1. **`saveShortcut()` drops `tournament`** (`media-viewer.js:~9538-9543`) — it persists only `single` and `compare`, so a tournament remap never survives a reload. Adjacent to this work, not caused by it.
+   ⚠️ **Sequencing constraint (PR #71 round 3, verified here): entries 1 and 3 must ship together, entry 3 never alone.** The drop is currently *unobservable* because there is no UI path to remap a tournament binding at all — `renderShortcutRows` emits `data-mode` as only `single` or `compare` (`media-viewer.js:9569`/`9576`), `index.html` has exactly those two grids (`403`/`409`), and `startListeningMode` reads `kbdElement.dataset.mode`, so `saveShortcut` is never called with `'tournament'`. Adding the tournament F1 section **converts this latent bug into a visible one**: the user would remap a tournament key, watch it take effect, and lose it on reload. Cross-reference both BACKLOG entries at closeout.
 2. **`checkShortcutConflict` never runs at load** — it only validates at remap time, which is why a
    default added later could collide unnoticed. `_mergeModeShortcuts` now covers the load side, but the
    asymmetry is worth a look if a third validation path ever appears.
-3. **Tournament has no F1 help section** — `renderShortcutRows()` renders only the single and compare grids, so tournament's `1`/`2` stay undiscoverable in help. This group at least surfaces them in the overlay tooltip.
+3. **Tournament has no F1 help section** (⚠️ blocked on entry 1 — see its sequencing note) — `renderShortcutRows()` renders only the single and compare grids, so tournament's `1`/`2` stay undiscoverable in help. This group at least surfaces them in the overlay tooltip.
 
 ---
 

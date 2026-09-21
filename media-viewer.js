@@ -9444,9 +9444,12 @@ class MediaViewer {
 
         for (const action of Object.keys(defaults)) {
             // An explicit stored binding ON this action is the user's own choice, not a clash.
+            // This skip is also what guarantees `holder !== action` below: every holder comes
+            // from `customMode`, and every action reaching the lookup is absent from it. Drop
+            // this `continue` and that invariant goes with it.
             if (Object.prototype.hasOwnProperty.call(customMode, action)) continue;
             const holder = claimedBy.get(merged[action]);
-            if (holder && holder !== action) {
+            if (holder) {
                 this._shortcutCollisions.push({ mode, action, key: merged[action], heldBy: holder });
                 merged[action] = null;
             }
