@@ -155,6 +155,63 @@ test.describe('Compare Mode', () => {
         await expect(page.locator('#specialBtn')).toHaveAttribute('title', 'Move to special folder');
     });
 
+    // Regression, PR #71 review: Digit1/Digit2 were legal remap targets in compare mode before
+    // this feature existed, so a user could already hold "1" for `next`. buildReverseMap is
+    // last-write-wins and defaults iterate last, which made the new leftSpecial default steal
+    // the key — pressing "1" MOVED A FILE instead of advancing. The constructor already ran by
+    // the time a test can seed storage, so re-run the real merge and reverse map in place.
+    test('a pre-existing remap onto 1 keeps the key and does not move a file', async () => {
+        await seedLocalStorage(page, { customSpecialFolder: tmpFixtures.specialDir });
+        await page.evaluate(() => {
+            localStorage.setItem(
+                'customShortcuts',
+                JSON.stringify({
+                    version: 2,
+                    compare: {
+                        leftLike: 'KeyQ',
+                        leftDislike: 'KeyW',
+                        rightLike: 'KeyE',
+                        rightDislike: 'KeyR',
+                        next: 'Digit1',
+                        previous: 'KeyA',
+                        undo: 'Ctrl+KeyA',
+                        bothGood: 'KeyD',
+                        bothBad: 'KeyF',
+                    },
+                })
+            );
+            const mv = window.mediaViewer;
+            mv.shortcuts = mv.loadShortcuts();
+            mv.shortcutReverseMap = mv.buildReverseMap();
+        });
+
+        await page.evaluate(() => window.mediaViewer.toggleViewMode());
+        await page.waitForTimeout(500);
+        await page.waitForFunction(() => window.mediaViewer.compareLeftFile != null);
+
+        const before = await page.evaluate(() => ({
+            name: window.mediaViewer.compareLeftFile.name,
+            index: window.mediaViewer.currentIndex,
+            count: window.mediaViewer.mediaFiles.length,
+        }));
+
+        await page.keyboard.press('1');
+        await page.waitForTimeout(600);
+
+        // The user's own binding still wins: "1" navigates, and nothing left the source folder.
+        await expect(access(join(tmpFixtures.specialDir, before.name))).rejects.toThrow();
+        const after = await page.evaluate(() => ({
+            index: window.mediaViewer.currentIndex,
+            count: window.mediaViewer.mediaFiles.length,
+        }));
+        expect(after.count).toBe(before.count);
+        expect(after.index).not.toBe(before.index);
+
+        // ...and the action that lost the race is reported as unbound, not silently missing.
+        const leftSpecialKey = await page.evaluate(() => window.mediaViewer.shortcuts.compare.leftSpecial);
+        expect(leftSpecialKey).toBeNull();
+    });
+
     test('switches to single mode when last pair is rated', async () => {
         // Load with only 2 files (minimum for compare mode)
         const twoFileTmp = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png']);

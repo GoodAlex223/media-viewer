@@ -3,7 +3,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵, 3 SP); BACKLOG 🔵 `### [2026-08-28]` batch 2 (tooltips entry) + batch 3 (compare `1`/`2` entry)
 **Spec**: None — bounded task, design approved in chat (brainstorming § Bounded path)
 **Created**: 2026-09-21
-**Status**: Implemented — awaiting review
+**Status**: Implemented — PR #71 review round 1 addressed
 **Last Updated**: 2026-09-21
 **Branch**: `g3-compare-special-hotkeys`
 
@@ -94,7 +94,10 @@ Task 1 (bindings + dispatch) first — it turns an existing exact-`toEqual` asse
 ## Residuals for Extract (🟤 candidates, found while reading — not fixed here)
 
 1. **`saveShortcut()` drops `tournament`** (`media-viewer.js:~9434-9441`) — it persists only `single` and `compare`, so a tournament remap never survives a reload. Adjacent to this work, not caused by it.
-2. **Tournament has no F1 help section** — `renderShortcutRows()` renders only the single and compare grids, so tournament's `1`/`2` stay undiscoverable in help. This group at least surfaces them in the overlay tooltip.
+2. **`checkShortcutConflict` never runs at load** — it only validates at remap time, which is why a
+   default added later could collide unnoticed. `_mergeModeShortcuts` now covers the load side, but the
+   asymmetry is worth a look if a third validation path ever appears.
+3. **Tournament has no F1 help section** — `renderShortcutRows()` renders only the single and compare grids, so tournament's `1`/`2` stay undiscoverable in help. This group at least surfaces them in the overlay tooltip.
 
 ---
 
@@ -107,6 +110,45 @@ Per `~/.claude/rules/planning-closeout.md`: **Extract → Archive → Transition
 - [ ] **Transition**: WEEKLY G3's two checkboxes + the doc ride-along + Summary-Table row `✅ <merge-SHA>`.
 - [ ] **Commit**: check off the two 🔵 `[2026-08-28]` BACKLOG entries (compare `1`/`2`; tooltips) **in the same commit as the closeout**.
 - [ ] **Capture learnings**: session memory file + a one-line `MEMORY.md` pointer.
+
+---
+
+## Review round 1 (PR #71) — one finding, accepted and fixed differently
+
+**Finding**: the new `leftSpecial: 'Digit1'` / `rightSpecial: 'Digit2'` defaults silently shadow a
+pre-existing user remap onto those keys. `Digit1`/`Digit2` were legal remap targets in compare mode
+before this PR (`reservedKeys` is only `['F1','Space','KeyI','KeyZ','KeyX','Escape']`), so a user
+could hold `1` for `next`. `Object.assign` preserves the *default* key order and the new actions are
+declared last, while `buildReverseMap` is last-write-wins — so `1` dispatched `leftSpecial`, the
+user's `next` went dead, and pressing `1` **moved a file** with nothing reporting it.
+
+**Verified before acting**, by executing the real `loadShortcuts` merge and `buildReverseMap` loop
+against the exact stored object described — not by reading them:
+
+```
+merged.next = Digit1 | merged.leftSpecial = Digit1
+pressing "1" in compare dispatches -> leftSpecial
+user's remapped `next` reachable?  -> NO - DEAD
+migration re-ran / rewrote storage? -> false
+```
+
+**Remedy — the reviewer's suggested v3 bump was declined in favour of a structural fix.** A version
+bump is one-shot: the *next* additive binding needs a v4, and the CLAUDE.md rule would have to become
+"additive keys need a bump too" — the exact rule this task already proved forgettable. The cause is
+not a missing migration; it is that the merge lets a later default steal a claimed key. So
+`_mergeModeShortcuts()` now makes the merge itself collision-safe, and the rule stays true.
+
+**Who loses the race matters.** A v3 delete would drop the *user's* remap, which still leaves someone
+pressing `1` expecting navigation and getting a file move — only softened by a toast. The **new
+default yields instead** (`null`), so the user's key keeps doing what they bound it to. Knock-ons, all
+covered by tests: `keyDisplayName` renders `'Unbound'` (an unguarded `null` crashes the entire F1
+panel — caught by a RED `TypeError`, not by inspection), `buildReverseMap` skips the entry, and
+`_persistableBindings` keeps the `null` out of localStorage, without which `hasOwnProperty` would
+short-circuit the sweep next load and pin the action Unbound forever.
+
+**Self-caught during the fix**: the comment asserting collisions are "never written back" was fiction
+until `_persistableBindings` existed — `saveShortcut` persists the full mode object. Found by
+re-reading my own comment against `saveShortcut`, and fixed rather than reworded.
 
 ---
 

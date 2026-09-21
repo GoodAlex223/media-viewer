@@ -308,6 +308,9 @@ class MediaViewer {
         this.setupControlsVisibility();
         this.updateRatingButtonsState();
         this.updateSpecialButtonsState();
+        // After initializeElements(): loadShortcuts runs far earlier in this constructor, before
+        // the notification container exists, so the report is deferred to here.
+        this._reportShortcutCollisions();
         // ML worker and feature pool are initialized lazily when user clicks "Sort by Prediction"
 
         if (!window.electronAPI) {
@@ -9379,11 +9382,76 @@ class MediaViewer {
                 localStorage.setItem('customShortcuts', JSON.stringify(custom));
             }
         }
+        // Collisions are recomputed from storage on every load, never written back — so if a
+        // colliding default is ever removed, the user's binding simply works again.
+        this._shortcutCollisions = [];
         return {
-            single: Object.assign({}, DEFAULT_SHORTCUTS.single, custom.single),
-            compare: Object.assign({}, DEFAULT_SHORTCUTS.compare, custom.compare),
-            tournament: Object.assign({}, DEFAULT_SHORTCUTS.tournament, custom.tournament),
+            single: this._mergeModeShortcuts('single', custom.single),
+            compare: this._mergeModeShortcuts('compare', custom.compare),
+            tournament: this._mergeModeShortcuts('tournament', custom.tournament),
         };
+    }
+
+    // Drops the null bindings _mergeModeShortcuts produces. They are runtime state, not a user
+    // choice, and persisting one would make the next load's `hasOwnProperty` check short-circuit
+    // the sweep — pinning that action Unbound permanently, so freeing the key would never bring
+    // its default back. Keeping them out is what makes "recomputed every load, never written
+    // back" actually true.
+    _persistableBindings(modeShortcuts) {
+        return Object.fromEntries(Object.entries(modeShortcuts).filter(([, key]) => key));
+    }
+
+    // Surfaced once per launch, after initializeElements() has built the notification
+    // container. Silence here was the sharper half of the defect: the user would simply find
+    // a key they had bound doing nothing, with no way to connect it to an upgrade.
+    _reportShortcutCollisions() {
+        if (!this._shortcutCollisions?.length) return;
+        for (const { action, key, heldBy } of this._shortcutCollisions) {
+            const label = ACTION_LABELS[action] ?? action;
+            const holder = ACTION_LABELS[heldBy] ?? heldBy;
+            this.showNotification(
+                `"${label}" has no shortcut: ${this.keyDisplayName(key)} is already your "${holder}" key. ` +
+                    `Assign one in Settings (F1).`,
+                'warning'
+            );
+        }
+    }
+
+    // A stored remap claims a physical key for its whole mode, so a default ADDED LATER that
+    // wants the same key must yield rather than steal it. Without this, `buildReverseMap` is
+    // last-write-wins and defaults iterate last (Object.assign preserves the default key
+    // order), so the new action silently captured the key: a user who had bound compare
+    // `next` to `1` would press `1` and get `moveToSpecialFolder('left')` — a real file move —
+    // with their `next` left unreachable and nothing reporting it. `checkShortcutConflict`
+    // cannot catch this; it only runs at remap time, never at load against newly-added defaults.
+    //
+    // The loser is the NEW default, not the user's binding: dropping the user's remap instead
+    // would still leave `1` moving a file for someone who pressed it expecting to navigate.
+    // Yielding leaves the new action unbound — `keyDisplayName` renders that as "Unbound" and
+    // `_specialShortcutSuffix` omits the suffix — with the on-screen button and F1 rebinding
+    // both still working. This is also why an additive default needs no version bump: the
+    // merge itself is collision-safe, rather than each new binding needing its own migration.
+    _mergeModeShortcuts(mode, customMode) {
+        const defaults = DEFAULT_SHORTCUTS[mode];
+        const merged = Object.assign({}, defaults, customMode);
+        if (!customMode) return merged;
+
+        // saveShortcut persists the FULL mode object, so this covers every key the user holds.
+        const claimedBy = new Map();
+        for (const [action, key] of Object.entries(customMode)) {
+            if (key) claimedBy.set(key, action);
+        }
+
+        for (const action of Object.keys(defaults)) {
+            // An explicit stored binding ON this action is the user's own choice, not a clash.
+            if (Object.prototype.hasOwnProperty.call(customMode, action)) continue;
+            const holder = claimedBy.get(merged[action]);
+            if (holder && holder !== action) {
+                this._shortcutCollisions.push({ mode, action, key: merged[action], heldBy: holder });
+                merged[action] = null;
+            }
+        }
+        return merged;
     }
 
     buildKeyString(e) {
@@ -9398,6 +9466,9 @@ class MediaViewer {
         const reverse = { single: {}, compare: {}, tournament: {} };
         for (const mode of ['single', 'compare', 'tournament']) {
             for (const [action, key] of Object.entries(this.shortcuts[mode] ?? {})) {
+                // Skip actions left unbound by _mergeModeShortcuts, or they'd register under
+                // the literal key "null" and shadow nothing while looking bound.
+                if (!key) continue;
                 reverse[mode][key] = action;
             }
         }
@@ -9467,13 +9538,17 @@ class MediaViewer {
         // clobber an intentional 'next' remap on the next load.
         const custom = {
             version: 2,
-            single: Object.assign({}, this.shortcuts.single),
-            compare: Object.assign({}, this.shortcuts.compare),
+            single: this._persistableBindings(this.shortcuts.single),
+            compare: this._persistableBindings(this.shortcuts.compare),
         };
         localStorage.setItem('customShortcuts', JSON.stringify(custom));
     }
 
     keyDisplayName(keyStr) {
+        // null when _mergeModeShortcuts made a new default yield to a user's existing remap.
+        // renderShortcutRows and stopListeningMode both feed this straight from the shortcut
+        // map, so without this guard one unbound action takes down the whole F1 panel.
+        if (!keyStr) return 'Unbound';
         return keyStr.replace('Key', '').replace('Digit', '').replace('+Key', '+').replace('+Digit', '+');
     }
 
