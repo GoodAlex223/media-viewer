@@ -6040,6 +6040,12 @@ describe('addMediaOverlayControls — slot targeting and button order (G2)', () 
             handleLeftDislike: vi.fn(),
             handleRightDislike: vi.fn(),
             moveToSpecialFolder: vi.fn(),
+            // The special button's tooltip is derived (G3), so the real helper and the
+            // shortcut map it reads are part of this method's required context now.
+            isTournamentMode: false,
+            shortcuts: { compare: { leftSpecial: 'Digit1', rightSpecial: 'Digit2' } },
+            keyDisplayName: extractMethod('keyDisplayName'),
+            _specialShortcutSuffix: extractMethod('_specialShortcutSuffix'),
         };
     }
 
@@ -6180,5 +6186,62 @@ describe('removeZoomPopover — dismisses the popover, keeps the button (G2)', (
     it('is a no-op for a target with no popover', () => {
         const ctx = { zoomControlsMap: {} };
         expect(() => removeZoomPopover.call(ctx, 'right')).not.toThrow();
+    });
+});
+
+describe('updateSpecialButtonsState tooltips', () => {
+    const updateSpecialButtonsState = extractMethod('updateSpecialButtonsState');
+    const _specialShortcutSuffix = extractMethod('_specialShortcutSuffix');
+    const keyDisplayName = extractMethod('keyDisplayName');
+
+    function btn() {
+        return { disabled: false, title: '' };
+    }
+
+    // Real helper wiring, not a stub: the suffix logic is what these assertions are about.
+    function ctxWith({ folder, compareOverrides = {} } = {}) {
+        return {
+            customSpecialFolder: folder,
+            specialBtn: btn(),
+            leftSpecialBtn: btn(),
+            rightSpecialBtn: btn(),
+            shortcuts: {
+                single: { like: 'KeyQ' },
+                compare: Object.assign({ leftSpecial: 'Digit1', rightSpecial: 'Digit2' }, compareOverrides),
+            },
+            keyDisplayName,
+            _specialShortcutSuffix,
+        };
+    }
+
+    it('shows the compare special hotkeys on the left and right buttons', () => {
+        const ctx = ctxWith({ folder: 'C:/special' });
+        updateSpecialButtonsState.call(ctx);
+        expect(ctx.leftSpecialBtn.title).toBe('Move left to special folder (1)');
+        expect(ctx.rightSpecialBtn.title).toBe('Move right to special folder (2)');
+    });
+
+    // Ruled at design time: single mode has no special binding, so its tooltip stays bare.
+    // This falls out of the derivation rather than being special-cased.
+    it('leaves the single-mode button bare, since single has no special binding', () => {
+        const ctx = ctxWith({ folder: 'C:/special' });
+        updateSpecialButtonsState.call(ctx);
+        expect(ctx.specialBtn.title).toBe('Move to special folder');
+    });
+
+    it('tracks a remapped binding', () => {
+        const ctx = ctxWith({ folder: 'C:/special', compareOverrides: { leftSpecial: 'Digit9' } });
+        updateSpecialButtonsState.call(ctx);
+        expect(ctx.leftSpecialBtn.title).toBe('Move left to special folder (9)');
+    });
+
+    it('omits the suffix entirely when no special folder is configured', () => {
+        const ctx = ctxWith({ folder: '' });
+        updateSpecialButtonsState.call(ctx);
+        const configure = 'Configure special folder in Settings (F1)';
+        expect(ctx.specialBtn.title).toBe(configure);
+        expect(ctx.leftSpecialBtn.title).toBe(configure);
+        expect(ctx.rightSpecialBtn.title).toBe(configure);
+        expect(ctx.leftSpecialBtn.disabled).toBe(true);
     });
 });

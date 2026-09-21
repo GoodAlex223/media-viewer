@@ -20,6 +20,18 @@ test.describe('Compare Mode', () => {
             customLikeFolder: tmpFixtures.likeDir,
             customDislikeFolder: tmpFixtures.dislikeDir,
         });
+        // launchApp() sets no userDataDir, so localStorage survives BOTH across tests and
+        // across runs in the real app profile. Any test that writes customShortcuts would
+        // otherwise leave every later test — and every later run — with those bindings.
+        // The constructor has already read them by now, so reload the shortcut state too.
+        await page.evaluate(() => {
+            localStorage.removeItem('customShortcuts');
+            const mv = window.mediaViewer;
+            mv.shortcuts = mv.loadShortcuts();
+            mv.shortcutReverseMap = mv.buildReverseMap();
+            mv.renderShortcutRows();
+            mv.updateSpecialButtonsState();
+        });
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
     });
@@ -112,6 +124,106 @@ test.describe('Compare Mode', () => {
 
         // Verify file moved to like folder
         await expect(access(join(tmpFixtures.likeDir, leftFileName))).resolves.toBeUndefined();
+    });
+
+    // Unit tests cover the binding, the reverse map and the executeAction branch, but none of
+    // them prove the keydown listener actually reaches them for Digit1 in compare mode. This
+    // does: a real key press, through the real dispatch, ending in a file on disk.
+    test('moves the left file to the special folder with the 1 key', async () => {
+        await seedLocalStorage(page, { customSpecialFolder: tmpFixtures.specialDir });
+        await page.evaluate(() => window.mediaViewer.toggleViewMode());
+        await page.waitForTimeout(500);
+
+        await page.waitForFunction(() => window.mediaViewer.compareLeftFile != null);
+        const leftFileName = await page.evaluate(() => window.mediaViewer.compareLeftFile.name);
+
+        await page.keyboard.press('1');
+        await page.waitForTimeout(500);
+
+        await expect(access(join(tmpFixtures.specialDir, leftFileName))).resolves.toBeUndefined();
+    });
+
+    test('moves the right file to the special folder with the 2 key', async () => {
+        await seedLocalStorage(page, { customSpecialFolder: tmpFixtures.specialDir });
+        await page.evaluate(() => window.mediaViewer.toggleViewMode());
+        await page.waitForTimeout(500);
+
+        await page.waitForFunction(() => window.mediaViewer.compareRightFile != null);
+        const rightFileName = await page.evaluate(() => window.mediaViewer.compareRightFile.name);
+
+        await page.keyboard.press('2');
+        await page.waitForTimeout(500);
+
+        await expect(access(join(tmpFixtures.specialDir, rightFileName))).resolves.toBeUndefined();
+    });
+
+    // The tooltip is derived from this.shortcuts, so this asserts the wiring end to end:
+    // seedLocalStorage calls updateSpecialButtonsState(), which must append the bound key.
+    test('compare special buttons advertise their hotkey in the tooltip', async () => {
+        await seedLocalStorage(page, { customSpecialFolder: tmpFixtures.specialDir });
+        await expect(page.locator('#leftSpecialBtn')).toHaveAttribute('title', 'Move left to special folder (1)');
+        await expect(page.locator('#rightSpecialBtn')).toHaveAttribute('title', 'Move right to special folder (2)');
+        // Single mode has no special binding, so its button stays bare.
+        await expect(page.locator('#specialBtn')).toHaveAttribute('title', 'Move to special folder');
+    });
+
+    // Regression, PR #71 review: Digit1/Digit2 were legal remap targets in compare mode before
+    // this feature existed, so a user could already hold "1" for `next`. buildReverseMap is
+    // last-write-wins and defaults iterate last, which made the new leftSpecial default steal
+    // the key — pressing "1" MOVED A FILE instead of advancing. The constructor already ran by
+    // the time a test can seed storage, so re-run the real merge and reverse map in place.
+    test('a pre-existing remap onto 1 keeps the key and does not move a file', async () => {
+        await seedLocalStorage(page, { customSpecialFolder: tmpFixtures.specialDir });
+        await page.evaluate(() => {
+            localStorage.setItem(
+                'customShortcuts',
+                JSON.stringify({
+                    version: 2,
+                    compare: {
+                        leftLike: 'KeyQ',
+                        leftDislike: 'KeyW',
+                        rightLike: 'KeyE',
+                        rightDislike: 'KeyR',
+                        next: 'Digit1',
+                        previous: 'KeyA',
+                        undo: 'Ctrl+KeyA',
+                        bothGood: 'KeyD',
+                        bothBad: 'KeyF',
+                    },
+                })
+            );
+            const mv = window.mediaViewer;
+            mv.shortcuts = mv.loadShortcuts();
+            mv.shortcutReverseMap = mv.buildReverseMap();
+        });
+
+        await page.evaluate(() => window.mediaViewer.toggleViewMode());
+        await page.waitForTimeout(500);
+        await page.waitForFunction(() => window.mediaViewer.compareLeftFile != null);
+
+        const before = await page.evaluate(() => ({
+            name: window.mediaViewer.compareLeftFile.name,
+            index: window.mediaViewer.currentIndex,
+            count: window.mediaViewer.mediaFiles.length,
+        }));
+
+        await page.keyboard.press('1');
+        await page.waitForTimeout(600);
+
+        // The user's own binding still wins: "1" navigates, and nothing left the source folder.
+        await expect(access(join(tmpFixtures.specialDir, before.name))).rejects.toThrow();
+        const after = await page.evaluate(() => ({
+            index: window.mediaViewer.currentIndex,
+            count: window.mediaViewer.mediaFiles.length,
+        }));
+        expect(after.count).toBe(before.count);
+        expect(after.index).not.toBe(before.index);
+
+        // ...and the action that lost the race is reported as unbound, not silently missing.
+        const leftSpecialKey = await page.evaluate(() => window.mediaViewer.shortcuts.compare.leftSpecial);
+        expect(leftSpecialKey).toBeNull();
+
+        await page.evaluate(() => localStorage.removeItem('customShortcuts'));
     });
 
     test('switches to single mode when last pair is rated', async () => {

@@ -20,6 +20,11 @@ const DEFAULT_SHORTCUTS = {
         undo: 'Ctrl+KeyA',
         bothGood: 'KeyD',
         bothBad: 'KeyF',
+        // Mirrors the tournament block below so 1/2 mean "this side to the special folder"
+        // in both two-up modes. Additive keys, so no loadShortcuts version bump is needed:
+        // a stored object that predates them falls through to these defaults via Object.assign.
+        leftSpecial: 'Digit1',
+        rightSpecial: 'Digit2',
     },
     tournament: {
         // Like/dislike handlers are tournament-aware (see _tournamentPickFromSide)
@@ -303,6 +308,9 @@ class MediaViewer {
         this.setupControlsVisibility();
         this.updateRatingButtonsState();
         this.updateSpecialButtonsState();
+        // After initializeElements(): loadShortcuts runs far earlier in this constructor, before
+        // the notification container exists, so the report is deferred to here.
+        this._reportShortcutCollisions();
         // ML worker and feature pool are initialized lazily when user clicks "Sort by Prediction"
 
         if (!window.electronAPI) {
@@ -471,24 +479,41 @@ class MediaViewer {
         }
     }
 
+    // The " (1)" a special-button tooltip carries, derived from the live binding rather than
+    // hardcoded, so a remap in the F1 panel reaches the button. Returns '' when the action is
+    // unbound in that mode — which is how single mode's tooltip stays bare without a special
+    // case, since shortcuts.single has no special action at all.
+    _specialShortcutSuffix(mode, action) {
+        const key = this.shortcuts?.[mode]?.[action];
+        return key ? ` (${this.keyDisplayName(key)})` : '';
+    }
+
+    // Sole runtime owner of the three static special-button titles: it overwrites whatever
+    // index.html declared, on init and on every special-folder browse/clear. saveShortcut and
+    // resetShortcuts also call it so a rebinding refreshes the suffix.
     updateSpecialButtonsState() {
         const enabled = !!this.customSpecialFolder;
         const tooltip = enabled ? 'Move to special folder' : 'Configure special folder in Settings (F1)';
 
-        // Single mode button
+        // Single mode button — single has no special binding, so the suffix resolves to ''.
         if (this.specialBtn) {
             this.specialBtn.disabled = !enabled;
-            this.specialBtn.title = tooltip;
+            this.specialBtn.title = enabled ? tooltip + this._specialShortcutSuffix('single', 'special') : tooltip;
         }
 
-        // Compare mode buttons
+        // Compare mode buttons. These live in .left/.right-media-controls, which CSS hides in
+        // tournament mode, so they are compare-only surfaces and always read the compare map.
         if (this.leftSpecialBtn) {
             this.leftSpecialBtn.disabled = !enabled;
-            this.leftSpecialBtn.title = enabled ? 'Move left to special folder' : tooltip;
+            this.leftSpecialBtn.title = enabled
+                ? 'Move left to special folder' + this._specialShortcutSuffix('compare', 'leftSpecial')
+                : tooltip;
         }
         if (this.rightSpecialBtn) {
             this.rightSpecialBtn.disabled = !enabled;
-            this.rightSpecialBtn.title = enabled ? 'Move right to special folder' : tooltip;
+            this.rightSpecialBtn.title = enabled
+                ? 'Move right to special folder' + this._specialShortcutSuffix('compare', 'rightSpecial')
+                : tooltip;
         }
     }
 
@@ -3402,8 +3427,13 @@ class MediaViewer {
         const specialBtn = document.createElement('button');
         specialBtn.className = 'overlay-btn overlay-special-btn';
         specialBtn.innerHTML = '<i data-lucide="folder-heart"></i>';
+        // This bar is built fresh on every compare AND tournament render, so reading the mode
+        // here is enough to keep the suffix correct — no separate refresh hook is needed, and
+        // tournament's long-standing 1/2 bindings become visible for the first time.
+        const specialAction = side === 'left' ? 'leftSpecial' : 'rightSpecial';
+        const specialMode = this.isTournamentMode ? 'tournament' : 'compare';
         specialBtn.title = this.customSpecialFolder
-            ? 'Move to special folder'
+            ? 'Move to special folder' + this._specialShortcutSuffix(specialMode, specialAction)
             : 'Configure special folder in Settings (F1)';
         specialBtn.disabled = !this.customSpecialFolder;
         specialBtn.addEventListener('click', (e) => {
@@ -9352,11 +9382,79 @@ class MediaViewer {
                 localStorage.setItem('customShortcuts', JSON.stringify(custom));
             }
         }
+        // Collisions are recomputed from storage on every load, never written back — so if a
+        // colliding default is ever removed, the user's binding simply works again.
+        this._shortcutCollisions = [];
         return {
-            single: Object.assign({}, DEFAULT_SHORTCUTS.single, custom.single),
-            compare: Object.assign({}, DEFAULT_SHORTCUTS.compare, custom.compare),
-            tournament: Object.assign({}, DEFAULT_SHORTCUTS.tournament, custom.tournament),
+            single: this._mergeModeShortcuts('single', custom.single),
+            compare: this._mergeModeShortcuts('compare', custom.compare),
+            tournament: this._mergeModeShortcuts('tournament', custom.tournament),
         };
+    }
+
+    // Drops the null bindings _mergeModeShortcuts produces. They are runtime state, not a user
+    // choice, and persisting one would make the next load's `hasOwnProperty` check short-circuit
+    // the sweep — pinning that action Unbound permanently, so freeing the key would never bring
+    // its default back. Keeping them out is what makes "recomputed every load, never written
+    // back" actually true.
+    _persistableBindings(modeShortcuts) {
+        return Object.fromEntries(Object.entries(modeShortcuts).filter(([, key]) => key));
+    }
+
+    // Surfaced once per launch, after initializeElements() has built the notification
+    // container. Silence here was the sharper half of the defect: the user would simply find
+    // a key they had bound doing nothing, with no way to connect it to an upgrade.
+    _reportShortcutCollisions() {
+        if (!this._shortcutCollisions?.length) return;
+        for (const { action, key, heldBy } of this._shortcutCollisions) {
+            const label = ACTION_LABELS[action] ?? action;
+            const holder = ACTION_LABELS[heldBy] ?? heldBy;
+            this.showNotification(
+                `"${label}" has no shortcut: ${this.keyDisplayName(key)} is already your "${holder}" key. ` +
+                    `Assign one in Settings (F1).`,
+                'warning'
+            );
+        }
+    }
+
+    // A stored remap claims a physical key for its whole mode, so a default ADDED LATER that
+    // wants the same key must yield rather than steal it. Without this, `buildReverseMap` is
+    // last-write-wins and defaults iterate last (Object.assign preserves the default key
+    // order), so the new action silently captured the key: a user who had bound compare
+    // `next` to `1` would press `1` and get `moveToSpecialFolder('left')` — a real file move —
+    // with their `next` left unreachable and nothing reporting it. `checkShortcutConflict`
+    // cannot catch this; it only runs at remap time, never at load against newly-added defaults.
+    //
+    // The loser is the NEW default, not the user's binding: dropping the user's remap instead
+    // would still leave `1` moving a file for someone who pressed it expecting to navigate.
+    // Yielding leaves the new action unbound — `keyDisplayName` renders that as "Unbound" and
+    // `_specialShortcutSuffix` omits the suffix — with the on-screen button and F1 rebinding
+    // both still working. This is also why an additive default needs no version bump: the
+    // merge itself is collision-safe, rather than each new binding needing its own migration.
+    _mergeModeShortcuts(mode, customMode) {
+        const defaults = DEFAULT_SHORTCUTS[mode];
+        const merged = Object.assign({}, defaults, customMode);
+        if (!customMode) return merged;
+
+        // saveShortcut persists the FULL mode object, so this covers every key the user holds.
+        const claimedBy = new Map();
+        for (const [action, key] of Object.entries(customMode)) {
+            if (key) claimedBy.set(key, action);
+        }
+
+        for (const action of Object.keys(defaults)) {
+            // An explicit stored binding ON this action is the user's own choice, not a clash.
+            // This skip is also what guarantees `holder !== action` below: every holder comes
+            // from `customMode`, and every action reaching the lookup is absent from it. Drop
+            // this `continue` and that invariant goes with it.
+            if (Object.prototype.hasOwnProperty.call(customMode, action)) continue;
+            const holder = claimedBy.get(merged[action]);
+            if (holder) {
+                this._shortcutCollisions.push({ mode, action, key: merged[action], heldBy: holder });
+                merged[action] = null;
+            }
+        }
+        return merged;
     }
 
     buildKeyString(e) {
@@ -9371,6 +9469,9 @@ class MediaViewer {
         const reverse = { single: {}, compare: {}, tournament: {} };
         for (const mode of ['single', 'compare', 'tournament']) {
             for (const [action, key] of Object.entries(this.shortcuts[mode] ?? {})) {
+                // Skip actions left unbound by _mergeModeShortcuts, or they'd register under
+                // the literal key "null" and shadow nothing while looking bound.
+                if (!key) continue;
                 reverse[mode][key] = action;
             }
         }
@@ -9398,11 +9499,17 @@ class MediaViewer {
             bothBad: () => this.handleBothBad(),
             bothWin: () => this.handleTournamentDraw('win'),
             bothLose: () => this.handleTournamentDraw('lose'),
+            // Bound in compare and tournament only. Tournament needs the engine-sync wrapper;
+            // compare goes straight to the move, the same path #leftSpecialBtn's click takes.
+            // Single mode has no binding, so the reverse map never produces these there —
+            // the mode check is the second line of defence, not the only one.
             leftSpecial: () => {
                 if (this.isTournamentMode) this.handleTournamentSpecial('left');
+                else if (this.isCompareMode) this.moveToSpecialFolder('left');
             },
             rightSpecial: () => {
                 if (this.isTournamentMode) this.handleTournamentSpecial('right');
+                else if (this.isCompareMode) this.moveToSpecialFolder('right');
             },
         };
         actions[action]?.();
@@ -9425,19 +9532,26 @@ class MediaViewer {
     saveShortcut(mode, action, newKey) {
         this.shortcuts[mode][action] = newKey;
         this.shortcutReverseMap = this.buildReverseMap();
+        // The special tooltips are derived from this.shortcuts; without this the button would
+        // keep advertising the old key while the F1 row already shows the new one.
+        this.updateSpecialButtonsState();
 
         // Persist the current shortcuts — loadShortcuts merges on load so full save is safe.
         // version must be written so the v1->v2 migration in loadShortcuts does not re-run and
         // clobber an intentional 'next' remap on the next load.
         const custom = {
             version: 2,
-            single: Object.assign({}, this.shortcuts.single),
-            compare: Object.assign({}, this.shortcuts.compare),
+            single: this._persistableBindings(this.shortcuts.single),
+            compare: this._persistableBindings(this.shortcuts.compare),
         };
         localStorage.setItem('customShortcuts', JSON.stringify(custom));
     }
 
     keyDisplayName(keyStr) {
+        // null when _mergeModeShortcuts made a new default yield to a user's existing remap.
+        // renderShortcutRows and stopListeningMode both feed this straight from the shortcut
+        // map, so without this guard one unbound action takes down the whole F1 panel.
+        if (!keyStr) return 'Unbound';
         return keyStr.replace('Key', '').replace('Digit', '').replace('+Key', '+').replace('+Digit', '+');
     }
 
@@ -9549,6 +9663,7 @@ class MediaViewer {
         };
         this.shortcutReverseMap = this.buildReverseMap();
         localStorage.removeItem('customShortcuts');
+        this.updateSpecialButtonsState();
         this.renderShortcutRows?.();
         this.attachShortcutKeyListeners?.();
     }

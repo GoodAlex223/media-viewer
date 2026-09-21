@@ -182,6 +182,9 @@
                         <span class="btn-label">Zoom</span>
                     </button>
                 </div>
+                <!-- The three special-btn titles below are a pre-JS fallback only:
+                     updateSpecialButtonsState() overwrites them at init and appends the
+                     bound hotkey, which cannot be expressed in static markup. -->
                 <button class="control-btn special-btn" id="specialBtn" title="Move to special folder">
                     <span class="btn-icon"><i data-lucide="folder-heart"></i></span>
                     <span class="btn-label">Special</span>
