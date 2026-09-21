@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-09-12 <!-- Group G4: ML pipeline integrity (🟤 Auto) — **MERGED 2026-09-12 via PR #69, merge `7df03b8`**, after three review rounds plus a final ruling pass with no blocking findings. 3/3 tasks + the 0-SP housekeeping flip. The CLIP unload lease closes the last reachable zero-CLIP training door (the filed one-line remedy was half of it — it closes only the armed-before-the-sort order); `ml-worker.js`'s abort protocol was **deleted rather than pinned**, having no sender, a self-clearing flag and a synchronous loop that could not observe it; the harness went 8 → 24 cases. Three of the group's four premises had expired because PR #68 merged between scoping and execution. Two closeout misses found and repaired (G2 shipped four of five PR #65 entries, not five; G1's own task checkboxes were never flipped). Three review remarks, all one defect class — a rationale living only where nobody executing the work will read it — in code, in a test mock, and in a backlog cross-reference. Unit 761 → **793**; E2E 61/61 unchanged. NOTE: this stamp had been stale since 2026-09-02 — G1's closeout (entry dated 2026-09-10) did not bump it. -->
+**Last Updated**: 2026-09-21 <!-- Group G3: Compare-mode special hotkeys + tooltips (🔵 User) — **MERGED 2026-09-21 via PR #71, merge `4b650aa`**, after three review rounds. 2/2 tasks + the doc ride-along. Compare mode gained `1`/`2` for the special-folder move, and every special-button tooltip is now **derived** from the live binding rather than hardcoded. The group’s filed premise was wrong in a useful way: both the BACKLOG entry and CLAUDE.md L185 demanded a shortcut-localStorage migration, which verification showed additive keys do not need — but review round 1 then found the entry had been sitting next to a **real** hazard it never described, since `Digit1`/`Digit2` were already legal remap targets, so the new defaults could shadow a user’s existing binding and **silently move a file**. Fixed structurally (`_mergeModeShortcuts` makes a later default yield to a stored remap) rather than with the reviewer’s suggested v3 bump, which they withdrew in round 2. A `holder !== action` guard both later rounds called harmless was removed after brute force proved it dead across 46,200 cases. Unit 805 → **837**; E2E 71 → **75**. -->
+<!-- Previous: Group G4: ML pipeline integrity (🟤 Auto) — **MERGED 2026-09-12 via PR #69, merge `7df03b8`**, after three review rounds plus a final ruling pass with no blocking findings. 3/3 tasks + the 0-SP housekeeping flip. The CLIP unload lease closes the last reachable zero-CLIP training door (the filed one-line remedy was half of it — it closes only the armed-before-the-sort order); `ml-worker.js`'s abort protocol was **deleted rather than pinned**, having no sender, a self-clearing flag and a synchronous loop that could not observe it; the harness went 8 → 24 cases. Three of the group's four premises had expired because PR #68 merged between scoping and execution. Two closeout misses found and repaired (G2 shipped four of five PR #65 entries, not five; G1's own task checkboxes were never flipped). Three review remarks, all one defect class — a rationale living only where nobody executing the work will read it — in code, in a test mock, and in a backlog cross-reference. Unit 761 → **793**; E2E 61/61 unchanged. NOTE: this stamp had been stale since 2026-09-02 — G1's closeout (entry dated 2026-09-10) did not bump it. -->
 <!-- Previous: Group G6: Weekly Reviews (2026-09-02 run, ⚪ Overhead) — **MERGED 2026-09-03 via PR #67, merge `de4bdac`**, after 3 review rounds and 8 findings, all resolved — 5/5 items plus G4's terminal `dead-rules-audit` read-out, which closes G4 at 3/3. Run held two days ahead of its Friday Sep 4 slot. Five verdict rows (§1a `github`/External-integrations pass · §1b fracalo/electron-playwright-mcp pass · §2 plugin context-cost audit adopt · §3 loop-engineering evidence-gating adopt · §4 reviewer-negative-finding propagate) plus the first two § 5 trial read-outs, BOTH failures: `dead-rules-audit` drop (its judge scores compliant edits as violations — 10 of 43 rules flagged, led by rules G2 had just enforced) and visual verification inconclusive (G5 shipped a progress card with zero visual evidence). Both adopts trace to those failures rather than to the web; the six-day window produced no plugin adopt, as predicted. Also surfaced: §4 `propagate` has the same zero-burn-down problem § 5 was built to fix for adopts — 2 filed, 0 applied, the 2026-08-27 `realness` propagation still absent at its target. -->
 
 **Purpose**: Historical record of completed work.
@@ -14,6 +15,77 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-09 (September)
+
+### 2026-09-21 — Group G3: Compare-mode special hotkeys + tooltips 🔵 — 2/2 tasks + doc ride-along, **MERGED `4b650aa`** (PR #71)
+
+**Plan**: [archived](../archive/plans/2026-09-21_g3-compare-special-hotkeys.md) — bounded task, no spec (brainstorming classified it bounded; the design was presented in chat and recorded in the plan)
+**Branch**: `g3-compare-special-hotkeys`, cut from `main` at `59a2875` (after G2's `f874f93`, per the plan's ordering constraint). **Merged 2026-09-21 as `4b650aa`** (`--merge`, [PR #71](https://github.com/GoodAlex223/media-viewer/pull/71); branch deleted local + remote). Three review rounds; **round 1 found a real defect this group introduced**, rounds 2 and 3 clean.
+**Commits**: `2d91c49` (feature) → `9f274f1` (review fix) → `24528ed` (E2E leak fix) → `bd2dab2` (dead-guard removal). All four verified ancestors of `main` with `git merge-base --is-ancestor`.
+**Tests**: unit 805 → **837**; E2E 71 → **75** (4 new in `compare-mode.test.js`: the `1`/`2` real-keydown moves, the derived tooltip, and the collision regression). This entry is the only place the delta is stated; WEEKLY points here.
+
+**Summary**: Two 🔵 `[2026-08-28]` entries, both closed. Compare mode gained `leftSpecial: 'Digit1'` /
+`rightSpecial: 'Digit2'` mirroring tournament, and `executeAction`'s existing handlers gained an
+`else if (this.isCompareMode)` branch onto `moveToSpecialFolder(side)` — the same path
+`#leftSpecialBtn`'s click already took. Much of the work was already free: `renderShortcutRows` and
+`checkShortcutConflict` both iterate the mode's shortcut object, so the F1 rows and conflict
+detection needed no edit, and `ACTION_LABELS` already carried both labels.
+
+**A wrong premise that was nonetheless pointing at something.** Both the BACKLOG entry and CLAUDE.md
+L185 asserted this "requires the versioned shortcut-localStorage migration". Verified false at
+planning: additive keys fall through via `Object.assign`, and the v1→v2 migration's own comment
+states the rule. That correction was right — and incomplete in a way that mattered. Review round 1
+showed the entry had been sitting beside a **real** hazard it never described: `Digit1`/`Digit2` were
+legal remap targets before this feature existed, so a user could already hold `1` for `next`.
+`Object.assign` preserves the *default* key order and the new actions are declared last, while
+`buildReverseMap` is last-write-wins — so `1` dispatched `leftSpecial`, the user's `next` went dead,
+and pressing `1` ran `moveToSpecialFolder('left')` and **moved a file**, with nothing reporting it.
+`checkShortcutConflict` cannot catch this: it runs at remap time, never at load.
+
+**Fixed structurally, not with the suggested migration.** The reviewer proposed a v3 bump; that was
+declined and they withdrew it in round 2. A bump is one-shot — the next additive binding needs a v4,
+and the rule degrades into "additive keys need a bump too", which is the exact rule this task had
+just proved forgettable. `_mergeModeShortcuts()` makes the merge itself collision-safe instead, so
+the rule stays true. The **new default** is the loser, not the user's binding: dropping the user's
+remap (what a v3 delete does) still leaves someone pressing `1` expecting navigation and getting a
+file move, only softened by a toast.
+
+**Three knock-ons, each load-bearing.** `keyDisplayName` returns `'Unbound'` for a null binding — it
+feeds `renderShortcutRows` and `stopListeningMode` directly, so the first unguarded `null` took down
+the entire F1 panel (caught by a RED `TypeError`, not by inspection). `buildReverseMap` skips the
+entry. And `_persistableBindings` keeps nulls out of localStorage — without it `hasOwnProperty` would
+short-circuit the sweep on the next load and pin the action Unbound permanently, so freeing the key
+would never restore the default. That last one was self-caught by re-reading a comment written
+minutes earlier ("recomputed every load, never written back") against `saveShortcut`, which persists
+the full mode object and would have made the comment fiction.
+
+**`index.html` was deliberately not edited**, against the plan's own file list.
+`updateSpecialButtonsState()` is the sole runtime owner of all three static special titles and
+overwrites the markup at init and on every browse/clear, so a literal `(1)` there is replaced before
+anyone sees it. The plan's file list had omitted that function entirely — editing only `index.html`
+as filed would have produced a change with no visible effect. A comment naming the owner is the residue.
+
+**The pre-push gate earned itself.** The new collision E2E writes `customShortcuts`, and
+`launchApp()` sets no `userDataDir` — so localStorage persists across tests *and across whole runs*
+in the real app profile. A standalone run of that test poisoned the profile and failed two **earlier**
+tests in a later run with no code change between them. Fixed in `beforeEach` so no future test can
+leak bindings, and verified against a genuinely poisoned profile rather than a clean one: with the
+per-test cleanup disabled, run 1 poisoned it and run 2 still passed 13/13 on the guard alone. The
+general hazard is pre-existing (`rating.test.js` already works around it for the folder keys) and is
+filed as a 🟤 residual.
+
+**A guard proved dead rather than assumed dead.** Rounds 2 and 3 both flagged `holder !== action` as
+unreachable and both said no action needed. Removed anyway, after brute-forcing every mode × override
+× key combination: **46,200 cases, 45,304 real collisions, zero where `holder === action`**. Dead code
+shaped like a guard reads as a contract implying a case that cannot occur; the comment on the
+`hasOwnProperty` skip now records that the skip is what supplies the invariant.
+
+**Residuals**: four 🟤 filed under `### [2026-09-21] From: G3 closeout` (the `saveShortcut` tournament
+drop and the missing tournament F1 section — a **sequenced pair**, the second never to ship alone,
+since no UI path can remap a tournament binding today and adding one first would make the latent bug
+visible; the `checkShortcutConflict` load/remap asymmetry; and the E2E profile-leak generalisation),
+plus one 🟡 for the CLAUDE.md size-audit trigger, which this group **widened** rather than held.
+
+---
 
 ### 2026-09-12 — Group G4: ML pipeline integrity 🟤 — 3/3 tasks + 0-SP housekeeping, **MERGED `7df03b8`** (PR #69)
 

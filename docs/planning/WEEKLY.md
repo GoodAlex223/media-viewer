@@ -63,9 +63,9 @@
 
 > ⚠️ **Premise corrected at planning — cheaper than filed.** Both the BACKLOG entry and CLAUDE.md L185 say this "requires the versioned shortcut-localStorage migration in `loadShortcuts()`". That migration **already exists** (`media-viewer.js:~9386`, v1 → v2), and its own comment states the rule that makes it unnecessary here: keys that were never stored "simply fall through to defaults" through `Object.assign({}, DEFAULT_SHORTCUTS.compare, custom.compare)`. Adding `leftSpecial`/`rightSpecial` is **additive** — no version bump. Bump only when an existing default _changes_. Verified `DEFAULT_SHORTCUTS.compare` has no special bindings today and that `Digit1`/`Digit2` are unbound in compare mode.
 
-- [ ] **Compare-mode `Digit1` / `Digit2` → `moveToSpecialFolder('left' | 'right')`** — `DEFAULT_SHORTCUTS.compare` + the mode-keyed reverse map (dispatch isolation comes from `buildReverseMap()`, per CLAUDE.md), `executeAction` compare branch, conflict check, F1 help overlay rows; unit tests for dispatch + no-conflict; no migration (see above). `media-viewer.js` (2) — 🔵 [2026-08-28]
-- [ ] **Tooltips carry the special hotkey where one is bound** — tournament (`1`/`2`) and compare (after the item above); single mode has **no** special binding, so its tooltip stays bare unless the group decides a binding is trivial (out of scope otherwise — say so in the plan). Static titles in `index.html`, the dynamic title in `addMediaOverlayControls`. (1) — 🔵 [2026-08-28]
-- _Doc ride-along (0 SP)_: rephrase CLAUDE.md L185 — the migration exists at v2; bump for changed defaults only, never for additive keys.
+- [x] **Compare-mode `Digit1` / `Digit2` → `moveToSpecialFolder('left' | 'right')`** — `DEFAULT_SHORTCUTS.compare` + the mode-keyed reverse map (dispatch isolation comes from `buildReverseMap()`, per CLAUDE.md), `executeAction` compare branch, conflict check, F1 help overlay rows; unit tests for dispatch + no-conflict; no migration (see above). `media-viewer.js` (2) — 🔵 [2026-08-28]
+- [x] **Tooltips carry the special hotkey where one is bound** — tournament (`1`/`2`) and compare (after the item above); single mode has **no** special binding, so its tooltip stays bare unless the group decides a binding is trivial (out of scope otherwise — say so in the plan). Static titles in `index.html`, the dynamic title in `addMediaOverlayControls`. (1) — 🔵 [2026-08-28]
+- _Doc ride-along (0 SP)_: rephrase CLAUDE.md L185 — the migration exists at v2; bump for changed defaults only, never for additive keys. ✅ done — and **corrected further than planned**: "never for additive keys" was itself the misleading half. The fall-through argument holds only while the new *physical key* is unclaimed; L186 now names `_mergeModeShortcuts()` as what actually makes additive keys safe.
 
 ### G4. ML pipeline integrity [batch] 🟤
 
@@ -124,13 +124,13 @@
 > G2 first (it owns the shared `index.html` / `addMediaOverlayControls` touch points); G3 branches from `main` after G2 merges. G2's screenshots are captured before the review, not after.
 
 - **[G2](#g2-reachable-overlay-controls-batch-)** 🔵 — all three items + visual evidence ✅ done — merged `f874f93` via PR #70; a fourth item not in the plan — the F4 zoom regression (`removeZoomPopover` deleting the zoom button's own parent, which stripped the tournament fast path's zoom control from pair 2 onward) — was found during scoping and folded in, taking the group to 6 SP against the 5 planned
-- **[G3](#g3-compare-mode-special-hotkeys--tooltips-batch-)** 🔵 — start (hotkeys)
+- **[G3](#g3-compare-mode-special-hotkeys--tooltips-batch-)** 🔵 — start (hotkeys) ✅ done — bindings + per-mode dispatch; premise corrected (no migration needed, contrary to the BACKLOG entry and CLAUDE.md L185)
 
 **Daily total**: ~6 SP
 
 ### Friday, September 11 — Finish + Reviews + buffer
 
-- **[G3](#g3-compare-mode-special-hotkeys--tooltips-batch-)** 🔵 — tooltips, CLAUDE.md L185, merge
+- **[G3](#g3-compare-mode-special-hotkeys--tooltips-batch-)** 🔵 — tooltips, CLAUDE.md L185, merge ✅ done — derived tooltips via `_specialShortcutSuffix`; **merged `4b650aa` via PR #71** after 3 review rounds. Round 1 found a real defect the group introduced (new defaults shadowing a pre-existing user remap → a silent file move) — fixed structurally in `9f274f1`, and the reviewer withdrew their own suggested v3-migration remedy in round 2 (test delta in [DONE.md](DONE.md), not restated here)
 - **[G5](#g5-weekly-reviews-batch--overhead)** ⚪ — § 5 read-out first, then §§1–4
 - Buffer for G1/G2 review spillover; closeout: Summary-Table statuses (`✅ <merge-SHA>`), constituent BACKLOG/TODO entries checked off **in the same commit as the closeout**, DONE entries.
 
@@ -144,7 +144,7 @@
 | --- | ------------------------------------------------------ | --------------------------------------------- | ----------- | ----- | -------- | ------- | ---------- |
 | G1  | ML training pipeline — design pass + retrain skip [solo] 🏆 | JS logic (ML training / feature cache) + new module | 🔵 User     | 3     | 8        | Mon–Wed | ✅ PR #68 (merge `bfcc881`) |
 | G2  | Reachable overlay controls [batch]                     | CSS layout + renderer DOM + E2E evidence      | 🔵 User     | 3 (closes 4 🔵 + 1 🟤) | 5 | Thu | ✅ PR #70 (merge `f874f93`) |
-| G3  | Compare-mode special hotkeys + tooltips [batch]        | Shortcuts + tooltips                          | 🔵 User     | 2     | 3        | Thu–Fri | ☐ Planned  |
+| G3  | Compare-mode special hotkeys + tooltips [batch]        | Shortcuts + tooltips                          | 🔵 User     | 2 (closes 2 🔵) | 3        | Thu–Fri | ✅ PR #71 (merge `4b650aa`) |
 | G4  | ML pipeline integrity [batch]                          | JS logic (CLIP lifecycle) + test infra        | 🟤 Auto     | 3 (+1 housekeeping) | 5 | Mon–Tue | ✅ PR #69 (merge `7df03b8`) |
 | G5  | Weekly Reviews [batch]                                 | Research / process                            | ⚪ Overhead | 5     | 5        | Fri     | ☐ Planned  |
 |     | **Total (quota-counted)**                              |                                               |             | **11** | **21**  |         |            |

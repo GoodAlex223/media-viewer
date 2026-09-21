@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| [G3 Compare-Mode Special Hotkeys + Tooltips Plan](planning/plans/2026-09-21_g3-compare-special-hotkeys.md) | Compare `1`/`2` special-folder bindings + derived tooltips |
+| _None currently active_     | —                                      |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
@@ -103,6 +103,7 @@ Central index for all project documentation.
 | [G1 ML Training Pipeline Plan][] | 10-task subagent-driven plan: training-set fingerprint + per-training-folder vector caches + fingerprint-keyed model cache in `ml-training.js`; drops the online per-rating update protocol; corrects the recorded root cause (Group G1, Sep 7–11) |
 | [G4 ML Pipeline Integrity Plan][] | CLIP unload lease (the filed one-line remedy closed only one of two arming orders); deletes `ml-worker.js`'s unreachable abort protocol rather than pinning it; harness 8 → 24 cases. Three of its four premises had expired between scoping and execution (Group G4, Sep 7–11) |
 | [G2 Reachable Overlay Controls Plan][] | Container-anchored `#compareOverlayBar` (`1fr auto 1fr` grid, explicit `grid-column` pins) replaces wrapper-relative per-media controls and the prediction badge, fixing low-height clipping by construction; Like-left/Dislike-right on every rating surface; `removeZoomPopover` no longer deletes the tournament zoom button's parent (found defect, folded in); committed before/after visual evidence caught a real layout bug no automated check saw (Group G2, Sep 7–11) |
+| [G3 Compare-Mode Special Hotkeys + Tooltips Plan][] | Compare-mode `1`/`2` bound to `moveToSpecialFolder('left'\|'right')` mirroring tournament, and special-button tooltips **derived** from the live binding (`_specialShortcutSuffix`) instead of hardcoded; review found the new defaults could shadow a pre-existing user remap and silently move a file, fixed structurally by `_mergeModeShortcuts()` making a later default yield to a stored binding rather than by a one-shot migration bump (Group G3, Sep 7–11) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -165,6 +166,7 @@ Central index for all project documentation.
 [G1 ML Training Pipeline Plan]: archive/plans/2026-09-10_ml-training-pipeline.md
 [G4 ML Pipeline Integrity Plan]: archive/plans/2026-09-12_g4-ml-pipeline-integrity.md
 [G2 Reachable Overlay Controls Plan]: archive/plans/2026-09-13_g2-reachable-overlay-controls.md
+[G3 Compare-Mode Special Hotkeys + Tooltips Plan]: archive/plans/2026-09-21_g3-compare-special-hotkeys.md
 
 ## Design Specs
 

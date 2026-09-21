@@ -3,7 +3,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵, 3 SP); BACKLOG 🔵 `### [2026-08-28]` batch 2 (tooltips entry) + batch 3 (compare `1`/`2` entry)
 **Spec**: None — bounded task, design approved in chat (brainstorming § Bounded path)
 **Created**: 2026-09-21
-**Status**: Implemented — PR #71 review round 1 addressed
+**Status**: Complete — merged `4b650aa` (PR #71, 3 review rounds)
 **Last Updated**: 2026-09-21
 **Branch**: `g3-compare-special-hotkeys`
 
@@ -106,11 +106,11 @@ Task 1 (bindings + dispatch) first — it turns an existing exact-`toEqual` asse
 
 Per `~/.claude/rules/planning-closeout.md`: **Extract → Archive → Transition → Commit → Capture learnings**.
 
-- [ ] **Extract**: file the two residuals above as BACKLOG 🟤 under `### [2026-09-21] From: G3 closeout`.
-- [ ] **Archive**: remove the Active Plans row from `docs/README.md`, `git mv` this file to `docs/archive/plans/`, mark `Status: Complete — merged <SHA>`, and index it in `docs/README.md` (pre-commit guard enforces this).
-- [ ] **Transition**: WEEKLY G3's two checkboxes + the doc ride-along + Summary-Table row `✅ <merge-SHA>`.
-- [ ] **Commit**: check off the two 🔵 `[2026-08-28]` BACKLOG entries (compare `1`/`2`; tooltips) **in the same commit as the closeout**.
-- [ ] **Capture learnings**: session memory file + a one-line `MEMORY.md` pointer.
+- [x] **Extract**: file the two residuals above as BACKLOG 🟤 under `### [2026-09-21] From: G3 closeout`.
+- [x] **Archive**: remove the Active Plans row from `docs/README.md`, `git mv` this file to `docs/archive/plans/`, mark `Status: Complete — merged <SHA>`, and index it in `docs/README.md` (pre-commit guard enforces this).
+- [x] **Transition**: WEEKLY G3's two checkboxes + the doc ride-along + Summary-Table row `✅ <merge-SHA>`.
+- [x] **Commit**: check off the two 🔵 `[2026-08-28]` BACKLOG entries (compare `1`/`2`; tooltips) **in the same commit as the closeout**.
+- [x] **Capture learnings**: session memory file + a one-line `MEMORY.md` pointer.
 
 ---
 
