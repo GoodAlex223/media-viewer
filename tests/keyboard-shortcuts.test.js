@@ -50,7 +50,7 @@ describe('DEFAULT_SHORTCUTS', () => {
         });
     });
 
-    it('compare mode has left/right like/dislike, next, previous, undo', () => {
+    it('compare mode has left/right like/dislike, next, previous, undo, special', () => {
         const shortcuts = extractDefaultShortcuts();
         expect(shortcuts.compare).toEqual({
             leftLike: 'KeyQ',
@@ -62,7 +62,22 @@ describe('DEFAULT_SHORTCUTS', () => {
             undo: 'Ctrl+KeyA',
             bothGood: 'KeyD',
             bothBad: 'KeyF',
+            leftSpecial: 'Digit1',
+            rightSpecial: 'Digit2',
         });
+    });
+
+    it('compare mode mirrors tournament for the special-folder bindings', () => {
+        const shortcuts = extractDefaultShortcuts();
+        expect(shortcuts.compare.leftSpecial).toBe(shortcuts.tournament.leftSpecial);
+        expect(shortcuts.compare.rightSpecial).toBe(shortcuts.tournament.rightSpecial);
+    });
+
+    it('single mode has no special-folder binding', () => {
+        const shortcuts = extractDefaultShortcuts();
+        expect(shortcuts.single.leftSpecial).toBeUndefined();
+        expect(shortcuts.single.rightSpecial).toBeUndefined();
+        expect(shortcuts.single.special).toBeUndefined();
     });
 
     it('compare mode has no duplicate key bindings', () => {
@@ -256,6 +271,20 @@ describe('buildReverseMap', () => {
         expect(result.compare['KeyR']).toBe('rightDislike');
     });
 
+    // Dispatch isolation comes from the mode-keyed reverse map, not from action-name
+    // uniqueness: leftSpecial exists in BOTH compare and tournament and resolves to a
+    // different handler in each (see the executeAction per-mode tests below).
+    it('maps Digit1/Digit2 to the special actions in compare and tournament, but not single', () => {
+        const shortcuts = extractDefaultShortcuts();
+        const result = buildReverseMap.call({ shortcuts });
+        expect(result.compare['Digit1']).toBe('leftSpecial');
+        expect(result.compare['Digit2']).toBe('rightSpecial');
+        expect(result.tournament['Digit1']).toBe('leftSpecial');
+        expect(result.tournament['Digit2']).toBe('rightSpecial');
+        expect(result.single['Digit1']).toBeUndefined();
+        expect(result.single['Digit2']).toBeUndefined();
+    });
+
     it('reverse map reflects custom overrides', () => {
         const shortcuts = {
             single: { like: 'KeyT', dislike: 'KeyW', next: 'KeyD', previous: 'KeyA', undo: 'Ctrl+KeyA' },
@@ -343,6 +372,48 @@ describe('executeAction', () => {
         executeAction.call(ctx, 'nonexistent');
         expect(ctx.handleLike).not.toHaveBeenCalled();
         expect(ctx.nextMedia).not.toHaveBeenCalled();
+    });
+
+    describe('special-folder actions route per mode', () => {
+        function specialCtx(mode) {
+            return {
+                isCompareMode: mode === 'compare',
+                isTournamentMode: mode === 'tournament',
+                moveToSpecialFolder: vi.fn(),
+                handleTournamentSpecial: vi.fn(),
+            };
+        }
+
+        it('compare mode moves the chosen side to the special folder', () => {
+            const ctx = specialCtx('compare');
+            executeAction.call(ctx, 'leftSpecial');
+            expect(ctx.moveToSpecialFolder).toHaveBeenCalledWith('left');
+            expect(ctx.handleTournamentSpecial).not.toHaveBeenCalled();
+
+            executeAction.call(ctx, 'rightSpecial');
+            expect(ctx.moveToSpecialFolder).toHaveBeenCalledWith('right');
+            expect(ctx.moveToSpecialFolder).toHaveBeenCalledTimes(2);
+        });
+
+        it('tournament mode routes through handleTournamentSpecial, not moveToSpecialFolder', () => {
+            const ctx = specialCtx('tournament');
+            executeAction.call(ctx, 'leftSpecial');
+            expect(ctx.handleTournamentSpecial).toHaveBeenCalledWith('left');
+            expect(ctx.moveToSpecialFolder).not.toHaveBeenCalled();
+
+            executeAction.call(ctx, 'rightSpecial');
+            expect(ctx.handleTournamentSpecial).toHaveBeenCalledWith('right');
+        });
+
+        // Single mode has no Digit1/Digit2 binding, so the reverse map never produces
+        // these actions there; the handler guard is the second line of defence.
+        it('single mode does nothing for either special action', () => {
+            const ctx = specialCtx('single');
+            executeAction.call(ctx, 'leftSpecial');
+            executeAction.call(ctx, 'rightSpecial');
+            expect(ctx.moveToSpecialFolder).not.toHaveBeenCalled();
+            expect(ctx.handleTournamentSpecial).not.toHaveBeenCalled();
+        });
     });
 });
 
@@ -443,6 +514,58 @@ describe('checkShortcutConflict', () => {
         expect(checkShortcutConflict.call(ctx, 'single', 'like', 'KeyX')).toBe('_reserved');
         expect(checkShortcutConflict.call(ctx, 'single', 'like', 'Escape')).toBe('_reserved');
     });
+
+    it('reports the new compare special bindings as conflicts', () => {
+        const ctx = { shortcuts: extractDefaultShortcuts() };
+        expect(checkShortcutConflict.call(ctx, 'compare', 'leftLike', 'Digit1')).toBe('leftSpecial');
+        expect(checkShortcutConflict.call(ctx, 'compare', 'leftLike', 'Digit2')).toBe('rightSpecial');
+    });
+
+    it('does not treat Digit1/Digit2 as reserved keys', () => {
+        const ctx = { shortcuts: extractDefaultShortcuts() };
+        expect(checkShortcutConflict.call(ctx, 'compare', 'leftSpecial', 'Digit1')).toBeNull();
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'Digit1')).toBeNull();
+    });
+});
+
+describe('_specialShortcutSuffix', () => {
+    const _specialShortcutSuffix = extractMethod('_specialShortcutSuffix');
+    const keyDisplayName = extractMethod('keyDisplayName');
+
+    function ctxWith(shortcuts) {
+        return { shortcuts, keyDisplayName };
+    }
+
+    it('renders the bound key as a parenthesised suffix', () => {
+        const ctx = ctxWith(extractDefaultShortcuts());
+        expect(_specialShortcutSuffix.call(ctx, 'compare', 'leftSpecial')).toBe(' (1)');
+        expect(_specialShortcutSuffix.call(ctx, 'compare', 'rightSpecial')).toBe(' (2)');
+        expect(_specialShortcutSuffix.call(ctx, 'tournament', 'leftSpecial')).toBe(' (1)');
+    });
+
+    // The whole point of deriving rather than hardcoding: a remap must reach the tooltip.
+    it('follows a remapped binding instead of the default', () => {
+        const shortcuts = extractDefaultShortcuts();
+        shortcuts.compare.leftSpecial = 'Digit9';
+        expect(_specialShortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (9)');
+    });
+
+    it('renders a modifier binding through keyDisplayName', () => {
+        const shortcuts = extractDefaultShortcuts();
+        shortcuts.compare.leftSpecial = 'Ctrl+Digit1';
+        expect(_specialShortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (Ctrl+1)');
+    });
+
+    it('returns an empty string when the action is unbound in that mode', () => {
+        const ctx = ctxWith(extractDefaultShortcuts());
+        expect(_specialShortcutSuffix.call(ctx, 'single', 'special')).toBe('');
+        expect(_specialShortcutSuffix.call(ctx, 'single', 'leftSpecial')).toBe('');
+    });
+
+    it('returns an empty string for an unknown mode rather than throwing', () => {
+        const ctx = ctxWith(extractDefaultShortcuts());
+        expect(_specialShortcutSuffix.call(ctx, 'nosuchmode', 'leftSpecial')).toBe('');
+    });
 });
 
 describe('saveShortcut', () => {
@@ -482,6 +605,7 @@ describe('saveShortcut', () => {
             buildReverseMap() {
                 return { single: {}, compare: {} };
             },
+            updateSpecialButtonsState: vi.fn(),
         };
         saveShortcut.call(ctx, 'single', 'like', 'KeyT');
         expect(ctx.shortcuts.single.like).toBe('KeyT');
@@ -511,9 +635,29 @@ describe('saveShortcut', () => {
                 rebuildCalled = true;
                 return { single: {}, compare: {} };
             },
+            updateSpecialButtonsState: vi.fn(),
         };
         saveShortcut.call(ctx, 'single', 'like', 'KeyT');
         expect(rebuildCalled).toBe(true);
+    });
+
+    // The special tooltips are derived from this.shortcuts, so a remap that does not
+    // refresh them leaves the button advertising the old key while F1 shows the new one.
+    it('refreshes the special-button tooltips so a remap reaches them', () => {
+        globalThis.localStorage = { setItem: () => {}, removeItem: () => {} };
+        const ctx = {
+            shortcuts: {
+                single: { like: 'KeyQ' },
+                compare: { leftLike: 'KeyQ', leftSpecial: 'Digit1' },
+            },
+            shortcutReverseMap: { single: {}, compare: {} },
+            buildReverseMap() {
+                return { single: {}, compare: {} };
+            },
+            updateSpecialButtonsState: vi.fn(),
+        };
+        saveShortcut.call(ctx, 'compare', 'leftSpecial', 'Digit9');
+        expect(ctx.updateSpecialButtonsState).toHaveBeenCalledOnce();
     });
 });
 
@@ -558,6 +702,7 @@ describe('resetShortcuts', () => {
             buildReverseMap() {
                 return { single: {}, compare: {} };
             },
+            updateSpecialButtonsState: vi.fn(),
             stopListeningMode() {},
             _listeningState: null,
         };
@@ -565,5 +710,21 @@ describe('resetShortcuts', () => {
         expect(ctx.shortcuts.single).toEqual(defaults.single);
         expect(ctx.shortcuts.compare).toEqual(defaults.compare);
         expect(removedKey).toBe('customShortcuts');
+    });
+
+    it('refreshes the special-button tooltips after restoring defaults', () => {
+        globalThis.localStorage = { removeItem: () => {} };
+        const ctx = {
+            shortcuts: { single: {}, compare: { leftSpecial: 'Digit9' } },
+            shortcutReverseMap: { single: {}, compare: {} },
+            buildReverseMap() {
+                return { single: {}, compare: {} };
+            },
+            updateSpecialButtonsState: vi.fn(),
+            stopListeningMode() {},
+            _listeningState: null,
+        };
+        resetShortcuts.call(ctx);
+        expect(ctx.updateSpecialButtonsState).toHaveBeenCalledOnce();
     });
 });

@@ -114,6 +114,47 @@ test.describe('Compare Mode', () => {
         await expect(access(join(tmpFixtures.likeDir, leftFileName))).resolves.toBeUndefined();
     });
 
+    // Unit tests cover the binding, the reverse map and the executeAction branch, but none of
+    // them prove the keydown listener actually reaches them for Digit1 in compare mode. This
+    // does: a real key press, through the real dispatch, ending in a file on disk.
+    test('moves the left file to the special folder with the 1 key', async () => {
+        await seedLocalStorage(page, { customSpecialFolder: tmpFixtures.specialDir });
+        await page.evaluate(() => window.mediaViewer.toggleViewMode());
+        await page.waitForTimeout(500);
+
+        await page.waitForFunction(() => window.mediaViewer.compareLeftFile != null);
+        const leftFileName = await page.evaluate(() => window.mediaViewer.compareLeftFile.name);
+
+        await page.keyboard.press('1');
+        await page.waitForTimeout(500);
+
+        await expect(access(join(tmpFixtures.specialDir, leftFileName))).resolves.toBeUndefined();
+    });
+
+    test('moves the right file to the special folder with the 2 key', async () => {
+        await seedLocalStorage(page, { customSpecialFolder: tmpFixtures.specialDir });
+        await page.evaluate(() => window.mediaViewer.toggleViewMode());
+        await page.waitForTimeout(500);
+
+        await page.waitForFunction(() => window.mediaViewer.compareRightFile != null);
+        const rightFileName = await page.evaluate(() => window.mediaViewer.compareRightFile.name);
+
+        await page.keyboard.press('2');
+        await page.waitForTimeout(500);
+
+        await expect(access(join(tmpFixtures.specialDir, rightFileName))).resolves.toBeUndefined();
+    });
+
+    // The tooltip is derived from this.shortcuts, so this asserts the wiring end to end:
+    // seedLocalStorage calls updateSpecialButtonsState(), which must append the bound key.
+    test('compare special buttons advertise their hotkey in the tooltip', async () => {
+        await seedLocalStorage(page, { customSpecialFolder: tmpFixtures.specialDir });
+        await expect(page.locator('#leftSpecialBtn')).toHaveAttribute('title', 'Move left to special folder (1)');
+        await expect(page.locator('#rightSpecialBtn')).toHaveAttribute('title', 'Move right to special folder (2)');
+        // Single mode has no special binding, so its button stays bare.
+        await expect(page.locator('#specialBtn')).toHaveAttribute('title', 'Move to special folder');
+    });
+
     test('switches to single mode when last pair is rated', async () => {
         // Load with only 2 files (minimum for compare mode)
         const twoFileTmp = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png']);

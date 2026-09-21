@@ -20,6 +20,11 @@ const DEFAULT_SHORTCUTS = {
         undo: 'Ctrl+KeyA',
         bothGood: 'KeyD',
         bothBad: 'KeyF',
+        // Mirrors the tournament block below so 1/2 mean "this side to the special folder"
+        // in both two-up modes. Additive keys, so no loadShortcuts version bump is needed:
+        // a stored object that predates them falls through to these defaults via Object.assign.
+        leftSpecial: 'Digit1',
+        rightSpecial: 'Digit2',
     },
     tournament: {
         // Like/dislike handlers are tournament-aware (see _tournamentPickFromSide)
@@ -471,24 +476,41 @@ class MediaViewer {
         }
     }
 
+    // The " (1)" a special-button tooltip carries, derived from the live binding rather than
+    // hardcoded, so a remap in the F1 panel reaches the button. Returns '' when the action is
+    // unbound in that mode — which is how single mode's tooltip stays bare without a special
+    // case, since shortcuts.single has no special action at all.
+    _specialShortcutSuffix(mode, action) {
+        const key = this.shortcuts?.[mode]?.[action];
+        return key ? ` (${this.keyDisplayName(key)})` : '';
+    }
+
+    // Sole runtime owner of the three static special-button titles: it overwrites whatever
+    // index.html declared, on init and on every special-folder browse/clear. saveShortcut and
+    // resetShortcuts also call it so a rebinding refreshes the suffix.
     updateSpecialButtonsState() {
         const enabled = !!this.customSpecialFolder;
         const tooltip = enabled ? 'Move to special folder' : 'Configure special folder in Settings (F1)';
 
-        // Single mode button
+        // Single mode button — single has no special binding, so the suffix resolves to ''.
         if (this.specialBtn) {
             this.specialBtn.disabled = !enabled;
-            this.specialBtn.title = tooltip;
+            this.specialBtn.title = enabled ? tooltip + this._specialShortcutSuffix('single', 'special') : tooltip;
         }
 
-        // Compare mode buttons
+        // Compare mode buttons. These live in .left/.right-media-controls, which CSS hides in
+        // tournament mode, so they are compare-only surfaces and always read the compare map.
         if (this.leftSpecialBtn) {
             this.leftSpecialBtn.disabled = !enabled;
-            this.leftSpecialBtn.title = enabled ? 'Move left to special folder' : tooltip;
+            this.leftSpecialBtn.title = enabled
+                ? 'Move left to special folder' + this._specialShortcutSuffix('compare', 'leftSpecial')
+                : tooltip;
         }
         if (this.rightSpecialBtn) {
             this.rightSpecialBtn.disabled = !enabled;
-            this.rightSpecialBtn.title = enabled ? 'Move right to special folder' : tooltip;
+            this.rightSpecialBtn.title = enabled
+                ? 'Move right to special folder' + this._specialShortcutSuffix('compare', 'rightSpecial')
+                : tooltip;
         }
     }
 
@@ -3402,8 +3424,13 @@ class MediaViewer {
         const specialBtn = document.createElement('button');
         specialBtn.className = 'overlay-btn overlay-special-btn';
         specialBtn.innerHTML = '<i data-lucide="folder-heart"></i>';
+        // This bar is built fresh on every compare AND tournament render, so reading the mode
+        // here is enough to keep the suffix correct — no separate refresh hook is needed, and
+        // tournament's long-standing 1/2 bindings become visible for the first time.
+        const specialAction = side === 'left' ? 'leftSpecial' : 'rightSpecial';
+        const specialMode = this.isTournamentMode ? 'tournament' : 'compare';
         specialBtn.title = this.customSpecialFolder
-            ? 'Move to special folder'
+            ? 'Move to special folder' + this._specialShortcutSuffix(specialMode, specialAction)
             : 'Configure special folder in Settings (F1)';
         specialBtn.disabled = !this.customSpecialFolder;
         specialBtn.addEventListener('click', (e) => {
@@ -9398,11 +9425,17 @@ class MediaViewer {
             bothBad: () => this.handleBothBad(),
             bothWin: () => this.handleTournamentDraw('win'),
             bothLose: () => this.handleTournamentDraw('lose'),
+            // Bound in compare and tournament only. Tournament needs the engine-sync wrapper;
+            // compare goes straight to the move, the same path #leftSpecialBtn's click takes.
+            // Single mode has no binding, so the reverse map never produces these there —
+            // the mode check is the second line of defence, not the only one.
             leftSpecial: () => {
                 if (this.isTournamentMode) this.handleTournamentSpecial('left');
+                else if (this.isCompareMode) this.moveToSpecialFolder('left');
             },
             rightSpecial: () => {
                 if (this.isTournamentMode) this.handleTournamentSpecial('right');
+                else if (this.isCompareMode) this.moveToSpecialFolder('right');
             },
         };
         actions[action]?.();
@@ -9425,6 +9458,9 @@ class MediaViewer {
     saveShortcut(mode, action, newKey) {
         this.shortcuts[mode][action] = newKey;
         this.shortcutReverseMap = this.buildReverseMap();
+        // The special tooltips are derived from this.shortcuts; without this the button would
+        // keep advertising the old key while the F1 row already shows the new one.
+        this.updateSpecialButtonsState();
 
         // Persist the current shortcuts — loadShortcuts merges on load so full save is safe.
         // version must be written so the v1->v2 migration in loadShortcuts does not re-run and
@@ -9549,6 +9585,7 @@ class MediaViewer {
         };
         this.shortcutReverseMap = this.buildReverseMap();
         localStorage.removeItem('customShortcuts');
+        this.updateSpecialButtonsState();
         this.renderShortcutRows?.();
         this.attachShortcutKeyListeners?.();
     }
