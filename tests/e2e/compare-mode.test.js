@@ -20,6 +20,18 @@ test.describe('Compare Mode', () => {
             customLikeFolder: tmpFixtures.likeDir,
             customDislikeFolder: tmpFixtures.dislikeDir,
         });
+        // launchApp() sets no userDataDir, so localStorage survives BOTH across tests and
+        // across runs in the real app profile. Any test that writes customShortcuts would
+        // otherwise leave every later test — and every later run — with those bindings.
+        // The constructor has already read them by now, so reload the shortcut state too.
+        await page.evaluate(() => {
+            localStorage.removeItem('customShortcuts');
+            const mv = window.mediaViewer;
+            mv.shortcuts = mv.loadShortcuts();
+            mv.shortcutReverseMap = mv.buildReverseMap();
+            mv.renderShortcutRows();
+            mv.updateSpecialButtonsState();
+        });
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
     });
@@ -210,6 +222,8 @@ test.describe('Compare Mode', () => {
         // ...and the action that lost the race is reported as unbound, not silently missing.
         const leftSpecialKey = await page.evaluate(() => window.mediaViewer.shortcuts.compare.leftSpecial);
         expect(leftSpecialKey).toBeNull();
+
+        await page.evaluate(() => localStorage.removeItem('customShortcuts'));
     });
 
     test('switches to single mode when last pair is rated', async () => {
