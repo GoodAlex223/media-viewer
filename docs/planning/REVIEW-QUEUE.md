@@ -151,9 +151,10 @@ invented here — one convention, two directions.
 <!-- newest last: | date | propagation (verdict date) | target | outcome: applied / unapplied / dropped | evidence | -->
 
 Added 2026-09-24 (see Conventions). Evidence is the post-edit `grep -c` at the target; a sibling-tree 0 is
-expected under live-first and reads "sync pending", not "unapplied". Sibling measured at its HEAD `af49962`
-(the target files there last changed on 2026-08-25 and 2026-06-04, so the working copy matched HEAD), and
-still 0 for all four at `c0ebbee` when PR #72's review was answered — the sync has not yet run. Every edit was diffed against a
+expected under live-first and reads "sync pending", not "unapplied". Sibling measured at its HEAD `af49962`,
+whose `home-claude/` tree had no uncommitted changes; `git show <rev>:<file> | grep -c` gives 0 for all six
+probes at both `af49962` and `c0ebbee` (the sibling's HEAD when PR #72's review was answered), with a
+positive control matching at both — the sync has not yet run. Every edit was diffed against a
 pre-edit backup: insertions only, apart from the replaced template-version footer and the one step-3 line
 that received its clause.
 

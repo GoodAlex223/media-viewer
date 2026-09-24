@@ -59,9 +59,9 @@ Every figure below names the probe that produced it; none is carried forward fro
    absence from it was never evidence of absence. The catalog lists **311** plugins today against **291**
    in the Aug 29 snapshot: 20 added, none removed.
 4. **§4 outbound stands at 3 filed / 0 applied — re-measured, not carried.** `grep -c` over both trees
-   (live `~/.claude`, and `claude-code-universal-config/home-claude` at that repo's HEAD `af49962` — the
-   two target files there last changed on 2026-08-25 and 2026-06-04, so the working copy matched HEAD;
-   HEAD named in PR #72's review): `realness` 0 / 0 and the
+   (live `~/.claude`, and `claude-code-universal-config/home-claude` at that repo's HEAD `af49962`: its
+   `home-claude/` tree had no uncommitted changes, and `git show af49962:<file> | grep -c` gives the same
+   zeros — HEAD and that evidence added in PR #72's review): `realness` 0 / 0 and the
    negative-finding phrases 0 / 0 in `POLICIES/code-review.md` (382 lines in each tree); `closeout
    artifacts` / `live-surface` 0 / 0 in `TEMPLATES/plan.md` (225 lines in each tree). Neither target file
    has been modified since the rows were filed. A first keyword pass over `CLAUDE.md`, `WORKFLOW.md`,
@@ -324,11 +324,11 @@ was not edited.
    Verification rule ("never its README"), even though the plugin's source sat in the same local clone.
    Caught in PR #72's review. Every claim was then re-verified against source — `agents/scan-verifier.md`,
    `scripts/lib/finding.py`, `workflows/scan.js`, `skills/claude-security/jobs/`,
-   `scripts/render_report.py`, `hooks/hooks.py` — and every one held, so the verdict stands and only the
+   `scripts/render_report.py`, `scripts/patch_artifacts.py`, `hooks/hooks.py` — and every one held, so the verdict stands and only the
    citations changed (REVIEW-QUEUE §1a, BACKLOG).
 9. **D1's "Not used recently" column was never captured, and the § 5 table first dropped it silently.** Only
    the `/plugin` Installed tab shows it; checkpoint 1 was planned to ask the user for that reading and did
-   not. The table went out with four of D1's five columns, the WEEKLY § 5 box was checked for a table that
+   not. The table went out without the column, the WEEKLY § 5 box was checked for a table that
    records it, and the new Recurring read-out policy named that table as the format — so the omission would
    have propagated. Caught in PR #72's review and corrected in all three places: the table now carries the
    column (`not read` for the twelve non-synced rows, and `n/a` by design for the eight synced ones, which
