@@ -134,7 +134,7 @@
 ### Friday, September 11 — Finish + Reviews + buffer
 
 - **[G3](#g3-compare-mode-special-hotkeys--tooltips-batch-)** 🔵 — tooltips, CLAUDE.md L185, merge ✅ done — derived tooltips via `_specialShortcutSuffix`; **merged `4b650aa` via PR #71** after 3 review rounds. Round 1 found a real defect the group introduced (new defaults shadowing a pre-existing user remap → a silent file move) — fixed structurally in `9f274f1`, and the reviewer withdrew their own suggested v3-migration remedy in round 2 (test delta in [DONE.md](DONE.md), not restated here)
-- **[G5](#g5-weekly-reviews-batch--overhead)** ⚪ — § 5 read-out first, then §§1–4 ✅ done — held **2026-09-24**, 13 days after this slot (see Spillover); run-card [`2026-09-24-weekly-reviews-run.md`](../superpowers/specs/2026-09-24-weekly-reviews-run.md). Branch `g5-weekly-reviews`, docs-only
+- **[G5](#g5-weekly-reviews-batch--overhead)** ⚪ — § 5 read-out first, then §§1–4 ✅ done — held **2026-09-24**, 13 days after this slot (see Spillover); run-card [`2026-09-24-weekly-reviews-run.md`](../superpowers/specs/2026-09-24-weekly-reviews-run.md). Branch `g5-weekly-reviews`, docs-only; **merged `7342473` via PR #72** after three review rounds and a close-out ruling (review record in [DONE.md](DONE.md)). With G5 merged, every group of this plan has shipped.
 - Buffer for G1/G2 review spillover; closeout: Summary-Table statuses (`✅ <merge-SHA>`), constituent BACKLOG/TODO entries checked off **in the same commit as the closeout**, DONE entries.
 
 **Daily total**: ~3 SP + reviews overhead + buffer
@@ -149,7 +149,7 @@
 | G2  | Reachable overlay controls [batch]                     | CSS layout + renderer DOM + E2E evidence      | 🔵 User     | 3 (closes 4 🔵 + 1 🟤) | 5 | Thu | ✅ PR #70 (merge `f874f93`) |
 | G3  | Compare-mode special hotkeys + tooltips [batch]        | Shortcuts + tooltips                          | 🔵 User     | 2 (closes 2 🔵) | 3        | Thu–Fri | ✅ PR #71 (merge `4b650aa`) |
 | G4  | ML pipeline integrity [batch]                          | JS logic (CLIP lifecycle) + test infra        | 🟤 Auto     | 3 (+1 housekeeping) | 5 | Mon–Tue | ✅ PR #69 (merge `7df03b8`) |
-| G5  | Weekly Reviews [batch]                                 | Research / process                            | ⚪ Overhead | 5     | 5        | Fri     | ◐ Branch complete, unmerged |
+| G5  | Weekly Reviews [batch]                                 | Research / process                            | ⚪ Overhead | 5     | 5        | Fri     | ✅ PR #72 (merge `7342473`) |
 |     | **Total (quota-counted)**                              |                                               |             | **11** | **21**  |         |            |
 |     | **Total (incl. ⚪ overhead)**                          |                                               |             | **16** | **26**  |         |            |
 

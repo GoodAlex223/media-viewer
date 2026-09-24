@@ -308,6 +308,12 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 
 ## 🟤 Auto-Generated Tech Debt
 
+### [2026-09-24] From: G5 closeout (PR #72 review rounds)
+
+**Origin**: surfaced while answering PR #72's close-out ruling (merged `7342473`). Claude-surfaced → 🟤.
+
+- [ ] **`check-secrets.test.js`'s real-git block times out under transient Windows process-spawn latency** — **Measured 2026-09-24**, on the first attempt at PR #72's close-out commit: the pre-commit hook failed because "attributes added lines to the correct file across a multi-file staged diff" timed out at 5979 ms against vitest's 5000 ms default. The diff was not the cause: every test in that `describe` block slowed at once (3266 / 5979 / 1862 ms, then back to 271 ms) while the file's 19 pure-function tests stayed at 0–4 ms. Each of those tests spawns about seven `git` processes (`init`, four `config`s, `add`, `diff`) into a fresh temp repo, and something on the machine slowed spawning roughly tenfold for a few seconds; what, was not identified. It did not reproduce — three standalone runs passed at 1.08–1.12 s, and the retried commit passed 837/837. Each recurrence costs a blocked commit and a rerun, and a failing pre-commit hook is exactly when `--no-verify` tempts. Fix options: a longer per-suite timeout on that `describe` block only (e.g. 20 s), so a genuine hang in the pure-function tests still surfaces at 5 s; and/or fewer spawns per test (pass the identity and `core.autocrlf` as `git -c …` flags, or configure a template repo once in `beforeAll` and copy it per test). Effort: XS. Affected: `tests/check-secrets.test.js`.
+
 ### [2026-09-24] From: Weekly Reviews (2026-09-24 run)
 
 **Origin**: Group G5 Weekly Reviews, 5th run — run-card

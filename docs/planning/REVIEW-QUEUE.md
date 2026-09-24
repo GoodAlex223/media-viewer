@@ -183,6 +183,7 @@ that received its clause.
 - _Outbound_ — **`git worktree remove --force` follows a Windows junction and deletes its target** (G2: junctioning `node_modules` into a scratch worktree cost 1.3 GB of the real checkout; per-project memory `feedback_worktree_remove_follows_junctions.md`). Data-destructive and generic to any Windows project: worktrees are routine across projects via the global `superpowers:using-git-worktrees` skill, and junctioning `node_modules` into one is a natural Windows shortcut. **Absent at the target, 2026-09-24**: `worktree remove` returns 0 in both trees; `junction` returns 1 in each — a database-docs template's "Junction Table" column, not this hazard. Held only by the one-per-run cadence; a strong next candidate.
 - _Outbound_ — **A BACKLOG entry's stated mechanism is a hypothesis to re-measure; its symptom is the evidence** (G5 on 2026-09-02: "UI only, 1 SP" hid silent training corruption; the Sep 7–11 plan's premise corrections; per-project memory `feedback_backlog_premise_may_be_wrong.md`). **Absent at the target, 2026-09-24**: `stated mechanism` returns 0 in both trees; `hypothesis` returns 1 in each — the bug-report template's optional field, not this rule.
 - _Inbound_ — **`mattpocock/skills`** (now in the official catalog as `mattpocock-skills`) and the **design-video sub-batch** — **parked, event-driven** (user ruling 2026-09-24): re-check only when `claude-code-universal-config` logs a verdict on them (for `mattpocock/skills`, its comparison against superpowers), never on this run's cadence.
+- _Inbound_ — **two more rows naming this repo** landed in the origin's § Spawned Tasks at `c0ebbee`, after this run swept `af49962` (11 → 13 rows, verified 2026-09-24 with `git show`; first flagged by PR #72's review): a design-tool video short (`mdiSnFLzQaI`, still pending the origin's review) and a suggestion to run `/claude-api prompt-audit` over this project's Claude instructions. Not yet ruled; the next inbound sweep takes them.
 - _Consumed 2026-08-27 (removed rather than struck through): `dead-rules-audit` → §1 Plugins `adopt`._
 - _Consumed 2026-09-02 (removed rather than struck through): "a reviewer’s negative finding must cite its evidence" → §4 outbound `propagate`, routed to TODO § Spawned Tasks._
 - _Ruled 2026-09-24 (removed rather than struck through): `/wayfinder` folded into `mattpocock/skills`; Jenkins, Firecrawl and indiehackers.com dropped for this repo; `dead-end-registry` consumed by §1b. See the dated inbound row above._
@@ -217,7 +218,11 @@ Reviewed-log rows are never rewritten — a trial outcome lands here and cross-r
   cannot give: the `/plugin` Installed tab's **Not used recently** group, which needs the user. Its method
   and table format are the 2026-09-24 read-out at the end of this section, including that column — which
   the first read-out left unread (run-card deviation 9); the next run fills it. It is a kept practice, not
-  a trial, so it adds nothing to the queue count.
+  a trial, so it adds nothing to the queue count. If last-use evidence comes from session transcripts
+  rather than `skillUsage`, count a skill's runs in **both** shapes: `Skill` tool calls — checking each
+  call's result, since a refused call is not a run — and `/<name>` slash commands, which are stored as user
+  messages with a `<command-name>` tag. On 2026-09-24 a probe for tool calls alone missed both
+  `/claude-security` runs and counted a refused call instead (PR #72's close-out).
 
 **Why this exists.** The 2026-08-27 run recorded `adopt` verdicts with zero trial outcomes and diagnosed
 it as _"a review process whose output is never tried produces verdicts, not value"_. The measured cause
