@@ -59,7 +59,9 @@ Every figure below names the probe that produced it; none is carried forward fro
    absence from it was never evidence of absence. The catalog lists **311** plugins today against **291**
    in the Aug 29 snapshot: 20 added, none removed.
 4. **§4 outbound stands at 3 filed / 0 applied — re-measured, not carried.** `grep -c` over both trees
-   (live `~/.claude` and `claude-code-universal-config/home-claude`): `realness` 0 / 0 and the
+   (live `~/.claude`, and `claude-code-universal-config/home-claude` at that repo's HEAD `af49962` — the
+   two target files there last changed on 2026-08-25 and 2026-06-04, so the working copy matched HEAD;
+   HEAD named in PR #72's review): `realness` 0 / 0 and the
    negative-finding phrases 0 / 0 in `POLICIES/code-review.md` (382 lines in each tree); `closeout
    artifacts` / `live-surface` 0 / 0 in `TEMPLATES/plan.md` (225 lines in each tree). Neither target file
    has been modified since the rows were filed. A first keyword pass over `CLAUDE.md`, `WORKFLOW.md`,
@@ -112,9 +114,11 @@ the catalog diff — the 20 plugins added since the Aug 29 snapshot — before t
   does. The exact diffs are shown to the user **before any write**.
 - **New propagation**: _a closeout checks off every BACKLOG/TODO entry the task closed, in the same
   commit_ → `~/.claude/rules/planning-closeout.md` § Task Completion step 3, which today checks off only
-  the WEEKLY group. Evidence: the PR #65 closeout miss (G2 shipped five `### [2026-07-21]` entries and
-  flipped none — WEEKLY Notes calls it "the fifth instance"), and G1's three task boxes flipped by G4
-  rather than by G1's own closeout. Absence is re-verified with a wider pattern set and a positive
+  the WEEKLY group. Evidence: the PR #65 closeout miss (G2 shipped four of the five `### [2026-07-21]`
+  entries and its closeout flipped none — four, as G4's housekeeping item corrected the planning note; the
+  fifth, the CLAUDE.md line-191 split, was never performed), and G1's three task boxes flipped by G4
+  rather than by G1's own closeout. _(Corrected in PR #72's review: this line first said "five", copied
+  from a WEEKLY Notes line that G4's correction had never been swept back to.)_ Absence is re-verified with a wider pattern set and a positive
   control before promotion.
 - **Parked, with fresh grep evidence**: the Windows-junction / `git worktree remove --force` hazard
   (G2 — it deleted 1.3 GB of the real checkout); and "a BACKLOG entry's stated mechanism is a hypothesis
@@ -247,7 +251,8 @@ Docs and configuration only — verification is **evidence for each written clai
 ## Outcome (2026-09-24 run)
 
 **Executed** on branch `g5-weekly-reviews` the same day. **8 web calls** (5 `WebFetch`, 3 `WebSearch`) —
-within the 8–12 budget, no harness, no fan-out. Both checkpoints ran as planned.
+within the 8–12 budget, no harness, no fan-out. Both checkpoints ran — but checkpoint 1 never asked for
+the `/plugin` reading it was planned to include (deviations 2 and 9).
 
 | Category                          | Pick                                             | Verdict                             |
 | --------------------------------- | ------------------------------------------------ | ----------------------------------- |
@@ -303,12 +308,29 @@ was not edited.
    would mine across a session — so its counts are an upper bound. The row states it.
 4. **An unplanned incident and a retracted hypothesis.** The project's Prettier hook reformatted seven
    planning docs mid-run while the shell's cwd was `docs/planning`; all seven were restored from `HEAD`
-   (formatter output only, verified with `git diff -w`). An intermediate conclusion — that the runtime sets
+   — formatter output only, **reproduced exactly** in PR #72's review: re-running Prettier from
+   `docs/planning` on the `89393be` versions of the six untouched files gives the identical diffstat
+   (107 insertions, 105 deletions); the incident-time check had only sampled `git diff -w`. An intermediate conclusion — that the runtime sets
    `$CLAUDE_FILE_PATH` — was refuted by a discriminating test before any doc carried it; the corrected
    mechanism, and the refutation itself, are recorded in REVIEW-QUEUE §2 so it is not re-derived.
 5. **The sibling repo was mid-edit** by a parallel session during the inbound sweep; the committed state at
-   `af49962` is what is cited, and the rows naming this repo were confirmed identical in both states.
+   `af49962` is what is cited, and the rows naming this repo matched in both states — the same 11,
+   compared on their first 120 characters, all `status: pending`.
 6. **Two WEEKLY.md premises were corrected on the page**: the G5 header's "≈9 days" window and its
    dependence on the Installed tab, plus the Plugins box's parenthetical about "nonexistent" plugins.
 7. **BACKLOG received more than the adopt entries**, as the Outputs list allowed ("plus any defect the run
    itself surfaces"): the two hook defects, the path-casing split and the connectors/skills audit extension.
+8. **The `claude-security` adopt was first written from the plugin's README**, against this run-card's own
+   Verification rule ("never its README"), even though the plugin's source sat in the same local clone.
+   Caught in PR #72's review. Every claim was then re-verified against source — `agents/scan-verifier.md`,
+   `scripts/lib/finding.py`, `workflows/scan.js`, `skills/claude-security/jobs/`,
+   `scripts/render_report.py`, `hooks/hooks.py` — and every one held, so the verdict stands and only the
+   citations changed (REVIEW-QUEUE §1a, BACKLOG).
+9. **D1's "Not used recently" column was never captured, and the § 5 table first dropped it silently.** Only
+   the `/plugin` Installed tab shows it; checkpoint 1 was planned to ask the user for that reading and did
+   not. The table went out with four of D1's five columns, the WEEKLY § 5 box was checked for a table that
+   records it, and the new Recurring read-out policy named that table as the format — so the omission would
+   have propagated. Caught in PR #72's review and corrected in all three places: the table now carries the
+   column (`not read` for the twelve non-synced rows, and `n/a` by design for the eight synced ones, which
+   the docs say are never listed there), the WEEKLY box says what was not delivered, and the policy names the
+   reading as the one step that needs the user.
