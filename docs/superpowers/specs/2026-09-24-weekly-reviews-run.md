@@ -241,3 +241,74 @@ Docs and configuration only — verification is **evidence for each written clai
   incidents).
 - The pre-commit hook passes (`check-secrets.js`, `check-docs-index.js`, the unit suite), and
   `backlog-structure.test.js` passes.
+
+---
+
+## Outcome (2026-09-24 run)
+
+**Executed** on branch `g5-weekly-reviews` the same day. **8 web calls** (5 `WebFetch`, 3 `WebSearch`) —
+within the 8–12 budget, no harness, no fan-out. Both checkpoints ran as planned.
+
+| Category                          | Pick                                             | Verdict                             |
+| --------------------------------- | ------------------------------------------------ | ----------------------------------- |
+| § 5 read-out                      | installed-plugin context cost & disuse           | **keep** — acted on                 |
+| Plugins / official catalog        | `claude-security` (Anthropic)                    | **adopt** (trial) → 🟤              |
+| Plugins / wider internet          | `dead-end-registry` (arrived inbound)            | pass — measured                     |
+| Claude best-practice              | version the project's `.claude/settings.json`    | **adopt** (known shape) → 🟤        |
+| Non-Claude best-practice          | sandbox-by-default agent execution               | pass                                |
+| Cross-project, outbound           | a closeout checks off every entry it closed      | **propagate** — applied live        |
+| Cross-project, inbound            | every sibling row naming this repo               | ruled per item by the user          |
+
+### Out-of-repo change log
+
+Recorded here because no PR diff can carry these changes. Each was approved by the user before it ran, and
+each file was backed up to the session scratchpad first (the backups are not committed). The sibling repo
+was not edited.
+
+| Approved at        | Where                                   | Change                                                                                              | Evidence                                                              |
+| ------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Brainstorm ruling  | `~/.claude/settings.json`               | eight `"<name>@synced": false` entries                                                               | text diff: exactly those eight lines added; CLI shows 0 of 8 enabled  |
+| Checkpoint 1       | `.claude/settings.json` (gitignored)    | `pr-review-toolkit` set false; the `chrome-devtools-mcp` enable removed                             | diff against the backup; valid JSON                                   |
+| Checkpoint 1       | `.claude/settings.local.json` (ignored) | `hookify` and the `context7` plugin set false; the `auto-memory` enable, and `memory` + `github` in `enabledMcpjsonServers`, removed | diff against the backup; valid JSON                                   |
+| Checkpoint 1       | plugin install records                  | `dead-rules-audit` uninstalled at project scope (from a lowercase-drive cwd)                        | CLI success; no longer listed; its `enabledPlugins` entry removed     |
+| Checkpoint 2       | `~/.claude/POLICIES/code-review.md`     | *Deciding What to Report* subsection; *Claude's Role* item 8                                        | diff: insertions only                                                 |
+| Checkpoint 2       | `~/.claude/TEMPLATES/plan.md`           | live-surface preflight; § 9 Closeout Artifacts; version 1.0 → 1.1                                   | diff: insertions plus the replaced version footer                     |
+| Checkpoint 2       | `~/.claude/rules/planning-closeout.md`  | the step-3 clause                                                                                   | diff: one line changed                                                |
+| Checkpoint 2       | `~/.claude/WORKFLOW.md`                 | § Phase 5 paragraph and a 5.2 checklist line                                                        | diff: insertions only                                                 |
+
+### Key discoveries
+
+- **The audit's real subject was invisible from inside the repo.** Plugins synced from claude.ai arrive
+  with no install record in this tree or in `installed_plugins.json`; only `claude plugin list --json`
+  showed them. They cost more per session than every other plugin combined, and nothing had ever used them.
+- **The hardest defects to see were in the one config file nobody reviews.** Both hooks in the
+  unversioned `.claude/settings.json` are broken, and the only enforcement of the preload review rule has
+  never fired. That is §2's adopt, argued by measurement rather than by the tip that suggested it.
+- **A negative finding rested on a source that could not contain the positive.** Two runs called real
+  official plugins nonexistent because the page they checked lists examples, not the catalog — including
+  the run that propagated "a negative finding must cite its evidence".
+- **A probe that cannot discriminate confirmed the wrong mechanism.** At the repo root, "the hook formats
+  this file" and "the hook formats the whole directory" look identical. The subdirectory incident exposed
+  the difference, an isolated test confirmed it, and the conclusion was reversed before it reached a doc.
+- **The zero-application problem was a decision problem, not a capacity one.** Once the user ruled
+  "apply", the whole propagation backlog took minutes.
+
+### Deviations from this run-card, recorded rather than buried
+
+1. **A fourth `~/.claude` target.** D3 named three files; `WORKFLOW.md` § Phase 5 was added as the second
+   live description of the same step 3, so the two would not diverge. Approved at checkpoint 2.
+2. **The `/plugin` tab cross-check was not performed.** As D1 required, the table says so rather than
+   implying a check that did not happen.
+3. **`dead-end-registry` was measured over whole transcripts** — the union of what its Stop-time hook
+   would mine across a session — so its counts are an upper bound. The row states it.
+4. **An unplanned incident and a retracted hypothesis.** The project's Prettier hook reformatted seven
+   planning docs mid-run while the shell's cwd was `docs/planning`; all seven were restored from `HEAD`
+   (formatter output only, verified with `git diff -w`). An intermediate conclusion — that the runtime sets
+   `$CLAUDE_FILE_PATH` — was refuted by a discriminating test before any doc carried it; the corrected
+   mechanism, and the refutation itself, are recorded in REVIEW-QUEUE §2 so it is not re-derived.
+5. **The sibling repo was mid-edit** by a parallel session during the inbound sweep; the committed state at
+   `af49962` is what is cited, and the rows naming this repo were confirmed identical in both states.
+6. **Two WEEKLY.md premises were corrected on the page**: the G5 header's "≈9 days" window and its
+   dependence on the Installed tab, plus the Plugins box's parenthetical about "nonexistent" plugins.
+7. **BACKLOG received more than the adopt entries**, as the Outputs list allowed ("plus any defect the run
+   itself surfaces"): the two hook defects, the path-casing split and the connectors/skills audit extension.
