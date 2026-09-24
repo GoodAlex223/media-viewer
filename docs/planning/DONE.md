@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-09-21 <!-- Group G3: Compare-mode special hotkeys + tooltips (🔵 User) — **MERGED 2026-09-21 via PR #71, merge `4b650aa`**, after three review rounds. 2/2 tasks + the doc ride-along. Compare mode gained `1`/`2` for the special-folder move, and every special-button tooltip is now **derived** from the live binding rather than hardcoded. The group’s filed premise was wrong in a useful way: both the BACKLOG entry and CLAUDE.md L185 demanded a shortcut-localStorage migration, which verification showed additive keys do not need — but review round 1 then found the entry had been sitting next to a **real** hazard it never described, since `Digit1`/`Digit2` were already legal remap targets, so the new defaults could shadow a user’s existing binding and **silently move a file**. Fixed structurally (`_mergeModeShortcuts` makes a later default yield to a stored remap) rather than with the reviewer’s suggested v3 bump, which they withdrew in round 2. A `holder !== action` guard both later rounds called harmless was removed after brute force proved it dead across 46,200 cases. Unit 805 → **837**; E2E 71 → **75**. -->
+**Last Updated**: 2026-09-24 <!-- Group G5: Weekly Reviews (2026-09-24 run, ⚪ Overhead) — 5/5, branch complete and unmerged at the time of writing; the § 5 context-cost audit read out `keep` and was acted on, the three pending § 4 propagations plus a fourth were applied live in ~/.claude, and every inbound row was ruled per item by the user. -->
+<!-- Previous: Group G3: Compare-mode special hotkeys + tooltips (🔵 User) — **MERGED 2026-09-21 via PR #71, merge `4b650aa`**, after three review rounds. 2/2 tasks + the doc ride-along. Compare mode gained `1`/`2` for the special-folder move, and every special-button tooltip is now **derived** from the live binding rather than hardcoded. The group’s filed premise was wrong in a useful way: both the BACKLOG entry and CLAUDE.md L185 demanded a shortcut-localStorage migration, which verification showed additive keys do not need — but review round 1 then found the entry had been sitting next to a **real** hazard it never described, since `Digit1`/`Digit2` were already legal remap targets, so the new defaults could shadow a user’s existing binding and **silently move a file**. Fixed structurally (`_mergeModeShortcuts` makes a later default yield to a stored remap) rather than with the reviewer’s suggested v3 bump, which they withdrew in round 2. A `holder !== action` guard both later rounds called harmless was removed after brute force proved it dead across 46,200 cases. Unit 805 → **837**; E2E 71 → **75**. -->
 <!-- Previous: Group G4: ML pipeline integrity (🟤 Auto) — **MERGED 2026-09-12 via PR #69, merge `7df03b8`**, after three review rounds plus a final ruling pass with no blocking findings. 3/3 tasks + the 0-SP housekeeping flip. The CLIP unload lease closes the last reachable zero-CLIP training door (the filed one-line remedy was half of it — it closes only the armed-before-the-sort order); `ml-worker.js`'s abort protocol was **deleted rather than pinned**, having no sender, a self-clearing flag and a synchronous loop that could not observe it; the harness went 8 → 24 cases. Three of the group's four premises had expired because PR #68 merged between scoping and execution. Two closeout misses found and repaired (G2 shipped four of five PR #65 entries, not five; G1's own task checkboxes were never flipped). Three review remarks, all one defect class — a rationale living only where nobody executing the work will read it — in code, in a test mock, and in a backlog cross-reference. Unit 761 → **793**; E2E 61/61 unchanged. NOTE: this stamp had been stale since 2026-09-02 — G1's closeout (entry dated 2026-09-10) did not bump it. -->
 <!-- Previous: Group G6: Weekly Reviews (2026-09-02 run, ⚪ Overhead) — **MERGED 2026-09-03 via PR #67, merge `de4bdac`**, after 3 review rounds and 8 findings, all resolved — 5/5 items plus G4's terminal `dead-rules-audit` read-out, which closes G4 at 3/3. Run held two days ahead of its Friday Sep 4 slot. Five verdict rows (§1a `github`/External-integrations pass · §1b fracalo/electron-playwright-mcp pass · §2 plugin context-cost audit adopt · §3 loop-engineering evidence-gating adopt · §4 reviewer-negative-finding propagate) plus the first two § 5 trial read-outs, BOTH failures: `dead-rules-audit` drop (its judge scores compliant edits as violations — 10 of 43 rules flagged, led by rules G2 had just enforced) and visual verification inconclusive (G5 shipped a progress card with zero visual evidence). Both adopts trace to those failures rather than to the web; the six-day window produced no plugin adopt, as predicted. Also surfaced: §4 `propagate` has the same zero-burn-down problem § 5 was built to fix for adopts — 2 filed, 0 applied, the 2026-08-27 `realness` propagation still absent at its target. -->
 
@@ -15,6 +16,53 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-09 (September)
+
+### 2026-09-24 — Group G5: Weekly Reviews (2026-09-24 run) ⚪ Overhead — **5/5**
+
+**Run-card**: [2026-09-24-weekly-reviews-run.md](../superpowers/specs/2026-09-24-weekly-reviews-run.md) (methodology rule #6 — a codified repeat needs brainstorm → run-card → execute, not a fresh spec + plan).
+**Spec**: none — the reusable methodology is [`2026-06-26-weekly-reviews-first-run-design.md`](../superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md) § _Methodology (canonical)_.
+**Branch**: `g5-weekly-reviews`, cut from `main` at `794b146`.
+
+◐ **Status: 5/5 — branch complete, unmerged at the time of writing.** Docs-only in-repo. The out-of-repo changes — plugin configuration and four live `~/.claude` files — were each approved by the user before they ran, and are recorded in the run-card's Outcome, because no PR diff can carry them.
+
+**Summary**: Fifth run of the recurring Weekly Reviews batch, held **2026-09-24 — 13 days after** its Friday Sep 11 slot, as the last open group of a plan that ran two weeks long (Spillover now recorded in WEEKLY.md). The window was **22 days**, not the ≈9 planned. User-in-the-loop throughout: three rulings at the brainstorm, two execution checkpoints.
+
+**The headline is that the run acted instead of filing.** Three changes landed outside the repo, each approved before it ran:
+
+- **§ 5 context-cost audit → `keep`, and acted on.** A media_viewer session loaded far more than the nine plugins the entry named: **eight plugins synced from the user's claude.ai account** (`sales`, `small-business`, `legal`, …) that Claude Code had never once invoked. Measured with Claude Code's own estimator (`claude plugin details`), not the UI — though the tab's own **Not used recently** reading was never taken (run-card deviation 9, found in PR #72's review). Disabled user-wide on the user's ruling, along with `pr-review-toolkit` (project scope), `hookify` and the `context7` plugin (this repo only), `dead-rules-audit` (**uninstalled**) and four dangling settings entries. Plugin always-on context per session fell from about 24k tokens to about 1.5k, by the estimator — a floor, since it does not count hook-injected context.
+- **§4 outbound: from "3 filed, 0 applied" to every propagation applied live.** The three pending rows (the realness rating axis, the negative-finding evidence rule, the plan-template closeout block) and this run's new one (_a closeout checks off every BACKLOG/TODO entry it closed_) were written into live `~/.claude` — four files, each diffed against a backup — and the sibling repo receives them through its one-way sync. The outcome-row convention the user ruled on 2026-09-03 now exists, as an outbound outcome log in REVIEW-QUEUE § 4.
+- **§4 inbound: the six-week stall settled.** Eleven sibling rows address this repo, not three — two of them missed by the 2026-09-02 sweep, which re-checked only its own parked items. The "ask the origin directly" step was taken by asking the user: four dropped, two parked event-driven, the rest consumed or not applicable.
+
+**Two recorded claims corrected, both measured:**
+
+- REVIEW-QUEUE §1 twice recorded that roundups "asserted nonexistent official plugins". False: `frontend-design` (by Anthropic), `semgrep` and `chrome-devtools-mcp` are all in the official catalog, including its Aug 29 snapshot — the two runs had checked the docs page, which is not the roster. §1 now sources from the catalog.
+- The project's `.claude/settings.json` hooks are both defective, invisibly, because the file is unversioned: the `preload.js`/`.env` guard never fires (it reads a variable Claude Code does not set, and its `exit 1` could not block anyway), and the Prettier hook formats the **whole working directory** after every edit — it reformatted seven planning docs mid-run while the session's cwd was `docs/planning`. All were restored from `HEAD`; the diff was formatter output only.
+
+**Verdict rows** (§§1–4, dated 2026-09-24):
+
+- **§1a** `claude-security` (official, Anthropic) → **`adopt`**, a trial → 🟤 — the single slot the § 5 cap allowed; vehicle: a whole-repository scan in Cleanup Week #4.
+- **§1b** `dead-end-registry` (arrived inbound) → **`pass`**, measured with its own miner over this repo's transcripts: 223 dead ends, 10 with a code hunk, 1 genuine. Its judge collides with this repo's `undo` feature and its mutation-verification practice.
+- **§2** version the project's `.claude/settings.json` → **`adopt`**, known shape → 🟤, plus the two hook defects as their own entries.
+- **§3** sandbox-by-default agent execution → **`pass`** — Claude Code's sandbox does not support native Windows.
+- **§4** outbound **`propagate`** (the closeout lesson), applied live; one inbound row ruling every sibling row.
+
+**Key changes** (in-repo):
+
+- **[REVIEW-QUEUE.md](REVIEW-QUEUE.md)** — four §§1–3 verdict rows and the §1 correction (the catalog is now the roster); §2 Next-up non-candidates dropped after a fourth fresh-check win; § 4 outbound row, outbound outcome log, inbound row and two Conventions lines; § 5 trial outcome `keep`, a new `pending` trial row, a recurring-read-out policy line, and the read-out table.
+- **[BACKLOG.md](BACKLOG.md)** — a new `### [2026-09-24] From: Weekly Reviews` section (the two adopts and the defects the run surfaced); the context-cost audit entry checked off; two entries annotated with the inbound rows they consume.
+- **[TODO.md](TODO.md)** — the three § Spawned Tasks rows checked off with post-edit grep evidence; the fourth added, already checked.
+- **[WEEKLY.md](WEEKLY.md)** — the Spillover line; G5's boxes and Friday row; Summary-Table `◐`; two live notes corrected (the Parallel Work bullet, and the Plugins box's false parenthetical).
+- **[docs/README.md](../README.md)** — run-card indexed.
+- **Run-card** — decisions D1–D6 and the appended Outcome.
+
+**Learnings**:
+
+- ⭐ **A probe that cannot discriminate between two mechanisms confirms whichever one you expected.** A mis-formatted scratch file at the repo root got formatted, which "showed" the hook variable was set — but formatting the whole directory produces the same observation there. Only a subdirectory run and an isolated `prettier --write ""` told the two apart, and they reversed the conclusion before it reached a doc.
+- ⭐ **Absence from a source is evidence only if the source could have contained it.** Two runs called real official plugins nonexistent because the page they checked lists examples, not the catalog — in the run that propagated "a negative finding must cite its evidence".
+- ⭐ **A hook that runs a tool without an explicit path inherits the session's cwd.** Where the session happens to stand decides what a formatter touches.
+- The zero-application problem in § 4 was a decision problem, not a capacity one: once the user ruled "apply", the backlog took minutes.
+
+**Web calls**: 8 (5 `WebFetch`, 3 `WebSearch`) — inside the 8–12 budget; no harness, no fan-out. Unit suite unchanged (docs-only).
 
 ### 2026-09-21 — Group G3: Compare-mode special hotkeys + tooltips 🔵 — 2/2 tasks + doc ride-along, **MERGED `4b650aa`** (PR #71)
 
