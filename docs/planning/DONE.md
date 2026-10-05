@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-09-24 <!-- Group G5: Weekly Reviews (2026-09-24 run, ⚪ Overhead) — 5/5, MERGED 2026-09-24 via PR #72 (merge 7342473) after three review rounds and a close-out ruling; the § 5 context-cost audit read out `keep` and was acted on, the three pending § 4 propagations plus a fourth were applied live in ~/.claude, and every inbound row was ruled per item by the user. -->
+**Last Updated**: 2026-10-05 <!-- Group G2: Hooks and logs that actually fire (🟤 +1 🔵, Cleanup Week #4) — 5/5, MERGED 2026-10-05 via PR #73 (merge 83c6df0) after three review rounds and a close-out (LGTM). -->
+<!-- Previous: Group G5: Weekly Reviews (2026-09-24 run, ⚪ Overhead) — 5/5, MERGED 2026-09-24 via PR #72 (merge 7342473) after three review rounds and a close-out ruling; the § 5 context-cost audit read out `keep` and was acted on, the three pending § 4 propagations plus a fourth were applied live in ~/.claude, and every inbound row was ruled per item by the user. -->
 <!-- Previous: Group G3: Compare-mode special hotkeys + tooltips (🔵 User) — **MERGED 2026-09-21 via PR #71, merge `4b650aa`**, after three review rounds. 2/2 tasks + the doc ride-along. Compare mode gained `1`/`2` for the special-folder move, and every special-button tooltip is now **derived** from the live binding rather than hardcoded. The group’s filed premise was wrong in a useful way: both the BACKLOG entry and CLAUDE.md L185 demanded a shortcut-localStorage migration, which verification showed additive keys do not need — but review round 1 then found the entry had been sitting next to a **real** hazard it never described, since `Digit1`/`Digit2` were already legal remap targets, so the new defaults could shadow a user’s existing binding and **silently move a file**. Fixed structurally (`_mergeModeShortcuts` makes a later default yield to a stored remap) rather than with the reviewer’s suggested v3 bump, which they withdrew in round 2. A `holder !== action` guard both later rounds called harmless was removed after brute force proved it dead across 46,200 cases. Unit 805 → **837**; E2E 71 → **75**. -->
 <!-- Previous: Group G4: ML pipeline integrity (🟤 Auto) — **MERGED 2026-09-12 via PR #69, merge `7df03b8`**, after three review rounds plus a final ruling pass with no blocking findings. 3/3 tasks + the 0-SP housekeeping flip. The CLIP unload lease closes the last reachable zero-CLIP training door (the filed one-line remedy was half of it — it closes only the armed-before-the-sort order); `ml-worker.js`'s abort protocol was **deleted rather than pinned**, having no sender, a self-clearing flag and a synchronous loop that could not observe it; the harness went 8 → 24 cases. Three of the group's four premises had expired because PR #68 merged between scoping and execution. Two closeout misses found and repaired (G2 shipped four of five PR #65 entries, not five; G1's own task checkboxes were never flipped). Three review remarks, all one defect class — a rationale living only where nobody executing the work will read it — in code, in a test mock, and in a backlog cross-reference. Unit 761 → **793**; E2E 61/61 unchanged. NOTE: this stamp had been stale since 2026-09-02 — G1's closeout (entry dated 2026-09-10) did not bump it. -->
 <!-- Previous: Group G6: Weekly Reviews (2026-09-02 run, ⚪ Overhead) — **MERGED 2026-09-03 via PR #67, merge `de4bdac`**, after 3 review rounds and 8 findings, all resolved — 5/5 items plus G4's terminal `dead-rules-audit` read-out, which closes G4 at 3/3. Run held two days ahead of its Friday Sep 4 slot. Five verdict rows (§1a `github`/External-integrations pass · §1b fracalo/electron-playwright-mcp pass · §2 plugin context-cost audit adopt · §3 loop-engineering evidence-gating adopt · §4 reviewer-negative-finding propagate) plus the first two § 5 trial read-outs, BOTH failures: `dead-rules-audit` drop (its judge scores compliant edits as violations — 10 of 43 rules flagged, led by rules G2 had just enforced) and visual verification inconclusive (G5 shipped a progress card with zero visual evidence). Both adopts trace to those failures rather than to the web; the six-day window produced no plugin adopt, as predicted. Also surfaced: §4 `propagate` has the same zero-burn-down problem § 5 was built to fix for adopts — 2 filed, 0 applied, the 2026-08-27 `realness` propagation still absent at its target. -->
@@ -14,6 +15,36 @@ Completed tasks with implementation details and learnings.
 ---
 
 <!-- Organize by month, newest first. -->
+
+## 2026-10 (October)
+
+### 2026-10-05 — Group G2: Hooks and logs that actually fire 🟤 (+1 🔵 folded) (Cleanup Week #4) — **5/5, MERGED `83c6df0`** (PR #73)
+
+**Plan**: [2026-10-05_g2-hooks-and-logs-that-fire.md](../archive/plans/2026-10-05_g2-hooks-and-logs-that-fire.md)
+**Spec**: [2026-10-05-g2-hooks-and-logs-that-fire-design.md](../superpowers/specs/2026-10-05-g2-hooks-and-logs-that-fire-design.md) (D1–D6, plus D1a added during execution)
+**Branch**: `g2-hooks-and-logs-that-fire`, cut from `main` at `a545d41`; deleted remote and local after the merge.
+
+✅ **Status: 5/5. MERGED 2026-10-05 via PR #73** (merge `83c6df0`), after three review rounds and a close-out that ruled on all 19 response bullets (LGTM, nothing blocking). Executed inline (Native) on Opus · `medium` in one day — the WEEKLY plan had given it Monday–Tuesday.
+
+**Summary**: Cleanup Week #4's "protections that don't actually work" group. Acceptance was a live probe per protection with a must-fire and a must-not-fire half, never a green suite alone — and two of the probes changed the design.
+
+**Key changes**:
+
+- **`.claude/` under version control** ([.gitignore](../../.gitignore)) — allow-list `agents/`, `hooks/`, `rules/` (reserved, empty), `settings.json`, `skills/`; `settings.local.json` stays per-machine. The `new-e2e-test` project skill committed for the first time (null-guarded `afterEach`, current fixture list).
+- **The `preload.js` / `.env` guard fires** ([.claude/settings.json](../../.claude/settings.json), [guard-preload-bash.js](../../.claude/hooks/guard-preload-bash.js)) — the dead `PreToolUse` hook (unset `$CLAUDE_FILE_PATH`, non-blocking `exit 1`) replaced by `permissions.ask` rules for every edit tool, plus — **D1a, from the live probe** — a `PreToolUse` hook on `Bash|PowerShell`: the `Bash(*preload.js*)` rule did not prompt for `cd <project dir> && … preload.js` (three misses, re-tested); an invocation log showed Claude Code hands hooks such a command with the `cd` stripped, and the hook's `ask` then prompted.
+- **The formatter formats only the edited file** ([format-edited-file.js](../../.claude/hooks/format-edited-file.js)) — path from stdin, skips paths outside the repo (a Prettier probe showed it would otherwise format `~/.claude` memory files with this repo's config), runs Prettier from the repo root. The probe that proved it live discriminated old from new: two mis-formatted files, one edited — only that one changed.
+- **`SKIP=<check>` per-check bypass** ([.husky/skip.sh](../../.husky/skip.sh)) — tokens `secrets`, `docs-index`, `lint-staged`, `vitest` (pre-commit) and `e2e` (pre-push); a warning on every skip and every unknown token; `check_failed` keeps a failing check's exit status (127 → "run npm install", never a `SKIP` hint). Remedy texts in `check-secrets.js` / `check-docs-index.js` name their own token instead of `--no-verify`.
+- **Session logs survive a clean quit** ([logger.js](../../logger.js)) — one `media-viewer-YYYY-MM-DD_HH-MM-SS.log` per launch (`'wx'`, same-second `-2`…), newest 10 kept; header names the pid, a clean quit writes a footer (no footer = crash or kill); `main.js` logs the build and log path. Fixed in passing: timestamps paired a UTC date with a local time (yesterday's date after local midnight at UTC+3). Probe confirmed `npm start` logs to `%APPDATA%\media_viewer\logs` and E2E to `%APPDATA%\Electron\logs` — WEEKLY/BACKLOG had them reversed, corrected.
+
+**Review** (PR #73): round 1 — 2 findings (prune could delete the session's own log when 10 later-stamped logs existed; a stale ESLint header) + 10 near-misses: 8 fixed (incl. `SKIP` spaces, `check_failed`, the `init()` header-write guard, 20 s timeouts on spawning tests, CLAUDE.md mode claims), 2 recorded, 1 pushed back (the guard failing open, accepted). Round 2 — future mtimes now sort oldest; `dontAsk` denies rather than prompts. Round 3 — the spec's survival claim qualified for the double-skew mirror case. Close-out — release-build log retention added to the plan's Improvements so Extract carries it.
+
+**Tests**: unit 837 → **881**; E2E 75/75 via the new pre-push hook on every code push. Lint 0 errors.
+
+**Key learnings**:
+
+- A documented permission rule can still miss a command shape — `Bash(...)` ask rules missed `cd <project dir> && …`. Only a live probe found it; the hook is the belt.
+- A `settings.json` hook edit is not always live on the very next tool call; a "hook is dead" verdict needs a second probe or an invocation log.
+- Retention ordered by a name stamp — or by raw mtime — is evicted by clock skew; the current file must be exempt and future mtimes sort oldest.
 
 ## 2026-09 (September)
 

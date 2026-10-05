@@ -104,6 +104,7 @@ Central index for all project documentation.
 | [G4 ML Pipeline Integrity Plan][] | CLIP unload lease (the filed one-line remedy closed only one of two arming orders); deletes `ml-worker.js`'s unreachable abort protocol rather than pinning it; harness 8 → 24 cases. Three of its four premises had expired between scoping and execution (Group G4, Sep 7–11) |
 | [G2 Reachable Overlay Controls Plan][] | Container-anchored `#compareOverlayBar` (`1fr auto 1fr` grid, explicit `grid-column` pins) replaces wrapper-relative per-media controls and the prediction badge, fixing low-height clipping by construction; Like-left/Dislike-right on every rating surface; `removeZoomPopover` no longer deletes the tournament zoom button's parent (found defect, folded in); committed before/after visual evidence caught a real layout bug no automated check saw (Group G2, Sep 7–11) |
 | [G3 Compare-Mode Special Hotkeys + Tooltips Plan][] | Compare-mode `1`/`2` bound to `moveToSpecialFolder('left'\|'right')` mirroring tournament, and special-button tooltips **derived** from the live binding (`_specialShortcutSuffix`) instead of hardcoded; review found the new defaults could shadow a pre-existing user remap and silently move a file, fixed structurally by `_mergeModeShortcuts()` making a later default yield to a stored binding rather than by a one-shot migration bump (Group G3, Sep 7–11) |
+| [G2 Hooks and Logs That Fire Plan][] | Five tasks, one commit each, every protection probed must-fire / must-not-fire: `.claude/` allow-listed and `settings.json` versioned; the dead preload/.env hook replaced by `permissions.ask` rules **plus** a `PreToolUse` shell hook (`guard-preload-bash.js`) after the live probe showed the `Bash(*preload.js*)` rule misses `cd <project dir> && …`; the Prettier hook rebuilt to format only the edited in-repo file (`format-edited-file.js`); `SKIP=<check>` per-check Husky bypass (`.husky/skip.sh`, `check_failed` keeps exit 127); dated session logs, newest 10, never pruning the current file, future mtimes oldest; the `new-e2e-test` skill committed. PR #73, 3 review rounds + close-out (Group G2, Oct 5–9 Cleanup Week #4) |
 
 [Notifications & Media Info]: archive/plans/2025-12-25_notifications-media-info-less-intrusive.md
 [Sorting Cache]: archive/plans/2025-12-27_sorting-cache.md
@@ -167,6 +168,7 @@ Central index for all project documentation.
 [G4 ML Pipeline Integrity Plan]: archive/plans/2026-09-12_g4-ml-pipeline-integrity.md
 [G2 Reachable Overlay Controls Plan]: archive/plans/2026-09-13_g2-reachable-overlay-controls.md
 [G3 Compare-Mode Special Hotkeys + Tooltips Plan]: archive/plans/2026-09-21_g3-compare-special-hotkeys.md
+[G2 Hooks and Logs That Fire Plan]: archive/plans/2026-10-05_g2-hooks-and-logs-that-fire.md
 
 ## Design Specs
 

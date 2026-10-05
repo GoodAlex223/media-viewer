@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🟤 + 1 🔵 folded, 8 SP → ~9 SP); BACKLOG 🟤 `[2026-09-24]` ×3, 🟤 `[2026-09-02]` G3 closeout, 🔵 `[2026-10-05]`
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G2 (🟤 + 1 🔵 folded, 8 SP → ~9 SP); BACKLOG 🟤 `[2026-09-24]` ×3, 🟤 `[2026-09-02]` G3 closeout, 🔵 `[2026-10-05]`
 **Spec**: [2026-10-05-g2-hooks-and-logs-that-fire-design.md](../../superpowers/specs/2026-10-05-g2-hooks-and-logs-that-fire-design.md) (committed `e797f43`, user-approved 2026-10-05)
 **Created**: 2026-10-05
-**Status**: Implemented — awaiting code review (user, separate chat) and push/PR
-**Last Updated**: 2026-10-05
+**Status**: Complete — merged `83c6df0` (PR #73, 3 review rounds + close-out, LGTM)
+**Last Updated**: 2026-10-05 (closeout)
 **Branch**: `g2-hooks-and-logs-that-fire`
 
 **Goal:** Make every protection G2 names demonstrably fire — a `preload.js`/`.env` guard, a formatter that touches only the edited file, a per-check commit-hook bypass — and keep the app's session logs after a clean quit.
@@ -93,7 +93,7 @@ Task 1 first (the old Prettier hook taxes every later edit). Task 2 needs Task 1
 - Consumes: nothing.
 - Produces: `planFormat({ filePath, root }, pathImpl = path) → { action: 'skip', reason: string } | { action: 'format', relPath: string }` (CommonJS export of `.claude/hooks/format-edited-file.js`); the `.gitignore` allow-list that Task 2 relies on to make `.claude/skills/` committable.
 
-- [ ] **Step 1: Back up the files that tracking will expose to branch switches (spec F8)**
+- [x] **Step 1: Back up the files that tracking will expose to branch switches (spec F8)**
 
 ```bash
 cd /c/Users/alexm/Projects/media_viewer
@@ -102,7 +102,7 @@ mkdir -p "$BK" && cp -r .claude/settings.json .claude/settings.local.json .claud
 ```
 Expected: three files listed (`settings.json`, `settings.local.json`, `skills/new-e2e-test/SKILL.md`).
 
-- [ ] **Step 2: Write the failing tests** — create `tests/format-edited-file.test.js`:
+- [x] **Step 2: Write the failing tests** — create `tests/format-edited-file.test.js`:
 
 ```js
 import { describe, it, expect, afterEach } from 'vitest';
@@ -243,12 +243,12 @@ describe('format-edited-file CLI — run as Claude Code runs it', () => {
 });
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/format-edited-file.test.js`
 Expected: FAIL — `Cannot find module '../.claude/hooks/format-edited-file.js'`.
 
-- [ ] **Step 4: Write the hook script** — create `.claude/hooks/format-edited-file.js`:
+- [x] **Step 4: Write the hook script** — create `.claude/hooks/format-edited-file.js`:
 
 ```js
 // PostToolUse hook (.claude/settings.json): run Prettier on the ONE file an Edit/Write just
@@ -319,12 +319,12 @@ if (require.main === module) {
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/format-edited-file.test.js`
 Expected: PASS (14 tests). Then `git status --short` — no `__fmt_probe_*` file left behind.
 
-- [ ] **Step 6: Make ESLint cover `.claude/hooks/` and prove it reaches the file** — in `eslint.config.mjs`, change the scripts block's comment and `files` line:
+- [x] **Step 6: Make ESLint cover `.claude/hooks/` and prove it reaches the file** — in `eslint.config.mjs`, change the scripts block's comment and `files` line:
 
 ```js
     // 6. Build / maintenance scripts and Claude Code hook scripts (Node CJS — `node scripts/*.js`,
@@ -341,7 +341,7 @@ npx eslint . --format json | node -e "const r=JSON.parse(require('fs').readFileS
 ```
 Expected: `LINT-CLEAN`; `sourceType: commonjs`; `npm run lint reaches the hook: true`. (`false` on the last line means `eslint .` skips the dot-directory — stop and add it explicitly rather than ship a lint block that never runs.)
 
-- [ ] **Step 7: Settle the `.gitignore` allow-list** — replace the last block but one of `.gitignore`:
+- [x] **Step 7: Settle the `.gitignore` allow-list** — replace the last block but one of `.gitignore`:
 
 ```gitignore
 # Claude Code configuration (per-developer, except shared agents)
@@ -364,7 +364,7 @@ with:
 Run: `git status --short --untracked-files=all .claude && git check-ignore -v .claude/settings.local.json`
 Expected: `?? .claude/hooks/format-edited-file.js`, `?? .claude/settings.json`, `?? .claude/skills/new-e2e-test/SKILL.md`; and `.gitignore:…:.claude/*	.claude/settings.local.json` (still ignored).
 
-- [ ] **Step 8: Rewrite `.claude/settings.json`** (protected path — the write may prompt):
+- [x] **Step 8: Rewrite `.claude/settings.json`** (protected path — the write may prompt):
 
 ```json
 {
@@ -394,7 +394,7 @@ Expected: `?? .claude/hooks/format-edited-file.js`, `?? .claude/settings.json`, 
 ```
 Then check it carries no machine-specific path: `grep -n -i -E "c:|users|alexm|appdata" .claude/settings.json` → no output.
 
-- [ ] **Step 9: Probe the formatter — it must fire on the edited file, and only on it.** The two-file setup **discriminates** the new hook from the old one (the old one would format both). Create both via Bash (Bash does not trigger the hook):
+- [x] **Step 9: Probe the formatter — it must fire on the edited file, and only on it.** The two-file setup **discriminates** the new hook from the old one (the old one would format both). Create both via Bash (Bash does not trigger the hook):
 
 ```bash
 printf 'const   a  =  {b:1}\n' > scripts/__probe_a.js && printf 'const   a  =  {b:1}\n' > scripts/__probe_b.js
@@ -408,7 +408,7 @@ cat scripts/__probe_a.js scripts/__probe_b.js "$SP/__probe_c.js"; sha256sum "$SP
 Expected: `__probe_a.js` → `const a = { b: 2 };` (**must fire**); `__probe_b.js` → still `const   a  =  {b:1}` (**must not fire**); `__probe_c.js` → `const   a  =  {b:2}` unformatted (**must not fire** — outside the repo). If `__probe_a.js` is unformatted, the hook did not reload: ask the user to run `/hooks` and confirm the PostToolUse entry, then repeat.
 **Only after that passes**, the subdirectory probe: `cd docs/planning` in a Bash call, then use the Edit tool to make a one-character change to `docs/planning/TODO.md`'s `**Last Updated**` line (and revert it the same way), then `cd /c/Users/alexm/Projects/media_viewer && git status --short docs/` → empty (**must not fire** — no planning doc reformatted). Clean up: `rm scripts/__probe_a.js scripts/__probe_b.js "$SP/__probe_c.js"`.
 
-- [ ] **Step 10: Probe the guard — USER AT THE KEYBOARD (~2 min).** Tell the user each prompt is expected and which answer to give:
+- [x] **Step 10: Probe the guard — USER AT THE KEYBOARD (~2 min).** Tell the user each prompt is expected and which answer to give:
   1. **Write tool** → create `.env` at the repo root with content `PROBE=1` → **must prompt**; user answers **No**. Then `ls -a | grep -c '^\.env$'` → `0`.
   2. **Read** `preload.js` (reads are not guarded), then `cd docs/planning` in a Bash call; then **Edit tool** on `preload.js` replacing its last line with that same line plus a trailing blank line → **must prompt** even from a subdirectory cwd (the `/` anchor); user answers **No**. Then `cd /c/Users/alexm/Projects/media_viewer && git status --short preload.js` → empty.
   3. Bash: `grep -c contextBridge preload.js` → **must prompt** (the Bash rule); user answers **Yes** (a read).
@@ -416,7 +416,7 @@ Expected: `__probe_a.js` → `const a = { b: 2 };` (**must fire**); `__probe_b.j
 
   Record each outcome in the Progress Log. Any probe that behaves otherwise blocks the commit — re-read the rule syntax against the permissions page before retrying.
 
-- [ ] **Step 11: Update `CLAUDE.md`** — three edits:
+- [x] **Step 11: Update `CLAUDE.md`** — three edits:
   - L56, replace `├── .claude/agents/      # Shared agent definitions tracked in git (other .claude/* gitignored)` with
     `├── .claude/             # Committed: agents/, hooks/ (format-edited-file.js), rules/, settings.json (ask rules, hooks, plugin enables), skills/ — everything else per-machine`
   - L190, replace the whole bullet starting `` - `.claude/*` is gitignored except `` with:
@@ -424,12 +424,12 @@ Expected: `__probe_a.js` → `const a = { b: 2 };` (**must fire**); `__probe_b.j
   - L204, replace `- Changes to preload.js require security review` with:
     ``- Changes to preload.js require security review — **enforced**: `permissions.ask` rules in `.claude/settings.json` prompt before any edit tool touches `preload.js` or a `.env` file, and before any Bash command that names `preload.js`, in every permission mode (auto included). **Not covered**: Bash writes to a `.env` file, and Bash commands that change `preload.js` without naming it (`git checkout -- .`, `git stash pop`, a `*.js` glob).``
 
-- [ ] **Step 12: Run the whole unit suite and lint**
+- [x] **Step 12: Run the whole unit suite and lint**
 
 Run: `npx vitest run && npm run lint`
 Expected: all test files pass (previous total 837 + 14 new); lint reports 0 errors.
 
-- [ ] **Step 13: Commit C1** (stage explicitly — the skill is Task 2's):
+- [x] **Step 13: Commit C1** (stage explicitly — the skill is Task 2's):
 
 ```bash
 git add .gitignore .claude/settings.json .claude/hooks/format-edited-file.js tests/format-edited-file.test.js eslint.config.mjs CLAUDE.md
@@ -469,7 +469,7 @@ EOF
 
 Checked at planning against CLAUDE.md § Testing (E2E) and `tests/e2e/helpers/electron-app.js`: the helper names, `createTempFixtureDir`'s `{ dir, likeDir, dislikeDir, specialDir, cleanup, addFile }` return, `#helpOverlay`, and the file-naming list are current. Two things mislead.
 
-- [ ] **Step 1: Guard the template's `afterEach`** (CLAUDE.md: _"`afterEach` null guards: guard `if (electronApp)`/`if (tmpFixtures)`/`if (page)` before cleanup — `.catch()` only handles rejections, not a sync TypeError on undefined"_). Replace L39-42:
+- [x] **Step 1: Guard the template's `afterEach`** (CLAUDE.md: _"`afterEach` null guards: guard `if (electronApp)`/`if (tmpFixtures)`/`if (page)` before cleanup — `.catch()` only handles rejections, not a sync TypeError on undefined"_). Replace L39-42:
 
 ```js
     test.afterEach(async () => {
@@ -493,7 +493,7 @@ and replace the two lifecycle bullets at L58-60 (`` - `closeApp(electronApp)` in
 - **Guard every cleanup** (`if (electronApp)`, `if (tmpFixtures)`, `if (page)`): when `beforeEach` throws, these are undefined, and an unguarded call throws a TypeError that hides the original failure.
 ```
 
-- [ ] **Step 2: Bring the fixture list up to date.** Replace L63:
+- [x] **Step 2: Bring the fixture list up to date.** Replace L63:
 ```markdown
 - Available: `red-1x1.png`, `green-1x1.png`, `blue-1x1.png`, `tiny.mp4` in `tests/e2e/fixtures/`.
 ```
@@ -502,12 +502,12 @@ with:
 - Available in `tests/e2e/fixtures/`: `red-1x1.png`, `green-1x1.png`, `blue-1x1.png`, `normal-320x240.png`, `wide-short-64x4.png`, `static.jxl`, `tiny.mp4` (`generate.js` rebuilds the images). Note: `tiny.mp4` currently fails to load in the Playwright runs — see WEEKLY G3 before relying on video playback.
 ```
 
-- [ ] **Step 3: Verify nothing else in the skill contradicts CLAUDE.md**
+- [x] **Step 3: Verify nothing else in the skill contradicts CLAUDE.md**
 
 Run: `grep -n -E "afterEach|cleanup|fixtures|seedLocalStorage" .claude/skills/new-e2e-test/SKILL.md`
 Expected: every `cleanup`/`closeApp` call in the template is guarded; `seedLocalStorage` is described as called after `launchApp()` and before `loadFolder()` (L34-35 — already true).
 
-- [ ] **Step 4: Commit C2**
+- [x] **Step 4: Commit C2**
 
 ```bash
 git add .claude/skills/new-e2e-test/SKILL.md
@@ -534,7 +534,7 @@ EOF
 - Consumes: nothing.
 - Produces: shell functions `skipped <token>` (exit 0 = skip, warns on stderr) and `check_skip_tokens "<space-separated known tokens>"` (warns per unknown token), defined by sourcing `.husky/skip.sh`; reads `SKIP` and optional `HOOK_NAME` from the environment. Tokens: `secrets`, `docs-index`, `lint-staged`, `vitest` (pre-commit); `e2e` (pre-push).
 
-- [ ] **Step 1: Write the failing tests** — create `tests/husky-skip.test.js`:
+- [x] **Step 1: Write the failing tests** — create `tests/husky-skip.test.js`:
 
 ```js
 import { describe, it, expect } from 'vitest';
@@ -597,12 +597,12 @@ describe.skipIf(!shAvailable)('.husky/skip.sh (needs sh on PATH — Git Bash on 
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/husky-skip.test.js`
 Expected: FAIL — `sh` cannot source `./.husky/skip.sh` (No such file), so stdout is empty and every `toBe('RAN')`/`toBe('SKIPPED')` fails. (If the suite reports **skipped**, `sh` is not on `PATH` — stop: the tests would prove nothing on this machine.)
 
-- [ ] **Step 3: Write `.husky/skip.sh`**
+- [x] **Step 3: Write `.husky/skip.sh`**
 
 ```sh
 # Sourced by .husky/pre-commit and .husky/pre-push — Husky runs only files named after git hooks.
@@ -644,12 +644,12 @@ check_skip_tokens() (
 )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/husky-skip.test.js`
 Expected: PASS (6 tests, none skipped).
 
-- [ ] **Step 5: Rewrite the hooks.** `.husky/pre-commit`:
+- [x] **Step 5: Rewrite the hooks.** `.husky/pre-commit`:
 
 ```sh
 # SKIP=<check>[,<check>…] waives single checks for one commit — see .husky/skip.sh.
@@ -683,7 +683,7 @@ if [ "$decision" = "RUN" ] && ! skipped e2e; then
 fi
 ```
 
-- [ ] **Step 6: Point each remedy at its own token.** `scripts/check-secrets.js` L113-117, replace:
+- [x] **Step 6: Point each remedy at its own token.** `scripts/check-secrets.js` L113-117, replace:
 ```js
         console.error(
             '\nRemove the secret(s) and re-stage. If this is a genuine false positive,' +
@@ -715,14 +715,14 @@ with:
     );
 ```
 
-- [ ] **Step 7: Docs.** `CLAUDE.md` L27 — replace the final sentence `Bypass a WIP push with \`git push --no-verify\`.` with:
+- [x] **Step 7: Docs.** `CLAUDE.md` L27 — replace the final sentence `Bypass a WIP push with \`git push --no-verify\`.` with:
 ``**Per-check bypass**: `SKIP=<check>[,<check>…]` waives the named checks for one command and warns on every skip — pre-commit tokens `secrets`, `docs-index`, `lint-staged`, `vitest`; pre-push `e2e` (shared helper `.husky/skip.sh`; PowerShell: `$env:SKIP='docs-index'; git commit …; $env:SKIP=$null`). `--no-verify` is the last resort: it disables every check, the secret scan included.``
 `PROJECT.md` L64-65 — after `# Husky pre-push: conditional E2E (skipped for docs-only pushes)` add:
 ```
 # Per-check bypass: SKIP=<check> git commit|push — secrets, docs-index, lint-staged, vitest | e2e (see CLAUDE.md)
 ```
 
-- [ ] **Step 8: Probe the hook — the bypass must waive only what it names.** Stage this task's files first (lint-staged hides *unstaged* changes in partially-staged files; with everything staged it hides nothing, so `sh` keeps reading an unchanged `.husky/pre-commit`). Then stage a fake secret and run the hook directly — `git commit` never runs:
+- [x] **Step 8: Probe the hook — the bypass must waive only what it names.** Stage this task's files first (lint-staged hides *unstaged* changes in partially-staged files; with everything staged it hides nothing, so `sh` keeps reading an unchanged `.husky/pre-commit`). Then stage a fake secret and run the hook directly — `git commit` never runs:
 
 ```bash
 git add .husky/skip.sh .husky/pre-commit .husky/pre-push tests/husky-skip.test.js scripts/check-secrets.js scripts/check-docs-index.js CLAUDE.md PROJECT.md
@@ -735,12 +735,12 @@ git rm --cached -q probe-secret.txt && rm probe-secret.txt && git status --short
 Expected: **A** — `⛔ Potential secret(s)` naming `probe-secret.txt`, the new `SKIP=secrets` remedy line, `exit=1` (**must fire**). **B** — the `SKIP=docs-index` warning, then the same secret block, `exit=1` (**waiving one check must not disarm another**). **C** — `⚠️  pre-commit: SKIP=secrets — the secrets check did NOT run`, then docs-index, lint-staged and vitest run, `exit=0` (**must not fire**). Final status: only this task's files staged, no `probe-secret.txt`.
 Then the pre-push typo warning: `SKIP=e2ee sh -c '. ./.husky/skip.sh; HOOK_NAME=pre-push; check_skip_tokens "e2e"'` → `unknown SKIP token 'e2ee'`.
 
-- [ ] **Step 9: Run the whole unit suite**
+- [x] **Step 9: Run the whole unit suite**
 
 Run: `npx vitest run`
 Expected: all pass (Task 1 total + 6).
 
-- [ ] **Step 10: Commit C3** (the hook runs for real — with the new pre-commit file):
+- [x] **Step 10: Commit C3** (the hook runs for real — with the new pre-commit file):
 
 ```bash
 git commit -F - <<'EOF'
@@ -774,7 +774,7 @@ EOF
 - Consumes: nothing.
 - Produces: unchanged exports `{ init, log, warn, error, logPerf, cleanup, getLogPath }`; `getLogPath()` now returns `<logDir>/media-viewer-YYYY-MM-DD_HH-MM-SS[-N].log`; log files carry a first line `[…] [INFO] [logger] Session started (pid N)` and, after `cleanup()`, a last line `[…] [INFO] [logger] Session ended (clean quit)`.
 
-- [ ] **Step 1: Write the failing tests** — replace `tests/logger.test.js` entirely:
+- [x] **Step 1: Write the failing tests** — replace `tests/logger.test.js` entirely:
 
 ```js
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -1038,12 +1038,12 @@ describe('logger', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail — and that the local-date test is RED**
+- [x] **Step 2: Run the tests to verify they fail — and that the local-date test is RED**
 
 Run: `npx vitest run tests/logger.test.js`
 Expected: FAIL — at least `creates a dated session log` (name is `media-viewer.log`), `opens the session with a header line`, `keeps only the newest 10`, `keeps the session log and ends it with a clean-quit footer` (file deleted), and **`stamps the local date, not the UTC date`** (expected `[2026-10-06 00:15…`, received `[2026-10-05 00:15…` on this UTC+3 machine). If the local-date test passes here, stop — it proves nothing (feedback: a RED test that passes is zero coverage).
 
-- [ ] **Step 3: Rewrite `logger.js`**
+- [x] **Step 3: Rewrite `logger.js`**
 
 ```js
 const fs = require('fs');
@@ -1235,12 +1235,12 @@ function getLogPath() {
 module.exports = { init, log, warn, error, logPerf, cleanup, getLogPath };
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/logger.test.js`
 Expected: PASS (24 tests).
 
-- [ ] **Step 5: `main.js` — say which build wrote each log.** After the `console.error = (...args) => { … };` block (just before `createWindow();`, ~L160), add:
+- [x] **Step 5: `main.js` — say which build wrote each log.** After the `console.error = (...args) => { … };` block (just before `createWindow();`, ~L160), add:
 
 ```js
     // First line through the intercepted console, so every kept session log says which build wrote it.
@@ -1249,14 +1249,14 @@ Expected: PASS (24 tests).
     );
 ```
 
-- [ ] **Step 6: Comments that name the old file** — replace the text only:
+- [x] **Step 6: Comments that name the old file** — replace the text only:
   - `media-viewer.js` ~L4807: `// repro is diagnosable in media-viewer.log, then prune + retry (bounded).` → `// repro is diagnosable in the session log, then prune + retry (bounded).`
   - `media-viewer.js` ~L5040: `// it is lost to console.error alone (not forwarded to media-viewer.log).` → `// it is lost to console.error alone (not forwarded to the session log).`
   - `tests/media-viewer-utils.test.js` ~L5269: `// Finding 5: the OS error behind the permanent discard must reach media-viewer.log, not` → `// Finding 5: the OS error behind the permanent discard must reach the session log, not`
 
 Then the sweep: `grep -rn --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=archive --exclude-dir=specs --exclude-dir=.superpowers -E "media-viewer\.log|deleted on quit|truncated on init" --include=*.js --include=*.cjs .` → the only hits are `logger.js` (its history comment and the legacy-file note in `pruneSessionLogs`) and `tests/logger.test.js` (the legacy-file test). Any other hit is a stale description — fix it.
 
-- [ ] **Step 7: Probe — where the logs live, and that they survive.** (Confirms spec F5 before any doc states it.)
+- [x] **Step 7: Probe — where the logs live, and that they survive.** (Confirms spec F5 before any doc states it.)
 
 ```bash
 DEV="$APPDATA/media_viewer/logs"; E2E="$APPDATA/Electron/logs"
@@ -1270,7 +1270,7 @@ Expected: the file is in `%APPDATA%\media_viewer\logs\` (**F5 confirmed** — if
 Relaunch, wait for a second new file, then kill: `taskkill //F //IM electron.exe`. Expected: two dated files from this probe, the first still ending in the footer (**must survive a relaunch**), the second with **no** footer (**a kill must not look like a clean quit**).
 E2E side: `npx playwright test tests/e2e/app-launch.test.js` → new dated files appear in `%APPDATA%\Electron\logs\` and **none** in `%APPDATA%\media_viewer\logs\`.
 
-- [ ] **Step 8: Record the launch-path dependency** (only if Step 7 confirmed F5). In `tests/e2e/helpers/electron-app.js`, directly above `function getLaunchArgs() {`, add:
+- [x] **Step 8: Record the launch-path dependency** (only if Step 7 confirmed F5). In `tests/e2e/helpers/electron-app.js`, directly above `function getLaunchArgs() {`, add:
 
 ```js
 // Launching main.js directly (not the project directory) means Electron reads no package.json, so
@@ -1280,15 +1280,15 @@ E2E side: `npx playwright test tests/e2e/app-launch.test.js` → new dated files
 // Keep it if this launch path ever changes.
 ```
 
-- [ ] **Step 9: `CLAUDE.md` L34** — replace `├── logger.js            # File logger (init/log/warn/error/cleanup/getLogPath) → app.getPath('logs')/media-viewer.log` with:
+- [x] **Step 9: `CLAUDE.md` L34** — replace `├── logger.js            # File logger (init/log/warn/error/cleanup/getLogPath) → app.getPath('logs')/media-viewer.log` with:
 ``├── logger.js            # Session logger (init/log/warn/error/cleanup/getLogPath): one media-viewer-<YYYY-MM-DD_HH-MM-SS>.log per launch in app.getPath('logs'), newest 10 kept, never deleted on quit (no "Session ended" footer = crash/kill) + append-only media-viewer-perf.log. `npm start` → %APPDATA%\media_viewer\logs; E2E (launches main.js, app name "Electron") → %APPDATA%\Electron\logs``
 
-- [ ] **Step 10: Run the whole unit suite and lint**
+- [x] **Step 10: Run the whole unit suite and lint**
 
 Run: `npx vitest run && npm run lint`
 Expected: all pass; 0 lint errors.
 
-- [ ] **Step 11: Commit C4**
+- [x] **Step 11: Commit C4**
 
 ```bash
 git add logger.js tests/logger.test.js main.js media-viewer.js tests/media-viewer-utils.test.js tests/e2e/helpers/electron-app.js CLAUDE.md
@@ -1325,14 +1325,14 @@ EOF
 **Interfaces:**
 - Consumes: Task 4 Step 7's confirmed locations. If Step 7 contradicted F5, do not run this task — write the measured paths instead, and record the contradiction in Key Discoveries.
 
-- [ ] **Step 1: WEEKLY L40** — replace `Note where the logs live — dev runs via \`npm start\` write to \`%APPDATA%\Electron\logs\`, not \`%APPDATA%\media_viewer\logs\`.` with:
+- [x] **Step 1: WEEKLY L40** — replace `Note where the logs live — dev runs via \`npm start\` write to \`%APPDATA%\Electron\logs\`, not \`%APPDATA%\media_viewer\logs\`.` with:
 ``Note where the logs live — **corrected 2026-10-05 by G2's probe**: dev runs via `npm start` write to `%APPDATA%\media_viewer\logs\`; E2E runs (which launch `main.js` directly, so the app is named "Electron") write to `%APPDATA%\Electron\logs\`.``
 
-- [ ] **Step 2: BACKLOG L72** — replace `Measured 2026-10-05: neither \`%APPDATA%\Electron\logs\` (dev runs via \`npm start\`, where the app name is "Electron") nor \`%APPDATA%\media_viewer\logs\` holds a \`media-viewer.log\`` with:
+- [x] **Step 2: BACKLOG L72** — replace `Measured 2026-10-05: neither \`%APPDATA%\Electron\logs\` (dev runs via \`npm start\`, where the app name is "Electron") nor \`%APPDATA%\media_viewer\logs\` holds a \`media-viewer.log\`` with:
 ``Measured 2026-10-05: neither `%APPDATA%\Electron\logs\` (E2E runs, which launch `main.js` directly so the app name is "Electron" — corrected by G2's probe; this entry first attributed it to `npm start`) nor `%APPDATA%\media_viewer\logs\` (`npm start`) holds a `media-viewer.log` ``
 (the rest of the sentence — `, and the persistent media-viewer-perf.log in each has no move errors.` — is unchanged).
 
-- [ ] **Step 3: Verify and commit C5**
+- [x] **Step 3: Verify and commit C5**
 
 Run: `node scripts/check-docs-index.js && git diff --stat`
 Expected: exit 0; two files, a few lines each.
@@ -1354,11 +1354,11 @@ EOF
 
 ## Finish (after Task 5)
 
-- [ ] `npx vitest run` and `npm run lint` green; `git status --short` clean.
-- [ ] Push (`git push -u origin g2-hooks-and-logs-that-fire`) — the pre-push hook runs the full E2E suite (non-docs push). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
-- [ ] Open the PR (body: spec link, the five probe results, test deltas, the named Bash gaps).
-- [ ] Review **deep (`max`)** — C1 and C3 are the only enforcement around `preload.js` and the secret scan.
-- [ ] Merge only on the user's go-ahead.
+- [x] `npx vitest run` and `npm run lint` green; `git status --short` clean.
+- [x] Push (`git push -u origin g2-hooks-and-logs-that-fire`) — the pre-push hook runs the full E2E suite (non-docs push). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
+- [x] Open the PR (body: spec link, the five probe results, test deltas, the named Bash gaps).
+- [x] Review **deep (`max`)** — C1 and C3 are the only enforcement around `preload.js` and the secret scan.
+- [x] Merge only on the user's go-ahead.
 
 ## Improvements (minimum 2 required before Extract)
 
@@ -1375,9 +1375,9 @@ EOF
 
 ## Closeout (after the merge, on `main`)
 
-- [ ] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] G2 closeout`), archive this plan, DONE.md entry, WEEKLY Status → `✅ PR #N` + both Daily-Schedule rows, check off the five BACKLOG entries G2 closed (🟤 [2026-09-24] ×3, 🟤 [2026-09-02] pre-commit bypass, 🔵 [2026-10-05] logs) — **in the closeout commit**.
-- [ ] Memory: delete `project_prettier_hook_formats_cwd.md` and its `MEMORY.md` line (the workaround retires); session memory file.
-- [ ] Propagation check: re-read every live surface this plan touched for a late correction that did not reach it.
+- [x] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] G2 closeout`), archive this plan, DONE.md entry, WEEKLY Status → `✅ PR #N` + both Daily-Schedule rows, check off the five BACKLOG entries G2 closed (🟤 [2026-09-24] ×3, 🟤 [2026-09-02] pre-commit bypass, 🔵 [2026-10-05] logs) — **in the closeout commit**.
+- [x] Memory: delete `project_prettier_hook_formats_cwd.md` and its `MEMORY.md` line (the workaround retires); session memory file.
+- [x] Propagation check: re-read every live surface this plan touched for a late correction that did not reach it.
 
 ## Progress Log
 
