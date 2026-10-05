@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🟤 + 1 🔵 folded, 8 SP → ~9 SP); BACKLOG 🟤 `[2026-09-24]` ×3, 🟤 `[2026-09-02]` G3 closeout, 🔵 `[2026-10-05]`
 **Spec**: [2026-10-05-g2-hooks-and-logs-that-fire-design.md](../../superpowers/specs/2026-10-05-g2-hooks-and-logs-that-fire-design.md) (committed `e797f43`, user-approved 2026-10-05)
 **Created**: 2026-10-05
-**Status**: Planned — awaiting user review
+**Status**: Implemented — awaiting code review (user, separate chat) and push/PR
 **Last Updated**: 2026-10-05
 **Branch**: `g2-hooks-and-logs-that-fire`
 
@@ -1383,6 +1383,10 @@ EOF
 - **2026-10-05** — Brainstormed with the user (decisions D1 ask rules + Bash rule, D3 skills committed, D5 dated files ×10); spec committed `e797f43`; plan written. Planning-time verifications: exec-form hook syntax (hooks reference), `planFormat` path cases and the prune order (scratch script), Prettier `--log-level` flag, the skill's helper/fixture claims against `tests/e2e/helpers/electron-app.js`.
 
 - **2026-10-05 — Task 1** — Formatter probe passed both halves (edited file formatted, mis-formatted sibling and out-of-repo file untouched; a `docs/planning`-cwd edit left every planning doc byte-identical). Guard probe: `.env` Write and `preload.js` Edit (from a subdirectory cwd) prompted — the user's "No" blocked both; an ordinary write did not prompt. **Deviation**: the `Bash(*preload.js*)` rule missed `cd <project dir> && … preload.js` three times → user-directed `PreToolUse` hook `guard-preload-bash.js` (spec D1a) + `tests/guard-preload-bash.test.js` (10); its first live probe came too soon after the settings edit, the instrumented re-run prompted.
+- **2026-10-05 — Task 2** `021f24e` — skill committed; template guards written with braces (ESLint `curly: all`), not the plan's one-line form.
+- **2026-10-05 — Task 3** `7eb1b9b` — `SKIP` probe: no SKIP and `SKIP=docs-index` both blocked by the staged fake secret; `SKIP=secrets` waived only the scan (other three ran, 867 tests); typo token warned. (Plan's Expected for `SKIP=docs-index` named a warning that cannot print — `secrets` aborts first.)
+- **2026-10-05 — Task 4** `427b8ee` — local-date test RED on this UTC+3 machine (`10-05` vs `10-06`) before the fix. Live: `npm start` → `%APPDATA%\media_viewer\logs` (F5 confirmed) with header + build line; clean close (WM_CLOSE) kept the file with its footer; relaunch kept it; `taskkill /F` left no footer; E2E `app-launch` (5 tests) wrote 5 dated files to `Electron\logs` only.
+- **2026-10-05 — Task 5** `1f2ba1a` — WEEKLY + BACKLOG log-location note corrected. Unit tests 837 → 874; lint 0 errors (2 pre-existing warnings in untouched test files).
 
 ## Key Discoveries
 
