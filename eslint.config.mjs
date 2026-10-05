@@ -237,9 +237,10 @@ export default [
         },
     },
 
-    // 6. Build / maintenance scripts (Node CJS — run via `node scripts/*.js`)
+    // 6. Build / maintenance scripts and Claude Code hook scripts (Node CJS — `node scripts/*.js`,
+    //    `node .claude/hooks/*.js`)
     {
-        files: ['scripts/**/*.js'],
+        files: ['scripts/**/*.js', '.claude/hooks/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',

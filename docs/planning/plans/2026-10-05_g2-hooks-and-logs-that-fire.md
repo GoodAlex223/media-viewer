@@ -79,7 +79,7 @@
 
 Task 1 first (the old Prettier hook taxes every later edit). Task 2 needs Task 1's `.gitignore`. Tasks 3 and 4 are independent of each other; Task 5 needs Task 4's probe result. One commit per task (C1–C5 in the spec).
 
-**Execution models** (spec § 9, WORKFLOW.md § 1.0): Tasks 1 and 3 on Opus · `medium` (the formatter script and the shell helper hold the edge cases); Tasks 2, 4 and 5 on Sonnet · `medium`. The live probes (Task 1 Steps 9–10, Task 3 Step 8, Task 4 Step 7) run in the **main session** whatever the execution mode — Claude Code's hooks and `ask` prompts are observed there, and Task 1 Step 10 needs the user at the keyboard. Whole-branch review: deep (`max`).
+**Model and effort** (WORKFLOW.md § 1.0): SP 8 → ~9 · execution mode **Native** (user, 2026-10-05) · execute on **Opus 5.5 · `medium`** for all five tasks · switch: effort now (`xhigh` → `medium` via `/effort medium`; the cache survives on Opus 5.5), no model switch — a model switch drops the cache in a one-session run, and the Sonnet-eligible Tasks 2/4/5 are ~4.5 SP of spelled-out work (optional cheap break if wanted: after Task 3's commit, `/compact` then `/model sonnet`, switching back after) · escalate to `high` only if a probe fails from a skipped or rushed step · final review on **Opus 5.5 · `max`** (`/code-review max` on the branch) — the deep review WEEKLY and the spec planned, for the only enforcement around `preload.js` and the secret scan. (The spec's per-task Opus/Sonnet split assumed subagent execution.) The live probes (Task 1 Steps 9–10, Task 3 Step 8, Task 4 Step 7) run in this session — Claude Code's hooks and `ask` prompts are observed here, and Task 1 Step 10 needs the user at the keyboard.
 
 ---
 
@@ -1382,6 +1382,9 @@ EOF
 
 - **2026-10-05** — Brainstormed with the user (decisions D1 ask rules + Bash rule, D3 skills committed, D5 dated files ×10); spec committed `e797f43`; plan written. Planning-time verifications: exec-form hook syntax (hooks reference), `planFormat` path cases and the prune order (scratch script), Prettier `--log-level` flag, the skill's helper/fixture claims against `tests/e2e/helpers/electron-app.js`.
 
+- **2026-10-05 — Task 1** — Formatter probe passed both halves (edited file formatted, mis-formatted sibling and out-of-repo file untouched; a `docs/planning`-cwd edit left every planning doc byte-identical). Guard probe: `.env` Write and `preload.js` Edit (from a subdirectory cwd) prompted — the user's "No" blocked both; an ordinary write did not prompt. **Deviation**: the `Bash(*preload.js*)` rule missed `cd <project dir> && … preload.js` three times → user-directed `PreToolUse` hook `guard-preload-bash.js` (spec D1a) + `tests/guard-preload-bash.test.js` (10); its first live probe came too soon after the settings edit, the instrumented re-run prompted.
+
 ## Key Discoveries
 
-_(filled during execution)_
+1. **A `Bash(...)` ask rule did not catch `cd <project dir> && X`**, although the permissions page says ask rules apply when any subcommand matches. Claude Code strips a `cd` to the current directory before hooks see the command; a hook on the command text closed the gap where the rule did not. Measured, not inferred — the next Weekly Reviews may want to report it upstream.
+2. **A settings.json hook edit is not always live on the very next tool call** — the first probe after wiring the hook saw no prompt; the same probe minutes later did. A "hook is dead" conclusion needs a second probe (or an invocation log) before it is believed.

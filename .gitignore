@@ -137,9 +137,15 @@ dist
 # Playwright test results
 test-results/
 
-# Claude Code configuration (per-developer, except shared agents)
+# Claude Code configuration — committed: shared agents, hook scripts, path-scoped rules, project
+# settings (permission rules, hooks, plugin enables) and project skills. Everything else under
+# .claude/ is per-machine (settings.local.json, worktrees/, …) and stays out.
 .claude/*
 !.claude/agents/
+!.claude/hooks/
+!.claude/rules/
+!.claude/settings.json
+!.claude/skills/
 
 # Superpowers brainstorm session artifacts
 .superpowers/brainstorm/
