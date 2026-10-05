@@ -120,6 +120,33 @@ describe('logger', () => {
             expect(sessionLogs()).toHaveLength(10);
         });
 
+        it('never prunes the session it just opened, even when later-stamped logs fill the quota', () => {
+            // PR #73 review: a clock set back, a move west or a DST fall-back leaves names stamped
+            // "after now"; ordering by name put the new log 11th and init() deleted its own file.
+            for (let i = 0; i < 10; i++) {
+                fs.writeFileSync(path.join(testLogDir, `media-viewer-2099-01-01_00-00-0${i}.log`), 'future\n');
+            }
+            logger.init(testLogDir);
+            expect(fs.existsSync(logger.getLogPath())).toBe(true);
+            expect(sessionLogs()).toHaveLength(10);
+        });
+
+        it('orders sessions by modification time, so skewed names cannot evict the previous session', () => {
+            const old = new Date(2020, 0, 1);
+            for (let i = 0; i < 10; i++) {
+                const name = path.join(testLogDir, `media-viewer-2099-01-01_00-00-0${i}.log`);
+                fs.writeFileSync(name, 'future\n');
+                fs.utimesSync(name, old, old);
+            }
+            logger.init(testLogDir);
+            const previous = logger.getLogPath();
+            logger.cleanup();
+            logger.init(testLogDir); // relaunch: the previous session must still be there to read
+            expect(fs.existsSync(previous)).toBe(true);
+            expect(fs.existsSync(logger.getLogPath())).toBe(true);
+            expect(sessionLogs()).toHaveLength(10);
+        });
+
         it('still starts the session when an old log cannot be deleted', () => {
             vi.useFakeTimers({ toFake: ['Date'] });
             for (let s = 0; s < 10; s++) {

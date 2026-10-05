@@ -50,10 +50,14 @@ function openSessionLog(logDir, date) {
     throw new Error(`logger: no free session-log name for ${sessionLogName(date, 1)}`);
 }
 
-// Delete all but the newest `keep` session logs. Only names matching SESSION_LOG_PATTERN are
-// candidates, so media-viewer-perf.log and a legacy media-viewer.log are never touched. Best
-// effort and never throws: a file held open elsewhere stays and is retried on the next launch.
-function pruneSessionLogs(logDir, keep) {
+// Delete all but the newest `keep` session logs, the current one included. Only names matching
+// SESSION_LOG_PATTERN are candidates, so media-viewer-perf.log and a legacy media-viewer.log are
+// never touched. The current session's file is never a candidate, and the rest are ordered by
+// modification time (the name's local-time stamp only breaks ties): a clock set back, a move to a
+// zone further west or a DST fall-back leaves names stamped "after now", and ordering by name let
+// those evict the previous session — or, before the exemption, the new log itself (PR #73 review).
+// Best effort and never throws: a file held open elsewhere stays and is retried on the next launch.
+function pruneSessionLogs(logDir, keep, currentName) {
     let names;
     try {
         names = fs.readdirSync(logDir);
@@ -61,18 +65,31 @@ function pruneSessionLogs(logDir, keep) {
         return;
     }
     const sessions = names
+        .filter((name) => name !== currentName)
         .map((name) => {
             const match = SESSION_LOG_PATTERN.exec(name);
-            return match ? { name, stamp: match[1], sequence: match[2] ? Number(match[2]) : 1 } : null;
+            if (!match) {
+                return null;
+            }
+            let mtimeMs = 0;
+            try {
+                mtimeMs = fs.statSync(path.join(logDir, name)).mtimeMs;
+            } catch (_e) {
+                // Vanished since readdir — sorts oldest; its unlink below is a no-op.
+            }
+            return { name, mtimeMs, stamp: match[1], sequence: match[2] ? Number(match[2]) : 1 };
         })
         .filter(Boolean)
         .sort((a, b) => {
+            if (a.mtimeMs !== b.mtimeMs) {
+                return b.mtimeMs - a.mtimeMs;
+            }
             if (a.stamp !== b.stamp) {
                 return a.stamp < b.stamp ? 1 : -1;
             }
             return b.sequence - a.sequence;
         });
-    for (const old of sessions.slice(keep)) {
+    for (const old of sessions.slice(Math.max(keep - 1, 0))) {
         try {
             fs.unlinkSync(path.join(logDir, old.name));
         } catch (_e) {
@@ -106,7 +123,7 @@ function init(logDir) {
     logFd = session.fd;
     logPath = session.filePath;
     writeEntry('INFO', 'logger', `Session started (pid ${process.pid})`);
-    pruneSessionLogs(logDir, SESSION_LOGS_KEPT);
+    pruneSessionLogs(logDir, SESSION_LOGS_KEPT, path.basename(logPath));
 }
 
 function formatTimestamp() {

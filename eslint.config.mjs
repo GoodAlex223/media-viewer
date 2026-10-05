@@ -12,7 +12,7 @@
 //   4.  Unit tests (Vitest)          — tests/**/*.js (excl. e2e)
 //   5a. E2E helpers (CJS)            — tests/e2e/**/*.cjs
 //   5b. E2E tests (Playwright)       — tests/e2e/**/*.js, playwright.config.js
-//   6.  Build / maintenance scripts  — scripts/**/*.js (Node CJS)
+//   6.  Scripts + Claude Code hooks  — scripts/**/*.js, .claude/hooks/**/*.js (Node CJS)
 //
 // eslint-config-prettier applied last to suppress formatting rule conflicts.
 

@@ -77,7 +77,7 @@ media_viewer/
 
 **Formatting & Linting**:
 - Prettier: tabWidth=4, useTabs=false, singleQuote, semi, trailingComma=es5, printWidth=120, bracketSpacing, arrowParens=always, endOfLine="lf". `.gitattributes` enforces LF.
-- ESLint flat config (`eslint.config.mjs`): twelve file-group blocks (main, preload, renderer module/script, fullscreen+tournament, workers, jxl module worker, shared libs, scripts, unit tests, e2e helpers/tests); shared rules eqeqeq/curly/prefer-const/no-var/no-shadow(warn)/no-unused-vars(warn); `eslint-config-prettier` last.
+- ESLint flat config (`eslint.config.mjs`): twelve file-group blocks (main, preload, renderer module/script, fullscreen+tournament, workers, jxl module worker, shared libs, scripts + `.claude/hooks/`, unit tests, e2e helpers/tests); shared rules eqeqeq/curly/prefer-const/no-var/no-shadow(warn)/no-unused-vars(warn); `eslint-config-prettier` last.
 - Prettier ignores `docs/`, `*.md`, `package-lock.json`.
 
 **Testing (Unit — Vitest)**:

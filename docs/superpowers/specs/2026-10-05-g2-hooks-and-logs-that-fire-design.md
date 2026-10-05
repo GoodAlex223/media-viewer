@@ -282,7 +282,10 @@ own remedy, and a second message would only repeat it.
   `EEXIST` (two launches in one second) try `-2`, `-3`, … (bounded; past the bound, throw as `openSync` does
   today). First line: `Session started (pid <pid>)`. Then **prune**: list the directory, keep only names matching
   `^media-viewer-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(-\d+)?\.log$`, order newest first (timestamp, then suffix
-  number), delete all but the newest `SESSION_LOGS_KEPT = 10` (the current file counts). Each delete is
+  number), delete all but the newest `SESSION_LOGS_KEPT = 10` (the current file counts). **Amended after PR #73
+  review**: the current session's file is never a prune candidate, and the others are ordered by modification
+  time (name stamp, then suffix, only break ties) — name order let logs stamped "after now" (clock set back, a
+  move west, DST fall-back) evict the new log itself, and then the previous session. Each delete is
   best-effort — a file held open elsewhere is skipped and retried on the next launch. Prune never throws.
 - **The pattern is the safety boundary**: `media-viewer-perf.log` and a legacy `media-viewer.log` (e.g. left by a
   crash before this change) do not match it and are never deleted.
@@ -387,8 +390,9 @@ declarative guard removed a script and its tests.
   candidate at closeout.
 - **`media-viewer-perf.log` grows without bound** (48 KB in the E2E directory, first line 2026-07-05, last
   2026-09-21). BACKLOG candidate at closeout.
-- **Log pruning orders by the local timestamp in the name**; in the one repeated hour of a DST fall-back, the
-  order of sessions started in that hour can be wrong. Effect: with ≥ 11 files, the wrong one of two same-hour
-  files may be pruned. Accepted.
+- ~~**Log pruning orders by the local timestamp in the name**~~ — superseded after PR #73 review: pruning orders
+  by modification time and never touches the current file (§ 6.1), which removes the DST/timezone mis-ordering.
+  Remaining: a system clock set *back* also skews mtimes, so files written under the fast clock still sort
+  newest and can crowd out real sessions until they age out of the 10 — the current session is always kept.
 - **`SKIP` cannot be set from VS Code's Source Control commit button.** Accepted — the terminal is where a
   false positive is diagnosed.
