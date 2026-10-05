@@ -279,7 +279,8 @@ if (require.main === module) {
     console.error(
         'Add a row + link for each missing file, and repoint or remove each dead link.\n' +
             'Then stage docs/README.md — this reads the index, so an unstaged fix will not clear it.\n' +
-            'Re-check without committing: node scripts/check-docs-index.js\n'
+            'Re-check without committing: node scripts/check-docs-index.js\n' +
+            'False positive? Skip this check only: SKIP=docs-index git commit …\n'
     );
     process.exit(1);
 }
