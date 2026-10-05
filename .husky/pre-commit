@@ -1,4 +1,11 @@
-node scripts/check-secrets.js
-node scripts/check-docs-index.js
-npx lint-staged
-npx vitest run
+# SKIP=<check>[,<check>…] waives single checks for one commit — see .husky/skip.sh.
+# Checks: secrets, docs-index, lint-staged, vitest. --no-verify skips them ALL.
+. "$(dirname "$0")/skip.sh"
+check_skip_tokens "secrets docs-index lint-staged vitest"
+
+# check_failed (skip.sh) adds the remedy for the two third-party checks; check-secrets.js and
+# check-docs-index.js print their own.
+skipped secrets || node scripts/check-secrets.js
+skipped docs-index || node scripts/check-docs-index.js
+skipped lint-staged || npx lint-staged || check_failed lint-staged
+skipped vitest || npx vitest run || check_failed vitest

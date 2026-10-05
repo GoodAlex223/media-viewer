@@ -1,5 +1,9 @@
+# SKIP=e2e waives the E2E suite for one push — see .husky/skip.sh.
+. "$(dirname "$0")/skip.sh"
+check_skip_tokens "e2e"
+
 decision=$(node scripts/check-e2e-needed.js || echo RUN)
-if [ "$decision" = "RUN" ]; then
-    echo "pre-push: running the E2E suite before push (bypass a WIP push with: git push --no-verify)…"
+if [ "$decision" = "RUN" ] && ! skipped e2e; then
+    echo "pre-push: running the E2E suite before push (skip it for one push with: SKIP=e2e git push)…"
     npx playwright test
 fi

@@ -112,8 +112,8 @@ if (require.main === module) {
             console.error(`  ${f.file ?? '<unknown>'}:${f.line} — ${f.pattern}`);
         }
         console.error(
-            '\nRemove the secret(s) and re-stage. If this is a genuine false positive,' +
-                ' bypass with: git commit --no-verify\n'
+            '\nRemove the secret(s) and re-stage. If this is a genuine false positive, skip this check only:\n' +
+                "  SKIP=secrets git commit …    (PowerShell: $env:SKIP='secrets'; git commit …; $env:SKIP=$null)\n"
         );
         process.exit(1);
     }

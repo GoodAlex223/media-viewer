@@ -1,0 +1,37 @@
+{
+    "permissions": {
+        "ask": ["Edit(/preload.js)", "Edit(/**/.env)", "Edit(/**/.env.*)", "Bash(*preload.js*)"]
+    },
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash|PowerShell",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node",
+                        "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-preload-bash.js"],
+                        "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node",
+                        "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/format-edited-file.js"],
+                        "timeout": 30
+                    }
+                ]
+            }
+        ]
+    },
+    "enabledPlugins": {
+        "superpowers@claude-plugins-official": true,
+        "pr-review-toolkit@claude-plugins-official": false
+    }
+}

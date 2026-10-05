@@ -1,13 +1,110 @@
 const fs = require('fs');
 const path = require('path');
 
+// Session log: one file per app launch, named by its local start time
+// (media-viewer-YYYY-MM-DD_HH-MM-SS.log). init() keeps the newest SESSION_LOGS_KEPT; cleanup()
+// writes a clean-quit footer and closes the file WITHOUT deleting it, so a kept log with no
+// footer is a crash or a kill. Until G2 (2026-10-05) the log was truncated on launch and deleted
+// on quit, on the TASK-025 assumption that errors mean crashes — a session that broke the app
+// without crashing it lost its evidence that way.
+const SESSION_LOGS_KEPT = 10;
+const SESSION_LOG_PATTERN = /^media-viewer-(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:-(\d+))?\.log$/;
+const MAX_SAME_SECOND_SESSIONS = 100;
+const FUTURE_MTIME_SLACK_MS = 5 * 60 * 1000; // clock jitter tolerated before an mtime counts as "future"
+
 let logPath = null;
 let logFd = null;
-// Persistent perf/diagnostics log. Unlike the main log (truncated on init, deleted on quit),
-// this is append-mode and survives across sessions so real-run timings can be reviewed after
-// the app closes. Opened lazily on first logPerf() call.
+// Persistent perf/diagnostics log. Unlike the session logs (one per launch, pruned to the newest
+// SESSION_LOGS_KEPT), this is append-mode, never pruned, and accumulates across sessions so
+// real-run timings can be reviewed after the app closes. Opened lazily on first logPerf() call.
 let perfFd = null;
 let perfLogDir = null;
+
+function pad(value, width = 2) {
+    return String(value).padStart(width, '0');
+}
+
+// Local calendar date. (toISOString() is UTC: paired with the local time it stamped yesterday's
+// date on every line written between local midnight and the UTC offset.)
+function formatLocalDate(date) {
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function buildSessionLogName(date, sequence) {
+    const time = `${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+    const suffix = sequence > 1 ? `-${sequence}` : '';
+    return `media-viewer-${formatLocalDate(date)}_${time}${suffix}.log`;
+}
+
+// 'wx' never reuses a file: a second session started in the same second gets -2, -3, …
+function openSessionLog(logDir, date) {
+    for (let sequence = 1; sequence <= MAX_SAME_SECOND_SESSIONS; sequence++) {
+        const candidate = path.join(logDir, buildSessionLogName(date, sequence));
+        try {
+            return { fd: fs.openSync(candidate, 'wx'), filePath: candidate };
+        } catch (err) {
+            if (err.code !== 'EEXIST') {
+                throw err;
+            }
+        }
+    }
+    throw new Error(`logger: no free session-log name for ${buildSessionLogName(date, 1)}`);
+}
+
+// Delete all but the newest `keep` session logs, the current one included. Only names matching
+// SESSION_LOG_PATTERN are candidates, so media-viewer-perf.log and a legacy media-viewer.log are
+// never touched. The current session's file is never a candidate, and the rest are ordered by
+// modification time (the name's local-time stamp only breaks ties): a clock set back, a move to a
+// zone further west or a DST fall-back leaves names stamped "after now", and ordering by name let
+// those evict the previous session — or, before the exemption, the new log itself (PR #73 review).
+// An mtime more than FUTURE_MTIME_SLACK_MS ahead of the clock (written while the clock ran fast,
+// then set back) sorts as oldest: newer sessions can never outrank it, so ranking it newest made
+// every relaunch delete the previous session's log (PR #73 review, round 2).
+// Best effort and never throws: a file held open elsewhere stays and is retried on the next launch.
+function pruneSessionLogs(logDir, keep, currentName) {
+    let names;
+    try {
+        names = fs.readdirSync(logDir);
+    } catch (_e) {
+        return;
+    }
+    const latestPlausibleMtime = Date.now() + FUTURE_MTIME_SLACK_MS;
+    const sessions = names
+        .filter((name) => name !== currentName)
+        .map((name) => {
+            const match = SESSION_LOG_PATTERN.exec(name);
+            if (!match) {
+                return null;
+            }
+            let mtimeMs = 0;
+            try {
+                mtimeMs = fs.statSync(path.join(logDir, name)).mtimeMs;
+            } catch (_e) {
+                // Vanished since readdir — sorts oldest; its unlink below is a no-op.
+            }
+            if (mtimeMs > latestPlausibleMtime) {
+                mtimeMs = 0;
+            }
+            return { name, mtimeMs, stamp: match[1], sequence: match[2] ? Number(match[2]) : 1 };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+            if (a.mtimeMs !== b.mtimeMs) {
+                return b.mtimeMs - a.mtimeMs;
+            }
+            if (a.stamp !== b.stamp) {
+                return a.stamp < b.stamp ? 1 : -1;
+            }
+            return b.sequence - a.sequence;
+        });
+    for (const old of sessions.slice(Math.max(keep - 1, 0))) {
+        try {
+            fs.unlinkSync(path.join(logDir, old.name));
+        } catch (_e) {
+            // Held open or already gone — retried on the next launch.
+        }
+    }
+}
 
 function init(logDir) {
     if (logFd !== null) {
@@ -30,16 +127,21 @@ function init(logDir) {
     }
     perfLogDir = logDir;
     fs.mkdirSync(logDir, { recursive: true });
-    logPath = path.join(logDir, 'media-viewer.log');
-    logFd = fs.openSync(logPath, 'w');
+    const session = openSessionLog(logDir, new Date());
+    logFd = session.fd;
+    logPath = session.filePath;
+    try {
+        writeEntry('INFO', 'logger', `Session started (pid ${process.pid})`);
+    } catch (_e) {
+        // A failed header (e.g. a full disk) must not stop the app from starting.
+    }
+    pruneSessionLogs(logDir, SESSION_LOGS_KEPT, path.basename(logPath));
 }
 
 function formatTimestamp() {
     const now = new Date();
-    const date = now.toISOString().slice(0, 10);
     const time = now.toTimeString().slice(0, 8);
-    const ms = String(now.getMilliseconds()).padStart(3, '0');
-    return `${date} ${time}.${ms}`;
+    return `${formatLocalDate(now)} ${time}.${pad(now.getMilliseconds(), 3)}`;
 }
 
 function writeEntry(level, source, message) {
@@ -63,8 +165,8 @@ function error(source, message) {
 }
 
 // Append a diagnostics line to the persistent perf log (media-viewer-perf.log). Survives quit
-// (never unlinked) and accumulates across sessions (append-mode) so real-run behavior can be
-// reviewed after the fact. No-op before init().
+// (never unlinked, never pruned) and accumulates across sessions (append-mode) so real-run
+// behavior can be reviewed after the fact. No-op before init().
 function logPerf(message) {
     if (perfLogDir === null) {
         return;
@@ -79,6 +181,7 @@ function logPerf(message) {
     }
 }
 
+// Clean quit: footer, then close. The session log is KEPT (pruned only by a later init()).
 function cleanup() {
     // Close (but never delete) the persistent perf log first — it must survive quit.
     if (perfFd !== null) {
@@ -92,7 +195,11 @@ function cleanup() {
     if (logFd === null) {
         return;
     }
-    const pathToDelete = logPath;
+    try {
+        writeEntry('INFO', 'logger', 'Session ended (clean quit)');
+    } catch (_e) {
+        // A failed footer must not stop the close below.
+    }
     try {
         fs.closeSync(logFd);
     } catch (_e) {
@@ -100,11 +207,6 @@ function cleanup() {
     }
     logFd = null;
     logPath = null;
-    try {
-        fs.unlinkSync(pathToDelete);
-    } catch (_e) {
-        // File may already be deleted
-    }
 }
 
 function getLogPath() {

@@ -4804,7 +4804,7 @@ class MediaViewer {
             const missing = leftIdx === -1 ? pair.left : pair.right;
             // Capture net: unreachable after reconcileWithFiles (see _enterResumedTournamentUI).
             // If it still fires, the engine/mediaFiles diverged — log the shape so a real 24k
-            // repro is diagnosable in media-viewer.log, then prune + retry (bounded).
+            // repro is diagnosable in the session log, then prune + retry (bounded).
             const absent = this.tournament.engine.files.filter((f) => this.getMediaIndex(f) === -1).length;
             window.electronAPI.logError?.(
                 `Tournament divergence: pair file absent from mediaFiles. ` +
@@ -5037,7 +5037,7 @@ class MediaViewer {
                     // Unlike the first failure (forwarded via showError below, which logs
                     // error.message itself), this permanent-discard path shows the user only
                     // a generic message — so the OS error must be logged explicitly here or
-                    // it is lost to console.error alone (not forwarded to media-viewer.log).
+                    // it is lost to console.error alone (not forwarded to the session log).
                     window.electronAPI.logError?.(
                         `Tournament undo restore permanently failed for ${move.fileName}: ${error.message}`
                     );
