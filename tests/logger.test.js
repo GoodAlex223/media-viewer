@@ -147,6 +147,23 @@ describe('logger', () => {
             expect(sessionLogs()).toHaveLength(10);
         });
 
+        it('treats a modification time in the future as oldest, so a clock set back cannot evict the previous session', () => {
+            // PR #73 review round 2: logs written under a fast clock carry future mtimes, which newer
+            // sessions never outrank — ordering them newest made each relaunch delete the prior log.
+            const future = new Date(2099, 0, 1);
+            for (let i = 0; i < 10; i++) {
+                const name = path.join(testLogDir, `media-viewer-2099-01-01_00-00-0${i}.log`);
+                fs.writeFileSync(name, 'future\n');
+                fs.utimesSync(name, future, future);
+            }
+            logger.init(testLogDir);
+            const previous = logger.getLogPath();
+            logger.cleanup();
+            logger.init(testLogDir); // relaunch: the previous session must still be there to read
+            expect(fs.existsSync(previous)).toBe(true);
+            expect(sessionLogs()).toHaveLength(10);
+        });
+
         it('still starts when the header line cannot be written (PR #73 review)', () => {
             vi.spyOn(fs, 'writeSync').mockImplementationOnce(() => {
                 const err = new Error('ENOSPC: no space left on device');

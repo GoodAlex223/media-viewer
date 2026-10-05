@@ -394,7 +394,8 @@ declarative guard removed a script and its tests.
   2026-09-21). BACKLOG candidate at closeout.
 - ~~**Log pruning orders by the local timestamp in the name**~~ — superseded after PR #73 review: pruning orders
   by modification time and never touches the current file (§ 6.1), which removes the DST/timezone mis-ordering.
-  Remaining: a system clock set *back* also skews mtimes, so files written under the fast clock still sort
-  newest and can crowd out real sessions until they age out of the 10 — the current session is always kept.
+  A system clock set *back* skews mtimes too: files written under the fast clock carry future mtimes that newer
+  sessions never outrank. **Amended after PR #73 review round 2**: an mtime more than 5 minutes ahead of the clock
+  sorts as oldest, so those files are pruned first and the previous session survives a relaunch.
 - **`SKIP` cannot be set from VS Code's Source Control commit button.** Accepted — the terminal is where a
   false positive is diagnosed.

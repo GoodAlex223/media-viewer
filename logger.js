@@ -10,6 +10,7 @@ const path = require('path');
 const SESSION_LOGS_KEPT = 10;
 const SESSION_LOG_PATTERN = /^media-viewer-(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:-(\d+))?\.log$/;
 const MAX_SAME_SECOND_SESSIONS = 100;
+const FUTURE_MTIME_SLACK_MS = 5 * 60 * 1000; // clock jitter tolerated before an mtime counts as "future"
 
 let logPath = null;
 let logFd = null;
@@ -56,6 +57,9 @@ function openSessionLog(logDir, date) {
 // modification time (the name's local-time stamp only breaks ties): a clock set back, a move to a
 // zone further west or a DST fall-back leaves names stamped "after now", and ordering by name let
 // those evict the previous session — or, before the exemption, the new log itself (PR #73 review).
+// An mtime more than FUTURE_MTIME_SLACK_MS ahead of the clock (written while the clock ran fast,
+// then set back) sorts as oldest: newer sessions can never outrank it, so ranking it newest made
+// every relaunch delete the previous session's log (PR #73 review, round 2).
 // Best effort and never throws: a file held open elsewhere stays and is retried on the next launch.
 function pruneSessionLogs(logDir, keep, currentName) {
     let names;
@@ -64,6 +68,7 @@ function pruneSessionLogs(logDir, keep, currentName) {
     } catch (_e) {
         return;
     }
+    const latestPlausibleMtime = Date.now() + FUTURE_MTIME_SLACK_MS;
     const sessions = names
         .filter((name) => name !== currentName)
         .map((name) => {
@@ -76,6 +81,9 @@ function pruneSessionLogs(logDir, keep, currentName) {
                 mtimeMs = fs.statSync(path.join(logDir, name)).mtimeMs;
             } catch (_e) {
                 // Vanished since readdir — sorts oldest; its unlink below is a no-op.
+            }
+            if (mtimeMs > latestPlausibleMtime) {
+                mtimeMs = 0;
             }
             return { name, mtimeMs, stamp: match[1], sequence: match[2] ? Number(match[2]) : 1 };
         })
