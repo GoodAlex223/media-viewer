@@ -1365,6 +1365,7 @@ EOF
 1. **Detect any writer of `preload.js`, not just the ones the rules see** — a `FileChanged` hook (hooks reference: _"To run a hook when a specific file changes on disk, whatever wrote it, use a FileChanged hook"_) could flag `git checkout` / glob / `.env`-via-Bash writes after the fact. 🟤 candidate.
 2. **Bound `media-viewer-perf.log`** — append-only and never pruned (48 KB in the E2E directory, 2026-07-05 → 09-21); rotate by size or prune by age alongside the session logs. 🟤 candidate.
 3. **E2E runs share one `userData` across runs** (memory: localStorage leaks between runs) — the same launch-path fact Task 4 records; a per-run `--user-data-dir` would isolate both state and logs explicitly instead of by accident. 🟤 candidate.
+4. **Session-log retention in released builds** (PR #73 review, near-miss, recorded not fixed) — retained logs carry folder paths and error stacks, and no file has a size cap; D5 keeps the newest 10 in every build. Options the BACKLOG 🔵 [2026-10-05] entry already listed: keep only in dev runs (`!app.isPackaged`), or keep only sessions that logged a warning/error; or add a per-file size cap. 🟤 candidate.
 
 ## Residuals for Extract (found while planning — not fixed here)
 
