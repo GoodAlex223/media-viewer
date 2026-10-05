@@ -396,6 +396,10 @@ declarative guard removed a script and its tests.
   by modification time and never touches the current file (§ 6.1), which removes the DST/timezone mis-ordering.
   A system clock set *back* skews mtimes too: files written under the fast clock carry future mtimes that newer
   sessions never outrank. **Amended after PR #73 review round 2**: an mtime more than 5 minutes ahead of the clock
-  sorts as oldest, so those files are pruned first and the previous session survives a relaunch.
+  sorts as oldest, so those files are pruned first and the previous session survives a relaunch — unless that
+  session was itself written under the fast clock and the relaunch falls inside the skew window, in which case its
+  log is the one pruned (PR #73 review round 3). Accepted as the better trade: the loss is bounded to that one log,
+  where name/mtime ordering lost the previous session on every relaunch for as long as the future-dated files
+  lasted. Not taken: also keeping the highest raw mtime — it spends a slot and still loses to any later-dated file.
 - **`SKIP` cannot be set from VS Code's Source Control commit button.** Accepted — the terminal is where a
   false positive is diagnosed.
