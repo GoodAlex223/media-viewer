@@ -31,7 +31,7 @@ Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret sca
 ```
 media_viewer/
 ├── main.js              # Electron main process: IPC handlers, file ops, JXL/CLIP/tournament/bulk-rated/feature-cache IPC
-├── logger.js            # File logger (init/log/warn/error/cleanup/getLogPath) → app.getPath('logs')/media-viewer.log
+├── logger.js            # Session logger (init/log/warn/error/cleanup/getLogPath): one media-viewer-<YYYY-MM-DD_HH-MM-SS>.log per launch in app.getPath('logs'), newest 10 kept, never deleted on quit (no "Session ended" footer = crash/kill) + append-only media-viewer-perf.log. `npm start` → %APPDATA%\media_viewer\logs; E2E (launches main.js, app name "Electron") → %APPDATA%\Electron\logs
 ├── preload.js           # Security bridge (contextBridge → window.electronAPI): file ops, CLIP IPC, tournament IPC, bulk-rated IPC, logError
 ├── media-viewer.js      # Renderer: all UI logic (~9400 lines, MediaViewer class); imports FullscreenManager + TournamentManager
 ├── index.html           # Main HTML entry point

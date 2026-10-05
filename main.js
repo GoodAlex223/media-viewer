@@ -157,6 +157,10 @@ app.whenReady().then(() => {
         originalError(...args);
         logger.error('main', formatArgs(args));
     };
+    // First line through the intercepted console, so every kept session log says which build wrote it.
+    console.log(
+        `Media Viewer ${app.getVersion()} (${app.isPackaged ? 'packaged' : 'dev'}) — session log: ${logger.getLogPath()}`
+    );
 
     createWindow();
 

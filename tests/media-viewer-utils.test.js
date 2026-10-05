@@ -5266,7 +5266,7 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         expect(ctx.tournament.engine.clearHistory).toHaveBeenCalledTimes(1);
         expect(ctx.moveHistory).toEqual([]);
         expect(ctx.showError).toHaveBeenLastCalledWith(expect.stringContaining('c.jpg'));
-        // Finding 5: the OS error behind the permanent discard must reach media-viewer.log, not
+        // Finding 5: the OS error behind the permanent discard must reach the session log, not
         // just console.error (which is not forwarded).
         expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(expect.stringContaining('ENOENT'));
         // Re-rendered so #tournamentUndoBtn re-reads peekUndoKind() and can disable.

@@ -28,6 +28,11 @@ function getElectronWrapperPath() {
     return process.execPath; // node binary
 }
 
+// Launching main.js directly (not the project directory) means Electron reads no package.json, so
+// the app runs as "Electron": its userData — and its session logs — live under %APPDATA%\Electron\,
+// apart from the real app's %APPDATA%\media_viewer\. That separation is what stops an E2E run (one
+// launch per test) from pruning a debugging session's log away (logger.js keeps the newest 10).
+// Keep it if this launch path ever changes.
 function getLaunchArgs() {
     if (process.platform === 'win32') {
         return [join(PROJECT_ROOT, 'main.js')];
