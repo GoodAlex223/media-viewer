@@ -29,7 +29,7 @@ function formatLocalDate(date) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function sessionLogName(date, sequence) {
+function buildSessionLogName(date, sequence) {
     const time = `${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
     const suffix = sequence > 1 ? `-${sequence}` : '';
     return `media-viewer-${formatLocalDate(date)}_${time}${suffix}.log`;
@@ -38,7 +38,7 @@ function sessionLogName(date, sequence) {
 // 'wx' never reuses a file: a second session started in the same second gets -2, -3, …
 function openSessionLog(logDir, date) {
     for (let sequence = 1; sequence <= MAX_SAME_SECOND_SESSIONS; sequence++) {
-        const candidate = path.join(logDir, sessionLogName(date, sequence));
+        const candidate = path.join(logDir, buildSessionLogName(date, sequence));
         try {
             return { fd: fs.openSync(candidate, 'wx'), filePath: candidate };
         } catch (err) {
@@ -47,7 +47,7 @@ function openSessionLog(logDir, date) {
             }
         }
     }
-    throw new Error(`logger: no free session-log name for ${sessionLogName(date, 1)}`);
+    throw new Error(`logger: no free session-log name for ${buildSessionLogName(date, 1)}`);
 }
 
 // Delete all but the newest `keep` session logs, the current one included. Only names matching
@@ -122,7 +122,11 @@ function init(logDir) {
     const session = openSessionLog(logDir, new Date());
     logFd = session.fd;
     logPath = session.filePath;
-    writeEntry('INFO', 'logger', `Session started (pid ${process.pid})`);
+    try {
+        writeEntry('INFO', 'logger', `Session started (pid ${process.pid})`);
+    } catch (_e) {
+        // A failed header (e.g. a full disk) must not stop the app from starting.
+    }
     pruneSessionLogs(logDir, SESSION_LOGS_KEPT, path.basename(logPath));
 }
 

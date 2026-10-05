@@ -3,14 +3,9 @@
 . "$(dirname "$0")/skip.sh"
 check_skip_tokens "secrets docs-index lint-staged vitest"
 
-# Remedy trailer for the two third-party checks; check-secrets.js and check-docs-index.js
-# print their own.
-fail() {
-    echo "pre-commit: $1 failed — fix it, or waive this check only: SKIP=$1 git commit …" >&2
-    exit 1
-}
-
+# check_failed (skip.sh) adds the remedy for the two third-party checks; check-secrets.js and
+# check-docs-index.js print their own.
 skipped secrets || node scripts/check-secrets.js
 skipped docs-index || node scripts/check-docs-index.js
-skipped lint-staged || npx lint-staged || fail lint-staged
-skipped vitest || npx vitest run || fail vitest
+skipped lint-staged || npx lint-staged || check_failed lint-staged
+skipped vitest || npx vitest run || check_failed vitest

@@ -42,7 +42,8 @@ describe('decidePreloadGuard — which shell commands must ask first', () => {
     });
 });
 
-describe('guard-preload-bash CLI — run as Claude Code runs it', () => {
+// Each test spawns node: give it room above vitest's 5 s default under Windows spawn latency.
+describe('guard-preload-bash CLI — run as Claude Code runs it', { timeout: 20000 }, () => {
     const runHook = (stdin) => spawnSync(process.execPath, [HOOK], { input: stdin, encoding: 'utf8' });
     const call = (toolName, command) =>
         JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: toolName, tool_input: { command } });

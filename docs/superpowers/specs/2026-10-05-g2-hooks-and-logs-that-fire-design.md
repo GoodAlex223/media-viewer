@@ -257,6 +257,8 @@ if [ "$decision" = "RUN" ] && ! skipped e2e; then
 fi
 ```
 
+**Amended after PR #73 review**: `fail` became `check_failed` in `skip.sh` — it keeps the failing exit status and, for 127 (command not found), says to run `npm install` instead of suggesting `SKIP` (an `exit 1` had also hidden Husky's own 127 message); and spaces now separate `SKIP` tokens like commas (`tr -d ' '` had fused `docs-index secrets` into one silently-unmatched token).
+
 `fail` trailers only for the two third-party checks; `check-secrets.js` and `check-docs-index.js` print their
 own remedy, and a second message would only repeat it.
 

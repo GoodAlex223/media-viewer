@@ -1387,6 +1387,7 @@ EOF
 - **2026-10-05 — Task 3** `7eb1b9b` — `SKIP` probe: no SKIP and `SKIP=docs-index` both blocked by the staged fake secret; `SKIP=secrets` waived only the scan (other three ran, 867 tests); typo token warned. (Plan's Expected for `SKIP=docs-index` named a warning that cannot print — `secrets` aborts first.)
 - **2026-10-05 — Task 4** `427b8ee` — local-date test RED on this UTC+3 machine (`10-05` vs `10-06`) before the fix. Live: `npm start` → `%APPDATA%\media_viewer\logs` (F5 confirmed) with header + build line; clean close (WM_CLOSE) kept the file with its footer; relaunch kept it; `taskkill /F` left no footer; E2E `app-launch` (5 tests) wrote 5 dated files to `Electron\logs` only.
 - **2026-10-05 — Task 5** `1f2ba1a` — WEEKLY + BACKLOG log-location note corrected. Unit tests 837 → 874; lint 0 errors (2 pre-existing warnings in untouched test files).
+- **2026-10-05 — PR #73 review** — `3dbcbc5`: prune never deletes the current session log and orders by mtime (reproduced: 10 future-stamped logs made `init()` unlink its own file); stale ESLint header. Then the near-misses: `SKIP` spaces separate tokens, `fail` → `check_failed` in `skip.sh` (keeps the status; 127 → "run npm install"), `init()` header write guarded, `sessionLogName` → `buildSessionLogName`, 20 s timeouts on the spawning test blocks, CLAUDE.md wording (`rules/` reserved; mode claims limited to what the docs and the probes support; `logPerf` listed). The code blocks above are the plan as written; `fail()` and `sessionLogName` there are superseded.
 
 ## Key Discoveries
 

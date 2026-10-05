@@ -18,7 +18,8 @@ function runSkip(script, skipValue) {
 const verdict = (token, skipValue) =>
     runSkip(`if skipped ${token}; then echo SKIPPED; else echo RAN; fi`, skipValue).stdout.trim();
 
-describe.skipIf(!shAvailable)('.husky/skip.sh (needs sh on PATH — Git Bash on Windows)', () => {
+// Each test spawns sh: give it room above vitest's 5 s default under Windows spawn latency.
+describe.skipIf(!shAvailable)('.husky/skip.sh (needs sh on PATH — Git Bash on Windows)', { timeout: 20000 }, () => {
     it('runs every check when SKIP is unset or empty', () => {
         expect(verdict('secrets')).toBe('RAN');
         expect(verdict('secrets', '')).toBe('RAN');
@@ -34,6 +35,25 @@ describe.skipIf(!shAvailable)('.husky/skip.sh (needs sh on PATH — Git Bash on 
         expect(verdict('secrets', 'docs-index, secrets')).toBe('SKIPPED');
         expect(verdict('docs-index', 'docs-index, secrets')).toBe('SKIPPED');
         expect(verdict('vitest', 'docs-index, secrets')).toBe('RAN');
+    });
+
+    it('accepts a space-separated list too (PR #73 review: it used to collapse into one token)', () => {
+        expect(verdict('secrets', 'docs-index secrets')).toBe('SKIPPED');
+        expect(verdict('docs-index', 'docs-index secrets')).toBe('SKIPPED');
+        expect(verdict('vitest', 'docs-index secrets')).toBe('RAN');
+    });
+
+    it('check_failed keeps the failing exit status and names the SKIP token', () => {
+        const result = runSkip('(exit 1) || check_failed vitest', undefined);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('vitest failed — fix it, or waive this check only: SKIP=vitest');
+    });
+
+    it('check_failed reports a missing command (127) instead of suggesting SKIP', () => {
+        const result = runSkip('(exit 127) || check_failed lint-staged', undefined);
+        expect(result.status).toBe(127);
+        expect(result.stderr).toContain('lint-staged could not run — command not found (exit 127)');
+        expect(result.stderr).not.toContain('SKIP=');
     });
 
     it('matches whole tokens only — never a prefix, a longer token, or another case', () => {

@@ -147,6 +147,16 @@ describe('logger', () => {
             expect(sessionLogs()).toHaveLength(10);
         });
 
+        it('still starts when the header line cannot be written (PR #73 review)', () => {
+            vi.spyOn(fs, 'writeSync').mockImplementationOnce(() => {
+                const err = new Error('ENOSPC: no space left on device');
+                err.code = 'ENOSPC';
+                throw err;
+            });
+            expect(() => logger.init(testLogDir)).not.toThrow();
+            expect(fs.existsSync(logger.getLogPath())).toBe(true);
+        });
+
         it('still starts the session when an old log cannot be deleted', () => {
             vi.useFakeTimers({ toFake: ['Date'] });
             for (let s = 0; s < 10; s++) {

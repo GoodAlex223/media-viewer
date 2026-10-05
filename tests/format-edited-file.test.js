@@ -76,7 +76,9 @@ describe('planFormat — which edited file gets formatted', () => {
     });
 });
 
-describe('format-edited-file CLI — run as Claude Code runs it', () => {
+// Each test spawns node (and Prettier): above vitest's 5 s default under Windows spawn latency
+// (the check-secrets timeout flake, BACKLOG [2026-09-24]).
+describe('format-edited-file CLI — run as Claude Code runs it', { timeout: 20000 }, () => {
     const created = [];
     const probe = (relPath, content) => {
         const abs = path.join(ROOT, relPath);
