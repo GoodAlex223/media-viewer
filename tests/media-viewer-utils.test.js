@@ -6199,14 +6199,14 @@ describe('updateSpecialButtonsState tooltips', () => {
     }
 
     // Real helper wiring, not a stub: the suffix logic is what these assertions are about.
-    function ctxWith({ folder, compareOverrides = {} } = {}) {
+    function ctxWith({ folder, compareOverrides = {}, singleOverrides = {} } = {}) {
         return {
             customSpecialFolder: folder,
             specialBtn: btn(),
             leftSpecialBtn: btn(),
             rightSpecialBtn: btn(),
             shortcuts: {
-                single: { like: 'KeyQ' },
+                single: Object.assign({ like: 'KeyQ', special: 'Digit1' }, singleOverrides),
                 compare: Object.assign({ leftSpecial: 'Digit1', rightSpecial: 'Digit2' }, compareOverrides),
             },
             keyDisplayName,
@@ -6221,10 +6221,17 @@ describe('updateSpecialButtonsState tooltips', () => {
         expect(ctx.rightSpecialBtn.title).toBe('Move right to special folder (2)');
     });
 
-    // Ruled at design time: single mode has no special binding, so its tooltip stays bare.
-    // This falls out of the derivation rather than being special-cased.
-    it('leaves the single-mode button bare, since single has no special binding', () => {
+    // G1 binds single-mode special to Digit1, so the single button carries a suffix too.
+    // (Hand-built ctx: these two pass before Task 6 — they replace a test whose premise became
+    // false; the RED evidence for the binding is the DEFAULT_SHORTCUTS tests.)
+    it('shows the single-mode special hotkey on the single button', () => {
         const ctx = ctxWith({ folder: 'C:/special' });
+        updateSpecialButtonsState.call(ctx);
+        expect(ctx.specialBtn.title).toBe('Move to special folder (1)');
+    });
+
+    it('leaves the single-mode button bare when special is unbound', () => {
+        const ctx = ctxWith({ folder: 'C:/special', singleOverrides: { special: null } });
         updateSpecialButtonsState.call(ctx);
         expect(ctx.specialBtn.title).toBe('Move to special folder');
     });

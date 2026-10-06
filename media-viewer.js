@@ -9,6 +9,9 @@ const DEFAULT_SHORTCUTS = {
         next: 'KeyS',
         previous: 'KeyA',
         undo: 'Ctrl+KeyA',
+        // Additive (G1), matching compare/tournament's leftSpecial: no loadShortcuts version bump —
+        // _mergeModeShortcuts leaves it unbound if a stored single-mode remap already holds Digit1.
+        special: 'Digit1',
     },
     compare: {
         leftLike: 'KeyQ',
@@ -47,6 +50,7 @@ const ACTION_LABELS = {
     next: 'Next media',
     previous: 'Previous media',
     undo: 'Undo last move',
+    special: 'Move to special folder',
     leftLike: 'Left media Like',
     leftDislike: 'Left media Dislike',
     rightLike: 'Right media Like',
@@ -491,8 +495,7 @@ class MediaViewer {
 
     // The " (1)" a special-button tooltip carries, derived from the live binding rather than
     // hardcoded, so a remap in the F1 panel reaches the button. Returns '' when the action is
-    // unbound in that mode — which is how single mode's tooltip stays bare without a special
-    // case, since shortcuts.single has no special action at all.
+    // unbound in that mode (a default that yielded to a user remap, or an unknown mode).
     _specialShortcutSuffix(mode, action) {
         const key = this.shortcuts?.[mode]?.[action];
         return key ? ` (${this.keyDisplayName(key)})` : '';
@@ -505,7 +508,7 @@ class MediaViewer {
         const enabled = !!this.customSpecialFolder;
         const tooltip = enabled ? 'Move to special folder' : 'Configure special folder in Settings (F1)';
 
-        // Single mode button — single has no special binding, so the suffix resolves to ''.
+        // Single mode button — suffix from single's `special` binding (Digit1 by default).
         if (this.specialBtn) {
             this.specialBtn.disabled = !enabled;
             this.specialBtn.title = enabled ? tooltip + this._specialShortcutSuffix('single', 'special') : tooltip;
@@ -9594,9 +9597,14 @@ class MediaViewer {
             bothBad: () => this.handleBothBad(),
             bothWin: () => this.handleTournamentDraw('win'),
             bothLose: () => this.handleTournamentDraw('lose'),
+            // Single mode only; the reverse map produces `special` nowhere else, and the mode check
+            // is the second line of defence. Same guarded path as #specialBtn's click.
+            special: () => {
+                if (!this.isCompareMode && !this.isTournamentMode) this.moveToSpecialFolder();
+            },
             // Bound in compare and tournament only. Tournament needs the engine-sync wrapper;
             // compare goes straight to the move, the same path #leftSpecialBtn's click takes.
-            // Single mode has no binding, so the reverse map never produces these there —
+            // Single mode binds `special` instead, so the reverse map never produces these there —
             // the mode check is the second line of defence, not the only one.
             leftSpecial: () => {
                 if (this.isTournamentMode) this.handleTournamentSpecial('left');

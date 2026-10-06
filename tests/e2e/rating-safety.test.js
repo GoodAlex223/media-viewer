@@ -94,6 +94,15 @@ test.describe('Held keys fire once (G1)', () => {
         expect(await errors(page)).toEqual([]);
     });
 
+    test('a held 1 in single mode moves exactly one file to the special folder', async () => {
+        await holdKey(page, 'Digit1');
+        await page.waitForTimeout(1500);
+        await waitForIdle(page);
+
+        expect(await countFiles(tmpFixtures.specialDir)).toBe(1);
+        expect(await errors(page)).toEqual([]);
+    });
+
     // The must-not-fire half: navigation is the one action allowed to repeat. Passes before and
     // after the fix — its job is to catch an over-broad filter.
     test('a held Next still auto-repeats', async () => {
