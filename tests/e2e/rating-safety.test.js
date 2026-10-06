@@ -103,6 +103,21 @@ test.describe('Held keys fire once (G1)', () => {
         expect(await errors(page)).toEqual([]);
     });
 
+    // Final review (Critical): typing into a form field must never fire a shortcut. The tournament
+    // Rounds box is open while the dispatch mode is still `single`, where 1 is now `special`.
+    test('typing 10 into the tournament Rounds box moves no file', async () => {
+        await page.evaluate(() => window.mediaViewer.switchMode('tournament'));
+        const rounds = page.locator('#tournamentRoundsSelect');
+        await rounds.waitFor({ state: 'visible' });
+        await rounds.fill('');
+        await rounds.focus();
+        await page.keyboard.type('10');
+        await page.waitForTimeout(1000);
+
+        expect(await countFiles(tmpFixtures.specialDir)).toBe(0);
+        await expect(rounds).toHaveValue('10');
+    });
+
     // The must-not-fire half: navigation is the one action allowed to repeat. Passes before and
     // after the fix — its job is to catch an over-broad filter.
     test('a held Next still auto-repeats', async () => {

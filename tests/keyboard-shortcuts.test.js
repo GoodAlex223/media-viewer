@@ -1090,3 +1090,33 @@ describe('resetShortcuts', () => {
         expect(ctx.updateRatingButtonsState).toHaveBeenCalledOnce();
     });
 });
+
+// G1 final review (Critical): the document keydown listener dispatched bound keys typed into form
+// fields. With single.special = Digit1, typing "10" into the tournament Rounds box (open while the
+// dispatch mode is still `single`) moved the displayed file to the special folder.
+describe('_isTextEntryTarget (form fields never dispatch shortcuts, G1)', () => {
+    const _isTextEntryTarget = extractMethod('_isTextEntryTarget');
+
+    it('treats text-like inputs, textareas, selects and contenteditable as text entry', () => {
+        for (const type of ['number', 'text', 'search', '']) {
+            expect(_isTextEntryTarget.call({}, { tagName: 'INPUT', type }), type).toBe(true);
+        }
+        expect(_isTextEntryTarget.call({}, { tagName: 'TEXTAREA' })).toBe(true);
+        expect(_isTextEntryTarget.call({}, { tagName: 'SELECT' })).toBe(true);
+        expect(_isTextEntryTarget.call({}, { tagName: 'DIV', isContentEditable: true })).toBe(true);
+    });
+
+    // A clicked slider or checkbox keeps focus; letter shortcuts must still work there, as before.
+    it('leaves sliders, checkboxes, buttons and ordinary elements to the shortcuts', () => {
+        for (const type of ['range', 'checkbox', 'radio', 'button']) {
+            expect(_isTextEntryTarget.call({}, { tagName: 'INPUT', type }), type).toBe(false);
+        }
+        expect(_isTextEntryTarget.call({}, { tagName: 'BUTTON' })).toBe(false);
+        expect(_isTextEntryTarget.call({}, { tagName: 'BODY' })).toBe(false);
+        expect(_isTextEntryTarget.call({}, null)).toBe(false);
+    });
+
+    it('is consulted by both keydown branches before shortcut dispatch', () => {
+        expect(source.match(/this\._isTextEntryTarget\(e\.target\)/g)).toHaveLength(2);
+    });
+});

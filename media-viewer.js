@@ -2228,6 +2228,8 @@ class MediaViewer {
                 const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
                 const keyStr = this.buildKeyString(e);
                 const action = this.shortcutReverseMap[mode]?.[keyStr];
+                // Ctrl+A in a form field selects its text; it must not undo a move.
+                if (this._isTextEntryTarget(e.target)) return;
                 if (this._isSuppressedRepeat(e, action)) {
                     e.preventDefault();
                     return;
@@ -2276,6 +2278,11 @@ class MediaViewer {
                 this.toggleHelp();
                 return;
             }
+
+            // Escape and F1 above stay global. Everything below is a letter or digit that belongs to
+            // the field when one has focus: typing "10" into the tournament Rounds box — open while
+            // the dispatch mode is still 'single', where 1 is `special` — moved a file (G1 review).
+            if (this._isTextEntryTarget(e.target)) return;
 
             if (!this.isCompareMode) {
                 // Single mode fixed utilities
@@ -9565,6 +9572,18 @@ class MediaViewer {
     // text or number field must keep repeating.
     _isSuppressedRepeat(e, action) {
         return Boolean(action) && e.repeat === true && !REPEATABLE_ACTIONS.has(action);
+    }
+
+    // True when keystrokes belong to a form field rather than to the shortcuts: text-like inputs,
+    // textareas, selects, contenteditable. Sliders, checkboxes and buttons keep focus after a click,
+    // and letter shortcuts must keep working there, as they always have.
+    _isTextEntryTarget(target) {
+        if (!target) return false;
+        if (target.isContentEditable === true) return true;
+        const tag = target.tagName;
+        if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+        const nonText = ['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'file', 'color', 'image'];
+        return tag === 'INPUT' && !nonText.includes(target.type);
     }
 
     buildKeyString(e) {
