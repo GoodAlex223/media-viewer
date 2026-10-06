@@ -6245,3 +6245,56 @@ describe('updateSpecialButtonsState tooltips', () => {
         expect(ctx.leftSpecialBtn.disabled).toBe(true);
     });
 });
+
+describe('forceVideoCleanup releases only its own video (G1 D5)', () => {
+    const forceVideoCleanup = extractAsyncMethod('forceVideoCleanup');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = {}; // the method probes window.gc
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        globalThis.window = origWindow;
+    });
+
+    function fakeVideo() {
+        return {
+            tagName: 'VIDEO',
+            parentNode: {},
+            currentTime: 3,
+            pause: vi.fn(),
+            load: vi.fn(),
+            removeAttribute: vi.fn(),
+            removeEventListener: vi.fn(),
+            remove: vi.fn(),
+        };
+    }
+
+    it('nulls currentMedia when it is still the video it cleaned', async () => {
+        const video = fakeVideo();
+        const ctx = { currentMedia: video, videoEventListeners: [], isBeingCleaned: false };
+        const done = forceVideoCleanup.call(ctx);
+        await vi.advanceTimersByTimeAsync(100);
+        await done;
+        expect(ctx.currentMedia).toBeNull();
+        expect(video.remove).toHaveBeenCalledOnce();
+        expect(ctx.isBeingCleaned).toBe(false);
+    });
+
+    // The held-Like end state (spec F3): a render installs the next media during the 100 ms wait.
+    it('leaves alone a currentMedia that a render installed during its wait', async () => {
+        const video = fakeVideo();
+        const next = { tagName: 'IMG' };
+        const ctx = { currentMedia: video, videoEventListeners: [], isBeingCleaned: false };
+        const done = forceVideoCleanup.call(ctx);
+        ctx.currentMedia = next;
+        await vi.advanceTimersByTimeAsync(100);
+        await done;
+        expect(ctx.currentMedia).toBe(next);
+        expect(video.remove).toHaveBeenCalledOnce();
+    });
+});

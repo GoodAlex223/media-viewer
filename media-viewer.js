@@ -1801,7 +1801,13 @@ class MediaViewer {
             video.remove();
         }
 
-        this.currentMedia = null;
+        // Release only our own reference. By the end of the 100 ms wait a render may already have
+        // installed the NEXT media; nulling that one left its load handler (which requires
+        // currentMedia to be its element) ignoring the event, so isLoading never cleared — the
+        // held-Like blank view with dead controls (G1 spec F3, reproduced in Phase 0).
+        if (this.currentMedia === video) {
+            this.currentMedia = null;
+        }
         this.isBeingCleaned = false;
 
         // Force garbage collection if available
