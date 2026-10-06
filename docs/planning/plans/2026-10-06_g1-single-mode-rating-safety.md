@@ -5,8 +5,8 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G1 (🔵 🏆, 7 SP → ~8 SP); TODO 🔴 [2026-10-04] "Stop a held Like key from firing overlapping file moves in single mode"; BACKLOG 🔵 [2026-10-04] "Add a special-folder hotkey to single mode", "Fix the single-mode Like/Dislike tooltips that show old hotkeys"
 **Spec**: [2026-10-06-g1-single-mode-rating-safety-design.md](../../superpowers/specs/2026-10-06-g1-single-mode-rating-safety-design.md) (committed `e385e0c`, user-approved 2026-10-06)
 **Created**: 2026-10-06
-**Status**: Planned — awaiting user review
-**Last Updated**: 2026-10-06
+**Status**: Implemented — Tasks 1–7 + final-review fix committed; awaiting push / PR
+**Last Updated**: 2026-10-06 (execution + final review)
 **Branch**: `g1-single-mode-rating-safety`
 
 **Goal:** A held rating key fires one action, two file actions never run at once, the held-Like blank-view / dead-controls end state is reproduced and explained (or bounded), and single mode gets a `1` special hotkey plus like/dislike tooltips derived from the live bindings.
@@ -88,12 +88,12 @@ Task 1 (Phase 0) gates everything: a **refuted** hypothesis stops the plan for a
 - Consumes: the E2E helpers in `tests/e2e/helpers/electron-app.js` (`launchApp`, `closeApp`, `loadFolder`, `seedLocalStorage`, `createTempFixtureDir`).
 - Produces: § 11 outcome (**confirmed** / **refuted** / **not reproduced**) and the value `SLOW_NEXT` — the fixture name that, placed right after the video, produced the stuck state (`'normal-320x240.png'`, or `'big.jpg'` if the large generated image was needed). Task 4 uses `SLOW_NEXT`.
 
-- [ ] **Step 1: Confirm the tree is clean and nothing has been fixed yet**
+- [x] **Step 1: Confirm the tree is clean and nothing has been fixed yet**
 
 Run: `git status --short && git log --oneline -1`
 Expected: empty status; HEAD is `e385e0c` or the plan commit on top of it. `media-viewer.js` must be unmodified — the probe measures the shipped code.
 
-- [ ] **Step 2: Write the probe**
+- [x] **Step 2: Write the probe**
 
 Create `tests/e2e/__probe-held-like.test.js`:
 
@@ -256,17 +256,17 @@ for (const run of [
 }
 ```
 
-- [ ] **Step 3: Run runs (a) and (b)**
+- [x] **Step 3: Run runs (a) and (b)**
 
 Run: `npx playwright test tests/e2e/__probe-held-like.test.js -g "a-images-only|b-video-then-320" --reporter=list`
 Expected: both tests pass their sentinels and print one `PROBE-…` JSON line each. A failed sentinel means the probe did not exercise the target (no repeat events reached the page, or only one move started) — fix the probe, do not interpret its output.
 
-- [ ] **Step 4: Run (b2) only if (b) did not stick**
+- [x] **Step 4: Run (b2) only if (b) did not stick**
 
 "Stuck" means `isLoading === true` or `navInProgress === true` with `likeStillActs === false`. If (b) is stuck, skip this step. Otherwise:
 Run: `npx playwright test tests/e2e/__probe-held-like.test.js -g "b2-video-then-big" --reporter=list`
 
-- [ ] **Step 5: Classify the outcome (spec § 4)**
+- [x] **Step 5: Classify the outcome (spec § 4)**
 
 | Outcome | Condition |
 | --- | --- |
@@ -276,7 +276,7 @@ Run: `npx playwright test tests/e2e/__probe-held-like.test.js -g "b2-video-then-
 
 Set `SLOW_NEXT` = `'normal-320x240.png'` if (b) stuck, `'big.jpg'` if only (b2) did, else `'normal-320x240.png'` (not reproduced — the Task 4 E2E still guards the one-file / no-`ENOENT` outcome).
 
-- [ ] **Step 6: Delete the probe and write § 11**
+- [x] **Step 6: Delete the probe and write § 11**
 
 Run: `rm tests/e2e/__probe-held-like.test.js && git status --short`
 Expected: empty (the probe was never tracked).
@@ -297,7 +297,7 @@ Replace the body of spec § 11 ("Not yet run — …") with:
 
 Fill every `<…>` from the `PROBE-…` lines. Also change the spec's `**Status**:` line to `Approved 2026-10-06; § 11 Phase 0 recorded`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-10-06-g1-single-mode-rating-safety-design.md
@@ -319,7 +319,7 @@ Log the outcome and `SLOW_NEXT` in this plan's Progress Log. **If Refuted: stop 
 **Interfaces:**
 - Produces: module constant `REPEATABLE_ACTIONS: Set<string>`; method `_isSuppressedRepeat(e: {repeat: boolean}, action: string|null|undefined): boolean`. E2E helpers in `tests/e2e/rating-safety.test.js` reused by Tasks 4–6: `holdKey(page, key, repeats = 20)`, `waitForIdle(page)`, `spyOnErrors(page)`, `errors(page)`, `countFiles(dir)`.
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 In `tests/keyboard-shortcuts.test.js`, add below `extractActionLabels()` (~L39):
 
@@ -377,12 +377,12 @@ describe('_isSuppressedRepeat (held-key filter, G1)', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/keyboard-shortcuts.test.js`
 Expected: FAIL — `Could not find method: _isSuppressedRepeat` (the describe throws while collecting).
 
-- [ ] **Step 3: Implement the constant and the method**
+- [x] **Step 3: Implement the constant and the method**
 
 In `media-viewer.js`, directly after the `ACTION_LABELS` object (~L60):
 
@@ -404,7 +404,7 @@ Directly above `buildKeyString(e) {` (~L9460):
     }
 ```
 
-- [ ] **Step 4: Call it from both keydown branches**
+- [x] **Step 4: Call it from both keydown branches**
 
 Empty-state branch (~L2184), replace:
 
@@ -442,12 +442,12 @@ with:
             if (action && !this.isLoading) {
 ```
 
-- [ ] **Step 5: Run the unit tests**
+- [x] **Step 5: Run the unit tests**
 
 Run: `npx vitest run tests/keyboard-shortcuts.test.js`
 Expected: PASS (all, including the five new).
 
-- [ ] **Step 6: Write the E2E file with the held-Like and held-Next tests**
+- [x] **Step 6: Write the E2E file with the held-Like and held-Next tests**
 
 Create `tests/e2e/rating-safety.test.js`:
 
@@ -563,17 +563,17 @@ test.describe('Held keys fire once (G1)', () => {
 });
 ```
 
-- [ ] **Step 7: Prove the held-Like test is RED on the unfixed code**
+- [x] **Step 7: Prove the held-Like test is RED on the unfixed code**
 
 Run: `git stash push media-viewer.js && npx playwright test tests/e2e/rating-safety.test.js --reporter=list; git stash pop`
 Expected: `a held Like moves exactly one file` FAILS (`likeDir` > 1 and/or `ENOENT` errors — matching Phase 0 run (a)); `a held Next still auto-repeats` PASSES. Record both in the Progress Log. If the held-Like test passes on the unfixed code, stop and find out why.
 
-- [ ] **Step 8: Run the E2E file on the fixed code**
+- [x] **Step 8: Run the E2E file on the fixed code**
 
 Run: `npx playwright test tests/e2e/rating-safety.test.js --reporter=list`
 Expected: 2 passed.
 
-- [ ] **Step 9: Document the rule in CLAUDE.md**
+- [x] **Step 9: Document the rule in CLAUDE.md**
 
 In `CLAUDE.md` § Detected Patterns → **Keyboard Shortcuts**, append a bullet after the `loadShortcuts()` bullet (~L169):
 
@@ -581,7 +581,7 @@ In `CLAUDE.md` § Detected Patterns → **Keyboard Shortcuts**, append a bullet 
 - Key auto-repeat: both keydown branches (main and empty-state) drop an `e.repeat` event for every bound action outside `REPEATABLE_ACTIONS` (`next`, `previous`) via `_isSuppressedRepeat(e, action)`, calling `preventDefault` — a held rating key used to move files at the OS repeat rate (G1). An unbound key is never suppressed (a held key in a Settings field keeps repeating). A burst of discrete presses or clicks (`repeat: false`) is the in-flight guard's job, not this filter's.
 ```
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add media-viewer.js tests/keyboard-shortcuts.test.js tests/e2e/rating-safety.test.js CLAUDE.md
@@ -600,7 +600,7 @@ git commit -m "fix(g1): a held key fires bound actions once — repeat only for 
 - Consumes: nothing new.
 - Produces: `forceVideoCleanup()` contract — nulls `this.currentMedia` only when it is still the video captured at entry.
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 Append to `tests/media-viewer-utils.test.js`:
 
@@ -659,12 +659,12 @@ describe('forceVideoCleanup releases only its own video (G1 D5)', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify the second test fails**
+- [x] **Step 2: Run to verify the second test fails**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "forceVideoCleanup releases only"`
 Expected: 1 failed (`expected null to be { tagName: 'IMG' }`), 1 passed.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `forceVideoCleanup`, replace:
 
@@ -696,12 +696,12 @@ with (pick the bracketed phrase that matches Task 1's outcome — `reproduced in
         this.isBeingCleaned = false;
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "forceVideoCleanup releases only"`
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js
@@ -722,7 +722,7 @@ git commit -m "fix(g1): forceVideoCleanup no longer nulls the next render's medi
 - Consumes: E2E helpers from Task 2; `SLOW_NEXT` from Task 1.
 - Produces: instance field `_fileOpInFlight: boolean` (constructor `false`); contract — a guarded method returns immediately when it is `true`, otherwise sets it synchronously before its first `await` and clears it in `finally`. Module-level test helper `gatedApi({ moveResult } = {}) → { api, drain(...calls) }` in `tests/media-viewer-utils.test.js`, reused by Task 5.
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 Append to `tests/media-viewer-utils.test.js`:
 
@@ -949,12 +949,12 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "_fileOpInFlight — one file action"`
 Expected **FAIL (8)**: holds-the-flag (`expected false to be true`); both second-call tests (`moveFile` called 2 times); special-while-like (2 calls); refuses-with-a-notice (`'No moves to undo'` shown instead); undo-during-a-like (the restore runs — 2 calls); holds-the-flag-during-restore (`expected false to be true`); navigation (`showMedia` called). Expected **PASS on unfixed code, by construction (3)**: the three "releases the flag after …" tests — `guardCtx` starts the flag at `false` and unfixed code never writes it. They pin the `finally` once the holds-the-flag tests prove the flag is set. Record the per-test result in the Progress Log.
 
-- [ ] **Step 3: Add the field**
+- [x] **Step 3: Add the field**
 
 In the constructor, after `this.isBeingCleaned = false; // Flag to prevent error notifications during cleanup` (~L94):
 
@@ -966,7 +966,7 @@ In the constructor, after `this.isBeingCleaned = false; // Flag to prevent error
         this._fileOpInFlight = false;
 ```
 
-- [ ] **Step 4: Guard navigation**
+- [x] **Step 4: Guard navigation**
 
 `nextMedia` (~L1398): `if (this.isLoading || this.mediaNavigationInProgress) return;` →
 
@@ -988,7 +988,7 @@ In the constructor, after `this.isBeingCleaned = false; // Flag to prevent error
         }
 ```
 
-- [ ] **Step 5: Guard `moveCurrentFile`**
+- [x] **Step 5: Guard `moveCurrentFile`**
 
 Replace the head:
 
@@ -1058,7 +1058,7 @@ with:
 
 Save; the formatter hook re-indents the body one level. Confirm with `git diff -w media-viewer.js` that only the guard lines changed in this method.
 
-- [ ] **Step 6: Guard `moveToSpecialFolder`**
+- [x] **Step 6: Guard `moveToSpecialFolder`**
 
 Replace:
 
@@ -1108,7 +1108,7 @@ with:
     // New method for thorough video cleanup before file operations
 ```
 
-- [ ] **Step 7: Guard `handleCancel`**
+- [x] **Step 7: Guard `handleCancel`**
 
 Replace the head:
 
@@ -1185,12 +1185,12 @@ with:
     switchToSingleModeUI() {
 ```
 
-- [ ] **Step 8: Run the unit suite**
+- [x] **Step 8: Run the unit suite**
 
 Run: `npx vitest run`
 Expected: all pass — the new describe and every pre-existing `moveCurrentFile` / `handleCancel` / `moveToSpecialFolder` test (their contexts lack `_fileOpInFlight`; `undefined` is falsy, then `finally` writes `false`).
 
-- [ ] **Step 9: Write the E2E tests**
+- [x] **Step 9: Write the E2E tests**
 
 Append to `tests/e2e/rating-safety.test.js` (set `SLOW_NEXT` from Task 1):
 
@@ -1314,17 +1314,17 @@ test.describe('One file action at a time (G1)', () => {
         await writeFile(join(tmpFixtures.dir, 'big.jpg'), Buffer.from(b64, 'base64'));
 ```
 
-- [ ] **Step 10: Prove both E2Es are RED without the guard**
+- [x] **Step 10: Prove both E2Es are RED without the guard**
 
 Run: `git stash push media-viewer.js && npx playwright test tests/e2e/rating-safety.test.js -g "One file action" --reporter=list; git stash pop`
 Expected (the stash removes only this task's uncommitted guard; Tasks 2–3 stay applied, which is the right baseline — clicks and a discrete Ctrl+A bypass the repeat filter, and the narrowing alone does not stop overlapping moves): the burst test FAILS (`ENOENT` errors and/or `likeDir` ≠ 1 and/or a stuck flag — `waitForIdle` timing out counts); the undo test FAILS (no notice, and `red-1x1.png` restored out of `liked`). Record both. A pass here means the test does not exercise the guard — stop and find out why.
 
-- [ ] **Step 11: Run the whole E2E file on the fixed code, three times**
+- [x] **Step 11: Run the whole E2E file on the fixed code, three times**
 
 Run: `for i in 1 2 3; do npx playwright test tests/e2e/rating-safety.test.js --reporter=line || break; done`
 Expected: 4 passed, three runs in a row.
 
-- [ ] **Step 12: Document the guard in CLAUDE.md**
+- [x] **Step 12: Document the guard in CLAUDE.md**
 
 In § Detected Patterns → **Async Patterns**, append:
 
@@ -1338,7 +1338,7 @@ In § Code Conventions → **Testing (E2E — Playwright)**, append:
 - A file action started while another holds `_fileOpInFlight` is refused (undo shows a notice). An E2E that chains moves must let the previous one finish first — `waitForIdle` (no `isLoading`/`mediaNavigationInProgress`) after its render is enough, since the flag drops before the render it starts settles.
 ```
 
-- [ ] **Step 13: Commit**
+- [x] **Step 13: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js tests/e2e/rating-safety.test.js CLAUDE.md
@@ -1359,7 +1359,7 @@ git commit -m "fix(g1): one file action at a time — single-mode moves, undo, n
 - Consumes: `_fileOpInFlight` (Task 4); `gatedApi` (Task 4, module scope); E2E helpers (Task 2).
 - Produces: `moveComparePair` and `applyBulkRating` join the guarded set.
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 Append to `tests/media-viewer-utils.test.js`:
 
@@ -1488,12 +1488,12 @@ describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "compare pair moves and bulk rating"`
 Expected **FAIL (4)**: Q-then-E (more than two `moveFile` calls); refused-while-in-flight (`checkFolderExists` called); second bulk rating (two saves, two history entries); bulk refused-while-in-flight (`saveBulkRatedFile` called). Expected **PASS by construction (1)**: "releases the flag after a failed move" — same reason as Task 4 Step 2.
 
-- [ ] **Step 3: Guard `moveComparePair`**
+- [x] **Step 3: Guard `moveComparePair`**
 
 Replace the head:
 
@@ -1554,7 +1554,7 @@ with:
     async cleanupCompareMedia(side) {
 ```
 
-- [ ] **Step 4: Guard `applyBulkRating`**
+- [x] **Step 4: Guard `applyBulkRating`**
 
 Replace:
 
@@ -1623,12 +1623,12 @@ with:
     async handleBothGood() {
 ```
 
-- [ ] **Step 5: Run the unit suite**
+- [x] **Step 5: Run the unit suite**
 
 Run: `npx vitest run`
 Expected: all pass, including the pre-existing `applyBulkRating` tests and the source-order test that reads `methodSource('moveComparePair')`.
 
-- [ ] **Step 6: Write the compare E2E**
+- [x] **Step 6: Write the compare E2E**
 
 Append to `tests/e2e/rating-safety.test.js`:
 
@@ -1694,17 +1694,17 @@ test.describe('Compare: one pair move at a time (G1)', () => {
 });
 ```
 
-- [ ] **Step 7: Prove the compare E2E is RED without this task's guard**
+- [x] **Step 7: Prove the compare E2E is RED without this task's guard**
 
 Run: `git stash push media-viewer.js && npx playwright test tests/e2e/rating-safety.test.js -g "Compare: one pair" --reporter=list; git stash pop`
 Expected: FAIL (both files in `liked`, phantom names listed, and/or `Failed to move files` errors). Record it. A pass means E arrived after the first pair move settled — find out why before continuing.
 
-- [ ] **Step 8: Run the E2E file three times**
+- [x] **Step 8: Run the E2E file three times**
 
 Run: `for i in 1 2 3; do npx playwright test tests/e2e/rating-safety.test.js --reporter=line || break; done`
 Expected: 5 passed, three runs in a row.
 
-- [ ] **Step 9: Re-verify that no guarded method calls another**
+- [x] **Step 9: Re-verify that no guarded method calls another**
 
 Run: `grep -n "this\.\(moveCurrentFile\|moveToSpecialFolder\|moveComparePair\|applyBulkRating\|handleCancel\)(" media-viewer.js`
 Expected: callers only in `handleLike`/`handleDislike`, the four compare handlers, `handleTournamentSpecial`, `handleBothGood`/`handleBothBad`, `executeAction`, and button/empty-state listeners — **none inside a guarded method's body**. Any hit inside one is a silently refused nested call: stop and report.
@@ -1716,11 +1716,11 @@ Then verify, per call site, the spec § 5.1 exception — that no guarded compar
 - `handleCancel` (compare branches): only ever adds files back.
 Any path that can reach the `< 2` branch with the flag about to drop is a gap: stop and report.
 
-- [ ] **Step 10: Update the CLAUDE.md guard bullet**
+- [x] **Step 10: Update the CLAUDE.md guard bullet**
 
 In the Async Patterns bullet written in Task 4, replace `is held by \`moveCurrentFile\`, \`moveToSpecialFolder\` and \`handleCancel\`` with `is held by \`moveCurrentFile\`, \`moveToSpecialFolder\`, \`moveComparePair\`, \`applyBulkRating\` and \`handleCancel\``, and replace `ratings, special and navigation quietly` with `ratings, special, bulk and navigation quietly`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js tests/e2e/rating-safety.test.js CLAUDE.md
@@ -1741,7 +1741,7 @@ git commit -m "fix(g1): guard compare pair moves and bulk rating — no Q-then-E
 - Consumes: the guarded `moveToSpecialFolder()` (Task 4).
 - Produces: action name `special` in `shortcuts.single`; `executeAction('special')` → `moveToSpecialFolder()` in single mode only.
 
-- [ ] **Step 1: Flip the shape tests and add the routing and collision tests (failing)**
+- [x] **Step 1: Flip the shape tests and add the routing and collision tests (failing)**
 
 In `tests/keyboard-shortcuts.test.js`:
 
@@ -1850,12 +1850,12 @@ In `tests/media-viewer-utils.test.js`, `describe('updateSpecialButtonsState tool
     });
 ```
 
-- [ ] **Step 2: Run to verify the RED set fails**
+- [x] **Step 2: Run to verify the RED set fails**
 
 Run: `npx vitest run tests/keyboard-shortcuts.test.js`
 Expected: FAIL — (a) shape `toEqual`, (b) `special` undefined, (c) `single['Digit1']` undefined, (d) the single-routing test (`moveToSpecialFolder` not called), (e) `' (1)'` vs `''`, (f) `special` `undefined` vs `null`. The no-duplicates and compare/tournament-ignore tests may pass already — expected.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `DEFAULT_SHORTCUTS.single`:
 
@@ -1905,12 +1905,12 @@ with:
 
 Comments: above `_specialShortcutSuffix` replace `unbound in that mode — which is how single mode's tooltip stays bare without a special case, since shortcuts.single has no special action at all.` with `unbound in that mode (a default that yielded to a user remap, or an unknown mode).`; in `updateSpecialButtonsState` replace `// Single mode button — single has no special binding, so the suffix resolves to ''.` with `// Single mode button — suffix from single's \`special\` binding (Digit1 by default).`
 
-- [ ] **Step 4: Run the unit suite**
+- [x] **Step 4: Run the unit suite**
 
 Run: `npx vitest run`
 Expected: all pass (`tests/keyboard-shortcuts.test.js` ACTION_LABELS coverage tests included — `special` now has a label).
 
-- [ ] **Step 5: Add the held-`1` E2E (failing first)**
+- [x] **Step 5: Add the held-`1` E2E (failing first)**
 
 In `tests/e2e/rating-safety.test.js`, inside `describe('Held keys fire once (G1)')` (its `beforeEach` already seeds `customSpecialFolder`), add:
 
@@ -1928,11 +1928,11 @@ In `tests/e2e/rating-safety.test.js`, inside `describe('Held keys fire once (G1)
 Run: `git stash push media-viewer.js && npx playwright test tests/e2e/rating-safety.test.js -g "held 1" --reporter=list; git stash pop`
 Expected: FAIL (`specialDir` has 0 — no binding). Then run it on the fixed code: `npx playwright test tests/e2e/rating-safety.test.js -g "held 1" --reporter=list` → PASS.
 
-- [ ] **Step 6: Update CLAUDE.md**
+- [x] **Step 6: Update CLAUDE.md**
 
 In the Git Insights bullet that begins `- Special-button tooltips are **derived, not hardcoded**` (~L187), replace `, which is how single mode's \`#specialBtn\` stays bare without a special case.` with `; single mode's \`#specialBtn\` reads ` (1)` since G1 bound \`special: 'Digit1'\` (additive — a yielded binding renders bare).` (Task 7 rewrites the rest of this bullet.)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js tests/keyboard-shortcuts.test.js tests/media-viewer-utils.test.js tests/e2e/rating-safety.test.js CLAUDE.md
@@ -1953,7 +1953,7 @@ git commit -m "feat(g1): single-mode special-folder hotkey (1) on the guarded mo
 - Consumes: `special` single binding (Task 6).
 - Produces: `_shortcutSuffix(mode: string, action: string): string` (replaces `_specialShortcutSuffix`); `updateRatingButtonsState()` derives all six static like/dislike titles and is called from `saveShortcut`/`resetShortcuts`.
 
-- [ ] **Step 1: Rename the helper (refactor, no behaviour change)**
+- [x] **Step 1: Rename the helper (refactor, no behaviour change)**
 
 Run: `grep -rn "_specialShortcutSuffix" media-viewer.js tests/ CLAUDE.md`
 Replace every hit in those three locations with `_shortcutSuffix` (the method name, the four call sites, the `_mergeModeShortcuts` comment, the test `describe` titles, `extractMethod('_specialShortcutSuffix')` and the local `const` names in both test files, and the CLAUDE.md L186 mention). Replace the method's header comment with:
@@ -1966,7 +1966,7 @@ Replace every hit in those three locations with `_shortcutSuffix` (the method na
 
 Run: `npx vitest run` → all pass. Run: `grep -rn "_specialShortcutSuffix" media-viewer.js tests/ CLAUDE.md` → no output.
 
-- [ ] **Step 2: Add the `updateRatingButtonsState` tests (failing)**
+- [x] **Step 2: Add the `updateRatingButtonsState` tests (failing)**
 
 In `tests/media-viewer-utils.test.js`, after `describe('updateSpecialButtonsState tooltips')`:
 
@@ -2045,7 +2045,7 @@ describe('updateRatingButtonsState tooltips (G1)', () => {
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "updateRatingButtonsState tooltips"`
 Expected: the first three FAIL (`'Like (Arrow Up)'`, `'Like (Arrow Up)'` vs `'Like (T)'`, `'Dislike (Arrow Down)'`); the configure-folders test passes already.
 
-- [ ] **Step 3: Implement `updateRatingButtonsState`**
+- [x] **Step 3: Implement `updateRatingButtonsState`**
 
 Replace the method's body from `const enabled` through the end of the `rightDislikeBtn` block with:
 
@@ -2095,7 +2095,7 @@ Add above `updateRatingButtonsState() {`:
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "updateRatingButtonsState tooltips"` → 4 passed.
 
-- [ ] **Step 4: Refresh from `saveShortcut` / `resetShortcuts` (failing first)**
+- [x] **Step 4: Refresh from `saveShortcut` / `resetShortcuts` (failing first)**
 
 In `tests/keyboard-shortcuts.test.js`, add `updateRatingButtonsState: vi.fn(),` directly after **every** `updateSpecialButtonsState: vi.fn(),` (`grep -n "updateSpecialButtonsState: vi.fn()," tests/keyboard-shortcuts.test.js` — seven sites). Then, in the test ending `saveShortcut.call(ctx, 'compare', 'leftSpecial', 'Digit9');` (~L831) and the test `'refreshes the special-button tooltips after restoring defaults'` (~L967), add after the existing `expect(ctx.updateSpecialButtonsState).toHaveBeenCalledOnce();`:
 
@@ -2128,7 +2128,7 @@ In `resetShortcuts`, after `this.updateSpecialButtonsState();` add `this.updateR
 
 Run: `npx vitest run` → all pass.
 
-- [ ] **Step 5: Derive the overlay titles**
+- [x] **Step 5: Derive the overlay titles**
 
 In `addMediaOverlayControls`, directly after `controls.className = 'media-overlay-controls';` add:
 
@@ -2159,7 +2159,7 @@ Replace `dislikeBtn.title = side === 'left' ? 'Dislike Left (W)' : 'Dislike Righ
 
 In the special-button block, delete the three-line comment `// This bar is built fresh on every compare AND tournament render, …` and the line `const specialMode = this.isTournamentMode ? 'tournament' : 'compare';`, and change `this._shortcutSuffix(specialMode, specialAction)` to `this._shortcutSuffix(overlayMode, specialAction)`.
 
-- [ ] **Step 6: Add the overlay E2E (failing first)**
+- [x] **Step 6: Add the overlay E2E (failing first)**
 
 In `tests/e2e/overlay-controls.test.js`, inside `describe('Overlay controls reachability (G2)')`, after `'compare: the Like button actually rates the file on short media'`:
 
@@ -2189,7 +2189,7 @@ In `tests/e2e/overlay-controls.test.js`, inside `describe('Overlay controls reac
 Run: `git stash push media-viewer.js && npx playwright test tests/e2e/overlay-controls.test.js -g "follow a remapped" --reporter=list; git stash pop`
 Expected: FAIL (`'Like Left (Q)'` after the remap). Then `npx playwright test tests/e2e/overlay-controls.test.js --reporter=list` → all pass.
 
-- [ ] **Step 7: Bare fallback titles in `index.html`**
+- [x] **Step 7: Bare fallback titles in `index.html`**
 
 Replace the comment at ~L185–187:
 
@@ -2209,7 +2209,7 @@ with:
 
 `id="likeBtn" title="Move to next folder (Q)"` → `id="likeBtn" title="Like"`; `id="dislikeBtn" title="Move to previous folder (W)"` → `id="dislikeBtn" title="Dislike"`.
 
-- [ ] **Step 8: Rewrite the CLAUDE.md tooltip bullet**
+- [x] **Step 8: Rewrite the CLAUDE.md tooltip bullet**
 
 Replace the whole Git Insights bullet beginning `- Special-button tooltips are **derived, not hardcoded**` with:
 
@@ -2217,12 +2217,12 @@ Replace the whole Git Insights bullet beginning `- Special-button tooltips are *
 - Button tooltips are **derived, not hardcoded**: `_shortcutSuffix(mode, action)` renders the live binding as ` (Q)` and `''` when unbound (a default that yielded to a user remap, or an unknown mode). `updateSpecialButtonsState()` and `updateRatingButtonsState()` are the sole runtime owners of the special and like/dislike titles in `index.html` (they overwrite them at init and on every folder browse/clear, so editing the markup alone is futile — the markup carries bare fallbacks) and both are called from `saveShortcut`/`resetShortcuts` so a remap reaches the buttons. The compare-control buttons always read the `compare` map (CSS hides them in tournament mode); `addMediaOverlayControls` derives its like/dislike/special titles per render from `isTournamentMode ? 'tournament' : 'compare'`, so the overlay bar picks up a remap on the next pair. Single mode's `special` (`Digit1`, G1) is additive — no version bump. `#cancelBtn`'s `(Ctrl+A)` is still hardcoded (BACKLOG 🟤).
 ```
 
-- [ ] **Step 9: Sweep for stale prose**
+- [x] **Step 9: Sweep for stale prose**
 
 Run: `grep -rn "Arrow Up\|Arrow Down\|stays bare\|no special binding\|has no special\|stay hardcoded\|_specialShortcutSuffix" media-viewer.js index.html tests/ CLAUDE.md`
 Expected: no output. Re-read every comment attached to the code changed in this task.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add media-viewer.js index.html tests/keyboard-shortcuts.test.js tests/media-viewer-utils.test.js tests/e2e/overlay-controls.test.js CLAUDE.md
@@ -2233,10 +2233,10 @@ git commit -m "fix(g1): like/dislike tooltips follow the live binding — _short
 
 ## Finish (after Task 7)
 
-- [ ] `npx vitest run`, `npm run lint`, `npm run format:check` green; `git status --short` clean.
-- [ ] `for i in 1 2 3; do npx playwright test tests/e2e/rating-safety.test.js --reporter=line || break; done` — 6 passed, three runs in a row (spec § 7).
-- [ ] `npx playwright test` — the full suite once. If an existing E2E fails because it fired a second file action before the first settled, fix **the test** (wait for idle), never the guard, and log a deviation.
-- [ ] Dispatch the `regression-checker` agent on the branch diff of `media-viewer.js` (`git diff main...HEAD -- media-viewer.js`); triage every finding against the spec.
+- [x] `npx vitest run`, `npm run lint`, `npm run format:check` green; `git status --short` clean. (917 unit; lint 0 errors, 2 pre-existing warnings.)
+- [x] `for i in 1 2 3; do npx playwright test tests/e2e/rating-safety.test.js --reporter=line || break; done` — three runs in a row (spec § 7). (7 passed ×3 — the 7th is the final-review form-field test.)
+- [x] `npx playwright test` — the full suite once. If an existing E2E fails because it fired a second file action before the first settled, fix **the test** (wait for idle), never the guard, and log a deviation. (83 passed, 4 skipped; no existing test relied on overlapping actions.)
+- [x] Dispatch the `regression-checker` agent on the branch diff of `media-viewer.js` (`git diff main...HEAD -- media-viewer.js`); triage every finding against the spec.
 - [ ] Push (`git push -u origin g1-single-mode-rating-safety`; the pre-push hook runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
 - [ ] Open the PR (body: spec link, Phase 0 table and outcome, the RED→GREEN evidence per task, test deltas, the residuals). Review **thorough (`/code-review high`)**.
 - [ ] Merge only on the user's go-ahead.
@@ -2253,6 +2253,9 @@ git commit -m "fix(g1): like/dislike tooltips follow the live binding — _short
 - Tournament picks / draws / `handleTournamentUndo` during a guarded tournament special move still run concurrently, as before (no regression, no fix) — annotate the 🟤 [2026-08-31] "Re-entrancy guard for the tournament handler family — BLOCKED on item 1" entry at closeout that `_fileOpInFlight` now exists and what it does not cover.
 - WEEKLY G1's "flip the four tests G3 pinned" and the BACKLOG hotkey entry's four test locations were inaccurate (see Premise Corrections 1) — no edit (frozen history); the plan records the true set.
 
+- Four pre-existing failure-path defects the final review set aside (ruled out of G1's scope, each → BACKLOG 🟤): (1) `moveComparePair` — a failed **secondary** move leaves the primary as a phantom in `mediaFiles` with an orphan history entry, after both compare media were already cleaned up; (2) a failed single-mode **video** move leaves a blank view (`forceVideoCleanup` already removed the element and nothing re-renders; controls stay alive); (3) `removeFailedFile(index)` (the "Remove" button on a load-error toast) is unguarded and index-based, so during or after a move it can drop the wrong list entry (not the file on disk); (4) loading another folder while a move holds `_fileOpInFlight` (e.g. with the folder-creation dialog open) lets the move finish against stale state.
+- Three final-review minors, deferred: the undo notice says "A move is still in progress" though the in-flight op may be an undo or a bulk rating (spec D1 fixed the wording); `moveToSpecialFolder` checks `customSpecialFolder` before `_fileOpInFlight`, so with no special folder set a press during another move shows an error toast instead of a quiet refusal; CLAUDE.md's guard-handoff sentence holds on success branches only (failure paths render nothing — safe). → BACKLOG 🟤 at closeout, one entry each.
+
 ## Closeout (after the merge, on `main`)
 
 - [ ] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] G1 closeout`), archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans), DONE.md entry, WEEKLY Summary-Table Status → `✅ PR #N` + the Tuesday and Wednesday G1 Daily-Schedule rows, check off TODO 🔴 [2026-10-04] (held Like) and BACKLOG 🔵 [2026-10-04] (special hotkey, tooltips) — **in the closeout commit**.
@@ -2264,6 +2267,17 @@ git commit -m "fix(g1): like/dislike tooltips follow the live binding — _short
 
 - **2026-10-06** — Brainstormed with the user (D1 undo refused with a notice; D2 repeat only for next/previous; D3 one shared guard incl. compare + bulk + undo; D4 refuse-not-queue flag); spec committed `e385e0c`; plan written. Planning-time verifications: Playwright `Keyboard.down` repeat semantics (Context7, `docs/src/api/class-keyboard.md`); the test-harness constraint that extracted methods cannot see module constants (existing `globalThis.DEFAULT_SHORTCUTS` pattern); the true pinned-test set (Premise Corrections 1); `showCompareMedia` sets `isLoading` synchronously except in its `< 2`-files branch; no guarded method calls another.
 
+- **2026-10-06 — Task 1** `7b0d52f` — Phase 0 **confirmed** F3 (spec § 11): run (b) video → 320×240 stuck (`isLoading`/`navInProgress` true, 1 clobber, 1 ignored load, 4 `ENOENT`, image hidden under the spinner); run (a) images-only did not stick but liked all 4 files from one hold, with no `ENOENT` — the plan's "(a) logs ENOENT" criterion was timing-dependent (ruled). `SLOW_NEXT = 'normal-320x240.png'`; (b2) not needed.
+- **2026-10-06 — Task 2** `8a3cf3d` — RED: held Like moved 4 (expected 1); held Next green before and after.
+- **2026-10-06 — Task 3** `8fe5dd5` — RED: `expected null to be { tagName: 'IMG' }`.
+- **2026-10-06 — Task 4** `2081430` — unit RED exactly as predicted (8 fail, 3 pass by construction). E2E RED with Tasks 2–3 applied: burst moved 2; undo notice absent. **Deviation (ruled)**: the burst test's error assertion narrowed to `Failed to move…` — `tiny.mp4`'s expected decode failure reaches `showError` too.
+- **2026-10-06 — Task 5** `41b4b15` — unit RED 4 + 1 by construction; compare E2E RED (`Failed to move files: ENOENT`, phantom). Step 9: no nested guarded calls; the `< 2` branch is unreachable from guarded compare paths.
+- **2026-10-06 — Task 6** `ff37561` — RED: the 6 predicted unit tests + held `1` (special folder empty). **Deviation (ruled)**: a 7th pinned test (`does not treat Digit1/Digit2 as reserved keys`) asserted single `Digit1` free — kept its intent with `Digit2`, added the new `Digit1 → special` conflict.
+- **2026-10-06 — Task 7** `6403aa9` — RED: 3 tooltip unit (`'Like (Arrow Up)'`), 2 refresh (proven by removing only the two calls), overlay E2E (`Like Left (Q)`). **Deviation (ruled)**: the stale-prose sweep found an **8th** pin the plan missed — `tests/e2e/compare-mode.test.js` asserted the single `#specialBtn` bare; flipped. Lint follow-up `162609d` (no-shadow).
+- **2026-10-06 — Final review** — fresh reviewer (Opus, `code-reviewer.md`) and `regression-checker`, independently, one **Critical**: the keydown listener never filtered editable targets, so with single `Digit1 → special`, typing "10" into the tournament Rounds box (the config modal is open while the dispatch mode is still `single`) moved the file behind the modal. Fixed `4a9d5d3` (`_isTextEntryTarget`, both branches, after Escape/F1) — unit + E2E RED → GREEN; unit 917/917, rating-safety 7/7 ×3, full E2E 83 passed / 4 skipped. No Important findings; three minors and four pre-existing out-of-scope items carried as Residuals.
+
 ## Key Discoveries
 
-_(filled in during execution)_
+1. **The end state was one unconditional assignment.** `forceVideoCleanup`'s `this.currentMedia = null`, fired by a *stale* overlapping call 100 ms later, nulled the next render's element; its load handler then ignored the event and `isLoading` never cleared. The in-flight guard removes the overlap, but the narrowing removes the mechanism — either alone stops the freeze (the Task 4 RED run, with Task 3 applied, moved 2 files but did not stick).
+2. **Review Focus 1 was written against the wrong premise.** It assumed digits were keys "the dispatcher does not own"; Task 6 made `Digit1` owned in single mode, and the tournament config modal runs in single-mode dispatch. The plan's own Task 2 pin (`action === undefined`) could not see it — both final reviewers did, independently. A new default binding needs a check of **every focusable field reachable in that mode**, not just of stored remaps.
+3. **Test pins outnumbered every list made of them** — the brief said four, the spec five, the plan's planning-time re-count six; execution found eight (one unit, one E2E beyond the plan). The E2E one is invisible to the unit-only pre-commit hook; only the prose sweep caught it.
