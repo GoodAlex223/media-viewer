@@ -125,6 +125,27 @@ test.describe('Overlay controls reachability (G2)', () => {
         await access(join(tmpFixtures.likeDir, leftFile));
     });
 
+    test('compare: the overlay like/dislike titles follow a remapped binding (G1)', async () => {
+        await enterCompare(page);
+        const leftLike = page.locator('.overlay-bar-slot[data-side="left"] .overlay-like-btn');
+        await expect(leftLike).toHaveAttribute('title', 'Like Left (Q)');
+        try {
+            await page.evaluate(() => window.mediaViewer.saveShortcut('compare', 'leftLike', 'KeyT'));
+            await page.evaluate(() => window.mediaViewer.showMedia()); // the bar is rebuilt per render
+            await page.waitForFunction(
+                () => !window.mediaViewer.isLoading && !window.mediaViewer.mediaNavigationInProgress
+            );
+            await expect(leftLike).toHaveAttribute('title', 'Like Left (T)');
+            await expect(page.locator('.overlay-bar-slot[data-side="right"] .overlay-dislike-btn')).toHaveAttribute(
+                'title',
+                'Dislike Right (R)'
+            );
+        } finally {
+            // E2E localStorage persists across runs — never leave a remap behind.
+            await page.evaluate(() => window.mediaViewer.resetShortcuts());
+        }
+    });
+
     test('compare: buttons are ghosted at rest and opaque on hover', async () => {
         await enterCompare(page);
 

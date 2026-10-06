@@ -163,8 +163,8 @@ test.describe('Compare Mode', () => {
         await seedLocalStorage(page, { customSpecialFolder: tmpFixtures.specialDir });
         await expect(page.locator('#leftSpecialBtn')).toHaveAttribute('title', 'Move left to special folder (1)');
         await expect(page.locator('#rightSpecialBtn')).toHaveAttribute('title', 'Move right to special folder (2)');
-        // Single mode has no special binding, so its button stays bare.
-        await expect(page.locator('#specialBtn')).toHaveAttribute('title', 'Move to special folder');
+        // Single mode binds `special` to 1 since G1, so its button advertises it too.
+        await expect(page.locator('#specialBtn')).toHaveAttribute('title', 'Move to special folder (1)');
     });
 
     // Regression, PR #71 review: Digit1/Digit2 were legal remap targets in compare mode before

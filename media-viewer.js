@@ -9,6 +9,9 @@ const DEFAULT_SHORTCUTS = {
         next: 'KeyS',
         previous: 'KeyA',
         undo: 'Ctrl+KeyA',
+        // Additive (G1), matching compare/tournament's leftSpecial: no loadShortcuts version bump —
+        // _mergeModeShortcuts leaves it unbound if a stored single-mode remap already holds Digit1.
+        special: 'Digit1',
     },
     compare: {
         leftLike: 'KeyQ',
@@ -47,6 +50,7 @@ const ACTION_LABELS = {
     next: 'Next media',
     previous: 'Previous media',
     undo: 'Undo last move',
+    special: 'Move to special folder',
     leftLike: 'Left media Like',
     leftDislike: 'Left media Dislike',
     rightLike: 'Right media Like',
@@ -58,6 +62,11 @@ const ACTION_LABELS = {
     bothWin: 'Both win (tie up)',
     bothLose: 'Both lose (tie down)',
 };
+
+// Actions a held key may auto-repeat. Everything else — every rating, special and bulk action,
+// tournament picks and draws, and undo — fires once per physical press: a held Q used to move
+// files at the OS key-repeat rate (~30/s, G1). Navigation is the one place hold-to-repeat is wanted.
+const REPEATABLE_ACTIONS = new Set(['next', 'previous']);
 
 const CLIP_UNLOAD_DELAY_MS = 30000; // grace period before unloading the CLIP model after extraction
 
@@ -92,6 +101,11 @@ class MediaViewer {
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
         this.isBeingCleaned = false; // Flag to prevent error notifications during cleanup
+        // Held by every file-acting method (moveCurrentFile, moveToSpecialFolder, handleCancel — and
+        // moveComparePair, applyBulkRating) from before its first await until its finally. Any other
+        // file action that arrives meanwhile is refused (G1). Not isLoading: render handlers clear
+        // that at first paint, and showMedia() itself returns early on it.
+        this._fileOpInFlight = false;
 
         // Compare mode state
         this.isCompareMode = false;
@@ -440,36 +454,42 @@ class MediaViewer {
         return this.customLikeFolder && this.customDislikeFolder;
     }
 
+    // Sole runtime owner of the six static like/dislike titles: overwrites index.html's at init,
+    // on every like/dislike-folder browse/clear, and from saveShortcut/resetShortcuts.
     updateRatingButtonsState() {
         const enabled = this.areFoldersConfigured();
         const tooltip = enabled ? '' : 'Configure like/dislike folders in Settings (F1)';
+        // Hotkeys come from the live bindings (G1). The single-mode titles once read
+        // 'Arrow Up'/'Arrow Down' — wrong even with the default Q/W.
+        const title = (label, mode, action) => (enabled ? label + this._shortcutSuffix(mode, action) : tooltip);
 
         // Single mode buttons
         if (this.likeBtn) {
             this.likeBtn.disabled = !enabled;
-            this.likeBtn.title = enabled ? 'Like (Arrow Up)' : tooltip;
+            this.likeBtn.title = title('Like', 'single', 'like');
         }
         if (this.dislikeBtn) {
             this.dislikeBtn.disabled = !enabled;
-            this.dislikeBtn.title = enabled ? 'Dislike (Arrow Down)' : tooltip;
+            this.dislikeBtn.title = title('Dislike', 'single', 'dislike');
         }
 
-        // Compare mode buttons
+        // Compare mode buttons. Like the special pair, these live in .left/.right-media-controls,
+        // which CSS hides in tournament mode, so they always read the compare map.
         if (this.leftLikeBtn) {
             this.leftLikeBtn.disabled = !enabled;
-            this.leftLikeBtn.title = enabled ? 'Like Left (Q)' : tooltip;
+            this.leftLikeBtn.title = title('Like Left', 'compare', 'leftLike');
         }
         if (this.leftDislikeBtn) {
             this.leftDislikeBtn.disabled = !enabled;
-            this.leftDislikeBtn.title = enabled ? 'Dislike Left (W)' : tooltip;
+            this.leftDislikeBtn.title = title('Dislike Left', 'compare', 'leftDislike');
         }
         if (this.rightLikeBtn) {
             this.rightLikeBtn.disabled = !enabled;
-            this.rightLikeBtn.title = enabled ? 'Like Right (E)' : tooltip;
+            this.rightLikeBtn.title = title('Like Right', 'compare', 'rightLike');
         }
         if (this.rightDislikeBtn) {
             this.rightDislikeBtn.disabled = !enabled;
-            this.rightDislikeBtn.title = enabled ? 'Dislike Right (R)' : tooltip;
+            this.rightDislikeBtn.title = title('Dislike Right', 'compare', 'rightDislike');
         }
 
         // Update folder config warning
@@ -479,11 +499,10 @@ class MediaViewer {
         }
     }
 
-    // The " (1)" a special-button tooltip carries, derived from the live binding rather than
-    // hardcoded, so a remap in the F1 panel reaches the button. Returns '' when the action is
-    // unbound in that mode — which is how single mode's tooltip stays bare without a special
-    // case, since shortcuts.single has no special action at all.
-    _specialShortcutSuffix(mode, action) {
+    // The " (Q)" a button tooltip carries for `action` in `mode`, derived from the live binding
+    // rather than hardcoded, so a remap in the F1 panel reaches the button. Returns '' when the
+    // action is unbound in that mode (a default that yielded to a user remap, or an unknown mode).
+    _shortcutSuffix(mode, action) {
         const key = this.shortcuts?.[mode]?.[action];
         return key ? ` (${this.keyDisplayName(key)})` : '';
     }
@@ -495,10 +514,10 @@ class MediaViewer {
         const enabled = !!this.customSpecialFolder;
         const tooltip = enabled ? 'Move to special folder' : 'Configure special folder in Settings (F1)';
 
-        // Single mode button — single has no special binding, so the suffix resolves to ''.
+        // Single mode button — suffix from single's `special` binding (Digit1 by default).
         if (this.specialBtn) {
             this.specialBtn.disabled = !enabled;
-            this.specialBtn.title = enabled ? tooltip + this._specialShortcutSuffix('single', 'special') : tooltip;
+            this.specialBtn.title = enabled ? tooltip + this._shortcutSuffix('single', 'special') : tooltip;
         }
 
         // Compare mode buttons. These live in .left/.right-media-controls, which CSS hides in
@@ -506,13 +525,13 @@ class MediaViewer {
         if (this.leftSpecialBtn) {
             this.leftSpecialBtn.disabled = !enabled;
             this.leftSpecialBtn.title = enabled
-                ? 'Move left to special folder' + this._specialShortcutSuffix('compare', 'leftSpecial')
+                ? 'Move left to special folder' + this._shortcutSuffix('compare', 'leftSpecial')
                 : tooltip;
         }
         if (this.rightSpecialBtn) {
             this.rightSpecialBtn.disabled = !enabled;
             this.rightSpecialBtn.title = enabled
-                ? 'Move right to special folder' + this._specialShortcutSuffix('compare', 'rightSpecial')
+                ? 'Move right to special folder' + this._shortcutSuffix('compare', 'rightSpecial')
                 : tooltip;
         }
     }
@@ -1395,7 +1414,8 @@ class MediaViewer {
             return;
         }
 
-        if (this.isLoading || this.mediaNavigationInProgress) return;
+        // A file action renders the next file itself; navigating underneath it raced that render.
+        if (this.isLoading || this.mediaNavigationInProgress || this._fileOpInFlight) return;
 
         this.signalUserActivity();
 
@@ -1418,7 +1438,9 @@ class MediaViewer {
     }
 
     previousMedia() {
-        if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress) return;
+        if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress || this._fileOpInFlight) {
+            return;
+        }
 
         this.signalUserActivity();
 
@@ -1453,112 +1475,124 @@ class MediaViewer {
     }
 
     async moveCurrentFile(actionType) {
+        // One file action at a time (G1). A second Like arriving during this method's awaits read
+        // the same currentFile and failed at fs.rename with ENOENT — and, with a video on screen,
+        // raced forceVideoCleanup against the next render. Refused rather than queued: the press
+        // targets a file the user has not seen yet.
+        if (this._fileOpInFlight) return;
         if (this.mediaFiles.length === 0 || this.isLoading) return;
         if (!this.areFoldersConfigured()) {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
             return;
         }
 
-        const currentFile = this.mediaFiles[this.currentIndex];
-        const targetFolderPath = actionType === 'like' ? this.customLikeFolder : this.customDislikeFolder;
-        const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
-
-        // Extract ML features BEFORE moving file (while media is still accessible)
-        let mlFeatures = null;
-        if (this.isMlEnabled && this.mlWorker) {
-            let rawFeatures = this.featureCache.get(currentFile.path);
-            if (!rawFeatures && this.currentMedia) {
-                try {
-                    rawFeatures = await this.extractFeaturesFromDisplayedMedia();
-                    if (rawFeatures) {
-                        this.featureCache.set(currentFile.path, rawFeatures);
-                        const ratingFileInfo = this.mediaFiles.find((f) => f.path === currentFile.path);
-                        if (ratingFileInfo) {
-                            this.featureMetadata.set(currentFile.path, {
-                                size: ratingFileInfo.size,
-                                mtime: ratingFileInfo.mtimeMs || 0,
-                            });
-                        }
-                    }
-                } catch (err) {
-                    console.warn('Could not extract ML features:', err);
-                }
-            }
-            // Use combined features (64-dim basic + 512-dim CLIP) for ML pipeline
-            const combined = this.getCombinedFeatures(currentFile.path);
-            mlFeatures = combined || (rawFeatures ? Array.from(rawFeatures) : null);
-        }
-
+        this._fileOpInFlight = true;
         try {
-            // For videos, ensure proper cleanup before moving
-            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
-                await this.forceVideoCleanup();
-                // Additional wait for file handles to be fully released
-                await new Promise((resolve) => setTimeout(resolve, 500));
-            }
+            const currentFile = this.mediaFiles[this.currentIndex];
+            const targetFolderPath = actionType === 'like' ? this.customLikeFolder : this.customDislikeFolder;
+            const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
 
-            const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
-
-            if (!folderExists) {
-                const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
-                if (!shouldCreate) return;
-
-                const createResult = await window.electronAPI.createFolder(targetFolderPath);
-                if (!createResult.success) {
-                    throw new Error(createResult.error);
+            // Extract ML features BEFORE moving file (while media is still accessible)
+            let mlFeatures = null;
+            if (this.isMlEnabled && this.mlWorker) {
+                let rawFeatures = this.featureCache.get(currentFile.path);
+                if (!rawFeatures && this.currentMedia) {
+                    try {
+                        rawFeatures = await this.extractFeaturesFromDisplayedMedia();
+                        if (rawFeatures) {
+                            this.featureCache.set(currentFile.path, rawFeatures);
+                            const ratingFileInfo = this.mediaFiles.find((f) => f.path === currentFile.path);
+                            if (ratingFileInfo) {
+                                this.featureMetadata.set(currentFile.path, {
+                                    size: ratingFileInfo.size,
+                                    mtime: ratingFileInfo.mtimeMs || 0,
+                                });
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('Could not extract ML features:', err);
+                    }
                 }
+                // Use combined features (64-dim basic + 512-dim CLIP) for ML pipeline
+                const combined = this.getCombinedFeatures(currentFile.path);
+                mlFeatures = combined || (rawFeatures ? Array.from(rawFeatures) : null);
             }
 
-            // Move the file
-            const moveResult = await window.electronAPI.moveFile({
-                sourcePath: currentFile.path,
-                targetFolder: targetFolderPath,
-                fileName: currentFile.name,
-            });
+            try {
+                // For videos, ensure proper cleanup before moving
+                if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                    await this.forceVideoCleanup();
+                    // Additional wait for file handles to be fully released
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                }
 
-            if (!moveResult.success) {
-                throw new Error(moveResult.error);
+                const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
+
+                if (!folderExists) {
+                    const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
+                    if (!shouldCreate) return;
+
+                    const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+
+                // Move the file
+                const moveResult = await window.electronAPI.moveFile({
+                    sourcePath: currentFile.path,
+                    targetFolder: targetFolderPath,
+                    fileName: currentFile.name,
+                });
+
+                if (!moveResult.success) {
+                    throw new Error(moveResult.error);
+                }
+
+                // Store move in history for undo functionality (mlFeatures feeds
+                // restoreFeatureCachesFromHistory's cache restoration on undo)
+                const historyEntry = {
+                    fileName: currentFile.name,
+                    originalPath: currentFile.path,
+                    newPath: moveResult.targetPath,
+                    fileSize: currentFile.size,
+                    fileType: currentFile.type,
+                    actionType: actionType,
+                    mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
+                };
+                // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
+                const prunedPairKeys = this._bulkPairKeysReferencing(currentFile.name);
+                if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
+                this.moveHistory.push(historyEntry);
+
+                // Show success notification (if enabled)
+                if (this.showRatingConfirmations) {
+                    const fileName =
+                        currentFile.name.length > 20 ? currentFile.name.substring(0, 20) + '...' : currentFile.name;
+                    this.showNotification(
+                        `${actionType === 'like' ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
+                        actionType === 'like' ? 'success' : 'dislike'
+                    );
+                }
+
+                // Remove current file from array and clean up caches
+                this.removeFileFromList(currentFile.path);
+
+                // Wrap to start when rating the last file (intentional UX: cycle through all files)
+                if (this.mediaFiles.length > 0 && this.currentIndex >= this.mediaFiles.length) {
+                    this.currentIndex = 0;
+                }
+
+                this.updateFolderInfo();
+                // showMedia() sets isLoading synchronously, before finally releases _fileOpInFlight,
+                // so the isLoading gates take over with no gap until the next file paints.
+                this.showMedia();
+            } catch (error) {
+                console.error('Error moving file:', error);
+                this.showError(`Failed to move file: ${error.message}`);
             }
-
-            // Store move in history for undo functionality (mlFeatures feeds
-            // restoreFeatureCachesFromHistory's cache restoration on undo)
-            const historyEntry = {
-                fileName: currentFile.name,
-                originalPath: currentFile.path,
-                newPath: moveResult.targetPath,
-                fileSize: currentFile.size,
-                fileType: currentFile.type,
-                actionType: actionType,
-                mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
-            };
-            // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
-            const prunedPairKeys = this._bulkPairKeysReferencing(currentFile.name);
-            if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
-            this.moveHistory.push(historyEntry);
-
-            // Show success notification (if enabled)
-            if (this.showRatingConfirmations) {
-                const fileName =
-                    currentFile.name.length > 20 ? currentFile.name.substring(0, 20) + '...' : currentFile.name;
-                this.showNotification(
-                    `${actionType === 'like' ? '👍' : '👎'} Moved ${fileName} to ${targetFolderName}`,
-                    actionType === 'like' ? 'success' : 'dislike'
-                );
-            }
-
-            // Remove current file from array and clean up caches
-            this.removeFileFromList(currentFile.path);
-
-            // Wrap to start when rating the last file (intentional UX: cycle through all files)
-            if (this.mediaFiles.length > 0 && this.currentIndex >= this.mediaFiles.length) {
-                this.currentIndex = 0;
-            }
-
-            this.updateFolderInfo();
-            this.showMedia();
-        } catch (error) {
-            console.error('Error moving file:', error);
-            this.showError(`Failed to move file: ${error.message}`);
+        } finally {
+            this._fileOpInFlight = false;
         }
     }
 
@@ -1569,203 +1603,209 @@ class MediaViewer {
             return;
         }
 
-        if (this.isLoading) return;
+        // Shared by all three modes; see moveCurrentFile for why a second file action is refused.
+        if (this.isLoading || this._fileOpInFlight) return;
         this.signalUserActivity();
 
-        // Determine which file to move based on mode and side
-        let fileToMove;
-        let fileIndex;
-        let remainingFile = null;
-        let remainingFileIndex = null;
-
-        if (side === 'left' || side === 'right') {
-            // Compare mode - use stored file references (set by showCompareMedia)
-            if (this.mediaFiles.length < 2) return;
-
-            const leftFile = this.compareLeftFile;
-            const rightFile = this.compareRightFile;
-
-            if (!leftFile || !rightFile) return;
-
-            // Get the file to move and the remaining file
-            fileToMove = side === 'left' ? leftFile : rightFile;
-            remainingFile = side === 'left' ? rightFile : leftFile;
-
-            // Find actual indices in the array
-            fileIndex = this.mediaFiles.findIndex((f) => f.path === fileToMove.path);
-            remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === remainingFile.path);
-
-            if (fileIndex === -1) return;
-
-            // Cleanup both media before moving
-            const cleanupPromises = [];
-            if (this.leftMedia) {
-                cleanupPromises.push(this.cleanupCompareMedia('left'));
-            }
-            if (this.rightMedia) {
-                cleanupPromises.push(this.cleanupCompareMedia('right'));
-            }
-            await Promise.all(cleanupPromises);
-            await new Promise((resolve) => setTimeout(resolve, 50));
-        } else {
-            // Single mode
-            if (this.mediaFiles.length === 0) return;
-            fileIndex = this.currentIndex;
-            fileToMove = this.mediaFiles[fileIndex];
-
-            // For videos, ensure proper cleanup before moving
-            if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
-                await this.forceVideoCleanup();
-                await new Promise((resolve) => setTimeout(resolve, 500));
-            }
-        }
-
-        if (!fileToMove) return;
-
-        const targetFolderPath = this.customSpecialFolder;
-        const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
-
-        // Extract ML features BEFORE moving file (while media is still accessible).
-        // Captured into history so undo can restore feature caches that
-        // removeFileFromList clears below.
-        let mlFeatures = null;
-        if (this.isMlEnabled && this.mlWorker) {
-            const combined = this.getCombinedFeatures(fileToMove.path);
-            const rawFeatures = this.featureCache.get(fileToMove.path);
-            mlFeatures = combined || (rawFeatures ? Array.from(rawFeatures) : null);
-        }
-
+        this._fileOpInFlight = true;
         try {
-            const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
+            // Determine which file to move based on mode and side
+            let fileToMove;
+            let fileIndex;
+            let remainingFile = null;
+            let remainingFileIndex = null;
 
-            if (!folderExists) {
-                const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
-                if (!shouldCreate) return;
+            if (side === 'left' || side === 'right') {
+                // Compare mode - use stored file references (set by showCompareMedia)
+                if (this.mediaFiles.length < 2) return;
 
-                const createResult = await window.electronAPI.createFolder(targetFolderPath);
-                if (!createResult.success) {
-                    throw new Error(createResult.error);
+                const leftFile = this.compareLeftFile;
+                const rightFile = this.compareRightFile;
+
+                if (!leftFile || !rightFile) return;
+
+                // Get the file to move and the remaining file
+                fileToMove = side === 'left' ? leftFile : rightFile;
+                remainingFile = side === 'left' ? rightFile : leftFile;
+
+                // Find actual indices in the array
+                fileIndex = this.mediaFiles.findIndex((f) => f.path === fileToMove.path);
+                remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === remainingFile.path);
+
+                if (fileIndex === -1) return;
+
+                // Cleanup both media before moving
+                const cleanupPromises = [];
+                if (this.leftMedia) {
+                    cleanupPromises.push(this.cleanupCompareMedia('left'));
+                }
+                if (this.rightMedia) {
+                    cleanupPromises.push(this.cleanupCompareMedia('right'));
+                }
+                await Promise.all(cleanupPromises);
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            } else {
+                // Single mode
+                if (this.mediaFiles.length === 0) return;
+                fileIndex = this.currentIndex;
+                fileToMove = this.mediaFiles[fileIndex];
+
+                // For videos, ensure proper cleanup before moving
+                if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                    await this.forceVideoCleanup();
+                    await new Promise((resolve) => setTimeout(resolve, 500));
                 }
             }
 
-            // Move the file
-            const moveResult = await window.electronAPI.moveFile({
-                sourcePath: fileToMove.path,
-                targetFolder: targetFolderPath,
-                fileName: fileToMove.name,
-            });
+            if (!fileToMove) return;
 
-            if (!moveResult.success) {
-                throw new Error(moveResult.error);
+            const targetFolderPath = this.customSpecialFolder;
+            const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
+
+            // Extract ML features BEFORE moving file (while media is still accessible).
+            // Captured into history so undo can restore feature caches that
+            // removeFileFromList clears below.
+            let mlFeatures = null;
+            if (this.isMlEnabled && this.mlWorker) {
+                const combined = this.getCombinedFeatures(fileToMove.path);
+                const rawFeatures = this.featureCache.get(fileToMove.path);
+                mlFeatures = combined || (rawFeatures ? Array.from(rawFeatures) : null);
             }
 
-            // Store move in history for undo functionality
-            const historyEntry = {
-                fileName: fileToMove.name,
-                originalPath: fileToMove.path,
-                newPath: moveResult.targetPath,
-                fileSize: fileToMove.size,
-                fileType: fileToMove.type,
-                actionType: 'special',
-                mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
-            };
-            // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
-            const prunedPairKeys = this._bulkPairKeysReferencing(fileToMove.name);
-            if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
+            try {
+                const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
 
-            // In compare mode, store remaining file info for proper undo
-            if (side === 'left' || side === 'right') {
-                historyEntry.compareMode = true;
-                historyEntry.remainingFile = remainingFile;
-                historyEntry.remainingFileOriginalIndex =
-                    remainingFileIndex > fileIndex
-                        ? remainingFileIndex - 1 // Adjust for the removed file
-                        : remainingFileIndex;
-            }
+                if (!folderExists) {
+                    const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
+                    if (!shouldCreate) return;
 
-            this.moveHistory.push(historyEntry);
-
-            // Show success notification
-            if (this.showRatingConfirmations) {
-                const fileName =
-                    fileToMove.name.length > 20 ? fileToMove.name.substring(0, 20) + '...' : fileToMove.name;
-                this.showNotification(`📁 Moved ${fileName} to ${targetFolderName}`, 'info');
-            }
-
-            // Remove file from array and clean up caches
-            this.removeFileFromList(fileToMove.path);
-
-            // Tournament mode: also drop the moved file from the engine. `trackUndo` records it
-            // on engine.history as a `special` entry, IN ORDER with the picks, so Ctrl+A reverses
-            // whichever action happened last; `meta` carries this moveHistory entry back to
-            // handleTournamentUndo (opaque to the engine). The state write is debounced
-            // (non-blocking) — a crash before it lands is self-healing, since the file is gone
-            // from disk and resume reconciliation prunes it anyway.
-            if (this.isTournamentMode && this.tournament.engine) {
-                this.tournament.engine.removeFile(fileToMove.path, {
-                    trackUndo: true,
-                    kind: 'special',
-                    meta: historyEntry,
-                });
-                this.tournament._schedulePersist(this.baseFolderPath);
-            }
-
-            // In compare mode, move the remaining file to the end of the list
-            if (side === 'left' || side === 'right') {
-                if (remainingFile && this.mediaFiles.length >= 1) {
-                    const newRemainingIndex = this.mediaFiles.findIndex((f) => f.path === remainingFile.path);
-                    if (newRemainingIndex !== -1 && newRemainingIndex !== this.mediaFiles.length - 1) {
-                        const [movedFile] = this.mediaFiles.splice(newRemainingIndex, 1);
-                        this.mediaFiles.push(movedFile);
+                    const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
                     }
                 }
-                // Reset current index to start of list for next pair
-                this.currentIndex = 0;
-            }
 
-            this.updateFolderInfo();
+                // Move the file
+                const moveResult = await window.electronAPI.moveFile({
+                    sourcePath: fileToMove.path,
+                    targetFolder: targetFolderPath,
+                    fileName: fileToMove.name,
+                });
 
-            // Tournament mode: re-render via engine, skip compare/single navigation logic
-            if (this.isTournamentMode) {
-                await this.showTournamentPair();
-                return;
-            }
+                if (!moveResult.success) {
+                    throw new Error(moveResult.error);
+                }
 
-            // Navigate based on mode
-            if (side === 'left' || side === 'right') {
-                // In compare mode, show next pair
-                if (this.mediaFiles.length >= 2) {
-                    this.showMedia();
-                } else if (this.mediaFiles.length === 1) {
-                    // Only one file left, switch to single mode
-                    this.switchToSingleModeUI();
-                    this.showNotification('Last file in compare mode — switched to single view', 'info');
+                // Store move in history for undo functionality
+                const historyEntry = {
+                    fileName: fileToMove.name,
+                    originalPath: fileToMove.path,
+                    newPath: moveResult.targetPath,
+                    fileSize: fileToMove.size,
+                    fileType: fileToMove.type,
+                    actionType: 'special',
+                    mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
+                };
+                // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
+                const prunedPairKeys = this._bulkPairKeysReferencing(fileToMove.name);
+                if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
+
+                // In compare mode, store remaining file info for proper undo
+                if (side === 'left' || side === 'right') {
+                    historyEntry.compareMode = true;
+                    historyEntry.remainingFile = remainingFile;
+                    historyEntry.remainingFileOriginalIndex =
+                        remainingFileIndex > fileIndex
+                            ? remainingFileIndex - 1 // Adjust for the removed file
+                            : remainingFileIndex;
+                }
+
+                this.moveHistory.push(historyEntry);
+
+                // Show success notification
+                if (this.showRatingConfirmations) {
+                    const fileName =
+                        fileToMove.name.length > 20 ? fileToMove.name.substring(0, 20) + '...' : fileToMove.name;
+                    this.showNotification(`📁 Moved ${fileName} to ${targetFolderName}`, 'info');
+                }
+
+                // Remove file from array and clean up caches
+                this.removeFileFromList(fileToMove.path);
+
+                // Tournament mode: also drop the moved file from the engine. `trackUndo` records it
+                // on engine.history as a `special` entry, IN ORDER with the picks, so Ctrl+A reverses
+                // whichever action happened last; `meta` carries this moveHistory entry back to
+                // handleTournamentUndo (opaque to the engine). The state write is debounced
+                // (non-blocking) — a crash before it lands is self-healing, since the file is gone
+                // from disk and resume reconciliation prunes it anyway.
+                if (this.isTournamentMode && this.tournament.engine) {
+                    this.tournament.engine.removeFile(fileToMove.path, {
+                        trackUndo: true,
+                        kind: 'special',
+                        meta: historyEntry,
+                    });
+                    this.tournament._schedulePersist(this.baseFolderPath);
+                }
+
+                // In compare mode, move the remaining file to the end of the list
+                if (side === 'left' || side === 'right') {
+                    if (remainingFile && this.mediaFiles.length >= 1) {
+                        const newRemainingIndex = this.mediaFiles.findIndex((f) => f.path === remainingFile.path);
+                        if (newRemainingIndex !== -1 && newRemainingIndex !== this.mediaFiles.length - 1) {
+                            const [movedFile] = this.mediaFiles.splice(newRemainingIndex, 1);
+                            this.mediaFiles.push(movedFile);
+                        }
+                    }
+                    // Reset current index to start of list for next pair
                     this.currentIndex = 0;
-                    await this.showMedia();
-                } else {
-                    // No files left — preserve undo
-                    if (this.moveHistory.length > 0) {
+                }
+
+                this.updateFolderInfo();
+
+                // Tournament mode: re-render via engine, skip compare/single navigation logic
+                if (this.isTournamentMode) {
+                    await this.showTournamentPair();
+                    return;
+                }
+
+                // Navigate based on mode
+                if (side === 'left' || side === 'right') {
+                    // In compare mode, show next pair
+                    if (this.mediaFiles.length >= 2) {
+                        this.showMedia();
+                    } else if (this.mediaFiles.length === 1) {
+                        // Only one file left, switch to single mode
                         this.switchToSingleModeUI();
+                        this.showNotification('Last file in compare mode — switched to single view', 'info');
+                        this.currentIndex = 0;
+                        await this.showMedia();
+                    } else {
+                        // No files left — preserve undo
+                        if (this.moveHistory.length > 0) {
+                            this.switchToSingleModeUI();
+                            this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                            this.showEmptyStateWithUndo();
+                        } else {
+                            this.showDropZone();
+                        }
+                    }
+                } else {
+                    // Single mode - show next media
+                    if (this.mediaFiles.length > 0) {
+                        this.showMedia();
+                    } else if (this.moveHistory.length > 0) {
                         this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
                         this.showEmptyStateWithUndo();
                     } else {
                         this.showDropZone();
                     }
                 }
-            } else {
-                // Single mode - show next media
-                if (this.mediaFiles.length > 0) {
-                    this.showMedia();
-                } else if (this.moveHistory.length > 0) {
-                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
-                    this.showEmptyStateWithUndo();
-                } else {
-                    this.showDropZone();
-                }
+            } catch (error) {
+                console.error('Error moving file to special folder:', error);
+                this.showError(`Failed to move file: ${error.message}`);
             }
-        } catch (error) {
-            console.error('Error moving file to special folder:', error);
-            this.showError(`Failed to move file: ${error.message}`);
+        } finally {
+            this._fileOpInFlight = false;
         }
     }
 
@@ -1796,7 +1836,13 @@ class MediaViewer {
             video.remove();
         }
 
-        this.currentMedia = null;
+        // Release only our own reference. By the end of the 100 ms wait a render may already have
+        // installed the NEXT media; nulling that one left its load handler (which requires
+        // currentMedia to be its element) ignoring the event, so isLoading never cleared — the
+        // held-Like blank view with dead controls (G1 spec F3, reproduced in Phase 0).
+        if (this.currentMedia === video) {
+            this.currentMedia = null;
+        }
         this.isBeingCleaned = false;
 
         // Force garbage collection if available
@@ -2182,6 +2228,12 @@ class MediaViewer {
                 const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
                 const keyStr = this.buildKeyString(e);
                 const action = this.shortcutReverseMap[mode]?.[keyStr];
+                // Ctrl+A in a form field selects its text; it must not undo a move.
+                if (this._isTextEntryTarget(e.target)) return;
+                if (this._isSuppressedRepeat(e, action)) {
+                    e.preventDefault();
+                    return;
+                }
                 // The undo shortcut must also fire for a tournament whose engine still holds an
                 // undoable entry. #tournamentUndoBtn already consults peekUndoKind() (in
                 // showTournamentPair, where the button's disabled state is set), so
@@ -2227,6 +2279,11 @@ class MediaViewer {
                 return;
             }
 
+            // Escape and F1 above stay global. Everything below is a letter or digit that belongs to
+            // the field when one has focus: typing "10" into the tournament Rounds box — open while
+            // the dispatch mode is still 'single', where 1 is `special` — moved a file (G1 review).
+            if (this._isTextEntryTarget(e.target)) return;
+
             if (!this.isCompareMode) {
                 // Single mode fixed utilities
                 if (e.key === ' ') {
@@ -2263,6 +2320,10 @@ class MediaViewer {
             const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
             const keyStr = this.buildKeyString(e);
             const action = this.shortcutReverseMap[mode]?.[keyStr];
+            if (this._isSuppressedRepeat(e, action)) {
+                e.preventDefault();
+                return;
+            }
             if (action && !this.isLoading) {
                 e.preventDefault();
                 this.signalUserActivity();
@@ -3403,11 +3464,18 @@ class MediaViewer {
 
         const controls = document.createElement('div');
         controls.className = 'media-overlay-controls';
+        // This bar is rebuilt on every compare AND tournament render, so reading the mode here keeps
+        // every title's hotkey current with no separate refresh hook (tournament reuses Q/W/E/R for
+        // picks, but each map can be remapped on its own).
+        const overlayMode = this.isTournamentMode ? 'tournament' : 'compare';
 
         const likeBtn = document.createElement('button');
         likeBtn.className = 'overlay-btn overlay-like-btn';
         likeBtn.innerHTML = '<i data-lucide="thumbs-up"></i>';
-        likeBtn.title = side === 'left' ? 'Like Left (Q)' : 'Like Right (E)';
+        likeBtn.title =
+            side === 'left'
+                ? 'Like Left' + this._shortcutSuffix(overlayMode, 'leftLike')
+                : 'Like Right' + this._shortcutSuffix(overlayMode, 'rightLike');
         likeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (side === 'left') this.handleLeftLike();
@@ -3417,7 +3485,10 @@ class MediaViewer {
         const dislikeBtn = document.createElement('button');
         dislikeBtn.className = 'overlay-btn overlay-dislike-btn';
         dislikeBtn.innerHTML = '<i data-lucide="thumbs-down"></i>';
-        dislikeBtn.title = side === 'left' ? 'Dislike Left (W)' : 'Dislike Right (R)';
+        dislikeBtn.title =
+            side === 'left'
+                ? 'Dislike Left' + this._shortcutSuffix(overlayMode, 'leftDislike')
+                : 'Dislike Right' + this._shortcutSuffix(overlayMode, 'rightDislike');
         dislikeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (side === 'left') this.handleLeftDislike();
@@ -3427,13 +3498,9 @@ class MediaViewer {
         const specialBtn = document.createElement('button');
         specialBtn.className = 'overlay-btn overlay-special-btn';
         specialBtn.innerHTML = '<i data-lucide="folder-heart"></i>';
-        // This bar is built fresh on every compare AND tournament render, so reading the mode
-        // here is enough to keep the suffix correct — no separate refresh hook is needed, and
-        // tournament's long-standing 1/2 bindings become visible for the first time.
         const specialAction = side === 'left' ? 'leftSpecial' : 'rightSpecial';
-        const specialMode = this.isTournamentMode ? 'tournament' : 'compare';
         specialBtn.title = this.customSpecialFolder
-            ? 'Move to special folder' + this._specialShortcutSuffix(specialMode, specialAction)
+            ? 'Move to special folder' + this._shortcutSuffix(overlayMode, specialAction)
             : 'Configure special folder in Settings (F1)';
         specialBtn.disabled = !this.customSpecialFolder;
         specialBtn.addEventListener('click', (e) => {
@@ -4052,6 +4119,14 @@ class MediaViewer {
     }
 
     async handleCancel() {
+        // Before the empty-history branch: an undo pressed during the session's first move would
+        // otherwise read "No moves to undo". Refused WITH a notice — a silent drop lost a prompt
+        // Ctrl+A in the tournament guard trial (BACKLOG 🟤 [2026-08-31]).
+        if (this._fileOpInFlight) {
+            this.showNotification('A move is still in progress — press Undo again in a moment', 'info');
+            return;
+        }
+
         if (this.moveHistory.length === 0) {
             this.showNotification('No moves to undo', 'error');
             return;
@@ -4064,243 +4139,250 @@ class MediaViewer {
         if (this.isLoading || this.mediaNavigationInProgress) return;
         this.signalUserActivity();
 
-        // Check if last move was a special move in compare mode
-        const lastMove = this.moveHistory[this.moveHistory.length - 1];
+        // An undo moves files back across awaits too: hold the flag so a Like pressed meanwhile
+        // cannot act on a list being restored underneath it.
+        this._fileOpInFlight = true;
+        try {
+            // Check if last move was a special move in compare mode
+            const lastMove = this.moveHistory[this.moveHistory.length - 1];
 
-        // Bulk rating (Both good / Both bad): no file move to reverse, and no model update to
-        // reverse either — undoBulkRating only clears the bulkRated/bulkRatedPairs bookkeeping and
-        // re-saves. Return to the pair that was bulk-rated (applyBulkRating clamped the cursor when
-        // the rated pair dropped out of the valid list; prevPairIndex holds the original index),
-        // refresh prediction badges, and re-render so the floating Undo button visibility updates.
-        if (lastMove.bothGood || lastMove.bothBad) {
-            this.moveHistory.pop();
-            await this.undoBulkRating(lastMove);
-            if (typeof lastMove.prevPairIndex === 'number') {
-                this.mlComparePairIndex = lastMove.prevPairIndex;
-            }
-            if (this.isSortedByPrediction) this.requestPredictionScores();
-            await this.showMedia();
-            return;
-        }
-
-        if (this.isCompareMode && lastMove.compareMode && lastMove.actionType === 'special') {
-            // Undo special folder move in compare mode
-            this.moveHistory.pop();
-
-            try {
-                // Restore the moved file from special folder
-                const moveResult = await window.electronAPI.moveFile({
-                    sourcePath: lastMove.newPath,
-                    targetFolder: this.baseFolderPath,
-                    fileName: lastMove.fileName,
-                });
-
-                if (!moveResult.success) {
-                    throw new Error(moveResult.error);
+            // Bulk rating (Both good / Both bad): no file move to reverse, and no model update to
+            // reverse either — undoBulkRating only clears the bulkRated/bulkRatedPairs bookkeeping and
+            // re-saves. Return to the pair that was bulk-rated (applyBulkRating clamped the cursor when
+            // the rated pair dropped out of the valid list; prevPairIndex holds the original index),
+            // refresh prediction badges, and re-render so the floating Undo button visibility updates.
+            if (lastMove.bothGood || lastMove.bothBad) {
+                this.moveHistory.pop();
+                await this.undoBulkRating(lastMove);
+                if (typeof lastMove.prevPairIndex === 'number') {
+                    this.mlComparePairIndex = lastMove.prevPairIndex;
                 }
-
-                // Find the remaining file (should be at the end of the list)
-                const remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === lastMove.remainingFile.path);
-
-                // Remove remaining file from current position (end of list)
-                let remainingFile = null;
-                if (remainingFileIndex !== -1) {
-                    [remainingFile] = this.mediaFiles.splice(remainingFileIndex, 1);
-                }
-
-                // Calculate where to insert the restored file
-                const restoredFile = {
-                    name: lastMove.fileName,
-                    path: lastMove.originalPath,
-                    size: lastMove.fileSize,
-                    type: lastMove.fileType,
-                };
-
-                // Insert remaining file back to its original position
-                if (remainingFile) {
-                    this.mediaFiles.splice(lastMove.remainingFileOriginalIndex, 0, remainingFile);
-                }
-
-                // Insert restored file at correct position relative to remaining file
-                // The moved file was either before or after the remaining file originally
-                const insertIndex = lastMove.remainingFileOriginalIndex;
-                this.mediaFiles.splice(insertIndex, 0, restoredFile);
-
-                this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
-                this.updateFolderInfo();
-
-                // Set restored pair to be displayed directly
-                if (remainingFile) {
-                    this._restoredPairFiles = { left: restoredFile, right: remainingFile };
-                }
-
-                this.currentIndex = insertIndex;
-                this.restoreFeatureCachesFromHistory(lastMove);
                 if (this.isSortedByPrediction) this.requestPredictionScores();
                 await this.showMedia();
-            } catch (error) {
-                console.error('Error undoing special move:', error);
-                this.showError(`Failed to undo move: ${error.message}`);
-                this.moveHistory.push(lastMove);
+                return;
             }
-        } else if (this.isCompareMode && lastMove.compareMode && this.moveHistory.length >= 2) {
-            // In compare mode, restore both files (last two moves from like/dislike)
-            const secondMove = this.moveHistory.pop();
-            const firstMove = this.moveHistory.pop();
 
-            try {
-                // Restore first file
-                const firstMoveResult = await window.electronAPI.moveFile({
-                    sourcePath: firstMove.newPath,
-                    targetFolder: this.baseFolderPath,
-                    fileName: firstMove.fileName,
-                });
+            if (this.isCompareMode && lastMove.compareMode && lastMove.actionType === 'special') {
+                // Undo special folder move in compare mode
+                this.moveHistory.pop();
 
-                if (!firstMoveResult.success) {
-                    throw new Error(firstMoveResult.error);
-                }
+                try {
+                    // Restore the moved file from special folder
+                    const moveResult = await window.electronAPI.moveFile({
+                        sourcePath: lastMove.newPath,
+                        targetFolder: this.baseFolderPath,
+                        fileName: lastMove.fileName,
+                    });
 
-                // Restore second file
-                const secondMoveResult = await window.electronAPI.moveFile({
-                    sourcePath: secondMove.newPath,
-                    targetFolder: this.baseFolderPath,
-                    fileName: secondMove.fileName,
-                });
+                    if (!moveResult.success) {
+                        throw new Error(moveResult.error);
+                    }
 
-                if (!secondMoveResult.success) {
-                    throw new Error(secondMoveResult.error);
-                }
+                    // Find the remaining file (should be at the end of the list)
+                    const remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === lastMove.remainingFile.path);
 
-                // Add both files back to mediaFiles
-                this.mediaFiles.push({
-                    name: firstMove.fileName,
-                    path: firstMove.originalPath,
-                    size: firstMove.fileSize,
-                    type: firstMove.fileType,
-                });
+                    // Remove remaining file from current position (end of list)
+                    let remainingFile = null;
+                    if (remainingFileIndex !== -1) {
+                        [remainingFile] = this.mediaFiles.splice(remainingFileIndex, 1);
+                    }
 
-                this.mediaFiles.push({
-                    name: secondMove.fileName,
-                    path: secondMove.originalPath,
-                    size: secondMove.fileSize,
-                    type: secondMove.fileType,
-                });
+                    // Calculate where to insert the restored file
+                    const restoredFile = {
+                        name: lastMove.fileName,
+                        path: lastMove.originalPath,
+                        size: lastMove.fileSize,
+                        type: lastMove.fileType,
+                    };
 
-                this.restoreFeatureCachesFromHistory(firstMove);
-                this.restoreFeatureCachesFromHistory(secondMove);
-                this.showNotification(`✅ Restored ${firstMove.fileName}`, 'success');
-                this.showNotification(`✅ Restored ${secondMove.fileName}`, 'success');
-                this.updateFolderInfo();
+                    // Insert remaining file back to its original position
+                    if (remainingFile) {
+                        this.mediaFiles.splice(lastMove.remainingFileOriginalIndex, 0, remainingFile);
+                    }
 
-                // Store restored files to display them directly (bypasses ML pair selection)
-                const restoredFirst = this.mediaFiles.find((f) => f.path === firstMove.originalPath);
-                const restoredSecond = this.mediaFiles.find((f) => f.path === secondMove.originalPath);
+                    // Insert restored file at correct position relative to remaining file
+                    // The moved file was either before or after the remaining file originally
+                    const insertIndex = lastMove.remainingFileOriginalIndex;
+                    this.mediaFiles.splice(insertIndex, 0, restoredFile);
 
-                if (restoredFirst && restoredSecond) {
+                    this.showNotification(`✅ Restored ${lastMove.fileName}`, 'success');
+                    this.updateFolderInfo();
+
                     // Set restored pair to be displayed directly
-                    this._restoredPairFiles = { left: restoredFirst, right: restoredSecond };
+                    if (remainingFile) {
+                        this._restoredPairFiles = { left: restoredFile, right: remainingFile };
+                    }
+
+                    this.currentIndex = insertIndex;
+                    this.restoreFeatureCachesFromHistory(lastMove);
+                    if (this.isSortedByPrediction) this.requestPredictionScores();
+                    await this.showMedia();
+                } catch (error) {
+                    console.error('Error undoing special move:', error);
+                    this.showError(`Failed to undo move: ${error.message}`);
+                    this.moveHistory.push(lastMove);
                 }
+            } else if (this.isCompareMode && lastMove.compareMode && this.moveHistory.length >= 2) {
+                // In compare mode, restore both files (last two moves from like/dislike)
+                const secondMove = this.moveHistory.pop();
+                const firstMove = this.moveHistory.pop();
 
-                this.currentIndex = this.mediaFiles.length - 2;
+                try {
+                    // Restore first file
+                    const firstMoveResult = await window.electronAPI.moveFile({
+                        sourcePath: firstMove.newPath,
+                        targetFolder: this.baseFolderPath,
+                        fileName: firstMove.fileName,
+                    });
 
-                await this.showMedia();
-            } catch (error) {
-                console.error('Error undoing move:', error);
-                this.showError(`Failed to undo move: ${error.message}`);
-                // Restore history on error
-                this.moveHistory.push(firstMove);
-                this.moveHistory.push(secondMove);
+                    if (!firstMoveResult.success) {
+                        throw new Error(firstMoveResult.error);
+                    }
+
+                    // Restore second file
+                    const secondMoveResult = await window.electronAPI.moveFile({
+                        sourcePath: secondMove.newPath,
+                        targetFolder: this.baseFolderPath,
+                        fileName: secondMove.fileName,
+                    });
+
+                    if (!secondMoveResult.success) {
+                        throw new Error(secondMoveResult.error);
+                    }
+
+                    // Add both files back to mediaFiles
+                    this.mediaFiles.push({
+                        name: firstMove.fileName,
+                        path: firstMove.originalPath,
+                        size: firstMove.fileSize,
+                        type: firstMove.fileType,
+                    });
+
+                    this.mediaFiles.push({
+                        name: secondMove.fileName,
+                        path: secondMove.originalPath,
+                        size: secondMove.fileSize,
+                        type: secondMove.fileType,
+                    });
+
+                    this.restoreFeatureCachesFromHistory(firstMove);
+                    this.restoreFeatureCachesFromHistory(secondMove);
+                    this.showNotification(`✅ Restored ${firstMove.fileName}`, 'success');
+                    this.showNotification(`✅ Restored ${secondMove.fileName}`, 'success');
+                    this.updateFolderInfo();
+
+                    // Store restored files to display them directly (bypasses ML pair selection)
+                    const restoredFirst = this.mediaFiles.find((f) => f.path === firstMove.originalPath);
+                    const restoredSecond = this.mediaFiles.find((f) => f.path === secondMove.originalPath);
+
+                    if (restoredFirst && restoredSecond) {
+                        // Set restored pair to be displayed directly
+                        this._restoredPairFiles = { left: restoredFirst, right: restoredSecond };
+                    }
+
+                    this.currentIndex = this.mediaFiles.length - 2;
+
+                    await this.showMedia();
+                } catch (error) {
+                    console.error('Error undoing move:', error);
+                    this.showError(`Failed to undo move: ${error.message}`);
+                    // Restore history on error
+                    this.moveHistory.push(firstMove);
+                    this.moveHistory.push(secondMove);
+                }
+            } else if (
+                !this.isCompareMode &&
+                this.moveHistory.length >= 2 &&
+                this.moveHistory[this.moveHistory.length - 1].compareMode &&
+                this.moveHistory[this.moveHistory.length - 2].compareMode
+            ) {
+                // Single mode — undo last compare pair (both files in one action)
+                const secondMove = this.moveHistory.pop();
+                const firstMove = this.moveHistory.pop();
+
+                try {
+                    const firstMoveResult = await window.electronAPI.moveFile({
+                        sourcePath: firstMove.newPath,
+                        targetFolder: this.baseFolderPath,
+                        fileName: firstMove.fileName,
+                    });
+                    if (!firstMoveResult.success) {
+                        throw new Error(firstMoveResult.error);
+                    }
+
+                    const secondMoveResult = await window.electronAPI.moveFile({
+                        sourcePath: secondMove.newPath,
+                        targetFolder: this.baseFolderPath,
+                        fileName: secondMove.fileName,
+                    });
+                    if (!secondMoveResult.success) {
+                        throw new Error(secondMoveResult.error);
+                    }
+
+                    this.mediaFiles.push({
+                        name: firstMove.fileName,
+                        path: firstMove.originalPath,
+                        size: firstMove.fileSize,
+                        type: firstMove.fileType,
+                    });
+                    this.mediaFiles.push({
+                        name: secondMove.fileName,
+                        path: secondMove.originalPath,
+                        size: secondMove.fileSize,
+                        type: secondMove.fileType,
+                    });
+
+                    this.restoreFeatureCachesFromHistory(firstMove);
+                    this.restoreFeatureCachesFromHistory(secondMove);
+                    this.showNotification(`Restored ${firstMove.fileName}`, 'success');
+                    this.showNotification(`Restored ${secondMove.fileName}`, 'success');
+                    this.updateFolderInfo();
+
+                    this.currentIndex = this.mediaFiles.length - 2;
+                    await this.showMedia();
+                } catch (error) {
+                    console.error('Error undoing compare pair move:', error);
+                    this.showError(`Failed to undo move: ${error.message}`);
+                    this.moveHistory.push(firstMove);
+                    this.moveHistory.push(secondMove);
+                }
+            } else {
+                // Single mode - restore one file
+                const undoMove = this.moveHistory.pop();
+
+                try {
+                    const moveResult = await window.electronAPI.moveFile({
+                        sourcePath: undoMove.newPath,
+                        targetFolder: this.baseFolderPath,
+                        fileName: undoMove.fileName,
+                    });
+
+                    if (!moveResult.success) {
+                        throw new Error(moveResult.error);
+                    }
+
+                    // Insert file back at current position to maintain order
+                    this.mediaFiles.splice(this.currentIndex, 0, {
+                        name: undoMove.fileName,
+                        path: undoMove.originalPath,
+                        size: undoMove.fileSize,
+                        type: undoMove.fileType,
+                    });
+
+                    this.restoreFeatureCachesFromHistory(undoMove);
+                    this.showNotification(`✅ Restored ${undoMove.fileName}`, 'success');
+                    this.updateFolderInfo();
+
+                    // currentIndex already points to the restored file's position
+                    await this.showMedia();
+                } catch (error) {
+                    console.error('Error undoing move:', error);
+                    this.showError(`Failed to undo move: ${error.message}`);
+                    this.moveHistory.push(undoMove);
+                }
             }
-        } else if (
-            !this.isCompareMode &&
-            this.moveHistory.length >= 2 &&
-            this.moveHistory[this.moveHistory.length - 1].compareMode &&
-            this.moveHistory[this.moveHistory.length - 2].compareMode
-        ) {
-            // Single mode — undo last compare pair (both files in one action)
-            const secondMove = this.moveHistory.pop();
-            const firstMove = this.moveHistory.pop();
-
-            try {
-                const firstMoveResult = await window.electronAPI.moveFile({
-                    sourcePath: firstMove.newPath,
-                    targetFolder: this.baseFolderPath,
-                    fileName: firstMove.fileName,
-                });
-                if (!firstMoveResult.success) {
-                    throw new Error(firstMoveResult.error);
-                }
-
-                const secondMoveResult = await window.electronAPI.moveFile({
-                    sourcePath: secondMove.newPath,
-                    targetFolder: this.baseFolderPath,
-                    fileName: secondMove.fileName,
-                });
-                if (!secondMoveResult.success) {
-                    throw new Error(secondMoveResult.error);
-                }
-
-                this.mediaFiles.push({
-                    name: firstMove.fileName,
-                    path: firstMove.originalPath,
-                    size: firstMove.fileSize,
-                    type: firstMove.fileType,
-                });
-                this.mediaFiles.push({
-                    name: secondMove.fileName,
-                    path: secondMove.originalPath,
-                    size: secondMove.fileSize,
-                    type: secondMove.fileType,
-                });
-
-                this.restoreFeatureCachesFromHistory(firstMove);
-                this.restoreFeatureCachesFromHistory(secondMove);
-                this.showNotification(`Restored ${firstMove.fileName}`, 'success');
-                this.showNotification(`Restored ${secondMove.fileName}`, 'success');
-                this.updateFolderInfo();
-
-                this.currentIndex = this.mediaFiles.length - 2;
-                await this.showMedia();
-            } catch (error) {
-                console.error('Error undoing compare pair move:', error);
-                this.showError(`Failed to undo move: ${error.message}`);
-                this.moveHistory.push(firstMove);
-                this.moveHistory.push(secondMove);
-            }
-        } else {
-            // Single mode - restore one file
-            const undoMove = this.moveHistory.pop();
-
-            try {
-                const moveResult = await window.electronAPI.moveFile({
-                    sourcePath: undoMove.newPath,
-                    targetFolder: this.baseFolderPath,
-                    fileName: undoMove.fileName,
-                });
-
-                if (!moveResult.success) {
-                    throw new Error(moveResult.error);
-                }
-
-                // Insert file back at current position to maintain order
-                this.mediaFiles.splice(this.currentIndex, 0, {
-                    name: undoMove.fileName,
-                    path: undoMove.originalPath,
-                    size: undoMove.fileSize,
-                    type: undoMove.fileType,
-                });
-
-                this.restoreFeatureCachesFromHistory(undoMove);
-                this.showNotification(`✅ Restored ${undoMove.fileName}`, 'success');
-                this.updateFolderInfo();
-
-                // currentIndex already points to the restored file's position
-                await this.showMedia();
-            } catch (error) {
-                console.error('Error undoing move:', error);
-                this.showError(`Failed to undo move: ${error.message}`);
-                this.moveHistory.push(undoMove);
-            }
+        } finally {
+            this._fileOpInFlight = false;
         }
     }
 
@@ -5343,247 +5425,259 @@ class MediaViewer {
     }
 
     async moveComparePair(primarySide, primaryAction, secondaryAction) {
-        if (this.isLoading) return;
+        // _fileOpInFlight (G1 spec F5): a quick Q-then-E ran two pair moves on the same compare
+        // files — both moved, then each call's secondary failed with ENOENT before
+        // removeFileFromList, leaving both as phantoms in mediaFiles with orphan history entries.
+        // Checked here rather than in the handlers, whose tournament branch must stay unguarded.
+        if (this.isLoading || this._fileOpInFlight) return;
         if (!this.areFoldersConfigured()) {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
             return;
         }
 
-        // Use stored file references (set by showCompareMedia)
-        const leftFile = this.compareLeftFile;
-        const rightFile = this.compareRightFile;
-
-        if (!leftFile || !rightFile) return;
-
-        // Find indices for removal
-        const leftFileIndex = this.mediaFiles.findIndex((f) => f.path === leftFile.path);
-        const rightFileIndex = this.mediaFiles.findIndex((f) => f.path === rightFile.path);
-
-        if (leftFileIndex === -1 || rightFileIndex === -1) {
-            console.error('Could not find files in mediaFiles array');
-            return;
-        }
-
-        // Get cached ML features, with fallback extraction from displayed media
-        let leftFeatures = null;
-        let rightFeatures = null;
-        if (this.isMlEnabled && this.mlWorker) {
-            leftFeatures = this.featureCache.get(leftFile.path);
-            rightFeatures = this.featureCache.get(rightFile.path);
-
-            // Fallback: extract from displayed media if not cached (must happen before cleanup)
-            if (!leftFeatures && this.leftMedia) {
-                try {
-                    console.log('[ML Debug] Fallback extraction for left:', leftFile.name);
-                    leftFeatures = await this.extractFeaturesFromMediaElement(this.leftMedia);
-                    if (leftFeatures) {
-                        this.featureCache.set(leftFile.path, leftFeatures);
-                        this.featureCacheDirty = true;
-                        const leftInfo = this.mediaFiles.find((f) => f.path === leftFile.path);
-                        if (leftInfo) {
-                            this.featureMetadata.set(leftFile.path, {
-                                size: leftInfo.size,
-                                mtime: leftInfo.mtimeMs || 0,
-                            });
-                        }
-                        console.log('[ML Debug] Left features extracted successfully');
-                    }
-                } catch (err) {
-                    console.warn('[ML Debug] Could not extract left features:', err);
-                }
-            }
-            if (!rightFeatures && this.rightMedia) {
-                try {
-                    console.log('[ML Debug] Fallback extraction for right:', rightFile.name);
-                    rightFeatures = await this.extractFeaturesFromMediaElement(this.rightMedia);
-                    if (rightFeatures) {
-                        this.featureCache.set(rightFile.path, rightFeatures);
-                        this.featureCacheDirty = true;
-                        const rightInfo = this.mediaFiles.find((f) => f.path === rightFile.path);
-                        if (rightInfo) {
-                            this.featureMetadata.set(rightFile.path, {
-                                size: rightInfo.size,
-                                mtime: rightInfo.mtimeMs || 0,
-                            });
-                        }
-                        console.log('[ML Debug] Right features extracted successfully');
-                    }
-                } catch (err) {
-                    console.warn('[ML Debug] Could not extract right features:', err);
-                }
-            }
-
-            // Use combined features (64-dim basic + 512-dim CLIP) for ML pipeline
-            const leftCombined = this.getCombinedFeatures(leftFile.path);
-            leftFeatures = leftCombined || (leftFeatures ? Array.from(leftFeatures) : null);
-            const rightCombined = this.getCombinedFeatures(rightFile.path);
-            rightFeatures = rightCombined || (rightFeatures ? Array.from(rightFeatures) : null);
-
-            // Debug: log feature status
-            console.log(
-                '[ML Debug] Rating pair - Left features:',
-                leftFeatures ? 'YES' : 'NO',
-                '| Right features:',
-                rightFeatures ? 'YES' : 'NO'
-            );
-        }
-
+        this._fileOpInFlight = true;
         try {
-            // Cleanup both media in parallel before moving
-            const cleanupPromises = [];
-            if (this.leftMedia) {
-                cleanupPromises.push(this.cleanupCompareMedia('left'));
-            }
-            if (this.rightMedia) {
-                cleanupPromises.push(this.cleanupCompareMedia('right'));
-            }
-            await Promise.all(cleanupPromises);
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            // Use stored file references (set by showCompareMedia)
+            const leftFile = this.compareLeftFile;
+            const rightFile = this.compareRightFile;
 
-            // Move primary file (the one being rated)
-            const primaryFile = primarySide === 'left' ? leftFile : rightFile;
-            const primaryFolderPath = primaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
-            const primaryFolderName = window.electronAPI.path.basename(primaryFolderPath);
+            if (!leftFile || !rightFile) return;
 
-            let folderExists = await window.electronAPI.checkFolderExists(primaryFolderPath);
-            if (!folderExists) {
-                const shouldCreate = await this.showFolderCreationDialog(primaryFolderPath);
-                if (!shouldCreate) return;
-                const createResult = await window.electronAPI.createFolder(primaryFolderPath);
-                if (!createResult.success) {
-                    throw new Error(createResult.error);
-                }
-            }
+            // Find indices for removal
+            const leftFileIndex = this.mediaFiles.findIndex((f) => f.path === leftFile.path);
+            const rightFileIndex = this.mediaFiles.findIndex((f) => f.path === rightFile.path);
 
-            const primaryMoveResult = await window.electronAPI.moveFile({
-                sourcePath: primaryFile.path,
-                targetFolder: primaryFolderPath,
-                fileName: primaryFile.name,
-            });
-
-            if (!primaryMoveResult.success) {
-                throw new Error(primaryMoveResult.error);
-            }
-
-            // Store primary move in history (mlFeatures feeds restoreFeatureCachesFromHistory's
-            // cache restoration on undo)
-            const primaryFeatures = primarySide === 'left' ? leftFeatures : rightFeatures;
-            const primaryEntry = {
-                fileName: primaryFile.name,
-                originalPath: primaryFile.path,
-                newPath: primaryMoveResult.targetPath,
-                fileSize: primaryFile.size,
-                fileType: primaryFile.type,
-                actionType: primaryAction,
-                mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
-                compareMode: true,
-            };
-            // Capture the rated-pair keys removeFileFromList (below) is about to prune, so undo can reinstate them.
-            const primaryPrunedKeys = this._bulkPairKeysReferencing(primaryFile.name);
-            if (primaryPrunedKeys.length > 0) primaryEntry.prunedPairKeys = primaryPrunedKeys;
-            this.moveHistory.push(primaryEntry);
-
-            // Move secondary file (the other one)
-            const secondaryFile = primarySide === 'left' ? rightFile : leftFile;
-            const secondaryFolderPath = secondaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
-            const secondaryFolderName = window.electronAPI.path.basename(secondaryFolderPath);
-
-            folderExists = await window.electronAPI.checkFolderExists(secondaryFolderPath);
-            if (!folderExists) {
-                const createResult = await window.electronAPI.createFolder(secondaryFolderPath);
-                if (!createResult.success) {
-                    throw new Error(createResult.error);
-                }
-            }
-
-            const secondaryMoveResult = await window.electronAPI.moveFile({
-                sourcePath: secondaryFile.path,
-                targetFolder: secondaryFolderPath,
-                fileName: secondaryFile.name,
-            });
-
-            if (!secondaryMoveResult.success) {
-                throw new Error(secondaryMoveResult.error);
-            }
-
-            // Store secondary move in history (mlFeatures feeds restoreFeatureCachesFromHistory's
-            // cache restoration on undo)
-            const secondaryFeatures = primarySide === 'left' ? rightFeatures : leftFeatures;
-            const secondaryEntry = {
-                fileName: secondaryFile.name,
-                originalPath: secondaryFile.path,
-                newPath: secondaryMoveResult.targetPath,
-                fileSize: secondaryFile.size,
-                fileType: secondaryFile.type,
-                actionType: secondaryAction,
-                mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
-                compareMode: true,
-            };
-            const secondaryPrunedKeys = this._bulkPairKeysReferencing(secondaryFile.name);
-            if (secondaryPrunedKeys.length > 0) secondaryEntry.prunedPairKeys = secondaryPrunedKeys;
-            this.moveHistory.push(secondaryEntry);
-
-            // Show notifications (if enabled)
-            if (this.showRatingConfirmations) {
-                const primaryFileName =
-                    primaryFile.name.length > 20 ? primaryFile.name.substring(0, 20) + '...' : primaryFile.name;
-                const secondaryFileName =
-                    secondaryFile.name.length > 20 ? secondaryFile.name.substring(0, 20) + '...' : secondaryFile.name;
-
-                this.showNotification(
-                    `${primaryAction === 'like' ? '👍' : '👎'} ${primaryFileName} → ${primaryFolderName}`,
-                    primaryAction === 'like' ? 'success' : 'dislike'
-                );
-                this.showNotification(
-                    `${secondaryAction === 'like' ? '👍' : '👎'} ${secondaryFileName} → ${secondaryFolderName}`,
-                    secondaryAction === 'like' ? 'success' : 'dislike'
-                );
-            }
-
-            // Remove both files from current view and clean up caches
-            this.removeFileFromList(leftFile.path);
-            this.removeFileFromList(rightFile.path);
-
-            // Clear stored file references
-            this.compareLeftFile = null;
-            this.compareRightFile = null;
-
-            // Reset ML pair index to show new highest vs lowest
-            this.mlComparePairIndex = 0;
-
-            // TASK-022: Clean switch to single mode when <2 files remain
-            if (this.mediaFiles.length < 2) {
-                // Reset state flags
-                this.isLoading = false;
-                this.mediaNavigationInProgress = false;
-                this.hideLoadingSpinner();
-
-                // switchToSingleModeUI() tears down the stale compare wrappers.
-                this.switchToSingleModeUI();
-                this.updateFolderInfo();
-
-                if (this.mediaFiles.length === 1) {
-                    this.showNotification('Last pair rated — switched to single view', 'info');
-                    this.currentIndex = 0;
-                    await this.showMedia();
-                } else {
-                    this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
-                    this.showEmptyStateWithUndo();
-                }
+            if (leftFileIndex === -1 || rightFileIndex === -1) {
+                console.error('Could not find files in mediaFiles array');
                 return;
             }
 
-            // Ensure current index can show a pair
-            if (this.currentIndex >= this.mediaFiles.length - 1) {
-                this.currentIndex = 0;
+            // Get cached ML features, with fallback extraction from displayed media
+            let leftFeatures = null;
+            let rightFeatures = null;
+            if (this.isMlEnabled && this.mlWorker) {
+                leftFeatures = this.featureCache.get(leftFile.path);
+                rightFeatures = this.featureCache.get(rightFile.path);
+
+                // Fallback: extract from displayed media if not cached (must happen before cleanup)
+                if (!leftFeatures && this.leftMedia) {
+                    try {
+                        console.log('[ML Debug] Fallback extraction for left:', leftFile.name);
+                        leftFeatures = await this.extractFeaturesFromMediaElement(this.leftMedia);
+                        if (leftFeatures) {
+                            this.featureCache.set(leftFile.path, leftFeatures);
+                            this.featureCacheDirty = true;
+                            const leftInfo = this.mediaFiles.find((f) => f.path === leftFile.path);
+                            if (leftInfo) {
+                                this.featureMetadata.set(leftFile.path, {
+                                    size: leftInfo.size,
+                                    mtime: leftInfo.mtimeMs || 0,
+                                });
+                            }
+                            console.log('[ML Debug] Left features extracted successfully');
+                        }
+                    } catch (err) {
+                        console.warn('[ML Debug] Could not extract left features:', err);
+                    }
+                }
+                if (!rightFeatures && this.rightMedia) {
+                    try {
+                        console.log('[ML Debug] Fallback extraction for right:', rightFile.name);
+                        rightFeatures = await this.extractFeaturesFromMediaElement(this.rightMedia);
+                        if (rightFeatures) {
+                            this.featureCache.set(rightFile.path, rightFeatures);
+                            this.featureCacheDirty = true;
+                            const rightInfo = this.mediaFiles.find((f) => f.path === rightFile.path);
+                            if (rightInfo) {
+                                this.featureMetadata.set(rightFile.path, {
+                                    size: rightInfo.size,
+                                    mtime: rightInfo.mtimeMs || 0,
+                                });
+                            }
+                            console.log('[ML Debug] Right features extracted successfully');
+                        }
+                    } catch (err) {
+                        console.warn('[ML Debug] Could not extract right features:', err);
+                    }
+                }
+
+                // Use combined features (64-dim basic + 512-dim CLIP) for ML pipeline
+                const leftCombined = this.getCombinedFeatures(leftFile.path);
+                leftFeatures = leftCombined || (leftFeatures ? Array.from(leftFeatures) : null);
+                const rightCombined = this.getCombinedFeatures(rightFile.path);
+                rightFeatures = rightCombined || (rightFeatures ? Array.from(rightFeatures) : null);
+
+                // Debug: log feature status
+                console.log(
+                    '[ML Debug] Rating pair - Left features:',
+                    leftFeatures ? 'YES' : 'NO',
+                    '| Right features:',
+                    rightFeatures ? 'YES' : 'NO'
+                );
             }
 
-            this.updateFolderInfo();
+            try {
+                // Cleanup both media in parallel before moving
+                const cleanupPromises = [];
+                if (this.leftMedia) {
+                    cleanupPromises.push(this.cleanupCompareMedia('left'));
+                }
+                if (this.rightMedia) {
+                    cleanupPromises.push(this.cleanupCompareMedia('right'));
+                }
+                await Promise.all(cleanupPromises);
+                await new Promise((resolve) => setTimeout(resolve, 50));
 
-            await this.showMedia();
-        } catch (error) {
-            console.error('Error moving compare files:', error);
-            this.showError(`Failed to move files: ${error.message}`);
+                // Move primary file (the one being rated)
+                const primaryFile = primarySide === 'left' ? leftFile : rightFile;
+                const primaryFolderPath = primaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
+                const primaryFolderName = window.electronAPI.path.basename(primaryFolderPath);
+
+                let folderExists = await window.electronAPI.checkFolderExists(primaryFolderPath);
+                if (!folderExists) {
+                    const shouldCreate = await this.showFolderCreationDialog(primaryFolderPath);
+                    if (!shouldCreate) return;
+                    const createResult = await window.electronAPI.createFolder(primaryFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+
+                const primaryMoveResult = await window.electronAPI.moveFile({
+                    sourcePath: primaryFile.path,
+                    targetFolder: primaryFolderPath,
+                    fileName: primaryFile.name,
+                });
+
+                if (!primaryMoveResult.success) {
+                    throw new Error(primaryMoveResult.error);
+                }
+
+                // Store primary move in history (mlFeatures feeds restoreFeatureCachesFromHistory's
+                // cache restoration on undo)
+                const primaryFeatures = primarySide === 'left' ? leftFeatures : rightFeatures;
+                const primaryEntry = {
+                    fileName: primaryFile.name,
+                    originalPath: primaryFile.path,
+                    newPath: primaryMoveResult.targetPath,
+                    fileSize: primaryFile.size,
+                    fileType: primaryFile.type,
+                    actionType: primaryAction,
+                    mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
+                    compareMode: true,
+                };
+                // Capture the rated-pair keys removeFileFromList (below) is about to prune, so undo can reinstate them.
+                const primaryPrunedKeys = this._bulkPairKeysReferencing(primaryFile.name);
+                if (primaryPrunedKeys.length > 0) primaryEntry.prunedPairKeys = primaryPrunedKeys;
+                this.moveHistory.push(primaryEntry);
+
+                // Move secondary file (the other one)
+                const secondaryFile = primarySide === 'left' ? rightFile : leftFile;
+                const secondaryFolderPath =
+                    secondaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
+                const secondaryFolderName = window.electronAPI.path.basename(secondaryFolderPath);
+
+                folderExists = await window.electronAPI.checkFolderExists(secondaryFolderPath);
+                if (!folderExists) {
+                    const createResult = await window.electronAPI.createFolder(secondaryFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+
+                const secondaryMoveResult = await window.electronAPI.moveFile({
+                    sourcePath: secondaryFile.path,
+                    targetFolder: secondaryFolderPath,
+                    fileName: secondaryFile.name,
+                });
+
+                if (!secondaryMoveResult.success) {
+                    throw new Error(secondaryMoveResult.error);
+                }
+
+                // Store secondary move in history (mlFeatures feeds restoreFeatureCachesFromHistory's
+                // cache restoration on undo)
+                const secondaryFeatures = primarySide === 'left' ? rightFeatures : leftFeatures;
+                const secondaryEntry = {
+                    fileName: secondaryFile.name,
+                    originalPath: secondaryFile.path,
+                    newPath: secondaryMoveResult.targetPath,
+                    fileSize: secondaryFile.size,
+                    fileType: secondaryFile.type,
+                    actionType: secondaryAction,
+                    mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
+                    compareMode: true,
+                };
+                const secondaryPrunedKeys = this._bulkPairKeysReferencing(secondaryFile.name);
+                if (secondaryPrunedKeys.length > 0) secondaryEntry.prunedPairKeys = secondaryPrunedKeys;
+                this.moveHistory.push(secondaryEntry);
+
+                // Show notifications (if enabled)
+                if (this.showRatingConfirmations) {
+                    const primaryFileName =
+                        primaryFile.name.length > 20 ? primaryFile.name.substring(0, 20) + '...' : primaryFile.name;
+                    const secondaryFileName =
+                        secondaryFile.name.length > 20
+                            ? secondaryFile.name.substring(0, 20) + '...'
+                            : secondaryFile.name;
+
+                    this.showNotification(
+                        `${primaryAction === 'like' ? '👍' : '👎'} ${primaryFileName} → ${primaryFolderName}`,
+                        primaryAction === 'like' ? 'success' : 'dislike'
+                    );
+                    this.showNotification(
+                        `${secondaryAction === 'like' ? '👍' : '👎'} ${secondaryFileName} → ${secondaryFolderName}`,
+                        secondaryAction === 'like' ? 'success' : 'dislike'
+                    );
+                }
+
+                // Remove both files from current view and clean up caches
+                this.removeFileFromList(leftFile.path);
+                this.removeFileFromList(rightFile.path);
+
+                // Clear stored file references
+                this.compareLeftFile = null;
+                this.compareRightFile = null;
+
+                // Reset ML pair index to show new highest vs lowest
+                this.mlComparePairIndex = 0;
+
+                // TASK-022: Clean switch to single mode when <2 files remain
+                if (this.mediaFiles.length < 2) {
+                    // Reset state flags
+                    this.isLoading = false;
+                    this.mediaNavigationInProgress = false;
+                    this.hideLoadingSpinner();
+
+                    // switchToSingleModeUI() tears down the stale compare wrappers.
+                    this.switchToSingleModeUI();
+                    this.updateFolderInfo();
+
+                    if (this.mediaFiles.length === 1) {
+                        this.showNotification('Last pair rated — switched to single view', 'info');
+                        this.currentIndex = 0;
+                        await this.showMedia();
+                    } else {
+                        this.showNotification('All files rated — press Ctrl+Z to undo', 'info');
+                        this.showEmptyStateWithUndo();
+                    }
+                    return;
+                }
+
+                // Ensure current index can show a pair
+                if (this.currentIndex >= this.mediaFiles.length - 1) {
+                    this.currentIndex = 0;
+                }
+
+                this.updateFolderInfo();
+
+                await this.showMedia();
+            } catch (error) {
+                console.error('Error moving compare files:', error);
+                this.showError(`Failed to move files: ${error.message}`);
+            }
+        } finally {
+            this._fileOpInFlight = false;
         }
     }
 
@@ -8158,47 +8252,63 @@ class MediaViewer {
     }
 
     async applyBulkRating(bucket) {
-        // Drop a re-entrant press while the previous rating's render is still in flight
-        // (mediaNavigationInProgress, set by showMedia() and cleared once it settles): otherwise
-        // a fast double D/F or a double-click re-rates the SAME on-screen pair before it
-        // changes — duplicate bulkRated writes plus two moveHistory entries for one user action.
-        if (!this.isSortedByPrediction || !this.isCompareMode || this.mediaNavigationInProgress) return;
+        // Drop a re-entrant press: otherwise a fast double D/F or a double-click re-rates the SAME
+        // on-screen pair before it changes — duplicate bulkRated writes plus two moveHistory entries
+        // for one user action. mediaNavigationInProgress covers the render; _fileOpInFlight (G1)
+        // covers the earlier saveBulkRatedFile await, which nothing guarded, and any other file
+        // action in flight.
+        if (
+            !this.isSortedByPrediction ||
+            !this.isCompareMode ||
+            this.mediaNavigationInProgress ||
+            this._fileOpInFlight
+        ) {
+            return;
+        }
         const left = this.compareLeftFile;
         const right = this.compareRightFile;
         if (!left || !right) return;
 
-        const bulkFiles = [];
-        for (const f of [left, right]) {
-            bulkFiles.push({ name: f.name });
-            this.bulkRated.set(f.name, bucket);
+        this._fileOpInFlight = true;
+        try {
+            const bulkFiles = [];
+            for (const f of [left, right]) {
+                bulkFiles.push({ name: f.name });
+                this.bulkRated.set(f.name, bucket);
+            }
+
+            await this.saveBulkRatedFile();
+
+            // Suppress re-showing this exact combo (spec G3 D1). Session-only.
+            this.bulkRatedPairs.add(this.bulkPairKey(left.name, right.name));
+
+            this.moveHistory.push({
+                bothGood: bucket === 'good',
+                bothBad: bucket === 'bad',
+                bulkFiles,
+                // Current pair index. showMedia() no longer advances it (the rated pair drops out of
+                // computeValidComparePairs and the next pair slides into this same index) — but the user
+                // may still navigate away with prev/next before undoing, so this remains a real restore point.
+                prevPairIndex: this.mlComparePairIndex,
+            });
+
+            // The rated pair dropped out of the valid list — clamp the cursor into the now-shorter list
+            // so the "Pair N of M" count and the selected pair stay coherent (rating the last valid pair
+            // would otherwise leave the cursor past the end). prevPairIndex above keeps undo exact.
+            this.mlComparePairIndex = Math.min(
+                this.mlComparePairIndex,
+                Math.max(0, this.computeValidComparePairs().length - 1)
+            );
+
+            this.showNotification(
+                bucket === 'good' ? '👍 Both files marked good' : '👎 Both files marked bad',
+                'success'
+            );
+
+            this.showMedia();
+        } finally {
+            this._fileOpInFlight = false;
         }
-
-        await this.saveBulkRatedFile();
-
-        // Suppress re-showing this exact combo (spec G3 D1). Session-only.
-        this.bulkRatedPairs.add(this.bulkPairKey(left.name, right.name));
-
-        this.moveHistory.push({
-            bothGood: bucket === 'good',
-            bothBad: bucket === 'bad',
-            bulkFiles,
-            // Current pair index. showMedia() no longer advances it (the rated pair drops out of
-            // computeValidComparePairs and the next pair slides into this same index) — but the user
-            // may still navigate away with prev/next before undoing, so this remains a real restore point.
-            prevPairIndex: this.mlComparePairIndex,
-        });
-
-        // The rated pair dropped out of the valid list — clamp the cursor into the now-shorter list
-        // so the "Pair N of M" count and the selected pair stay coherent (rating the last valid pair
-        // would otherwise leave the cursor past the end). prevPairIndex above keeps undo exact.
-        this.mlComparePairIndex = Math.min(
-            this.mlComparePairIndex,
-            Math.max(0, this.computeValidComparePairs().length - 1)
-        );
-
-        this.showNotification(bucket === 'good' ? '👍 Both files marked good' : '👎 Both files marked bad', 'success');
-
-        this.showMedia();
     }
 
     async handleBothGood() {
@@ -9428,7 +9538,7 @@ class MediaViewer {
     // The loser is the NEW default, not the user's binding: dropping the user's remap instead
     // would still leave `1` moving a file for someone who pressed it expecting to navigate.
     // Yielding leaves the new action unbound — `keyDisplayName` renders that as "Unbound" and
-    // `_specialShortcutSuffix` omits the suffix — with the on-screen button and F1 rebinding
+    // `_shortcutSuffix` omits the suffix — with the on-screen button and F1 rebinding
     // both still working. This is also why an additive default needs no version bump: the
     // merge itself is collision-safe, rather than each new binding needing its own migration.
     _mergeModeShortcuts(mode, customMode) {
@@ -9455,6 +9565,27 @@ class MediaViewer {
             }
         }
         return merged;
+    }
+
+    // True for an auto-repeat keydown of a bound action outside REPEATABLE_ACTIONS. An unbound key
+    // (action undefined) is never suppressed: the dispatcher does not own it, and a held key in a
+    // text or number field must keep repeating.
+    _isSuppressedRepeat(e, action) {
+        return Boolean(action) && e.repeat === true && !REPEATABLE_ACTIONS.has(action);
+    }
+
+    // True when keystrokes are the field's typed content rather than shortcuts: text-like inputs,
+    // textareas, contenteditable. Sliders, checkboxes, buttons and selects keep focus after a click,
+    // and shortcuts must keep working there, as they always have. A <select> is deliberately NOT
+    // text entry (PR #74 review): returning early skipped the dispatch's preventDefault, so the toolbar
+    // #sortAlgorithmSelect's type-ahead took S and switched the algorithm instead of navigating.
+    _isTextEntryTarget(target) {
+        if (!target) return false;
+        if (target.isContentEditable === true) return true;
+        const tag = target.tagName;
+        if (tag === 'TEXTAREA') return true;
+        const nonText = ['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'file', 'color', 'image'];
+        return tag === 'INPUT' && !nonText.includes(target.type);
     }
 
     buildKeyString(e) {
@@ -9499,9 +9630,14 @@ class MediaViewer {
             bothBad: () => this.handleBothBad(),
             bothWin: () => this.handleTournamentDraw('win'),
             bothLose: () => this.handleTournamentDraw('lose'),
+            // Single mode only; the reverse map produces `special` nowhere else, and the mode check
+            // is the second line of defence. Same guarded path as #specialBtn's click.
+            special: () => {
+                if (!this.isCompareMode && !this.isTournamentMode) this.moveToSpecialFolder();
+            },
             // Bound in compare and tournament only. Tournament needs the engine-sync wrapper;
             // compare goes straight to the move, the same path #leftSpecialBtn's click takes.
-            // Single mode has no binding, so the reverse map never produces these there —
+            // Single mode binds `special` instead, so the reverse map never produces these there —
             // the mode check is the second line of defence, not the only one.
             leftSpecial: () => {
                 if (this.isTournamentMode) this.handleTournamentSpecial('left');
@@ -9532,9 +9668,10 @@ class MediaViewer {
     saveShortcut(mode, action, newKey) {
         this.shortcuts[mode][action] = newKey;
         this.shortcutReverseMap = this.buildReverseMap();
-        // The special tooltips are derived from this.shortcuts; without this the button would
-        // keep advertising the old key while the F1 row already shows the new one.
+        // Button tooltips are derived from this.shortcuts; without these the buttons would keep
+        // advertising the old key while the F1 row already shows the new one.
         this.updateSpecialButtonsState();
+        this.updateRatingButtonsState();
 
         // Persist the current shortcuts — loadShortcuts merges on load so full save is safe.
         // version must be written so the v1->v2 migration in loadShortcuts does not re-run and
@@ -9664,6 +9801,7 @@ class MediaViewer {
         this.shortcutReverseMap = this.buildReverseMap();
         localStorage.removeItem('customShortcuts');
         this.updateSpecialButtonsState();
+        this.updateRatingButtonsState();
         this.renderShortcutRows?.();
         this.attachShortcutKeyListeners?.();
     }

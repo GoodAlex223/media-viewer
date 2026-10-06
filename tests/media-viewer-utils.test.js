@@ -6045,7 +6045,7 @@ describe('addMediaOverlayControls — slot targeting and button order (G2)', () 
             isTournamentMode: false,
             shortcuts: { compare: { leftSpecial: 'Digit1', rightSpecial: 'Digit2' } },
             keyDisplayName: extractMethod('keyDisplayName'),
-            _specialShortcutSuffix: extractMethod('_specialShortcutSuffix'),
+            _shortcutSuffix: extractMethod('_shortcutSuffix'),
         };
     }
 
@@ -6191,7 +6191,7 @@ describe('removeZoomPopover — dismisses the popover, keeps the button (G2)', (
 
 describe('updateSpecialButtonsState tooltips', () => {
     const updateSpecialButtonsState = extractMethod('updateSpecialButtonsState');
-    const _specialShortcutSuffix = extractMethod('_specialShortcutSuffix');
+    const _shortcutSuffix = extractMethod('_shortcutSuffix');
     const keyDisplayName = extractMethod('keyDisplayName');
 
     function btn() {
@@ -6199,18 +6199,18 @@ describe('updateSpecialButtonsState tooltips', () => {
     }
 
     // Real helper wiring, not a stub: the suffix logic is what these assertions are about.
-    function ctxWith({ folder, compareOverrides = {} } = {}) {
+    function ctxWith({ folder, compareOverrides = {}, singleOverrides = {} } = {}) {
         return {
             customSpecialFolder: folder,
             specialBtn: btn(),
             leftSpecialBtn: btn(),
             rightSpecialBtn: btn(),
             shortcuts: {
-                single: { like: 'KeyQ' },
+                single: Object.assign({ like: 'KeyQ', special: 'Digit1' }, singleOverrides),
                 compare: Object.assign({ leftSpecial: 'Digit1', rightSpecial: 'Digit2' }, compareOverrides),
             },
             keyDisplayName,
-            _specialShortcutSuffix,
+            _shortcutSuffix,
         };
     }
 
@@ -6221,10 +6221,17 @@ describe('updateSpecialButtonsState tooltips', () => {
         expect(ctx.rightSpecialBtn.title).toBe('Move right to special folder (2)');
     });
 
-    // Ruled at design time: single mode has no special binding, so its tooltip stays bare.
-    // This falls out of the derivation rather than being special-cased.
-    it('leaves the single-mode button bare, since single has no special binding', () => {
+    // G1 binds single-mode special to Digit1, so the single button carries a suffix too.
+    // (Hand-built ctx: these two pass before Task 6 — they replace a test whose premise became
+    // false; the RED evidence for the binding is the DEFAULT_SHORTCUTS tests.)
+    it('shows the single-mode special hotkey on the single button', () => {
         const ctx = ctxWith({ folder: 'C:/special' });
+        updateSpecialButtonsState.call(ctx);
+        expect(ctx.specialBtn.title).toBe('Move to special folder (1)');
+    });
+
+    it('leaves the single-mode button bare when special is unbound', () => {
+        const ctx = ctxWith({ folder: 'C:/special', singleOverrides: { special: null } });
         updateSpecialButtonsState.call(ctx);
         expect(ctx.specialBtn.title).toBe('Move to special folder');
     });
@@ -6243,5 +6250,476 @@ describe('updateSpecialButtonsState tooltips', () => {
         expect(ctx.leftSpecialBtn.title).toBe(configure);
         expect(ctx.rightSpecialBtn.title).toBe(configure);
         expect(ctx.leftSpecialBtn.disabled).toBe(true);
+    });
+});
+
+describe('updateRatingButtonsState tooltips (G1)', () => {
+    const updateRatingButtonsState = extractMethod('updateRatingButtonsState');
+    const _shortcutSuffix = extractMethod('_shortcutSuffix');
+    const keyDisplayName = extractMethod('keyDisplayName');
+    const BUTTONS = ['likeBtn', 'dislikeBtn', 'leftLikeBtn', 'leftDislikeBtn', 'rightLikeBtn', 'rightDislikeBtn'];
+    let origDocument;
+
+    beforeEach(() => {
+        origDocument = globalThis.document;
+        globalThis.document = { getElementById: () => null }; // #folderConfigWarning
+    });
+
+    afterEach(() => {
+        globalThis.document = origDocument;
+    });
+
+    function ctxWith({ folders = true, single = {}, compare = {} } = {}) {
+        const ctx = {
+            customLikeFolder: folders ? '/liked' : '',
+            customDislikeFolder: folders ? '/disliked' : '',
+            shortcuts: {
+                single: Object.assign({ like: 'KeyQ', dislike: 'KeyW' }, single),
+                compare: Object.assign(
+                    { leftLike: 'KeyQ', leftDislike: 'KeyW', rightLike: 'KeyE', rightDislike: 'KeyR' },
+                    compare
+                ),
+            },
+            areFoldersConfigured,
+            _shortcutSuffix,
+            keyDisplayName,
+        };
+        for (const b of BUTTONS) ctx[b] = { disabled: false, title: '' };
+        return ctx;
+    }
+
+    it('shows the real default hotkeys (single mode read "Arrow Up"/"Arrow Down")', () => {
+        const ctx = ctxWith();
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.likeBtn.title).toBe('Like (Q)');
+        expect(ctx.dislikeBtn.title).toBe('Dislike (W)');
+        expect(ctx.leftLikeBtn.title).toBe('Like Left (Q)');
+        expect(ctx.leftDislikeBtn.title).toBe('Dislike Left (W)');
+        expect(ctx.rightLikeBtn.title).toBe('Like Right (E)');
+        expect(ctx.rightDislikeBtn.title).toBe('Dislike Right (R)');
+    });
+
+    it('follows a remap in either mode', () => {
+        const ctx = ctxWith({ single: { like: 'KeyT' }, compare: { rightDislike: 'Shift+KeyR' } });
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.likeBtn.title).toBe('Like (T)');
+        expect(ctx.rightDislikeBtn.title).toBe('Dislike Right (Shift+R)');
+    });
+
+    it('renders a bare label for an unbound action', () => {
+        const ctx = ctxWith({ single: { dislike: null } });
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.dislikeBtn.title).toBe('Dislike');
+    });
+
+    it('keeps the configure-folders tooltip, and disables, when folders are missing', () => {
+        const ctx = ctxWith({ folders: false });
+        updateRatingButtonsState.call(ctx);
+        for (const b of BUTTONS) {
+            expect(ctx[b].title, b).toBe('Configure like/dislike folders in Settings (F1)');
+            expect(ctx[b].disabled, b).toBe(true);
+        }
+    });
+});
+
+describe('forceVideoCleanup releases only its own video (G1 D5)', () => {
+    const forceVideoCleanup = extractAsyncMethod('forceVideoCleanup');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = {}; // the method probes window.gc
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        globalThis.window = origWindow;
+    });
+
+    function fakeVideo() {
+        return {
+            tagName: 'VIDEO',
+            parentNode: {},
+            currentTime: 3,
+            pause: vi.fn(),
+            load: vi.fn(),
+            removeAttribute: vi.fn(),
+            removeEventListener: vi.fn(),
+            remove: vi.fn(),
+        };
+    }
+
+    it('nulls currentMedia when it is still the video it cleaned', async () => {
+        const video = fakeVideo();
+        const ctx = { currentMedia: video, videoEventListeners: [], isBeingCleaned: false };
+        const done = forceVideoCleanup.call(ctx);
+        await vi.advanceTimersByTimeAsync(100);
+        await done;
+        expect(ctx.currentMedia).toBeNull();
+        expect(video.remove).toHaveBeenCalledOnce();
+        expect(ctx.isBeingCleaned).toBe(false);
+    });
+
+    // The held-Like end state (spec F3): a render installs the next media during the 100 ms wait.
+    it('leaves alone a currentMedia that a render installed during its wait', async () => {
+        const video = fakeVideo();
+        const next = { tagName: 'IMG' };
+        const ctx = { currentMedia: video, videoEventListeners: [], isBeingCleaned: false };
+        const done = forceVideoCleanup.call(ctx);
+        ctx.currentMedia = next;
+        await vi.advanceTimersByTimeAsync(100);
+        await done;
+        expect(ctx.currentMedia).toBe(next);
+        expect(video.remove).toHaveBeenCalledOnce();
+    });
+});
+
+// checkFolderExists / moveFile park on a gate, so a test can start a second call while the first
+// is mid-await — the exact window a held key or a double-tap used to hit. drain() keeps opening the
+// gate (each awaited IPC step parks on a fresh waiter; some methods also sleep between steps) until
+// every given call has settled.
+function gatedApi({ moveResult } = {}) {
+    const waiters = [];
+    const gate = () => new Promise((resolve) => waiters.push(resolve));
+    const api = {
+        path: { basename: (p) => p.split('/').pop() },
+        checkFolderExists: vi.fn(async () => {
+            await gate();
+            return true;
+        }),
+        moveFile: vi.fn(async ({ targetFolder, fileName }) => {
+            await gate();
+            return moveResult ?? { success: true, targetPath: `${targetFolder}/${fileName}` };
+        }),
+    };
+    const drain = async (...calls) => {
+        let settled = false;
+        Promise.allSettled(calls).then(() => {
+            settled = true;
+        });
+        for (let i = 0; i < 400 && !settled; i++) {
+            waiters.splice(0).forEach((resolve) => resolve());
+            await new Promise((r) => setTimeout(r, 5));
+        }
+        return Promise.all(calls);
+    };
+    return { api, drain };
+}
+
+const IN_FLIGHT_NOTICE = 'A move is still in progress — press Undo again in a moment';
+
+describe('_fileOpInFlight — one file action at a time (G1)', () => {
+    const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+    const moveToSpecialFolder = extractAsyncMethod('moveToSpecialFolder');
+    const handleCancel = extractAsyncMethod('handleCancel');
+    const nextMedia = extractMethod('nextMedia');
+    const previousMedia = extractMethod('previousMedia');
+
+    const previousLike = () => ({
+        fileName: 'z.jpg',
+        originalPath: '/f/z.jpg',
+        newPath: '/liked/z.jpg',
+        fileSize: 10,
+        fileType: 'image/jpeg',
+        actionType: 'like',
+        mlFeatures: null,
+    });
+
+    function guardCtx(overrides = {}) {
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: false,
+            isTournamentMode: false,
+            isSortedByPrediction: false,
+            isMlEnabled: false,
+            mlWorker: null,
+            currentMedia: null,
+            mediaFiles: [
+                { name: 'a.jpg', path: '/f/a.jpg', size: 10, type: 'image/jpeg' },
+                { name: 'b.jpg', path: '/f/b.jpg', size: 10, type: 'image/jpeg' },
+                { name: 'c.jpg', path: '/f/c.jpg', size: 10, type: 'image/jpeg' },
+            ],
+            currentIndex: 0,
+            moveHistory: [],
+            baseFolderPath: '/f',
+            customLikeFolder: '/liked',
+            customDislikeFolder: '/disliked',
+            customSpecialFolder: '/special',
+            showRatingConfirmations: false,
+            featureCache: new Map(),
+            areFoldersConfigured: () => true,
+            getCombinedFeatures: () => null,
+            _bulkPairKeysReferencing: () => [],
+            removeFileFromList: vi.fn(function (p) {
+                this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
+            }),
+            restoreFeatureCachesFromHistory: vi.fn(),
+            requestPredictionScores: vi.fn(),
+            signalUserActivity: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            showFolderCreationDialog: vi.fn(async () => false),
+            showEmptyStateWithUndo: vi.fn(),
+            showDropZone: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('moveCurrentFile holds the flag from before its first await until it settles', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        const like = moveCurrentFile.call(ctx, 'like');
+        expect(ctx._fileOpInFlight).toBe(true);
+        await drain(like);
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it("a second moveCurrentFile during the first one's awaits never reaches moveFile", async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        const first = moveCurrentFile.call(ctx, 'like');
+        const second = moveCurrentFile.call(ctx, 'like');
+        await drain(first, second);
+        expect(api.moveFile).toHaveBeenCalledTimes(1);
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.showError).not.toHaveBeenCalled();
+    });
+
+    it('moveCurrentFile releases the flag after a failed move', async () => {
+        const { api, drain } = gatedApi({ moveResult: { success: false, error: 'ENOENT' } });
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        await drain(moveCurrentFile.call(ctx, 'like'));
+        expect(ctx.showError).toHaveBeenCalledWith('Failed to move file: ENOENT');
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('moveCurrentFile releases the flag after an early return inside the guarded section', async () => {
+        const { api, drain } = gatedApi();
+        api.checkFolderExists = vi.fn(async () => false); // → creation dialog, declined
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        await drain(moveCurrentFile.call(ctx, 'like'));
+        expect(ctx.showFolderCreationDialog).toHaveBeenCalledOnce();
+        expect(api.moveFile).not.toHaveBeenCalled();
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it("a second single-mode moveToSpecialFolder during the first one's awaits never reaches moveFile", async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        const first = moveToSpecialFolder.call(ctx);
+        const second = moveToSpecialFolder.call(ctx);
+        await drain(first, second);
+        expect(api.moveFile).toHaveBeenCalledTimes(1);
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('moveToSpecialFolder is refused while a like is in flight', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        const like = moveCurrentFile.call(ctx, 'like');
+        const special = moveToSpecialFolder.call(ctx);
+        await drain(like, special);
+        expect(api.moveFile).toHaveBeenCalledTimes(1);
+        expect(api.moveFile.mock.calls[0][0].targetFolder).toBe('/liked');
+    });
+
+    it('handleCancel refuses with a notice while a move is in flight — even with an empty history', async () => {
+        const { api } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx({ _fileOpInFlight: true });
+        await handleCancel.call(ctx);
+        expect(ctx.showNotification).toHaveBeenCalledWith(IN_FLIGHT_NOTICE, 'info');
+        expect(ctx.showNotification).not.toHaveBeenCalledWith('No moves to undo', 'error');
+        expect(api.moveFile).not.toHaveBeenCalled();
+    });
+
+    it('an undo pressed during a like does not reverse the previous move', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx({ moveHistory: [previousLike()] });
+        const like = moveCurrentFile.call(ctx, 'like');
+        const undo = handleCancel.call(ctx);
+        await drain(like, undo);
+        expect(api.moveFile).toHaveBeenCalledTimes(1); // the like only
+        expect(ctx.moveHistory.map((m) => m.fileName)).toEqual(['z.jpg', 'a.jpg']);
+        expect(ctx.showNotification).toHaveBeenCalledWith(IN_FLIGHT_NOTICE, 'info');
+    });
+
+    it('handleCancel holds the flag during its own restore, so a like pressed then is refused', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx({ moveHistory: [previousLike()] });
+        const undo = handleCancel.call(ctx);
+        expect(ctx._fileOpInFlight).toBe(true);
+        const like = moveCurrentFile.call(ctx, 'like');
+        await drain(undo, like);
+        expect(api.moveFile).toHaveBeenCalledTimes(1); // the restore only
+        expect(api.moveFile.mock.calls[0][0].sourcePath).toBe('/liked/z.jpg');
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('handleCancel releases the flag after a failed restore', async () => {
+        const { api, drain } = gatedApi({ moveResult: { success: false, error: 'EBUSY' } });
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx({ moveHistory: [previousLike()] });
+        await drain(handleCancel.call(ctx));
+        expect(ctx.showError).toHaveBeenCalledWith('Failed to undo move: EBUSY');
+        expect(ctx.moveHistory).toHaveLength(1); // pushed back
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('nextMedia and previousMedia do not move while a file action is in flight', () => {
+        const ctx = guardCtx({ _fileOpInFlight: true, currentIndex: 1 });
+        nextMedia.call(ctx);
+        previousMedia.call(ctx);
+        expect(ctx.currentIndex).toBe(1);
+        expect(ctx.showMedia).not.toHaveBeenCalled();
+    });
+});
+
+describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
+    const moveComparePair = extractAsyncMethod('moveComparePair');
+    const applyBulkRating = extractAsyncMethod('applyBulkRating');
+    const bulkPairKey = extractMethod('bulkPairKey');
+
+    function pairCtx(overrides = {}) {
+        const files = ['a', 'b', 'c', 'd'].map((n) => ({
+            name: `${n}.jpg`,
+            path: `/f/${n}.jpg`,
+            size: 10,
+            type: 'image/jpeg',
+        }));
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: true,
+            isTournamentMode: false,
+            isSortedByPrediction: false,
+            isMlEnabled: false,
+            mlWorker: null,
+            leftMedia: null,
+            rightMedia: null,
+            mediaFiles: files,
+            compareLeftFile: files[0],
+            compareRightFile: files[1],
+            currentIndex: 0,
+            mlComparePairIndex: 0,
+            moveHistory: [],
+            customLikeFolder: '/liked',
+            customDislikeFolder: '/disliked',
+            showRatingConfirmations: false,
+            areFoldersConfigured: () => true,
+            _bulkPairKeysReferencing: () => [],
+            removeFileFromList: vi.fn(function (p) {
+                this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
+            }),
+            cleanupCompareMedia: vi.fn(async () => {}),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            showFolderCreationDialog: vi.fn(async () => false),
+            switchToSingleModeUI: vi.fn(),
+            hideLoadingSpinner: vi.fn(),
+            showEmptyStateWithUndo: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    // Spec F5: Q then E used to run two pair moves on the same compare files.
+    it('a second pair move during the first never reaches moveFile (Q then E)', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = pairCtx();
+        const q = moveComparePair.call(ctx, 'left', 'like', 'dislike');
+        const e = moveComparePair.call(ctx, 'right', 'like', 'dislike');
+        await drain(q, e);
+        expect(api.moveFile.mock.calls.map(([arg]) => `${arg.fileName}->${arg.targetFolder}`)).toEqual([
+            'a.jpg->/liked',
+            'b.jpg->/disliked',
+        ]);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['c.jpg', 'd.jpg']);
+        expect(ctx.moveHistory).toHaveLength(2);
+        expect(ctx.showError).not.toHaveBeenCalled();
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('moveComparePair releases the flag after a failed move', async () => {
+        const { api, drain } = gatedApi({ moveResult: { success: false, error: 'ENOENT' } });
+        globalThis.window = { electronAPI: api };
+        const ctx = pairCtx();
+        await drain(moveComparePair.call(ctx, 'left', 'like', 'dislike'));
+        expect(ctx.showError).toHaveBeenCalledWith('Failed to move files: ENOENT');
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('a pair move is refused while another file action is in flight', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = pairCtx({ _fileOpInFlight: true });
+        await drain(moveComparePair.call(ctx, 'left', 'like', 'dislike'));
+        expect(api.checkFolderExists).not.toHaveBeenCalled();
+        expect(api.moveFile).not.toHaveBeenCalled();
+    });
+
+    function bulkCtx(overrides = {}) {
+        const saves = [];
+        const ctx = pairCtx({
+            isSortedByPrediction: true,
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey,
+            saveBulkRatedFile: vi.fn(() => new Promise((resolve) => saves.push(resolve))),
+            computeValidComparePairs: () => [{}, {}],
+            ...overrides,
+        });
+        return { ctx, releaseSaves: () => saves.splice(0).forEach((resolve) => resolve()) };
+    }
+
+    it("a second bulk rating during the first one's save is refused", async () => {
+        const { ctx, releaseSaves } = bulkCtx();
+        const first = applyBulkRating.call(ctx, 'good');
+        const second = applyBulkRating.call(ctx, 'good');
+        releaseSaves();
+        await Promise.all([first, second]);
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('a bulk rating is refused while a pair move is in flight', async () => {
+        const { ctx } = bulkCtx({ _fileOpInFlight: true });
+        await applyBulkRating.call(ctx, 'bad');
+        expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
+        expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.moveHistory).toHaveLength(0);
     });
 });

@@ -38,6 +38,12 @@ function extractActionLabels() {
     return new Function(`return ${match[1]}`)();
 }
 
+function extractRepeatableActions() {
+    const match = source.match(/const REPEATABLE_ACTIONS\s*=\s*(new Set\(\[[^\]]*\]\));/);
+    if (!match) throw new Error('Could not find REPEATABLE_ACTIONS');
+    return new Function(`return ${match[1]}`)();
+}
+
 // loadShortcuts delegates the per-mode merge, so an extracted copy needs the real collaborator
 // on its `this` — the same rule every extract-method test here follows.
 function loadCtx() {
@@ -51,7 +57,7 @@ describe('DEFAULT_SHORTCUTS', () => {
         expect(shortcuts).toHaveProperty('compare');
     });
 
-    it('single mode has like, dislike, next, previous, undo', () => {
+    it('single mode has like, dislike, next, previous, undo, special', () => {
         const shortcuts = extractDefaultShortcuts();
         expect(shortcuts.single).toEqual({
             like: 'KeyQ',
@@ -59,6 +65,7 @@ describe('DEFAULT_SHORTCUTS', () => {
             next: 'KeyS',
             previous: 'KeyA',
             undo: 'Ctrl+KeyA',
+            special: 'Digit1',
         });
     });
 
@@ -85,11 +92,17 @@ describe('DEFAULT_SHORTCUTS', () => {
         expect(shortcuts.compare.rightSpecial).toBe(shortcuts.tournament.rightSpecial);
     });
 
-    it('single mode has no special-folder binding', () => {
+    it('single mode binds special to Digit1 and has no side-specific special actions', () => {
         const shortcuts = extractDefaultShortcuts();
+        expect(shortcuts.single.special).toBe('Digit1');
         expect(shortcuts.single.leftSpecial).toBeUndefined();
         expect(shortcuts.single.rightSpecial).toBeUndefined();
-        expect(shortcuts.single.special).toBeUndefined();
+    });
+
+    it('single mode has no duplicate key bindings', () => {
+        const shortcuts = extractDefaultShortcuts();
+        const keys = Object.values(shortcuts.single);
+        expect(new Set(keys).size).toBe(keys.length);
     });
 
     it('compare mode has no duplicate key bindings', () => {
@@ -298,6 +311,24 @@ describe('loadShortcuts — a stored remap outranks a later additive default', (
         expect(Object.values(reverse.compare)).not.toContain('leftSpecial');
     });
 
+    // G1 adds single.special = 'Digit1'; a user who already put Digit1 on a single-mode action
+    // keeps it, and the new action yields — no file moved by their key.
+    it('leaves single-mode special unbound when a stored single remap holds Digit1', () => {
+        globalThis.localStorage = {
+            getItem: () =>
+                JSON.stringify({
+                    version: 2,
+                    single: { like: 'KeyQ', dislike: 'KeyW', next: 'Digit1', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                }),
+            setItem: () => {},
+        };
+        const ctx = loadCtx();
+        const shortcuts = loadShortcuts.call(ctx);
+        expect(shortcuts.single.special).toBeNull();
+        expect(buildReverseMap.call({ shortcuts }).single['Digit1']).toBe('next');
+        expect(ctx._shortcutCollisions).toEqual([{ mode: 'single', action: 'special', key: 'Digit1', heldBy: 'next' }]);
+    });
+
     it('records the collision so it can be surfaced to the user', () => {
         seedPreG3Compare({ next: 'Digit1' });
         const ctx = loadCtx();
@@ -418,6 +449,48 @@ describe('buildKeyString', () => {
     });
 });
 
+describe('_isSuppressedRepeat (held-key filter, G1)', () => {
+    const _isSuppressedRepeat = extractMethod('_isSuppressedRepeat');
+    let origRepeatable;
+
+    beforeEach(() => {
+        origRepeatable = globalThis.REPEATABLE_ACTIONS;
+        globalThis.REPEATABLE_ACTIONS = extractRepeatableActions();
+    });
+
+    afterEach(() => {
+        globalThis.REPEATABLE_ACTIONS = origRepeatable;
+    });
+
+    it('lets navigation auto-repeat', () => {
+        expect(_isSuppressedRepeat.call({}, { repeat: true }, 'next')).toBe(false);
+        expect(_isSuppressedRepeat.call({}, { repeat: true }, 'previous')).toBe(false);
+    });
+
+    it('suppresses the auto-repeat of every other bound action, undo included', () => {
+        const actions = ['like', 'dislike', 'special', 'undo', 'leftLike', 'rightDislike', 'leftSpecial'];
+        for (const action of [...actions, 'bothGood', 'bothBad', 'bothWin', 'bothLose']) {
+            expect(_isSuppressedRepeat.call({}, { repeat: true }, action), action).toBe(true);
+        }
+    });
+
+    it('never suppresses a first (non-repeat) press', () => {
+        expect(_isSuppressedRepeat.call({}, { repeat: false }, 'like')).toBe(false);
+        expect(_isSuppressedRepeat.call({}, { repeat: false }, 'undo')).toBe(false);
+    });
+
+    // A held key the dispatcher does not own — typing in a Settings number field — must keep its
+    // native repeat; a preventDefault there would break the field.
+    it('never suppresses an unbound key', () => {
+        expect(_isSuppressedRepeat.call({}, { repeat: true }, undefined)).toBe(false);
+        expect(_isSuppressedRepeat.call({}, { repeat: true }, null)).toBe(false);
+    });
+
+    it('is consulted by both keydown branches (main and empty-state)', () => {
+        expect(source.match(/this\._isSuppressedRepeat\(e, action\)/g)).toHaveLength(2);
+    });
+});
+
 describe('buildReverseMap', () => {
     const buildReverseMap = extractMethod('buildReverseMap');
 
@@ -444,14 +517,14 @@ describe('buildReverseMap', () => {
     // Dispatch isolation comes from the mode-keyed reverse map, not from action-name
     // uniqueness: leftSpecial exists in BOTH compare and tournament and resolves to a
     // different handler in each (see the executeAction per-mode tests below).
-    it('maps Digit1/Digit2 to the special actions in compare and tournament, but not single', () => {
+    it('maps Digit1/Digit2 to the special actions in every mode that binds them', () => {
         const shortcuts = extractDefaultShortcuts();
         const result = buildReverseMap.call({ shortcuts });
         expect(result.compare['Digit1']).toBe('leftSpecial');
         expect(result.compare['Digit2']).toBe('rightSpecial');
         expect(result.tournament['Digit1']).toBe('leftSpecial');
         expect(result.tournament['Digit2']).toBe('rightSpecial');
-        expect(result.single['Digit1']).toBeUndefined();
+        expect(result.single['Digit1']).toBe('special');
         expect(result.single['Digit2']).toBeUndefined();
     });
 
@@ -575,14 +648,32 @@ describe('executeAction', () => {
             expect(ctx.handleTournamentSpecial).toHaveBeenCalledWith('right');
         });
 
-        // Single mode has no Digit1/Digit2 binding, so the reverse map never produces
-        // these actions there; the handler guard is the second line of defence.
+        // leftSpecial/rightSpecial stay compare/tournament-only: single binds `special` (Digit1)
+        // instead, so the reverse map never produces these there; the handler guard is the second
+        // line of defence.
         it('single mode does nothing for either special action', () => {
             const ctx = specialCtx('single');
             executeAction.call(ctx, 'leftSpecial');
             executeAction.call(ctx, 'rightSpecial');
             expect(ctx.moveToSpecialFolder).not.toHaveBeenCalled();
             expect(ctx.handleTournamentSpecial).not.toHaveBeenCalled();
+        });
+
+        it('single mode moves the current file to the special folder', () => {
+            const ctx = specialCtx('single');
+            executeAction.call(ctx, 'special');
+            expect(ctx.moveToSpecialFolder).toHaveBeenCalledOnce();
+            expect(ctx.moveToSpecialFolder).toHaveBeenCalledWith();
+            expect(ctx.handleTournamentSpecial).not.toHaveBeenCalled();
+        });
+
+        it('compare and tournament ignore the single-mode special action', () => {
+            for (const mode of ['compare', 'tournament']) {
+                const ctx = specialCtx(mode);
+                executeAction.call(ctx, 'special');
+                expect(ctx.moveToSpecialFolder, mode).not.toHaveBeenCalled();
+                expect(ctx.handleTournamentSpecial, mode).not.toHaveBeenCalled();
+            }
         });
     });
 });
@@ -694,12 +785,14 @@ describe('checkShortcutConflict', () => {
     it('does not treat Digit1/Digit2 as reserved keys', () => {
         const ctx = { shortcuts: extractDefaultShortcuts() };
         expect(checkShortcutConflict.call(ctx, 'compare', 'leftSpecial', 'Digit1')).toBeNull();
-        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'Digit1')).toBeNull();
+        // Single binds Digit1 to `special` since G1, so Digit2 is the free digit there.
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'Digit2')).toBeNull();
+        expect(checkShortcutConflict.call(ctx, 'single', 'like', 'Digit1')).toBe('special');
     });
 });
 
-describe('_specialShortcutSuffix', () => {
-    const _specialShortcutSuffix = extractMethod('_specialShortcutSuffix');
+describe('_shortcutSuffix', () => {
+    const _shortcutSuffix = extractMethod('_shortcutSuffix');
     const keyDisplayName = extractMethod('keyDisplayName');
 
     function ctxWith(shortcuts) {
@@ -708,33 +801,40 @@ describe('_specialShortcutSuffix', () => {
 
     it('renders the bound key as a parenthesised suffix', () => {
         const ctx = ctxWith(extractDefaultShortcuts());
-        expect(_specialShortcutSuffix.call(ctx, 'compare', 'leftSpecial')).toBe(' (1)');
-        expect(_specialShortcutSuffix.call(ctx, 'compare', 'rightSpecial')).toBe(' (2)');
-        expect(_specialShortcutSuffix.call(ctx, 'tournament', 'leftSpecial')).toBe(' (1)');
+        expect(_shortcutSuffix.call(ctx, 'compare', 'leftSpecial')).toBe(' (1)');
+        expect(_shortcutSuffix.call(ctx, 'compare', 'rightSpecial')).toBe(' (2)');
+        expect(_shortcutSuffix.call(ctx, 'tournament', 'leftSpecial')).toBe(' (1)');
     });
 
     // The whole point of deriving rather than hardcoding: a remap must reach the tooltip.
     it('follows a remapped binding instead of the default', () => {
         const shortcuts = extractDefaultShortcuts();
         shortcuts.compare.leftSpecial = 'Digit9';
-        expect(_specialShortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (9)');
+        expect(_shortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (9)');
     });
 
     it('renders a modifier binding through keyDisplayName', () => {
         const shortcuts = extractDefaultShortcuts();
         shortcuts.compare.leftSpecial = 'Ctrl+Digit1';
-        expect(_specialShortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (Ctrl+1)');
+        expect(_shortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (Ctrl+1)');
+    });
+
+    it('renders the single-mode special binding', () => {
+        const ctx = ctxWith(extractDefaultShortcuts());
+        expect(_shortcutSuffix.call(ctx, 'single', 'special')).toBe(' (1)');
     });
 
     it('returns an empty string when the action is unbound in that mode', () => {
         const ctx = ctxWith(extractDefaultShortcuts());
-        expect(_specialShortcutSuffix.call(ctx, 'single', 'special')).toBe('');
-        expect(_specialShortcutSuffix.call(ctx, 'single', 'leftSpecial')).toBe('');
+        expect(_shortcutSuffix.call(ctx, 'single', 'leftSpecial')).toBe('');
+        const shortcuts = extractDefaultShortcuts();
+        shortcuts.single.special = null; // yielded to a user remap by _mergeModeShortcuts
+        expect(_shortcutSuffix.call(ctxWith(shortcuts), 'single', 'special')).toBe('');
     });
 
     it('returns an empty string for an unknown mode rather than throwing', () => {
         const ctx = ctxWith(extractDefaultShortcuts());
-        expect(_specialShortcutSuffix.call(ctx, 'nosuchmode', 'leftSpecial')).toBe('');
+        expect(_shortcutSuffix.call(ctx, 'nosuchmode', 'leftSpecial')).toBe('');
     });
 });
 
@@ -776,6 +876,7 @@ describe('saveShortcut', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         saveShortcut.call(ctx, 'single', 'like', 'KeyT');
@@ -807,6 +908,7 @@ describe('saveShortcut', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         saveShortcut.call(ctx, 'single', 'like', 'KeyT');
@@ -815,7 +917,7 @@ describe('saveShortcut', () => {
 
     // The special tooltips are derived from this.shortcuts, so a remap that does not
     // refresh them leaves the button advertising the old key while F1 shows the new one.
-    it('refreshes the special-button tooltips so a remap reaches them', () => {
+    it('refreshes the button tooltips so a remap reaches them', () => {
         globalThis.localStorage = { setItem: () => {}, removeItem: () => {} };
         const ctx = {
             shortcuts: {
@@ -827,10 +929,12 @@ describe('saveShortcut', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         saveShortcut.call(ctx, 'compare', 'leftSpecial', 'Digit9');
         expect(ctx.updateSpecialButtonsState).toHaveBeenCalledOnce();
+        expect(ctx.updateRatingButtonsState).toHaveBeenCalledOnce();
     });
 });
 
@@ -871,6 +975,7 @@ describe('saveShortcut does not persist an unbound collision', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         saveShortcut.call(ctx, 'compare', 'rightSpecial', 'Digit3');
@@ -902,6 +1007,7 @@ describe('saveShortcut does not persist an unbound collision', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         // User moves `next` off Digit1, freeing it.
@@ -954,6 +1060,7 @@ describe('resetShortcuts', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
             stopListeningMode() {},
             _listeningState: null,
@@ -964,7 +1071,7 @@ describe('resetShortcuts', () => {
         expect(removedKey).toBe('customShortcuts');
     });
 
-    it('refreshes the special-button tooltips after restoring defaults', () => {
+    it('refreshes the button tooltips after restoring defaults', () => {
         globalThis.localStorage = { removeItem: () => {} };
         const ctx = {
             shortcuts: { single: {}, compare: { leftSpecial: 'Digit9' } },
@@ -973,11 +1080,45 @@ describe('resetShortcuts', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
             stopListeningMode() {},
             _listeningState: null,
         };
         resetShortcuts.call(ctx);
         expect(ctx.updateSpecialButtonsState).toHaveBeenCalledOnce();
+        expect(ctx.updateRatingButtonsState).toHaveBeenCalledOnce();
+    });
+});
+
+// G1 final review (Critical): the document keydown listener dispatched bound keys typed into form
+// fields. With single.special = Digit1, typing "10" into the tournament Rounds box (open while the
+// dispatch mode is still `single`) moved the displayed file to the special folder.
+describe('_isTextEntryTarget (form fields never dispatch shortcuts, G1)', () => {
+    const _isTextEntryTarget = extractMethod('_isTextEntryTarget');
+
+    it('treats text-like inputs, textareas and contenteditable as text entry', () => {
+        for (const type of ['number', 'text', 'search', '']) {
+            expect(_isTextEntryTarget.call({}, { tagName: 'INPUT', type }), type).toBe(true);
+        }
+        expect(_isTextEntryTarget.call({}, { tagName: 'TEXTAREA' })).toBe(true);
+        expect(_isTextEntryTarget.call({}, { tagName: 'DIV', isContentEditable: true })).toBe(true);
+    });
+
+    // A clicked slider, checkbox or select keeps focus; shortcuts must still work there, as before.
+    // PR #74 review: guarding SELECT skipped the dispatch's preventDefault, so the toolbar
+    // #sortAlgorithmSelect's type-ahead took S — it picked "Simple (Limited)" instead of navigating.
+    it('leaves sliders, checkboxes, selects, buttons and ordinary elements to the shortcuts', () => {
+        for (const type of ['range', 'checkbox', 'radio', 'button']) {
+            expect(_isTextEntryTarget.call({}, { tagName: 'INPUT', type }), type).toBe(false);
+        }
+        expect(_isTextEntryTarget.call({}, { tagName: 'SELECT' })).toBe(false);
+        expect(_isTextEntryTarget.call({}, { tagName: 'BUTTON' })).toBe(false);
+        expect(_isTextEntryTarget.call({}, { tagName: 'BODY' })).toBe(false);
+        expect(_isTextEntryTarget.call({}, null)).toBe(false);
+    });
+
+    it('is consulted by both keydown branches before shortcut dispatch', () => {
+        expect(source.match(/this\._isTextEntryTarget\(e\.target\)/g)).toHaveLength(2);
     });
 });
