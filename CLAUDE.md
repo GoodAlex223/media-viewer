@@ -167,6 +167,7 @@ BACKLOG.md is split into three source sections. Authoritative rules live in
 **Keyboard Shortcuts**:
 - `DEFAULT_SHORTCUTS` defines `single`/`compare`/`tournament` bindings. Per-mode dispatch: `mode = isTournamentMode ? 'tournament' : isCompareMode ? 'compare' : 'single'`; `D`/`F` resolve to different handlers per mode (compare `bothGood`/`bothBad` = ML training; tournament `bothWin`/`bothLose` = `handleTournamentDraw`, no ML) — isolation comes from the mode-keyed reverse map, not action-name uniqueness.
 - `loadShortcuts()` merges sparse `customShortcuts` from global `localStorage` over defaults; `buildKeyString(e)` normalizes events; `buildReverseMap()` inverts `shortcuts[mode]` for O(1) dispatch; `executeAction(action)` dispatches to handlers; `checkShortcutConflict` checks within-mode; `saveShortcut`/`resetShortcuts` persist/clear the full object. Shortcut methods use global `localStorage` directly (tests mock `globalThis.localStorage`).
+- Key auto-repeat: both keydown branches (main and empty-state) drop an `e.repeat` event for every bound action outside `REPEATABLE_ACTIONS` (`next`, `previous`) via `_isSuppressedRepeat(e, action)`, calling `preventDefault` — a held rating key used to move files at the OS repeat rate (G1). An unbound key is never suppressed (a held key in a Settings field keeps repeating). A burst of discrete presses or clicks (`repeat: false`) is the in-flight guard's job, not this filter's.
 
 ## Git Insights
 

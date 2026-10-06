@@ -38,6 +38,12 @@ function extractActionLabels() {
     return new Function(`return ${match[1]}`)();
 }
 
+function extractRepeatableActions() {
+    const match = source.match(/const REPEATABLE_ACTIONS\s*=\s*(new Set\(\[[^\]]*\]\));/);
+    if (!match) throw new Error('Could not find REPEATABLE_ACTIONS');
+    return new Function(`return ${match[1]}`)();
+}
+
 // loadShortcuts delegates the per-mode merge, so an extracted copy needs the real collaborator
 // on its `this` — the same rule every extract-method test here follows.
 function loadCtx() {
@@ -415,6 +421,48 @@ describe('buildKeyString', () => {
     it('handles non-letter codes', () => {
         const e = { code: 'Space', ctrlKey: false, shiftKey: false };
         expect(buildKeyString.call({}, e)).toBe('Space');
+    });
+});
+
+describe('_isSuppressedRepeat (held-key filter, G1)', () => {
+    const _isSuppressedRepeat = extractMethod('_isSuppressedRepeat');
+    let origRepeatable;
+
+    beforeEach(() => {
+        origRepeatable = globalThis.REPEATABLE_ACTIONS;
+        globalThis.REPEATABLE_ACTIONS = extractRepeatableActions();
+    });
+
+    afterEach(() => {
+        globalThis.REPEATABLE_ACTIONS = origRepeatable;
+    });
+
+    it('lets navigation auto-repeat', () => {
+        expect(_isSuppressedRepeat.call({}, { repeat: true }, 'next')).toBe(false);
+        expect(_isSuppressedRepeat.call({}, { repeat: true }, 'previous')).toBe(false);
+    });
+
+    it('suppresses the auto-repeat of every other bound action, undo included', () => {
+        const actions = ['like', 'dislike', 'special', 'undo', 'leftLike', 'rightDislike', 'leftSpecial'];
+        for (const action of [...actions, 'bothGood', 'bothBad', 'bothWin', 'bothLose']) {
+            expect(_isSuppressedRepeat.call({}, { repeat: true }, action), action).toBe(true);
+        }
+    });
+
+    it('never suppresses a first (non-repeat) press', () => {
+        expect(_isSuppressedRepeat.call({}, { repeat: false }, 'like')).toBe(false);
+        expect(_isSuppressedRepeat.call({}, { repeat: false }, 'undo')).toBe(false);
+    });
+
+    // A held key the dispatcher does not own — typing in a Settings number field — must keep its
+    // native repeat; a preventDefault there would break the field.
+    it('never suppresses an unbound key', () => {
+        expect(_isSuppressedRepeat.call({}, { repeat: true }, undefined)).toBe(false);
+        expect(_isSuppressedRepeat.call({}, { repeat: true }, null)).toBe(false);
+    });
+
+    it('is consulted by both keydown branches (main and empty-state)', () => {
+        expect(source.match(/this\._isSuppressedRepeat\(e, action\)/g)).toHaveLength(2);
     });
 });
 

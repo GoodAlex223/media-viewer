@@ -59,6 +59,11 @@ const ACTION_LABELS = {
     bothLose: 'Both lose (tie down)',
 };
 
+// Actions a held key may auto-repeat. Everything else — every rating, special and bulk action,
+// tournament picks and draws, and undo — fires once per physical press: a held Q used to move
+// files at the OS key-repeat rate (~30/s, G1). Navigation is the one place hold-to-repeat is wanted.
+const REPEATABLE_ACTIONS = new Set(['next', 'previous']);
+
 const CLIP_UNLOAD_DELAY_MS = 30000; // grace period before unloading the CLIP model after extraction
 
 // Cumulative failed disk restores of the SAME tournament `special` undo entry (not a
@@ -2182,6 +2187,10 @@ class MediaViewer {
                 const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
                 const keyStr = this.buildKeyString(e);
                 const action = this.shortcutReverseMap[mode]?.[keyStr];
+                if (this._isSuppressedRepeat(e, action)) {
+                    e.preventDefault();
+                    return;
+                }
                 // The undo shortcut must also fire for a tournament whose engine still holds an
                 // undoable entry. #tournamentUndoBtn already consults peekUndoKind() (in
                 // showTournamentPair, where the button's disabled state is set), so
@@ -2263,6 +2272,10 @@ class MediaViewer {
             const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
             const keyStr = this.buildKeyString(e);
             const action = this.shortcutReverseMap[mode]?.[keyStr];
+            if (this._isSuppressedRepeat(e, action)) {
+                e.preventDefault();
+                return;
+            }
             if (action && !this.isLoading) {
                 e.preventDefault();
                 this.signalUserActivity();
@@ -9455,6 +9468,13 @@ class MediaViewer {
             }
         }
         return merged;
+    }
+
+    // True for an auto-repeat keydown of a bound action outside REPEATABLE_ACTIONS. An unbound key
+    // (action undefined) is never suppressed: the dispatcher does not own it, and a held key in a
+    // text or number field must keep repeating.
+    _isSuppressedRepeat(e, action) {
+        return Boolean(action) && e.repeat === true && !REPEATABLE_ACTIONS.has(action);
     }
 
     buildKeyString(e) {
