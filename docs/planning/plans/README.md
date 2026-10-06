@@ -76,7 +76,9 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 ## Current Plans
 
-_None currently active._
+| Plan | Group | Branch | Status |
+| ---- | ----- | ------ | ------ |
+| [2026-10-06_g1-single-mode-rating-safety.md](2026-10-06_g1-single-mode-rating-safety.md) | G1 Single-mode rating safety (Oct 5–9) | `g1-single-mode-rating-safety` | Planned — awaiting review |
 
 <!-- 2026-09-12 (Group G4 closeout): 2026-09-12_g4-ml-pipeline-integrity.md left this table on
      archive — merged `7df03b8` via PR #69, moved to docs/archive/plans/ with `git mv` and indexed
