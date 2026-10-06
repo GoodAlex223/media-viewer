@@ -118,6 +118,33 @@ test.describe('Held keys fire once (G1)', () => {
         await expect(rounds).toHaveValue('10');
     });
 
+    // PR #74 review: a <select> keeps focus after a mouse pick. Treating it as a text field skipped
+    // the dispatch's preventDefault, so the select's type-ahead took S — it switched the algorithm to
+    // "Simple (Limited)" (and persisted it) instead of navigating.
+    test('after picking a sort algorithm, S still navigates and the algorithm is unchanged', async () => {
+        const original = await page.evaluate(() => localStorage.getItem('sortAlgorithm'));
+        try {
+            const select = page.locator('#sortAlgorithmSelect');
+            await select.selectOption('mst');
+            await select.focus();
+            const before = await page.evaluate(() => window.mediaViewer.currentIndex);
+
+            await page.keyboard.press('s');
+            await page.waitForTimeout(500);
+            await waitForIdle(page);
+
+            expect(await page.evaluate(() => window.mediaViewer.currentIndex)).toBe(before + 1);
+            expect(await page.evaluate(() => window.mediaViewer.sortAlgorithm)).toBe('mst');
+            await expect(select).toHaveValue('mst');
+        } finally {
+            // E2E localStorage persists across runs — never leave a changed algorithm behind.
+            await page.evaluate((value) => {
+                if (value === null) localStorage.removeItem('sortAlgorithm');
+                else localStorage.setItem('sortAlgorithm', value);
+            }, original);
+        }
+    });
+
     // The must-not-fire half: navigation is the one action allowed to repeat. Passes before and
     // after the fix — its job is to catch an over-broad filter.
     test('a held Next still auto-repeats', async () => {

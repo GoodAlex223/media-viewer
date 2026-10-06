@@ -1097,20 +1097,22 @@ describe('resetShortcuts', () => {
 describe('_isTextEntryTarget (form fields never dispatch shortcuts, G1)', () => {
     const _isTextEntryTarget = extractMethod('_isTextEntryTarget');
 
-    it('treats text-like inputs, textareas, selects and contenteditable as text entry', () => {
+    it('treats text-like inputs, textareas and contenteditable as text entry', () => {
         for (const type of ['number', 'text', 'search', '']) {
             expect(_isTextEntryTarget.call({}, { tagName: 'INPUT', type }), type).toBe(true);
         }
         expect(_isTextEntryTarget.call({}, { tagName: 'TEXTAREA' })).toBe(true);
-        expect(_isTextEntryTarget.call({}, { tagName: 'SELECT' })).toBe(true);
         expect(_isTextEntryTarget.call({}, { tagName: 'DIV', isContentEditable: true })).toBe(true);
     });
 
-    // A clicked slider or checkbox keeps focus; letter shortcuts must still work there, as before.
-    it('leaves sliders, checkboxes, buttons and ordinary elements to the shortcuts', () => {
+    // A clicked slider, checkbox or select keeps focus; shortcuts must still work there, as before.
+    // PR #74 review: guarding SELECT skipped the dispatch's preventDefault, so the toolbar
+    // #sortAlgorithmSelect's type-ahead took S — it picked "Simple (Limited)" instead of navigating.
+    it('leaves sliders, checkboxes, selects, buttons and ordinary elements to the shortcuts', () => {
         for (const type of ['range', 'checkbox', 'radio', 'button']) {
             expect(_isTextEntryTarget.call({}, { tagName: 'INPUT', type }), type).toBe(false);
         }
+        expect(_isTextEntryTarget.call({}, { tagName: 'SELECT' })).toBe(false);
         expect(_isTextEntryTarget.call({}, { tagName: 'BUTTON' })).toBe(false);
         expect(_isTextEntryTarget.call({}, { tagName: 'BODY' })).toBe(false);
         expect(_isTextEntryTarget.call({}, null)).toBe(false);

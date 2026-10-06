@@ -9574,14 +9574,16 @@ class MediaViewer {
         return Boolean(action) && e.repeat === true && !REPEATABLE_ACTIONS.has(action);
     }
 
-    // True when keystrokes belong to a form field rather than to the shortcuts: text-like inputs,
-    // textareas, selects, contenteditable. Sliders, checkboxes and buttons keep focus after a click,
-    // and letter shortcuts must keep working there, as they always have.
+    // True when keystrokes are the field's typed content rather than shortcuts: text-like inputs,
+    // textareas, contenteditable. Sliders, checkboxes, buttons and selects keep focus after a click,
+    // and shortcuts must keep working there, as they always have. A <select> is deliberately NOT
+    // text entry (PR #74 review): returning early skipped the dispatch's preventDefault, so the toolbar
+    // #sortAlgorithmSelect's type-ahead took S and switched the algorithm instead of navigating.
     _isTextEntryTarget(target) {
         if (!target) return false;
         if (target.isContentEditable === true) return true;
         const tag = target.tagName;
-        if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+        if (tag === 'TEXTAREA') return true;
         const nonText = ['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'file', 'color', 'image'];
         return tag === 'INPUT' && !nonText.includes(target.type);
     }
