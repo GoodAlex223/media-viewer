@@ -214,3 +214,68 @@ test.describe('One file action at a time (G1)', () => {
         expect(await page.evaluate(() => window.mediaViewer.moveHistory.length)).toBe(2);
     });
 });
+
+test.describe('Compare: one pair move at a time (G1)', () => {
+    let electronApp, page, tmpFixtures;
+
+    test.beforeEach(async () => {
+        tmpFixtures = await createTempFixtureDir([
+            'red-1x1.png',
+            'green-1x1.png',
+            'blue-1x1.png',
+            'normal-320x240.png',
+        ]);
+        ({ electronApp, page } = await launchApp());
+        await seedLocalStorage(page, {
+            customLikeFolder: tmpFixtures.likeDir,
+            customDislikeFolder: tmpFixtures.dislikeDir,
+        });
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+        await waitForIdle(page);
+        await page.evaluate(() => window.mediaViewer.switchMode('compare'));
+        await page.waitForFunction(() => {
+            const mv = window.mediaViewer;
+            return (
+                mv.isCompareMode &&
+                mv.compareLeftFile &&
+                mv.compareRightFile &&
+                !mv.isLoading &&
+                !mv.mediaNavigationInProgress
+            );
+        });
+        await spyOnErrors(page);
+    });
+
+    test.afterEach(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+            tmpFixtures = null;
+        }
+    });
+
+    // Spec F5 — two different keys, so the repeat filter cannot help.
+    test('Q then E at once moves exactly one pair and leaves no phantom files', async () => {
+        const [left, right] = await page.evaluate(() => [
+            window.mediaViewer.compareLeftFile.name,
+            window.mediaViewer.compareRightFile.name,
+        ]);
+        await page.keyboard.press('q');
+        await page.keyboard.press('e');
+        await page.waitForTimeout(1500);
+        await waitForIdle(page);
+
+        expect(await readdir(tmpFixtures.likeDir)).toEqual([left]);
+        expect(await readdir(tmpFixtures.dislikeDir)).toEqual([right]);
+        const listed = await page.evaluate(() => window.mediaViewer.mediaFiles.map((f) => f.name));
+        expect(listed).toHaveLength(2);
+        const onDisk = await readdir(tmpFixtures.dir);
+        for (const name of listed) {
+            expect(onDisk).toContain(name);
+        }
+        expect(await errors(page)).toEqual([]);
+    });
+});

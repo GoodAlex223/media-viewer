@@ -6519,3 +6519,131 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
         expect(ctx.showMedia).not.toHaveBeenCalled();
     });
 });
+
+describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
+    const moveComparePair = extractAsyncMethod('moveComparePair');
+    const applyBulkRating = extractAsyncMethod('applyBulkRating');
+    const bulkPairKey = extractMethod('bulkPairKey');
+
+    function pairCtx(overrides = {}) {
+        const files = ['a', 'b', 'c', 'd'].map((n) => ({
+            name: `${n}.jpg`,
+            path: `/f/${n}.jpg`,
+            size: 10,
+            type: 'image/jpeg',
+        }));
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: true,
+            isTournamentMode: false,
+            isSortedByPrediction: false,
+            isMlEnabled: false,
+            mlWorker: null,
+            leftMedia: null,
+            rightMedia: null,
+            mediaFiles: files,
+            compareLeftFile: files[0],
+            compareRightFile: files[1],
+            currentIndex: 0,
+            mlComparePairIndex: 0,
+            moveHistory: [],
+            customLikeFolder: '/liked',
+            customDislikeFolder: '/disliked',
+            showRatingConfirmations: false,
+            areFoldersConfigured: () => true,
+            _bulkPairKeysReferencing: () => [],
+            removeFileFromList: vi.fn(function (p) {
+                this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
+            }),
+            cleanupCompareMedia: vi.fn(async () => {}),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            showFolderCreationDialog: vi.fn(async () => false),
+            switchToSingleModeUI: vi.fn(),
+            hideLoadingSpinner: vi.fn(),
+            showEmptyStateWithUndo: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    // Spec F5: Q then E used to run two pair moves on the same compare files.
+    it('a second pair move during the first never reaches moveFile (Q then E)', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = pairCtx();
+        const q = moveComparePair.call(ctx, 'left', 'like', 'dislike');
+        const e = moveComparePair.call(ctx, 'right', 'like', 'dislike');
+        await drain(q, e);
+        expect(api.moveFile.mock.calls.map(([arg]) => `${arg.fileName}->${arg.targetFolder}`)).toEqual([
+            'a.jpg->/liked',
+            'b.jpg->/disliked',
+        ]);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['c.jpg', 'd.jpg']);
+        expect(ctx.moveHistory).toHaveLength(2);
+        expect(ctx.showError).not.toHaveBeenCalled();
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('moveComparePair releases the flag after a failed move', async () => {
+        const { api, drain } = gatedApi({ moveResult: { success: false, error: 'ENOENT' } });
+        globalThis.window = { electronAPI: api };
+        const ctx = pairCtx();
+        await drain(moveComparePair.call(ctx, 'left', 'like', 'dislike'));
+        expect(ctx.showError).toHaveBeenCalledWith('Failed to move files: ENOENT');
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('a pair move is refused while another file action is in flight', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = pairCtx({ _fileOpInFlight: true });
+        await drain(moveComparePair.call(ctx, 'left', 'like', 'dislike'));
+        expect(api.checkFolderExists).not.toHaveBeenCalled();
+        expect(api.moveFile).not.toHaveBeenCalled();
+    });
+
+    function bulkCtx(overrides = {}) {
+        const saves = [];
+        const ctx = pairCtx({
+            isSortedByPrediction: true,
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            bulkPairKey,
+            saveBulkRatedFile: vi.fn(() => new Promise((resolve) => saves.push(resolve))),
+            computeValidComparePairs: () => [{}, {}],
+            ...overrides,
+        });
+        return { ctx, releaseSaves: () => saves.splice(0).forEach((resolve) => resolve()) };
+    }
+
+    it("a second bulk rating during the first one's save is refused", async () => {
+        const { ctx, releaseSaves } = bulkCtx();
+        const first = applyBulkRating.call(ctx, 'good');
+        const second = applyBulkRating.call(ctx, 'good');
+        releaseSaves();
+        await Promise.all([first, second]);
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('a bulk rating is refused while a pair move is in flight', async () => {
+        const { ctx } = bulkCtx({ _fileOpInFlight: true });
+        await applyBulkRating.call(ctx, 'bad');
+        expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
+        expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.moveHistory).toHaveLength(0);
+    });
+});
