@@ -6045,7 +6045,7 @@ describe('addMediaOverlayControls — slot targeting and button order (G2)', () 
             isTournamentMode: false,
             shortcuts: { compare: { leftSpecial: 'Digit1', rightSpecial: 'Digit2' } },
             keyDisplayName: extractMethod('keyDisplayName'),
-            _specialShortcutSuffix: extractMethod('_specialShortcutSuffix'),
+            _shortcutSuffix: extractMethod('_shortcutSuffix'),
         };
     }
 
@@ -6191,7 +6191,7 @@ describe('removeZoomPopover — dismisses the popover, keeps the button (G2)', (
 
 describe('updateSpecialButtonsState tooltips', () => {
     const updateSpecialButtonsState = extractMethod('updateSpecialButtonsState');
-    const _specialShortcutSuffix = extractMethod('_specialShortcutSuffix');
+    const _shortcutSuffix = extractMethod('_shortcutSuffix');
     const keyDisplayName = extractMethod('keyDisplayName');
 
     function btn() {
@@ -6210,7 +6210,7 @@ describe('updateSpecialButtonsState tooltips', () => {
                 compare: Object.assign({ leftSpecial: 'Digit1', rightSpecial: 'Digit2' }, compareOverrides),
             },
             keyDisplayName,
-            _specialShortcutSuffix,
+            _shortcutSuffix,
         };
     }
 
@@ -6250,6 +6250,76 @@ describe('updateSpecialButtonsState tooltips', () => {
         expect(ctx.leftSpecialBtn.title).toBe(configure);
         expect(ctx.rightSpecialBtn.title).toBe(configure);
         expect(ctx.leftSpecialBtn.disabled).toBe(true);
+    });
+});
+
+describe('updateRatingButtonsState tooltips (G1)', () => {
+    const updateRatingButtonsState = extractMethod('updateRatingButtonsState');
+    const areFoldersConfigured = extractMethod('areFoldersConfigured');
+    const _shortcutSuffix = extractMethod('_shortcutSuffix');
+    const keyDisplayName = extractMethod('keyDisplayName');
+    const BUTTONS = ['likeBtn', 'dislikeBtn', 'leftLikeBtn', 'leftDislikeBtn', 'rightLikeBtn', 'rightDislikeBtn'];
+    let origDocument;
+
+    beforeEach(() => {
+        origDocument = globalThis.document;
+        globalThis.document = { getElementById: () => null }; // #folderConfigWarning
+    });
+
+    afterEach(() => {
+        globalThis.document = origDocument;
+    });
+
+    function ctxWith({ folders = true, single = {}, compare = {} } = {}) {
+        const ctx = {
+            customLikeFolder: folders ? '/liked' : '',
+            customDislikeFolder: folders ? '/disliked' : '',
+            shortcuts: {
+                single: Object.assign({ like: 'KeyQ', dislike: 'KeyW' }, single),
+                compare: Object.assign(
+                    { leftLike: 'KeyQ', leftDislike: 'KeyW', rightLike: 'KeyE', rightDislike: 'KeyR' },
+                    compare
+                ),
+            },
+            areFoldersConfigured,
+            _shortcutSuffix,
+            keyDisplayName,
+        };
+        for (const b of BUTTONS) ctx[b] = { disabled: false, title: '' };
+        return ctx;
+    }
+
+    it('shows the real default hotkeys (single mode read "Arrow Up"/"Arrow Down")', () => {
+        const ctx = ctxWith();
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.likeBtn.title).toBe('Like (Q)');
+        expect(ctx.dislikeBtn.title).toBe('Dislike (W)');
+        expect(ctx.leftLikeBtn.title).toBe('Like Left (Q)');
+        expect(ctx.leftDislikeBtn.title).toBe('Dislike Left (W)');
+        expect(ctx.rightLikeBtn.title).toBe('Like Right (E)');
+        expect(ctx.rightDislikeBtn.title).toBe('Dislike Right (R)');
+    });
+
+    it('follows a remap in either mode', () => {
+        const ctx = ctxWith({ single: { like: 'KeyT' }, compare: { rightDislike: 'Shift+KeyR' } });
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.likeBtn.title).toBe('Like (T)');
+        expect(ctx.rightDislikeBtn.title).toBe('Dislike Right (Shift+R)');
+    });
+
+    it('renders a bare label for an unbound action', () => {
+        const ctx = ctxWith({ single: { dislike: null } });
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.dislikeBtn.title).toBe('Dislike');
+    });
+
+    it('keeps the configure-folders tooltip, and disables, when folders are missing', () => {
+        const ctx = ctxWith({ folders: false });
+        updateRatingButtonsState.call(ctx);
+        for (const b of BUTTONS) {
+            expect(ctx[b].title, b).toBe('Configure like/dislike folders in Settings (F1)');
+            expect(ctx[b].disabled, b).toBe(true);
+        }
     });
 });
 

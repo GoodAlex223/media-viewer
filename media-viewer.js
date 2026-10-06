@@ -454,36 +454,42 @@ class MediaViewer {
         return this.customLikeFolder && this.customDislikeFolder;
     }
 
+    // Sole runtime owner of the six static like/dislike titles: overwrites index.html's at init,
+    // on every like/dislike-folder browse/clear, and from saveShortcut/resetShortcuts.
     updateRatingButtonsState() {
         const enabled = this.areFoldersConfigured();
         const tooltip = enabled ? '' : 'Configure like/dislike folders in Settings (F1)';
+        // Hotkeys come from the live bindings (G1). The single-mode titles once read
+        // 'Arrow Up'/'Arrow Down' — wrong even with the default Q/W.
+        const title = (label, mode, action) => (enabled ? label + this._shortcutSuffix(mode, action) : tooltip);
 
         // Single mode buttons
         if (this.likeBtn) {
             this.likeBtn.disabled = !enabled;
-            this.likeBtn.title = enabled ? 'Like (Arrow Up)' : tooltip;
+            this.likeBtn.title = title('Like', 'single', 'like');
         }
         if (this.dislikeBtn) {
             this.dislikeBtn.disabled = !enabled;
-            this.dislikeBtn.title = enabled ? 'Dislike (Arrow Down)' : tooltip;
+            this.dislikeBtn.title = title('Dislike', 'single', 'dislike');
         }
 
-        // Compare mode buttons
+        // Compare mode buttons. Like the special pair, these live in .left/.right-media-controls,
+        // which CSS hides in tournament mode, so they always read the compare map.
         if (this.leftLikeBtn) {
             this.leftLikeBtn.disabled = !enabled;
-            this.leftLikeBtn.title = enabled ? 'Like Left (Q)' : tooltip;
+            this.leftLikeBtn.title = title('Like Left', 'compare', 'leftLike');
         }
         if (this.leftDislikeBtn) {
             this.leftDislikeBtn.disabled = !enabled;
-            this.leftDislikeBtn.title = enabled ? 'Dislike Left (W)' : tooltip;
+            this.leftDislikeBtn.title = title('Dislike Left', 'compare', 'leftDislike');
         }
         if (this.rightLikeBtn) {
             this.rightLikeBtn.disabled = !enabled;
-            this.rightLikeBtn.title = enabled ? 'Like Right (E)' : tooltip;
+            this.rightLikeBtn.title = title('Like Right', 'compare', 'rightLike');
         }
         if (this.rightDislikeBtn) {
             this.rightDislikeBtn.disabled = !enabled;
-            this.rightDislikeBtn.title = enabled ? 'Dislike Right (R)' : tooltip;
+            this.rightDislikeBtn.title = title('Dislike Right', 'compare', 'rightDislike');
         }
 
         // Update folder config warning
@@ -493,10 +499,10 @@ class MediaViewer {
         }
     }
 
-    // The " (1)" a special-button tooltip carries, derived from the live binding rather than
-    // hardcoded, so a remap in the F1 panel reaches the button. Returns '' when the action is
-    // unbound in that mode (a default that yielded to a user remap, or an unknown mode).
-    _specialShortcutSuffix(mode, action) {
+    // The " (Q)" a button tooltip carries for `action` in `mode`, derived from the live binding
+    // rather than hardcoded, so a remap in the F1 panel reaches the button. Returns '' when the
+    // action is unbound in that mode (a default that yielded to a user remap, or an unknown mode).
+    _shortcutSuffix(mode, action) {
         const key = this.shortcuts?.[mode]?.[action];
         return key ? ` (${this.keyDisplayName(key)})` : '';
     }
@@ -511,7 +517,7 @@ class MediaViewer {
         // Single mode button — suffix from single's `special` binding (Digit1 by default).
         if (this.specialBtn) {
             this.specialBtn.disabled = !enabled;
-            this.specialBtn.title = enabled ? tooltip + this._specialShortcutSuffix('single', 'special') : tooltip;
+            this.specialBtn.title = enabled ? tooltip + this._shortcutSuffix('single', 'special') : tooltip;
         }
 
         // Compare mode buttons. These live in .left/.right-media-controls, which CSS hides in
@@ -519,13 +525,13 @@ class MediaViewer {
         if (this.leftSpecialBtn) {
             this.leftSpecialBtn.disabled = !enabled;
             this.leftSpecialBtn.title = enabled
-                ? 'Move left to special folder' + this._specialShortcutSuffix('compare', 'leftSpecial')
+                ? 'Move left to special folder' + this._shortcutSuffix('compare', 'leftSpecial')
                 : tooltip;
         }
         if (this.rightSpecialBtn) {
             this.rightSpecialBtn.disabled = !enabled;
             this.rightSpecialBtn.title = enabled
-                ? 'Move right to special folder' + this._specialShortcutSuffix('compare', 'rightSpecial')
+                ? 'Move right to special folder' + this._shortcutSuffix('compare', 'rightSpecial')
                 : tooltip;
         }
     }
@@ -3451,11 +3457,18 @@ class MediaViewer {
 
         const controls = document.createElement('div');
         controls.className = 'media-overlay-controls';
+        // This bar is rebuilt on every compare AND tournament render, so reading the mode here keeps
+        // every title's hotkey current with no separate refresh hook (tournament reuses Q/W/E/R for
+        // picks, but each map can be remapped on its own).
+        const overlayMode = this.isTournamentMode ? 'tournament' : 'compare';
 
         const likeBtn = document.createElement('button');
         likeBtn.className = 'overlay-btn overlay-like-btn';
         likeBtn.innerHTML = '<i data-lucide="thumbs-up"></i>';
-        likeBtn.title = side === 'left' ? 'Like Left (Q)' : 'Like Right (E)';
+        likeBtn.title =
+            side === 'left'
+                ? 'Like Left' + this._shortcutSuffix(overlayMode, 'leftLike')
+                : 'Like Right' + this._shortcutSuffix(overlayMode, 'rightLike');
         likeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (side === 'left') this.handleLeftLike();
@@ -3465,7 +3478,10 @@ class MediaViewer {
         const dislikeBtn = document.createElement('button');
         dislikeBtn.className = 'overlay-btn overlay-dislike-btn';
         dislikeBtn.innerHTML = '<i data-lucide="thumbs-down"></i>';
-        dislikeBtn.title = side === 'left' ? 'Dislike Left (W)' : 'Dislike Right (R)';
+        dislikeBtn.title =
+            side === 'left'
+                ? 'Dislike Left' + this._shortcutSuffix(overlayMode, 'leftDislike')
+                : 'Dislike Right' + this._shortcutSuffix(overlayMode, 'rightDislike');
         dislikeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (side === 'left') this.handleLeftDislike();
@@ -3475,13 +3491,9 @@ class MediaViewer {
         const specialBtn = document.createElement('button');
         specialBtn.className = 'overlay-btn overlay-special-btn';
         specialBtn.innerHTML = '<i data-lucide="folder-heart"></i>';
-        // This bar is built fresh on every compare AND tournament render, so reading the mode
-        // here is enough to keep the suffix correct — no separate refresh hook is needed, and
-        // tournament's long-standing 1/2 bindings become visible for the first time.
         const specialAction = side === 'left' ? 'leftSpecial' : 'rightSpecial';
-        const specialMode = this.isTournamentMode ? 'tournament' : 'compare';
         specialBtn.title = this.customSpecialFolder
-            ? 'Move to special folder' + this._specialShortcutSuffix(specialMode, specialAction)
+            ? 'Move to special folder' + this._shortcutSuffix(overlayMode, specialAction)
             : 'Configure special folder in Settings (F1)';
         specialBtn.disabled = !this.customSpecialFolder;
         specialBtn.addEventListener('click', (e) => {
@@ -9519,7 +9531,7 @@ class MediaViewer {
     // The loser is the NEW default, not the user's binding: dropping the user's remap instead
     // would still leave `1` moving a file for someone who pressed it expecting to navigate.
     // Yielding leaves the new action unbound — `keyDisplayName` renders that as "Unbound" and
-    // `_specialShortcutSuffix` omits the suffix — with the on-screen button and F1 rebinding
+    // `_shortcutSuffix` omits the suffix — with the on-screen button and F1 rebinding
     // both still working. This is also why an additive default needs no version bump: the
     // merge itself is collision-safe, rather than each new binding needing its own migration.
     _mergeModeShortcuts(mode, customMode) {
@@ -9635,9 +9647,10 @@ class MediaViewer {
     saveShortcut(mode, action, newKey) {
         this.shortcuts[mode][action] = newKey;
         this.shortcutReverseMap = this.buildReverseMap();
-        // The special tooltips are derived from this.shortcuts; without this the button would
-        // keep advertising the old key while the F1 row already shows the new one.
+        // Button tooltips are derived from this.shortcuts; without these the buttons would keep
+        // advertising the old key while the F1 row already shows the new one.
         this.updateSpecialButtonsState();
+        this.updateRatingButtonsState();
 
         // Persist the current shortcuts — loadShortcuts merges on load so full save is safe.
         // version must be written so the v1->v2 migration in loadShortcuts does not re-run and
@@ -9767,6 +9780,7 @@ class MediaViewer {
         this.shortcutReverseMap = this.buildReverseMap();
         localStorage.removeItem('customShortcuts');
         this.updateSpecialButtonsState();
+        this.updateRatingButtonsState();
         this.renderShortcutRows?.();
         this.attachShortcutKeyListeners?.();
     }

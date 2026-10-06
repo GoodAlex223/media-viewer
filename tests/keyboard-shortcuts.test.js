@@ -791,8 +791,8 @@ describe('checkShortcutConflict', () => {
     });
 });
 
-describe('_specialShortcutSuffix', () => {
-    const _specialShortcutSuffix = extractMethod('_specialShortcutSuffix');
+describe('_shortcutSuffix', () => {
+    const _shortcutSuffix = extractMethod('_shortcutSuffix');
     const keyDisplayName = extractMethod('keyDisplayName');
 
     function ctxWith(shortcuts) {
@@ -801,40 +801,40 @@ describe('_specialShortcutSuffix', () => {
 
     it('renders the bound key as a parenthesised suffix', () => {
         const ctx = ctxWith(extractDefaultShortcuts());
-        expect(_specialShortcutSuffix.call(ctx, 'compare', 'leftSpecial')).toBe(' (1)');
-        expect(_specialShortcutSuffix.call(ctx, 'compare', 'rightSpecial')).toBe(' (2)');
-        expect(_specialShortcutSuffix.call(ctx, 'tournament', 'leftSpecial')).toBe(' (1)');
+        expect(_shortcutSuffix.call(ctx, 'compare', 'leftSpecial')).toBe(' (1)');
+        expect(_shortcutSuffix.call(ctx, 'compare', 'rightSpecial')).toBe(' (2)');
+        expect(_shortcutSuffix.call(ctx, 'tournament', 'leftSpecial')).toBe(' (1)');
     });
 
     // The whole point of deriving rather than hardcoding: a remap must reach the tooltip.
     it('follows a remapped binding instead of the default', () => {
         const shortcuts = extractDefaultShortcuts();
         shortcuts.compare.leftSpecial = 'Digit9';
-        expect(_specialShortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (9)');
+        expect(_shortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (9)');
     });
 
     it('renders a modifier binding through keyDisplayName', () => {
         const shortcuts = extractDefaultShortcuts();
         shortcuts.compare.leftSpecial = 'Ctrl+Digit1';
-        expect(_specialShortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (Ctrl+1)');
+        expect(_shortcutSuffix.call(ctxWith(shortcuts), 'compare', 'leftSpecial')).toBe(' (Ctrl+1)');
     });
 
     it('renders the single-mode special binding', () => {
         const ctx = ctxWith(extractDefaultShortcuts());
-        expect(_specialShortcutSuffix.call(ctx, 'single', 'special')).toBe(' (1)');
+        expect(_shortcutSuffix.call(ctx, 'single', 'special')).toBe(' (1)');
     });
 
     it('returns an empty string when the action is unbound in that mode', () => {
         const ctx = ctxWith(extractDefaultShortcuts());
-        expect(_specialShortcutSuffix.call(ctx, 'single', 'leftSpecial')).toBe('');
+        expect(_shortcutSuffix.call(ctx, 'single', 'leftSpecial')).toBe('');
         const shortcuts = extractDefaultShortcuts();
         shortcuts.single.special = null; // yielded to a user remap by _mergeModeShortcuts
-        expect(_specialShortcutSuffix.call(ctxWith(shortcuts), 'single', 'special')).toBe('');
+        expect(_shortcutSuffix.call(ctxWith(shortcuts), 'single', 'special')).toBe('');
     });
 
     it('returns an empty string for an unknown mode rather than throwing', () => {
         const ctx = ctxWith(extractDefaultShortcuts());
-        expect(_specialShortcutSuffix.call(ctx, 'nosuchmode', 'leftSpecial')).toBe('');
+        expect(_shortcutSuffix.call(ctx, 'nosuchmode', 'leftSpecial')).toBe('');
     });
 });
 
@@ -876,6 +876,7 @@ describe('saveShortcut', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         saveShortcut.call(ctx, 'single', 'like', 'KeyT');
@@ -907,6 +908,7 @@ describe('saveShortcut', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         saveShortcut.call(ctx, 'single', 'like', 'KeyT');
@@ -915,7 +917,7 @@ describe('saveShortcut', () => {
 
     // The special tooltips are derived from this.shortcuts, so a remap that does not
     // refresh them leaves the button advertising the old key while F1 shows the new one.
-    it('refreshes the special-button tooltips so a remap reaches them', () => {
+    it('refreshes the button tooltips so a remap reaches them', () => {
         globalThis.localStorage = { setItem: () => {}, removeItem: () => {} };
         const ctx = {
             shortcuts: {
@@ -927,10 +929,12 @@ describe('saveShortcut', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         saveShortcut.call(ctx, 'compare', 'leftSpecial', 'Digit9');
         expect(ctx.updateSpecialButtonsState).toHaveBeenCalledOnce();
+        expect(ctx.updateRatingButtonsState).toHaveBeenCalledOnce();
     });
 });
 
@@ -971,6 +975,7 @@ describe('saveShortcut does not persist an unbound collision', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         saveShortcut.call(ctx, 'compare', 'rightSpecial', 'Digit3');
@@ -1002,6 +1007,7 @@ describe('saveShortcut does not persist an unbound collision', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         // User moves `next` off Digit1, freeing it.
@@ -1054,6 +1060,7 @@ describe('resetShortcuts', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
             stopListeningMode() {},
             _listeningState: null,
@@ -1064,7 +1071,7 @@ describe('resetShortcuts', () => {
         expect(removedKey).toBe('customShortcuts');
     });
 
-    it('refreshes the special-button tooltips after restoring defaults', () => {
+    it('refreshes the button tooltips after restoring defaults', () => {
         globalThis.localStorage = { removeItem: () => {} };
         const ctx = {
             shortcuts: { single: {}, compare: { leftSpecial: 'Digit9' } },
@@ -1073,11 +1080,13 @@ describe('resetShortcuts', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
             stopListeningMode() {},
             _listeningState: null,
         };
         resetShortcuts.call(ctx);
         expect(ctx.updateSpecialButtonsState).toHaveBeenCalledOnce();
+        expect(ctx.updateRatingButtonsState).toHaveBeenCalledOnce();
     });
 });

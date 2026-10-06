@@ -182,9 +182,9 @@
                         <span class="btn-label">Zoom</span>
                     </button>
                 </div>
-                <!-- The three special-btn titles below are a pre-JS fallback only:
-                     updateSpecialButtonsState() overwrites them at init and appends the
-                     bound hotkey, which cannot be expressed in static markup. -->
+                <!-- The special-btn and like/dislike-btn titles below are pre-JS fallbacks only:
+                     updateSpecialButtonsState() / updateRatingButtonsState() overwrite them at
+                     init and append the bound hotkey, which cannot be expressed in static markup. -->
                 <button class="control-btn special-btn" id="specialBtn" title="Move to special folder">
                     <span class="btn-icon"><i data-lucide="folder-heart"></i></span>
                     <span class="btn-label">Special</span>
@@ -193,11 +193,11 @@
                     <span class="btn-icon"><i data-lucide="undo-2"></i></span>
                     <span class="btn-label">Undo</span>
                 </button>
-                <button class="control-btn like-btn" id="likeBtn" title="Move to next folder (Q)">
+                <button class="control-btn like-btn" id="likeBtn" title="Like">
                     <span class="btn-icon"><i data-lucide="thumbs-up"></i></span>
                     <span class="btn-label">Like</span>
                 </button>
-                <button class="control-btn dislike-btn" id="dislikeBtn" title="Move to previous folder (W)">
+                <button class="control-btn dislike-btn" id="dislikeBtn" title="Dislike">
                     <span class="btn-icon"><i data-lucide="thumbs-down"></i></span>
                     <span class="btn-label">Dislike</span>
                 </button>
