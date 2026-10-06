@@ -112,3 +112,105 @@ test.describe('Held keys fire once (G1)', () => {
         expect(await page.evaluate(() => window.__navs)).toBeGreaterThanOrEqual(2);
     });
 });
+
+// From Phase 0 (spec § 11): the file that, shown right after the video, exposed the stuck state.
+const SLOW_NEXT = 'normal-320x240.png';
+
+/** Reorder mediaFiles so `lead` comes first in that order, show the first, wait for it to settle. */
+async function arrange(page, lead) {
+    await waitForIdle(page);
+    await page.evaluate(async (names) => {
+        const mv = window.mediaViewer;
+        const rank = (f) => (names.indexOf(f.name) === -1 ? names.length : names.indexOf(f.name));
+        mv.mediaFiles.sort((a, b) => rank(a) - rank(b));
+        mv.currentIndex = 0;
+        await mv.showMedia();
+    }, lead);
+    await page.waitForFunction(
+        (first) => window.mediaViewer.mediaFiles[0]?.name === first && window.mediaViewer.currentMedia !== null,
+        lead[0]
+    );
+    await waitForIdle(page);
+}
+
+test.describe('One file action at a time (G1)', () => {
+    let electronApp, page, tmpFixtures;
+
+    test.beforeEach(async () => {
+        tmpFixtures = await createTempFixtureDir([
+            'red-1x1.png',
+            'green-1x1.png',
+            'blue-1x1.png',
+            'normal-320x240.png',
+            'tiny.mp4',
+        ]);
+        ({ electronApp, page } = await launchApp());
+        await seedLocalStorage(page, {
+            customLikeFolder: tmpFixtures.likeDir,
+            customDislikeFolder: tmpFixtures.dislikeDir,
+        });
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+        await waitForIdle(page);
+        await spyOnErrors(page);
+    });
+
+    test.afterEach(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+            tmpFixtures = null;
+        }
+    });
+
+    // The held-Like end state (spec F3), driven by clicks: a burst the repeat filter cannot see,
+    // at the cadence a held key used. tiny.mp4 may fail to decode here; it is still a <video>, so
+    // forceVideoCleanup and its 500 ms wait still run.
+    test('a burst of Like clicks on a video moves one file and leaves the controls alive', async () => {
+        await arrange(page, ['tiny.mp4', SLOW_NEXT]);
+        await page.evaluate(async () => {
+            const btn = document.getElementById('likeBtn');
+            for (let i = 0; i < 8; i++) {
+                btn.click();
+                await new Promise((r) => setTimeout(r, 33));
+            }
+        });
+        await page.waitForTimeout(2000);
+        await waitForIdle(page);
+
+        expect(await countFiles(tmpFixtures.likeDir)).toBe(1);
+        // Move failures only: tiny.mp4's own decode failure ("Failed to load video") is expected here.
+        expect((await errors(page)).filter((m) => m.startsWith('Failed to move'))).toEqual([]);
+        const visible = await page.evaluate(
+            () =>
+                [...document.querySelectorAll('.media-display')].filter((el) => getComputedStyle(el).display !== 'none')
+                    .length
+        );
+        expect(visible).toBe(1);
+
+        // The controls still act: one more Like moves exactly one more file.
+        await page.evaluate(() => window.mediaViewer.handleLike());
+        await page.waitForTimeout(500);
+        await waitForIdle(page);
+        expect(await countFiles(tmpFixtures.likeDir)).toBe(2);
+    });
+
+    test('an Undo pressed during a move is refused with a notice and reverses nothing', async () => {
+        await arrange(page, ['red-1x1.png', 'tiny.mp4']);
+        await page.keyboard.press('q'); // a completed like — the move a wrong undo would reverse
+        await page.waitForFunction(() => window.mediaViewer.currentMedia?.tagName === 'VIDEO');
+        await waitForIdle(page);
+
+        await page.keyboard.press('q'); // the video's move waits ~600 ms before fs.rename
+        await page.keyboard.press('Control+KeyA');
+
+        await expect(page.locator('.notification').filter({ hasText: 'A move is still in progress' })).toBeVisible();
+        await page.waitForTimeout(1500);
+        await waitForIdle(page);
+
+        expect((await readdir(tmpFixtures.likeDir)).sort()).toEqual(['red-1x1.png', 'tiny.mp4']);
+        expect(await page.evaluate(() => window.mediaViewer.moveHistory.length)).toBe(2);
+    });
+});

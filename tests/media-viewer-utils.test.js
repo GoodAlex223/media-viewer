@@ -6298,3 +6298,224 @@ describe('forceVideoCleanup releases only its own video (G1 D5)', () => {
         expect(video.remove).toHaveBeenCalledOnce();
     });
 });
+
+// checkFolderExists / moveFile park on a gate, so a test can start a second call while the first
+// is mid-await — the exact window a held key or a double-tap used to hit. drain() keeps opening the
+// gate (each awaited IPC step parks on a fresh waiter; some methods also sleep between steps) until
+// every given call has settled.
+function gatedApi({ moveResult } = {}) {
+    const waiters = [];
+    const gate = () => new Promise((resolve) => waiters.push(resolve));
+    const api = {
+        path: { basename: (p) => p.split('/').pop() },
+        checkFolderExists: vi.fn(async () => {
+            await gate();
+            return true;
+        }),
+        moveFile: vi.fn(async ({ targetFolder, fileName }) => {
+            await gate();
+            return moveResult ?? { success: true, targetPath: `${targetFolder}/${fileName}` };
+        }),
+    };
+    const drain = async (...calls) => {
+        let settled = false;
+        Promise.allSettled(calls).then(() => {
+            settled = true;
+        });
+        for (let i = 0; i < 400 && !settled; i++) {
+            waiters.splice(0).forEach((resolve) => resolve());
+            await new Promise((r) => setTimeout(r, 5));
+        }
+        return Promise.all(calls);
+    };
+    return { api, drain };
+}
+
+const IN_FLIGHT_NOTICE = 'A move is still in progress — press Undo again in a moment';
+
+describe('_fileOpInFlight — one file action at a time (G1)', () => {
+    const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+    const moveToSpecialFolder = extractAsyncMethod('moveToSpecialFolder');
+    const handleCancel = extractAsyncMethod('handleCancel');
+    const nextMedia = extractMethod('nextMedia');
+    const previousMedia = extractMethod('previousMedia');
+
+    const previousLike = () => ({
+        fileName: 'z.jpg',
+        originalPath: '/f/z.jpg',
+        newPath: '/liked/z.jpg',
+        fileSize: 10,
+        fileType: 'image/jpeg',
+        actionType: 'like',
+        mlFeatures: null,
+    });
+
+    function guardCtx(overrides = {}) {
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: false,
+            isTournamentMode: false,
+            isSortedByPrediction: false,
+            isMlEnabled: false,
+            mlWorker: null,
+            currentMedia: null,
+            mediaFiles: [
+                { name: 'a.jpg', path: '/f/a.jpg', size: 10, type: 'image/jpeg' },
+                { name: 'b.jpg', path: '/f/b.jpg', size: 10, type: 'image/jpeg' },
+                { name: 'c.jpg', path: '/f/c.jpg', size: 10, type: 'image/jpeg' },
+            ],
+            currentIndex: 0,
+            moveHistory: [],
+            baseFolderPath: '/f',
+            customLikeFolder: '/liked',
+            customDislikeFolder: '/disliked',
+            customSpecialFolder: '/special',
+            showRatingConfirmations: false,
+            featureCache: new Map(),
+            areFoldersConfigured: () => true,
+            getCombinedFeatures: () => null,
+            _bulkPairKeysReferencing: () => [],
+            removeFileFromList: vi.fn(function (p) {
+                this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
+            }),
+            restoreFeatureCachesFromHistory: vi.fn(),
+            requestPredictionScores: vi.fn(),
+            signalUserActivity: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            showFolderCreationDialog: vi.fn(async () => false),
+            showEmptyStateWithUndo: vi.fn(),
+            showDropZone: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('moveCurrentFile holds the flag from before its first await until it settles', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        const like = moveCurrentFile.call(ctx, 'like');
+        expect(ctx._fileOpInFlight).toBe(true);
+        await drain(like);
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it("a second moveCurrentFile during the first one's awaits never reaches moveFile", async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        const first = moveCurrentFile.call(ctx, 'like');
+        const second = moveCurrentFile.call(ctx, 'like');
+        await drain(first, second);
+        expect(api.moveFile).toHaveBeenCalledTimes(1);
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.showError).not.toHaveBeenCalled();
+    });
+
+    it('moveCurrentFile releases the flag after a failed move', async () => {
+        const { api, drain } = gatedApi({ moveResult: { success: false, error: 'ENOENT' } });
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        await drain(moveCurrentFile.call(ctx, 'like'));
+        expect(ctx.showError).toHaveBeenCalledWith('Failed to move file: ENOENT');
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('moveCurrentFile releases the flag after an early return inside the guarded section', async () => {
+        const { api, drain } = gatedApi();
+        api.checkFolderExists = vi.fn(async () => false); // → creation dialog, declined
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        await drain(moveCurrentFile.call(ctx, 'like'));
+        expect(ctx.showFolderCreationDialog).toHaveBeenCalledOnce();
+        expect(api.moveFile).not.toHaveBeenCalled();
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it("a second single-mode moveToSpecialFolder during the first one's awaits never reaches moveFile", async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        const first = moveToSpecialFolder.call(ctx);
+        const second = moveToSpecialFolder.call(ctx);
+        await drain(first, second);
+        expect(api.moveFile).toHaveBeenCalledTimes(1);
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('moveToSpecialFolder is refused while a like is in flight', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx();
+        const like = moveCurrentFile.call(ctx, 'like');
+        const special = moveToSpecialFolder.call(ctx);
+        await drain(like, special);
+        expect(api.moveFile).toHaveBeenCalledTimes(1);
+        expect(api.moveFile.mock.calls[0][0].targetFolder).toBe('/liked');
+    });
+
+    it('handleCancel refuses with a notice while a move is in flight — even with an empty history', async () => {
+        const { api } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx({ _fileOpInFlight: true });
+        await handleCancel.call(ctx);
+        expect(ctx.showNotification).toHaveBeenCalledWith(IN_FLIGHT_NOTICE, 'info');
+        expect(ctx.showNotification).not.toHaveBeenCalledWith('No moves to undo', 'error');
+        expect(api.moveFile).not.toHaveBeenCalled();
+    });
+
+    it('an undo pressed during a like does not reverse the previous move', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx({ moveHistory: [previousLike()] });
+        const like = moveCurrentFile.call(ctx, 'like');
+        const undo = handleCancel.call(ctx);
+        await drain(like, undo);
+        expect(api.moveFile).toHaveBeenCalledTimes(1); // the like only
+        expect(ctx.moveHistory.map((m) => m.fileName)).toEqual(['z.jpg', 'a.jpg']);
+        expect(ctx.showNotification).toHaveBeenCalledWith(IN_FLIGHT_NOTICE, 'info');
+    });
+
+    it('handleCancel holds the flag during its own restore, so a like pressed then is refused', async () => {
+        const { api, drain } = gatedApi();
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx({ moveHistory: [previousLike()] });
+        const undo = handleCancel.call(ctx);
+        expect(ctx._fileOpInFlight).toBe(true);
+        const like = moveCurrentFile.call(ctx, 'like');
+        await drain(undo, like);
+        expect(api.moveFile).toHaveBeenCalledTimes(1); // the restore only
+        expect(api.moveFile.mock.calls[0][0].sourcePath).toBe('/liked/z.jpg');
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('handleCancel releases the flag after a failed restore', async () => {
+        const { api, drain } = gatedApi({ moveResult: { success: false, error: 'EBUSY' } });
+        globalThis.window = { electronAPI: api };
+        const ctx = guardCtx({ moveHistory: [previousLike()] });
+        await drain(handleCancel.call(ctx));
+        expect(ctx.showError).toHaveBeenCalledWith('Failed to undo move: EBUSY');
+        expect(ctx.moveHistory).toHaveLength(1); // pushed back
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('nextMedia and previousMedia do not move while a file action is in flight', () => {
+        const ctx = guardCtx({ _fileOpInFlight: true, currentIndex: 1 });
+        nextMedia.call(ctx);
+        previousMedia.call(ctx);
+        expect(ctx.currentIndex).toBe(1);
+        expect(ctx.showMedia).not.toHaveBeenCalled();
+    });
+});
