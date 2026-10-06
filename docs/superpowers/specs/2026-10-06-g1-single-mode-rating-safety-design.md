@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 5–9 § G1 (🔵 🏆, 7 SP → **~8 SP**, see § 9) ← TODO 🔴 [2026-10-04] "Stop a held Like key from firing overlapping file moves in single mode", BACKLOG 🔵 [2026-10-04] "Add a special-folder hotkey to single mode" and "Fix the single-mode Like/Dislike tooltips that show old hotkeys"
 **Created**: 2026-10-06
-**Status**: Draft — awaiting user review
+**Status**: Approved 2026-10-06; § 11 Phase 0 recorded
 **Branch**: `g1-single-mode-rating-safety` (PR, per the week's branch/PR shape; G3 branches after this merges — both change `moveToSpecialFolder`)
 
 ---
@@ -328,5 +328,24 @@ CLAUDE.md). The `.media-container` overlay rule applies to any click.
 
 ## 11. Phase 0 result
 
-Not yet run — it is the plan's first task, and nothing in § 5 is implemented until this section records
-the outcome.
+**Run 2026-10-06** on the shipped code (branch at `a3f6818`, no fix applied), E2E harness, one
+`keyboard.down('q')` + 20 repeat keydowns at ~33 ms, then a 3 s settle; runtime-only instrumentation.
+Sentinels held in both runs (20 repeat events reached the page; ≥ 4 `moveCurrentFile` calls).
+
+| Run | liked | `ENOENT` errors | stuck (`isLoading` / `navInProgress`) | clobbers | ignored loads | Like still acts | media elements |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| (a) images only (4 files) | 4 of 4 | 0 | no / no | 0 | 0 | n/a — folder empty | none |
+| (b) video → 320×240 PNG | 1 | 4 | **yes / yes** (spinner shown) | 1 (`IMG`) | 1 (`load:IMG`) | **no** | `IMG:none` |
+| (b2) video → 4000×3000 JPEG | not run — (b) stuck | | | | | | |
+
+**Outcome: Confirmed.** Run (b) reproduces the reported end state exactly as F3 predicts: four
+overlapping moves on the video, one of which moved it while the others failed with `ENOENT`; a stale
+`forceVideoCleanup` timer nulled `currentMedia` after the next render had installed the 320×240 image
+(the `clobber`); that image's `load` then arrived to a `null` `currentMedia` and was ignored, leaving
+`isLoading` and `mediaNavigationInProgress` stuck `true`, the image hidden (`display:none`) under a
+spinning loader, and Like dead. Run (a) did **not** stick, as predicted — but it also logged **no**
+`ENOENT` toasts: with small images each move finished before the next repeat arrived, so the overlap
+showed up as "like everything at the render rate" (all four files liked by one hold) rather than as
+failed renames. F3's "images alone give … `ENOENT` toasts" is therefore timing-dependent, not
+guaranteed; the stuck state needs a video. `SLOW_NEXT` for the Task 4 end-state E2E:
+`'normal-320x240.png'`.
