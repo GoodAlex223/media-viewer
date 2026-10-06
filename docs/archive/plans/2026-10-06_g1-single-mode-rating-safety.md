@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G1 (🔵 🏆, 7 SP → ~8 SP); TODO 🔴 [2026-10-04] "Stop a held Like key from firing overlapping file moves in single mode"; BACKLOG 🔵 [2026-10-04] "Add a special-folder hotkey to single mode", "Fix the single-mode Like/Dislike tooltips that show old hotkeys"
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G1 (🔵 🏆, 7 SP → ~8 SP); TODO 🔴 [2026-10-04] "Stop a held Like key from firing overlapping file moves in single mode"; BACKLOG 🔵 [2026-10-04] "Add a special-folder hotkey to single mode", "Fix the single-mode Like/Dislike tooltips that show old hotkeys"
 **Spec**: [2026-10-06-g1-single-mode-rating-safety-design.md](../../superpowers/specs/2026-10-06-g1-single-mode-rating-safety-design.md) (committed `e385e0c`, user-approved 2026-10-06)
 **Created**: 2026-10-06
-**Status**: Implemented — Tasks 1–7 + final-review fix committed; awaiting push / PR
-**Last Updated**: 2026-10-06 (execution + final review)
+**Status**: Complete — merged `0bdcdb3` (PR #74: pre-PR final review, 2 review rounds + close-out, no issues)
+**Last Updated**: 2026-10-06 (closeout)
 **Branch**: `g1-single-mode-rating-safety`
 
 **Goal:** A held rating key fires one action, two file actions never run at once, the held-Like blank-view / dead-controls end state is reproduced and explained (or bounded), and single mode gets a `1` special hotkey plus like/dislike tooltips derived from the live bindings.
@@ -2237,9 +2237,9 @@ git commit -m "fix(g1): like/dislike tooltips follow the live binding — _short
 - [x] `for i in 1 2 3; do npx playwright test tests/e2e/rating-safety.test.js --reporter=line || break; done` — three runs in a row (spec § 7). (7 passed ×3 — the 7th is the final-review form-field test.)
 - [x] `npx playwright test` — the full suite once. If an existing E2E fails because it fired a second file action before the first settled, fix **the test** (wait for idle), never the guard, and log a deviation. (83 passed, 4 skipped; no existing test relied on overlapping actions.)
 - [x] Dispatch the `regression-checker` agent on the branch diff of `media-viewer.js` (`git diff main...HEAD -- media-viewer.js`); triage every finding against the spec.
-- [ ] Push (`git push -u origin g1-single-mode-rating-safety`; the pre-push hook runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
-- [ ] Open the PR (body: spec link, Phase 0 table and outcome, the RED→GREEN evidence per task, test deltas, the residuals). Review **thorough (`/code-review high`)**.
-- [ ] Merge only on the user's go-ahead.
+- [x] Push (`git push -u origin g1-single-mode-rating-safety`; the pre-push hook runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
+- [x] Open the PR (body: spec link, Phase 0 table and outcome, the RED→GREEN evidence per task, test deltas, the residuals). Review **thorough (`/code-review high`)**.
+- [x] Merge only on the user's go-ahead.
 
 ## Improvements (minimum 2 required before Extract)
 
@@ -2259,10 +2259,10 @@ git commit -m "fix(g1): like/dislike tooltips follow the live binding — _short
 
 ## Closeout (after the merge, on `main`)
 
-- [ ] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] G1 closeout`), archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans), DONE.md entry, WEEKLY Summary-Table Status → `✅ PR #N` + the Tuesday and Wednesday G1 Daily-Schedule rows, check off TODO 🔴 [2026-10-04] (held Like) and BACKLOG 🔵 [2026-10-04] (special hotkey, tooltips) — **in the closeout commit**.
-- [ ] Remove this plan's row from [README.md](README.md) § Current Plans (that table has gone stale on archive twice before).
-- [ ] Propagation check: re-read every live surface this plan touched (CLAUDE.md, the code comments, index.html) for a late correction — especially Phase 0's outcome wording — that did not reach it.
-- [ ] Memory: session file + MEMORY.md line; record durable lessons only.
+- [x] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] G1 closeout`), archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans), DONE.md entry, WEEKLY Summary-Table Status → `✅ PR #N` + the Tuesday and Wednesday G1 Daily-Schedule rows, check off TODO 🔴 [2026-10-04] (held Like) and BACKLOG 🔵 [2026-10-04] (special hotkey, tooltips) — **in the closeout commit**.
+- [x] Remove this plan's row from [README.md](../../planning/plans/README.md) § Current Plans (that table has gone stale on archive twice before).
+- [x] Propagation check: re-read every live surface this plan touched (CLAUDE.md, the code comments, index.html) for a late correction — especially Phase 0's outcome wording — that did not reach it.
+- [x] Memory: session file + MEMORY.md line; record durable lessons only.
 
 ## Progress Log
 
@@ -2278,6 +2278,7 @@ git commit -m "fix(g1): like/dislike tooltips follow the live binding — _short
 - **2026-10-06 — Final review** — fresh reviewer (Opus, `code-reviewer.md`) and `regression-checker`, independently, one **Critical**: the keydown listener never filtered editable targets, so with single `Digit1 → special`, typing "10" into the tournament Rounds box (the config modal is open while the dispatch mode is still `single`) moved the file behind the modal. Fixed `4a9d5d3` (`_isTextEntryTarget`, both branches, after Escape/F1) — unit + E2E RED → GREEN; unit 917/917, rating-safety 7/7 ×3, full E2E 83 passed / 4 skipped. No Important findings; three minors (one later fixed in `02e20df`, PR #74 review) and four pre-existing out-of-scope items carried as Residuals.
 
 - **2026-10-06 — PR #74 review** — 2 findings, both verified: (1) `_isTextEntryTarget` guarded `SELECT`, so a still-focused `#sortAlgorithmSelect` swallowed shortcuts and its type-ahead turned `S` into "Simple (Limited)" (persisted) — `SELECT` dropped from the guard; unit + E2E `after picking a sort algorithm, S still navigates…` RED (index 0, expected 1) → GREEN. (2) the four compare like/dislike titles in `index.html` still hardcoded `(Q)`–`(R)` under a comment / CLAUDE.md line calling the markup bare — made bare. Near-miss minor 3 (handoff "on success branches") fixed in the same CLAUDE.md edit.
+- **2026-10-06 — Merged + closeout** — PR #74 merged `0bdcdb3` (`--merge`), branch deleted remote and local. Closeout on `main`: 11 🟤 entries extracted (`### [2026-10-06] From: G1 closeout`), 2 🔵 BACKLOG entries and the TODO 🔴 item checked off, 2 open entries annotated, DONE.md entry, WEEKLY G1 → `✅ PR #74` with both schedule rows; spec § 12 post-implementation notes added (the frozen spec gets a note, not a rewrite).
 
 ## Key Discoveries
 

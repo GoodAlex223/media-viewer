@@ -24,9 +24,9 @@
 > The 🔵 exception and the week's 🏆. All three items touch the single-mode rating code, and the hotkey's own entry says it must land "with or after" the guard, so they share one branch. **G3 branches after G1 merges** — both change `moveToSpecialFolder`. The BACKLOG/TODO line numbers are as filed on 2026-10-04; re-locate before editing.
 > **Model:** start Opus · `high` (a file-moving bug whose end state is still unexplained — edge cases likely, and `high` is the 5–7 SP row's level for writing the plan) → execute Opus · `medium` for the guard, Sonnet · `medium` for the hotkey and tooltip steps the plan spells out; review thorough (`high`) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **Stop a held Like key from firing overlapping file moves** — reproduce it first — the reported session's log is gone (`logger.cleanup()` deletes `media-viewer.log` on a clean quit; measured 2026-10-05), so the mechanism has to be confirmed by repro, run with G2's log retention in place; then ignore `e.repeat` for file-moving actions only (like / dislike / special / bulk — never next / previous), and give the single-mode move path (`moveCurrentFile`, `moveToSpecialFolder`) a real in-flight guard. ⚠️ Read 🟤 [2026-08-31] "Re-entrancy guard for the tournament handler family" before choosing it: an `isLoading` mutex was _measured_ insufficient there, and a flag that drops the second action silently lost a quick Ctrl+A. Explain the blank-view / dead-controls end state, or bound it and say what is still unexplained. E2E: repeated `keydown` with `repeat: true` → exactly one file moved. `media-viewer.js` (keydown dispatch, `handleLike`/`handleDislike`, `moveCurrentFile`, `moveToSpecialFolder`), `tests/e2e/` (4) — TODO 🔴 [2026-10-04]
-- [ ] **Single-mode special-folder hotkey** — `special: 'Digit1'` in `DEFAULT_SHORTCUTS.single`, an `ACTION_LABELS` row, an `executeAction` case calling `moveToSpecialFolder()` on the guarded path above; flip the four tests G3 pinned single mode's bare state in (`tests/keyboard-shortcuts.test.js` ×3, `tests/media-viewer-utils.test.js` ×1). An additive default needs no `loadShortcuts` version bump — `_mergeModeShortcuts` leaves it unbound if the user already holds `Digit1`. (2) — 🔵 [2026-10-04]
-- [ ] **Like/Dislike tooltips derived from the live binding** — generalise `_specialShortcutSuffix` to any action and apply it to **all eight** hardcoded like/dislike titles (`updateRatingButtonsState`'s two single-mode and four compare titles, `addMediaOverlayControls`' two), refreshed from `saveShortcut`/`resetShortcuts`. Fixes `Like (Arrow Up)` / `Dislike (Arrow Down)`, which are wrong with default bindings, and closes the remap gap G3 declined as out of scope. (1) — 🔵 [2026-10-04]
+- [x] **Stop a held Like key from firing overlapping file moves** — reproduce it first — the reported session's log is gone (`logger.cleanup()` deletes `media-viewer.log` on a clean quit; measured 2026-10-05), so the mechanism has to be confirmed by repro, run with G2's log retention in place; then ignore `e.repeat` for file-moving actions only (like / dislike / special / bulk — never next / previous), and give the single-mode move path (`moveCurrentFile`, `moveToSpecialFolder`) a real in-flight guard. ⚠️ Read 🟤 [2026-08-31] "Re-entrancy guard for the tournament handler family" before choosing it: an `isLoading` mutex was _measured_ insufficient there, and a flag that drops the second action silently lost a quick Ctrl+A. Explain the blank-view / dead-controls end state, or bound it and say what is still unexplained. E2E: repeated `keydown` with `repeat: true` → exactly one file moved. `media-viewer.js` (keydown dispatch, `handleLike`/`handleDislike`, `moveCurrentFile`, `moveToSpecialFolder`), `tests/e2e/` (4) — TODO 🔴 [2026-10-04]
+- [x] **Single-mode special-folder hotkey** — `special: 'Digit1'` in `DEFAULT_SHORTCUTS.single`, an `ACTION_LABELS` row, an `executeAction` case calling `moveToSpecialFolder()` on the guarded path above; flip the four tests G3 pinned single mode's bare state in (`tests/keyboard-shortcuts.test.js` ×3, `tests/media-viewer-utils.test.js` ×1). An additive default needs no `loadShortcuts` version bump — `_mergeModeShortcuts` leaves it unbound if the user already holds `Digit1`. (2) — 🔵 [2026-10-04]
+- [x] **Like/Dislike tooltips derived from the live binding** — generalise `_specialShortcutSuffix` to any action and apply it to **all eight** hardcoded like/dislike titles (`updateRatingButtonsState`'s two single-mode and four compare titles, `addMediaOverlayControls`' two), refreshed from `saveShortcut`/`resetShortcuts`. Fixes `Like (Arrow Up)` / `Dislike (Arrow Down)`, which are wrong with default bindings, and closes the remap gap G3 declined as out of scope. (1) — 🔵 [2026-10-04]
 
 ### G2. Hooks and logs that actually fire `[batch]` 🟤 (+1 🔵 folded) — Claude Code hooks, commit hook, session log — 8 SP
 
@@ -80,13 +80,13 @@
 ### Tuesday, October 6 — Finish the hooks; reproduce held-Like
 
 - **[G2](#g2-hooks-and-logs-that-actually-fire-batch--1--folded--claude-code-hooks-commit-hook-session-log--8-sp)** 🟤 — finish the `settings.json` change; the `SKIP=<check>` bypass; review; merge (part 2 of 2) — ✅ PR #73 (done Monday, with part 1)
-- **[G1](#g1-single-mode-rating-safety-batch----single-mode-move-path--shortcuts--7-sp)** 🔵 🏆 — reproduce; key-repeat filter + in-flight guard + E2E (part 1 of 2)
+- **[G1](#g1-single-mode-rating-safety-batch----single-mode-move-path--shortcuts--7-sp)** 🔵 🏆 — reproduce; key-repeat filter + in-flight guard + E2E (part 1 of 2) — ✅ PR #74 (all of G1 shipped Tuesday, merge `0bdcdb3`)
 
 **Daily total**: ~6 SP
 
 ### Wednesday, October 7 — Single-mode safety lands; tournament starts
 
-- **[G1](#g1-single-mode-rating-safety-batch----single-mode-move-path--shortcuts--7-sp)** 🔵 🏆 — special-folder hotkey + tooltips; review; merge (part 2 of 2)
+- **[G1](#g1-single-mode-rating-safety-batch----single-mode-move-path--shortcuts--7-sp)** 🔵 🏆 — special-folder hotkey + tooltips; review; merge (part 2 of 2) — ✅ PR #74 (done Tuesday, with part 1)
 - **[G3](#g3-tournament-render-re-entry-solo---tournament-render-lifecycle--5-sp)** 🟤 — branch after G1 merges; design the restart decision (part 1 of 2)
 
 **Daily total**: ~5 SP
@@ -112,7 +112,7 @@
 
 | ID  | Group                                       | Domain                                   | Source      | Tasks | Total SP | Day     | Status     |
 | --- | ------------------------------------------- | ---------------------------------------- | ----------- | ----- | -------- | ------- | ---------- |
-| G1  | Single-mode rating safety `[batch]` 🏆      | Single-mode move path + shortcuts        | 🔵 User     | 3     | 7        | Tue–Wed | ☐ Planned |
+| G1  | Single-mode rating safety `[batch]` 🏆      | Single-mode move path + shortcuts        | 🔵 User     | 3     | 7        | Tue–Wed | ✅ PR #74 |
 | G2  | Hooks and logs that actually fire `[batch]` | Claude Code hooks + commit hook + session log | 🟤 Auto (+1 🔵) | 5 | 8 | Mon–Tue | ✅ PR #73 |
 | G3  | Tournament render re-entry `[solo]`         | Tournament render lifecycle              | 🟤 Auto     | 1     | 5        | Wed–Thu | ☐ Planned |
 | G4  | Cleanup Week trial batch `[batch]`          | Adopt trials + recurring read-out        | 🟤 Auto     | 2     | 3        | Thu–Fri | ☐ Planned |

@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-05 <!-- Group G2: Hooks and logs that actually fire (🟤 +1 🔵, Cleanup Week #4) — 5/5, MERGED 2026-10-05 via PR #73 (merge 83c6df0) after three review rounds and a close-out (LGTM). -->
+**Last Updated**: 2026-10-06 <!-- Group G1: Single-mode rating safety (🔵 🏆, Cleanup Week #4) — 3/3, MERGED 2026-10-06 via PR #74 (merge 0bdcdb3) after a pre-PR final review, two review rounds and a close-out (no issues). -->
+<!-- Previous: Group G2: Hooks and logs that actually fire (🟤 +1 🔵, Cleanup Week #4) — 5/5, MERGED 2026-10-05 via PR #73 (merge 83c6df0) after three review rounds and a close-out (LGTM). -->
 <!-- Previous: Group G5: Weekly Reviews (2026-09-24 run, ⚪ Overhead) — 5/5, MERGED 2026-09-24 via PR #72 (merge 7342473) after three review rounds and a close-out ruling; the § 5 context-cost audit read out `keep` and was acted on, the three pending § 4 propagations plus a fourth were applied live in ~/.claude, and every inbound row was ruled per item by the user. -->
 <!-- Previous: Group G3: Compare-mode special hotkeys + tooltips (🔵 User) — **MERGED 2026-09-21 via PR #71, merge `4b650aa`**, after three review rounds. 2/2 tasks + the doc ride-along. Compare mode gained `1`/`2` for the special-folder move, and every special-button tooltip is now **derived** from the live binding rather than hardcoded. The group’s filed premise was wrong in a useful way: both the BACKLOG entry and CLAUDE.md L185 demanded a shortcut-localStorage migration, which verification showed additive keys do not need — but review round 1 then found the entry had been sitting next to a **real** hazard it never described, since `Digit1`/`Digit2` were already legal remap targets, so the new defaults could shadow a user’s existing binding and **silently move a file**. Fixed structurally (`_mergeModeShortcuts` makes a later default yield to a stored remap) rather than with the reviewer’s suggested v3 bump, which they withdrew in round 2. A `holder !== action` guard both later rounds called harmless was removed after brute force proved it dead across 46,200 cases. Unit 805 → **837**; E2E 71 → **75**. -->
 <!-- Previous: Group G4: ML pipeline integrity (🟤 Auto) — **MERGED 2026-09-12 via PR #69, merge `7df03b8`**, after three review rounds plus a final ruling pass with no blocking findings. 3/3 tasks + the 0-SP housekeeping flip. The CLIP unload lease closes the last reachable zero-CLIP training door (the filed one-line remedy was half of it — it closes only the armed-before-the-sort order); `ml-worker.js`'s abort protocol was **deleted rather than pinned**, having no sender, a self-clearing flag and a synchronous loop that could not observe it; the harness went 8 → 24 cases. Three of the group's four premises had expired because PR #68 merged between scoping and execution. Two closeout misses found and repaired (G2 shipped four of five PR #65 entries, not five; G1's own task checkboxes were never flipped). Three review remarks, all one defect class — a rationale living only where nobody executing the work will read it — in code, in a test mock, and in a backlog cross-reference. Unit 761 → **793**; E2E 61/61 unchanged. NOTE: this stamp had been stale since 2026-09-02 — G1's closeout (entry dated 2026-09-10) did not bump it. -->
@@ -17,6 +18,36 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-06 — Group G1: Single-mode rating safety 🔵 🏆 (Cleanup Week #4) — **3/3, MERGED `0bdcdb3`** (PR #74)
+
+**Plan**: [2026-10-06_g1-single-mode-rating-safety.md](../archive/plans/2026-10-06_g1-single-mode-rating-safety.md)
+**Spec**: [2026-10-06-g1-single-mode-rating-safety-design.md](../superpowers/specs/2026-10-06-g1-single-mode-rating-safety-design.md) (D1–D7; § 11 Phase 0 result; § 12 post-implementation notes)
+**Branch**: `g1-single-mode-rating-safety`, cut from `main` at `9705a6d`; deleted remote and local after the merge.
+
+✅ **Status: 3/3. MERGED 2026-10-06 via PR #74** (merge `0bdcdb3`), after a pre-PR final review that found one Critical, two PR review rounds and a close-out ("No issues found"). Executed inline (Native) in one day — WEEKLY had given it Tuesday–Wednesday.
+
+**Summary**: Cleanup Week #4's 🔵 exception and 🏆. Holding Like in single mode moved files at the key-repeat rate, threw `ENOENT` toasts and could freeze on a blank view with dead controls. The end state was **reproduced before any fix** (Phase 0, runtime-only instrumentation): four overlapping moves on a video, then a stale `forceVideoCleanup` timer nulled the next render's `currentMedia`, its load handler ignored the event, and `isLoading` never cleared.
+
+**Key changes** ([media-viewer.js](../../media-viewer.js)):
+
+- **`forceVideoCleanup` releases only its own video** — `if (this.currentMedia === video)` replaces the unconditional null that was the freeze.
+- **A held key fires bound actions once** — `_isSuppressedRepeat` drops `e.repeat` for every bound action outside `REPEATABLE_ACTIONS` (`next`, `previous`), undo included; unbound keys untouched.
+- **One file action at a time** — `_fileOpInFlight`, set before the first `await` and cleared in `finally`, in `moveCurrentFile`, `moveToSpecialFolder`, `moveComparePair`, `applyBulkRating` and `handleCancel`. Ratings, special, bulk and navigation are refused quietly; undo with an `info` notice checked before "No moves to undo" (an undo mid-move used to reverse the **previous** move). Refuse, not queue — a queued rating lands on an unseen file. Closes the compare Q-then-E double move that left both files as phantoms.
+- **Single-mode special hotkey `1`** — additive, no version bump.
+- **Like/Dislike tooltips from the live binding** — `_shortcutSuffix(mode, action)` (renamed from `_specialShortcutSuffix`) for all eight titles; "Like (Arrow Up)" was wrong even with default bindings; the markup carries bare fallbacks.
+- **Form fields never dispatch shortcuts** (final review, Critical) — `_isTextEntryTarget` in both keydown branches, after Escape/F1. The tournament config modal runs in `single` dispatch, so with `1` bound, typing "10" rounds moved the file behind it. Selects excluded after PR #74 review: guarding them let the toolbar sort select's type-ahead turn `S` into "Simple".
+
+**Review**: pre-PR — a fresh-context reviewer and `regression-checker` independently found the form-field Critical; fixed with unit + E2E RED → GREEN; four pre-existing failure-path defects and two minors recorded. PR #74 round 1 — guarding `<select>` broke the sort select (fixed, E2E replayed by the reviewer under the old guard); the compare titles still hardcoded keys under a comment calling them bare (markup made bare). Round 2 — a fixed minor still filed as deferred in the plan's Residuals (corrected). Close-out — all six items closed; 11 🟤 entries extracted.
+
+**Tests**: unit 881 → **917**; E2E 75 → **84** passed (4 skipped) — `tests/e2e/rating-safety.test.js` (8, the timing-sensitive file green three runs in a row) plus one overlay-title test. Every fix had a test that failed against the unfixed code first.
+
+**Key learnings**:
+
+- Reproduce before fixing: the code reading had a strong candidate, but only the probe showed the freeze needs a video and that images alone fail differently ("like everything", no `ENOENT`).
+- A new default key binding reaches every focusable field in that dispatch mode — including a modal that runs under another mode's dispatch. Both reviewers found it; the plan's own Review Focus had assumed digits were unowned.
+- A guard's own exclusion rationale is a test of its inclusion list: sliders were excluded because they keep focus after a click — so does a `<select>`.
+- Pinned tests outnumbered every list made of them (four, five, six — actually eight, one of them an E2E the unit-only pre-commit hook cannot see).
 
 ### 2026-10-05 — Group G2: Hooks and logs that actually fire 🟤 (+1 🔵 folded) (Cleanup Week #4) — **5/5, MERGED `83c6df0`** (PR #73)
 

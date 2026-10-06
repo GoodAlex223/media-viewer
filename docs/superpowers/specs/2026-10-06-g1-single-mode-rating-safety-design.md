@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 5–9 § G1 (🔵 🏆, 7 SP → **~8 SP**, see § 9) ← TODO 🔴 [2026-10-04] "Stop a held Like key from firing overlapping file moves in single mode", BACKLOG 🔵 [2026-10-04] "Add a special-folder hotkey to single mode" and "Fix the single-mode Like/Dislike tooltips that show old hotkeys"
 **Created**: 2026-10-06
-**Status**: Approved 2026-10-06; § 11 Phase 0 recorded
+**Status**: Implemented — merged `0bdcdb3` (PR #74). Frozen design record; § 12 lists where the shipped code departs from it.
 **Branch**: `g1-single-mode-rating-safety` (PR, per the week's branch/PR shape; G3 branches after this merges — both change `moveToSpecialFolder`)
 
 ---
@@ -349,3 +349,13 @@ showed up as "like everything at the render rate" (all four files liked by one h
 failed renames. F3's "images alone give … `ENOENT` toasts" is therefore timing-dependent, not
 guaranteed; the stuck state needs a video. `SLOW_NEXT` for the Task 4 end-state E2E:
 `'normal-320x240.png'`.
+
+---
+
+## 12. Post-implementation notes (added at closeout — the sections above are left as designed)
+
+- **§ 5.1 "Handoff without a gap"** holds on **success branches only**: a failed or declined file op renders nothing, so nothing is left in flight when the flag drops (fixed in CLAUDE.md, `02e20df`).
+- **§ 5.2 "an unbound key is never suppressed"** was not enough. The final review found the keydown listener never looked at `e.target`; with § 5.4's `Digit1`, typing "10" into the tournament Rounds box (the config modal runs in `single` dispatch) moved a file. Shipped: `_isTextEntryTarget` in both keydown branches, after Escape/F1 (`4a9d5d3`); `<select>` excluded after PR #74 review, because guarding it let the toolbar sort select's type-ahead take `S` (`02e20df`). Shortcuts still dispatch behind an open modal for non-text controls — BACKLOG 🟤 [2026-10-06] G1 closeout.
+- **§ 5.4 "five pinned tests"** — the true set was eight (seven unit, one E2E: `compare-mode.test.js` asserted the bare single `#specialBtn` title).
+- **§ 6 test 2** is driven by a burst of `#likeBtn` clicks, not a held key: once § 5.2's filter lands, a held key cannot overlap moves, so a held-key test would prove nothing about the guard or the narrowing.
+- **§ 10 residuals**, plus four pre-existing failure-path defects and two minors the reviews recorded, are BACKLOG 🟤 [2026-10-06] G1 closeout.
