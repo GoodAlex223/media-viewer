@@ -6255,7 +6255,6 @@ describe('updateSpecialButtonsState tooltips', () => {
 
 describe('updateRatingButtonsState tooltips (G1)', () => {
     const updateRatingButtonsState = extractMethod('updateRatingButtonsState');
-    const areFoldersConfigured = extractMethod('areFoldersConfigured');
     const _shortcutSuffix = extractMethod('_shortcutSuffix');
     const keyDisplayName = extractMethod('keyDisplayName');
     const BUTTONS = ['likeBtn', 'dislikeBtn', 'leftLikeBtn', 'leftDislikeBtn', 'rightLikeBtn', 'rightDislikeBtn'];
