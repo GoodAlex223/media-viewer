@@ -97,6 +97,9 @@ class MediaViewer {
         // later fails again is dropped on that second failure even though it reads to the user as a
         // fresh attempt — intended, since it bounds total attempts against a permanently-broken path.
         this._tournamentRestoreFailures = new WeakMap();
+        // Tournament render owner state (G3) — see showTournamentPair.
+        this._tournamentRenderLoop = null;
+        this._tournamentRenderDirty = false;
         this.isVideoLoading = false;
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
@@ -4859,7 +4862,42 @@ class MediaViewer {
         }
     }
 
-    async showTournamentPair(_pruneDepth = 0) {
+    // The single owner of tournament pair rendering (G3). Single-flight and coalescing: a call
+    // during a render marks it dirty and returns the running loop's promise; the loop re-renders
+    // the engine's CURRENT pair until nothing is dirty, so intermediate pairs are never painted.
+    // The promise resolves when the screen shows the engine's pair, and never rejects.
+    // Code running INSIDE a render pass (showTournamentPairFast, _buildTournamentSide,
+    // showCompareMedia's tournament branches) may call this, but must never await it: the pass
+    // would be waiting on the loop it belongs to.
+    showTournamentPair() {
+        this._tournamentRenderDirty = true;
+        if (!this._tournamentRenderLoop) this._tournamentRenderLoop = this._runTournamentRenderLoop();
+        return this._tournamentRenderLoop;
+    }
+
+    async _runTournamentRenderLoop() {
+        // Yield once so _tournamentRenderLoop is assigned before the first pass runs any code; a
+        // request made synchronously inside that pass then joins this loop instead of starting another.
+        await null;
+        try {
+            while (this._tournamentRenderDirty) {
+                this._tournamentRenderDirty = false;
+                try {
+                    await this._renderTournamentPairOnce();
+                } catch (err) {
+                    // One failed pass must not end the loop: a request queued behind it still runs.
+                    window.electronAPI.logError?.(`Tournament render failed: ${err?.message ?? err}`);
+                }
+            }
+        } finally {
+            // Same synchronous continuation as the last while-check: no request can land in between.
+            this._tournamentRenderLoop = null;
+        }
+    }
+
+    // One render pass of the engine's current pair. Only the owner (showTournamentPair) calls this,
+    // apart from the -1 capture net's own bounded recursion below.
+    async _renderTournamentPairOnce(_pruneDepth = 0) {
         if (!this.isTournamentMode || !this.tournament.engine) return;
 
         if (this.tournament.engine.isComplete()) {
@@ -4907,7 +4945,9 @@ class MediaViewer {
                 this.showTournamentSummaryModal();
                 return;
             }
-            return this.showTournamentPair(_pruneDepth + 1);
+            // Recurse into the pass, never the owner: awaiting the owner from inside a pass waits
+            // on the loop this pass belongs to.
+            return this._renderTournamentPairOnce(_pruneDepth + 1);
         }
 
         // Reuse compare-mode rendering: temporarily activate compare layout w/o the binary toggle
@@ -5000,7 +5040,10 @@ class MediaViewer {
                     window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
                     this.showNotification('Skipping undecodable JXL file', 'warning');
                     this.removeFileFromList(file.path);
-                    return this.showTournamentPair(); // re-render the (now different) engine pair
+                    // Request, never await: this runs inside a pass of the render owner, and awaiting
+                    // the owner here would wait on the loop this pass belongs to.
+                    this.showTournamentPair();
+                    return;
                 }
             } else {
                 media.src = fileUrl;
@@ -5132,9 +5175,9 @@ class MediaViewer {
             // The stack must still be exactly where we left it. peekUndoEntry() is non-mutating, so an
             // unchanged stack returns the same object; anything else means a pick/draw/special landed
             // during the await (see the advisory note above). Nothing serializes the tournament
-            // handler family — the re-entrancy guard that would have is BACKLOG [2026-08-31],
-            // blocked on the un-awaited re-entrant renders in _buildTournamentSide — so isLoading
-            // is the only thing in the way, and it is advisory. Reachable, not theoretical. BOTH
+            // handler family — the render itself is single-flight since G3 (showTournamentPair), but
+            // the handler guard is still BACKLOG [2026-08-31] item 2 — so isLoading is the only
+            // thing in the way, and it is advisory. Reachable, not theoretical. BOTH
             // exits below need the check: the failure path mutates the stack too, and
             // _dropWedgedSpecialEntry's clearHistory() would take the entry that just landed with it.
             const stackMoved = this.tournament.engine.peekUndoEntry() !== pending;

@@ -3966,10 +3966,11 @@ describe('tournament isLoading guards (Fix 2)', () => {
         expect(ctx.showTournamentPair).not.toHaveBeenCalled();
     });
 
-    // NOTE: the four re-entrancy cases that stood here were reverted with Task 4 on 2026-08-31.
-    // A lock over this handler family cannot hold while _buildTournamentSide re-enters the render
-    // from a DOM error callback that never passes through a handler — see BACKLOG [2026-08-31].
-    // isLoading remains the only (advisory) guard; the cases above pin what it does and does not do.
+    // NOTE: the four re-entrancy cases that stood here were reverted with Task 4 on 2026-08-31, because
+    // _buildTournamentSide re-entered the render from a DOM error callback outside every handler. G3
+    // (2026-10-07) made the render single-flight (showTournamentPair is its owner), which removes that
+    // re-entry; the handler guard itself is still BACKLOG [2026-08-31] item 2. isLoading remains the
+    // only (advisory) guard; the cases above pin what it does and does not do.
 });
 
 describe('loadFolder cache reset (Fix 1)', () => {
@@ -5367,10 +5368,10 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         // held across the moveFile await), a 'pick'/'draw' undo sets NO isLoading anywhere in this
         // method, so a double Ctrl+A during showTournamentPair() reverses TWO entries.
         //
-        // Task 4 added a lock here and was reverted on 2026-08-31: any lock over this handler
-        // family either misses the re-entrant render path (_buildTournamentSide's DOM error
-        // callback calls showTournamentPair() un-awaited, bypassing every handler) and silently
-        // drops user input, or covers it and wedges. Measured both. See BACKLOG [2026-08-31].
+        // Task 4 added a lock here and was reverted on 2026-08-31: at the time _buildTournamentSide's
+        // DOM error callback re-entered the render outside every handler, so any lock over this
+        // family either dropped user input or wedged (measured both). G3 made the render
+        // single-flight, which unblocks a real guard — BACKLOG [2026-08-31] item 2, not built yet.
         //
         // This test is the tripwire: when the real guard lands it MUST go red, and be replaced
         // with the assertion that the second undo is served rather than doubled or dropped.
@@ -6721,5 +6722,153 @@ describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
         expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
         expect(ctx.bulkRated.size).toBe(0);
         expect(ctx.moveHistory).toHaveLength(0);
+    });
+});
+
+describe('G3 tournament render owner (showTournamentPair: single-flight, coalescing)', () => {
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    // Each pass is a deferred the test releases: releases[i]() settles the i-th deferred pass.
+    // Methods are extracted inside makeCtx so a missing method fails the test, not the file.
+    function makeCtx() {
+        const releases = [];
+        const ctx = {
+            _tournamentRenderDirty: false,
+            _tournamentRenderLoop: null,
+            showTournamentPair: extractMethod('showTournamentPair'),
+            _runTournamentRenderLoop: vi.fn(extractAsyncMethod('_runTournamentRenderLoop')),
+            _renderTournamentPairOnce: vi.fn(() => new Promise((resolve) => releases.push(resolve))),
+        };
+        return { ctx, releases };
+    }
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it('coalesces requests made during a pass into exactly one extra pass', async () => {
+        const { ctx, releases } = makeCtx();
+        const first = ctx.showTournamentPair();
+        await flush();
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(1);
+
+        expect(ctx.showTournamentPair()).toBe(first);
+        expect(ctx.showTournamentPair()).toBe(first);
+        expect(ctx.showTournamentPair()).toBe(first);
+        let settled = false;
+        first.then(() => (settled = true));
+
+        releases[0]();
+        await flush();
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        expect(settled).toBe(false); // nobody resolves before the pass that covers their request
+
+        releases[1]();
+        await first;
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        expect(ctx._runTournamentRenderLoop).toHaveBeenCalledTimes(1);
+        expect(ctx._tournamentRenderLoop).toBeNull();
+    });
+
+    it('a request made synchronously inside the first pass joins the running loop', async () => {
+        const { ctx, releases } = makeCtx();
+        ctx._renderTournamentPairOnce.mockImplementationOnce(function () {
+            this.showTournamentPair(); // e.g. a failure reported before the pass's first await
+            return Promise.resolve();
+        });
+        const done = ctx.showTournamentPair();
+        await flush();
+        expect(ctx._runTournamentRenderLoop).toHaveBeenCalledTimes(1); // no second loop
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        releases[0]();
+        await Promise.race([
+            done,
+            new Promise((_resolve, reject) => setTimeout(() => reject(new Error('render loop hung')), 1000)),
+        ]);
+    });
+
+    it('a request landing just as the last pass finishes is still served', async () => {
+        const { ctx, releases } = makeCtx();
+        const first = ctx.showTournamentPair();
+        await flush();
+        let second;
+        releases[0]();
+        queueMicrotask(() => (second = ctx.showTournamentPair()));
+        await first;
+        await flush();
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        releases[1]();
+        await second;
+        expect(ctx._tournamentRenderLoop).toBeNull();
+    });
+
+    it('a pass that throws is logged, a request queued behind it still runs, and the promise resolves', async () => {
+        const { ctx, releases } = makeCtx();
+        ctx._renderTournamentPairOnce.mockImplementationOnce(function () {
+            this.showTournamentPair();
+            return Promise.reject(new Error('boom'));
+        });
+        const done = ctx.showTournamentPair();
+        await flush();
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith('Tournament render failed: boom');
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        releases[0]();
+        await expect(done).resolves.toBeUndefined();
+        expect(ctx._tournamentRenderLoop).toBeNull();
+    });
+});
+
+describe('G3 _renderTournamentPairOnce -1 capture net (bounded retry, D7)', () => {
+    let origWindow, origDocument;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        origDocument = globalThis.document;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+        globalThis.document = { getElementById: () => ({ textContent: '', disabled: false }) };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+        globalThis.document = origDocument;
+    });
+
+    it('terminates at the summary within the depth cap, recursing into itself and never the owner', async () => {
+        const ctx = {
+            isTournamentMode: true,
+            mediaFiles: [{ path: '/a.png' }, { path: '/b.png' }],
+            isSortedByPrediction: false,
+            isSortedBySimilarity: false,
+            baseFolderPath: '/dir',
+            tournament: {
+                engine: {
+                    files: ['/x.png', '/y.png'],
+                    isComplete: () => false,
+                    getCurrentPair: () => ({ left: '/x.png', right: '/y.png' }),
+                    peekUndoKind: () => null,
+                    removeFile: vi.fn(),
+                },
+                getProgressText: () => '',
+                getTierBreakdownText: () => '',
+                _schedulePersist: vi.fn(),
+            },
+            getMediaIndex: () => -1, // every engine pair is absent: the net never resolves a pair
+            showNotification: vi.fn(),
+            showTournamentSummaryModal: vi.fn(),
+            showTournamentPair: vi.fn(), // the owner: must never be called from inside a pass
+        };
+        ctx._renderTournamentPairOnce = vi.fn(extractAsyncMethod('_renderTournamentPairOnce'));
+
+        await ctx._renderTournamentPairOnce();
+
+        expect(ctx.showTournamentSummaryModal).toHaveBeenCalledTimes(1);
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+        // Cap is `_pruneDepth > mediaFiles.length + 1`: depths 0..4 run, depth 4 falls to the summary.
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(ctx.mediaFiles.length + 3);
+        expect(ctx.tournament.engine.removeFile).toHaveBeenCalledWith('/x.png', { trackUndo: true });
     });
 });

@@ -474,7 +474,6 @@ test.describe('Tournament Mode', () => {
     // test knows where tiny.mp4 — a 32-byte stub that never decodes — sits before relying on it.
 
     test('G3 E1: two overlapping render requests leave one media element per side', async () => {
-        test.fail(true, 'RED by design until G3 Task 3 (render owner) — delete this line there');
         tmpFixtures = await createTempFixtureDir([
             'red-1x1.png',
             'green-1x1.png',
