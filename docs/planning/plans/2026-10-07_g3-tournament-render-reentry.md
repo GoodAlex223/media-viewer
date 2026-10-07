@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🟤, 5 SP → ~6 SP); BACKLOG 🟤 [2026-08-31] "G2 Task 4 revert — E2E measurement", item 1 "Un-awaited re-entrant `showTournamentPair()` from inside `_buildTournamentSide`"; folds in 🟤 [2026-07-02] "`showTournamentPair` −1 bounded-retry branch has no direct unit test"
 **Spec**: [2026-10-07-g3-tournament-render-reentry-design.md](../../superpowers/specs/2026-10-07-g3-tournament-render-reentry-design.md) (committed `bdada4c`, user-approved 2026-10-07)
 **Created**: 2026-10-07
-**Status**: Planned — awaiting user review
+**Status**: Implemented — Tasks 1–4 + final-review fix pass committed; awaiting push / PR
 **Last Updated**: 2026-10-07
 **Branch**: `g3-tournament-render-reentry` (from `main` @ `149b95d`)
 
@@ -92,12 +92,12 @@ Task 1 (Phase 0) runs first, against unchanged code, and gates everything: a RED
 - Consumes: `launchApp`, `closeApp`, `loadFolder`, `createTempFixtureDir`, `waitForMedia` (`tests/e2e/helpers/electron-app.js`); the renderer's `window.mediaViewer`.
 - Produces (module-local to the test file, used by Tasks 3–4): `waitForTournamentIdle(page)`, `instrumentRender(page)` (sets `window.__fast = { inFlight, max, calls }`, `window.__msgs: string[]`, `window.__tinyFailed: boolean`), `setSeedScores(page, scoresByName) → Promise<string[][]>` (round-1 pairs as basenames), `screenState(page) → Promise<{ shown, srcs, engine, leftCount, rightCount, engineFiles, mediaFiles, fastMax, msgs }>`, `expectScreenMatchesEngine(s)`, `failureMessages(s) → string[]`, `SKIP_TINY`, and `enterAndStartTournament(page, { rounds, aiSeeding = false })`.
 
-- [ ] **Step 1: Confirm the tree holds no product change**
+- [x] **Step 1: Confirm the tree holds no product change**
 
 Run: `git status --short && git log --oneline -3`
 Expected: empty status; HEAD is the plan commit on top of `bdada4c`. `git diff 149b95d -- media-viewer.js main.js logger.js` prints nothing — Phase 0 measures the shipped code.
 
-- [ ] **Step 2: Add the helpers and the AI-seeding option**
+- [x] **Step 2: Add the helpers and the AI-seeding option**
 
 In `tests/e2e/tournament-mode.test.js`, replace the whole `enterAndStartTournament` function (lines 6–31) with the block below, which adds the helpers above it:
 
@@ -242,7 +242,7 @@ async function enterAndStartTournament(page, { rounds, aiSeeding = false }) {
 }
 ```
 
-- [ ] **Step 3: Replace the three vacuous post-pick waits (spec F9)**
+- [x] **Step 3: Replace the three vacuous post-pick waits (spec F9)**
 
 The line `        await page.waitForFunction(() => !window.mediaViewer.isLoading);` occurs exactly three times (after the pick in the Ctrl+A, leave-prompt and undo-button tests). Replace all three with:
 
@@ -253,7 +253,7 @@ The line `        await page.waitForFunction(() => !window.mediaViewer.isLoading
 Run: `grep -n "!window.mediaViewer.isLoading" tests/e2e/tournament-mode.test.js`
 Expected: one hit only — the resume test's combined `isTournamentMode && engine !== null && !isLoading` wait (`:266-271`), which stays.
 
-- [ ] **Step 4: Append E1–E3 at the end of the `describe` block (after the chrome test)**
+- [x] **Step 4: Append E1–E3 at the end of the `describe` block (after the chrome test)**
 
 ```js
     // ── G3: one way for a tournament render to restart itself (spec 2026-10-07) ──
@@ -367,7 +367,7 @@ Expected: one hit only — the resume test's combined `isTournamentMode && engin
     });
 ```
 
-- [ ] **Step 5: Run each new test WITHOUT its marker against unchanged code and record why it fails**
+- [x] **Step 5: Run each new test WITHOUT its marker against unchanged code and record why it fails**
 
 Temporarily comment out the three `test.fail(...)` lines (do not stage this state). Run:
 
@@ -380,12 +380,12 @@ Expected — all three FAIL, each for its named reason (record the soft-assertio
 
 If any test **passes**, or fails only on a setup assertion (`pairs` placement, `toHaveValue('ai')`, the E3 first-pair check), or times out: STOP, fix the test, re-run. Do not continue to Step 6 on a RED that has not shown its named reason.
 
-- [ ] **Step 6: Restore the markers and run the whole file**
+- [x] **Step 6: Restore the markers and run the whole file**
 
 Uncomment the three `test.fail(...)` lines. Run: `npx playwright test tests/e2e/tournament-mode.test.js --reporter=line`
 Expected: `12 passed` (9 existing + 3 expected failures reported as passed). An "Expected to fail, but passed." line means a test went green on unchanged code — STOP.
 
-- [ ] **Step 7: Record the Phase 0 result in the spec**
+- [x] **Step 7: Record the Phase 0 result in the spec**
 
 Append to the spec:
 
@@ -409,7 +409,7 @@ trigger fired through `_buildTournamentSide`'s listener>
 
 Fill every `<…>` from Step 5's output before committing (the angle brackets are this step's input slots, not text to keep).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add tests/e2e/tournament-mode.test.js docs/superpowers/specs/2026-10-07-g3-tournament-render-reentry-design.md docs/planning/plans/2026-10-07_g3-tournament-render-reentry.md
@@ -437,7 +437,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: nothing from other tasks.
 - Produces: `logger.normalizeRendererLogEntry(data: unknown) → { level: 'warn' | 'error', message: string, source: string }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/logger.test.js`, inside `describe('logger', …)` after the `describe('logPerf()', …)` block:
 
@@ -504,12 +504,12 @@ In `tests/logger.test.js`, inside `describe('logger', …)` after the `describe(
     });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npx vitest run tests/logger.test.js`
 Expected: 8 FAIL — seven with `TypeError: logger.normalizeRendererLogEntry is not a function`, the wiring check with `expected '…' to contain 'logger.normalizeRendererLogEntry('`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `logger.js`, directly above `module.exports`:
 
@@ -555,17 +555,17 @@ In `main.js`, replace the handler (`:990-994`):
     });
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/logger.test.js`
 Expected: all PASS. Then `npx vitest run` — expected **925** passing (917 + 8).
 
-- [ ] **Step 5: Update CLAUDE.md**
+- [x] **Step 5: Update CLAUDE.md**
 
 - Line 34 (`logger.js`): change `# Session logger (init/log/warn/error/logPerf/cleanup/getLogPath):` to `# Session logger (init/log/warn/error/logPerf/cleanup/getLogPath, normalizeRendererLogEntry):`.
 - Line 130: after `forwarded to the main-process file logger via \`window.electronAPI.logError\` (fire-and-forget)` insert `, which accepts a plain string or \`{ level, message, source }\` — \`main.js\` normalises both via \`logger.normalizeRendererLogEntry\` (before G3, every string logged as \`undefined\`)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add logger.js main.js tests/logger.test.js CLAUDE.md
@@ -593,7 +593,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: Task 1's E1.
 - Produces: `showTournamentPair(): Promise<void>` (sync method returning the loop promise; never rejects); `async _runTournamentRenderLoop(): Promise<void>`; `async _renderTournamentPairOnce(_pruneDepth = 0): Promise<void>` (the old body); fields `_tournamentRenderLoop: Promise<void> | null`, `_tournamentRenderDirty: boolean`.
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 Append to the end of `tests/media-viewer-utils.test.js`:
 
@@ -747,12 +747,12 @@ describe('G3 _renderTournamentPairOnce -1 capture net (bounded retry, D7)', () =
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "G3"`
 Expected: 5 FAIL — the four owner tests with `Could not find method: showTournamentPair` (today it is `async showTournamentPair(_pruneDepth = 0)`, which `extractMethod` does not match), the `-1` test with `Could not find async method: _renderTournamentPairOnce`.
 
-- [ ] **Step 3: Add the constructor fields**
+- [x] **Step 3: Add the constructor fields**
 
 In `media-viewer.js`, after `this._tournamentRestoreFailures = new WeakMap();` (`:99`):
 
@@ -762,7 +762,7 @@ In `media-viewer.js`, after `this._tournamentRestoreFailures = new WeakMap();` (
         this._tournamentRenderDirty = false;
 ```
 
-- [ ] **Step 4: Split `showTournamentPair` into the owner, the loop and the pass**
+- [x] **Step 4: Split `showTournamentPair` into the owner, the loop and the pass**
 
 Replace the method's first two lines (`:4862-4863`):
 
@@ -827,7 +827,7 @@ with:
             return this._renderTournamentPairOnce(_pruneDepth + 1);
 ```
 
-- [ ] **Step 5: Make `_buildTournamentSide`'s JXL catch request instead of await (Premise Correction 1)**
+- [x] **Step 5: Make `_buildTournamentSide`'s JXL catch request instead of await (Premise Correction 1)**
 
 Replace (`:5003`):
 
@@ -847,7 +847,7 @@ with:
 Run: `grep -n "showTournamentPair(" media-viewer.js`
 Expected: every remaining `await this.showTournamentPair()` is in a handler or entry point (`moveToSpecialFolder`, the Start `onclick`, `handleTournamentPick`, `handleTournamentDraw`, `handleTournamentUndo` ×2, `_enterResumedTournamentUI`); the error listener in `_buildTournamentSide` and the JXL catch call it without `await`/`return`. Record the list in the Progress Log.
 
-- [ ] **Step 6: Update the comments that name the re-entrant render as live**
+- [x] **Step 6: Update the comments that name the re-entrant render as live**
 
 `media-viewer.js` `handleTournamentUndo` (`:5134-5137`) — replace:
 
@@ -895,25 +895,25 @@ with:
         // single-flight, which unblocks a real guard — BACKLOG [2026-08-31] item 2, not built yet.
 ```
 
-- [ ] **Step 7: Run the unit tests**
+- [x] **Step 7: Run the unit tests**
 
 Run: `npx vitest run`
 Expected: **930** passing (925 + 5), including the CHARACTERIZATION test (`a second undo DOES re-enter mid-render`) — still green, item 2 untouched.
 
-- [ ] **Step 8: Turn E1 green**
+- [x] **Step 8: Turn E1 green**
 
 In `tests/e2e/tournament-mode.test.js`, delete the line `        test.fail(true, 'RED by design until G3 Task 3 (render owner) — delete this line there');`.
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js --reporter=line`
 Expected: `12 passed` — E1 now genuinely passes; E2 and E3 still fail as expected (on this code the old listener's toast is `Skipping missing file` and the `-1` net adds `File missing — removed from tournament: tiny.mp4`, so their message assertions still miss). An "Expected to fail, but passed." for E2 or E3 means a premise moved — STOP and report.
 
-- [ ] **Step 9: Update CLAUDE.md line 152**
+- [x] **Step 9: Update CLAUDE.md line 152**
 
 After the sentence `Per-pair render uses \`showTournamentPairFast\` (reuses the compare wrappers) instead of a full \`showCompareMedia\` teardown.` append:
 
 `` `showTournamentPair()` is the render's single-flight, coalescing **owner** (G3): a call during a render marks it dirty and returns the running loop's promise, which resolves once the screen shows the engine's current pair and never rejects; code inside a render pass may request a render but must **never await** one (it would await its own loop — `_renderTournamentPairOnce` is the pass, and the `-1` net recurses into it, not the owner).``
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js tests/e2e/tournament-mode.test.js CLAUDE.md
@@ -944,7 +944,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: Task 3's `showTournamentPair()` (request without awaiting) and `_tournamentRenderDirty`; Task 1's E2E helpers.
 - Produces: `_skipFailedTournamentFile(file: {name, path}, { side = null, media = null, reason = 'load' } = {}): void`; `_attachTournamentFailureListener(media: HTMLMediaElement, side: 'left' | 'right', file: {name, path}): void`; test helper `waitForUserHistory(page, n)`.
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 Append to `tests/media-viewer-utils.test.js`:
 
@@ -1076,12 +1076,12 @@ describe('G3 _attachTournamentFailureListener', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npx vitest run tests/media-viewer-utils.test.js -t "G3 _"`
 Expected: 7 FAIL — six with `Could not find method: _skipFailedTournamentFile`, one with `Could not find method: _attachTournamentFailureListener`. (`-t "G3 _"` also matches Task 3's `-1` test, which stays green.)
 
-- [ ] **Step 3: Add the Review Focus E2E cases and the history helper**
+- [x] **Step 3: Add the Review Focus E2E cases and the history helper**
 
 In `tests/e2e/tournament-mode.test.js`:
 
@@ -1246,7 +1246,7 @@ Append after E3, inside the `describe`:
     });
 ```
 
-- [ ] **Step 4: Run E4–E7 to see them fail on Task 3's code**
+- [x] **Step 4: Run E4–E7 to see them fail on Task 3's code**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js -g "G3 E[4-7]" --reporter=line`
 Expected:
@@ -1255,7 +1255,7 @@ Expected:
 - **E6 FAIL** — the summary modal is not visible (the first pair stayed up behind the `Failed to load video` toast).
 - **E7** — may pass (it pins semantics G3 preserves); record the result either way.
 
-- [ ] **Step 5: Implement the helper and the listener**
+- [x] **Step 5: Implement the helper and the listener**
 
 In `media-viewer.js`, directly after `_buildTournamentSide`'s closing brace, add:
 
@@ -1300,7 +1300,7 @@ In `media-viewer.js`, directly after `_buildTournamentSide`'s closing brace, add
     }
 ```
 
-- [ ] **Step 6: Route `_buildTournamentSide` through the helper**
+- [x] **Step 6: Route `_buildTournamentSide` through the helper**
 
 Replace the JXL catch body Task 3 left:
 
@@ -1363,7 +1363,7 @@ with:
     // never renders (it runs inside a pass of the render owner).
 ```
 
-- [ ] **Step 7: `showTournamentPairFast` — detached-wrapper fallback and stale-pair return**
+- [x] **Step 7: `showTournamentPairFast` — detached-wrapper fallback and stale-pair return**
 
 Replace:
 
@@ -1398,7 +1398,7 @@ with:
 
 In the header comment, replace `showCompareMedia for the first pair (no wrappers yet). Both sides re-render atomically` with `showCompareMedia for the first pair, or whenever the wrappers are not in the document. Both sides re-render atomically`.
 
-- [ ] **Step 8: `showCompareMedia` — tournament branches**
+- [x] **Step 8: `showCompareMedia` — tournament branches**
 
 Missing files — replace:
 
@@ -1508,7 +1508,7 @@ Handler setup — replace each of the four lines, keeping the attach **immediate
             if (this.isTournamentMode) this._attachTournamentFailureListener(this.rightMedia, 'right', rightFile);
 ```
 
-- [ ] **Step 9: Correct the two comments this task falsifies (spec F10, § 8)**
+- [x] **Step 9: Correct the two comments this task falsifies (spec F10, § 8)**
 
 In `_renderTournamentPairOnce`, replace:
 
@@ -1546,12 +1546,12 @@ with:
 Run: `grep -n "Skipping missing file\|Tournament media failed to load\|_retryCompareAfterRemoval(" media-viewer.js`
 Expected: no `Skipping missing file` and no `Tournament media failed to load`; `_retryCompareAfterRemoval(` only at its definition and the three compare-mode call sites (now reached only when `!isTournamentMode`).
 
-- [ ] **Step 10: Run the unit tests**
+- [x] **Step 10: Run the unit tests**
 
 Run: `npx vitest run`
 Expected: **937** passing (930 + 7).
 
-- [ ] **Step 11: Count user entries in the four existing history waits (spec F8) and turn E2/E3 green**
+- [x] **Step 11: Count user entries in the four existing history waits (spec F8) and turn E2/E3 green**
 
 In `tests/e2e/tournament-mode.test.js`:
 - Replace every `        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 1);` (three: the Ctrl+A, leave-prompt and undo-button tests) with `        await waitForUserHistory(page, 1);`.
@@ -1561,18 +1561,18 @@ In `tests/e2e/tournament-mode.test.js`:
 Run: `grep -n "history.length" tests/e2e/tournament-mode.test.js`
 Expected: the two `history.length > 0` waits in the 2-file PNG draw tests and the resume test's `historyLen` read — no tiny.mp4 in any of them, so a prune cannot appear.
 
-- [ ] **Step 12: Run the tournament file**
+- [x] **Step 12: Run the tournament file**
 
 Run: `npx playwright test tests/e2e/tournament-mode.test.js --reporter=line`
 Expected: `16 passed`, with no "Expected to fail" line left (`grep -c "test.fail" tests/e2e/tournament-mode.test.js` → `0`).
 
-- [ ] **Step 13: Update CLAUDE.md**
+- [x] **Step 13: Update CLAUDE.md**
 
 - Line 152: in `Structural-mutation writes (reconcile prune, \`-1\` missing-file removal, special-move removal)` add `, load-failure skip` after `\`-1\` missing-file removal`; and append to the owner sentence Task 3 added: `` Every tournament media failure — load error, JXL decode, missing file, first pair included — goes through `_skipFailedTournamentFile` (tracked `'prune'`, one toast, next pair requested, flags cleared); it never renders itself.``
 - Line 163: append ` Compare mode only: in tournament mode a failed file is skipped through \`_skipFailedTournamentFile\` and the engine's next pair rendered — the retry would render \`mediaFiles[currentIndex..+1]\`, a pair the engine is not on (G3).`
 - Line 200: replace `The \`-1\` auto-prune and the special-move removal pass \`{trackUndo: true}\` (kinds \`'prune'\` and \`'special'\`)` with `The \`-1\` auto-prune, the load-failure skip (\`_skipFailedTournamentFile\`) and the special-move removal pass \`{trackUndo: true}\` (kinds \`'prune'\`, \`'prune'\` and \`'special'\`)`.
 
-- [ ] **Step 14: Commit**
+- [x] **Step 14: Commit**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js tests/e2e/tournament-mode.test.js CLAUDE.md
@@ -1594,11 +1594,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## Finish (after Task 4)
 
-- [ ] `npx vitest run` (937), `npm run lint` (0 errors), `npm run format:check`; `git status --short` clean.
-- [ ] **Regression bar (spec § 7.2):** `S=$(mktemp -d); for i in 1 2 3 4 5; do npx playwright test tests/e2e/tournament-mode.test.js --reporter=line > "$S/after-run-$i.log" 2>&1; echo "run $i exit=$?"; done` — five consecutive green runs (16/16 each). Any failure resets the count; investigate before re-running, never retry-until-green.
-- [ ] **Acceptance 5 (spec § 7.5):** after a run, `grep -h "Tournament file skipped" "$APPDATA/Electron/logs"/media-viewer-*.log | head -3` shows the skip line as text, and `grep -c "\[renderer\] undefined$" "$APPDATA/Electron/logs"/media-viewer-*.log` is 0 for those sessions.
-- [ ] `npx playwright test` — the full suite once (expected 91 passed / 4 skipped: 84 + 7 new). An existing non-tournament test that changes behaviour is a finding — triage against the spec, never paper over it.
-- [ ] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
+- [x] `npx vitest run` (937), `npm run lint` (0 errors), `npm run format:check`; `git status --short` clean.
+- [x] **Regression bar (spec § 7.2):** `S=$(mktemp -d); for i in 1 2 3 4 5; do npx playwright test tests/e2e/tournament-mode.test.js --reporter=line > "$S/after-run-$i.log" 2>&1; echo "run $i exit=$?"; done` — five consecutive green runs (16/16 each). Any failure resets the count; investigate before re-running, never retry-until-green.
+- [x] **Acceptance 5 (spec § 7.5):** after a run, `grep -h "Tournament file skipped" "$APPDATA/Electron/logs"/media-viewer-*.log | head -3` shows the skip line as text, and `grep -c "\[renderer\] undefined$" "$APPDATA/Electron/logs"/media-viewer-*.log` is 0 for those sessions.
+- [x] `npx playwright test` — the full suite once (expected 91 passed / 4 skipped: 84 + 7 new). An existing non-tournament test that changes behaviour is a finding — triage against the spec, never paper over it.
+- [x] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
 - [ ] Push (`git push -u origin g3-tournament-render-reentry`; the pre-push hook runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
 - [ ] Open the PR (body: spec link, Phase 0 table, RED → GREEN per task, test deltas, the residuals). Review **deep (`/code-review max`)**.
 - [ ] Merge only on the user's go-ahead.
@@ -1611,6 +1611,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 4. **A coalesced pass after a failure-plus-request re-renders the same pair** (cleanup + rebuild of identical media — a flicker). Candidate: skip a pass whose engine pair equals the pair already painted, unless a failure marked it. 🟤 candidate; measure before acting.
 
 ## Residuals for Extract (found while planning — not fixed here)
+
+- **Final-review minors, deferred** (→ BACKLOG 🟤 at closeout, one entry each): (1) Review Focus 5 was overstated — a failure after a pick but before teardown still skips the file (harmless); (2) the re-prune after an undo-past-skip toasts `File missing — removed from tournament: <full path>` for a file still on disk (pairs with Improvement 1); (3) the owner's promise waits on every pass that joins the loop, and `moveToSpecialFolder` holds `_fileOpInFlight` across it, so special moves are refused during rapid picking; (4) `_skipFailedTournamentFile`'s stale / already-skipped returns don't clear `isLoading` (unreachable per the reviewer's trace); (5) `normalizeRendererLogEntry` JSON-stringifies a message-less object (the spec said `String()`) and stringifies an object `message` as `[object Object]` — note in spec § 12.
+- **"Both Win button records a win-win draw" intermittent click interception** — failed 1 of ~17 full-file runs on this branch (`.media-container` intercepts pointer events on `#tournamentBothWinBtn` for 30 s after the bottom chrome was revealed); unreproduced under trace; `main` 13/13. Not attributable to G3; if it recurs, capture the trace (`--trace=retain-on-failure`) before acting. → BACKLOG 🟤.
 
 - **Input during a render still lands** — a pick, draw or undo pressed while a pass is in flight scores the engine's pair, which may not be on screen yet (spec F4, item 2). E3 even exercises it (its draw scores an unseen pair) without asserting on it. At closeout, rewrite 🟤 [2026-08-31] item 2 as unblocked (spec § 8).
 - **`overlay-controls` and `visual-evidence` tournament tests still wait on `!isLoading`** after Start; harmless with their PNG-only fixtures (the first pair renders through `showCompareMedia`, which does set the flag), but `waitForTournamentIdle` is the correct sync point if either ever adds a fixture that fails. No action unless that happens.
@@ -1627,6 +1630,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## Progress Log
 
 - **2026-10-07** — Brainstormed with the user (D1 scope: every tournament render-restart path, item 2 left as a decision; D6 `logError` ride-along; D3 auto-skip everywhere; D2 coalescing owner). Measured before designing: the tournament file 5/5 green on `main` (45/45), so the WEEKLY's five-run bar cannot fail on unfixed code; `tiny.mp4` is a 32-byte stub; the "third site" has been awaited since at least `ae9588d`; 54 string `logError` calls log `undefined`. Spec committed `bdada4c`, user-approved; plan written. Planning-time verifications: Playwright 1.58 `test.fail` semantics (Context7, `/microsoft/playwright`); the AI-seeding pair order (`buildAiSeedingPairings`, best vs worst → `roundQueue`); `engine.removeFile` and `removeFileFromList` are no-ops for an absent file; `showTournamentSummaryModal` is re-runnable; `'Skipping missing file'` is emitted from one place only; and Premise Corrections 1–2 above.
+- **2026-10-07 — Execution mode**: user chose Native (inline, one final fresh reviewer).
+- **2026-10-07 — Task 1** `4a7a1b1` — Phase 0 RED on unchanged code, each for its named reason (spec § 11): E1 fastMax 2 + 2 elements per wrapper; E2 tiny.mp4 still in both lists, `["❌ Failed to load video: tiny.mp4"]`; E3 fastMax 2, 2 per wrapper, `["Skipping missing file", "File missing — removed from tournament: …tiny.mp4"]` (real trigger via the `_buildTournamentSide` listener). Markers restored: 12 passed.
+- **2026-10-07 — Task 2** `11f45aa` — RED: 7× `TypeError: logger.normalizeRendererLogEntry is not a function` + the wiring check. GREEN 36/36; suite 925.
+- **2026-10-07 — Task 3** `34324c0` — RED: 4× `Could not find method: showTournamentPair` + 1× `_renderTournamentPairOnce`. Call sites after the split: 7 awaited (handlers/entry points), 2 un-awaited (JXL catch, error listener). Suite 930 (CHARACTERIZATION still green); E1 marker removed, file 12 passed (E2/E3 still expected-fail).
+- **2026-10-07 — Task 4** `cfe29be` — unit RED 6× `_skipFailedTournamentFile` + 1× `_attachTournamentFailureListener`; E2E on Task-3 code: E4 `["Skipping undecodable JXL file", "File missing — … zz-bad.jxl"]`, E5 engine still holds the deleted pair + screen (blue, green) ≠ engine (red, normal), E6 summary hidden, E7 passed (by construction, as planned). GREEN: suite 937; tournament file 16 passed, no markers left. Lint 0 errors (2 pre-existing warnings), format clean.
+- **2026-10-07 — Finish** — regression bar 5/5 (80/80); Acceptance 5 confirmed (skip line logged as text; no `[renderer] undefined` in 10 session logs); full E2E 91 passed / 4 skipped; lint 0 errors; `regression-checker`: no issues ≥ 80, compare mode unchanged.
+- **2026-10-07 — Final review** (fresh Opus reviewer): 0 Critical / 0 Important / 8 Minor, "ready to merge". Re-graded by effect: Minor 4 → **Important** (an undo-restored skipped file that only draws byes would be tiered, so Apply moves it or fails) — fixed `45be916`, `_pruneUnlistedEngineFiles()` before both summary returns, 2 unit tests RED → GREEN, suite 939; Minor 1 + the wording half of Minor 5 → fixed as doc edits (KNOWN HOLES item 2; owner promise "resolves when no render is pending"). Five minors deferred (Residuals below). **Flake**: "Both Win button records a win-win draw" failed one full-file run (click intercepted by `.media-container` for 30 s) and one other run failed uncaptured; unreproduced under trace (20/20 isolated, 30/30 with its predecessor, 8/8 full-file), `main` control 13/13 — ruled not attributable to G3, carried as a residual.
 
 ## Key Discoveries
 
