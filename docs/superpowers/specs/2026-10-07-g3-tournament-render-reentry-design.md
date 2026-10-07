@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 5–9 § G3 (🟤, 5 SP → **~6 SP**, see § 9) ← BACKLOG 🟤 [2026-08-31] "G2 Task 4 revert — E2E measurement", item 1 "Un-awaited re-entrant `showTournamentPair()` from inside `_buildTournamentSide`"
 **Created**: 2026-10-07
-**Status**: Design approved section by section in brainstorming (2026-10-07); awaiting written-spec review
+**Status**: Approved 2026-10-07 (sections in brainstorming, then the written spec). Plan: [2026-10-07_g3-tournament-render-reentry.md](../../planning/plans/2026-10-07_g3-tournament-render-reentry.md)
 **Branch**: `g3-tournament-render-reentry` (from `main` @ `149b95d`, after G1 merged)
 
 ---
