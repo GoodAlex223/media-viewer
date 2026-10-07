@@ -213,4 +213,26 @@ function getLogPath() {
     return logPath;
 }
 
-module.exports = { init, log, warn, error, logPerf, cleanup, getLogPath };
+// The payload of the renderer's window.electronAPI.logError(...), normalised. Most renderer call
+// sites pass a plain string; a few pass { level, message, source }. The IPC handler used to
+// destructure the object form only, so every string logged as "undefined" — and an undefined or
+// null payload threw inside the handler (G3).
+function normalizeRendererLogEntry(data) {
+    if (data == null) return { level: 'error', message: '(empty renderer log entry)', source: 'renderer' };
+    if (typeof data !== 'object') return { level: 'error', message: String(data), source: 'renderer' };
+    let message = data.message;
+    if (message == null) {
+        try {
+            message = JSON.stringify(data);
+        } catch (_err) {
+            message = String(data);
+        }
+    }
+    return {
+        level: data.level === 'warn' ? 'warn' : 'error',
+        message: String(message),
+        source: typeof data.source === 'string' && data.source ? data.source : 'renderer',
+    };
+}
+
+module.exports = { init, log, warn, error, logPerf, cleanup, getLogPath, normalizeRendererLogEntry };

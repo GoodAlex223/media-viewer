@@ -987,10 +987,12 @@ app.whenReady().then(() => {
         }
     });
 
-    // Receive renderer errors for file logging (fire-and-forget)
-    ipcMain.on('log-renderer-error', (_event, { level, message, source }) => {
+    // Receive renderer errors for file logging (fire-and-forget). Callers pass a string or
+    // { level, message, source }; normalise both (see logger.normalizeRendererLogEntry).
+    ipcMain.on('log-renderer-error', (_event, data) => {
+        const { level, message, source } = logger.normalizeRendererLogEntry(data);
         const fn = level === 'warn' ? logger.warn : logger.error;
-        fn(source || 'renderer', message);
+        fn(source, message);
     });
 
     // Receive renderer perf/diagnostics lines for the persistent perf log (fire-and-forget).

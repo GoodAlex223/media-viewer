@@ -31,7 +31,7 @@ Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret sca
 ```
 media_viewer/
 ├── main.js              # Electron main process: IPC handlers, file ops, JXL/CLIP/tournament/bulk-rated/feature-cache IPC
-├── logger.js            # Session logger (init/log/warn/error/logPerf/cleanup/getLogPath): one media-viewer-<YYYY-MM-DD_HH-MM-SS>.log per launch in app.getPath('logs'), newest 10 kept, never deleted on quit (no "Session ended" footer = crash/kill) + append-only media-viewer-perf.log. `npm start` → %APPDATA%\media_viewer\logs; E2E (launches main.js, app name "Electron") → %APPDATA%\Electron\logs
+├── logger.js            # Session logger (init/log/warn/error/logPerf/cleanup/getLogPath, normalizeRendererLogEntry): one media-viewer-<YYYY-MM-DD_HH-MM-SS>.log per launch in app.getPath('logs'), newest 10 kept, never deleted on quit (no "Session ended" footer = crash/kill) + append-only media-viewer-perf.log. `npm start` → %APPDATA%\media_viewer\logs; E2E (launches main.js, app name "Electron") → %APPDATA%\Electron\logs
 ├── preload.js           # Security bridge (contextBridge → window.electronAPI): file ops, CLIP IPC, tournament IPC, bulk-rated IPC, logError
 ├── media-viewer.js      # Renderer: all UI logic (~9400 lines, MediaViewer class); imports FullscreenManager + TournamentManager
 ├── index.html           # Main HTML entry point
@@ -127,7 +127,7 @@ BACKLOG.md is split into three source sections. Authoritative rules live in
 
 ## Detected Patterns
 
-**Error Handling**: user-facing errors via the notification system (bottom-right); renderer errors forwarded to the main-process file logger via `window.electronAPI.logError` (fire-and-forget); `showError()`, `window.onerror`, `unhandledrejection` all forward.
+**Error Handling**: user-facing errors via the notification system (bottom-right); renderer errors forwarded to the main-process file logger via `window.electronAPI.logError` (fire-and-forget), which accepts a plain string or `{ level, message, source }` — `main.js` normalises both via `logger.normalizeRendererLogEntry` (before G3, every string logged as `undefined`); `showError()`, `window.onerror`, `unhandledrejection` all forward.
 
 **Data Structures**: MinHeap (priority queue) and VPTree (nearest neighbor) now live ONLY in `sorting-worker.js` — the renderer's own copies + the `sortMediaBySimilarity*` renderer methods were deleted in PR #54/PR1, so sorting is worker-only. Perceptual hashing (image similarity), cosine distance for CLIP (`1 - dot(a,b)` on unit-normalized 512-dim). `calculateCosineDistance` exists in both `sorting-worker.js` and the `MediaViewer` class — the renderer copy returns `1` (not `Infinity`) on null/mismatched input (cosine is bounded [0,2]; 1 = "no signal"). Shared-utility extraction tracked in BACKLOG.
 

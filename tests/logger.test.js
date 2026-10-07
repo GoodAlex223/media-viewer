@@ -310,4 +310,65 @@ describe('logger', () => {
             expect(() => logger.logPerf('x')).not.toThrow();
         });
     });
+
+    describe('normalizeRendererLogEntry()', () => {
+        it('wraps a plain string as an error from the renderer', () => {
+            expect(logger.normalizeRendererLogEntry('JXL decode failed: x')).toEqual({
+                level: 'error',
+                message: 'JXL decode failed: x',
+                source: 'renderer',
+            });
+        });
+
+        it('keeps a full object entry as it is', () => {
+            expect(logger.normalizeRendererLogEntry({ level: 'warn', message: 'm', source: 'ml' })).toEqual({
+                level: 'warn',
+                message: 'm',
+                source: 'ml',
+            });
+        });
+
+        it("defaults a partial object's level and source", () => {
+            expect(logger.normalizeRendererLogEntry({ message: 'm' })).toEqual({
+                level: 'error',
+                message: 'm',
+                source: 'renderer',
+            });
+        });
+
+        it('treats any level other than warn as error', () => {
+            expect(logger.normalizeRendererLogEntry({ level: 'info', message: 'm' }).level).toBe('error');
+        });
+
+        it('never logs a bare "undefined" for a missing payload', () => {
+            for (const data of [undefined, null]) {
+                expect(logger.normalizeRendererLogEntry(data)).toEqual({
+                    level: 'error',
+                    message: '(empty renderer log entry)',
+                    source: 'renderer',
+                });
+            }
+        });
+
+        it('uses the message of an Error-shaped value', () => {
+            expect(logger.normalizeRendererLogEntry(new Error('boom')).message).toBe('boom');
+        });
+
+        it('serialises an object with no message instead of dropping it', () => {
+            expect(logger.normalizeRendererLogEntry({ level: 'warn', code: 7 })).toEqual({
+                level: 'warn',
+                message: '{"level":"warn","code":7}',
+                source: 'renderer',
+            });
+        });
+
+        // Source-text wiring check: main.js's IPC handler is not unit-testable (it needs ipcMain).
+        it("is what main.js's log-renderer-error handler logs with", () => {
+            const src = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
+            const start = src.indexOf("ipcMain.on('log-renderer-error'");
+            expect(start).toBeGreaterThan(-1);
+            const handler = src.slice(start, src.indexOf('});', start));
+            expect(handler).toContain('logger.normalizeRendererLogEntry(');
+        });
+    });
 });
