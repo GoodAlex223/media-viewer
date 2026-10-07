@@ -6872,3 +6872,129 @@ describe('G3 _renderTournamentPairOnce -1 capture net (bounded retry, D7)', () =
         expect(ctx.tournament.engine.removeFile).toHaveBeenCalledWith('/x.png', { trackUndo: true });
     });
 });
+
+describe('G3 _skipFailedTournamentFile — the one tournament failure path', () => {
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    const FILE = { name: 'tiny.mp4', path: '/dir/tiny.mp4' };
+    function makeCtx(overrides = {}) {
+        const media = { tagName: 'VIDEO' };
+        const ctx = {
+            isTournamentMode: true,
+            baseFolderPath: '/dir',
+            mediaFiles: [{ name: 'a.png', path: '/dir/a.png' }, { ...FILE }],
+            leftMedia: { tagName: 'IMG' },
+            rightMedia: media,
+            isLoading: true,
+            mediaNavigationInProgress: true,
+            tournament: {
+                engine: { files: ['/dir/a.png', '/dir/tiny.mp4'], removeFile: vi.fn() },
+                _schedulePersist: vi.fn(),
+            },
+            removeFileFromList: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showNotification: vi.fn(),
+            hideLoadingSpinner: vi.fn(),
+            showTournamentPair: vi.fn(() => new Promise(() => {})), // never settles: must not be awaited
+            ...overrides,
+        };
+        return { ctx, media };
+    }
+    const skip = () => extractMethod('_skipFailedTournamentFile');
+
+    it('drops the file from both lists as a tracked prune, then requests a render without awaiting it', () => {
+        const { ctx, media } = makeCtx();
+        const ret = skip().call(ctx, FILE, { side: 'right', media, reason: 'load' });
+
+        expect(ret).toBeUndefined(); // not the owner's promise — a caller inside a pass must not await it
+        expect(ctx.removeFileFromList).toHaveBeenCalledWith('/dir/tiny.mp4');
+        expect(ctx.updateFolderInfo).toHaveBeenCalled();
+        expect(ctx.tournament.engine.removeFile).toHaveBeenCalledWith('/dir/tiny.mp4', { trackUndo: true });
+        expect(ctx.tournament._schedulePersist).toHaveBeenCalledWith('/dir');
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledWith("Skipping tiny.mp4 — couldn't be loaded", 'warning');
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(
+            'Tournament file skipped (load): /dir/tiny.mp4'
+        );
+        expect(ctx.isLoading).toBe(false);
+        expect(ctx.mediaNavigationInProgress).toBe(false);
+        expect(ctx.hideLoadingSpinner).toHaveBeenCalled();
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+        // The engine is pruned BEFORE the request, or the next pass falls into the -1 capture net
+        // instead of rendering the engine's new pair.
+        expect(ctx.tournament.engine.removeFile.mock.invocationCallOrder[0]).toBeLessThan(
+            ctx.showTournamentPair.mock.invocationCallOrder[0]
+        );
+    });
+
+    it('skips a file with no media element (missing on disk, undecodable)', () => {
+        const { ctx } = makeCtx();
+        skip().call(ctx, FILE, { reason: 'missing' });
+        expect(ctx.tournament.engine.removeFile).toHaveBeenCalledWith('/dir/tiny.mp4', { trackUndo: true });
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(
+            'Tournament file skipped (missing): /dir/tiny.mp4'
+        );
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a failure from an element that is no longer on screen (Review Focus 5)', () => {
+        const { ctx } = makeCtx();
+        skip().call(ctx, FILE, { side: 'right', media: { tagName: 'VIDEO' } }); // a torn-down element
+        expect(ctx.removeFileFromList).not.toHaveBeenCalled();
+        expect(ctx.tournament.engine.removeFile).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op for a file already gone from both lists', () => {
+        const { ctx, media } = makeCtx({ mediaFiles: [{ name: 'a.png', path: '/dir/a.png' }] });
+        ctx.tournament.engine.files = ['/dir/a.png'];
+        skip().call(ctx, FILE, { side: 'right', media });
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+
+    it('does nothing once tournament mode has been left (Review Focus 5)', () => {
+        const { ctx, media } = makeCtx({ isTournamentMode: false });
+        skip().call(ctx, FILE, { side: 'right', media });
+        expect(ctx.removeFileFromList).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the engine is gone — folder switched or Apply (Review Focus 5)', () => {
+        const { ctx, media } = makeCtx();
+        ctx.tournament.engine = null;
+        skip().call(ctx, FILE, { side: 'right', media });
+        expect(ctx.removeFileFromList).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+});
+
+describe('G3 _attachTournamentFailureListener', () => {
+    it("registers on the side's tracked list, so cleanupCompareMedia removes it with the others", () => {
+        const attach = extractMethod('_attachTournamentFailureListener');
+        const media = { addEventListener: vi.fn() };
+        const file = { name: 'tiny.mp4', path: '/dir/tiny.mp4' };
+        const ctx = { videoEventListenersLeft: [], videoEventListenersRight: [], _skipFailedTournamentFile: vi.fn() };
+
+        attach.call(ctx, media, 'right', file);
+
+        expect(ctx.videoEventListenersLeft).toHaveLength(0);
+        expect(ctx.videoEventListenersRight).toHaveLength(1);
+        const { event, handler } = ctx.videoEventListenersRight[0];
+        expect(event).toBe('error');
+        expect(media.addEventListener).toHaveBeenCalledWith('error', handler, { once: true });
+        handler();
+        expect(ctx._skipFailedTournamentFile).toHaveBeenCalledWith(file, { side: 'right', media, reason: 'load' });
+    });
+});

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { access } from 'fs/promises';
+import { access, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { launchApp, closeApp, loadFolder, createTempFixtureDir, waitForMedia } from './helpers/electron-app.js';
 
@@ -107,6 +107,15 @@ function expectScreenMatchesEngine(s) {
 /** Every toast about a failed or removed file, in order — the whole list prints when an assertion misses. */
 function failureMessages(s) {
     return s.msgs.filter((m) => /Skipp|Failed to load|File missing|undecodable/.test(m));
+}
+
+/** Wait until the undo stack holds `n` user entries — a skip's system 'prune' does not count (G3). */
+async function waitForUserHistory(page, n) {
+    await page.waitForFunction(
+        (want) =>
+            window.mediaViewer.tournament.engine.history.filter((e) => (e.kind ?? 'pick') !== 'prune').length === want,
+        n
+    );
 }
 
 /**
@@ -293,12 +302,12 @@ test.describe('Tournament Mode', () => {
 
         // Pick left winner → records one result and advances to the next pair.
         await page.keyboard.press('q');
-        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 1);
+        await waitForUserHistory(page, 1);
         await waitForTournamentIdle(page);
 
         // Undo → history empties and the original pair is current again.
         await page.keyboard.press('Control+a');
-        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 0);
+        await waitForUserHistory(page, 0);
 
         const after = await page.evaluate(() => {
             const p = window.mediaViewer.tournament.engine.getCurrentPair();
@@ -347,7 +356,7 @@ test.describe('Tournament Mode', () => {
 
         // Make one pick so there is progress worth saving.
         await page.keyboard.press('q');
-        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 1);
+        await waitForUserHistory(page, 1);
         await waitForTournamentIdle(page);
 
         // Switching to single while incomplete shows the leave prompt.
@@ -396,12 +405,12 @@ test.describe('Tournament Mode', () => {
         await expect(page.locator('#tournamentUndoBtn')).toBeDisabled();
 
         await page.keyboard.press('q');
-        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 1);
+        await waitForUserHistory(page, 1);
         await waitForTournamentIdle(page);
         await expect(page.locator('#tournamentUndoBtn')).toBeEnabled();
 
         await page.keyboard.press('Control+a');
-        await page.waitForFunction(() => window.mediaViewer.tournament.engine.history.length === 0);
+        await waitForUserHistory(page, 0);
         await expect(page.locator('#tournamentUndoBtn')).toBeDisabled();
     });
 
@@ -499,7 +508,6 @@ test.describe('Tournament Mode', () => {
     });
 
     test('G3 E2: an unreadable file in the first pair is skipped and the engine pair renders', async () => {
-        test.fail(true, 'RED by design until G3 Task 4 (failure path) — delete this line there');
         tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
@@ -526,7 +534,6 @@ test.describe('Tournament Mode', () => {
     });
 
     test('G3 E3: a file that fails in a later pair while a draw renders leaves one render in flight', async () => {
-        test.fail(true, 'RED by design until G3 Task 4 (failure path) — delete this line there');
         tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
@@ -575,6 +582,142 @@ test.describe('Tournament Mode', () => {
         // The whole list prints on a miss. Before G3, 'Skipping missing file' comes only from
         // _buildTournamentSide's own error listener — Phase 0's evidence that the real trigger fired.
         expect.soft(failureMessages(s), 'one skip toast; the -1 capture net not needed').toEqual([SKIP_TINY]);
+        expectScreenMatchesEngine(s);
+    });
+
+    test('G3 E4: an undecodable JXL in a later pair is skipped inside the render (Review Focus 1)', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
+        // Garbage bytes under a .jxl name: listed as image/jxl, rejected by the decoder. Named to sort
+        // last, so the file single mode shows on folder load is a PNG, not this one.
+        await writeFile(join(tmpFixtures.dir, 'zz-bad.jxl'), 'not a jxl file');
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+        const pairs = await setSeedScores(page, {
+            'red-1x1.png': 0.9,
+            'green-1x1.png': 0.7,
+            'zz-bad.jxl': 0.3,
+            'blue-1x1.png': 0.1,
+        });
+        expect(pairs, 'zz-bad.jxl is dealt into the second pair').toEqual([
+            ['red-1x1.png', 'blue-1x1.png'],
+            ['green-1x1.png', 'zz-bad.jxl'],
+        ]);
+        await instrumentRender(page);
+        await enterAndStartTournament(page, { rounds: 3, aiSeeding: true });
+        expect((await screenState(page)).engine).toEqual(['red-1x1.png', 'blue-1x1.png']);
+
+        await page.evaluate(() => (window.__fast.max = 0));
+        await page.keyboard.press('q'); // red beats blue → (green, zz-bad.jxl): its decode fails mid-render
+        await page.waitForFunction(() => window.__msgs.some((m) => /zz-bad\.jxl|undecodable/.test(m)));
+        await waitForTournamentIdle(page);
+
+        const s = await screenState(page);
+        expect.soft(s.fastMax, 'the failure re-rendered through the owner, not nested').toBe(1);
+        expect.soft(s.mediaFiles).not.toContain('zz-bad.jxl');
+        expect.soft(s.engineFiles).not.toContain('zz-bad.jxl');
+        expect.soft(failureMessages(s)).toEqual(["Skipping zz-bad.jxl — couldn't be loaded"]);
+        expectScreenMatchesEngine(s);
+    });
+
+    test('G3 E5: both files of the first pair missing from disk are skipped (Review Focus 2)', async () => {
+        tmpFixtures = await createTempFixtureDir([
+            'red-1x1.png',
+            'green-1x1.png',
+            'blue-1x1.png',
+            'normal-320x240.png',
+        ]);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+        const pairs = await setSeedScores(page, {
+            'red-1x1.png': 0.9,
+            'green-1x1.png': 0.7,
+            'blue-1x1.png': 0.3,
+            'normal-320x240.png': 0.1,
+        });
+        expect(pairs).toEqual([
+            ['red-1x1.png', 'normal-320x240.png'],
+            ['green-1x1.png', 'blue-1x1.png'],
+        ]);
+        // Gone from disk after the folder loaded: still listed, so the tournament deals them first.
+        await rm(join(tmpFixtures.dir, 'red-1x1.png'));
+        await rm(join(tmpFixtures.dir, 'normal-320x240.png'));
+        await instrumentRender(page);
+        await enterAndStartTournament(page, { rounds: 2, aiSeeding: true });
+        await page.waitForFunction(() => window.__msgs.some((m) => /^Skipp/.test(m)));
+        await waitForTournamentIdle(page);
+
+        const s = await screenState(page);
+        for (const gone of ['red-1x1.png', 'normal-320x240.png']) {
+            expect.soft(s.mediaFiles).not.toContain(gone);
+            expect.soft(s.engineFiles).not.toContain(gone);
+        }
+        expect
+            .soft(failureMessages(s))
+            .toEqual(["Skipping red-1x1.png — couldn't be loaded", "Skipping normal-320x240.png — couldn't be loaded"]);
+        expectScreenMatchesEngine(s);
+    });
+
+    test('G3 E6: skips that leave one file end at the summary, still in tournament mode (Review Focus 3)', async () => {
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'tiny.mp4']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+        const pairs = await setSeedScores(page, { 'red-1x1.png': 0.9, 'tiny.mp4': 0.1 });
+        expect(pairs).toEqual([['red-1x1.png', 'tiny.mp4']]);
+        await instrumentRender(page);
+        await enterAndStartTournament(page, { rounds: 1, aiSeeding: true });
+        await page.waitForFunction(() => window.__tinyFailed);
+        await waitForTournamentIdle(page);
+
+        await expect(page.locator('#tournamentSummaryModal')).toBeVisible();
+        const flags = await page.evaluate(() => ({
+            tournament: window.mediaViewer.isTournamentMode,
+            loading: window.mediaViewer.isLoading,
+            nav: window.mediaViewer.mediaNavigationInProgress,
+        }));
+        expect(flags).toEqual({ tournament: true, loading: false, nav: false });
+        const s = await screenState(page);
+        expect(s.engineFiles).toEqual(['red-1x1.png']);
+        expect(failureMessages(s)).toEqual([SKIP_TINY]);
+    });
+
+    test('G3 E7: undo right after a skip restores the pick; the skipped file is re-pruned when dealt (Review Focus 4)', async () => {
+        // Pins spec § 5.2's undo semantics, which G3 must preserve — may pass on pre-G3 code by construction.
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+        const pairs = await setSeedScores(page, {
+            'red-1x1.png': 0.9,
+            'green-1x1.png': 0.7,
+            'tiny.mp4': 0.3,
+            'blue-1x1.png': 0.1,
+        });
+        expect(pairs).toEqual([
+            ['red-1x1.png', 'blue-1x1.png'],
+            ['green-1x1.png', 'tiny.mp4'],
+        ]);
+        await instrumentRender(page);
+        await enterAndStartTournament(page, { rounds: 3, aiSeeding: true });
+
+        await page.keyboard.press('q'); // red beats blue → (green, tiny), which fails and is skipped
+        await page.waitForFunction(() => window.__tinyFailed);
+        await waitForTournamentIdle(page);
+        let s = await screenState(page);
+        expect(s.engineFiles).not.toContain('tiny.mp4');
+
+        await page.keyboard.press('Control+a'); // the newest entry is the skip's prune; the pick lies below it
+        await waitForUserHistory(page, 0);
+        await waitForTournamentIdle(page);
+        s = await screenState(page);
+        expect(s.engine, 'the pick is undone').toEqual(['red-1x1.png', 'blue-1x1.png']);
+        expect(s.engineFiles, 'undo absorbed the prune: back in the engine (spec § 5.2)').toContain('tiny.mp4');
+        expect(s.mediaFiles, '…but not in the list').not.toContain('tiny.mp4');
+        expectScreenMatchesEngine(s);
+
+        await page.keyboard.press('q'); // red beats blue again → tiny is dealt while absent from the list
+        await waitForUserHistory(page, 1);
+        await waitForTournamentIdle(page);
+        s = await screenState(page);
+        expect(s.engineFiles, 'the -1 capture net re-pruned it').not.toContain('tiny.mp4');
         expectScreenMatchesEngine(s);
     });
 });
