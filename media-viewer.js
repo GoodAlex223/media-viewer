@@ -4733,9 +4733,11 @@ class MediaViewer {
     //      prompt because engine.isComplete() — reachable via Escape-out-of-summary-modal. The
     //      summary modal's own Undo button likewise calls handleTournamentUndo WITHOUT exiting.
     //   2. _retryCompareAfterRemoval and showCompareMedia's <2-files branch, both of which drop to
-    //      single mode mid-render. Reachable from tournament mode: showTournamentPairFast falls
-    //      back to showCompareMedia while the wrappers do not exist yet (the first pair), so an
-    //      unusable file there lands in these branches.
+    //      single mode mid-render. Since G3 neither is reached through the tournament render owner:
+    //      showCompareMedia's tournament branches skip a failed file and return before the retry,
+    //      and a pass reaches showCompareMedia only with both pair files listed. They stay holes
+    //      for a showCompareMedia entered in tournament mode OUTSIDE the owner (a showMedia() call);
+    //      none is known today.
     // The empty-state keydown guard's isTournamentMode conjunct (the `canUndo` disjunction in the
     // keydown handler) neutralizes the one consequence that matters today.
     exitTournamentMode() {
@@ -4901,7 +4903,8 @@ class MediaViewer {
     // The single owner of tournament pair rendering (G3). Single-flight and coalescing: a call
     // during a render marks it dirty and returns the running loop's promise; the loop re-renders
     // the engine's CURRENT pair until nothing is dirty, so intermediate pairs are never painted.
-    // The promise resolves when the screen shows the engine's pair, and never rejects.
+    // The promise resolves when no render is pending — the screen shows the engine's pair, or the
+    // pass ended at the summary or because tournament mode was left — and never rejects.
     // Code running INSIDE a render pass (showTournamentPairFast, _buildTournamentSide,
     // showCompareMedia's tournament branches) may call this, but must never await it: the pass
     // would be waiting on the loop it belongs to.
@@ -4931,18 +4934,32 @@ class MediaViewer {
         }
     }
 
+    // Before the summary: drop every engine file no longer in mediaFiles. The -1 capture net only
+    // sees files dealt into a pair, so a skipped file that an undo returned to the engine (its prune
+    // absorbed by undoUserAction) and that then only drew byes would otherwise get a tier, and Apply
+    // would move an undecodable file into _Tier-N, or fail on a missing one (G3 final review).
+    // Tracked like every other prune, so the summary's Undo stays consistent.
+    _pruneUnlistedEngineFiles() {
+        const engine = this.tournament.engine;
+        const unlisted = engine.files.filter((f) => this.getMediaIndex(f) === -1);
+        for (const f of unlisted) engine.removeFile(f, { trackUndo: true });
+        if (unlisted.length > 0) this.tournament._schedulePersist(this.baseFolderPath);
+    }
+
     // One render pass of the engine's current pair. Only the owner (showTournamentPair) calls this,
     // apart from the -1 capture net's own bounded recursion below.
     async _renderTournamentPairOnce(_pruneDepth = 0) {
         if (!this.isTournamentMode || !this.tournament.engine) return;
 
         if (this.tournament.engine.isComplete()) {
+            this._pruneUnlistedEngineFiles();
             this.showTournamentSummaryModal();
             return;
         }
 
         const pair = this.tournament.engine.getCurrentPair();
         if (!pair) {
+            this._pruneUnlistedEngineFiles();
             this.showTournamentSummaryModal();
             return;
         }

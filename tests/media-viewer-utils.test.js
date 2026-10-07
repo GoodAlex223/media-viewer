@@ -6998,3 +6998,59 @@ describe('G3 _attachTournamentFailureListener', () => {
         expect(ctx._skipFailedTournamentFile).toHaveBeenCalledWith(file, { side: 'right', media, reason: 'load' });
     });
 });
+
+describe('G3 final review: no skipped file reaches the summary (Apply never tiers it)', () => {
+    let origWindow, origDocument;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        origDocument = globalThis.document;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+        globalThis.document = { getElementById: () => ({ textContent: '', disabled: false }) };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+        globalThis.document = origDocument;
+    });
+
+    // An undo that absorbed a skip's prune puts the skipped file back in engine.files but not in
+    // mediaFiles; if it then only ever draws byes, the -1 net never sees it, and handleApply would
+    // tier it — moving an undecodable file into _Tier-N, or failing Apply on a missing one.
+    function makeCtx({ complete }) {
+        const files = ['/dir/a.png', '/dir/b.png', '/dir/skipped.mp4'];
+        const engine = {
+            files: [...files],
+            isComplete: () => complete,
+            getCurrentPair: () => null,
+            removeFile: vi.fn((p) => {
+                engine.files = engine.files.filter((f) => f !== p);
+            }),
+        };
+        const listed = new Set(['/dir/a.png', '/dir/b.png']);
+        return {
+            isTournamentMode: true,
+            baseFolderPath: '/dir',
+            mediaFiles: [{ path: '/dir/a.png' }, { path: '/dir/b.png' }],
+            tournament: { engine, _schedulePersist: vi.fn() },
+            getMediaIndex: (p) => (listed.has(p) ? 0 : -1),
+            showTournamentSummaryModal: vi.fn(),
+            _pruneUnlistedEngineFiles: extractMethod('_pruneUnlistedEngineFiles'),
+        };
+    }
+
+    for (const complete of [true, false]) {
+        it(`prunes engine files absent from mediaFiles before the summary (${complete ? 'complete' : 'no pair left'})`, async () => {
+            const ctx = makeCtx({ complete });
+            const renderOnce = extractAsyncMethod('_renderTournamentPairOnce');
+            await renderOnce.call(ctx);
+
+            expect(ctx.tournament.engine.removeFile).toHaveBeenCalledWith('/dir/skipped.mp4', { trackUndo: true });
+            expect(ctx.tournament.engine.files).toEqual(['/dir/a.png', '/dir/b.png']);
+            expect(ctx.tournament._schedulePersist).toHaveBeenCalledWith('/dir');
+            expect(ctx.showTournamentSummaryModal).toHaveBeenCalledTimes(1);
+            expect(ctx.tournament.engine.removeFile.mock.invocationCallOrder[0]).toBeLessThan(
+                ctx.showTournamentSummaryModal.mock.invocationCallOrder[0]
+            );
+        });
+    }
+});
