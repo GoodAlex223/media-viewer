@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-06 <!-- Group G1: Single-mode rating safety (🔵 🏆, Cleanup Week #4) — 3/3, MERGED 2026-10-06 via PR #74 (merge 0bdcdb3) after a pre-PR final review, two review rounds and a close-out (no issues). -->
+**Last Updated**: 2026-10-08 <!-- Group G3: Tournament render re-entry (🟤, Cleanup Week #4) — 1/1, MERGED 2026-10-07 via PR #75 (merge 482a3c8) after a pre-PR final review + fix pass, one review round and a close-out (no issues). -->
+<!-- Previous: Group G1: Single-mode rating safety (🔵 🏆, Cleanup Week #4) — 3/3, MERGED 2026-10-06 via PR #74 (merge 0bdcdb3) after a pre-PR final review, two review rounds and a close-out (no issues). -->
 <!-- Previous: Group G2: Hooks and logs that actually fire (🟤 +1 🔵, Cleanup Week #4) — 5/5, MERGED 2026-10-05 via PR #73 (merge 83c6df0) after three review rounds and a close-out (LGTM). -->
 <!-- Previous: Group G5: Weekly Reviews (2026-09-24 run, ⚪ Overhead) — 5/5, MERGED 2026-09-24 via PR #72 (merge 7342473) after three review rounds and a close-out ruling; the § 5 context-cost audit read out `keep` and was acted on, the three pending § 4 propagations plus a fourth were applied live in ~/.claude, and every inbound row was ruled per item by the user. -->
 <!-- Previous: Group G3: Compare-mode special hotkeys + tooltips (🔵 User) — **MERGED 2026-09-21 via PR #71, merge `4b650aa`**, after three review rounds. 2/2 tasks + the doc ride-along. Compare mode gained `1`/`2` for the special-folder move, and every special-button tooltip is now **derived** from the live binding rather than hardcoded. The group’s filed premise was wrong in a useful way: both the BACKLOG entry and CLAUDE.md L185 demanded a shortcut-localStorage migration, which verification showed additive keys do not need — but review round 1 then found the entry had been sitting next to a **real** hazard it never described, since `Digit1`/`Digit2` were already legal remap targets, so the new defaults could shadow a user’s existing binding and **silently move a file**. Fixed structurally (`_mergeModeShortcuts` makes a later default yield to a stored remap) rather than with the reviewer’s suggested v3 bump, which they withdrew in round 2. A `holder !== action` guard both later rounds called harmless was removed after brute force proved it dead across 46,200 cases. Unit 805 → **837**; E2E 71 → **75**. -->
@@ -18,6 +19,36 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-07 — Group G3: Tournament render re-entry 🟤 (Cleanup Week #4) — **1/1, MERGED `482a3c8`** (PR #75)
+
+**Plan**: [2026-10-07_g3-tournament-render-reentry.md](../archive/plans/2026-10-07_g3-tournament-render-reentry.md)
+**Spec**: [2026-10-07-g3-tournament-render-reentry-design.md](../superpowers/specs/2026-10-07-g3-tournament-render-reentry-design.md) (D1–D7; § 11 Phase 0 result; § 12 post-implementation notes)
+**Branch**: `g3-tournament-render-reentry`, cut from `main` at `149b95d`; deleted remote and local after the merge.
+
+✅ **Status: 1/1. MERGED 2026-10-07 via PR #75** (merge `482a3c8`), after a pre-PR final review (fresh Opus reviewer + `regression-checker`) and its fix pass, one PR review round (2 comment/doc findings + 2 near-misses, all fixed) and a close-out ("No issues found"). Brainstormed, planned and executed inline (Native) in one day — WEEKLY had given it Wednesday–Thursday.
+
+**Summary**: The precondition the tournament handler guard had been **BLOCKED** on since the G2 Task 4 revert (2026-08-31): a tournament render restarted itself from DOM callbacks behind the handlers' backs, so two renders could run at once — orphaning a media element per side — and the screen could drift from the engine pair the next pick is scored against. **Measured before designing**, three premises moved: the WEEKLY's acceptance bar (tournament E2E green five runs in a row) already passed **5/5 on `main`**; the "third site", `moveToSpecialFolder`, had been awaited since at least `ae9588d`; and the ready repro (`tiny.mp4`, a 32-byte stub) mostly failed on the *first* pair through `showCompareMedia`'s Remove-toast path — whose retry renders `mediaFiles[currentIndex..+1]`, a pair the engine is not on. Phase 0 then proved E1–E3 fail on unfixed code for their named reasons; E3 showed the real `_buildTournamentSide` listener producing two renders in flight.
+
+**Key changes**:
+
+- **One render owner** ([media-viewer.js](../../media-viewer.js)) — `showTournamentPair()` is single-flight and coalescing: a call during a render marks it dirty and returns the running loop's promise (`_runTournamentRenderLoop`), which re-renders the engine's current pair (`_renderTournamentPairOnce`, the old body) until nothing is dirty; a pass that throws is logged and the loop goes on; the promise never rejects. Rule: code inside a pass may request a render, never await one — `_buildTournamentSide`'s JXL catch did exactly that and had to be converted in the owner's own commit or it would have deadlocked.
+- **One failure path** — `_skipFailedTournamentFile` drops a failed file from `mediaFiles` and the engine (tracked `'prune'`), shows one toast, clears the load flags and requests the next pass; `_buildTournamentSide` (load error, JXL decode) and `showCompareMedia`'s tournament branches (missing file, JXL decode, load error on the first pair) all call it. The error listener is now tracked (`_attachTournamentFailureListener`), so cleanup removes it; the fast path's fallback checks `isConnected`, because a failed `showCompareMedia` leaves detached wrappers.
+- **No skipped file reaches Apply** (final-review fix) — `_pruneUnlistedEngineFiles()` before the summary: an undo can return a skipped file to the engine, and one that then only draws byes is never dealt, so the `-1` net never sees it.
+- **Renderer logs readable** ([logger.js](../../logger.js), [main.js](../../main.js)) — `normalizeRendererLogEntry`: 54 string `logError` diagnostics had always logged as `undefined` (and `undefined`/`null` threw in the IPC handler).
+
+**Review**: pre-PR — the fresh reviewer found 0 Critical / 0 Important / 8 Minor; the undo-past-a-skip Apply hole was **re-graded Important by effect** (it can move a file) and fixed RED → GREEN; two live claims the branch made false were corrected; five minors deferred. PR #75 round 1 — two comments still credited `showTournamentPair` with relocated code and CLAUDE.md counted three of four tracked removal sites; a same-fact sweep found two more stale statements; all fixed in `09c0613`. Close-out — every response bullet confirmed or accepted first-hand; one non-blocking remainder (CLAUDE.md L152) fixed in this closeout.
+
+**Tests**: unit 917 → **939**; tournament E2E 9 → **16** (E1–E7; five consecutive green runs, 80/80); full E2E 84 → **91** passed (4 skipped), through the real pre-push gate twice. RED E2E were committed under Playwright `test.fail`, each marker deleted by the task that fixed it. One unattributed flake ("Both Win", 1 in ~17 full-file runs, unreproduced under trace, `main` 13/13) recorded in BACKLOG.
+
+**Closeout**: BACKLOG item 2 (the handler guard) rewritten as **unblocked**, with the owner's primitive and a starting direction — not built; `g2-serialization-wip` deleted (user decision), its live pointers struck.
+
+**Key learnings**:
+
+- Measure an acceptance bar on unfixed code before adopting it: five green runs proved nothing here because `main` already had them.
+- Introducing a single-flight owner turns every in-pass caller that awaits it into a self-deadlock — "single-flight" and "nobody inside awaits it" must land in the same commit.
+- An "at the instant of failure" E2E must respect dispatch order: an ancestor's capture listener runs before the element's own listener, with a microtask checkpoint between, so an action issued there wins the race it was meant to overlap.
+- Grade a review finding by what it can do: a Minor that lets Apply move a file is Important.
 
 ### 2026-10-06 — Group G1: Single-mode rating safety 🔵 🏆 (Cleanup Week #4) — **3/3, MERGED `0bdcdb3`** (PR #74)
 

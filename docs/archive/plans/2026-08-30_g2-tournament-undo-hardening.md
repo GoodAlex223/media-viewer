@@ -695,7 +695,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 > therefore either misses that path and silently drops user input — the shipped behaviour, which
 > lost a Ctrl+A pressed promptly after a pick — or covers it and wedges. Tournament E2E: **4/4
 > green with the lock neutralized, ~2/3 runs failing with it**; a serializing variant that waits
-> instead of dropping (branch `g2-serialization-wip`, `b155374`) still failed ~1 per run. The
+> instead of dropping (branch `g2-serialization-wip`, `b155374` — deleted 2026-10-08 at G3 closeout) still failed ~1 per run. The
 > guard is re-filed to BACKLOG [2026-08-31] as blocked on the re-entrant renders. Everything
 > below is retained as the record of what was built; do not use it as a specification.
 > Tasks 1, 2, 3 and 5 are unaffected and shipped.
@@ -1163,7 +1163,7 @@ writing. That is the same root cause G4's review recorded one group earlier.
 ### [2026-08-31] — PHASE: Revert (Task 4)
 
 Task 4 shipped, then failed E2E. Fix attempts, in order: a serializing variant that waits instead of
-dropping (parked on `g2-serialization-wip`, `b155374` — unit-green at 566, three guards
+dropping (parked on `g2-serialization-wip`, `b155374`, deleted 2026-10-08 at G3 closeout — unit-green at 566, three guards
 mutation-verified, still ~1 failure per run), then locking the tournament entry renders too. At the
 three-attempt stop condition, measured the alternative instead of continuing:
 
@@ -1224,7 +1224,7 @@ field, three guard/set/`try`+`finally` blocks, and one reworded comment; no stat
    one decision about how a render restarts itself. Filed 🟤 `[2026-08-31]`; the blocker for #2.
 2. **Re-land the re-entrancy guard once #1 is fixed** — the original 🟤 `[2026-07-21]` item, re-filed
    as blocked. Both mechanisms tried so far are known wrong; the serializing variant on
-   `g2-serialization-wip` is the starting point, but its `_isForeignLoadInFlight()` changes a
+   `g2-serialization-wip` is the starting point (superseded: G3 shipped a render owner instead and the branch was deleted 2026-10-08), but its `_isForeignLoadInFlight()` changes a
    pre-existing guard and needs its own review rather than a free ride.
 3. **Spec §7 out-of-scope residue** — enforcing (rather than documenting) the `exitTournamentMode`
    invariant, and the dead `2025-12-29_video-fullscreen-toggle.md` row in

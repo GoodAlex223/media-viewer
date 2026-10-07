@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 5–9 § G3 (🟤, 5 SP → **~6 SP**, see § 9) ← BACKLOG 🟤 [2026-08-31] "G2 Task 4 revert — E2E measurement", item 1 "Un-awaited re-entrant `showTournamentPair()` from inside `_buildTournamentSide`"
 **Created**: 2026-10-07
-**Status**: Approved 2026-10-07 (sections in brainstorming, then the written spec). Plan: [2026-10-07_g3-tournament-render-reentry.md](../../planning/plans/2026-10-07_g3-tournament-render-reentry.md)
+**Status**: Implemented — merged `482a3c8` (PR #75). Frozen design record; § 12 lists where the shipped code departs from it. Plan: [2026-10-07_g3-tournament-render-reentry.md](../../archive/plans/2026-10-07_g3-tournament-render-reentry.md)
 **Branch**: `g3-tournament-render-reentry` (from `main` @ `149b95d`, after G1 merged)
 
 ---
@@ -416,3 +416,16 @@ appears, so the failure went through the un-awaited listener render — which ov
 render (two in flight) and orphaned a media element per side, the F6 mechanism reached from
 production code. E3 also shows the `-1` capture net firing (F10). With the markers restored, the file
 runs `12 passed` (9 existing + 3 expected failures).
+
+---
+
+## 12. Post-implementation notes (added at closeout — the sections above are left as designed)
+
+- **A fourth tracked removal site was added**: `_pruneUnlistedEngineFiles()` runs before both summary returns in `_renderTournamentPairOnce`. The pre-PR final review found that an undo absorbing a skip's prune returns the file to the engine but not to `mediaFiles`, and a file that then only draws byes is never dealt, so the `-1` net never sees it and Apply would tier it. § 1's non-goal (no change to `undoUserAction()`'s prune absorption) still holds; D3's "Apply never moves it" now holds after an undo too.
+- **The owner's promise** resolves when no render is pending — the engine's pair on screen, *or* a pass that ended at the summary or because tournament mode was left (§ 5.1 said "when the screen shows the engine's pair").
+- **E3's trigger** fires the draw on the next task (`setTimeout(…, 0)`), not inside the capture listener: microtasks run between an ancestor's capture listener and the element's own listener, so a draw issued there tears the element down first and the failure is ignored as stale (plan Premise Correction 2). Phase 0's evidence that the real trigger fired is the toast list (`Skipping missing file` came from one place only), not a `removeFileFromList` wrapper (§ 4.2).
+- **`_buildTournamentSide`'s JXL catch was converted in the owner's commit**, not the failure-path commit: once the owner exists, `return this.showTournamentPair()` inside a pass is a self-await deadlock (plan Premise Correction 1).
+- **`normalizeRendererLogEntry`** JSON-stringifies an object payload that has no `message` (§ 5.4 said `String(data?.message ?? data)`, which yields `[object Object]`), and logs `(empty renderer log entry)` for `undefined`/`null`. An object-valued `message` still stringifies as `[object Object]`; no call site passes one (PR #75 close-out).
+- **Review Focus E2E cases E4–E7** were added beyond § 6.1's E1–E3 (undecodable JXL in a later pair, both first-pair files missing, skips leaving one file, undo right after a skip).
+- **§ 8's item-2 rewrite and branch decision were carried out**: BACKLOG 🟤 [2026-08-31] item 2 is rewritten as unblocked; `g2-serialization-wip` was deleted on the user's decision (2026-10-08).
+- **Five final-review minors and one unattributed E2E flake** were recorded rather than fixed — BACKLOG 🟤 `[2026-10-08] From: G3 closeout`.

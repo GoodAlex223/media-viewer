@@ -98,7 +98,7 @@ referenced in §4 D-1.)
 > two outcomes — miss the re-entrant path and silently drop user input (what shipped; a pick followed
 > promptly by Ctrl+A lost the undo with no feedback), or cover it and wedge. Both were measured on the
 > tournament E2E: **4/4 green with the lock neutralized, ~2/3 runs failing with it**, and a serializing
-> variant (branch `g2-serialization-wip`, `b155374`) still failing ~1 per run. Task 4 was reverted; the
+> variant (branch `g2-serialization-wip`, `b155374` — deleted 2026-10-08 at G3 closeout) still failing ~1 per run. Task 4 was reverted; the
 > guard is re-filed to BACKLOG [2026-08-31] as **blocked on** fixing those re-entrant renders first.
 > DEC-2 and DEC-3 are unaffected and shipped.
 | **DEC-2** | Escape policy for a wedged `special` entry? | **Drop after 2 consecutive failures** on the same entry, with a toast | Drop on 1st failure (a transient AV/network lock costs an undo). Demote to `'prune'` (silently reclassifies a user action). | §4 **D-2** |

@@ -11,7 +11,7 @@
 ## Parallel Work
 
 - **Auto-deploy: no** (Electron desktop app; a single `main` trunk with no production branch; no `.github/workflows/` and no deploy step — GOALS § Constraints "No CI service"). No Deploy Window group.
-- **Parked branch `g2-serialization-wip` (`b155374`, on `origin`)** — G3 is the item it was parked for; G3's closeout decides its fate (land, rebase, or delete with its three doc pointers struck).
+- **Parked branch `g2-serialization-wip` (`b155374`)** — ✅ **deleted 2026-10-08 at G3's closeout** (user decision): G3's render owner superseded its lock. Its live pointers were struck and the frozen records annotated; the 2026-08-31 measurement table stays.
 - **User-side 24k smokes (optional, not gates)**: PR #66 re-smoke round 2, still never run (its 🔵 re-report was checked off this session with that caveat kept); a first look at G2's overlay bar and the G1 fixes on the real folder.
 - **Next normal week's lead — still open** (carried from the Sep 7–11 plan's question 4, never answered): PR2 hash-off-thread (TODO 🔴, unscheduled since June) or the first v2.0 extraction. The 🔵 [2026-10-04] single-mode follow-ons — bulk "dislike the skipped files" (builds on G1's guard), the AI-order staleness hint, source-folder vector reuse on a training-cache miss (measure first) — and the "both good" fatigue design question are the obvious companions.
 
@@ -44,7 +44,7 @@
 > Kept this week despite the 2026-10-04 decision to move tournament mode into a plugin: that move is blocked on an add-on system that does not exist yet, and this defect fires today on any file that fails to decode. It is also the precondition the tournament handler guard has been **BLOCKED** on since the G2 Task 4 revert (2026-08-31). Branch from `main` **after G1 merges**.
 > **Model:** start Opus · `high` — **stepped up one row** from 5–7 SP because the design is unclear (both mechanisms proposed so far were measured wrong); `xhigh` to write the plan → execute Opus · `medium`; review deep (`max`) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **Stop the tournament render from re-entering itself** — one decision about how a render restarts itself, applied at three sites: `_buildTournamentSide`'s media `error` listener and its JXL decode-failure path both call `removeFileFromList()` plus an **un-awaited** `showTournamentPair()` from inside the render they belong to, and `moveToSpecialFolder`'s un-awaited render is the third. Ready repro: `tiny.mp4` fails to load in the Playwright fixtures on every run. Acceptance: the tournament E2E file green over **at least five consecutive runs**, the measurement shape of the 2026-08-31 table (one green run proved nothing there). Then re-read the BLOCKED guard entry and decide the fate of `g2-serialization-wip`. `media-viewer.js` (`_buildTournamentSide`, `moveToSpecialFolder`), `tests/e2e/tournament-mode.test.js` (5) — 🟤 [2026-08-31] G2 Task 4 revert, item 1
+- [x] **Stop the tournament render from re-entering itself** — ✅ PR #75 (merge `482a3c8`): render owner + one failure path; acceptance re-founded on tests that fail on `main` first (the five-run bar passed 5/5 unfixed) — — one decision about how a render restarts itself, applied at three sites: `_buildTournamentSide`'s media `error` listener and its JXL decode-failure path both call `removeFileFromList()` plus an **un-awaited** `showTournamentPair()` from inside the render they belong to, and `moveToSpecialFolder`'s un-awaited render is the third. Ready repro: `tiny.mp4` fails to load in the Playwright fixtures on every run. Acceptance: the tournament E2E file green over **at least five consecutive runs**, the measurement shape of the 2026-08-31 table (one green run proved nothing there). Then re-read the BLOCKED guard entry and decide the fate of `g2-serialization-wip`. `media-viewer.js` (`_buildTournamentSide`, `moveToSpecialFolder`), `tests/e2e/tournament-mode.test.js` (5) — 🟤 [2026-08-31] G2 Task 4 revert, item 1
 
 ### G4. Cleanup Week trial batch `[batch]` 🟤 — adopt trials + recurring read-out — 3 SP
 
@@ -87,13 +87,13 @@
 ### Wednesday, October 7 — Single-mode safety lands; tournament starts
 
 - **[G1](#g1-single-mode-rating-safety-batch----single-mode-move-path--shortcuts--7-sp)** 🔵 🏆 — special-folder hotkey + tooltips; review; merge (part 2 of 2) — ✅ PR #74 (done Tuesday, with part 1)
-- **[G3](#g3-tournament-render-re-entry-solo---tournament-render-lifecycle--5-sp)** 🟤 — branch after G1 merges; design the restart decision (part 1 of 2)
+- **[G3](#g3-tournament-render-re-entry-solo---tournament-render-lifecycle--5-sp)** 🟤 — branch after G1 merges; design the restart decision (part 1 of 2) — ✅ PR #75 (all of G3 shipped Wednesday, merge `482a3c8`)
 
 **Daily total**: ~5 SP
 
 ### Thursday, October 8 — Tournament lands; security scan
 
-- **[G3](#g3-tournament-render-re-entry-solo---tournament-render-lifecycle--5-sp)** 🟤 — implement; five-run E2E measurement; review; merge (part 2 of 2)
+- **[G3](#g3-tournament-render-re-entry-solo---tournament-render-lifecycle--5-sp)** 🟤 — implement; five-run E2E measurement; review; merge (part 2 of 2) — ✅ PR #75 (done Wednesday, with part 1)
 - **[G4](#g4-cleanup-week-trial-batch-batch---adopt-trials--recurring-read-out--3-sp)** 🟤 — user starts `/claude-security`; cost measured on install (part 1 of 2)
 
 **Daily total**: ~5 SP
@@ -114,7 +114,7 @@
 | --- | ------------------------------------------- | ---------------------------------------- | ----------- | ----- | -------- | ------- | ---------- |
 | G1  | Single-mode rating safety `[batch]` 🏆      | Single-mode move path + shortcuts        | 🔵 User     | 3     | 7        | Tue–Wed | ✅ PR #74 |
 | G2  | Hooks and logs that actually fire `[batch]` | Claude Code hooks + commit hook + session log | 🟤 Auto (+1 🔵) | 5 | 8 | Mon–Tue | ✅ PR #73 |
-| G3  | Tournament render re-entry `[solo]`         | Tournament render lifecycle              | 🟤 Auto     | 1     | 5        | Wed–Thu | ☐ Planned |
+| G3  | Tournament render re-entry `[solo]`         | Tournament render lifecycle              | 🟤 Auto     | 1     | 5        | Wed–Thu | ✅ PR #75 |
 | G4  | Cleanup Week trial batch `[batch]`          | Adopt trials + recurring read-out        | 🟤 Auto     | 2     | 3        | Thu–Fri | ☐ Planned |
 | G5  | Weekly Reviews `[batch]`                    | Research / process                       | ⚪ Overhead | 5     | 5        | Fri     | ☐ Planned |
 |     | **Total (quota-counted)**                   |                                          |             | **11** | **23**  |         |            |

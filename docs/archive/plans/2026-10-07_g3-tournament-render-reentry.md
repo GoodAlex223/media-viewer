@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🟤, 5 SP → ~6 SP); BACKLOG 🟤 [2026-08-31] "G2 Task 4 revert — E2E measurement", item 1 "Un-awaited re-entrant `showTournamentPair()` from inside `_buildTournamentSide`"; folds in 🟤 [2026-07-02] "`showTournamentPair` −1 bounded-retry branch has no direct unit test"
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G3 (🟤, 5 SP → ~6 SP); BACKLOG 🟤 [2026-08-31] "G2 Task 4 revert — E2E measurement", item 1 "Un-awaited re-entrant `showTournamentPair()` from inside `_buildTournamentSide`"; folds in 🟤 [2026-07-02] "`showTournamentPair` −1 bounded-retry branch has no direct unit test"
 **Spec**: [2026-10-07-g3-tournament-render-reentry-design.md](../../superpowers/specs/2026-10-07-g3-tournament-render-reentry-design.md) (committed `bdada4c`, user-approved 2026-10-07)
 **Created**: 2026-10-07
-**Status**: Implemented — Tasks 1–4 + final-review fix pass committed; awaiting push / PR
-**Last Updated**: 2026-10-07
+**Status**: Complete — merged `482a3c8` (PR #75: pre-PR final review + fix pass, one review round + close-out, no issues)
+**Last Updated**: 2026-10-08 (closeout)
 **Branch**: `g3-tournament-render-reentry` (from `main` @ `149b95d`)
 
 **Goal:** A tournament pair render has exactly one way to restart itself: `showTournamentPair()` becomes a single-flight, coalescing owner, and every tournament media failure — first pair included — auto-skips through one helper that requests a render and never runs one.
@@ -1599,9 +1599,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - [x] **Acceptance 5 (spec § 7.5):** after a run, `grep -h "Tournament file skipped" "$APPDATA/Electron/logs"/media-viewer-*.log | head -3` shows the skip line as text, and `grep -c "\[renderer\] undefined$" "$APPDATA/Electron/logs"/media-viewer-*.log` is 0 for those sessions.
 - [x] `npx playwright test` — the full suite once (expected 91 passed / 4 skipped: 84 + 7 new). An existing non-tournament test that changes behaviour is a finding — triage against the spec, never paper over it.
 - [x] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
-- [ ] Push (`git push -u origin g3-tournament-render-reentry`; the pre-push hook runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
-- [ ] Open the PR (body: spec link, Phase 0 table, RED → GREEN per task, test deltas, the residuals). Review **deep (`/code-review max`)**.
-- [ ] Merge only on the user's go-ahead.
+- [x] Push (`git push -u origin g3-tournament-render-reentry`; the pre-push hook runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
+- [x] Open the PR (body: spec link, Phase 0 table, RED → GREEN per task, test deltas, the residuals). Review **deep (`/code-review max`)**.
+- [x] Merge only on the user's go-ahead.
 
 ## Improvements (minimum 2 required before Extract)
 
@@ -1620,12 +1620,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## Closeout (after the merge, on `main`)
 
-- [ ] **BACKLOG** (spec § 8): close 🟤 [2026-08-31] item 1 with the premise corrections (spec F1–F3); close 🟤 [2026-07-03] "fast-path re-entrancy … sibling JXL object URL" (by the owner) and 🟤 [2026-07-02] "`-1` bounded-retry has no direct unit test" (D7); annotate 🟤 [2026-07-02] "fast-path swap doesn't set `isLoading`"; rewrite 🟤 [2026-08-31] item 2 as **unblocked** (the primitive: `_tournamentRenderLoop` / its promise; the direction: G1's refuse-pick-or-draw-during-a-render precedent, undo with a notice or queued behind the owner's promise). Extract Improvements + Residuals under `### [YYYY-MM-DD] From: G3 closeout`.
-- [ ] **`g2-serialization-wip`** (`b155374`): decide with evidence (lean: delete — its `_acquireTournamentRender` duplicates the owner and `_isForeignLoadInFlight()` changes a shipped guard). If deleting: strike its three doc pointers (BACKLOG item 2, the G2 spec's DEC-1 note, the archived G2 plan's Task 4 note), keep the measurement table, and **ask the user before `git push origin --delete g2-serialization-wip`**.
-- [ ] DONE.md entry; WEEKLY Summary-Table Status → `✅ PR #N` + the Wednesday and Thursday G3 Daily-Schedule rows; archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans); remove its row from [README.md](README.md) § Current Plans; spec § 12 post-implementation notes — all **in the closeout commit**.
-- [ ] Closeout artifacts table ([README.md](README.md) § Closeout artifacts) — every row done or N/A with a reason.
-- [ ] Propagation check: re-read every live surface this plan touched (CLAUDE.md lines 34/130/152/163/200, the code comments) for a late correction that did not reach it.
-- [ ] Memory: session file + MEMORY.md line; durable lessons only.
+- [x] **BACKLOG** (spec § 8): close 🟤 [2026-08-31] item 1 with the premise corrections (spec F1–F3); close 🟤 [2026-07-03] "fast-path re-entrancy … sibling JXL object URL" (by the owner) and 🟤 [2026-07-02] "`-1` bounded-retry has no direct unit test" (D7); annotate 🟤 [2026-07-02] "fast-path swap doesn't set `isLoading`"; rewrite 🟤 [2026-08-31] item 2 as **unblocked** (the primitive: `_tournamentRenderLoop` / its promise; the direction: G1's refuse-pick-or-draw-during-a-render precedent, undo with a notice or queued behind the owner's promise). Extract Improvements + Residuals under `### [YYYY-MM-DD] From: G3 closeout`.
+- [x] **`g2-serialization-wip`** (`b155374`): decide with evidence (lean: delete — its `_acquireTournamentRender` duplicates the owner and `_isForeignLoadInFlight()` changes a shipped guard). If deleting: strike its three doc pointers (BACKLOG item 2, the G2 spec's DEC-1 note, the archived G2 plan's Task 4 note), keep the measurement table, and **ask the user before `git push origin --delete g2-serialization-wip`**.
+- [x] DONE.md entry; WEEKLY Summary-Table Status → `✅ PR #N` + the Wednesday and Thursday G3 Daily-Schedule rows; archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans); remove its row from [README.md](../../planning/plans/README.md) § Current Plans; spec § 12 post-implementation notes — all **in the closeout commit**.
+- [x] Closeout artifacts table ([README.md](../../planning/plans/README.md) § Closeout artifacts) — every row done or N/A with a reason.
+- [x] Propagation check: re-read every live surface this plan touched (CLAUDE.md lines 34/130/152/163/200, the code comments) for a late correction that did not reach it.
+- [x] Memory: session file + MEMORY.md line; durable lessons only.
 
 ## Progress Log
 
@@ -1637,8 +1637,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - **2026-10-07 — Task 4** `cfe29be` — unit RED 6× `_skipFailedTournamentFile` + 1× `_attachTournamentFailureListener`; E2E on Task-3 code: E4 `["Skipping undecodable JXL file", "File missing — … zz-bad.jxl"]`, E5 engine still holds the deleted pair + screen (blue, green) ≠ engine (red, normal), E6 summary hidden, E7 passed (by construction, as planned). GREEN: suite 937; tournament file 16 passed, no markers left. Lint 0 errors (2 pre-existing warnings), format clean.
 - **2026-10-07 — Finish** — regression bar 5/5 (80/80); Acceptance 5 confirmed (skip line logged as text; no `[renderer] undefined` in 10 session logs); full E2E 91 passed / 4 skipped; lint 0 errors; `regression-checker`: no issues ≥ 80, compare mode unchanged.
 - **2026-10-07 — Final review** (fresh Opus reviewer): 0 Critical / 0 Important / 8 Minor, "ready to merge". Re-graded by effect: Minor 4 → **Important** (an undo-restored skipped file that only draws byes would be tiered, so Apply moves it or fails) — fixed `45be916`, `_pruneUnlistedEngineFiles()` before both summary returns, 2 unit tests RED → GREEN, suite 939; Minor 1 + the wording half of Minor 5 → fixed as doc edits (KNOWN HOLES item 2; owner promise "resolves when no render is pending"). Five minors deferred (Residuals below). **Flake**: "Both Win button records a win-win draw" failed one full-file run (click intercepted by `.media-container` for 30 s) and one other run failed uncaptured; unreproduced under trace (20/20 isolated, 30/30 with its predecessor, 8/8 full-file), `main` control 13/13 — ruled not attributable to G3, carried as a residual.
+- **2026-10-07 — PR #75** — pushed through the real pre-push gate (91 passed / 4 skipped). Review round 1: 2 findings, both comment/doc (two comments still credited `showTournamentPair` with the relocated undo-button and `-1` prune code; CLAUDE.md listed 3 of 4 tracked removal sites and called `reconcileWithFiles` "the third" of five) + 2 near-misses found by sweeping for the same fact (`tournament-engine.js`'s prune definition, CLAUDE.md's `'prune'` gloss) — all fixed in `09c0613`; consolidated response posted. Close-out: "No issues found", every bullet confirmed or accepted first-hand; one non-blocking remainder (CLAUDE.md L152's delayed-write list omits the pre-summary prune), fixed in the closeout.
+- **2026-10-08 — Merged + closeout** — PR #75 merged `482a3c8` (`--merge`), branch deleted remote and local. Closeout on `main`: 10 🟤 entries extracted (`### [2026-10-08] From: G3 closeout`); item 1, the fast-path sibling-URL entry and the `-1` bounded-retry test entry checked off; item 2 rewritten as **unblocked**; the fast-path `isLoading` entry annotated; `g2-serialization-wip` **deleted** (user decision) with its live pointers struck and frozen records annotated; DONE.md entry; WEEKLY G3 → `✅ PR #75` with both schedule rows; spec § 12 post-implementation notes; CLAUDE.md L152 and L161 corrected. The Closeout-artifacts table rows: BACKLOG done; TODO N/A (G3 was scheduled from BACKLOG, no TODO entry); DONE done; WEEKLY done; docs/README done; archive done.
 
 ## Key Discoveries
 
 1. **Introducing the owner without converting the in-render callers creates a deadlock the old code did not have.** `_buildTournamentSide`'s JXL catch returned the render's promise into the outer `Promise.all` — harmless while renders could nest, a self-await once they cannot (Premise Correction 1). "Single-flight" and "nobody inside awaits it" have to land in the same commit.
+3. **A finding's grade is what it can do, not the label it arrived with.** The fresh reviewer filed the undo-past-a-skip hole as Minor; traced by effect, a file that only drew byes after the undo would have been tiered and moved by Apply. Re-graded Important and fixed with a RED test before the PR — the PR review then found nothing functional.
+4. **Measure the acceptance bar on unfixed code before adopting it.** The WEEKLY's five-green-runs bar passed 5/5 on `main` before any fix. Measured at brainstorm time, it became the regression bar, and the gate became tests that fail first.
 2. **Event dispatch order decides what an "at the instant of failure" test measures.** Ancestor capture listeners run before the target's own listeners, with a microtask checkpoint between, so an action issued there wins the race against the failure handling it was meant to overlap (Premise Correction 2).
