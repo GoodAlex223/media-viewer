@@ -2239,7 +2239,7 @@ class MediaViewer {
                 }
                 // The undo shortcut must also fire for a tournament whose engine still holds an
                 // undoable entry. #tournamentUndoBtn already consults peekUndoKind() (in
-                // showTournamentPair, where the button's disabled state is set), so
+                // _renderTournamentPairOnce, where the button's disabled state is set), so
                 // gating the SHORTCUT on moveHistory alone let the button read enabled while
                 // Ctrl+A silently no-opped. The isTournamentMode conjunct is load-bearing:
                 // executeAction('undo') resolves through the mode-keyed reverse map, so without it
@@ -5203,8 +5203,9 @@ class MediaViewer {
     async handleTournamentUndo() {
         if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
         // engine.history is the single chronological undo stack: picks and tournament-mode
-        // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune
-        // in showTournamentPair) are absorbed by undoUserAction so they never cost a press.
+        // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune in
+        // _renderTournamentPairOnce, the load-failure skip in _skipFailedTournamentFile and the
+        // pre-summary _pruneUnlistedEngineFiles) are absorbed by undoUserAction so they never cost a press.
         const pending = this.tournament.engine.peekUndoEntry();
         if (!pending) {
             // Also the post-resume case: undo is session-only, so a resumed tournament starts
