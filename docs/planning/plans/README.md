@@ -76,7 +76,9 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 ## Current Plans
 
-_None currently active._
+| Plan | Group | Status |
+| ---- | ----- | ------ |
+| [2026-10-07_g3-tournament-render-reentry.md](2026-10-07_g3-tournament-render-reentry.md) | G3 Tournament render re-entry (Oct 5–9, Cleanup Week #4) | Implemented — awaiting PR |
 
 <!-- 2026-10-06 (Group G1 closeout): 2026-10-06_g1-single-mode-rating-safety.md left this table on
      archive — merged `0bdcdb3` via PR #74, moved to docs/archive/plans/ with `git mv` and indexed in

@@ -409,9 +409,11 @@ export class TournamentEngine {
         return entry;
     }
 
-    // A `prune` entry is system-initiated — the renderer's -1 auto-prune of a file that
-    // vanished from disk. It is reversed transparently as part of the following user undo, so
-    // it never costs the user a press. Everything else (`pick`, `special`) is a user action.
+    // A `prune` entry is system-initiated — the renderer removing a file the user did not act on:
+    // the -1 auto-prune (an engine file absent from mediaFiles), the skip of a file that failed to
+    // load or decode, and the pre-summary prune of unlisted files. It is reversed transparently as
+    // part of the following user undo, so it never costs the user a press. Everything else
+    // (`pick`, `special`) is a user action.
     // Entries written before G2 carry no `kind`; they are picks.
     _isUserEntry(entry) {
         return (entry.kind ?? 'pick') !== 'prune';

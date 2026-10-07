@@ -97,6 +97,9 @@ class MediaViewer {
         // later fails again is dropped on that second failure even though it reads to the user as a
         // fresh attempt — intended, since it bounds total attempts against a permanently-broken path.
         this._tournamentRestoreFailures = new WeakMap();
+        // Tournament render owner state (G3) — see showTournamentPair.
+        this._tournamentRenderLoop = null;
+        this._tournamentRenderDirty = false;
         this.isVideoLoading = false;
         this.videoEventListeners = []; // Track video event listeners for proper cleanup
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
@@ -2236,7 +2239,7 @@ class MediaViewer {
                 }
                 // The undo shortcut must also fire for a tournament whose engine still holds an
                 // undoable entry. #tournamentUndoBtn already consults peekUndoKind() (in
-                // showTournamentPair, where the button's disabled state is set), so
+                // _renderTournamentPairOnce, where the button's disabled state is set), so
                 // gating the SHORTCUT on moveHistory alone let the button read enabled while
                 // Ctrl+A silently no-opped. The isTournamentMode conjunct is load-bearing:
                 // executeAction('undo') resolves through the mode-keyed reverse map, so without it
@@ -3299,6 +3302,17 @@ class MediaViewer {
             window.electronAPI.checkFileExists(rightFile.path),
         ]);
 
+        // Tournament mode: this render is a pass of the tournament render owner (it draws the first
+        // pair, and any pair after a failure that left no wrappers). Skip each missing file through
+        // the one tournament failure path and let the owner's next pass render the engine's pair —
+        // _retryCompareAfterRemoval would render mediaFiles[currentIndex..+1], a pair the engine is
+        // not on (G3). Request, never await: we are inside a pass.
+        if (this.isTournamentMode && (!leftExists || !rightExists)) {
+            if (!leftExists) this._skipFailedTournamentFile(leftFile, { reason: 'missing' });
+            if (!rightExists) this._skipFailedTournamentFile(rightFile, { reason: 'missing' });
+            return;
+        }
+
         let removedCount = 0;
         if (!leftExists) {
             console.warn('Compare file missing:', leftFile.path);
@@ -3343,8 +3357,13 @@ class MediaViewer {
                     // Undecodable JXL: purge it and retry the pair (mirrors the missing-file path),
                     // rather than leaving compare half-rendered.
                     window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
-                    this.showNotification('Skipping undecodable JXL file', 'warning');
                     this.leftMedia = null; // detached <img>, never appended
+                    if (this.isTournamentMode) {
+                        // The one tournament failure path — see the missing-file branch above.
+                        this._skipFailedTournamentFile(leftFile, { reason: 'decode' });
+                        return;
+                    }
+                    this.showNotification('Skipping undecodable JXL file', 'warning');
                     this.removeFileFromList(leftFile.path);
                     this.isLoading = false;
                     this.mediaNavigationInProgress = false;
@@ -3354,7 +3373,13 @@ class MediaViewer {
             } else {
                 this.leftMedia.src = leftFileUrl;
             }
-            this.setupCompareImageHandlers(this.leftMedia, leftFile, 'left');
+            // Tournament mode: a load failure goes through the one tournament failure path (auto-skip),
+            // never compare's Remove toast, whose removeFailedFile → showMedia renders a pair the
+            // engine is not on (G3). Attached right after src, before the render's next await.
+            this.setupCompareImageHandlers(this.leftMedia, leftFile, 'left', {
+                skipErrorHandler: this.isTournamentMode,
+            });
+            if (this.isTournamentMode) this._attachTournamentFailureListener(this.leftMedia, 'left', leftFile);
         } else if (leftFile.type.startsWith('video/')) {
             this.leftMedia = document.createElement('video');
             this.leftMedia.src = leftFileUrl;
@@ -3364,7 +3389,10 @@ class MediaViewer {
             this.leftMedia.controls = true; // Enable native browser controls in compare mode
             this.leftMedia.volume = parseFloat(this.volumeSlider.value);
             this.leftMedia.preload = 'metadata';
-            this.setupCompareVideoHandlers(this.leftMedia, leftFile, 'left');
+            this.setupCompareVideoHandlers(this.leftMedia, leftFile, 'left', {
+                skipErrorHandler: this.isTournamentMode,
+            });
+            if (this.isTournamentMode) this._attachTournamentFailureListener(this.leftMedia, 'left', leftFile);
         }
 
         // Create right media
@@ -3383,8 +3411,13 @@ class MediaViewer {
                     // Undecodable JXL: purge it and retry the pair. The retry re-enters
                     // showCompareMedia, whose start-cleanup revokes the already-set left object URL.
                     window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
-                    this.showNotification('Skipping undecodable JXL file', 'warning');
                     this.rightMedia = null; // detached <img>, never appended
+                    if (this.isTournamentMode) {
+                        // The one tournament failure path — see the missing-file branch above.
+                        this._skipFailedTournamentFile(rightFile, { reason: 'decode' });
+                        return;
+                    }
+                    this.showNotification('Skipping undecodable JXL file', 'warning');
                     this.removeFileFromList(rightFile.path);
                     this.isLoading = false;
                     this.mediaNavigationInProgress = false;
@@ -3394,7 +3427,10 @@ class MediaViewer {
             } else {
                 this.rightMedia.src = rightFileUrl;
             }
-            this.setupCompareImageHandlers(this.rightMedia, rightFile, 'right');
+            this.setupCompareImageHandlers(this.rightMedia, rightFile, 'right', {
+                skipErrorHandler: this.isTournamentMode,
+            });
+            if (this.isTournamentMode) this._attachTournamentFailureListener(this.rightMedia, 'right', rightFile);
         } else if (rightFile.type.startsWith('video/')) {
             this.rightMedia = document.createElement('video');
             this.rightMedia.src = rightFileUrl;
@@ -3404,7 +3440,10 @@ class MediaViewer {
             this.rightMedia.controls = true; // Enable native browser controls in compare mode
             this.rightMedia.volume = parseFloat(this.volumeSlider.value);
             this.rightMedia.preload = 'metadata';
-            this.setupCompareVideoHandlers(this.rightMedia, rightFile, 'right');
+            this.setupCompareVideoHandlers(this.rightMedia, rightFile, 'right', {
+                skipErrorHandler: this.isTournamentMode,
+            });
+            if (this.isTournamentMode) this._attachTournamentFailureListener(this.rightMedia, 'right', rightFile);
         }
 
         this.leftMedia.className = 'media-display';
@@ -4694,9 +4733,11 @@ class MediaViewer {
     //      prompt because engine.isComplete() — reachable via Escape-out-of-summary-modal. The
     //      summary modal's own Undo button likewise calls handleTournamentUndo WITHOUT exiting.
     //   2. _retryCompareAfterRemoval and showCompareMedia's <2-files branch, both of which drop to
-    //      single mode mid-render. Reachable from tournament mode: showTournamentPairFast falls
-    //      back to showCompareMedia while the wrappers do not exist yet (the first pair), so an
-    //      unusable file there lands in these branches.
+    //      single mode mid-render. Since G3 neither is reached through the tournament render owner:
+    //      showCompareMedia's tournament branches skip a failed file and return before the retry,
+    //      and a pass reaches showCompareMedia only with both pair files listed. They stay holes
+    //      for a showCompareMedia entered in tournament mode OUTSIDE the owner (a showMedia() call);
+    //      none is known today.
     // The empty-state keydown guard's isTournamentMode conjunct (the `canUndo` disjunction in the
     // keydown handler) neutralizes the one consequence that matters today.
     exitTournamentMode() {
@@ -4859,16 +4900,66 @@ class MediaViewer {
         }
     }
 
-    async showTournamentPair(_pruneDepth = 0) {
+    // The single owner of tournament pair rendering (G3). Single-flight and coalescing: a call
+    // during a render marks it dirty and returns the running loop's promise; the loop re-renders
+    // the engine's CURRENT pair until nothing is dirty, so intermediate pairs are never painted.
+    // The promise resolves when no render is pending — the screen shows the engine's pair, or the
+    // pass ended at the summary or because tournament mode was left — and never rejects.
+    // Code running INSIDE a render pass (showTournamentPairFast, _buildTournamentSide,
+    // showCompareMedia's tournament branches) may call this, but must never await it: the pass
+    // would be waiting on the loop it belongs to.
+    showTournamentPair() {
+        this._tournamentRenderDirty = true;
+        if (!this._tournamentRenderLoop) this._tournamentRenderLoop = this._runTournamentRenderLoop();
+        return this._tournamentRenderLoop;
+    }
+
+    async _runTournamentRenderLoop() {
+        // Yield once so _tournamentRenderLoop is assigned before the first pass runs any code; a
+        // request made synchronously inside that pass then joins this loop instead of starting another.
+        await null;
+        try {
+            while (this._tournamentRenderDirty) {
+                this._tournamentRenderDirty = false;
+                try {
+                    await this._renderTournamentPairOnce();
+                } catch (err) {
+                    // One failed pass must not end the loop: a request queued behind it still runs.
+                    window.electronAPI.logError?.(`Tournament render failed: ${err?.message ?? err}`);
+                }
+            }
+        } finally {
+            // Same synchronous continuation as the last while-check: no request can land in between.
+            this._tournamentRenderLoop = null;
+        }
+    }
+
+    // Before the summary: drop every engine file no longer in mediaFiles. The -1 capture net only
+    // sees files dealt into a pair, so a skipped file that an undo returned to the engine (its prune
+    // absorbed by undoUserAction) and that then only drew byes would otherwise get a tier, and Apply
+    // would move an undecodable file into _Tier-N, or fail on a missing one (G3 final review).
+    // Tracked like every other prune, so the summary's Undo stays consistent.
+    _pruneUnlistedEngineFiles() {
+        const engine = this.tournament.engine;
+        const unlisted = engine.files.filter((f) => this.getMediaIndex(f) === -1);
+        for (const f of unlisted) engine.removeFile(f, { trackUndo: true });
+        if (unlisted.length > 0) this.tournament._schedulePersist(this.baseFolderPath);
+    }
+
+    // One render pass of the engine's current pair. Only the owner (showTournamentPair) calls this,
+    // apart from the -1 capture net's own bounded recursion below.
+    async _renderTournamentPairOnce(_pruneDepth = 0) {
         if (!this.isTournamentMode || !this.tournament.engine) return;
 
         if (this.tournament.engine.isComplete()) {
+            this._pruneUnlistedEngineFiles();
             this.showTournamentSummaryModal();
             return;
         }
 
         const pair = this.tournament.engine.getCurrentPair();
         if (!pair) {
+            this._pruneUnlistedEngineFiles();
             this.showTournamentSummaryModal();
             return;
         }
@@ -4884,9 +4975,11 @@ class MediaViewer {
 
         if (leftIdx === -1 || rightIdx === -1) {
             const missing = leftIdx === -1 ? pair.left : pair.right;
-            // Capture net: unreachable after reconcileWithFiles (see _enterResumedTournamentUI).
-            // If it still fires, the engine/mediaFiles diverged — log the shape so a real 24k
-            // repro is diagnosable in the session log, then prune + retry (bounded).
+            // Capture net: an engine file absent from mediaFiles. Expected after an undo whose
+            // undoUserAction() absorbed a skip's prune — the skipped file returns to the engine but
+            // not to mediaFiles (see _skipFailedTournamentFile); otherwise the engine and mediaFiles
+            // diverged in a way reconcileWithFiles missed. Log the shape so a real 24k repro is
+            // diagnosable in the session log, then prune + retry (bounded).
             const absent = this.tournament.engine.files.filter((f) => this.getMediaIndex(f) === -1).length;
             window.electronAPI.logError?.(
                 `Tournament divergence: pair file absent from mediaFiles. ` +
@@ -4907,7 +5000,9 @@ class MediaViewer {
                 this.showTournamentSummaryModal();
                 return;
             }
-            return this.showTournamentPair(_pruneDepth + 1);
+            // Recurse into the pass, never the owner: awaiting the owner from inside a pass waits
+            // on the loop this pass belongs to.
+            return this._renderTournamentPairOnce(_pruneDepth + 1);
         }
 
         // Reuse compare-mode rendering: temporarily activate compare layout w/o the binary toggle
@@ -4939,10 +5034,12 @@ class MediaViewer {
     // the addMediaOverlayControls calls below and _buildTournamentSide's header for why. Avoids
     // showCompareMedia's full teardown (.remove() + 50ms reflow grace + 2× checkFileExists IPC +
     // 2× lucide.createIcons), which makes pair changes sluggish at 24k. Falls back to
-    // showCompareMedia for the first pair (no wrappers yet). Both sides re-render atomically
+    // showCompareMedia for the first pair, or whenever the wrappers are not in the document. Both sides re-render atomically
     // (shared-_jxlObjectURLs invariant).
     async showTournamentPairFast(leftFile, rightFile) {
-        if (!this.leftMediaWrapper || !this.rightMediaWrapper) {
+        // isConnected, not mere presence: showCompareMedia removes the old wrappers before it can
+        // fail and return without new ones, leaving these fields on detached divs (G3).
+        if (!this.leftMediaWrapper?.isConnected || !this.rightMediaWrapper?.isConnected) {
             this._restoredPairFiles = { left: leftFile, right: rightFile };
             await this.showCompareMedia();
             return;
@@ -4971,6 +5068,9 @@ class MediaViewer {
             if (bar) lucide.createIcons({ root: bar });
         }
         await Promise.all([this._buildTournamentSide('left', leftFile), this._buildTournamentSide('right', rightFile)]);
+        // A side that failed to build has already requested the next pass, which paints the engine's
+        // new pair and its info — don't paint this stale pair's info first.
+        if (this._tournamentRenderDirty) return;
         this.updateCompareFileInfo(leftFile, rightFile);
         this.updateNavigationInfo();
         this._logSlowPhase('tournament pair render (fast)', t0);
@@ -4980,8 +5080,9 @@ class MediaViewer {
     // #compareOverlayBar's slots, not the wrapper (G2) — showTournamentPairFast rebuilds them
     // itself, between its cleanup and build phases, so this method no longer needs to preserve
     // them. Assumes cleanupCompareMedia(side) has already run for this side (see
-    // showTournamentPairFast's phase separation). A missing or undecodable file is purged
-    // (mirrors showCompareMedia) and the engine pair re-rendered.
+    // showTournamentPairFast's phase separation). A file that fails to load or decode goes to
+    // _skipFailedTournamentFile, which drops it and requests the engine's next pair; this method
+    // never renders (it runs inside a pass of the render owner).
     async _buildTournamentSide(side, file) {
         const wrapper = side === 'left' ? this.leftMediaWrapper : this.rightMediaWrapper;
 
@@ -4998,9 +5099,9 @@ class MediaViewer {
                     media.src = this.jxlFrameToObjectURL(decoded.frames[0]);
                 } catch (err) {
                     window.electronAPI.logError('JXL decode failed: ' + (err && err.message ? err.message : err));
-                    this.showNotification('Skipping undecodable JXL file', 'warning');
-                    this.removeFileFromList(file.path);
-                    return this.showTournamentPair(); // re-render the (now different) engine pair
+                    // The one tournament failure path; it requests the next pass itself, never awaits it.
+                    this._skipFailedTournamentFile(file, { reason: 'decode' });
+                    return;
                 }
             } else {
                 media.src = fileUrl;
@@ -5021,18 +5122,48 @@ class MediaViewer {
         media.style.display = 'none';
         // Insert as the FIRST child so it sits behind the persistent overlay controls.
         wrapper.insertBefore(media, wrapper.firstChild);
-        media.addEventListener(
-            'error',
-            () => {
-                window.electronAPI.logError?.('Tournament media failed to load: ' + file.path);
-                this.showNotification('Skipping missing file', 'warning');
-                this.removeFileFromList(file.path);
-                this.showTournamentPair();
-            },
-            { once: true }
-        );
+        this._attachTournamentFailureListener(media, side, file);
         if (side === 'left') this.leftMedia = media;
         else this.rightMedia = media;
+    }
+
+    // The ONE tournament media-failure path (G3). A missing, undecodable or unloadable file is
+    // skipped: dropped from mediaFiles and from the engine as a tracked 'prune' (so undoUserAction
+    // stays consistent), with one toast, and the engine's next pair requested. Every failure site
+    // calls this — _buildTournamentSide (load error, JXL decode) and showCompareMedia's tournament
+    // branches (first pair). It never renders and never awaits the render: callers can be inside a
+    // pass of the render owner (see showTournamentPair), and awaiting it there would wait on itself.
+    _skipFailedTournamentFile(file, { side = null, media = null, reason = 'load' } = {}) {
+        const engine = this.tournament.engine;
+        if (!this.isTournamentMode || !engine) return;
+        // A late event from an element a later render already tore down: not the file on screen.
+        if (media && media !== (side === 'left' ? this.leftMedia : this.rightMedia)) return;
+        const inList = this.mediaFiles.some((f) => f.path === file.path);
+        if (!inList && !engine.files.includes(file.path)) return; // already skipped
+        window.electronAPI.logError?.(`Tournament file skipped (${reason}): ${file.path}`);
+        this.showNotification(`Skipping ${file.name} — couldn't be loaded`, 'warning');
+        this.removeFileFromList(file.path);
+        this.updateFolderInfo();
+        // Before the render request, so the next pass renders the engine's new pair instead of
+        // falling into the -1 capture net in _renderTournamentPairOnce.
+        engine.removeFile(file.path, { trackUndo: true });
+        this.tournament._schedulePersist(this.baseFolderPath);
+        // As compare's onError does: a failed first pair (showCompareMedia set these) must not leave
+        // the controls dead. isLoading is advisory in tournament mode (see handleTournamentUndo).
+        this.isLoading = false;
+        this.mediaNavigationInProgress = false;
+        this.hideLoadingSpinner();
+        this.showTournamentPair();
+    }
+
+    // Route a tournament media element's load failure to _skipFailedTournamentFile. Registered on the
+    // side's tracked listener list, so cleanupCompareMedia removes it with the others — the untracked
+    // listener it replaces outlived its element (G3).
+    _attachTournamentFailureListener(media, side, file) {
+        const listeners = side === 'left' ? this.videoEventListenersLeft : this.videoEventListenersRight;
+        const onFailed = () => this._skipFailedTournamentFile(file, { side, media, reason: 'load' });
+        listeners.push({ event: 'error', handler: onFailed });
+        media.addEventListener('error', onFailed, { once: true });
     }
 
     async handleTournamentPick(winner, loser) {
@@ -5072,8 +5203,9 @@ class MediaViewer {
     async handleTournamentUndo() {
         if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
         // engine.history is the single chronological undo stack: picks and tournament-mode
-        // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune
-        // in showTournamentPair) are absorbed by undoUserAction so they never cost a press.
+        // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune in
+        // _renderTournamentPairOnce, the load-failure skip in _skipFailedTournamentFile and the
+        // pre-summary _pruneUnlistedEngineFiles) are absorbed by undoUserAction so they never cost a press.
         const pending = this.tournament.engine.peekUndoEntry();
         if (!pending) {
             // Also the post-resume case: undo is session-only, so a resumed tournament starts
@@ -5093,7 +5225,8 @@ class MediaViewer {
             // before showTournamentPair() runs.
             //
             // ADVISORY ONLY — isLoading is not exclusively owned. showTournamentPairFast never sets it,
-            // but the setupCompare*Handlers it attaches CLEAR it on bothLoaded/onError, so a pair render
+            // but the setupCompare*Handlers it attaches CLEAR it on bothLoaded (and
+            // _skipFailedTournamentFile clears it on a tournament media failure), so a pair render
             // still in flight when undo starts (special-move → immediate Ctrl+A) can drop this flag
             // mid-restore. The identity re-check below, not this flag, is what actually guarantees we
             // reverse the entry we peeked.
@@ -5132,9 +5265,9 @@ class MediaViewer {
             // The stack must still be exactly where we left it. peekUndoEntry() is non-mutating, so an
             // unchanged stack returns the same object; anything else means a pick/draw/special landed
             // during the await (see the advisory note above). Nothing serializes the tournament
-            // handler family — the re-entrancy guard that would have is BACKLOG [2026-08-31],
-            // blocked on the un-awaited re-entrant renders in _buildTournamentSide — so isLoading
-            // is the only thing in the way, and it is advisory. Reachable, not theoretical. BOTH
+            // handler family — the render itself is single-flight since G3 (showTournamentPair), but
+            // the handler guard is still BACKLOG [2026-08-31] item 2 — so isLoading is the only
+            // thing in the way, and it is advisory. Reachable, not theoretical. BOTH
             // exits below need the check: the failure path mutates the stack too, and
             // _dropWedgedSpecialEntry's clearHistory() would take the entry that just landed with it.
             const stackMoved = this.tournament.engine.peekUndoEntry() !== pending;

@@ -3966,10 +3966,11 @@ describe('tournament isLoading guards (Fix 2)', () => {
         expect(ctx.showTournamentPair).not.toHaveBeenCalled();
     });
 
-    // NOTE: the four re-entrancy cases that stood here were reverted with Task 4 on 2026-08-31.
-    // A lock over this handler family cannot hold while _buildTournamentSide re-enters the render
-    // from a DOM error callback that never passes through a handler — see BACKLOG [2026-08-31].
-    // isLoading remains the only (advisory) guard; the cases above pin what it does and does not do.
+    // NOTE: the four re-entrancy cases that stood here were reverted with Task 4 on 2026-08-31, because
+    // _buildTournamentSide re-entered the render from a DOM error callback outside every handler. G3
+    // (2026-10-07) made the render single-flight (showTournamentPair is its owner), which removes that
+    // re-entry; the handler guard itself is still BACKLOG [2026-08-31] item 2. isLoading remains the
+    // only (advisory) guard; the cases above pin what it does and does not do.
 });
 
 describe('loadFolder cache reset (Fix 1)', () => {
@@ -5367,10 +5368,10 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         // held across the moveFile await), a 'pick'/'draw' undo sets NO isLoading anywhere in this
         // method, so a double Ctrl+A during showTournamentPair() reverses TWO entries.
         //
-        // Task 4 added a lock here and was reverted on 2026-08-31: any lock over this handler
-        // family either misses the re-entrant render path (_buildTournamentSide's DOM error
-        // callback calls showTournamentPair() un-awaited, bypassing every handler) and silently
-        // drops user input, or covers it and wedges. Measured both. See BACKLOG [2026-08-31].
+        // Task 4 added a lock here and was reverted on 2026-08-31: at the time _buildTournamentSide's
+        // DOM error callback re-entered the render outside every handler, so any lock over this
+        // family either dropped user input or wedged (measured both). G3 made the render
+        // single-flight, which unblocks a real guard — BACKLOG [2026-08-31] item 2, not built yet.
         //
         // This test is the tripwire: when the real guard lands it MUST go red, and be replaced
         // with the assertion that the second undo is served rather than doubled or dropped.
@@ -6722,4 +6723,334 @@ describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
         expect(ctx.bulkRated.size).toBe(0);
         expect(ctx.moveHistory).toHaveLength(0);
     });
+});
+
+describe('G3 tournament render owner (showTournamentPair: single-flight, coalescing)', () => {
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    // Each pass is a deferred the test releases: releases[i]() settles the i-th deferred pass.
+    // Methods are extracted inside makeCtx so a missing method fails the test, not the file.
+    function makeCtx() {
+        const releases = [];
+        const ctx = {
+            _tournamentRenderDirty: false,
+            _tournamentRenderLoop: null,
+            showTournamentPair: extractMethod('showTournamentPair'),
+            _runTournamentRenderLoop: vi.fn(extractAsyncMethod('_runTournamentRenderLoop')),
+            _renderTournamentPairOnce: vi.fn(() => new Promise((resolve) => releases.push(resolve))),
+        };
+        return { ctx, releases };
+    }
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it('coalesces requests made during a pass into exactly one extra pass', async () => {
+        const { ctx, releases } = makeCtx();
+        const first = ctx.showTournamentPair();
+        await flush();
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(1);
+
+        expect(ctx.showTournamentPair()).toBe(first);
+        expect(ctx.showTournamentPair()).toBe(first);
+        expect(ctx.showTournamentPair()).toBe(first);
+        let settled = false;
+        first.then(() => (settled = true));
+
+        releases[0]();
+        await flush();
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        expect(settled).toBe(false); // nobody resolves before the pass that covers their request
+
+        releases[1]();
+        await first;
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        expect(ctx._runTournamentRenderLoop).toHaveBeenCalledTimes(1);
+        expect(ctx._tournamentRenderLoop).toBeNull();
+    });
+
+    it('a request made synchronously inside the first pass joins the running loop', async () => {
+        const { ctx, releases } = makeCtx();
+        ctx._renderTournamentPairOnce.mockImplementationOnce(function () {
+            this.showTournamentPair(); // e.g. a failure reported before the pass's first await
+            return Promise.resolve();
+        });
+        const done = ctx.showTournamentPair();
+        await flush();
+        expect(ctx._runTournamentRenderLoop).toHaveBeenCalledTimes(1); // no second loop
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        releases[0]();
+        await Promise.race([
+            done,
+            new Promise((_resolve, reject) => setTimeout(() => reject(new Error('render loop hung')), 1000)),
+        ]);
+    });
+
+    it('a request landing just as the last pass finishes is still served', async () => {
+        const { ctx, releases } = makeCtx();
+        const first = ctx.showTournamentPair();
+        await flush();
+        let second;
+        releases[0]();
+        queueMicrotask(() => (second = ctx.showTournamentPair()));
+        await first;
+        await flush();
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        releases[1]();
+        await second;
+        expect(ctx._tournamentRenderLoop).toBeNull();
+    });
+
+    it('a pass that throws is logged, a request queued behind it still runs, and the promise resolves', async () => {
+        const { ctx, releases } = makeCtx();
+        ctx._renderTournamentPairOnce.mockImplementationOnce(function () {
+            this.showTournamentPair();
+            return Promise.reject(new Error('boom'));
+        });
+        const done = ctx.showTournamentPair();
+        await flush();
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith('Tournament render failed: boom');
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(2);
+        releases[0]();
+        await expect(done).resolves.toBeUndefined();
+        expect(ctx._tournamentRenderLoop).toBeNull();
+    });
+});
+
+describe('G3 _renderTournamentPairOnce -1 capture net (bounded retry, D7)', () => {
+    let origWindow, origDocument;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        origDocument = globalThis.document;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+        globalThis.document = { getElementById: () => ({ textContent: '', disabled: false }) };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+        globalThis.document = origDocument;
+    });
+
+    it('terminates at the summary within the depth cap, recursing into itself and never the owner', async () => {
+        const ctx = {
+            isTournamentMode: true,
+            mediaFiles: [{ path: '/a.png' }, { path: '/b.png' }],
+            isSortedByPrediction: false,
+            isSortedBySimilarity: false,
+            baseFolderPath: '/dir',
+            tournament: {
+                engine: {
+                    files: ['/x.png', '/y.png'],
+                    isComplete: () => false,
+                    getCurrentPair: () => ({ left: '/x.png', right: '/y.png' }),
+                    peekUndoKind: () => null,
+                    removeFile: vi.fn(),
+                },
+                getProgressText: () => '',
+                getTierBreakdownText: () => '',
+                _schedulePersist: vi.fn(),
+            },
+            getMediaIndex: () => -1, // every engine pair is absent: the net never resolves a pair
+            showNotification: vi.fn(),
+            showTournamentSummaryModal: vi.fn(),
+            showTournamentPair: vi.fn(), // the owner: must never be called from inside a pass
+        };
+        ctx._renderTournamentPairOnce = vi.fn(extractAsyncMethod('_renderTournamentPairOnce'));
+
+        await ctx._renderTournamentPairOnce();
+
+        expect(ctx.showTournamentSummaryModal).toHaveBeenCalledTimes(1);
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+        // Cap is `_pruneDepth > mediaFiles.length + 1`: depths 0..4 run, depth 4 falls to the summary.
+        expect(ctx._renderTournamentPairOnce).toHaveBeenCalledTimes(ctx.mediaFiles.length + 3);
+        expect(ctx.tournament.engine.removeFile).toHaveBeenCalledWith('/x.png', { trackUndo: true });
+    });
+});
+
+describe('G3 _skipFailedTournamentFile — the one tournament failure path', () => {
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    const FILE = { name: 'tiny.mp4', path: '/dir/tiny.mp4' };
+    function makeCtx(overrides = {}) {
+        const media = { tagName: 'VIDEO' };
+        const ctx = {
+            isTournamentMode: true,
+            baseFolderPath: '/dir',
+            mediaFiles: [{ name: 'a.png', path: '/dir/a.png' }, { ...FILE }],
+            leftMedia: { tagName: 'IMG' },
+            rightMedia: media,
+            isLoading: true,
+            mediaNavigationInProgress: true,
+            tournament: {
+                engine: { files: ['/dir/a.png', '/dir/tiny.mp4'], removeFile: vi.fn() },
+                _schedulePersist: vi.fn(),
+            },
+            removeFileFromList: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showNotification: vi.fn(),
+            hideLoadingSpinner: vi.fn(),
+            showTournamentPair: vi.fn(() => new Promise(() => {})), // never settles: must not be awaited
+            ...overrides,
+        };
+        return { ctx, media };
+    }
+    const skip = () => extractMethod('_skipFailedTournamentFile');
+
+    it('drops the file from both lists as a tracked prune, then requests a render without awaiting it', () => {
+        const { ctx, media } = makeCtx();
+        const ret = skip().call(ctx, FILE, { side: 'right', media, reason: 'load' });
+
+        expect(ret).toBeUndefined(); // not the owner's promise — a caller inside a pass must not await it
+        expect(ctx.removeFileFromList).toHaveBeenCalledWith('/dir/tiny.mp4');
+        expect(ctx.updateFolderInfo).toHaveBeenCalled();
+        expect(ctx.tournament.engine.removeFile).toHaveBeenCalledWith('/dir/tiny.mp4', { trackUndo: true });
+        expect(ctx.tournament._schedulePersist).toHaveBeenCalledWith('/dir');
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledWith("Skipping tiny.mp4 — couldn't be loaded", 'warning');
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(
+            'Tournament file skipped (load): /dir/tiny.mp4'
+        );
+        expect(ctx.isLoading).toBe(false);
+        expect(ctx.mediaNavigationInProgress).toBe(false);
+        expect(ctx.hideLoadingSpinner).toHaveBeenCalled();
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+        // The engine is pruned BEFORE the request, or the next pass falls into the -1 capture net
+        // instead of rendering the engine's new pair.
+        expect(ctx.tournament.engine.removeFile.mock.invocationCallOrder[0]).toBeLessThan(
+            ctx.showTournamentPair.mock.invocationCallOrder[0]
+        );
+    });
+
+    it('skips a file with no media element (missing on disk, undecodable)', () => {
+        const { ctx } = makeCtx();
+        skip().call(ctx, FILE, { reason: 'missing' });
+        expect(ctx.tournament.engine.removeFile).toHaveBeenCalledWith('/dir/tiny.mp4', { trackUndo: true });
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(
+            'Tournament file skipped (missing): /dir/tiny.mp4'
+        );
+        expect(ctx.showTournamentPair).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a failure from an element that is no longer on screen (Review Focus 5)', () => {
+        const { ctx } = makeCtx();
+        skip().call(ctx, FILE, { side: 'right', media: { tagName: 'VIDEO' } }); // a torn-down element
+        expect(ctx.removeFileFromList).not.toHaveBeenCalled();
+        expect(ctx.tournament.engine.removeFile).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op for a file already gone from both lists', () => {
+        const { ctx, media } = makeCtx({ mediaFiles: [{ name: 'a.png', path: '/dir/a.png' }] });
+        ctx.tournament.engine.files = ['/dir/a.png'];
+        skip().call(ctx, FILE, { side: 'right', media });
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+
+    it('does nothing once tournament mode has been left (Review Focus 5)', () => {
+        const { ctx, media } = makeCtx({ isTournamentMode: false });
+        skip().call(ctx, FILE, { side: 'right', media });
+        expect(ctx.removeFileFromList).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the engine is gone — folder switched or Apply (Review Focus 5)', () => {
+        const { ctx, media } = makeCtx();
+        ctx.tournament.engine = null;
+        skip().call(ctx, FILE, { side: 'right', media });
+        expect(ctx.removeFileFromList).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.showTournamentPair).not.toHaveBeenCalled();
+    });
+});
+
+describe('G3 _attachTournamentFailureListener', () => {
+    it("registers on the side's tracked list, so cleanupCompareMedia removes it with the others", () => {
+        const attach = extractMethod('_attachTournamentFailureListener');
+        const media = { addEventListener: vi.fn() };
+        const file = { name: 'tiny.mp4', path: '/dir/tiny.mp4' };
+        const ctx = { videoEventListenersLeft: [], videoEventListenersRight: [], _skipFailedTournamentFile: vi.fn() };
+
+        attach.call(ctx, media, 'right', file);
+
+        expect(ctx.videoEventListenersLeft).toHaveLength(0);
+        expect(ctx.videoEventListenersRight).toHaveLength(1);
+        const { event, handler } = ctx.videoEventListenersRight[0];
+        expect(event).toBe('error');
+        expect(media.addEventListener).toHaveBeenCalledWith('error', handler, { once: true });
+        handler();
+        expect(ctx._skipFailedTournamentFile).toHaveBeenCalledWith(file, { side: 'right', media, reason: 'load' });
+    });
+});
+
+describe('G3 final review: no skipped file reaches the summary (Apply never tiers it)', () => {
+    let origWindow, origDocument;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        origDocument = globalThis.document;
+        globalThis.window = { electronAPI: { logError: vi.fn() } };
+        globalThis.document = { getElementById: () => ({ textContent: '', disabled: false }) };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+        globalThis.document = origDocument;
+    });
+
+    // An undo that absorbed a skip's prune puts the skipped file back in engine.files but not in
+    // mediaFiles; if it then only ever draws byes, the -1 net never sees it, and handleApply would
+    // tier it — moving an undecodable file into _Tier-N, or failing Apply on a missing one.
+    function makeCtx({ complete }) {
+        const files = ['/dir/a.png', '/dir/b.png', '/dir/skipped.mp4'];
+        const engine = {
+            files: [...files],
+            isComplete: () => complete,
+            getCurrentPair: () => null,
+            removeFile: vi.fn((p) => {
+                engine.files = engine.files.filter((f) => f !== p);
+            }),
+        };
+        const listed = new Set(['/dir/a.png', '/dir/b.png']);
+        return {
+            isTournamentMode: true,
+            baseFolderPath: '/dir',
+            mediaFiles: [{ path: '/dir/a.png' }, { path: '/dir/b.png' }],
+            tournament: { engine, _schedulePersist: vi.fn() },
+            getMediaIndex: (p) => (listed.has(p) ? 0 : -1),
+            showTournamentSummaryModal: vi.fn(),
+            _pruneUnlistedEngineFiles: extractMethod('_pruneUnlistedEngineFiles'),
+        };
+    }
+
+    for (const complete of [true, false]) {
+        it(`prunes engine files absent from mediaFiles before the summary (${complete ? 'complete' : 'no pair left'})`, async () => {
+            const ctx = makeCtx({ complete });
+            const renderOnce = extractAsyncMethod('_renderTournamentPairOnce');
+            await renderOnce.call(ctx);
+
+            expect(ctx.tournament.engine.removeFile).toHaveBeenCalledWith('/dir/skipped.mp4', { trackUndo: true });
+            expect(ctx.tournament.engine.files).toEqual(['/dir/a.png', '/dir/b.png']);
+            expect(ctx.tournament._schedulePersist).toHaveBeenCalledWith('/dir');
+            expect(ctx.showTournamentSummaryModal).toHaveBeenCalledTimes(1);
+            expect(ctx.tournament.engine.removeFile.mock.invocationCallOrder[0]).toBeLessThan(
+                ctx.showTournamentSummaryModal.mock.invocationCallOrder[0]
+            );
+        });
+    }
 });
