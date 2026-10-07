@@ -395,3 +395,24 @@ files.
 - **`isLoading` stays advisory in tournament mode** (🟤 [2026-07-02], annotated).
 - **The one-tick stale file info** after an in-render JXL skip is removed by § 5.3's early return; any
   other transient between passes is bounded by one pass.
+
+---
+
+## 11. Phase 0 result (2026-10-07)
+
+Run on unchanged code (`media-viewer.js`, `main.js`, `logger.js` identical to `149b95d`), each test
+without its `test.fail` marker (`npx playwright test tests/e2e/tournament-mode.test.js -g "G3 E"`):
+
+| Test | Result | Named reason observed |
+| ---- | ------ | --------------------- |
+| E1 | FAIL | `at most one pair render in flight` received `2`; left and right wrappers each held `2` `.media-display` elements |
+| E2 | FAIL | `tiny.mp4` still in `mediaFiles` and `engine.files`; failure messages `["❌ Failed to load video: tiny.mp4"]` (the Remove-button toast) |
+| E3 | FAIL | `at most one pair render in flight` received `2`; both wrappers held `2` elements; failure messages `["Skipping missing file", "File missing — removed from tournament: …\tiny.mp4"]` |
+
+Each failed for the reason it names, and none failed on a setup assertion (seeding placement, the AI
+option, E3's first pair). E3 is the real-trigger evidence spec § 4.2 asks for: `Skipping missing file`
+is emitted only by `_buildTournamentSide`'s own `error` listener, and no `Failed to load video` entry
+appears, so the failure went through the un-awaited listener render — which overlapped the draw's
+render (two in flight) and orphaned a media element per side, the F6 mechanism reached from
+production code. E3 also shows the `-1` capture net firing (F10). With the markers restored, the file
+runs `12 passed` (9 existing + 3 expected failures).
