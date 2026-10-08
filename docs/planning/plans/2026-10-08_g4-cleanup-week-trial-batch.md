@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) Oct 5–9 § G4 (🟤, 3 SP) ← BACKLOG 🟤 `### [2026-09-24] From: Weekly Reviews` ("Trial `claude-security`…") + [REVIEW-QUEUE.md](../REVIEW-QUEUE.md) § 5 Recurring read-out
 **Created**: 2026-10-08
-**Status**: Execution complete 2026-10-08 — awaiting user approval of the T6 dispositions, PR and merge; decision rule pre-registered below
+**Status**: Execution complete 2026-10-08 — T6 dispositions approved; PR #76; decision rule pre-registered below
 **Last Updated**: 2026-10-08
 **Branch**: `g4-cleanup-week-trial-batch` (from `main` `e590b52`); G5 may share it (WEEKLY G4 header)
 
@@ -27,7 +27,7 @@ re-derivation from source?_ — and run the recurring plugin context-cost & disu
 - [x] § 5 trial row read out under the pre-registered rule (§ 2 below), not a rule chosen after the results
 - [x] Each confirmed finding filed per the disclosure rule (§ 2)
 - [x] Leg 2's trigger named, or recorded as best-effort
-- [ ] Recurring read-out table in § 5, every disposition user-approved — table written; dispositions are **proposals** and the `/plugin` Not-used-recently reading arrived after the first push (one plugin flagged)
+- [x] Recurring read-out table in § 5, every disposition user-approved — approved 2026-10-08, with one change: `claude-security` is **not** disabled between scans
 
 ---
 
@@ -143,7 +143,7 @@ surviving findings.
       "`/claude-security` Scan changes before merge" in that group's acceptance. Record that the plugin's own
       push/PR tip disables itself once the menu has opened (`hooks.py` `TipState.spent`). A file-specific
       `gh pr create` hook only if the trial reads `keep` — filed as a 🟤 candidate conditional on that.
-- [~] **T6 — Recurring read-out** _(table written; the `/plugin` reading was supplied after the first push; dispositions await user approval)_.** After T1, so `claude-security` is in the table: `claude plugin list
+- [x] **T6 — Recurring read-out** _(dispositions user-approved 2026-10-08)_.** After T1, so `claude-security` is in the table: `claude plugin list
       --json` + `claude plugin details` per plugin loading in a media_viewer session; check for plugins a
       claude.ai sync added since 2026-09-24; the user reads `/plugin` → Installed → **Not used recently**
       (terminal session). New dated table in § 5; dispositions user-approved.
@@ -169,7 +169,7 @@ surviving findings.
   agent descriptions ~50–140 each. Four hooks (`UserPromptExpansion`, `PostToolUse`, `PostToolUseFailure`,
   `PermissionRequest`) are labelled "harness-only — no model context cost" — a floor, per the 2026-09-24
   finding that the estimator undercounts hooks. On-invoke: ~990–2.8k per component.
-- **Above the ~500 threshold → disable between scans.** Not disabled yet: it stays enabled through the
+- **Above the ~500 threshold → disable between scans** _(overruled by the user at T6, 2026-10-08: it stays enabled)_. Not disabled at the time: it stays enabled through the
   read-out in case an `inconclusive` result needs the one re-run; disabled at the end of T4, and leg 2's
   vehicle text then has to say "enable, then scan".
 - The CLI rewrote the committed `.claude/settings.json` with 2-space indentation (the repo's Prettier is
@@ -298,9 +298,8 @@ Plugins loading in a media_viewer session (`claude plugin list --json`, `claude 
 - Filed: 8 BACKLOG 🟤 entries under `[2026-10-08] From: G4 trial batch` (four High/Medium stubs, one Low, the
   guard gap, the conditional hook, upstream-feedback note), 1 🔴 TODO item, REVIEW-QUEUE § 5 trial row + stocktake +
   2026-10-08 plugin table, CLAUDE.md "Not covered" correction (Workflow subagents).
-- **T6 dispositions are proposals**: the plugin table's last column says so. Not applied: no plugin was
-  disabled, including `claude-security` (the plan said disable at end of T4 — held for the user's approval since
-  it edits committed `.claude/settings.json` and leg 2 needs it enabled).
+- **T6 dispositions approved by the user 2026-10-08, with one override**: `claude-security` stays enabled (the plan's
+  disable-between-scans threshold was overruled — leg 2 needs it on hand). No plugin was disabled by this task.
 
 ---
 
@@ -324,10 +323,6 @@ Plugins loading in a media_viewer session (`claude plugin list --json`, `claude 
 
 ## Residuals for Extract
 
-- Plugin dispositions (T6) await the user's approval; the `/plugin` reading is in. Until approval the
-  2026-10-08 table is proposals. Extract carries no `[x]` for the recurring read-out's "every disposition
-  user-approved" box until then.
-- `claude-security` is still enabled in `.claude/settings.json` (proposed: disable between scans).
 - WEEKLY.md G4 items and BACKLOG trial-entry closure: closeout, on `main`, after the merge. The trial entry
   stays `[ ]` (leg 2 pending) on purpose.
 
