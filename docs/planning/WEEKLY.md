@@ -51,8 +51,8 @@
 > **User-in-the-loop on Thursday**: the plugin sets `disable-model-invocation: true`, so only the user can start `/claude-security`; the `/plugin` tab reading is also the user's. If the user is not available, record `pending — needs the user to start the scan` rather than substituting a model-run review. Results are docs-only (REVIEW-QUEUE § 5, BACKLOG) and may share G5's branch. `typescript-lsp` stays parked by user decision (it would confound this trial); the evidence-gating gate is not built this week (see Notes).
 > **Model:** start Sonnet · `medium` (the scan runs under the plugin's own agents) → re-derive each surviving finding on Opus · `high` (verification matters: the trial judges the plugin's verifier, so our check has to be the stronger one); review standard (`high`) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **`claude-security` whole-repository scan** — install; measure its always-on cost with `claude plugin details claude-security@claude-plugins-official` straight away (disable between scans if material); the user runs the scan; re-derive every surviving finding from source; read out `keep` / `drop` in REVIEW-QUEUE § 5 against the trial question — keep if the survivors survive our re-derivation, or if a clean result's Coverage section demonstrably accounts for `main.js`, `preload.js` and the IPC handlers; drop if they fail it. Each confirmed finding becomes its own BACKLOG entry. Name the second leg's trigger (`Scan changes` on the first PR touching `main.js` or `preload.js` — none of this week's groups does) or record it as best-effort. (3) — 🟤 [2026-09-24] Weekly Reviews §1a adopt
-- [ ] **Plugin context-cost & disuse read-out (recurring)** — `claude plugin list --json` + `claude plugin details` per plugin, plus the user's `/plugin` Installed-tab **Not used recently** reading — the column the first read-out left unread; table in REVIEW-QUEUE § 5. A kept practice, not a trial (adds nothing to the queue count). (0) — REVIEW-QUEUE § 5 Recurring read-out
+- [x] **`claude-security` whole-repository scan** — ✅ **Done 2026-10-08 (PR #76, merge `44c282b`): `keep`** — 5/5 distinct findings held; High findings filed as public stubs; leg 2 stays open in BACKLOG (disable-between-scans was overridden by the user). Original brief: install; measure its always-on cost with `claude plugin details claude-security@claude-plugins-official` straight away (disable between scans if material); the user runs the scan; re-derive every surviving finding from source; read out `keep` / `drop` in REVIEW-QUEUE § 5 against the trial question — keep if the survivors survive our re-derivation, or if a clean result's Coverage section demonstrably accounts for `main.js`, `preload.js` and the IPC handlers; drop if they fail it. Each confirmed finding becomes its own BACKLOG entry. Name the second leg's trigger (`Scan changes` on the first PR touching `main.js` or `preload.js` — none of this week's groups does) or record it as best-effort. (3) — 🟤 [2026-09-24] Weekly Reviews §1a adopt
+- [x] **Plugin context-cost & disuse read-out (recurring)** — ✅ **Done 2026-10-08 (PR #76)** — table in REVIEW-QUEUE § 5, dispositions user-approved. Original brief: `claude plugin list --json` + `claude plugin details` per plugin, plus the user's `/plugin` Installed-tab **Not used recently** reading — the column the first read-out left unread; table in REVIEW-QUEUE § 5. A kept practice, not a trial (adds nothing to the queue count). (0) — REVIEW-QUEUE § 5 Recurring read-out
 
 ### G5. Weekly Reviews `[batch]` ⚪ Overhead — research / process — 5 SP
 
@@ -94,13 +94,13 @@
 ### Thursday, October 8 — Tournament lands; security scan
 
 - **[G3](#g3-tournament-render-re-entry-solo---tournament-render-lifecycle--5-sp)** 🟤 — implement; five-run E2E measurement; review; merge (part 2 of 2) — ✅ PR #75 (done Wednesday, with part 1)
-- **[G4](#g4-cleanup-week-trial-batch-batch---adopt-trials--recurring-read-out--3-sp)** 🟤 — user starts `/claude-security`; cost measured on install (part 1 of 2)
+- **[G4](#g4-cleanup-week-trial-batch-batch---adopt-trials--recurring-read-out--3-sp)** 🟤 — user starts `/claude-security`; cost measured on install (part 1 of 2) — ✅ PR #76 (scan Thursday, merge `44c282b`)
 
 **Daily total**: ~5 SP
 
 ### Friday, October 9 — Read-outs + Reviews + buffer
 
-- **[G4](#g4-cleanup-week-trial-batch-batch---adopt-trials--recurring-read-out--3-sp)** 🟤 — re-derive surviving findings; § 5 read-out; plugin read-out (part 2 of 2)
+- **[G4](#g4-cleanup-week-trial-batch-batch---adopt-trials--recurring-read-out--3-sp)** 🟤 — re-derive surviving findings; § 5 read-out; plugin read-out (part 2 of 2) — ✅ PR #76 (done Thursday, with part 1)
 - **[G5](#g5-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — after G4's read-out, then §§1–4 + the strategic-doc ride-along
 - Buffer for G1/G3 review rounds. Closeout per group: Summary-Table Status → `✅ PR #N` (or `✅ <merge-SHA>` where no PR was opened), the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — **in the closeout commit, after the merge**.
 
@@ -115,7 +115,7 @@
 | G1  | Single-mode rating safety `[batch]` 🏆      | Single-mode move path + shortcuts        | 🔵 User     | 3     | 7        | Tue–Wed | ✅ PR #74 |
 | G2  | Hooks and logs that actually fire `[batch]` | Claude Code hooks + commit hook + session log | 🟤 Auto (+1 🔵) | 5 | 8 | Mon–Tue | ✅ PR #73 |
 | G3  | Tournament render re-entry `[solo]`         | Tournament render lifecycle              | 🟤 Auto     | 1     | 5        | Wed–Thu | ✅ PR #75 |
-| G4  | Cleanup Week trial batch `[batch]`          | Adopt trials + recurring read-out        | 🟤 Auto     | 2     | 3        | Thu–Fri | ☐ Planned |
+| G4  | Cleanup Week trial batch `[batch]`          | Adopt trials + recurring read-out        | 🟤 Auto     | 2     | 3        | Thu–Fri | ✅ PR #76 |
 | G5  | Weekly Reviews `[batch]`                    | Research / process                       | ⚪ Overhead | 5     | 5        | Fri     | ☐ Planned |
 |     | **Total (quota-counted)**                   |                                          |             | **11** | **23**  |         |            |
 |     | **Total (incl. ⚪ overhead)**               |                                          |             | **16** | **28**  |         |            |

@@ -1,8 +1,8 @@
 # G4 Cleanup Week Trial Batch — Plan & Execution Log
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) Oct 5–9 § G4 (🟤, 3 SP) ← BACKLOG 🟤 `### [2026-09-24] From: Weekly Reviews` ("Trial `claude-security`…") + [REVIEW-QUEUE.md](../REVIEW-QUEUE.md) § 5 Recurring read-out
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) Oct 5–9 § G4 (🟤, 3 SP) ← BACKLOG 🟤 `### [2026-09-24] From: Weekly Reviews` ("Trial `claude-security`…") + [REVIEW-QUEUE.md](../../planning/REVIEW-QUEUE.md) § 5 Recurring read-out
 **Created**: 2026-10-08
-**Status**: Execution complete 2026-10-08 — T6 dispositions approved; PR #76; decision rule pre-registered below
+**Status**: ✅ Complete — MERGED 2026-10-08 via PR #76 (merge `44c282b`); T6 dispositions approved; decision rule pre-registered below
 **Last Updated**: 2026-10-08
 **Branch**: `g4-cleanup-week-trial-batch` (from `main` `e590b52`); G5 may share it (WEEKLY G4 header)
 

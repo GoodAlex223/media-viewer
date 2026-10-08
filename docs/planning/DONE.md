@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-08 <!-- Group G3: Tournament render re-entry (🟤, Cleanup Week #4) — 1/1, MERGED 2026-10-07 via PR #75 (merge 482a3c8) after a pre-PR final review + fix pass, one review round and a close-out (no issues). -->
+**Last Updated**: 2026-10-08 <!-- Group G4: Cleanup Week trial batch (🟤, Cleanup Week #4) — 2/2, MERGED 2026-10-08 via PR #76 (merge 44c282b) after one review round and a close-out. -->
+<!-- Previous: Group G3: Tournament render re-entry (🟤, Cleanup Week #4) — 1/1, MERGED 2026-10-07 via PR #75 (merge 482a3c8) after a pre-PR final review + fix pass, one review round and a close-out (no issues). -->
 <!-- Previous: Group G1: Single-mode rating safety (🔵 🏆, Cleanup Week #4) — 3/3, MERGED 2026-10-06 via PR #74 (merge 0bdcdb3) after a pre-PR final review, two review rounds and a close-out (no issues). -->
 <!-- Previous: Group G2: Hooks and logs that actually fire (🟤 +1 🔵, Cleanup Week #4) — 5/5, MERGED 2026-10-05 via PR #73 (merge 83c6df0) after three review rounds and a close-out (LGTM). -->
 <!-- Previous: Group G5: Weekly Reviews (2026-09-24 run, ⚪ Overhead) — 5/5, MERGED 2026-09-24 via PR #72 (merge 7342473) after three review rounds and a close-out ruling; the § 5 context-cost audit read out `keep` and was acted on, the three pending § 4 propagations plus a fourth were applied live in ~/.claude, and every inbound row was ruled per item by the user. -->
@@ -19,6 +20,23 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-08 — Group G4: Cleanup Week trial batch 🟤 (Cleanup Week #4) — **2/2, MERGED `44c282b`** (PR #76)
+
+**Plan**: [2026-10-08_g4-cleanup-week-trial-batch.md](../archive/plans/2026-10-08_g4-cleanup-week-trial-batch.md) (execution log, no spec — bounded path)
+**Branch**: `g4-cleanup-week-trial-batch`, cut from `main` at `e590b52`; deleted remote and local after the merge.
+
+✅ **Status: 2/2. MERGED 2026-10-08 via PR #76** (merge `44c282b`), after one review round (5 doc findings, all verified and fixed; close-out "No issues found" with two non-blocking notes, also fixed).
+
+**Summary**: Read out leg 1 of the `claude-security` adopt trial as **`keep`** under a decision rule committed before the scan. 7 findings reported, 5 distinct (two same-sink pairs the pipeline did not merge); all 5 held under our re-derivation from source, none overturned, severity matched on every row, Coverage accounted for `main.js`, `preload.js` and the IPC handlers. Because the repo is public, the High findings were filed as stubs only, with a 🔴 TODO fix item; the full report stays local. Ran the recurring plugin context-cost read-out and the user's `/plugin` Not-used-recently reading.
+
+**Key changes**:
+
+- REVIEW-QUEUE § 5: trial row `pending` → `keep` (leg 2 open), stocktake update, 2026-10-08 plugin table (dispositions user-approved; `claude-security` stays enabled — the disable-between-scans rule was overridden).
+- BACKLOG `[2026-10-08] From: G4 trial batch`: 9 entries (four High/Medium stubs, one Low, the preload-guard gap, a conditional leg-2 hook, a probe-method entry, an upstream-feedback note); TODO 🔴 fix item.
+- CLAUDE.md: the `preload.js` guard's "Not covered" list now names Workflow-tool subagents (18 read-only commands ran un-prompted inside the scan).
+
+**Learnings**: the scan cost ~3.6M subagent tokens, 53 agents, ~21 min; the plugin's own agents inherit the session model, so the scan model **is** the session model. Acting on a security scan's output in an Opus 5.5 session can trip the cyber safeguard and stall it. A review that finds only the author's own late-commit propagation misses (stale "outstanding" lines, a claim the log disproves, a self-attestation that failed) is the common failure of a long-lived plan log.
 
 ### 2026-10-07 — Group G3: Tournament render re-entry 🟤 (Cleanup Week #4) — **1/1, MERGED `482a3c8`** (PR #75)
 
