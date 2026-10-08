@@ -24,6 +24,10 @@ Active tasks and backlog.
 
 <!-- Defined tasks ready to start. Ordered by priority: 🔴 → 🟠 → 🟡 → 🟢 -->
 
+<!-- [2026-10-08] Security findings from the G4 `claude-security` scan (public repo: stub-level text only; full report is local, uncommitted). -->
+
+- [ ] 🔴 **Fix the High security findings from the `claude-security` scan** — Four BACKLOG 🟤 `[2026-10-08] From: G4 trial batch` entries (two High stubs, one Medium and one Low folded in) share one root: untrusted input is not validated or encoded at the boundaries the stubs name, and the main process does not authorize what the renderer asks of it. Scope: per the stubs and the local report — encode/validate at each named boundary, constrain the file IPC, confine destinations, and add defence in depth. Changes `preload.js` if the bridge is narrowed — security review applies (ask rules). **Acceptance**: each confirmed finding has a test that fails on `main` first; `/claude-security` Scan changes on the fix diff comes back clean for these sites (leg 2 of the trial); full detail goes public in the PR only after merge. Full finding text: local report `CLAUDE-SECURITY-20261008-084826/` (ask the owner; it is not in git). Effort: M (≈5 SP — set at planning; do not start before the next weekly plan schedules it).
+
 <!-- [2026-10-04] Manual-testing intake (source: manual testing) — placed in TODO by user decision. The batch's
      other 7 items went to BACKLOG 🔵 [2026-10-04]; two of them (bulk dislike, single-mode special hotkey)
      should build on this fix rather than on the current unguarded move path. -->

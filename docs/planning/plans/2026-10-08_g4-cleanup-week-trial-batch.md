@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) Oct 5–9 § G4 (🟤, 3 SP) ← BACKLOG 🟤 `### [2026-09-24] From: Weekly Reviews` ("Trial `claude-security`…") + [REVIEW-QUEUE.md](../REVIEW-QUEUE.md) § 5 Recurring read-out
 **Created**: 2026-10-08
-**Status**: In progress — design approved in-chat 2026-10-08 (bounded path: no spec); decision rule pre-registered below
+**Status**: Execution complete 2026-10-08 — awaiting user approval of the T6 dispositions, PR and merge; decision rule pre-registered below
 **Last Updated**: 2026-10-08
 **Branch**: `g4-cleanup-week-trial-batch` (from `main` `e590b52`); G5 may share it (WEEKLY G4 header)
 
@@ -22,12 +22,12 @@ re-derivation from source?_ — and run the recurring plugin context-cost & disu
 **Success criteria**:
 
 - [x] Plugin installed; always-on cost measured with `claude plugin details` before the scan (~778 tokens)
-- [ ] One whole-repository scan run by the user, on a clean committed tree
-- [ ] Every surviving finding re-derived from source, with a verdict and its evidence
-- [ ] § 5 trial row read out under the pre-registered rule (§ 2 below), not a rule chosen after the results
-- [ ] Each confirmed finding filed per the disclosure rule (§ 2)
-- [ ] Leg 2's trigger named, or recorded as best-effort
-- [ ] Recurring read-out table in § 5, every disposition user-approved
+- [x] One whole-repository scan run by the user, on a clean committed tree (`b7b10ab`, `verified`)
+- [x] Every surviving finding re-derived from source, with a verdict and its evidence
+- [x] § 5 trial row read out under the pre-registered rule (§ 2 below), not a rule chosen after the results
+- [x] Each confirmed finding filed per the disclosure rule (§ 2)
+- [x] Leg 2's trigger named, or recorded as best-effort
+- [ ] Recurring read-out table in § 5, every disposition user-approved — table written; dispositions are **proposals** and the `/plugin` Not-used-recently reading is still the user's
 
 ---
 
@@ -126,24 +126,24 @@ surviving findings.
       always-on figure. **Threshold**: disable between scans if > ~500 always-on tokens (the 2026-09-24 table's
       line: ~2,033 unused → disabled; ~838 used daily → kept). Commit the settings change + this log **before**
       the scan. User runs `/reload-plugins`.
-- [ ] **T2 — Scan (user).** In this session, Opus 5.5, auto mode, clean tree:
+- [x] **T2 — Scan (user).** In this session, Opus 5.5, auto mode, clean tree:
       `/claude-security scan the whole repository at medium effort — I understand it may take a while and use a lot of tokens`.
       Record: wall-clock, any token figure the harness reports, guard prompts, the stamp filename,
       `verification.status`, the Coverage fields.
-- [ ] **T3 — Re-derive (Opus · `high`).** Per surviving finding: read the cited code at the scanned commit;
+- [x] **T3 — Re-derive (Opus · `high`).** Per surviving finding: read the cited code at the scanned commit;
       trace source → sink; who can supply the input (renderer via the preload bridge, a crafted media file, a
       folder/file name); check its preconditions against the real Electron config (`contextIsolation`,
       `sandbox:false`); probe where cheap, with a sentinel. Verdict + evidence. Then audit Coverage:
       `completenessCheckOutcome`, `skippedComponents`, whether `main.js` / `preload.js` / the IPC handlers
       were read.
-- [ ] **T4 — Read-out & filing.** § 5 trial row under the rule above; stocktake update; findings filed per
+- [x] **T4 — Read-out & filing.** § 5 trial row under the rule above; stocktake update; findings filed per
       Decision 1.
-- [ ] **T5 — Leg 2 trigger.** Planning-time vehicle: the BACKLOG trial entry stays open as "leg 2 pending",
+- [x] **T5 — Leg 2 trigger.** Planning-time vehicle: the BACKLOG trial entry stays open as "leg 2 pending",
       and the first weekly plan that schedules a group touching `main.js` or `preload.js` puts
       "`/claude-security` Scan changes before merge" in that group's acceptance. Record that the plugin's own
       push/PR tip disables itself once the menu has opened (`hooks.py` `TipState.spent`). A file-specific
       `gh pr create` hook only if the trial reads `keep` — filed as a 🟤 candidate conditional on that.
-- [ ] **T6 — Recurring read-out.** After T1, so `claude-security` is in the table: `claude plugin list
+- [~] **T6 — Recurring read-out** _(table written; two user inputs outstanding)_.** After T1, so `claude-security` is in the table: `claude plugin list
       --json` + `claude plugin details` per plugin loading in a media_viewer session; check for plugins a
       claude.ai sync added since 2026-09-24; the user reads `/plugin` → Installed → **Not used recently**
       (terminal session). New dated table in § 5; dispositions user-approved.
@@ -177,6 +177,131 @@ surviving findings.
 - Settings change + this log committed **before** the scan, so the stamp names a clean commit and the
   decision rule above provably predates the results.
 
+### [2026-10-08] — PHASE: T2 scan
+
+- **Entry-point slip (usability)**: the user's first attempt ran `/claude-security:scan` — the plugin's
+  internal **workflow**, which autocomplete offers beside the skill — with the request as free text. The
+  workflow takes structured args (`scanRoot`, `runDir`, …) that the skill's scan job prepares, and its own
+  description says a typed command must not call it; nothing was started. The second attempt used
+  `/claude-security:claude-security …` and went straight to the scan (job, shape, effort and cost all named,
+  so no sub-menu and no confirmation).
+- Scan: report dir `CLAUDE-SECURITY-20261008-084826/` (self-ignored; `git status` clean after delivery).
+  Revision stamp `CLAUDE-SECURITY-REVISION-b7b10abe01c6.json` — **commit `b7b10ab`, `dirty: false`**;
+  `verification.status: verified`.
+- **Cost**: 53 agents (0 errors, 1 empty result), **3,630,496 subagent tokens**, 675 tool uses,
+  **1,277 s (~21 min)** wall-clock — from the Workflow completion notice. Plus the redactor (71,698 tokens).
+- **Coverage**: `completenessCheckOutcome: checked` (8/8 top-level dirs scanned or skipped); 5 components
+  (main-process = `main.js`, `logger.js`, `media-formats.js`, `preload.js`; renderer-ui; workers-ml;
+  vendored-jxl-decoder; build-scripts-hooks); skipped `tests/`, `docs/`, `.superpowers/` with reasons;
+  17/17 researchers returned (16 component × category + 1 breadth sweep); research tree check 41 files in
+  components, 37 read, 4 declared not-reached, **0 unaccounted**; 1 verification run; no lost candidates,
+  no adversarial casualties, **no severity lowered**. `memory-and-unsafe` lens pruned for 4 components
+  (managed-language decision), kept for the vendored decoder.
+- **Results**: 7 findings, all **3/3** panel votes — 4 High, 1 Medium, 2 Low. **5 distinct issues reported as 7**:
+  two pairs are same-sink duplicates the pipeline did not merge. All cited lines checked against `b7b10ab` —
+  each lands on its quoted snippet. Per-finding detail lives only in the local, self-ignored report
+  (Decision 1: nothing committed about the High findings beyond a stub).
+- **G2 guard did not gate the scan's agents** (side finding): a transcript scan of the 55 subagent
+  transcripts (sentinel printed; 197 `Bash` calls) found **18 `Bash` commands naming `preload.js`, all
+  executed with real output** (`is_error: false`) — and the user saw **no** prompt. All 18 were read-only
+  (`grep`, `cat`, `sed`, `wc`, `git log`). So neither the `Bash(*preload.js*)` ask rule nor
+  `guard-preload-bash.js` gated Workflow-tool subagents. Not discriminated: whether the hook ran and its
+  `ask` was auto-resolved, or never ran. → BACKLOG 🟤 + a correction to CLAUDE.md's "Not covered" list.
+
+### [2026-10-08] — PHASE: T3 status + session handoff
+
+- **T3 re-derivation by reading: done for all five distinct issues** (F1/F3, F2, F4, F5, F6/F7) against
+  `b7b10ab` — each source-to-sink path was traced in the code, with no check between them. Verdict wording and
+  the § 5 read-out are **not yet written**. The planned runtime probe was **dropped**: this session tripped
+  the model's cyber safeguard during re-derivation, and again on later turns, including one that carried
+  no security content. Deviation from "probe where cheap" — the decision rule judges by re-derivation from
+  source, so the probe was optional. **Trial observation for the read-out**: acting on the plugin's output
+  inside an Opus 5.5 session can trip the safeguard and stall the session.
+- **Continue in a fresh session** on this branch (working tree uncommitted on purpose — see Decision 1:
+  public text about High findings stays at stub level). The local report `CLAUDE-SECURITY-20261008-084826/`
+  holds the detail.
+
+### [2026-10-08] — PHASE: T3 verdicts + T4 read-out (stub level — Decision 1)
+
+Re-derivation was **by reading, against `b7b10ab`**, in two passes (the first session, then this one re-reading
+every cited sink and the code path into it before writing a verdict). The runtime probe was dropped (above).
+Each verdict names only component, class and severity.
+
+| Scan ID(s)  | Component                    | Class                          | Report sev. | Our sev. | Verdict                                                                                            |
+| ----------- | ---------------------------- | ------------------------------ | ----------- | -------- | -------------------------------------------------------------------------------------------------- |
+| F1 + F3     | renderer — UI modal          | HTML injection (CWE-79)        | High        | High     | **confirmed** — one sink reported twice                                                            |
+| F2          | main process — file IPC      | missing authorization (CWE-862) | High        | High     | **confirmed** — an amplifier: reachable only after a renderer foothold, which F1/F3/F4/F5 supply   |
+| F4          | renderer — UI modal          | HTML injection (CWE-79)        | High        | High     | **confirmed** — the stated path to the sink is longer than F1's; each hop was traced in source      |
+| F5          | renderer — UI modal          | HTML injection (CWE-79)        | Medium      | Medium   | **confirmed**                                                                                      |
+| F6 + F7     | main process — tier moves    | path traversal (CWE-22)        | Low         | Low      | **confirmed** — one sink reported twice; impact limited to media-extension files on the same volume |
+
+- **Surviving findings: 7 reported, 5 distinct. 5/5 distinct issues hold (7/7 as reported); 0 overturned; 0
+  mechanism-corrected.** Severity agrees on every row — the secondary measure shows no inflation.
+- **Common root, stated once at stub level**: untrusted input is not validated or encoded at the
+  boundaries the findings name, and the main process does not authorize what the renderer asks of it. Checked
+  first-hand in source — properties of the code, not of the scan. Specifics stay in the local report.
+- **Coverage audit**: `completenessCheckOutcome: checked`; 17/17 researchers returned; `main.js`, `preload.js`
+  and the IPC handlers sit in the `main-process` component, which was read; no `unverified` stamp.
+- **Pre-registered rule applied**: ≥ 80% hold (100%) **and** no High overturned (0 of 3 distinct) → **`keep`**.
+  Not `inconclusive`: stamp `verified`, 17/17 returned.
+- **What the verdict does not say**: one sample, one model (Opus 5.5), precision only — recall is out of the
+  question by design, and our own check is by reading, not by probe. Precision gap worth carrying: the
+  pipeline's dedup missed two same-sink pairs, so its "7 findings" overstates distinct issues by 40%.
+  Cost: ~3.6M subagent tokens (+71.7k redactor), ~21 min, 53 agents — about one Cleanup Week's token budget
+  for a first scan of a 257-file repo; a diff scan will be far cheaper.
+
+**Filing (Decision 1)**: High → public **stubs** + 🔴 TODO fix item (two stubs: the renderer injection sinks F1/F3/F4, and
+the main-process file-IPC authorization F2; one 🔴 TODO item covers both); Medium/Low → 🟤 BACKLOG entries at component/class/fix level, no
+payload shapes — F5 shares its class with the unfixed High findings, so its entry is held to the same stub rule
+until the group fix lands. The local report `CLAUDE-SECURITY-20261008-084826/` keeps the full text.
+
+### [2026-10-08] — PHASE: T6 measurements (partial — the `/plugin` tab reading is still the user's)
+
+Plugins loading in a media_viewer session (`claude plugin list --json`, `claude plugin details`, Claude Code
+2.1.289; last use from `~/.claude.json` `skillUsage`):
+
+| Plugin | Scope | State here | Always-on | Last skill use |
+| ------ | ----- | ---------- | --------- | -------------- |
+| `superpowers` | user + project | enabled | ~840 | 2026-10-08 |
+| `claude-security` | project | enabled (new, 2026-10-08) | ~778 | 2026-10-08 |
+| `claude-md-management` | user | enabled | ~177 | 2026-06-17 |
+| `code-review` | user | enabled | ~22 | 2026-10-07 |
+| `playwright` | user | enabled | ~0 (MCP) | — (MCP) |
+| `security-guidance` | user | enabled | ~0 (hooks) | — (hooks) |
+| `pr-review-toolkit` | project | disabled (09-24) | ~2,035 | — |
+| `hookify` | user | disabled here (local, 09-24) | ~294 | never |
+| `claude-code-setup` | user | **disabled at user scope — changed since 09-24** (was keep) | ~141 | 2026-08-27 |
+| `playground` | user | **disabled at user scope — changed since 09-24** (was keep) | ~93 | 2026-03-21 |
+| `context7` (plugin) | user | disabled here (local, 09-24) | ~0 | — |
+
+- Enabled always-on total ≈ **1,817** (09-24 "after": ≈ 1,501) — `claude-security` added +778, while
+  `claude-code-setup`, `playground` and `feature-dev` stopped loading.
+- **`feature-dev` is no longer installed at user scope** (09-24: keep, ~238; last skill use 2026-09-12) —
+  removed outside this repo's audit. Same for the two user-scope disables above: three changes to the
+  09-24 dispositions that nothing here recorded.
+- **Synced plugins: none arrive now.** The sync bucket's `manifest.json` lists `"plugins": []` (updated
+  2026-10-08), so no claude.ai sync has added plugins since 09-24 — and the eight `"<name>@synced": false`
+  entries in `~/.claude/settings.json` now point at plugins the sync no longer delivers (dangling).
+- `skillUsage` counts `claude-security:scan` once — the entry-point slip (T2) registers as a use.
+- **Still needed from the user**: `/plugin` → Installed → **Not used recently** (a terminal session).
+
+---
+
+### [2026-10-08] — PHASE: T5 leg-2 trigger, T6 table, filing
+
+- **Leg 2's trigger is named, and stronger than the planning-time vehicle**: the 🔴 TODO fix group for these
+  findings changes `main.js` (and `preload.js` if the bridge is narrowed) by construction, so its acceptance
+  already carries "`/claude-security` Scan changes on the fix diff". The general norm (first plan scheduling a
+  `main.js`/`preload.js` group adds the line) stays in the BACKLOG trial entry for later groups. The
+  file-specific `gh pr create` hook is filed as a 🟤 candidate (the trial read `keep`), to be built only if the
+  norm slips once.
+- Filed: 7 BACKLOG 🟤 entries under `[2026-10-08] From: G4 trial batch` (three High/Medium stubs, one Low, the
+  guard gap, the conditional hook, upstream-feedback note), 1 🔴 TODO item, REVIEW-QUEUE § 5 trial row + stocktake +
+  2026-10-08 plugin table, CLAUDE.md "Not covered" correction (Workflow subagents).
+- **T6 dispositions are proposals**: the plugin table's last column says so. Not applied: no plugin was
+  disabled, including `claude-security` (the plan said disable at end of T4 — held for the user's approval since
+  it edits committed `.claude/settings.json` and leg 2 needs it enabled).
+
 ---
 
 ## 5. Key Discoveries
@@ -190,11 +315,21 @@ surviving findings.
 
 ## 6. Future Improvements
 
-_(minimum 2 before Extract — filled during execution)_
+- 🟤 Fix the confirmed findings — the TODO 🔴 group (also leg 2's vehicle).
+- 🟤 Decide whether the `preload.js` guard gap is "hook never ran" or "ask auto-resolved" (probe in a throwaway
+  Workflow) — BACKLOG entry carries the method.
+- 🟤 Build the file-specific `gh pr create` leg-2 hook only if the norm slips once.
+- 🟤 A runtime-probe step for the next re-derivation, done in a session that will not trip the cyber safeguard
+  (e.g. a Sonnet session with the finding text already redacted to a sink location) — the probe was dropped here.
 
 ## Residuals for Extract
 
-_(filled during execution)_
+- Plugin dispositions (T6) await the user's approval and the `/plugin` Not-used-recently reading; until then
+  the 2026-10-08 table is proposals. Extract carries no `[x]` for the recurring read-out's "every disposition
+  user-approved" box until then.
+- `claude-security` is still enabled in `.claude/settings.json` (proposed: disable between scans).
+- WEEKLY.md G4 items and BACKLOG trial-entry closure: closeout, on `main`, after the merge. The trial entry
+  stays `[ ]` (leg 2 pending) on purpose.
 
 ---
 
