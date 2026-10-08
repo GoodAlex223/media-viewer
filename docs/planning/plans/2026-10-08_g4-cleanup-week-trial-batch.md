@@ -251,7 +251,7 @@ Each verdict names only component, class and severity.
   for a first scan of a 257-file repo; a diff scan will be far cheaper.
 
 **Filing (Decision 1)**: High → public **stubs** + 🔴 TODO fix item (three stubs: the renderer injection sites F1/F3 and F4, filed
-separately, and the main-process file-IPC authorization F2; one 🔴 TODO item covers both); Medium/Low → 🟤 BACKLOG entries at component/class/fix level, no
+separately, and the main-process file-IPC authorization F2; one 🔴 TODO item covers all three); Medium/Low → 🟤 BACKLOG entries at component/class/fix level, no
 payload shapes — F5 shares its class with the unfixed High findings, so its entry is held to the same stub rule
 until the group fix lands. The local report `CLAUDE-SECURITY-20261008-084826/` keeps the full text.
 
