@@ -357,23 +357,24 @@ injects at session start.
 
 The recurring read-out (Policy above), second run, Group G4. **Scope and method as 2026-09-24**: every
 plugin that loads in a media_viewer session; cost from `claude plugin details` (Claude Code 2.1.289); last
-use of skills from `~/.claude.json` `skillUsage`. **Not used recently** — the tab's own disuse flag — is
-**not yet read**: it needs the user in a terminal session (`/plugin` → Installed), so that column is empty
-and the dispositions below are **proposals, not decisions** until the user approves them.
+use of skills from `~/.claude.json` `skillUsage`. **Not used recently** — the tab's own disuse flag — was
+read by the user on 2026-10-08 (`/plugin` → Installed): the group lists **one** plugin, `claude-md-management`,
+and the column records "flagged" for it and "not flagged" for the rest. The dispositions below are still
+**proposals, not decisions** until the user approves them.
 
 | Plugin | Scope | State here | Always-on | Last skill use | Not used recently (tab) | Proposed disposition (pending user approval) |
 | ------ | ----- | ---------- | --------- | -------------- | ----------------------- | -------------------------------------------- |
-| `superpowers` | user + project | enabled | ~840 | 2026-10-08 | not read | keep |
-| `claude-security` | project | enabled (new) | ~778 | 2026-10-08 | not read | **disable between scans** (over the ~500 threshold; trial read `keep`); re-enable for leg 2 |
-| `claude-md-management` | user | enabled | ~177 | 2026-06-17 | not read | keep — the due CLAUDE.md audit is its next use |
-| `code-review` | user | enabled | ~22 | 2026-10-07 | not read | keep |
-| `playwright` | user | enabled | ~0 (MCP) | — (MCP) | not read | keep |
-| `security-guidance` | user | enabled | ~0 (hooks) | — (hooks) | not read | keep |
-| `pr-review-toolkit` | project | disabled (09-24) | ~2,035 | — | not read | stays disabled |
-| `hookify` | user | disabled here (local, 09-24) | ~294 | never | not read | stays disabled here |
-| `claude-code-setup` | user | **disabled at user scope — changed since 09-24** | ~141 | 2026-08-27 | not read | record only (was `keep`; the user disabled it) |
-| `playground` | user | **disabled at user scope — changed since 09-24** | ~93 | 2026-03-21 | not read | record only (was `keep`; the user disabled it) |
-| `context7` (plugin) | user | disabled here (local, 09-24) | ~0 | — | not read | stays disabled here |
+| `superpowers` | user + project | enabled | ~840 | 2026-10-08 | not flagged | keep |
+| `claude-security` | project | enabled (new) | ~778 | 2026-10-08 | not flagged | **disable between scans** (over the ~500 threshold; trial read `keep`); re-enable for leg 2 |
+| `claude-md-management` | user | enabled | ~177 | 2026-06-17 | **flagged** — 2 skills · 10 uses · not used in 112 days | keep — the due CLAUDE.md audit is its next use |
+| `code-review` | user | enabled | ~22 | 2026-10-07 | not flagged | keep |
+| `playwright` | user | enabled | ~0 (MCP) | — (MCP) | not flagged | keep |
+| `security-guidance` | user | enabled | ~0 (hooks) | — (hooks) | not flagged | keep |
+| `pr-review-toolkit` | project | disabled (09-24) | ~2,035 | — | n/a — disabled, not in the list | stays disabled |
+| `hookify` | user | disabled here (local, 09-24) | ~294 | never | n/a — disabled, not in the list | stays disabled here |
+| `claude-code-setup` | user | **disabled at user scope — changed since 09-24** | ~141 | 2026-08-27 | n/a — disabled, not in the list | record only (was `keep`; the user disabled it) |
+| `playground` | user | **disabled at user scope — changed since 09-24** | ~93 | 2026-03-21 | n/a — disabled, not in the list | record only (was `keep`; the user disabled it) |
+| `context7` (plugin) | user | disabled here (local, 09-24) | ~0 | — | n/a — disabled, not in the list | stays disabled here |
 
 **Totals**: enabled always-on ≈ **1,817** tokens (09-24 "after": ≈ 1,501) — `claude-security` adds +778,
 while `claude-code-setup`, `playground` and `feature-dev` stopped loading. Disabling `claude-security`

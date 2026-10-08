@@ -27,7 +27,7 @@ re-derivation from source?_ — and run the recurring plugin context-cost & disu
 - [x] § 5 trial row read out under the pre-registered rule (§ 2 below), not a rule chosen after the results
 - [x] Each confirmed finding filed per the disclosure rule (§ 2)
 - [x] Leg 2's trigger named, or recorded as best-effort
-- [ ] Recurring read-out table in § 5, every disposition user-approved — table written; dispositions are **proposals** and the `/plugin` Not-used-recently reading is still the user's
+- [ ] Recurring read-out table in § 5, every disposition user-approved — table written; dispositions are **proposals** and the `/plugin` Not-used-recently reading arrived after the first push (one plugin flagged)
 
 ---
 
