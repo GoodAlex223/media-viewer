@@ -143,7 +143,7 @@ surviving findings.
       "`/claude-security` Scan changes before merge" in that group's acceptance. Record that the plugin's own
       push/PR tip disables itself once the menu has opened (`hooks.py` `TipState.spent`). A file-specific
       `gh pr create` hook only if the trial reads `keep` — filed as a 🟤 candidate conditional on that.
-- [~] **T6 — Recurring read-out** _(table written; two user inputs outstanding)_.** After T1, so `claude-security` is in the table: `claude plugin list
+- [~] **T6 — Recurring read-out** _(table written; the `/plugin` reading was supplied after the first push; dispositions await user approval)_.** After T1, so `claude-security` is in the table: `claude plugin list
       --json` + `claude plugin details` per plugin loading in a media_viewer session; check for plugins a
       claude.ai sync added since 2026-09-24; the user reads `/plugin` → Installed → **Not used recently**
       (terminal session). New dated table in § 5; dispositions user-approved.
@@ -230,8 +230,8 @@ Each verdict names only component, class and severity.
 | Scan ID(s)  | Component                    | Class                          | Report sev. | Our sev. | Verdict                                                                                            |
 | ----------- | ---------------------------- | ------------------------------ | ----------- | -------- | -------------------------------------------------------------------------------------------------- |
 | F1 + F3     | renderer — UI modal          | HTML injection (CWE-79)        | High        | High     | **confirmed** — one sink reported twice                                                            |
-| F2          | main process — file IPC      | missing authorization (CWE-862) | High        | High     | **confirmed** — an amplifier: reachable only after a renderer foothold, which F1/F3/F4/F5 supply   |
-| F4          | renderer — UI modal          | HTML injection (CWE-79)        | High        | High     | **confirmed** — the stated path to the sink is longer than F1's; each hop was traced in source      |
+| F2          | main process — file IPC      | missing authorization (CWE-862) | High        | High     | **confirmed**                                                                                        |
+| F4          | renderer — UI modal          | HTML injection (CWE-79)        | High        | High     | **confirmed**                                                                                        |
 | F5          | renderer — UI modal          | HTML injection (CWE-79)        | Medium      | Medium   | **confirmed**                                                                                      |
 | F6 + F7     | main process — tier moves    | path traversal (CWE-22)        | Low         | Low      | **confirmed** — one sink reported twice; impact limited to media-extension files on the same volume |
 
@@ -250,12 +250,12 @@ Each verdict names only component, class and severity.
   Cost: ~3.6M subagent tokens (+71.7k redactor), ~21 min, 53 agents — about one Cleanup Week's token budget
   for a first scan of a 257-file repo; a diff scan will be far cheaper.
 
-**Filing (Decision 1)**: High → public **stubs** + 🔴 TODO fix item (two stubs: the renderer injection sinks F1/F3/F4, and
-the main-process file-IPC authorization F2; one 🔴 TODO item covers both); Medium/Low → 🟤 BACKLOG entries at component/class/fix level, no
+**Filing (Decision 1)**: High → public **stubs** + 🔴 TODO fix item (three stubs: the renderer injection sites F1/F3 and F4, filed
+separately, and the main-process file-IPC authorization F2; one 🔴 TODO item covers both); Medium/Low → 🟤 BACKLOG entries at component/class/fix level, no
 payload shapes — F5 shares its class with the unfixed High findings, so its entry is held to the same stub rule
 until the group fix lands. The local report `CLAUDE-SECURITY-20261008-084826/` keeps the full text.
 
-### [2026-10-08] — PHASE: T6 measurements (partial — the `/plugin` tab reading is still the user's)
+### [2026-10-08] — PHASE: T6 measurements (the `/plugin` tab reading was supplied after the first push)
 
 Plugins loading in a media_viewer session (`claude plugin list --json`, `claude plugin details`, Claude Code
 2.1.289; last use from `~/.claude.json` `skillUsage`):
@@ -283,7 +283,7 @@ Plugins loading in a media_viewer session (`claude plugin list --json`, `claude 
   2026-10-08), so no claude.ai sync has added plugins since 09-24 — and the eight `"<name>@synced": false`
   entries in `~/.claude/settings.json` now point at plugins the sync no longer delivers (dangling).
 - `skillUsage` counts `claude-security:scan` once — the entry-point slip (T2) registers as a use.
-- **Still needed from the user**: `/plugin` → Installed → **Not used recently** (a terminal session).
+- **`/plugin` → Installed → Not used recently** (user, after the first push): one plugin flagged, `claude-md-management` (2 skills · 10 uses · 112 days); recorded in the REVIEW-QUEUE table.
 
 ---
 
@@ -295,7 +295,7 @@ Plugins loading in a media_viewer session (`claude plugin list --json`, `claude 
   `main.js`/`preload.js` group adds the line) stays in the BACKLOG trial entry for later groups. The
   file-specific `gh pr create` hook is filed as a 🟤 candidate (the trial read `keep`), to be built only if the
   norm slips once.
-- Filed: 7 BACKLOG 🟤 entries under `[2026-10-08] From: G4 trial batch` (three High/Medium stubs, one Low, the
+- Filed: 8 BACKLOG 🟤 entries under `[2026-10-08] From: G4 trial batch` (four High/Medium stubs, one Low, the
   guard gap, the conditional hook, upstream-feedback note), 1 🔴 TODO item, REVIEW-QUEUE § 5 trial row + stocktake +
   2026-10-08 plugin table, CLAUDE.md "Not covered" correction (Workflow subagents).
 - **T6 dispositions are proposals**: the plugin table's last column says so. Not applied: no plugin was
@@ -324,8 +324,8 @@ Plugins loading in a media_viewer session (`claude plugin list --json`, `claude 
 
 ## Residuals for Extract
 
-- Plugin dispositions (T6) await the user's approval and the `/plugin` Not-used-recently reading; until then
-  the 2026-10-08 table is proposals. Extract carries no `[x]` for the recurring read-out's "every disposition
+- Plugin dispositions (T6) await the user's approval; the `/plugin` reading is in. Until approval the
+  2026-10-08 table is proposals. Extract carries no `[x]` for the recurring read-out's "every disposition
   user-approved" box until then.
 - `claude-security` is still enabled in `.claude/settings.json` (proposed: disable between scans).
 - WEEKLY.md G4 items and BACKLOG trial-entry closure: closeout, on `main`, after the merge. The trial entry
