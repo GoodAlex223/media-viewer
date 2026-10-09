@@ -59,11 +59,11 @@
 > Read [REVIEW-QUEUE.md](REVIEW-QUEUE.md) first. **Window ≈ 15 days** (last run 2026-09-24). **Run order is load-bearing (D4 precedent)**: G4's `claude-security` read-out lands first, so §§1–3 meet the cap as it stands after it — at 3 outstanding trials (`typescript-lsp`, evidence-gating, `claude-security`) a new trial `adopt` parks in Next-up; a read-out of `claude-security` drops the count to 2. §1a sources from the catalog (`marketplace.json`), not the docs page. Docs-only: merge or dated-defer in-session.
 > **Model:** Opus · `medium`, named directly because ⚪ overhead fits no row of the § 1.0 table: research and verdicts, with each claim checked against its primary source (every correction the 2026-09-24 run took came from that check); Sonnet · `medium` is enough for the routine sourcing searches.
 
-- [ ] **Plugins (2 SP)** — two independent tops: official catalog + wider internet, each with `source:`.
-- [ ] **Claude best-practices (1 SP)** — hybrid: fresh check vs. the parked list.
-- [ ] **Non-Claude AI best-practices (1 SP)**.
-- [ ] **Cross-project propagation (1 SP)** — outbound: this window's shipped work (PR #72's close-out, the 2026-10-04 intake, this week's G1–G4) and memory files changed since 2026-09-24, at the high bar; the parked "a BACKLOG entry's stated mechanism is a hypothesis" has fresh evidence (two of the 2026-10-04 intake notes predated the merges that changed what they describe). Inbound: any new sibling rows naming this repo.
-- _Ride-along (0 SP)_: the strategic-doc status flip found at planning (see Notes) — GOALS.md's "MLManager extracted" KR and MILESTONES.md's v2.0 status line, per [README.md](README.md) § Strategic Review ("small factual fixes may ride along in that week's docs group").
+- [x] **Plugins (2 SP)** — ✅ **Done 2026-10-09** — §1a `semgrep` pass (catalog additions 311 → 315 recovered from the upstream commit log; none fit), §1b `claude-mem` pass; Anthropic's community marketplace (2,284 plugins) is now §1b's roster. Original brief: two independent tops: official catalog + wider internet, each with `source:`.
+- [x] **Claude best-practices (1 SP)** — ✅ **Done 2026-10-09** — *You should know* built-in mod **adopt** (trial; queue 2 → 3, at the cap; 🟤 `[2026-10-09]`); `onFailure: "block"` parked. Original brief: hybrid: fresh check vs. the parked list.
+- [x] **Non-Claude AI best-practices (1 SP)** — ✅ **Done 2026-10-09** — OpenAI's `AGENTS.md` guidance: pass (already practiced). Its useful datum: `CLAUDE.md` is now 216 lines / 49,544 bytes, adding pressure on the path-scoped-rules adopt.
+- [x] **Cross-project propagation (1 SP)** — ✅ **Done 2026-10-09** — outbound: the Windows-junction worktree hazard propagated and applied live (`~/.claude/POLICIES/git.md`); inbound: 3 new rows ruled (`prompt-audit` → 🟡 `[2026-09-21]`, `typescript-lsp` → re-vehicles the § 5 trial, `mdiSnFLzQaI` parked). Original brief: outbound: this window's shipped work (PR #72's close-out, the 2026-10-04 intake, this week's G1–G4) and memory files changed since 2026-09-24, at the high bar; the parked "a BACKLOG entry's stated mechanism is a hypothesis" has fresh evidence (two of the 2026-10-04 intake notes predated the merges that changed what they describe). Inbound: any new sibling rows naming this repo.
+- _Ride-along (0 SP)_: ✅ **Done 2026-10-09** — GOALS.md KR row → "In progress — training half", MILESTONES.md → "2 of 6, a third partly" (checkbox left open); `Last Updated` kept, with a status-flip note. Original: the strategic-doc status flip found at planning (see Notes) — GOALS.md's "MLManager extracted" KR and MILESTONES.md's v2.0 status line, per [README.md](README.md) § Strategic Review ("small factual fixes may ride along in that week's docs group").
 
 ---
 
@@ -101,7 +101,7 @@
 ### Friday, October 9 — Read-outs + Reviews + buffer
 
 - **[G4](#g4-cleanup-week-trial-batch-batch---adopt-trials--recurring-read-out--3-sp)** 🟤 — re-derive surviving findings; § 5 read-out; plugin read-out (part 2 of 2) — ✅ PR #76 (done Thursday, with part 1)
-- **[G5](#g5-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — after G4's read-out, then §§1–4 + the strategic-doc ride-along
+- **[G5](#g5-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — after G4's read-out, then §§1–4 + the strategic-doc ride-along — ◐ branch `g5-weekly-reviews`, unmerged
 - Buffer for G1/G3 review rounds. Closeout per group: Summary-Table Status → `✅ PR #N` (or `✅ <merge-SHA>` where no PR was opened), the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — **in the closeout commit, after the merge**.
 
 **Daily total**: ~2 SP + 5 overhead + buffer
@@ -116,7 +116,7 @@
 | G2  | Hooks and logs that actually fire `[batch]` | Claude Code hooks + commit hook + session log | 🟤 Auto (+1 🔵) | 5 | 8 | Mon–Tue | ✅ PR #73 |
 | G3  | Tournament render re-entry `[solo]`         | Tournament render lifecycle              | 🟤 Auto     | 1     | 5        | Wed–Thu | ✅ PR #75 |
 | G4  | Cleanup Week trial batch `[batch]`          | Adopt trials + recurring read-out        | 🟤 Auto     | 2     | 3        | Thu–Fri | ✅ PR #76 |
-| G5  | Weekly Reviews `[batch]`                    | Research / process                       | ⚪ Overhead | 5     | 5        | Fri     | ☐ Planned |
+| G5  | Weekly Reviews `[batch]`                    | Research / process                       | ⚪ Overhead | 5     | 5        | Fri     | ◐ Branch complete, unmerged |
 |     | **Total (quota-counted)**                   |                                          |             | **11** | **23**  |         |            |
 |     | **Total (incl. ⚪ overhead)**               |                                          |             | **16** | **28**  |         |            |
 

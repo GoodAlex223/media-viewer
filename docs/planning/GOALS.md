@@ -2,7 +2,7 @@
 
 Project objectives and success metrics.
 
-**Last Updated**: 2026-08-27
+**Last Updated**: 2026-08-27 <!-- 2026-10-09: status flip only (G5 Weekly Reviews ride-along, per README § Strategic Review) — the MLManager KR row. Not a refresh; the 2-month clock still runs from 2026-08-27. -->
 **Review Cycle**: Continuous — planning-session staleness check (see [README.md](README.md) § Strategic Review)
 
 ---
@@ -45,7 +45,7 @@ Provide the most efficient desktop tool for reviewing, rating, and organizing la
 | ZoomManager extracted | Done | Not started | 🔴 |
 | CompareManager extracted | Done | Not started | 🔴 |
 | SortingManager extracted | Done | Not started | 🔴 |
-| MLManager extracted | Done | Not started | 🔴 |
+| MLManager extracted | Done | In progress — training half shipped (`MlTrainingManager`, `ml-training.js`, PR #68 `bfcc881`); sort orchestration still in the renderer | 🟡 |
 | Renderer line count reduced by the four extractions | < ~6,000 after the four extractions (soft) | ~9,400 (up from ~7,900 in July) | 🔴 |
 
 **Timeline**: Q4 2026 (soft)

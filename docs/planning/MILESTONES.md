@@ -2,7 +2,7 @@
 
 Key targets with dates.
 
-**Last Updated**: 2026-08-27
+**Last Updated**: 2026-08-27 <!-- 2026-10-09: status flip only (G5 Weekly Reviews ride-along, per README § Strategic Review) — the v2.0 status line. Not a refresh; the 2-month clock still runs from 2026-08-27. -->
 
 ---
 
@@ -21,7 +21,7 @@ Milestones are significant checkpoints. They should be:
 ### 🎯 v2.0 modularization complete
 
 **Target Date**: Q4 2026 (soft)
-**Status**: 🟡 In Progress — 2 of 6 managers extracted
+**Status**: 🟡 In Progress — 2 of 6 managers extracted, a third partly (MLManager's training half, `MlTrainingManager`, PR #68)
 
 **Definition of Done**:
 

@@ -182,3 +182,51 @@ Docs only. Verification means **evidence for each written claim**, not a test ru
 - Sweep for the **fact**, not the phrase, when correcting any count (`feedback_sweep_the_fact_not_the_phrase`).
 - Run a column-count check over every Markdown table touched. The pre-commit hook must pass
   (`check-secrets.js`, `check-docs-index.js`, the unit suite).
+
+---
+
+## Outcome (2026-10-09 run)
+
+Run in the run-card's order, with the checkpoint held once (rulings below). Web: **12 calls**, at the scope guard's upper
+bound, 2 of which failed (`ECONNRESET` on OpenAI's best-practices page, twice). Everything else was local or
+through `gh`.
+
+| § | Item | Verdict | Deciding evidence |
+| --- | --- | --- | --- |
+| 1a | `semgrep` (official catalog) | pass | The 4 catalog additions (`govtribe`, `vanguard-advisor-tools`, `linq-alpha`, `math-proof`) were recovered from the upstream commit log; none fits. `semgrep` at its pinned SHA: an opaque `hook.exe` on every Write/Edit/Bash, a semgrep.dev login, an OS-trust-store CA in its one skill, 16★ and no license. |
+| 1b | `claude-mem` (community) | pass | Its own source: hooks on 8 events, a Bun worker, SQLite + Chroma, model calls. Automatic capture versus this repo's curated memory. |
+| 2 | *You should know* built-in mod | **adopt** (trial) | 2.1.287 changelog; the mod and its description are present in the local 2.1.289 bundle; telemetry is on. Queue 2 → 3. |
+| 3 | OpenAI `AGENTS.md` guidance | pass | Already practiced here; `CLAUDE.md` measured at 216 lines / 49,544 bytes. |
+| 4 out | Windows-junction worktree hazard | propagate, **applied** | Live `POLICIES/git.md`: `worktree remove` 0 → 2, `junction` 0 → 3; sibling 0 at `746f995` (sync pending). |
+| 4 in | 3 new sibling rows | ruled | `prompt-audit` → 🟡 `[2026-09-21]`; `typescript-lsp` → § 5 re-vehicle; `mdiSnFLzQaI` → parked. |
+
+**Checkpoint rulings (user, 2026-10-09)**: §2 → the *You should know* adopt, with `onFailure: "block"` parked;
+the D2 diff approved as shown.
+
+### Out-of-repo change log
+
+| Path | Change | Evidence |
+| --- | --- | --- |
+| `~/.claude/POLICIES/git.md` | New *Throwaway Worktrees* subsection under *Workflow Patterns*, before *Merge Strategies* | Diff against the pre-edit backup: 15 lines added, 0 removed; post-edit greps above |
+
+No plugin was installed or enabled, and no sibling-repo file was touched.
+
+### Key discoveries
+
+1. **The diff baseline for §1a had silently disappeared.** The Aug-29 `.bak` snapshot is gone and the local
+   catalog clone is not a git repository. The upstream commit log for `marketplace.json` filtered by date is
+   a better baseline anyway: it names each addition and its date, which a snapshot diff cannot.
+2. **The 2.1.295 `onFailure` field is not yet documented**: none of the hooks reference's three chunks mentions it (the first two
+   checked only through the fetch tool's summariser, which can miss), and this machine runs 2.1.289. A changelog line is not the reference.
+3. **`typescript-lsp`'s vehicle had rolled forward twice** ("next Cleanup Week", then parked inside it).
+   The re-vehicle names a session type instead of a week. Three trials now point at next week's dev
+   sessions and must not share one; the § 5 stocktake says so.
+4. **`/doctor prompt-audit` exists**, confirmed from the local bundle rather than from the sibling's row.
+
+### Deviations from this run-card
+
+1. **D2's diff names junctions only, not symlinks.** The run-card's lesson text says "(or symlink)", but the
+   evidence (one incident, a junction) supports only the junction claim. The rule ("never link them in")
+   covers both, without asserting the symlink mechanism.
+2. **`sonarqube` was not reviewed.** `semgrep` was read first and took §1a; `sonarqube` stays parked
+   unreviewed, and the row says so.
