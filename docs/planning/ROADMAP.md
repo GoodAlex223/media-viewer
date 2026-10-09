@@ -2,7 +2,7 @@
 
 Long-term vision, active themes, and releases.
 
-**Last Updated**: 2026-08-27
+**Last Updated**: 2026-08-27 <!-- 2026-10-09: status flip only (G5 Weekly Reviews ride-along, completed in PR #77's review) — the v2.0 status line and the MLManager row. Not a refresh; the 2-month clock still runs from 2026-08-27. -->
 
 ---
 
@@ -61,7 +61,7 @@ Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engin
 ### v2.0 — Modularization 🔄 In Progress
 
 **Theme**: Carve the monolithic renderer into manager modules (v2.0 pattern: stateful manager class + constructor-injected host callbacks)
-**Status**: 🔄 In Progress — 2 of 6 managers extracted
+**Status**: 🔄 In Progress — 2 of 6 managers extracted, a third partly (MLManager's training half, `MlTrainingManager`, PR #68)
 **Done when**: ZoomManager, CompareManager, SortingManager, and MLManager are extracted with unit + E2E suites green.
 
 | Module                                                                          | Status       |
@@ -71,7 +71,7 @@ Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engin
 | ZoomManager                                                                     | ⬜ Planned   |
 | CompareManager                                                                  | ⬜ Planned   |
 | SortingManager                                                                  | ⬜ Planned   |
-| MLManager                                                                       | ⬜ Planned   |
+| MLManager                                                                       | 🟡 Training half extracted (`ml-training.js`) |
 
 Originally-planned v2.0 features delivered early: automated testing (Vitest + Playwright, hook-enforced), keyboard-shortcut customization.
 

@@ -53,7 +53,9 @@ Every figure names its probe; none is carried forward from an earlier run.
      "Junction Table" false positive, which also serves as the positive control).
    - `stated mechanism` 0; `hypothesis` 1 (the bug-report template).
    - `pre-push` 0.
-   24 memory files changed since 2026-09-24, including the new generic lessons on guard scope
+   30 topic files (31 with the `MEMORY.md` index) changed since 2026-09-24 (`find … -name '*.md' -newermt
+   2026-09-24` over the memory directory, at run time; first written here as "24", a miscount corrected in
+   PR #77's review), including the new generic lessons on guard scope
    (`feedback_partial_guards`, `feedback_guard_scope_by_own_rationale`) and RED-first tests.
 
 ## Decisions
@@ -102,6 +104,9 @@ of MLManager.
   (`MlTrainingManager`, PR #68)".
 - MILESTONES.md L24 → "2 of 6 managers extracted; a third (MLManager) partly". L31's checkbox stays
   unchecked, since only half is done.
+- ROADMAP.md (added in PR #77's review — the first pass left it contradicting the other two): the v2.0
+  status line → "2 of 6 managers extracted, a third partly", and the MLManager row → "🟡 Training half
+  extracted".
 - No other strategic-doc edit; the restated "~9,400 lines" figure belongs to 🟤 `[2026-09-02]`.
 
 **D7 — One docs-only branch and a PR**, as on 09-24. Methodology rules #3 and #4 apply. Push and PR only on
@@ -230,3 +235,14 @@ No plugin was installed or enabled, and no sibling-repo file was touched.
    covers both, without asserting the symlink mechanism.
 2. **`sonarqube` was not reviewed.** `semgrep` was read first and took §1a; `sonarqube` stays parked
    unreviewed, and the row says so.
+3. **Corrected in PR #77's review** (recorded rather than buried):
+   - The §1b `claude-mem` row first took its worker, store, model-call and sync claims from the README,
+     against the Verification rule. All of them have since been re-read from the plugin's source files, which the
+     row now cites; the verdict is unchanged.
+   - The §1a `semgrep` row's `Write|Edit|Bash` code span split its table row in GitHub's renderer: GFM
+     splits on every unescaped pipe, code spans included. This run's column check stripped code spans before
+     counting, so it could not see the defect and reported "clean". The checker now counts every
+     unescaped pipe, and finds that row and no other.
+   - D6 skipped ROADMAP.md, the third strategic doc, which still read "2 of 6" (now flipped).
+   - Two figures lacked a named probe (the `semgrep` stars and license; the memory-file count, which was
+     also miscounted), and one zero-result sweep lacked a control (guard scope). All three are fixed.
