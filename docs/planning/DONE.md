@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-08 <!-- Group G4: Cleanup Week trial batch (🟤, Cleanup Week #4) — 2/2, MERGED 2026-10-08 via PR #76 (merge 44c282b) after one review round and a close-out. -->
+**Last Updated**: 2026-10-09 <!-- Group G5: Weekly Reviews (2026-10-09 run, ⚪ Overhead) — 5/5, MERGED 2026-10-09 via PR #77 (merge 0e298b4) after one review round and two close-outs. -->
+<!-- Previous: Group G4: Cleanup Week trial batch (🟤, Cleanup Week #4) — 2/2, MERGED 2026-10-08 via PR #76 (merge 44c282b) after one review round and a close-out. -->
 <!-- Previous: Group G3: Tournament render re-entry (🟤, Cleanup Week #4) — 1/1, MERGED 2026-10-07 via PR #75 (merge 482a3c8) after a pre-PR final review + fix pass, one review round and a close-out (no issues). -->
 <!-- Previous: Group G1: Single-mode rating safety (🔵 🏆, Cleanup Week #4) — 3/3, MERGED 2026-10-06 via PR #74 (merge 0bdcdb3) after a pre-PR final review, two review rounds and a close-out (no issues). -->
 <!-- Previous: Group G2: Hooks and logs that actually fire (🟤 +1 🔵, Cleanup Week #4) — 5/5, MERGED 2026-10-05 via PR #73 (merge 83c6df0) after three review rounds and a close-out (LGTM). -->
@@ -20,6 +21,24 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-09 — Group G5: Weekly Reviews ⚪ (2026-10-09 run, Cleanup Week #4) — **5/5, MERGED `0e298b4`** (PR #77)
+
+**Run-card**: [2026-10-09-weekly-reviews-run.md](../superpowers/specs/2026-10-09-weekly-reviews-run.md) (codified-repeat ⚪ overhead — run-card, no plan file; archive: none)
+**Branch**: `g5-weekly-reviews`, cut from `main` at `4e568f0`; deleted remote and local after the merge.
+
+✅ **Status: 5/5 (four review categories + the strategic-doc ride-along). MERGED 2026-10-09 via PR #77** (merge `0e298b4`). One review round followed: 4 doc findings, all verified and fixed in `7d41cc4`. Then two close-outs: the first left a one-line residual, fixed in `d5cc64f`; the second found no issues.
+
+**Summary**: The 6th Weekly Reviews run. **1 adopt / 3 pass**: §1a `semgrep` pass (read at its pinned SHA); §1b `claude-mem` pass (read from source); §2 the *You should know* built-in mod adopted as a trial (queue 2 → 3, at the cap); §3 OpenAI's `AGENTS.md` guidance pass. §4 propagated the Windows-junction `git worktree remove --force` hazard, applied live to `~/.claude/POLICIES/git.md`. It ruled 3 new inbound rows: `/claude-api prompt-audit` folded into the quarterly `CLAUDE.md` audit, `typescript-lsp` re-vehicling the pending § 5 trial, and `mdiSnFLzQaI` parked. Ride-along: GOALS, MILESTONES and ROADMAP now show MLManager half-extracted.
+
+**Key changes**:
+
+- REVIEW-QUEUE: four verdict rows, § 4 outbound + outcome-log + inbound rows, § 5 stocktake and two trial rows; the community marketplace (2,284 plugins) became §1b's roster.
+- BACKLOG 🟤 `[2026-10-09]`: the *You should know* trial; `typescript-lsp` re-vehicled; 🟡 `[2026-09-21]` annotated with `prompt-audit`. Closeout extract: a GFM-correct table check, and a named catalog baseline per run.
+- TODO § Spawned Tasks: the junction propagation row, already checked. WEEKLY's next-week note carries the trial-vehicle clash (three trials name next week's dev sessions).
+- Out of repo: live `~/.claude/POLICIES/git.md` (+15 lines, *Throwaway Worktrees*).
+
+**Learnings**: a column check that masks code spans shares the author's wrong model of GFM and cannot fail on a pipe inside a code span; the reviewer proved the harm with `gh api markdown`. A README-sourced claim survived again (as on PR #72) until re-read from source, which kept the verdict and made the row true. A status flip has to reach every document that restates the status (ROADMAP was missed), and so do the summaries of the fix itself (the docs-index row). "Every figure names its probe" was the claim that failed most: one figure was simply miscounted (24 vs 30).
 
 ### 2026-10-08 — Group G4: Cleanup Week trial batch 🟤 (Cleanup Week #4) — **2/2, MERGED `44c282b`** (PR #76)
 

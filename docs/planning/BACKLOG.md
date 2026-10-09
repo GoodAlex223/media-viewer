@@ -329,6 +329,15 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 
 ## 🟤 Auto-Generated Tech Debt
 
+### [2026-10-09] From: G5 closeout (PR #77 review rounds)
+
+**Origin**: the closeout of WEEKLY G5 (Weekly Reviews, 6th run; merge `0e298b4`). Improvements extracted from
+the run-card [`2026-10-09-weekly-reviews-run.md`](../superpowers/specs/2026-10-09-weekly-reviews-run.md)
+§ Improvements. Claude-surfaced → 🟤.
+
+- [ ] **Promote the Markdown table column check to a committed, GFM-correct check** — PR #77's "column-count check is clean" was false. The ad-hoc checker masked backtick code spans before counting pipes, but GFM's table extension splits a row on **every** unescaped `|`, code spans included, and drops cells past the header. So the new `semgrep` row rendered only up to "for every `Write", and the check could not fail on exactly that mistake. Two earlier runs hit the same pipe-in-cell class (2026-09-02, 2026-09-24), each time caught by a hand-run check rather than a gate. Shape: `scripts/check-docs-tables.js` counts `(?<!\\)\|` per row against the header row of each table in staged `*.md` files, on the existing pre-commit hook beside `check-docs-index.js`, with its own `SKIP` token. Positive control in its unit test: a row with a pipe inside a code span must fail. Proven against GitHub's renderer with `gh api markdown` on PR #77's row. Per-project memory `feedback_gfm_pipe_in_code_span.md` and [[feedback_convention_is_not_a_control]]. Effort S. Affected: `scripts/`, `.husky/pre-commit`, `tests/`, `CLAUDE.md` hook prose.
+- [ ] **Record a named catalog baseline in each Weekly-Reviews run** — §1a's "additions since the last run" rule depended on a local `claude-plugins-official.bak/` snapshot, and that snapshot had silently disappeared by 2026-10-09; the local catalog clone is not a git repository. The run recovered by reading the upstream commit log for `.claude-plugin/marketplace.json` since the previous run's date. Make that the method: each run records, in REVIEW-QUEUE §1, the catalog's plugin count and the upstream HEAD SHA of `marketplace.json` it read (`gh api repos/anthropics/claude-plugins-official/commits?path=.claude-plugin/marketplace.json&per_page=1`), so the next run diffs from a named commit rather than a local file that may not exist. Same for the community marketplace (`anthropics/claude-plugins-community`), now §1b's roster. Effort XS (a convention line in REVIEW-QUEUE §1 plus this run's baseline values). Affected: `docs/planning/REVIEW-QUEUE.md`.
+
 ### [2026-10-09] From: Weekly Reviews (2026-10-09 run)
 
 **Origin**: Group G5 Weekly Reviews, 6th run — run-card

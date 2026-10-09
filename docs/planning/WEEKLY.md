@@ -101,7 +101,7 @@
 ### Friday, October 9 — Read-outs + Reviews + buffer
 
 - **[G4](#g4-cleanup-week-trial-batch-batch---adopt-trials--recurring-read-out--3-sp)** 🟤 — re-derive surviving findings; § 5 read-out; plugin read-out (part 2 of 2) — ✅ PR #76 (done Thursday, with part 1)
-- **[G5](#g5-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — after G4's read-out, then §§1–4 + the strategic-doc ride-along — ◐ branch `g5-weekly-reviews`, unmerged
+- **[G5](#g5-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — after G4's read-out, then §§1–4 + the strategic-doc ride-along — ✅ PR #77 (merge `0e298b4`)
 - Buffer for G1/G3 review rounds. Closeout per group: Summary-Table Status → `✅ PR #N` (or `✅ <merge-SHA>` where no PR was opened), the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — **in the closeout commit, after the merge**.
 
 **Daily total**: ~2 SP + 5 overhead + buffer
@@ -116,7 +116,7 @@
 | G2  | Hooks and logs that actually fire `[batch]` | Claude Code hooks + commit hook + session log | 🟤 Auto (+1 🔵) | 5 | 8 | Mon–Tue | ✅ PR #73 |
 | G3  | Tournament render re-entry `[solo]`         | Tournament render lifecycle              | 🟤 Auto     | 1     | 5        | Wed–Thu | ✅ PR #75 |
 | G4  | Cleanup Week trial batch `[batch]`          | Adopt trials + recurring read-out        | 🟤 Auto     | 2     | 3        | Thu–Fri | ✅ PR #76 |
-| G5  | Weekly Reviews `[batch]`                    | Research / process                       | ⚪ Overhead | 5     | 5        | Fri     | ◐ Branch complete, unmerged |
+| G5  | Weekly Reviews `[batch]`                    | Research / process                       | ⚪ Overhead | 5     | 5        | Fri     | ✅ PR #77 |
 |     | **Total (quota-counted)**                   |                                          |             | **11** | **23**  |         |            |
 |     | **Total (incl. ⚪ overhead)**               |                                          |             | **16** | **28**  |         |            |
 
