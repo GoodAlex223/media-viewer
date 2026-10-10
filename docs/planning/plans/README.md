@@ -76,7 +76,9 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 ## Current Plans
 
-_None currently active._
+| Plan | Group | Status |
+| --- | --- | --- |
+| [2026-10-10_g1-security-findings-fix.md](2026-10-10_g1-security-findings-fix.md) | WEEKLY G1 🟤 (High security findings fix) | In progress |
 
 <!-- 2026-10-08 (Group G3 closeout): 2026-10-07_g3-tournament-render-reentry.md left this table on
      archive — merged `482a3c8` via PR #75, moved to docs/archive/plans/ with `git mv` and indexed in
