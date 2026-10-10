@@ -73,6 +73,10 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - **Property test:** every state reached in seeded random tournaments validates.
   - **Compatibility:** the version-1 save format was checked against the last commit that wrote it.
   - **Results:** unit 1071 passed, 1 skipped. Tournament and security E2E 36/36.
+  - **Cache trace (spec):** the three per-folder caches were followed from read to every consumer.
+    - No HTML or path exposure.
+    - One cache's values are now checked at load. A malformed entry is recomputed (test failed first).
+    - Two defense-in-depth residuals go to the closeout extract.
 
 ## Key Discoveries
 

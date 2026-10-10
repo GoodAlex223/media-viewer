@@ -6577,6 +6577,10 @@ class MediaViewer {
                 // Convert cache entries back to Map with full paths
                 this.perceptualHashes = new Map();
                 for (const [fileName, hash] of Object.entries(cache)) {
+                    // The file lives in the media folder, so its values are untrusted (G1): only a
+                    // blockhash bit string may reach calculateHammingDistance, whose loop runs to
+                    // hash.length. Anything else is skipped and simply recomputed.
+                    if (typeof hash !== 'string' || hash.length > 4096 || !/^[01]+$/.test(hash)) continue;
                     // Reconstruct full path from base folder + filename
                     const fullPath = await window.electronAPI.path.join(this.baseFolderPath, fileName);
                     this.perceptualHashes.set(fullPath, hash);

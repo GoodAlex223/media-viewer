@@ -6490,6 +6490,46 @@ describe('updateRatingButtonsState tooltips (G1)', () => {
     });
 });
 
+// G1 cache trace: the hash cache lives in the media folder, so its values are untrusted. They feed
+// calculateHammingDistance's loop bound (hash.length) on the main thread and in the sorting
+// worker: an object with a huge `length` passed its guard and spun the loop forever.
+describe('loadHashCache keeps only well-formed hashes (G1)', () => {
+    const loadHashCache = extractAsyncMethod('loadHashCache');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('drops non-string, non-binary and oversized values, keeping real hashes', async () => {
+        const good = '01'.repeat(128);
+        const cache = {
+            'a.jpg': good,
+            'b.jpg': { length: 1e300 },
+            'c.jpg': 1e300,
+            'd.jpg': ['0', '1'],
+            'e.jpg': '<b data-probe="1">7</b>',
+            'f.jpg': '0'.repeat(5000),
+            'g.jpg': '',
+            'h.jpg': null,
+        };
+        globalThis.window = {
+            electronAPI: {
+                readFolderCache: vi.fn(async () => JSON.stringify(cache)),
+                path: { join: (a, b) => `${a}/${b}` },
+            },
+        };
+        const ctx = { baseFolderPath: '/f', perceptualHashes: new Map() };
+        const count = await loadHashCache.call(ctx);
+        expect([...ctx.perceptualHashes.entries()]).toEqual([['/f/a.jpg', good]]);
+        expect(count).toBe(1);
+    });
+});
+
 describe('enterTournamentMode resume validation (G1)', () => {
     const enterTournamentMode = extractAsyncMethod('enterTournamentMode');
     let origWindow;
