@@ -1,0 +1,135 @@
+// G1 — main-process file IPC authorization (F2) and tournament-apply confinement (F6/F7).
+// Every probe stays inside this test's own mkdtemp directories.
+import { test, expect } from '@playwright/test';
+import { access, mkdir, mkdtemp, rm, writeFile, cp } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join, resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { launchApp, closeApp, loadFolder, createTempFixtureDir } from './helpers/electron-app.js';
+
+const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures');
+
+let electronApp;
+let page;
+let tmpFixtures;
+let outside;
+
+test.beforeEach(async () => {
+    tmpFixtures = await createTempFixtureDir();
+    outside = await mkdtemp(join(tmpdir(), 'mv-e2e-outside-'));
+    await writeFile(join(outside, 'note.txt'), 'not for the app');
+    await mkdir(join(outside, 'keep-dir'));
+    ({ electronApp, page } = await launchApp());
+    await loadFolder(page, tmpFixtures.dir);
+});
+
+test.afterEach(async () => {
+    if (electronApp) {
+        await closeApp(electronApp);
+    }
+    if (tmpFixtures) {
+        await tmpFixtures.cleanup();
+    }
+    if (outside) {
+        await rm(outside, { recursive: true, force: true });
+    }
+});
+
+test.describe('G1 F2 — file IPC is confined to granted folders', () => {
+    test('control: a file in the granted folder is still reachable', async () => {
+        const exists = await page.evaluate(
+            (p) => window.electronAPI.checkFileExists(p),
+            join(tmpFixtures.dir, 'red-1x1.png')
+        );
+        expect(exists).toBe(true);
+    });
+
+    test('reading bytes outside every granted folder is refused', async () => {
+        test.fail(true, 'RED until G1 Task 4 (F2)');
+        const result = await page.evaluate((p) => window.electronAPI.readFileBuffer(p), join(outside, 'note.txt'));
+        expect(result).toBeNull();
+    });
+
+    test('an existence check outside every granted folder reports false', async () => {
+        test.fail(true, 'RED until G1 Task 4 (F2)');
+        const exists = await page.evaluate((p) => window.electronAPI.checkFileExists(p), join(outside, 'note.txt'));
+        expect(exists).toBe(false);
+    });
+
+    test('creating a folder outside every granted folder is refused and creates nothing', async () => {
+        test.fail(true, 'RED until G1 Task 4 (F2)');
+        const res = await page.evaluate((p) => window.electronAPI.createFolder(p), join(outside, 'made'));
+        expect(res.success).toBe(false);
+        await expect(access(join(outside, 'made'))).rejects.toThrow();
+    });
+
+    test('removing a directory main did not create is refused', async () => {
+        test.fail(true, 'RED until G1 Task 4 (F2)');
+        const res = await page.evaluate((p) => window.electronAPI.cleanupKeyframes(p), join(outside, 'keep-dir'));
+        expect(res.success).toBe(false);
+        await expect(access(join(outside, 'keep-dir'))).resolves.toBeUndefined();
+    });
+
+    test('moving a file into a folder that was never granted is refused', async () => {
+        test.fail(true, 'RED until G1 Task 4 (F2)');
+        const src = join(tmpFixtures.dir, 'red-1x1.png');
+        const res = await page.evaluate(
+            ([s, t]) => window.electronAPI.moveFile({ sourcePath: s, targetFolder: t, fileName: 'red-1x1.png' }),
+            [src, outside]
+        );
+        expect(res.success).toBe(false);
+        await expect(access(src)).resolves.toBeUndefined();
+    });
+});
+
+test.describe('G1 F6/F7 — tournament apply stays inside the folder', () => {
+    let parent;
+    let folder;
+
+    test.beforeEach(async () => {
+        parent = await mkdtemp(join(tmpdir(), 'mv-e2e-apply-'));
+        folder = join(parent, 'media');
+        await mkdir(folder);
+        await cp(join(FIXTURES, 'red-1x1.png'), join(folder, 'red-1x1.png'));
+        await cp(join(FIXTURES, 'red-1x1.png'), join(parent, 'sibling.png'));
+        await loadFolder(page, folder);
+    });
+
+    test.afterEach(async () => {
+        if (parent) {
+            await rm(parent, { recursive: true, force: true });
+        }
+    });
+
+    test('a non-integer tier is refused and nothing is created or moved', async () => {
+        const src = join(folder, 'red-1x1.png');
+        const res = await page.evaluate(
+            ([f, s]) => window.electronAPI.applyTournamentResults(f, { [s]: 'x/../../escaped' }),
+            [folder, src]
+        );
+        expect(res.success).toBe(false);
+        await expect(access(join(parent, 'escaped'))).rejects.toThrow();
+        await expect(access(src)).resolves.toBeUndefined();
+    });
+
+    test('a file that is not a direct child of the folder is refused', async () => {
+        test.fail(true, 'RED until G1 Task 5 (F6/F7)');
+        const res = await page.evaluate(
+            ([f, s]) => window.electronAPI.applyTournamentResults(f, { [s]: 1 }),
+            [folder, join(parent, 'sibling.png')]
+        );
+        expect(res.success).toBe(false);
+        await expect(access(join(parent, 'sibling.png'))).resolves.toBeUndefined();
+        await expect(access(join(folder, '_Tier-1'))).rejects.toThrow();
+    });
+
+    test('control: a valid apply still moves the file into _Tier-N', async () => {
+        const src = join(folder, 'red-1x1.png');
+        const res = await page.evaluate(
+            ([f, s]) => window.electronAPI.applyTournamentResults(f, { [s]: 2 }),
+            [folder, src]
+        );
+        expect(res.success).toBe(true);
+        await expect(access(join(folder, '_Tier-2', 'red-1x1.png'))).resolves.toBeUndefined();
+    });
+});
