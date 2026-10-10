@@ -751,6 +751,7 @@ class MediaViewer {
             const modal = document.createElement('div');
             modal.className = 'folder-creation-modal';
 
+            // Static markup only; the path (a saved setting) goes in as text, never parsed (G1).
             modal.innerHTML = `
                 <div class="folder-creation-content">
                     <div class="folder-creation-title">
@@ -760,13 +761,14 @@ class MediaViewer {
                     <p class="folder-creation-text">
                         The target folder doesn't exist. Would you like to create it?
                     </p>
-                    <div class="folder-creation-path">${folderPath}</div>
+                    <div class="folder-creation-path"></div>
                     <div class="folder-creation-actions">
                         <button id="createBtn" class="folder-creation-btn folder-creation-btn-create">Create Folder</button>
                         <button id="cancelBtn" class="folder-creation-btn folder-creation-btn-cancel">Cancel</button>
                     </div>
                 </div>
             `;
+            modal.querySelector('.folder-creation-path').textContent = folderPath;
 
             // Initialize Lucide icons in the modal
             if (typeof lucide !== 'undefined') {
@@ -1482,11 +1484,9 @@ class MediaViewer {
         el.className = 'notification info notification-progress';
 
         if (!el.querySelector('.progress-phase')) {
-            el.innerHTML =
-                '<div class="progress-phase"></div>' +
-                '<div class="progress-track"><div class="progress-fill"></div></div>' +
-                '<div class="progress-meta"><span class="progress-counts"></span>' +
-                '<button type="button" class="notification-action progress-cancel">Cancel</button></div>';
+            // One static literal (no whitespace between the nodes, as before); the lint guard (G1)
+            // accepts only a static string here, and the phase text goes in below as textContent.
+            el.innerHTML = `<div class="progress-phase"></div><div class="progress-track"><div class="progress-fill"></div></div><div class="progress-meta"><span class="progress-counts"></span><button type="button" class="notification-action progress-cancel">Cancel</button></div>`;
             el.querySelector('.progress-cancel').addEventListener('click', () => {
                 this.sortAbortController?.abort();
             });
@@ -9707,21 +9707,27 @@ class MediaViewer {
 
         const percentage = displayTotal > 0 ? Math.round((displayCurrent / displayTotal) * 100) : 0;
 
+        // Static icon markup; the counts go in as text (G1 lint guard: no built string is parsed).
+        const cachedSuffix = displayCached > 0 ? ` \u2014 ${displayCached} cached` : '';
         if (paused) {
             indicator.innerHTML = `
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
                 </svg>
-                <span>Paused \u2014 ${displayCurrent}/${displayTotal} (${percentage}%)${displayCached > 0 ? ` \u2014 ${displayCached} cached` : ''}</span>
+                <span></span>
             `;
+            indicator.querySelector('span').textContent =
+                `Paused \u2014 ${displayCurrent}/${displayTotal} (${percentage}%)${cachedSuffix}`;
         } else {
             const etaSuffix = etaText ? ` \u2014 ${etaText}` : '';
             indicator.innerHTML = `
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
                     <path d="M12 2v4m0 12v4m-7-7H3m18 0h-2M5.6 5.6l1.4 1.4m9.9 9.9l1.4 1.4M5.6 18.4l1.4-1.4m9.9-9.9l1.4-1.4"/>
                 </svg>
-                <span>Extracting features: ${displayCurrent}/${displayTotal} (${percentage}%)${displayCached > 0 ? ` \u2014 ${displayCached} cached` : ''}${etaSuffix}</span>
+                <span></span>
             `;
+            indicator.querySelector('span').textContent =
+                `Extracting features: ${displayCurrent}/${displayTotal} (${percentage}%)${cachedSuffix}${etaSuffix}`;
         }
 
         // Add spin animation if not already present
@@ -10004,18 +10010,27 @@ class MediaViewer {
         singleGrid.innerHTML = '';
         compareGrid.innerHTML = '';
 
-        for (const [action, key] of Object.entries(this.shortcuts.single)) {
+        // Built from DOM nodes (G1): action names and keys come from localStorage.
+        const buildRow = (mode, action, key) => {
             const row = document.createElement('div');
             row.className = 'shortcut-item';
-            row.innerHTML = `<kbd class="shortcut-key" data-action="${action}" data-mode="single">${this.keyDisplayName(key)}</kbd> <span>${ACTION_LABELS[action]}</span>`;
-            singleGrid.appendChild(row);
+            const kbd = document.createElement('kbd');
+            kbd.className = 'shortcut-key';
+            kbd.dataset.action = action;
+            kbd.dataset.mode = mode;
+            kbd.textContent = this.keyDisplayName(key);
+            const label = document.createElement('span');
+            label.textContent = ACTION_LABELS[action];
+            row.append(kbd, ' ', label);
+            return row;
+        };
+
+        for (const [action, key] of Object.entries(this.shortcuts.single)) {
+            singleGrid.appendChild(buildRow('single', action, key));
         }
 
         for (const [action, key] of Object.entries(this.shortcuts.compare)) {
-            const row = document.createElement('div');
-            row.className = 'shortcut-item';
-            row.innerHTML = `<kbd class="shortcut-key" data-action="${action}" data-mode="compare">${this.keyDisplayName(key)}</kbd> <span>${ACTION_LABELS[action]}</span>`;
-            compareGrid.appendChild(row);
+            compareGrid.appendChild(buildRow('compare', action, key));
         }
     }
 

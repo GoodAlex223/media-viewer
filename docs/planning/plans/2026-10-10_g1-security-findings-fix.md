@@ -40,7 +40,12 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
 - [x] **6. Saved-state validation:**
   - A saved tournament that fails validation is treated as absent: a notice, then a fresh start.
   - Legacy saves still resume.
-- [ ] **Remaining:** the remaining renderer sinks and the lint guard, CSP and the navigation lock, then verification (unit, E2E, user's _Scan changes_, deep review, manual real-folder session).
+- [x] **7. Remaining renderer sinks + lint guard:**
+  - The last UI built from HTML strings (one dialog, three internal-value sites) no longer parses any value.
+  - A lint rule bans built strings reaching the HTML parser in renderer code.
+  - A second lint rule bans IPC registration in the main process that bypasses the guard.
+  - A test proves both rules fire.
+- [ ] **Remaining:** CSP and the navigation lock, then verification (unit, E2E, user's _Scan changes_, deep review, manual real-folder session).
 
 ## Progress Log
 

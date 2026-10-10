@@ -82,7 +82,6 @@ test.describe('G1 renderer sinks render values as text', () => {
     });
 
     test('folder-creation dialog', async () => {
-        test.fail(true, 'RED until the G1 remaining-sinks task (folder-creation dialog)');
         await page.evaluate((probe) => {
             void window.mediaViewer.showFolderCreationDialog(probe);
         }, PROBE);
