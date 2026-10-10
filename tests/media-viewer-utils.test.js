@@ -1333,6 +1333,7 @@ describe('handleSortByPrediction lifecycle', () => {
         const ctx = {
             isTournamentMode: false,
             isMlEnabled: true,
+            _refuseIfNeedsRegrant: () => false,
             isSortedByPrediction: false,
             mlWorker: {},
             featureWorkers: [{}],
@@ -2490,6 +2491,7 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             moveHistory: [],
             showRatingConfirmations: false,
             areFoldersConfigured: () => true,
+            _refuseIfNeedsRegrant: () => false,
             getCombinedFeatures: () => null,
             removeFileFromList,
             updateFolderInfo: vi.fn(),
@@ -4042,6 +4044,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             showLoadingSpinner: vi.fn(),
             hideLoadingSpinner: vi.fn(),
             showDropZone: vi.fn(),
+            folderNeedsRegrant: new Set(),
             showError: vi.fn(),
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
@@ -6383,6 +6386,16 @@ describe('updateSpecialButtonsState tooltips', () => {
         expect(ctx.leftSpecialBtn.title).toBe('Move left to special folder (9)');
     });
 
+    it('appends the re-confirm suffix when the special folder is marked (G1 re-pick)', () => {
+        const ctx = ctxWith({ folder: 'C:/special' });
+        ctx.folderNeedsRegrant = new Set(['special']);
+        updateSpecialButtonsState.call(ctx);
+        expect(ctx.specialBtn.title).toBe('Move to special folder (1) — folder needs re-confirming (F1)');
+        expect(ctx.leftSpecialBtn.title).toBe('Move left to special folder (1) — folder needs re-confirming (F1)');
+        expect(ctx.rightSpecialBtn.title).toBe('Move right to special folder (2) — folder needs re-confirming (F1)');
+        expect(ctx.specialBtn.disabled).toBe(false);
+    });
+
     it('omits the suffix entirely when no special folder is configured', () => {
         const ctx = ctxWith({ folder: '' });
         updateSpecialButtonsState.call(ctx);
@@ -6460,6 +6473,167 @@ describe('updateRatingButtonsState tooltips (G1)', () => {
             expect(ctx[b].title, b).toBe('Configure like/dislike folders in Settings (F1)');
             expect(ctx[b].disabled, b).toBe(true);
         }
+    });
+
+    // G1 re-pick: a saved folder main has not granted keeps its buttons enabled (a click explains
+    // the refusal) and says so in the title, on that list's buttons only.
+    it('appends the re-confirm suffix to the marked list only', () => {
+        const ctx = ctxWith();
+        ctx.folderNeedsRegrant = new Set(['like']);
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.likeBtn.title).toBe('Like (Q) — folder needs re-confirming (F1)');
+        expect(ctx.leftLikeBtn.title).toBe('Like Left (Q) — folder needs re-confirming (F1)');
+        expect(ctx.rightLikeBtn.title).toBe('Like Right (E) — folder needs re-confirming (F1)');
+        expect(ctx.dislikeBtn.title).toBe('Dislike (W)');
+        expect(ctx.leftDislikeBtn.title).toBe('Dislike Left (W)');
+        expect(ctx.likeBtn.disabled).toBe(false);
+    });
+});
+
+describe('re-pick marks for folders saved before grants (G1)', () => {
+    const refreshFolderGrants = extractAsyncMethod('refreshFolderGrants');
+    const _refuseIfNeedsRegrant = extractMethod('_refuseIfNeedsRegrant');
+    const _regrantListText = extractMethod('_regrantListText');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function ctxWith({
+        like = '/liked',
+        dislike = '/disliked',
+        special = '',
+        status = async (paths) => paths.map(() => false),
+    } = {}) {
+        const getGrantStatus = vi.fn(status);
+        globalThis.window = { electronAPI: { getGrantStatus, logError: vi.fn() } };
+        return {
+            customLikeFolder: like,
+            customDislikeFolder: dislike,
+            customSpecialFolder: special,
+            folderNeedsRegrant: new Set(),
+            _grantRefreshGen: 0,
+            showNotification: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
+            updateSpecialButtonsState: vi.fn(),
+            _regrantListText,
+            getGrantStatus,
+        };
+    }
+
+    it('marks only the saved folders main has not granted, and skips empty settings', async () => {
+        const ctx = ctxWith({ status: async () => [false, true] });
+        await refreshFolderGrants.call(ctx);
+        expect(ctx.getGrantStatus).toHaveBeenCalledWith(['/liked', '/disliked']);
+        expect([...ctx.folderNeedsRegrant]).toEqual(['like']);
+        expect(ctx.updateRatingButtonsState).toHaveBeenCalled();
+        expect(ctx.updateSpecialButtonsState).toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('clears a mark once main grants the folder', async () => {
+        const ctx = ctxWith({ status: async () => [true, true] });
+        ctx.folderNeedsRegrant.add('like');
+        await refreshFolderGrants.call(ctx);
+        expect(ctx.folderNeedsRegrant.size).toBe(0);
+    });
+
+    it('asks nothing and clears the marks when no folder is saved', async () => {
+        const ctx = ctxWith({ like: '', dislike: '' });
+        ctx.folderNeedsRegrant.add('special');
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect(ctx.getGrantStatus).not.toHaveBeenCalled();
+        expect(ctx.folderNeedsRegrant.size).toBe(0);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('with notify, shows one notice naming every marked folder', async () => {
+        const ctx = ctxWith({ special: '/special', status: async () => [false, false, false] });
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your like, dislike and special folders in Settings (F1) — click Browse and pick each again (security update)',
+            'warning'
+        );
+    });
+
+    it('with notify, words the notice for a single folder', async () => {
+        const ctx = ctxWith({ status: async () => [false, true] });
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your like folder in Settings (F1) — click Browse and pick it again (security update)',
+            'warning'
+        );
+    });
+
+    it('with notify, stays silent when every saved folder is granted', async () => {
+        const ctx = ctxWith({ status: async () => [true, true] });
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('drops a reply that arrives after a folder setting changed', async () => {
+        let release;
+        const ctx = ctxWith({ status: () => new Promise((r) => (release = r)) });
+        const pending = refreshFolderGrants.call(ctx, { notify: true });
+        ctx._grantRefreshGen++; // a Browse or Clear landed while the query was in flight
+        release([false, false]);
+        await pending;
+        expect(ctx.folderNeedsRegrant.size).toBe(0);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('keeps the marks, logs, and resolves when main refuses the query', async () => {
+        const ctx = ctxWith({ status: async () => null });
+        ctx.folderNeedsRegrant.add('dislike');
+        await expect(refreshFolderGrants.call(ctx, { notify: true })).resolves.toBeUndefined();
+        expect([...ctx.folderNeedsRegrant]).toEqual(['dislike']);
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('resolves, keeping the marks, when the query throws', async () => {
+        const ctx = ctxWith({
+            status: async () => {
+                throw new Error('ipc gone');
+            },
+        });
+        ctx.folderNeedsRegrant.add('like');
+        await expect(refreshFolderGrants.call(ctx)).resolves.toBeUndefined();
+        expect([...ctx.folderNeedsRegrant]).toEqual(['like']);
+    });
+
+    it('refuses a move to a marked folder with the exact notice', () => {
+        const ctx = { folderNeedsRegrant: new Set(['like']), showNotification: vi.fn(), _regrantListText };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['like'], 'move')).toBe(true);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your like folder in Settings (F1) before moving files there',
+            'warning'
+        );
+    });
+
+    it('names only the marked folders among those asked about, in like/dislike/special order', () => {
+        const ctx = {
+            folderNeedsRegrant: new Set(['dislike', 'like', 'special']),
+            showNotification: vi.fn(),
+            _regrantListText,
+        };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['dislike', 'like', 'dislike'], 'sort')).toBe(true);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your like and dislike folders in Settings (F1) before using the AI sort',
+            'warning'
+        );
+    });
+
+    it('lets an unmarked folder through silently', () => {
+        const ctx = { folderNeedsRegrant: new Set(['special']), showNotification: vi.fn(), _regrantListText };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['like', 'dislike'], 'move')).toBe(false);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
     });
 });
 
@@ -6592,6 +6766,7 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
             showRatingConfirmations: false,
             featureCache: new Map(),
             areFoldersConfigured: () => true,
+            _refuseIfNeedsRegrant: () => false,
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
             removeFileFromList: vi.fn(function (p) {
@@ -6770,6 +6945,7 @@ describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
             customDislikeFolder: '/disliked',
             showRatingConfirmations: false,
             areFoldersConfigured: () => true,
+            _refuseIfNeedsRegrant: () => false,
             _bulkPairKeysReferencing: () => [],
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);

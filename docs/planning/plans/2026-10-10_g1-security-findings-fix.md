@@ -33,7 +33,11 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
 - [x] **3. E2E grant plumbing + RED tests** for the findings, committed under `test.fail` markers. `bffa77a`
 - [x] **4. File IPC authorization (F2)** — `main.js`, `preload.js` (security review applies), renderer callers. `d5c9258`
 - [x] **5. Tournament-apply confinement, completed (F6/F7)**, including a link check found by the patch review. `3bd95e7`
-- [ ] **Remaining (to be planned):** saved-state validation, the remaining renderer sinks and the lint guard, the re-pick flow, CSP and the navigation lock, then verification (unit, E2E, user's _Scan changes_, deep review, manual real-folder session).
+- [x] **9. Re-pick flow** for like/dislike/special folders saved before the fix:
+  - checked against main at startup, with one notice and a hint in the button tooltips
+  - moves and the AI sort refused up front, before any media is torn down
+  - re-confirmed through the existing Settings → Browse buttons
+- [ ] **Remaining:** saved-state validation, the remaining renderer sinks and the lint guard, CSP and the navigation lock, then verification (unit, E2E, user's _Scan changes_, deep review, manual real-folder session).
 
 ## Progress Log
 
@@ -52,6 +56,13 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - **The 4 Important findings,** all in the new authorization layer, are fixed in `80ee160`, each with a test that failed first.
   - **The Minor findings** are deferred to the closeout extract.
   - **After the fix pass:** unit 1006 passed, 1 skipped (a POSIX-only case). Full E2E 111 passed / 4 skipped.
+- **2026-10-11** — Task 9 (re-pick flow) done. This closes the review's Critical finding and the known gap above.
+  - **Failing-first evidence:**
+    - 8 new E2E tests failed at their own assertions on the unfixed renderer.
+    - The new unit tests failed first.
+    - A mutation that moved the check after the media teardown made the two "nothing torn down" assertions fail.
+  - **Beyond the spec:** saved folders are re-checked after each folder load, because a folder's grant also covers any saved folder inside it.
+  - **Results:** unit 1021 passed, 1 skipped.
 
 ## Key Discoveries
 

@@ -206,7 +206,9 @@ export async function seedLocalStorage(page, kvMap, { grant = true } = {}) {
 export async function mockFolderDialog(electronApp, returnPath) {
     await electronApp.evaluate(({ ipcMain }, folderPath) => {
         ipcMain.removeHandler('open-folder-dialog');
-        ipcMain.handle('open-folder-dialog', async () => {
+        ipcMain.handle('open-folder-dialog', async (_event, defaultPath) => {
+            // Where the dialog would have opened (G1 re-pick opens it at the saved folder).
+            global.__mvLastDialogDefaultPath = defaultPath;
             // A real pick grants the folder (G1); mirror that so later IPC on it is allowed.
             await global.__mvGrants?.grant(folderPath);
             return folderPath;

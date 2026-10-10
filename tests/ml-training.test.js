@@ -1614,29 +1614,38 @@ describe('ensureTrainedModel', () => {
     // one-class model trains and gets CACHED under that fingerprint -- every later session with
     // the folder still unreachable (e.g. a disconnected drive) gets a cache hit on it. Design doc
     // § 7.2 requires "Report" for this row; nothing was logged or notified before this fix.
-    it('trains but does not cache when a folder scan fails, and reports it', async () => {
-        const { m, modelCacheStore } = scenario({
-            managerOverrides: {
-                loadFolder: vi.fn(async (p) =>
-                    p === '/likes'
-                        ? { success: false, error: 'ENOENT' }
-                        : {
-                              success: true,
-                              files: [
-                                  { name: 'd1.jpg', path: '/dislikes/d1.jpg', size: 20, mtimeMs: 4 },
-                                  { name: 'd2.jpg', path: '/dislikes/d2.jpg', size: 21, mtimeMs: 5 },
-                                  { name: 'd3.jpg', path: '/dislikes/d3.jpg', size: 22, mtimeMs: 6 },
-                              ],
-                          }
-                ),
-            },
-        });
-        const res = await m.ensureTrainedModel({});
-        expect(res.source).toBe('trained');
-        expect(modelCacheStore.value?.entries || []).toHaveLength(0);
-        expect(m.notify).toHaveBeenCalled();
-        expect(m.logError).toHaveBeenCalled();
-    });
+    // G1: 'Not permitted' is the IPC guard's refusal for a folder main has not granted (a like
+    // folder saved before grants that the re-pick check did not catch, e.g. on a path the
+    // renderer's mark misses). It must take the same failed-scan path as a missing folder.
+    it.each(['ENOENT', 'Not permitted'])(
+        'trains but does not cache when a folder scan fails (%s), and reports it',
+        async (scanError) => {
+            const { m, modelCacheStore } = scenario({
+                managerOverrides: {
+                    loadFolder: vi.fn(async (p) =>
+                        p === '/likes'
+                            ? { success: false, error: scanError }
+                            : {
+                                  success: true,
+                                  files: [
+                                      { name: 'd1.jpg', path: '/dislikes/d1.jpg', size: 20, mtimeMs: 4 },
+                                      { name: 'd2.jpg', path: '/dislikes/d2.jpg', size: 21, mtimeMs: 5 },
+                                      { name: 'd3.jpg', path: '/dislikes/d3.jpg', size: 22, mtimeMs: 6 },
+                                  ],
+                              }
+                    ),
+                },
+            });
+            const res = await m.ensureTrainedModel({});
+            expect(res.source).toBe('trained');
+            expect(modelCacheStore.value?.entries || []).toHaveLength(0);
+            expect(m.notify).toHaveBeenCalledWith(
+                'Could not read the like folder — training on partial data.',
+                'warning'
+            );
+            expect(m.logError).toHaveBeenCalledWith(expect.stringContaining(scanError));
+        }
+    );
 
     it('logs and notifies for each folder scan failure even when the result is a skip', async () => {
         const { m } = scenario({

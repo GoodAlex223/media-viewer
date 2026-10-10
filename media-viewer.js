@@ -272,6 +272,11 @@ class MediaViewer {
         this.customLikeFolder = localStorage.getItem('customLikeFolder') || '';
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
+        // G1 re-pick: which saved folders main has not granted ('like' | 'dislike' | 'special'),
+        // filled by refreshFolderGrants(). A Browse or Clear bumps the generation so a query
+        // already in flight cannot re-mark the folder the user just picked.
+        this.folderNeedsRegrant = new Set();
+        this._grantRefreshGen = 0;
         this.shortcuts = this.loadShortcuts();
         this.shortcutReverseMap = this.buildReverseMap();
         this._listeningState = null;
@@ -328,6 +333,9 @@ class MediaViewer {
         // After initializeElements(): loadShortcuts runs far earlier in this constructor, before
         // the notification container exists, so the report is deferred to here.
         this._reportShortcutCollisions();
+        // Folders saved before G1 are not granted in main: mark them and say so once. Not
+        // awaited (never rejects); a move or AI sort checks the marks synchronously.
+        this.refreshFolderGrants({ notify: true });
         // ML worker and feature pool are initialized lazily when user clicks "Sort by Prediction"
 
         if (!window.electronAPI) {
@@ -458,41 +466,46 @@ class MediaViewer {
     }
 
     // Sole runtime owner of the six static like/dislike titles: overwrites index.html's at init,
-    // on every like/dislike-folder browse/clear, and from saveShortcut/resetShortcuts.
+    // on every like/dislike-folder browse/clear, from saveShortcut/resetShortcuts, and from
+    // refreshFolderGrants when a re-confirm mark changes (G1).
     updateRatingButtonsState() {
         const enabled = this.areFoldersConfigured();
         const tooltip = enabled ? '' : 'Configure like/dislike folders in Settings (F1)';
         // Hotkeys come from the live bindings (G1). The single-mode titles once read
         // 'Arrow Up'/'Arrow Down' — wrong even with the default Q/W.
-        const title = (label, mode, action) => (enabled ? label + this._shortcutSuffix(mode, action) : tooltip);
+        // A folder main has not granted (G1 re-pick) stays enabled — a click explains the refusal —
+        // and says so here.
+        const regrant = (list) => (this.folderNeedsRegrant?.has(list) ? ' — folder needs re-confirming (F1)' : '');
+        const title = (label, mode, action, list) =>
+            enabled ? label + this._shortcutSuffix(mode, action) + regrant(list) : tooltip;
 
         // Single mode buttons
         if (this.likeBtn) {
             this.likeBtn.disabled = !enabled;
-            this.likeBtn.title = title('Like', 'single', 'like');
+            this.likeBtn.title = title('Like', 'single', 'like', 'like');
         }
         if (this.dislikeBtn) {
             this.dislikeBtn.disabled = !enabled;
-            this.dislikeBtn.title = title('Dislike', 'single', 'dislike');
+            this.dislikeBtn.title = title('Dislike', 'single', 'dislike', 'dislike');
         }
 
         // Compare mode buttons. Like the special pair, these live in .left/.right-media-controls,
         // which CSS hides in tournament mode, so they always read the compare map.
         if (this.leftLikeBtn) {
             this.leftLikeBtn.disabled = !enabled;
-            this.leftLikeBtn.title = title('Like Left', 'compare', 'leftLike');
+            this.leftLikeBtn.title = title('Like Left', 'compare', 'leftLike', 'like');
         }
         if (this.leftDislikeBtn) {
             this.leftDislikeBtn.disabled = !enabled;
-            this.leftDislikeBtn.title = title('Dislike Left', 'compare', 'leftDislike');
+            this.leftDislikeBtn.title = title('Dislike Left', 'compare', 'leftDislike', 'dislike');
         }
         if (this.rightLikeBtn) {
             this.rightLikeBtn.disabled = !enabled;
-            this.rightLikeBtn.title = title('Like Right', 'compare', 'rightLike');
+            this.rightLikeBtn.title = title('Like Right', 'compare', 'rightLike', 'like');
         }
         if (this.rightDislikeBtn) {
             this.rightDislikeBtn.disabled = !enabled;
-            this.rightDislikeBtn.title = title('Dislike Right', 'compare', 'rightDislike');
+            this.rightDislikeBtn.title = title('Dislike Right', 'compare', 'rightDislike', 'dislike');
         }
 
         // Update folder config warning
@@ -512,15 +525,18 @@ class MediaViewer {
 
     // Sole runtime owner of the three static special-button titles: it overwrites whatever
     // index.html declared, on init and on every special-folder browse/clear. saveShortcut and
-    // resetShortcuts also call it so a rebinding refreshes the suffix.
+    // resetShortcuts also call it so a rebinding refreshes the suffix, and refreshFolderGrants
+    // so a re-confirm mark (G1) reaches the titles.
     updateSpecialButtonsState() {
         const enabled = !!this.customSpecialFolder;
         const tooltip = enabled ? 'Move to special folder' : 'Configure special folder in Settings (F1)';
+        // Not granted in main (G1 re-pick): stays enabled, a click explains the refusal.
+        const regrant = this.folderNeedsRegrant?.has('special') ? ' — folder needs re-confirming (F1)' : '';
 
         // Single mode button — suffix from single's `special` binding (Digit1 by default).
         if (this.specialBtn) {
             this.specialBtn.disabled = !enabled;
-            this.specialBtn.title = enabled ? tooltip + this._shortcutSuffix('single', 'special') : tooltip;
+            this.specialBtn.title = enabled ? tooltip + this._shortcutSuffix('single', 'special') + regrant : tooltip;
         }
 
         // Compare mode buttons. These live in .left/.right-media-controls, which CSS hides in
@@ -528,15 +544,76 @@ class MediaViewer {
         if (this.leftSpecialBtn) {
             this.leftSpecialBtn.disabled = !enabled;
             this.leftSpecialBtn.title = enabled
-                ? 'Move left to special folder' + this._shortcutSuffix('compare', 'leftSpecial')
+                ? 'Move left to special folder' + this._shortcutSuffix('compare', 'leftSpecial') + regrant
                 : tooltip;
         }
         if (this.rightSpecialBtn) {
             this.rightSpecialBtn.disabled = !enabled;
             this.rightSpecialBtn.title = enabled
-                ? 'Move right to special folder' + this._shortcutSuffix('compare', 'rightSpecial')
+                ? 'Move right to special folder' + this._shortcutSuffix('compare', 'rightSpecial') + regrant
                 : tooltip;
         }
+    }
+
+    // G1 re-pick. Every file IPC on a folder main has not granted is refused, and folders saved
+    // before grants existed never were. The marks mirror main's answer so a move or AI sort can
+    // refuse up front with a re-confirm notice, instead of failing halfway (review C1). Never
+    // rejects: a refused or failed query logs and leaves the marks as they were.
+    async refreshFolderGrants({ notify = false } = {}) {
+        const saved = [
+            ['like', this.customLikeFolder],
+            ['dislike', this.customDislikeFolder],
+            ['special', this.customSpecialFolder],
+        ].filter(([, folder]) => !!folder);
+        const gen = this._grantRefreshGen;
+        let granted = [];
+        if (saved.length > 0) {
+            try {
+                granted = await window.electronAPI.getGrantStatus(saved.map(([, folder]) => folder));
+            } catch (_err) {
+                granted = null;
+            }
+            if (!Array.isArray(granted) || granted.length !== saved.length) {
+                window.electronAPI?.logError?.({
+                    level: 'warn',
+                    message: 'Could not check which saved folders are granted; re-confirm marks unchanged',
+                    source: 'renderer',
+                });
+                return;
+            }
+        }
+        // A Browse or Clear while the query was in flight has already set the marks it affects.
+        if (gen !== this._grantRefreshGen) return;
+
+        this.folderNeedsRegrant = new Set(saved.filter((_, i) => granted[i] !== true).map(([list]) => list));
+        this.updateRatingButtonsState();
+        this.updateSpecialButtonsState();
+        if (notify && this.folderNeedsRegrant.size > 0) {
+            const { list, plural } = this._regrantListText([...this.folderNeedsRegrant]);
+            this.showNotification(
+                `Re-confirm your ${list} folder${plural ? 's' : ''} in Settings (F1) — click Browse and pick ${plural ? 'each' : 'it'} again (security update)`,
+                'warning'
+            );
+        }
+    }
+
+    // 'like' / 'like and dislike' / 'like, dislike and special': fixed order, duplicates dropped.
+    _regrantListText(lists) {
+        const names = ['like', 'dislike', 'special'].filter((name) => lists.includes(name));
+        const list =
+            names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || '';
+        return { list, plural: names.length > 1 };
+    }
+
+    // Synchronous on purpose: the move methods call it before their first await, so a refusal
+    // tears no media down (review C1) and leaves nothing in flight. `purpose`: 'move' | 'sort'.
+    _refuseIfNeedsRegrant(lists, purpose) {
+        const marked = lists.filter((name) => this.folderNeedsRegrant?.has(name));
+        if (marked.length === 0) return false;
+        const { list, plural } = this._regrantListText(marked);
+        const tail = purpose === 'sort' ? 'before using the AI sort' : 'before moving files there';
+        this.showNotification(`Re-confirm your ${list} folder${plural ? 's' : ''} in Settings (F1) ${tail}`, 'warning');
+        return true;
     }
 
     setupFolderSettings() {
@@ -558,8 +635,12 @@ class MediaViewer {
         // Browse button for like folder
         if (likeFolderBrowse) {
             likeFolderBrowse.addEventListener('click', async () => {
-                const folder = await window.electronAPI.openFolderDialog();
+                // Opens at the saved folder, so a re-pick (G1) is one click.
+                const folder = await window.electronAPI.openFolderDialog(this.customLikeFolder || undefined);
                 if (folder) {
+                    // The pick granted it in main: drop its mark, and any query still in flight.
+                    this._grantRefreshGen++;
+                    this.folderNeedsRegrant.delete('like');
                     this.customLikeFolder = folder;
                     localStorage.setItem('customLikeFolder', folder);
                     if (likeFolderInput) {
@@ -574,8 +655,12 @@ class MediaViewer {
         // Browse button for dislike folder
         if (dislikeFolderBrowse) {
             dislikeFolderBrowse.addEventListener('click', async () => {
-                const folder = await window.electronAPI.openFolderDialog();
+                // Opens at the saved folder, so a re-pick (G1) is one click.
+                const folder = await window.electronAPI.openFolderDialog(this.customDislikeFolder || undefined);
                 if (folder) {
+                    // The pick granted it in main: drop its mark, and any query still in flight.
+                    this._grantRefreshGen++;
+                    this.folderNeedsRegrant.delete('dislike');
                     this.customDislikeFolder = folder;
                     localStorage.setItem('customDislikeFolder', folder);
                     if (dislikeFolderInput) {
@@ -590,6 +675,8 @@ class MediaViewer {
         // Clear button for like folder
         if (likeFolderClear) {
             likeFolderClear.addEventListener('click', () => {
+                this._grantRefreshGen++;
+                this.folderNeedsRegrant.delete('like');
                 this.customLikeFolder = '';
                 localStorage.removeItem('customLikeFolder');
                 if (likeFolderInput) {
@@ -603,6 +690,8 @@ class MediaViewer {
         // Clear button for dislike folder
         if (dislikeFolderClear) {
             dislikeFolderClear.addEventListener('click', () => {
+                this._grantRefreshGen++;
+                this.folderNeedsRegrant.delete('dislike');
                 this.customDislikeFolder = '';
                 localStorage.removeItem('customDislikeFolder');
                 if (dislikeFolderInput) {
@@ -626,8 +715,12 @@ class MediaViewer {
         // Browse button for special folder
         if (specialFolderBrowse) {
             specialFolderBrowse.addEventListener('click', async () => {
-                const folder = await window.electronAPI.openFolderDialog();
+                // Opens at the saved folder, so a re-pick (G1) is one click.
+                const folder = await window.electronAPI.openFolderDialog(this.customSpecialFolder || undefined);
                 if (folder) {
+                    // The pick granted it in main: drop its mark, and any query still in flight.
+                    this._grantRefreshGen++;
+                    this.folderNeedsRegrant.delete('special');
                     this.customSpecialFolder = folder;
                     localStorage.setItem('customSpecialFolder', folder);
                     if (specialFolderInput) {
@@ -641,6 +734,8 @@ class MediaViewer {
         // Clear button for special folder
         if (specialFolderClear) {
             specialFolderClear.addEventListener('click', () => {
+                this._grantRefreshGen++;
+                this.folderNeedsRegrant.delete('special');
                 this.customSpecialFolder = '';
                 localStorage.removeItem('customSpecialFolder');
                 if (specialFolderInput) {
@@ -1488,6 +1583,9 @@ class MediaViewer {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
             return;
         }
+        // Before the first await: the video cleanup below must not run for a move main would
+        // refuse (G1 re-pick, review C1).
+        if (this._refuseIfNeedsRegrant([actionType], 'move')) return;
 
         this._fileOpInFlight = true;
         try {
@@ -1608,6 +1706,8 @@ class MediaViewer {
 
         // Shared by all three modes; see moveCurrentFile for why a second file action is refused.
         if (this.isLoading || this._fileOpInFlight) return;
+        // Before the pane/video cleanup below (G1 re-pick, review C1).
+        if (this._refuseIfNeedsRegrant(['special'], 'move')) return;
         this.signalUserActivity();
 
         this._fileOpInFlight = true;
@@ -2758,6 +2858,10 @@ class MediaViewer {
                 this.showError(result.error || 'Failed to load folder');
                 return;
             }
+
+            // This folder's grant covers any saved like/dislike/special folder inside it (G1), so
+            // a mark may be stale now. Not awaited; refreshFolderGrants never rejects.
+            if (this.folderNeedsRegrant.size > 0) this.refreshFolderGrants();
 
             // Folder switches always exit tournament mode (mode is folder-scoped, mirrors the
             // compare-mode reset pattern from 2fbe174). Must run BEFORE both branches diverge
@@ -5601,6 +5705,8 @@ class MediaViewer {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
             return;
         }
+        // Before the pane cleanup below (G1 re-pick, review C1). A pair move uses both folders.
+        if (this._refuseIfNeedsRegrant([primaryAction, secondaryAction], 'move')) return;
 
         this._fileOpInFlight = true;
         try {
@@ -8288,6 +8394,10 @@ class MediaViewer {
             this.showNotification('Restored original order', 'info');
             return;
         }
+
+        // Training reads both folders, which main refuses until they are re-confirmed (G1). Stop
+        // here — no worker, no CLIP lease, no training — rather than train on a failed scan.
+        if (this._refuseIfNeedsRegrant(['like', 'dislike'], 'sort')) return;
 
         this.isPredictionSorting = true;
         this.sortAbortController = new AbortController();
