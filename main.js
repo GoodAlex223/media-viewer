@@ -9,7 +9,7 @@ const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
 const { pathToFileURL } = require('url');
 const { createGrantStore, createTempDirRegistry } = require('./path-grants');
-const { createIpcGuard } = require('./ipc-guard');
+const { createIpcGuard, tierAssignmentsKind } = require('./ipc-guard');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
 // name, so the renderer never names a file path for these channels.
@@ -417,10 +417,23 @@ app.whenReady().then(async () => {
 
     guard.handle(
         'applyTournamentResults',
-        [kinds.grantedPath, kinds.any],
+        [kinds.grantedPath, tierAssignmentsKind({ isMediaFile })],
         async (_event, folderPath, tierAssignments) => {
             const moved = [];
             const failed = [];
+
+            // Belt-and-braces (G1): the guard already refused anything that could leave the folder;
+            // this re-checks the paths actually built, so a future change to how they are built
+            // cannot silently reopen it.
+            const root = path.resolve(folderPath);
+            const insideRoot = (p) => path.resolve(p).startsWith(root + path.sep);
+            const fold = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+            let realRoot;
+            try {
+                realRoot = await fs.realpath(root);
+            } catch (err) {
+                return { success: false, error: `Failed to resolve ${root}: ${err.message}`, moved, failed };
+            }
 
             const tiers = new Set(Object.values(tierAssignments));
 
@@ -436,6 +449,9 @@ app.whenReady().then(async () => {
 
             for (const tier of tiers) {
                 const tierDir = path.join(folderPath, `_Tier-${tier}`);
+                if (!insideRoot(tierDir)) {
+                    return { success: false, error: 'Tier folder outside the media folder', moved, failed };
+                }
                 try {
                     await fs.mkdir(tierDir, { recursive: true });
                 } catch (err) {
@@ -445,6 +461,18 @@ app.whenReady().then(async () => {
                         moved,
                         failed,
                     };
+                }
+                // mkdir(recursive) succeeds silently on an existing _Tier-N, and rename would follow
+                // it if it were a link or junction planted in the folder: each tier folder must
+                // resolve to exactly itself, directly inside the real folder. Checked for every tier
+                // before the first rename, so a refusal moves nothing.
+                try {
+                    const realTier = await fs.realpath(tierDir);
+                    if (fold(realTier) !== fold(path.join(realRoot, `_Tier-${tier}`))) {
+                        return { success: false, error: `Tier folder is a link: _Tier-${tier}`, moved, failed };
+                    }
+                } catch (err) {
+                    return { success: false, error: `Failed to check ${tierDir}: ${err.message}`, moved, failed };
                 }
             }
 
@@ -467,6 +495,10 @@ app.whenReady().then(async () => {
                         counter++;
                     }
 
+                    if (!insideRoot(destPath)) {
+                        failed.push({ path: srcPath, error: 'Destination outside the media folder' });
+                        continue;
+                    }
                     await fs.rename(srcPath, destPath);
                     moved.push({ srcPath, destPath });
                 } catch (err) {

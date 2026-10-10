@@ -181,3 +181,37 @@ describe('normalizeFileUrl', () => {
         expect(normalizeFileUrl('not a url', 'linux')).toBeNull();
     });
 });
+
+describe('tierAssignmentsKind', () => {
+    const { tierAssignmentsKind } = require('../ipc-guard.js');
+    const { isMediaFile } = require('../media-formats.js');
+    const folder = join(tmpdir(), 'media');
+    const kind = tierAssignmentsKind({ isMediaFile });
+    const check = (assignments, f = folder) => kind(assignments, [f, assignments]);
+
+    it('accepts integer tiers for media files directly in the folder', () => {
+        expect(check({ [join(folder, 'a.jpg')]: 0, [join(folder, 'b.png')]: 3 })).toBe(true);
+        expect(check({})).toBe(true);
+    });
+
+    it.each([
+        ['a string tier', { [join(folder, 'a.jpg')]: 'x' }],
+        ['a fractional tier', { [join(folder, 'a.jpg')]: 1.5 }],
+        ['a negative tier', { [join(folder, 'a.jpg')]: -1 }],
+        ['a tier above the cap', { [join(folder, 'a.jpg')]: 101 }],
+        ['a file in a subfolder', { [join(folder, 'sub', 'a.jpg')]: 1 }],
+        ['a file in a sibling folder', { [join(tmpdir(), 'other', 'a.jpg')]: 1 }],
+        ['a .. key', { [join(folder, '..', 'a.jpg')]: 1 }],
+        ['a relative key', { 'a.jpg': 1 }],
+        ['a non-media file', { [join(folder, 'notes.txt')]: 1 }],
+    ])('refuses %s', (_label, assignments) => {
+        expect(check(assignments)).toBe(false);
+    });
+
+    it('refuses non-object payloads and a relative folder', () => {
+        expect(check(null)).toBe(false);
+        expect(check([])).toBe(false);
+        expect(check('x')).toBe(false);
+        expect(check({ [join(folder, 'a.jpg')]: 1 }, 'relative')).toBe(false);
+    });
+});

@@ -5,6 +5,8 @@
 // (the renderer's existing error branches already handle it) and is logged; it never throws.
 // Pure CommonJS with no Electron import, so Vitest can load it.
 
+const path = require('path');
+
 const DEFAULT_REJECT = Object.freeze({ success: false, error: 'Not permitted' });
 
 // A file: URL reduced to what identifies the document: no query or fragment, and case-folded on
@@ -141,4 +143,38 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, platfo
     return { handle, on, kinds, int, optional, oneOf, arrayOf, shape, isTrustedSender };
 }
 
-module.exports = { createIpcGuard, normalizeFileUrl, isPlainBasename, DEFAULT_REJECT };
+// The tier map applyTournamentResults receives: every key a media file DIRECTLY inside the
+// folder (args[0], itself checked by grantedPath), every value a small non-negative integer —
+// integer-ness is what keeps `_Tier-${tier}` a plain folder name (G1, F6/F7). All or nothing:
+// one bad entry refuses the whole call before any mkdir or rename runs.
+function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000, platform = process.platform }) {
+    const fold = (p) => (platform === 'win32' ? p.toLowerCase() : p);
+    return (assignments, args) => {
+        const folderPath = args?.[0];
+        if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath)) {
+            return false;
+        }
+        if (assignments === null || typeof assignments !== 'object' || Array.isArray(assignments)) {
+            return false;
+        }
+        const entries = Object.entries(assignments);
+        if (entries.length > maxEntries) {
+            return false;
+        }
+        const folder = fold(path.resolve(folderPath));
+        for (const [src, tier] of entries) {
+            if (!Number.isSafeInteger(tier) || tier < 0 || tier > maxTier) {
+                return false;
+            }
+            if (!path.isAbsolute(src) || fold(path.dirname(path.resolve(src))) !== folder) {
+                return false;
+            }
+            if (!isMediaFile(path.extname(src).toLowerCase())) {
+                return false;
+            }
+        }
+        return true;
+    };
+}
+
+module.exports = { createIpcGuard, normalizeFileUrl, isPlainBasename, tierAssignmentsKind, DEFAULT_REJECT };

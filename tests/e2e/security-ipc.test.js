@@ -1,7 +1,7 @@
 // G1 — main-process file IPC authorization (F2) and tournament-apply confinement (F6/F7).
 // Every probe stays inside this test's own mkdtemp directories.
 import { test, expect } from '@playwright/test';
-import { access, mkdir, mkdtemp, rm, writeFile, cp } from 'fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile, cp, symlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -108,7 +108,6 @@ test.describe('G1 F6/F7 — tournament apply stays inside the folder', () => {
     });
 
     test('a file that is not a direct child of the folder is refused', async () => {
-        test.fail(true, 'RED until G1 Task 5 (F6/F7)');
         const res = await page.evaluate(
             ([f, s]) => window.electronAPI.applyTournamentResults(f, { [s]: 1 }),
             [folder, join(parent, 'sibling.png')]
@@ -116,6 +115,23 @@ test.describe('G1 F6/F7 — tournament apply stays inside the folder', () => {
         expect(res.success).toBe(false);
         await expect(access(join(parent, 'sibling.png'))).resolves.toBeUndefined();
         await expect(access(join(folder, '_Tier-1'))).rejects.toThrow();
+    });
+
+    // Found by the claude-security patch review: mkdir(recursive) succeeds silently on an existing
+    // _Tier-N, and rename follows it if it is a link. The link here points at a sibling directory
+    // inside this test's own temp parent.
+    test('a pre-existing _Tier-N link is refused and nothing moves through it', async () => {
+        const elsewhere = join(parent, 'elsewhere');
+        await mkdir(elsewhere);
+        await symlink(elsewhere, join(folder, '_Tier-1'), process.platform === 'win32' ? 'junction' : 'dir');
+        const src = join(folder, 'red-1x1.png');
+        const res = await page.evaluate(
+            ([f, s]) => window.electronAPI.applyTournamentResults(f, { [s]: 1 }),
+            [folder, src]
+        );
+        expect(res.success).toBe(false);
+        await expect(access(src)).resolves.toBeUndefined();
+        await expect(access(join(elsewhere, 'red-1x1.png'))).rejects.toThrow();
     });
 
     test('control: a valid apply still moves the file into _Tier-N', async () => {
