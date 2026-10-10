@@ -4388,7 +4388,14 @@ describe('methodSource — literal-brace guard', () => {
 describe('showTournamentLeavePrompt continuation', () => {
     const showTournamentLeavePrompt = extractMethod('showTournamentLeavePrompt');
 
-    const makeEl = () => ({ textContent: '', innerHTML: '', style: {}, onclick: null });
+    const makeEl = () => ({
+        textContent: '',
+        innerHTML: '',
+        style: {},
+        onclick: null,
+        append: () => {},
+        replaceChildren: () => {},
+    });
     let elements;
 
     beforeEach(() => {
@@ -4400,7 +4407,7 @@ describe('showTournamentLeavePrompt continuation', () => {
             tournamentResumeDiscard: makeEl(),
             tournamentResumeCancel: makeEl(),
         };
-        globalThis.document = { getElementById: (id) => elements[id] };
+        globalThis.document = { getElementById: (id) => elements[id], createElement: () => makeEl() };
     });
     afterEach(() => {
         delete globalThis.document;
@@ -4458,6 +4465,118 @@ describe('showTournamentLeavePrompt continuation', () => {
         } finally {
             delete globalThis.window;
         }
+    });
+});
+
+// .tournament_state.json travels inside the media folder, so every value read from it is
+// untrusted. These modal bodies used to be assigned via innerHTML, which parsed whatever markup a
+// saved value held. The stand-in throws on any innerHTML write, so a regression back to HTML parsing
+// fails here instead of passing silently. The probe is inert markup: the test only needs to see
+// whether it would have been parsed.
+describe('tournament modals render persisted state as text, not HTML', () => {
+    const showTournamentContinuePrompt = extractMethod('showTournamentContinuePrompt');
+    const showTournamentLeavePrompt = extractMethod('showTournamentLeavePrompt');
+    const showTournamentSummaryModal = extractMethod('showTournamentSummaryModal');
+    const PAYLOAD = '<b data-probe="1">7</b>';
+
+    function makeNode() {
+        const node = {
+            textContent: '',
+            className: '',
+            style: {},
+            onclick: null,
+            disabled: false,
+            children: [],
+            append(...kids) {
+                this.children.push(...kids);
+            },
+            replaceChildren(...kids) {
+                this.children = kids;
+            },
+        };
+        Object.defineProperty(node, 'innerHTML', {
+            get: () => '',
+            set: () => {
+                throw new Error('innerHTML assigned');
+            },
+        });
+        return node;
+    }
+    // Text of a node and all its descendants, in order: what the user reads.
+    const renderedText = (node) => node.textContent + node.children.map(renderedText).join('');
+
+    let elements;
+    beforeEach(() => {
+        elements = {};
+        globalThis.document = {
+            getElementById: (id) => {
+                if (!elements[id]) elements[id] = makeNode();
+                return elements[id];
+            },
+            createElement: () => makeNode(),
+        };
+    });
+    afterEach(() => {
+        delete globalThis.document;
+    });
+
+    it('resume prompt shows a planted gamesPlayed as literal text', () => {
+        const ctx = { tournament: { validateStateFile: () => ({ valid: true, removed: [], added: [] }) } };
+        const state = {
+            version: 2,
+            strategy: 'swiss',
+            files: ['a', 'b'],
+            createdAt: Date.now(),
+            gamesPlayed: PAYLOAD,
+        };
+        showTournamentContinuePrompt.call(ctx, state, ['a', 'b']);
+        expect(renderedText(elements.tournamentResumeBody)).toContain(`${PAYLOAD}/3 games`);
+    });
+
+    it('leave prompt shows the resumed gamesPlayed as literal text', () => {
+        const ctx = { tournament: { engine: { getProgress: () => ({ gamesPlayed: PAYLOAD, gamesTotal: 3 }) } } };
+        showTournamentLeavePrompt.call(ctx, vi.fn());
+        expect(renderedText(elements.tournamentResumeBody)).toContain(`${PAYLOAD}/3 games`);
+    });
+
+    it('summary shows a planted rounds value as literal text', () => {
+        const ctx = {
+            baseFolderPath: '/media',
+            tournament: {
+                engine: {
+                    getTierBreakdown: () => ({}),
+                    strategy: { options: { rounds: PAYLOAD } },
+                    peekUndoKind: () => null,
+                },
+            },
+        };
+        showTournamentSummaryModal.call(ctx);
+        expect(renderedText(elements.tournamentSummaryBody)).toContain(`_Tier-{0..${PAYLOAD}}/ inside /media`);
+    });
+
+    it('summary still renders one tier row per tier, highest first, with proportional bars', () => {
+        const ctx = {
+            baseFolderPath: '/media',
+            tournament: {
+                engine: {
+                    getTierBreakdown: () => ({ 0: 2, 1: 1 }),
+                    strategy: { options: { rounds: 1 } },
+                    peekUndoKind: () => null,
+                },
+            },
+        };
+        showTournamentSummaryModal.call(ctx);
+        const [top, bottom, destination] = elements.tournamentSummaryBody.children;
+        expect(top.className).toBe('tier-row');
+        expect(top.children[0].textContent).toBe('Tier-1');
+        expect(top.children[1].className).toBe('tier-bar');
+        expect(top.children[1].children[0].className).toBe('tier-bar-fill');
+        expect(top.children[1].children[0].style.width).toBe('50%');
+        expect(top.children[2].textContent).toBe('1 files');
+        expect(bottom.children[0].textContent).toBe('Tier-0');
+        expect(bottom.children[1].children[0].style.width).toBe('100%');
+        expect(bottom.children[2].textContent).toBe('2 files');
+        expect(destination.textContent).toBe('→ Files will move into _Tier-{0..1}/ inside /media');
     });
 });
 

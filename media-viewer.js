@@ -4582,9 +4582,19 @@ class MediaViewer {
         const cancelBtn = document.getElementById('tournamentResumeCancel');
         title.textContent = 'Leave tournament?';
         const p = this.tournament.engine.getProgress();
-        body.innerHTML =
-            `<div class="modal-row"><span>Progress:</span><span>${p.gamesPlayed}/${p.gamesTotal} games</span></div>` +
-            `<p style="font-size:12px;color:#888">Save to resume later from this folder, or discard it.</p>`;
+        // Built from text nodes, never parsed as HTML: on a resumed tournament gamesPlayed comes
+        // from the folder's untrusted .tournament_state.json (see showTournamentContinuePrompt).
+        const progressRow = document.createElement('div');
+        progressRow.className = 'modal-row';
+        const progressLabel = document.createElement('span');
+        progressLabel.textContent = 'Progress:';
+        const progressValue = document.createElement('span');
+        progressValue.textContent = `${p.gamesPlayed}/${p.gamesTotal} games`;
+        progressRow.append(progressLabel, progressValue);
+        const hint = document.createElement('p');
+        hint.style.cssText = 'font-size:12px;color:#888';
+        hint.textContent = 'Save to resume later from this folder, or discard it.';
+        body.replaceChildren(progressRow, hint);
         acceptBtn.textContent = 'Save & leave';
         discardBtn.textContent = 'Discard';
         if (cancelBtn) cancelBtn.style.display = '';
@@ -4674,16 +4684,31 @@ class MediaViewer {
         // v2 payloads carry no history; read gamesPlayed (falls back to strategyState for legacy v1 files).
         const progress = state.gamesPlayed ?? state.strategyState?.gamesPlayed ?? 0;
         const totalGames = Math.floor(state.files.length / 2) * (state.options?.rounds ?? 3);
-        let deltaNote = '';
+        // `state` is parsed from the folder's .tournament_state.json, which travels with the media
+        // folder and can be planted by whoever supplied it: render it as text nodes, never parse it
+        // as HTML (an innerHTML sink here ran script with the full electronAPI bridge).
+        const rows = [
+            ['Started:', `${startedAgo} min ago`],
+            ['Progress:', `${progress}/${totalGames} games`],
+        ].map(([label, value]) => {
+            const row = document.createElement('div');
+            row.className = 'modal-row';
+            const labelEl = document.createElement('span');
+            labelEl.textContent = label;
+            const valueEl = document.createElement('span');
+            valueEl.textContent = value;
+            row.append(labelEl, valueEl);
+            return row;
+        });
         if (!v.valid) {
-            deltaNote =
-                `<p style="font-size:12px;color:#888">${v.removed.length} file(s) removed, ` +
-                `${v.added.length} added since start — they'll be reconciled on continue.</p>`;
+            const deltaNote = document.createElement('p');
+            deltaNote.style.cssText = 'font-size:12px;color:#888';
+            deltaNote.textContent =
+                `${v.removed.length} file(s) removed, ` +
+                `${v.added.length} added since start — they'll be reconciled on continue.`;
+            rows.push(deltaNote);
         }
-        body.innerHTML =
-            `<div class="modal-row"><span>Started:</span><span>${startedAgo} min ago</span></div>` +
-            `<div class="modal-row"><span>Progress:</span><span>${progress}/${totalGames} games</span></div>` +
-            deltaNote;
+        body.replaceChildren(...rows);
         acceptBtn.textContent = 'Continue';
         discardBtn.textContent = 'Start over';
         if (cancelBtn) cancelBtn.style.display = '';
@@ -5376,22 +5401,31 @@ class MediaViewer {
         const maxCount = Math.max(...Object.values(bd), 1);
         const R = this.tournament.engine.strategy.options.rounds;
 
+        // Built from DOM nodes, never parsed as HTML: on a resumed tournament `rounds` comes from
+        // the folder's untrusted .tournament_state.json (see showTournamentContinuePrompt).
         const rows = [];
         for (let i = R; i >= 0; i--) {
             const count = bd[i] ?? 0;
             const pct = Math.round((count / maxCount) * 100);
-            rows.push(
-                `<div class="tier-row">` +
-                    `<span>Tier-${i}</span>` +
-                    `<div class="tier-bar"><div class="tier-bar-fill" style="width:${pct}%"></div></div>` +
-                    `<span>${count} files</span>` +
-                    `</div>`
-            );
+            const row = document.createElement('div');
+            row.className = 'tier-row';
+            const tierLabel = document.createElement('span');
+            tierLabel.textContent = `Tier-${i}`;
+            const bar = document.createElement('div');
+            bar.className = 'tier-bar';
+            const fill = document.createElement('div');
+            fill.className = 'tier-bar-fill';
+            fill.style.width = `${pct}%`;
+            bar.append(fill);
+            const countLabel = document.createElement('span');
+            countLabel.textContent = `${count} files`;
+            row.append(tierLabel, bar, countLabel);
+            rows.push(row);
         }
-        body.innerHTML =
-            rows.join('') +
-            `<p style="font-size:12px;margin-top:12px;color:#888">` +
-            `→ Files will move into _Tier-{0..${R}}/ inside ${this.baseFolderPath}</p>`;
+        const destination = document.createElement('p');
+        destination.style.cssText = 'font-size:12px;margin-top:12px;color:#888';
+        destination.textContent = `→ Files will move into _Tier-{0..${R}}/ inside ${this.baseFolderPath}`;
+        body.replaceChildren(...rows, destination);
 
         const cleanup = () => {
             modal.style.display = 'none';
