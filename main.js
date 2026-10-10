@@ -357,6 +357,16 @@ app.whenReady().then(() => {
 
         const tiers = new Set(Object.values(tierAssignments));
 
+        // Each tier becomes a path segment (`_Tier-<tier>`), and it is rebuilt from the folder's own
+        // .tournament_state.json, which anyone who can write to the folder controls. Only the engine's
+        // win count — a non-negative integer — is a safe single segment; a string such as '/../../x'
+        // would let path.join climb out of folderPath. Refuse the whole batch before any mkdir/rename.
+        for (const tier of tiers) {
+            if (!Number.isSafeInteger(tier) || tier < 0) {
+                return { success: false, error: 'Invalid tier value in tournament results', moved, failed };
+            }
+        }
+
         for (const tier of tiers) {
             const tierDir = path.join(folderPath, `_Tier-${tier}`);
             try {
