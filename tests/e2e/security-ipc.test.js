@@ -45,33 +45,28 @@ test.describe('G1 F2 — file IPC is confined to granted folders', () => {
     });
 
     test('reading bytes outside every granted folder is refused', async () => {
-        test.fail(true, 'RED until G1 Task 4 (F2)');
         const result = await page.evaluate((p) => window.electronAPI.readFileBuffer(p), join(outside, 'note.txt'));
         expect(result).toBeNull();
     });
 
     test('an existence check outside every granted folder reports false', async () => {
-        test.fail(true, 'RED until G1 Task 4 (F2)');
         const exists = await page.evaluate((p) => window.electronAPI.checkFileExists(p), join(outside, 'note.txt'));
         expect(exists).toBe(false);
     });
 
     test('creating a folder outside every granted folder is refused and creates nothing', async () => {
-        test.fail(true, 'RED until G1 Task 4 (F2)');
         const res = await page.evaluate((p) => window.electronAPI.createFolder(p), join(outside, 'made'));
         expect(res.success).toBe(false);
         await expect(access(join(outside, 'made'))).rejects.toThrow();
     });
 
     test('removing a directory main did not create is refused', async () => {
-        test.fail(true, 'RED until G1 Task 4 (F2)');
         const res = await page.evaluate((p) => window.electronAPI.cleanupKeyframes(p), join(outside, 'keep-dir'));
         expect(res.success).toBe(false);
         await expect(access(join(outside, 'keep-dir'))).resolves.toBeUndefined();
     });
 
     test('moving a file into a folder that was never granted is refused', async () => {
-        test.fail(true, 'RED until G1 Task 4 (F2)');
         const src = join(tmpFixtures.dir, 'red-1x1.png');
         const res = await page.evaluate(
             ([s, t]) => window.electronAPI.moveFile({ sourcePath: s, targetFolder: t, fileName: 'red-1x1.png' }),

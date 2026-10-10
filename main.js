@@ -7,6 +7,17 @@ const { promisify } = require('util');
 const logger = require('./logger');
 const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
+const { pathToFileURL } = require('url');
+const { createGrantStore, createTempDirRegistry } = require('./path-grants');
+const { createIpcGuard } = require('./ipc-guard');
+
+// Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
+// name, so the renderer never names a file path for these channels.
+const FOLDER_CACHE_FILES = Object.freeze({
+    hash: '.hash_cache.json',
+    sort: '.sort_cache.json',
+    feature: '.feature_cache.json',
+});
 
 // Streaming JSON reader for the feature cache (parse a 250MB+ file with a tiny memory
 // footprint instead of fs.readFile + JSON.parse, which peaks past ~1GB and kills the process).
@@ -136,7 +147,7 @@ function createWindow() {
 }
 
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     // Initialize file logger
     logger.init(app.getPath('logs'));
 
@@ -162,13 +173,34 @@ app.whenReady().then(() => {
         `Media Viewer ${app.getVersion()} (${app.isPackaged ? 'packaged' : 'dev'}) — session log: ${logger.getLogPath()}`
     );
 
+    // Folder grants (G1): every privileged file IPC acts only on paths inside a folder the user
+    // picked in main's own dialog. MV_E2E_GRANTS_FILE gives each E2E launch a fresh store and
+    // exposes it to electronApp.evaluate (main process only — the renderer cannot reach it).
+    const grants = createGrantStore({
+        storePath: process.env.MV_E2E_GRANTS_FILE || path.join(app.getPath('userData'), 'folder-grants.json'),
+    });
+    const grantLoad = await grants.load();
+    console.log(`Folder grants: ${grantLoad.ok ? `${grantLoad.count} loaded` : grantLoad.reason}`);
+    if (process.env.MV_E2E_GRANTS_FILE) {
+        global.__mvGrants = grants;
+    }
+    const tempDirs = createTempDirRegistry();
+    const guard = createIpcGuard({
+        ipcMain,
+        grants,
+        tempDirs,
+        expectedUrl: pathToFileURL(path.join(__dirname, 'index.html')).href,
+        logger,
+    });
+    const { kinds, int, optional, oneOf, arrayOf, shape } = guard;
+
     createWindow();
 
     // Renderer's verdict on a close confirm (no tournament, or Save & leave / Discard chosen).
     // Registered once here (not in createWindow) so it does not accumulate when a window is
     // re-created via the macOS dock-activate path. It closes over the module-level mainWindow,
     // which createWindow reassigns, so it always targets the current window.
-    ipcMain.on('app-close-allow', () => {
+    guard.on('app-close-allow', () => {
         // mainWindow is never nulled, so guard on isDestroyed() (symmetric to the close
         // handler's send-side guard) — calling close() on a destroyed window would throw.
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -185,24 +217,52 @@ app.whenReady().then(() => {
         }
     });
 
-    // Handle folder selection
-    ipcMain.handle('open-folder-dialog', async () => {
-        try {
-            const result = await dialog.showOpenDialog(mainWindow, {
-                properties: ['openDirectory'],
-                title: 'Select Media Folder',
-                buttonLabel: 'Select Folder',
-            });
+    // Handle folder selection. The ONLY place a folder is granted (G1): the user picked it here.
+    guard.handle(
+        'open-folder-dialog',
+        [optional(kinds.string)],
+        async (_event, defaultPath) => {
+            try {
+                const options = {
+                    properties: ['openDirectory'],
+                    title: 'Select Media Folder',
+                    buttonLabel: 'Select Folder',
+                };
+                if (typeof defaultPath === 'string' && path.isAbsolute(defaultPath)) {
+                    options.defaultPath = defaultPath; // re-pick opens at the saved folder
+                }
+                const result = await dialog.showOpenDialog(mainWindow, options);
+                if (result.canceled) {
+                    return null;
+                }
+                const picked = result.filePaths[0];
+                const granted = await grants.grant(picked);
+                if (!granted.path) {
+                    console.warn('Folder grant failed for', picked);
+                    return null;
+                }
+                if (!granted.persisted) {
+                    console.warn('Folder grant not persisted (session only):', picked);
+                }
+                return picked;
+            } catch (error) {
+                console.error('Dialog error:', error);
+                return null;
+            }
+        },
+        { rejectValue: null }
+    );
 
-            return result.canceled ? null : result.filePaths[0];
-        } catch (error) {
-            console.error('Dialog error:', error);
-            return null;
-        }
-    });
+    // Which of these paths are granted (G1 re-pick flow). Reveals grant membership only.
+    guard.handle(
+        'get-grant-status',
+        [arrayOf(kinds.string, 16)],
+        async (_event, paths) => Promise.all(paths.map(async (p) => (await grants.resolveAllowed(p)) !== null)),
+        { rejectValue: null }
+    );
 
     // Load media files from folder
-    ipcMain.handle('load-folder', async (event, folderPath) => {
+    guard.handle('load-folder', [kinds.grantedPath], async (event, folderPath) => {
         try {
             console.log('Loading folder:', folderPath);
             const files = await fs.readdir(folderPath);
@@ -240,21 +300,25 @@ app.whenReady().then(() => {
     });
 
     // File operations
-    ipcMain.handle('move-file', async (event, data) => {
-        try {
-            const { sourcePath, targetFolder, fileName } = data;
-            await fs.mkdir(targetFolder, { recursive: true });
-            const targetPath = path.join(targetFolder, fileName);
-            await fs.rename(sourcePath, targetPath);
-            return { success: true, targetPath };
-        } catch (error) {
-            console.error('File move error:', error);
-            return { success: false, error: error.message };
+    guard.handle(
+        'move-file',
+        [shape({ sourcePath: kinds.grantedPath, targetFolder: kinds.grantedPath, fileName: kinds.basename })],
+        async (event, data) => {
+            try {
+                const { sourcePath, targetFolder, fileName } = data;
+                await fs.mkdir(targetFolder, { recursive: true });
+                const targetPath = path.join(targetFolder, fileName);
+                await fs.rename(sourcePath, targetPath);
+                return { success: true, targetPath };
+            } catch (error) {
+                console.error('File move error:', error);
+                return { success: false, error: error.message };
+            }
         }
-    });
+    );
 
     // Tournament state persistence
-    ipcMain.handle('readTournamentState', async (_event, folderPath) => {
+    guard.handle('readTournamentState', [kinds.grantedPath], async (_event, folderPath) => {
         try {
             const statePath = path.join(folderPath, '.tournament_state.json');
             const text = await fs.readFile(statePath, 'utf-8');
@@ -268,7 +332,7 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('writeTournamentState', async (_event, folderPath, state) => {
+    guard.handle('writeTournamentState', [kinds.grantedPath, kinds.any], async (_event, folderPath, state) => {
         const statePath = path.join(folderPath, '.tournament_state.json');
         const tmpPath = statePath + '.tmp';
         try {
@@ -282,7 +346,7 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('deleteTournamentState', async (_event, folderPath) => {
+    guard.handle('deleteTournamentState', [kinds.grantedPath], async (_event, folderPath) => {
         try {
             const statePath = path.join(folderPath, '.tournament_state.json');
             await fs.unlink(statePath);
@@ -301,7 +365,7 @@ app.whenReady().then(() => {
     // fingerprint. See docs/superpowers/specs/2026-09-10-ml-training-pipeline-design.md.
     const mlModelCachePath = () => path.join(app.getPath('userData'), 'ml-model-cache.json');
 
-    ipcMain.handle('read-ml-model-cache', async () => {
+    guard.handle('read-ml-model-cache', [], async () => {
         try {
             const text = await fs.readFile(mlModelCachePath(), 'utf-8');
             return { success: true, store: JSON.parse(text) };
@@ -313,7 +377,7 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('write-ml-model-cache', async (_event, store) => {
+    guard.handle('write-ml-model-cache', [kinds.any], async (_event, store) => {
         const target = mlModelCachePath();
         const tmpPath = target + '.tmp';
         try {
@@ -326,7 +390,7 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('readBulkRatedFile', async (_event, folderPath) => {
+    guard.handle('readBulkRatedFile', [kinds.grantedPath], async (_event, folderPath) => {
         try {
             const filePath = path.join(folderPath, '.bulk_rated.json');
             const text = await fs.readFile(filePath, 'utf-8');
@@ -340,7 +404,7 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('writeBulkRatedFile', async (_event, folderPath, data) => {
+    guard.handle('writeBulkRatedFile', [kinds.grantedPath, kinds.any], async (_event, folderPath, data) => {
         try {
             const filePath = path.join(folderPath, '.bulk_rated.json');
             const text = JSON.stringify(data, null, 2);
@@ -351,92 +415,107 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('applyTournamentResults', async (_event, folderPath, tierAssignments) => {
-        const moved = [];
-        const failed = [];
+    guard.handle(
+        'applyTournamentResults',
+        [kinds.grantedPath, kinds.any],
+        async (_event, folderPath, tierAssignments) => {
+            const moved = [];
+            const failed = [];
 
-        const tiers = new Set(Object.values(tierAssignments));
+            const tiers = new Set(Object.values(tierAssignments));
 
-        // Each tier becomes a path segment (`_Tier-<tier>`), and it is rebuilt from the folder's own
-        // .tournament_state.json, which anyone who can write to the folder controls. Only the engine's
-        // win count — a non-negative integer — is a safe single segment; a string such as '/../../x'
-        // would let path.join climb out of folderPath. Refuse the whole batch before any mkdir/rename.
-        for (const tier of tiers) {
-            if (!Number.isSafeInteger(tier) || tier < 0) {
-                return { success: false, error: 'Invalid tier value in tournament results', moved, failed };
-            }
-        }
-
-        for (const tier of tiers) {
-            const tierDir = path.join(folderPath, `_Tier-${tier}`);
-            try {
-                await fs.mkdir(tierDir, { recursive: true });
-            } catch (err) {
-                return {
-                    success: false,
-                    error: `Failed to create ${tierDir}: ${err.message}`,
-                    moved,
-                    failed,
-                };
-            }
-        }
-
-        for (const [srcPath, tier] of Object.entries(tierAssignments)) {
-            try {
-                const tierDir = path.join(folderPath, `_Tier-${tier}`);
-                const baseName = path.basename(srcPath);
-                let destPath = path.join(tierDir, baseName);
-
-                let counter = 1;
-                const ext = path.extname(baseName);
-                const stem = path.basename(baseName, ext);
-                while (
-                    await fs
-                        .access(destPath)
-                        .then(() => true)
-                        .catch(() => false)
-                ) {
-                    destPath = path.join(tierDir, `${stem} (${counter})${ext}`);
-                    counter++;
+            // Each tier becomes a path segment (`_Tier-<tier>`), and it is rebuilt from the folder's own
+            // .tournament_state.json, which anyone who can write to the folder controls. Only the engine's
+            // win count — a non-negative integer — is a safe single segment; a string such as '/../../x'
+            // would let path.join climb out of folderPath. Refuse the whole batch before any mkdir/rename.
+            for (const tier of tiers) {
+                if (!Number.isSafeInteger(tier) || tier < 0) {
+                    return { success: false, error: 'Invalid tier value in tournament results', moved, failed };
                 }
-
-                await fs.rename(srcPath, destPath);
-                moved.push({ srcPath, destPath });
-            } catch (err) {
-                failed.push({ path: srcPath, error: err.message });
             }
-        }
 
-        if (failed.length === 0) {
+            for (const tier of tiers) {
+                const tierDir = path.join(folderPath, `_Tier-${tier}`);
+                try {
+                    await fs.mkdir(tierDir, { recursive: true });
+                } catch (err) {
+                    return {
+                        success: false,
+                        error: `Failed to create ${tierDir}: ${err.message}`,
+                        moved,
+                        failed,
+                    };
+                }
+            }
+
+            for (const [srcPath, tier] of Object.entries(tierAssignments)) {
+                try {
+                    const tierDir = path.join(folderPath, `_Tier-${tier}`);
+                    const baseName = path.basename(srcPath);
+                    let destPath = path.join(tierDir, baseName);
+
+                    let counter = 1;
+                    const ext = path.extname(baseName);
+                    const stem = path.basename(baseName, ext);
+                    while (
+                        await fs
+                            .access(destPath)
+                            .then(() => true)
+                            .catch(() => false)
+                    ) {
+                        destPath = path.join(tierDir, `${stem} (${counter})${ext}`);
+                        counter++;
+                    }
+
+                    await fs.rename(srcPath, destPath);
+                    moved.push({ srcPath, destPath });
+                } catch (err) {
+                    failed.push({ path: srcPath, error: err.message });
+                }
+            }
+
+            if (failed.length === 0) {
+                try {
+                    await fs.unlink(path.join(folderPath, '.tournament_state.json'));
+                } catch (_err) {
+                    // state file may not exist — ignore
+                }
+            }
+
+            return { success: failed.length === 0, moved: moved.length, failed };
+        },
+        { rejectValue: () => ({ success: false, error: 'Not permitted', moved: 0, failed: [] }) }
+    );
+
+    guard.handle(
+        'check-folder-exists',
+        [kinds.grantedPath],
+        async (event, folderPath) => {
             try {
-                await fs.unlink(path.join(folderPath, '.tournament_state.json'));
-            } catch (_err) {
-                // state file may not exist — ignore
+                await fs.access(folderPath);
+                return true;
+            } catch {
+                return false;
             }
-        }
+        },
+        { rejectValue: false }
+    );
 
-        return { success: failed.length === 0, moved: moved.length, failed };
-    });
+    guard.handle(
+        'check-file-exists',
+        [kinds.grantedPath],
+        async (event, filePath) => {
+            try {
+                await fs.access(filePath);
+                return true;
+            } catch {
+                return false;
+            }
+        },
+        { rejectValue: false }
+    );
 
-    ipcMain.handle('check-folder-exists', async (event, folderPath) => {
-        try {
-            await fs.access(folderPath);
-            return true;
-        } catch {
-            return false;
-        }
-    });
-
-    ipcMain.handle('check-file-exists', async (event, filePath) => {
-        try {
-            await fs.access(filePath);
-            return true;
-        } catch {
-            return false;
-        }
-    });
-
-    ipcMain.handle('create-folder', async (event, folderPath) => {
+    guard.handle('create-folder', [kinds.grantedPath], async (event, folderPath) => {
         try {
             await fs.mkdir(folderPath, { recursive: true });
             return { success: true };
@@ -446,41 +525,69 @@ app.whenReady().then(() => {
         }
     });
 
-    // File read/write operations for hash cache
-    ipcMain.handle('read-file', async (_event, filePath) => {
-        try {
-            const data = await fs.readFile(filePath, 'utf8');
-            return data;
-        } catch (_error) {
-            // Return null if file doesn't exist or can't be read
-            return null;
+    // Fixed-name per-folder caches (G1): replaces the generic read-file/write-file, which acted
+    // on any path the renderer named.
+    guard.handle(
+        'read-folder-cache',
+        [kinds.grantedPath, oneOf('hash', 'sort', 'feature')],
+        async (_event, folderPath, name) => {
+            try {
+                return await fs.readFile(path.join(folderPath, FOLDER_CACHE_FILES[name]), 'utf8');
+            } catch (_error) {
+                return null; // missing or unreadable — same contract as the old read-file
+            }
+        },
+        { rejectValue: null }
+    );
+
+    guard.handle(
+        'write-folder-cache',
+        [kinds.grantedPath, oneOf('hash', 'sort', 'feature'), kinds.string],
+        async (_event, folderPath, name, data) => {
+            try {
+                await fs.writeFile(path.join(folderPath, FOLDER_CACHE_FILES[name]), data, 'utf8');
+                return { success: true };
+            } catch (error) {
+                console.error('Write folder cache error:', error);
+                return { success: false, error: error.message };
+            }
         }
-    });
+    );
 
     // Read any file as raw bytes (no encoding) and return an ArrayBuffer. Used by the JXL
     // decode pipeline, which needs the original compressed bytes rather than a UTF-8 string.
-    ipcMain.handle('read-file-buffer', async (_event, filePath) => {
-        try {
-            const data = await fs.readFile(filePath); // Buffer (no encoding)
-            // Slice out exactly this Buffer's view — Node Buffers can be windows into a larger
-            // pooled ArrayBuffer, so returning data.buffer directly would leak unrelated bytes.
-            return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-        } catch (_error) {
-            return null;
-        }
-    });
+    guard.handle(
+        'read-file-buffer',
+        [kinds.grantedPath],
+        async (_event, filePath) => {
+            try {
+                const data = await fs.readFile(filePath); // Buffer (no encoding)
+                // Slice out exactly this Buffer's view — Node Buffers can be windows into a larger
+                // pooled ArrayBuffer, so returning data.buffer directly would leak unrelated bytes.
+                return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+            } catch (_error) {
+                return null;
+            }
+        },
+        { rejectValue: null }
+    );
 
     // Read the vendored jxl-oxide decoder wasm and return its bytes as an ArrayBuffer. Passing
     // explicit wasm bytes to the decode worker avoids fetch(file://) resolution issues.
-    ipcMain.handle('read-jxl-wasm', async () => {
-        try {
-            const wasmPath = path.join(__dirname, 'vendor', 'jxl-oxide-wasm', 'jxl_oxide_wasm_bg.wasm');
-            const data = await fs.readFile(wasmPath);
-            return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-        } catch (_error) {
-            return null;
-        }
-    });
+    guard.handle(
+        'read-jxl-wasm',
+        [],
+        async () => {
+            try {
+                const wasmPath = path.join(__dirname, 'vendor', 'jxl-oxide-wasm', 'jxl_oxide_wasm_bg.wasm');
+                const data = await fs.readFile(wasmPath);
+                return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+            } catch (_error) {
+                return null;
+            }
+        },
+        { rejectValue: null }
+    );
 
     // ---- Streaming feature-cache reader ----
     // The .feature_cache.json can grow to hundreds of MB on large folders; transferring it as
@@ -509,7 +616,8 @@ app.whenReady().then(() => {
             }
         });
 
-    ipcMain.handle('feature-cache-open', async (_event, filePath) => {
+    guard.handle('feature-cache-open', [kinds.grantedPath], async (_event, folderPath) => {
+        const filePath = path.join(folderPath, FOLDER_CACHE_FILES.feature);
         try {
             // Fail fast if the file is missing (avoids a dangling stream).
             await fs.access(filePath);
@@ -541,11 +649,16 @@ app.whenReady().then(() => {
             });
         });
     });
-    ipcMain.handle('feature-cache-chunk', async (_event, offset, limit) => {
-        if (!featureCacheSession) return { entries: [] };
-        return packFeatureChunk(featureCacheSession.slice(offset, offset + limit));
-    });
-    ipcMain.handle('feature-cache-close', async () => {
+    guard.handle(
+        'feature-cache-chunk',
+        [int(0, Number.MAX_SAFE_INTEGER), int(1, 100000)],
+        async (_event, offset, limit) => {
+            if (!featureCacheSession) return { entries: [] };
+            return packFeatureChunk(featureCacheSession.slice(offset, offset + limit));
+        },
+        { rejectValue: () => ({ entries: [] }) }
+    );
+    guard.handle('feature-cache-close', [], async () => {
         featureCacheSession = null; // release the parsed array
         return { success: true };
     });
@@ -555,7 +668,8 @@ app.whenReady().then(() => {
     // a temp file as monolithic JSON (same format the reader expects), then atomically renames
     // into place. Avoids the renderer building a ~130MB JSON string + IPC'ing it every 30s.
     let featureCacheWriter = null; // { stream, tmpPath, finalPath, first }
-    ipcMain.handle('feature-cache-write-open', async (_event, filePath, header) => {
+    guard.handle('feature-cache-write-open', [kinds.grantedPath, kinds.any], async (_event, folderPath, header) => {
+        const filePath = path.join(folderPath, FOLDER_CACHE_FILES.feature);
         try {
             // Close any leftover writer from an aborted save.
             if (featureCacheWriter) {
@@ -580,7 +694,7 @@ app.whenReady().then(() => {
             return { success: false, error: error.message };
         }
     });
-    ipcMain.handle('feature-cache-write-chunk', async (_event, entries) => {
+    guard.handle('feature-cache-write-chunk', [kinds.any], async (_event, entries) => {
         // Capture the module-level writer into a local so a concurrent
         // feature-cache-write-open swapping/destroying it during the 'drain'
         // await cannot make us operate on stale state (documented required
@@ -605,7 +719,7 @@ app.whenReady().then(() => {
             return { success: false, error: error.message };
         }
     });
-    ipcMain.handle('feature-cache-write-close', async () => {
+    guard.handle('feature-cache-write-close', [], async () => {
         if (!featureCacheWriter) return { success: false, error: 'no open writer' };
         const writer = featureCacheWriter;
         featureCacheWriter = null;
@@ -645,18 +759,8 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('write-file', async (_event, filePath, data) => {
-        try {
-            await fs.writeFile(filePath, data, 'utf8');
-            return { success: true };
-        } catch (error) {
-            console.error('Write file error:', error);
-            return { success: false, error: error.message };
-        }
-    });
-
     // Video probing using ffprobe
-    ipcMain.handle('probe-video', async (_event, videoPath) => {
+    guard.handle('probe-video', [kinds.grantedPath], async (_event, videoPath) => {
         if (!ffprobePath) {
             return { success: false, error: 'ffprobe not available' };
         }
@@ -709,116 +813,133 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('extractKeyframes', async (_event, videoPath, maxFrames = 20) => {
-        if (!ffmpegPath) {
-            return { success: false, error: 'ffmpeg not available' };
-        }
+    guard.handle(
+        'extractKeyframes',
+        [kinds.grantedPath, optional(int(1, 100))],
+        async (_event, videoPath, maxFrames = 20) => {
+            if (!ffmpegPath) {
+                return { success: false, error: 'ffmpeg not available' };
+            }
 
-        const os = require('os');
-        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mv-keyframes-'));
+            const os = require('os');
+            const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mv-keyframes-'));
+            tempDirs.add(tempDir); // cleanupKeyframes may remove only directories main made (G1)
 
-        try {
-            // Scene-change detection: extract frames where scene score > 0.3
-            const outputPattern = path.join(tempDir, 'frame-%03d.png');
-            await execFileAsync(
-                ffmpegPath,
-                [
-                    '-i',
-                    videoPath,
-                    '-vf',
-                    `select='gt(scene,0.3)',setpts=N/FRAME_RATE/TB`,
-                    '-frames:v',
-                    String(maxFrames),
-                    '-vsync',
-                    'vfr',
-                    outputPattern,
-                ],
-                { timeout: 60000 }
-            );
+            try {
+                // Scene-change detection: extract frames where scene score > 0.3
+                const outputPattern = path.join(tempDir, 'frame-%03d.png');
+                await execFileAsync(
+                    ffmpegPath,
+                    [
+                        '-i',
+                        videoPath,
+                        '-vf',
+                        `select='gt(scene,0.3)',setpts=N/FRAME_RATE/TB`,
+                        '-frames:v',
+                        String(maxFrames),
+                        '-vsync',
+                        'vfr',
+                        outputPattern,
+                    ],
+                    { timeout: 60000 }
+                );
 
-            // Read extracted frames
-            const files = await fs.readdir(tempDir);
-            const framePaths = files
-                .filter((f) => f.endsWith('.png'))
-                .sort()
-                .map((f) => path.join(tempDir, f));
+                // Read extracted frames
+                const files = await fs.readdir(tempDir);
+                const framePaths = files
+                    .filter((f) => f.endsWith('.png'))
+                    .sort()
+                    .map((f) => path.join(tempDir, f));
 
-            // Fallback: if scene detection yielded < 3 frames, sample uniformly
-            if (framePaths.length < 3) {
-                // Clean up scene-detected frames
+                // Fallback: if scene detection yielded < 3 frames, sample uniformly
+                if (framePaths.length < 3) {
+                    // Clean up scene-detected frames
+                    for (const fp of framePaths) {
+                        await fs.unlink(fp).catch(() => {});
+                    }
+
+                    // Get duration for uniform sampling
+                    let duration = 10; // default fallback
+                    if (ffprobePath) {
+                        try {
+                            const probeResult = await execFileAsync(ffprobePath, [
+                                '-v',
+                                'error',
+                                '-show_entries',
+                                'format=duration',
+                                '-of',
+                                'default=noprint_wrappers=1:nokey=1',
+                                videoPath,
+                            ]);
+                            duration = parseFloat(probeResult.stdout.trim()) || 10;
+                        } catch (_e) {
+                            // Use default duration
+                        }
+                    }
+
+                    // Extract first, middle, last frames.
+                    // Clamp timestamps inside the duration so very short videos don't seek past EOF
+                    // (ffmpeg can exit with code 0 yet skip writing the output file in that case).
+                    const safeDuration = Math.max(0.1, duration);
+                    const timestamps = [0, safeDuration / 2, Math.max(0, safeDuration - 0.1)];
+                    const fallbackPaths = [];
+                    for (let idx = 0; idx < timestamps.length; idx++) {
+                        const outPath = path.join(tempDir, `fallback-${idx}.png`);
+                        try {
+                            await execFileAsync(
+                                ffmpegPath,
+                                [
+                                    '-ss',
+                                    String(timestamps[idx]),
+                                    '-i',
+                                    videoPath,
+                                    '-frames:v',
+                                    '1',
+                                    '-q:v',
+                                    '2',
+                                    outPath,
+                                ],
+                                { timeout: 15000 }
+                            );
+                            // ffmpeg sometimes exits 0 without writing the file — verify before reporting.
+                            // Without this, downstream RawImage.read throws 404 and accumulates native
+                            // allocations in transformers.js/ONNX Runtime that the renderer can't see.
+                            await fs.access(outPath);
+                            fallbackPaths.push(outPath);
+                        } catch (_e) {
+                            // Skip failed frame (ffmpeg error OR file not written)
+                        }
+                    }
+
+                    return { success: true, framePaths: fallbackPaths, tempDir };
+                }
+
+                // Defense in depth: also verify scene-detected frames exist. Normally they do
+                // (readdir saw them), but if ffmpeg races a write or the file is unlinked between
+                // readdir and access, we'd otherwise return a broken path.
+                const verifiedFramePaths = [];
                 for (const fp of framePaths) {
-                    await fs.unlink(fp).catch(() => {});
-                }
-
-                // Get duration for uniform sampling
-                let duration = 10; // default fallback
-                if (ffprobePath) {
                     try {
-                        const probeResult = await execFileAsync(ffprobePath, [
-                            '-v',
-                            'error',
-                            '-show_entries',
-                            'format=duration',
-                            '-of',
-                            'default=noprint_wrappers=1:nokey=1',
-                            videoPath,
-                        ]);
-                        duration = parseFloat(probeResult.stdout.trim()) || 10;
+                        await fs.access(fp);
+                        verifiedFramePaths.push(fp);
                     } catch (_e) {
-                        // Use default duration
+                        // Skip missing
                     }
                 }
-
-                // Extract first, middle, last frames.
-                // Clamp timestamps inside the duration so very short videos don't seek past EOF
-                // (ffmpeg can exit with code 0 yet skip writing the output file in that case).
-                const safeDuration = Math.max(0.1, duration);
-                const timestamps = [0, safeDuration / 2, Math.max(0, safeDuration - 0.1)];
-                const fallbackPaths = [];
-                for (let idx = 0; idx < timestamps.length; idx++) {
-                    const outPath = path.join(tempDir, `fallback-${idx}.png`);
-                    try {
-                        await execFileAsync(
-                            ffmpegPath,
-                            ['-ss', String(timestamps[idx]), '-i', videoPath, '-frames:v', '1', '-q:v', '2', outPath],
-                            { timeout: 15000 }
-                        );
-                        // ffmpeg sometimes exits 0 without writing the file — verify before reporting.
-                        // Without this, downstream RawImage.read throws 404 and accumulates native
-                        // allocations in transformers.js/ONNX Runtime that the renderer can't see.
-                        await fs.access(outPath);
-                        fallbackPaths.push(outPath);
-                    } catch (_e) {
-                        // Skip failed frame (ffmpeg error OR file not written)
-                    }
-                }
-
-                return { success: true, framePaths: fallbackPaths, tempDir };
+                return { success: true, framePaths: verifiedFramePaths, tempDir };
+            } catch (error) {
+                // Clean up temp dir on error
+                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+                tempDirs.delete(tempDir);
+                return { success: false, error: error.message };
             }
-
-            // Defense in depth: also verify scene-detected frames exist. Normally they do
-            // (readdir saw them), but if ffmpeg races a write or the file is unlinked between
-            // readdir and access, we'd otherwise return a broken path.
-            const verifiedFramePaths = [];
-            for (const fp of framePaths) {
-                try {
-                    await fs.access(fp);
-                    verifiedFramePaths.push(fp);
-                } catch (_e) {
-                    // Skip missing
-                }
-            }
-            return { success: true, framePaths: verifiedFramePaths, tempDir };
-        } catch (error) {
-            // Clean up temp dir on error
-            await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-            return { success: false, error: error.message };
         }
-    });
+    );
 
-    ipcMain.handle('cleanupKeyframes', async (_event, tempDir) => {
+    guard.handle('cleanupKeyframes', [kinds.trackedTempDir], async (_event, tempDir) => {
         try {
             await fs.rm(tempDir, { recursive: true, force: true });
+            tempDirs.delete(tempDir);
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
@@ -826,11 +947,11 @@ app.whenReady().then(() => {
     });
 
     // CLIP model IPC handlers
-    ipcMain.handle('loadClipModel', async (event) => {
+    guard.handle('loadClipModel', [], async (event) => {
         return loadClipModel(event);
     });
 
-    ipcMain.handle('unloadClipModel', () => {
+    guard.handle('unloadClipModel', [], () => {
         if (clipModelLoading) {
             return { success: false, reason: 'loading' };
         }
@@ -840,7 +961,7 @@ app.whenReady().then(() => {
         return { success: true };
     });
 
-    ipcMain.handle('extractClipEmbedding', async (event, imagePath) => {
+    guard.handle('extractClipEmbedding', [kinds.grantedPath], async (event, imagePath) => {
         // Load model if needed
         const loadResult = await loadClipModel(event);
         if (!loadResult.success) {
@@ -884,7 +1005,7 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('extractClipEmbeddingFromBuffer', async (event, pngBytes) => {
+    guard.handle('extractClipEmbeddingFromBuffer', [kinds.binary], async (event, pngBytes) => {
         // Load model if needed
         const loadResult = await loadClipModel(event);
         if (!loadResult.success) {
@@ -929,7 +1050,7 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('extractClipEmbeddingBatch', async (event, imagePaths) => {
+    guard.handle('extractClipEmbeddingBatch', [arrayOf(kinds.grantedOrTempPath, 100)], async (event, imagePaths) => {
         // Load model if needed
         const loadResult = await loadClipModel(event);
         if (!loadResult.success) {
@@ -999,14 +1120,14 @@ app.whenReady().then(() => {
 
     // Receive renderer errors for file logging (fire-and-forget). Callers pass a string or
     // { level, message, source }; normalise both (see logger.normalizeRendererLogEntry).
-    ipcMain.on('log-renderer-error', (_event, data) => {
+    guard.on('log-renderer-error', (_event, data) => {
         const { level, message, source } = logger.normalizeRendererLogEntry(data);
         const fn = level === 'warn' ? logger.warn : logger.error;
         fn(source, message);
     });
 
     // Receive renderer perf/diagnostics lines for the persistent perf log (fire-and-forget).
-    ipcMain.on('log-perf', (_event, message) => {
+    guard.on('log-perf', (_event, message) => {
         logger.logPerf(String(message ?? ''));
     });
 

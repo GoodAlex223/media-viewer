@@ -363,9 +363,10 @@ describe('logger', () => {
         });
 
         // Source-text wiring check: main.js's IPC handler is not unit-testable (it needs ipcMain).
+        // Since G1 every channel registers through the IPC guard (guard.on), not ipcMain directly.
         it("is what main.js's log-renderer-error handler logs with", () => {
             const src = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
-            const start = src.indexOf("ipcMain.on('log-renderer-error'");
+            const start = src.indexOf("guard.on('log-renderer-error'");
             expect(start).toBeGreaterThan(-1);
             const handler = src.slice(start, src.indexOf('});', start));
             expect(handler).toContain('logger.normalizeRendererLogEntry(');

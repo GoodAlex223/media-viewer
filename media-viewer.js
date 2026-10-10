@@ -6458,8 +6458,7 @@ class MediaViewer {
         if (!this.baseFolderPath) return 0;
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.hash_cache.json');
-            const cacheData = await window.electronAPI.readFile(cacheFile);
+            const cacheData = await window.electronAPI.readFolderCache(this.baseFolderPath, 'hash');
 
             if (cacheData) {
                 const cache = JSON.parse(cacheData);
@@ -6492,7 +6491,14 @@ class MediaViewer {
                 const fileName = await window.electronAPI.path.basename(fullPath);
                 cache[fileName] = hash;
             }
-            await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
+            const res = await window.electronAPI.writeFolderCache(
+                this.baseFolderPath,
+                'hash',
+                JSON.stringify(cache, null, 2)
+            );
+            if (!res?.success) {
+                throw new Error(res?.error || 'write failed'); // a refused write is reported, not silent
+            }
             console.log(`Hash cache saved to: ${cacheFile}`);
         } catch (error) {
             console.error('Failed to save hash cache:', error);
@@ -6506,8 +6512,7 @@ class MediaViewer {
         if (!this.baseFolderPath) return null;
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.sort_cache.json');
-            const cacheData = await window.electronAPI.readFile(cacheFile);
+            const cacheData = await window.electronAPI.readFolderCache(this.baseFolderPath, 'sort');
 
             if (cacheData) {
                 const cache = JSON.parse(cacheData);
@@ -6526,12 +6531,10 @@ class MediaViewer {
         if (!this.baseFolderPath) return;
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.sort_cache.json');
-
             // Load existing cache or create new
             let cache = {};
             try {
-                const existingData = await window.electronAPI.readFile(cacheFile);
+                const existingData = await window.electronAPI.readFolderCache(this.baseFolderPath, 'sort');
                 if (existingData) {
                     cache = JSON.parse(existingData);
                 }
@@ -6560,7 +6563,14 @@ class MediaViewer {
                 totalFiles: fileNames.length,
             };
 
-            await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
+            const res = await window.electronAPI.writeFolderCache(
+                this.baseFolderPath,
+                'sort',
+                JSON.stringify(cache, null, 2)
+            );
+            if (!res?.success) {
+                throw new Error(res?.error || 'write failed');
+            }
             console.log(`Sort cache saved for ${algorithm}: ${fileNames.length} files`);
         } catch (error) {
             console.error('Failed to save sort cache:', error);
@@ -6572,11 +6582,9 @@ class MediaViewer {
         if (!this.baseFolderPath) return;
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.sort_cache.json');
-
             let existingData;
             try {
-                existingData = await window.electronAPI.readFile(cacheFile);
+                existingData = await window.electronAPI.readFolderCache(this.baseFolderPath, 'sort');
             } catch (_e) {
                 // Cache file does not exist — nothing to delete
                 return;
@@ -6595,7 +6603,14 @@ class MediaViewer {
             if (!cache[algorithm]) return;
 
             delete cache[algorithm];
-            await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
+            const res = await window.electronAPI.writeFolderCache(
+                this.baseFolderPath,
+                'sort',
+                JSON.stringify(cache, null, 2)
+            );
+            if (!res?.success) {
+                throw new Error(res?.error || 'write failed');
+            }
             console.log(`Sort cache deleted for algorithm: ${algorithm}`);
         } catch (error) {
             console.error('Failed to delete sort cache entry:', error);
@@ -7433,8 +7448,6 @@ class MediaViewer {
     async _loadFeatureCacheLocked({ signal, onProgress } = {}) {
         if (!this.baseFolderPath) return 0;
 
-        const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
-
         // Build lookup of current files for pruning + staleness validation.
         const currentFiles = new Map();
         for (const file of this.mediaFiles) {
@@ -7483,7 +7496,7 @@ class MediaViewer {
         // Keeps the renderer from ever holding the full (potentially 250MB+) JSON string.
         if (window.electronAPI.featureCacheOpen) {
             try {
-                const opened = await window.electronAPI.featureCacheOpen(cacheFile);
+                const opened = await window.electronAPI.featureCacheOpen(this.baseFolderPath);
                 if (!opened.success) {
                     this._featureCacheDiskCount = 0; // nothing usable on disk
                     return 0; // notFound/parse error — leave existing cache untouched
@@ -7559,7 +7572,7 @@ class MediaViewer {
         // Legacy fallback: single read + parse (older preload, or streaming failed).
         // Only safe for modest cache sizes.
         try {
-            const data = await window.electronAPI.readFile(cacheFile);
+            const data = await window.electronAPI.readFolderCache(this.baseFolderPath, 'feature');
             if (data) {
                 const parsed = JSON.parse(data);
                 if (parsed.version !== MediaViewer.FEATURE_CACHE_VERSION) {
@@ -7673,12 +7686,10 @@ class MediaViewer {
         };
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
-
             // Preferred path: stream batches to main (main appends + atomic-renames). Keeps the
             // renderer from ever building a ~130MB JSON string on every 30s auto-save.
             if (window.electronAPI.featureCacheWriteOpen) {
-                const opened = await window.electronAPI.featureCacheWriteOpen(cacheFile, {
+                const opened = await window.electronAPI.featureCacheWriteOpen(this.baseFolderPath, {
                     version: MediaViewer.FEATURE_CACHE_VERSION,
                     featureDim: 64,
                     clipDim: 512,
@@ -7721,8 +7732,9 @@ class MediaViewer {
                 features[filename] = entry;
                 legacyWrittenCount++;
             }
-            await window.electronAPI.writeFile(
-                cacheFile,
+            const res = await window.electronAPI.writeFolderCache(
+                this.baseFolderPath,
+                'feature',
                 JSON.stringify({
                     version: MediaViewer.FEATURE_CACHE_VERSION,
                     featureDim: 64,
@@ -7730,6 +7742,11 @@ class MediaViewer {
                     features,
                 })
             );
+            // Checked: before G1 this write's result was ignored, so a failed write still
+            // re-baselined the shrink guard to a count that never reached disk.
+            if (!res?.success) {
+                throw new Error(res?.error || 'legacy feature-cache write failed');
+            }
             // Re-baseline the shrink guard to what is now actually on disk.
             this._featureCacheDiskCount = legacyWrittenCount;
         } catch (error) {

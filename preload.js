@@ -4,31 +4,35 @@ const path = require('path');
 console.log('Preload script loading...');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    // File operations
+    // File operations. Since G1 the main process allows only paths inside folders the user
+    // picked in its own dialog; anything else is refused with the call's usual failure value.
     moveFile: (data) => ipcRenderer.invoke('move-file', data),
     checkFolderExists: (folderPath) => ipcRenderer.invoke('check-folder-exists', folderPath),
     checkFileExists: (filePath) => ipcRenderer.invoke('check-file-exists', filePath),
     createFolder: (folderPath) => ipcRenderer.invoke('create-folder', folderPath),
-    readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
     readFileBuffer: (filePath) => ipcRenderer.invoke('read-file-buffer', filePath),
     readJxlWasm: () => ipcRenderer.invoke('read-jxl-wasm'),
-    writeFile: (filePath, data) => ipcRenderer.invoke('write-file', filePath, data),
+    // Per-folder caches by NAME ('hash' | 'sort' | 'feature'): main joins the file name.
+    readFolderCache: (folderPath, name) => ipcRenderer.invoke('read-folder-cache', folderPath, name),
+    writeFolderCache: (folderPath, name, data) => ipcRenderer.invoke('write-folder-cache', folderPath, name, data),
     // Streaming feature-cache reader (parse in main, pull in batches) — avoids the renderer
-    // crashing on huge .feature_cache.json files.
-    featureCacheOpen: (filePath) => ipcRenderer.invoke('feature-cache-open', filePath),
+    // crashing on huge .feature_cache.json files. Takes the FOLDER; main names the file.
+    featureCacheOpen: (folderPath) => ipcRenderer.invoke('feature-cache-open', folderPath),
     featureCacheChunk: (offset, limit) => ipcRenderer.invoke('feature-cache-chunk', offset, limit),
     featureCacheClose: () => ipcRenderer.invoke('feature-cache-close'),
     // Streaming feature-cache writer (send batches to main, main appends + atomic rename) —
     // avoids the renderer building a ~130MB JSON string on every 30s auto-save.
-    featureCacheWriteOpen: (filePath, header) => ipcRenderer.invoke('feature-cache-write-open', filePath, header),
+    featureCacheWriteOpen: (folderPath, header) => ipcRenderer.invoke('feature-cache-write-open', folderPath, header),
     featureCacheWriteChunk: (entries) => ipcRenderer.invoke('feature-cache-write-chunk', entries),
     featureCacheWriteClose: () => ipcRenderer.invoke('feature-cache-write-close'),
     // ML model cache (app data, keyed by training-set fingerprint)
     readMlModelCache: () => ipcRenderer.invoke('read-ml-model-cache'),
     writeMlModelCache: (store) => ipcRenderer.invoke('write-ml-model-cache', store),
 
-    // Folder operations
-    openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'),
+    // Folder operations. openFolderDialog's pick is what grants a folder (G1); defaultPath only
+    // positions the dialog (re-confirming a saved folder).
+    openFolderDialog: (defaultPath) => ipcRenderer.invoke('open-folder-dialog', defaultPath),
+    getGrantStatus: (paths) => ipcRenderer.invoke('get-grant-status', paths),
     loadFolder: (folderPath) => ipcRenderer.invoke('load-folder', folderPath),
 
     // Video metadata extraction
@@ -72,9 +76,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('app-close-requested', handler);
     },
     allowAppClose: () => ipcRenderer.send('app-close-allow'),
-
-    // IPC invoke wrapper for other operations
-    invoke: (channel, data) => ipcRenderer.invoke(channel, data),
 
     // Path utilities
     path: {

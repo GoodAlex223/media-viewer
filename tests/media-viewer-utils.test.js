@@ -4759,7 +4759,7 @@ describe('loadFeatureCache incremental + signal', () => {
                 path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
                 featureCacheOpen: () => Promise.resolve({ success: false, notFound: true }),
                 featureCacheClose: () => Promise.resolve({ success: true }),
-                readFile: () => Promise.resolve(null),
+                readFolderCache: () => Promise.resolve(null),
             },
         };
         const existing = new Map([['/d/a.png', new Float32Array(64)]]);
@@ -4812,12 +4812,12 @@ describe('loadFeatureCache incremental + signal', () => {
     it('falls through to the legacy read when a chunk fetch throws mid-stream', async () => {
         // Staging is local, so a mid-stream chunk throw commits NOTHING into this.* — the
         // existing cache is intact and the streaming failure safely falls through to the legacy
-        // single-read path, which rebuilds from scratch. readFile returns a full valid cache;
+        // single-read path, which rebuilds from scratch. readFolderCache returns a full valid cache;
         // the assertions prove the legacy path ran AND produced the complete 1500-entry cache
         // (the partial staged chunk 1 was cleared, never clobbering the on-disk cache mid-way).
         const files = Array.from({ length: 1500 }, (_, i) => mkFile(`f${i}.png`, i, i));
         const all = files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)]);
-        let readFileCalled = false;
+        let legacyReadArgs = null;
         globalThis.window = {
             electronAPI: {
                 path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
@@ -4827,8 +4827,8 @@ describe('loadFeatureCache incremental + signal', () => {
                     return Promise.reject(new Error('IPC hiccup on chunk 2'));
                 },
                 featureCacheClose: () => Promise.resolve({ success: true }),
-                readFile: () => {
-                    readFileCalled = true;
+                readFolderCache: (...args) => {
+                    legacyReadArgs = args;
                     return Promise.resolve(JSON.stringify({ version: 4, features: Object.fromEntries(all) }));
                 },
             },
@@ -4841,7 +4841,9 @@ describe('loadFeatureCache incremental + signal', () => {
             clipCache: new Map(),
         };
         const size = await loadFeatureCacheLocked.call(ctx, {});
-        expect(readFileCalled).toBe(true); // streaming failure fell through to legacy
+        // Streaming failure fell through to legacy — through the fixed-name channel (G1): the
+        // renderer names the folder and the cache kind, never a file path.
+        expect(legacyReadArgs).toEqual(['/d', 'feature']);
         expect(size).toBe(1500); // full legacy contents, not the partial chunk 1
         expect(ctx.featureCache.size).toBe(1500);
     });
@@ -5031,7 +5033,7 @@ describe('saveFeatureCache data-loss guards', () => {
                 return Promise.resolve({ success: true });
             }),
             featureCacheWriteClose: vi.fn(() => Promise.resolve({ success: true })),
-            writeFile: vi.fn(() => Promise.resolve({ success: true })),
+            writeFolderCache: vi.fn(() => Promise.resolve({ success: true })),
             logError: vi.fn(),
         };
         globalThis.window = { electronAPI: api };
@@ -5073,7 +5075,7 @@ describe('saveFeatureCache data-loss guards', () => {
         expect(api.featureCacheWriteOpen).not.toHaveBeenCalled();
         expect(api.featureCacheWriteChunk).not.toHaveBeenCalled();
         expect(api.featureCacheWriteClose).not.toHaveBeenCalled();
-        expect(api.writeFile).not.toHaveBeenCalled();
+        expect(api.writeFolderCache).not.toHaveBeenCalled();
         expect(api.logError).toHaveBeenCalledWith(expect.stringContaining('shrink guard'));
         expect(ctx._featureCacheDiskCount).toBe(23559); // baseline untouched by the skipped save
     });
@@ -5139,10 +5141,29 @@ describe('saveFeatureCache data-loss guards', () => {
             _featureCacheDiskCount: 0,
         };
         await saveFeatureCacheLocked.call(ctx);
-        expect(api.writeFile).toHaveBeenCalledTimes(1);
-        const payload = JSON.parse(api.writeFile.mock.calls[0][1]);
+        expect(api.writeFolderCache).toHaveBeenCalledTimes(1);
+        expect(api.writeFolderCache.mock.calls[0].slice(0, 2)).toEqual(['/d', 'feature']);
+        const payload = JSON.parse(api.writeFolderCache.mock.calls[0][2]);
         expect(Object.keys(payload.features)).toEqual(['meta.png']);
         expect(ctx._featureCacheDiskCount).toBe(1);
+    });
+
+    // G1: the old legacy write's result was never checked, so a failed (or, since G1, refused)
+    // write still re-baselined the shrink guard to a count that never reached disk.
+    it('does not re-baseline the shrink guard when the legacy write fails', async () => {
+        delete api.featureCacheWriteOpen; // force the legacy fallback
+        api.writeFolderCache = vi.fn(() => Promise.resolve({ success: false, error: 'Not permitted' }));
+        const ctx = {
+            baseFolderPath: '/d',
+            mediaFiles: [],
+            featureCache: new Map([['/d/meta.png', new Float32Array(64).fill(0.1)]]),
+            featureMetadata: new Map([['/d/meta.png', { size: 111, mtime: 1111 }]]),
+            clipCache: new Map(),
+            _featureCacheDiskCount: 7,
+        };
+        await saveFeatureCacheLocked.call(ctx);
+        expect(api.writeFolderCache).toHaveBeenCalledTimes(1);
+        expect(ctx._featureCacheDiskCount).toBe(7); // unchanged: nothing reached disk
     });
 });
 

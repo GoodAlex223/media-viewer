@@ -109,8 +109,6 @@ const round6 = (arr) => {
 };
 
 export class MlTrainingManager {
-    static CACHE_FILENAME = '.feature_cache.json';
-
     /**
      * @param {Object} o
      * @param {(path: string) => Promise<{success: boolean, files?: Array}>} o.loadFolder
@@ -125,7 +123,9 @@ export class MlTrainingManager {
      *        trainingConfigVersion) -- the renderer's handler forwards only these two fields.
      * @param {() => Object} o.getConfig
      * @param {() => Object} o.getBulkRatedContext
-     * @param {Object} o.cacheIo    Streaming feature-cache IO, all calls serialized by acquireLock
+     * @param {Object} o.cacheIo    Streaming feature-cache IO, all calls serialized by acquireLock.
+     *        `open(folder)` / `writeOpen(folder, header)` take the training FOLDER; main names the
+     *        `.feature_cache.json` file inside it (G1: the renderer never names a file path).
      * @param {Object} o.modelCache `{ read(), write(store) }`
      * @param {(p: Object) => void} o.onProgress
      * @param {(msg: string) => void} o.logError
@@ -149,11 +149,6 @@ export class MlTrainingManager {
         // model-cache hit. This is what makes a repeat sort in one session free.
         this.sessionFingerprint = null;
         this.sessionStats = null;
-    }
-
-    _cachePath(folderPath) {
-        const sep = folderPath.includes('\\') ? '\\' : '/';
-        return folderPath.replace(/[\\/]+$/, '') + sep + MlTrainingManager.CACHE_FILENAME;
     }
 
     /**
@@ -197,7 +192,7 @@ export class MlTrainingManager {
         let diskCount = 0;
         let aborted = false;
         try {
-            const opened = await this.cacheIo.open(this._cachePath(folderPath));
+            const opened = await this.cacheIo.open(folderPath);
             if (!opened?.success) return { entries, diskCount: 0, aborted: false };
             if (expectedVersion !== undefined && opened.version !== expectedVersion) {
                 await this.cacheIo.close();
@@ -309,7 +304,7 @@ export class MlTrainingManager {
             // exist but return undefined (the harness's bare-vi.fn() failure mode), and only the
             // second `?.` guards that.
             const version = this.getConfig?.()?.versions?.featureCacheVersion;
-            const opened = await this.cacheIo.writeOpen(this._cachePath(folderPath), {
+            const opened = await this.cacheIo.writeOpen(folderPath, {
                 version,
                 featureDim: FEATURE_DIM,
                 clipDim: CLIP_DIM,
