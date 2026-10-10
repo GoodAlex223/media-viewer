@@ -26,18 +26,32 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
 
 ## Tasks
 
-- [ ] **A. Renderer sink set (F1/F3, F4, F5)** — `claude-security` patch F1, with its test probe made inert.
-- [ ] **B. Tournament-apply input check (F6/F7)** — `claude-security` patch F7.
-- [ ] **1. Folder grant store** (new main-process module, unit-tested).
-- [ ] **2. IPC registration guard** (new main-process module, unit-tested).
-- [ ] **3. E2E grant plumbing + RED tests** for the findings, committed under `test.fail` markers.
-- [ ] **4. File IPC authorization (F2)** — `main.js`, `preload.js` (security review applies), renderer callers.
-- [ ] **5. Tournament-apply confinement, completed (F6/F7)**, including a link check found by the patch review.
+- [x] **A. Renderer sink set (F1/F3, F4, F5)** — `claude-security` patch F1, with its test probe made inert. `6cfe41f`
+- [x] **B. Tournament-apply input check (F6/F7)** — `claude-security` patch F7. `2bae815`
+- [x] **1. Folder grant store** (new main-process module, unit-tested). `23c0a69`
+- [x] **2. IPC registration guard** (new main-process module, unit-tested). `43be8a9`
+- [x] **3. E2E grant plumbing + RED tests** for the findings, committed under `test.fail` markers. `bffa77a`
+- [x] **4. File IPC authorization (F2)** — `main.js`, `preload.js` (security review applies), renderer callers. `d5c9258`
+- [x] **5. Tournament-apply confinement, completed (F6/F7)**, including a link check found by the patch review. `3bd95e7`
 - [ ] **Remaining (to be planned):** saved-state validation, the remaining renderer sinks and the lint guard, the re-pick flow, CSP and the navigation lock, then verification (unit, E2E, user's _Scan changes_, deep review, manual real-folder session).
 
 ## Progress Log
 
 - **2026-10-10** — Branch created. Design brainstormed and the spec approved section by section (kept local). Writing the detailed plan was interrupted after Task 5; the route changed to `claude-security` patch mode (above). Patch review: apply F1 and F7, skip F4, F5 and F6 as superseded, and build F2 from the local plan's Tasks 1–5.
+- **2026-10-10** — Patches F1 and F7 applied, and Tasks 1–5 executed inline (TDD).
+  - **Failing-first evidence:**
+    - F1's unit tests fail 4/4 on the unfixed renderer.
+    - Every finding-level E2E fails at its own assertion before its fix: checked on marker-stripped copies, or by reverting the fix.
+    - A link-check E2E, added during Task 5, failed before the check existed.
+  - **Results:** unit 998/998. Full E2E 107 passed / 4 skipped (the opt-in visual-evidence tests), with the IPC guard live.
+  - **Known gap until the re-pick task lands:** like/dislike/special folders saved before this branch aren't granted. They work again after one re-pick through Settings → Browse.
+  - **Closeout note:** removing the generic bridge passthrough closes two older BACKLOG entries about it.
+  - **Next:** a fresh-context review of the branch so far.
+- **2026-10-11** — The fresh-context review (range `d5fce61..3bd95e7`) returned **No**: 1 Critical, 4 Important, 7 Minor.
+  - **Critical, held for the re-pick task:** the missing re-pick flow. It blocks merge; the re-pick task must refuse before any media teardown.
+  - **The 4 Important findings,** all in the new authorization layer, are fixed in `80ee160`, each with a test that failed first.
+  - **The Minor findings** are deferred to the closeout extract.
+  - **After the fix pass:** unit 1006 passed, 1 skipped (a POSIX-only case). Full E2E 111 passed / 4 skipped.
 
 ## Key Discoveries
 
