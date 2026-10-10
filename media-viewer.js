@@ -4665,6 +4665,12 @@ class MediaViewer {
         } catch (err) {
             window.electronAPI.logError?.(`Tournament state read failed: ${err.message}`);
         }
+        // The saved file travels with the folder (G1): one that fails validation is treated as
+        // absent. It is not deleted; a fresh start overwrites it through the normal persist.
+        if (state && !this.tournament.isLoadableState(state)) {
+            state = null;
+            this.showNotification("Saved tournament couldn't be read — starting fresh", 'info');
+        }
         if (state) {
             this._logSlowPhase('tournament state read+parse', _tResume, 0); // always record resume timing
             const currentFiles = this.mediaFiles.map((f) => f.path);

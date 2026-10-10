@@ -37,7 +37,10 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - checked against main at startup, with one notice and a hint in the button tooltips
   - moves and the AI sort refused up front, before any media is torn down
   - re-confirmed through the existing Settings → Browse buttons
-- [ ] **Remaining:** saved-state validation, the remaining renderer sinks and the lint guard, CSP and the navigation lock, then verification (unit, E2E, user's _Scan changes_, deep review, manual real-folder session).
+- [x] **6. Saved-state validation:**
+  - A saved tournament that fails validation is treated as absent: a notice, then a fresh start.
+  - Legacy saves still resume.
+- [ ] **Remaining:** the remaining renderer sinks and the lint guard, CSP and the navigation lock, then verification (unit, E2E, user's _Scan changes_, deep review, manual real-folder session).
 
 ## Progress Log
 
@@ -62,7 +65,14 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
     - The new unit tests failed first.
     - A mutation that moved the check after the media teardown made the two "nothing torn down" assertions fail.
   - **Beyond the spec:** saved folders are re-checked after each folder load, because a folder's grant also covers any saved folder inside it.
-  - **Results:** unit 1021 passed, 1 skipped.
+  - **Results:** unit 1021 passed, 1 skipped. Full E2E 119 passed / 4 skipped.
+- **2026-10-11** — Task 6 (saved-state validation) done.
+  - **Failing-first evidence:**
+    - The new unit tests failed first.
+    - A validator that accepts everything makes every reject case fail.
+  - **Property test:** every state reached in seeded random tournaments validates.
+  - **Compatibility:** the version-1 save format was checked against the last commit that wrote it.
+  - **Results:** unit 1071 passed, 1 skipped. Tournament and security E2E 36/36.
 
 ## Key Discoveries
 

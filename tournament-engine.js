@@ -9,6 +9,74 @@
 // (round-boundary) captures a full O(n) strategy snapshot, so 100 × O(n) is the worst-case ceiling.
 const UNDO_HISTORY_CAP = 100;
 
+// Saved state is untrusted input (G1): .tournament_state.json travels with the media folder, and
+// the resume prompt and the summary read it. Both deserialize()s validate before constructing
+// anything. Rounds follow the config modal's own clamp; the summary iterates tiers 0..rounds, so
+// the upper bound matters beyond type safety. Integer-ness is the safety property for counts;
+// the 2 × rounds bound on a win count is deliberately loose (a file gains at most one win per
+// round — pinned by a property test), so a bound that turned out tight cannot reject a legitimate
+// save. Unknown fields are ignored, keeping the format forward-compatible.
+export const MAX_ROUNDS = 50;
+
+export class InvalidTournamentStateError extends Error {
+    constructor(reason) {
+        super(`Invalid tournament state: ${reason}`);
+        this.name = 'InvalidTournamentStateError';
+    }
+}
+
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isCount = (v) => Number.isSafeInteger(v) && v >= 0;
+const isRounds = (v) => Number.isSafeInteger(v) && v >= 1 && v <= MAX_ROUNDS;
+const isStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+
+function requireValid(ok, reason) {
+    if (!ok) throw new InvalidTournamentStateError(reason);
+}
+
+// SwissStrategy.serialize()'s shape. Returns `s` unchanged, or throws InvalidTournamentStateError.
+export function validateStrategyState(s) {
+    requireValid(isPlainObject(s), 'strategy state is not an object');
+    requireValid(isStringArray(s.files), 'strategy files');
+    requireValid(isPlainObject(s.options) && isRounds(s.options.rounds), 'strategy rounds');
+    const maxWins = 2 * s.options.rounds;
+    requireValid(
+        Array.isArray(s.winCounts) &&
+            s.winCounts.every(
+                (e) =>
+                    Array.isArray(e) && e.length === 2 && typeof e[0] === 'string' && isCount(e[1]) && e[1] <= maxWins
+            ),
+        'win counts'
+    );
+    requireValid(isStringArray(s.playedPairs), 'played pairs');
+    requireValid(isStringArray(s.byes), 'byes');
+    requireValid(isCount(s.currentRound), 'current round');
+    requireValid(
+        Array.isArray(s.roundQueue) && s.roundQueue.every((p) => isStringArray(p) && p.length === 2),
+        'round queue'
+    );
+    requireValid(isCount(s.gamesPlayed), 'strategy game count');
+    return s;
+}
+
+// TournamentEngine.serialize()'s shape, version 1 or 2. Returns `json` unchanged, or throws
+// InvalidTournamentStateError.
+export function validateTournamentState(json) {
+    requireValid(isPlainObject(json), 'not an object');
+    requireValid(json.version === 1 || json.version === 2, 'unsupported version');
+    requireValid(json.strategy === 'swiss', 'unknown strategy');
+    requireValid(isStringArray(json.files), 'files');
+    requireValid(
+        json.options === undefined ||
+            (isPlainObject(json.options) && (json.options.rounds === undefined || isRounds(json.options.rounds))),
+        'rounds'
+    );
+    requireValid(json.gamesPlayed === undefined || isCount(json.gamesPlayed), 'game count');
+    requireValid(json.createdAt === undefined || Number.isFinite(json.createdAt), 'start time');
+    validateStrategyState(json.strategyState);
+    return json;
+}
+
 export class SwissStrategy {
     constructor() {
         this.files = [];
@@ -295,6 +363,7 @@ export class SwissStrategy {
     }
 
     static deserialize(json) {
+        validateStrategyState(json);
         const s = new SwissStrategy();
         s.files = [...json.files];
         s.options = { ...json.options };
@@ -534,9 +603,8 @@ export class TournamentEngine {
     }
 
     static deserialize(json, files) {
-        if (json.version !== 1 && json.version !== 2) {
-            throw new Error(`Unsupported tournament state version: ${json.version}`);
-        }
+        // Throws InvalidTournamentStateError (version and strategy included) before anything is built.
+        validateTournamentState(json);
         let strategy;
         if (json.strategy === 'swiss') {
             strategy = SwissStrategy.deserialize(json.strategyState);

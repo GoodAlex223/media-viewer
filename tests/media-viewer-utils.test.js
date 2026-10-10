@@ -6490,6 +6490,57 @@ describe('updateRatingButtonsState tooltips (G1)', () => {
     });
 });
 
+describe('enterTournamentMode resume validation (G1)', () => {
+    const enterTournamentMode = extractAsyncMethod('enterTournamentMode');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function ctxWith(state, loadable) {
+        globalThis.window = {
+            electronAPI: {
+                readTournamentState: vi.fn(async () => ({ success: true, state })),
+                logError: vi.fn(),
+            },
+        };
+        return {
+            restoreOriginalOrderForTournament: vi.fn(),
+            tournament: { engine: null, isLoadableState: vi.fn(() => loadable) },
+            baseFolderPath: '/f',
+            mediaFiles: [{ path: '/f/a.jpg' }, { path: '/f/b.jpg' }],
+            _logSlowPhase: vi.fn(),
+            showTournamentContinuePrompt: vi.fn(),
+            showTournamentConfigModal: vi.fn(),
+            showNotification: vi.fn(),
+        };
+    }
+
+    it('treats a saved tournament that fails validation as absent: one notice, then a fresh start', async () => {
+        const state = { version: 2, gamesPlayed: '<b data-probe="1">7</b>' };
+        const ctx = ctxWith(state, false);
+        await enterTournamentMode.call(ctx);
+        expect(ctx.tournament.isLoadableState).toHaveBeenCalledWith(state);
+        expect(ctx.showTournamentContinuePrompt).not.toHaveBeenCalled();
+        expect(ctx.showTournamentConfigModal).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledWith("Saved tournament couldn't be read — starting fresh", 'info');
+    });
+
+    it('still offers a saved tournament that validates', async () => {
+        const state = { version: 2 };
+        const ctx = ctxWith(state, true);
+        await enterTournamentMode.call(ctx);
+        expect(ctx.showTournamentContinuePrompt).toHaveBeenCalledWith(state, ['/f/a.jpg', '/f/b.jpg']);
+        expect(ctx.showTournamentConfigModal).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+});
+
 describe('re-pick marks for folders saved before grants (G1)', () => {
     const refreshFolderGrants = extractAsyncMethod('refreshFolderGrants');
     const _refuseIfNeedsRegrant = extractMethod('_refuseIfNeedsRegrant');
