@@ -1,0 +1,183 @@
+import { describe, it, expect, vi } from 'vitest';
+import { createRequire } from 'module';
+import { join } from 'path';
+import { tmpdir } from 'os';
+
+const require = createRequire(import.meta.url);
+const { createIpcGuard, normalizeFileUrl, isPlainBasename, DEFAULT_REJECT } = require('../ipc-guard.js');
+const { createTempDirRegistry } = require('../path-grants.js');
+
+const APP_URL = 'file:///C:/app/index.html';
+const GRANTED = join(tmpdir(), 'granted');
+
+function makeIpcMain() {
+    return {
+        handlers: new Map(),
+        listeners: new Map(),
+        handle(channel, fn) {
+            this.handlers.set(channel, fn);
+        },
+        on(channel, fn) {
+            this.listeners.set(channel, fn);
+        },
+    };
+}
+
+function makeGuard(overrides = {}) {
+    const ipcMain = makeIpcMain();
+    const logger = { warn: vi.fn() };
+    const tempDirs = createTempDirRegistry();
+    const grants = {
+        resolveAllowed: vi.fn(async (p) =>
+            typeof p === 'string' && (p === GRANTED || p.startsWith(GRANTED + require('path').sep)) ? p : null
+        ),
+    };
+    const guard = createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl: APP_URL, logger, ...overrides });
+    return { guard, ipcMain, logger, tempDirs, grants };
+}
+
+const trusted = (url = APP_URL) => ({ senderFrame: { url, parent: null } });
+
+describe('createIpcGuard sender check', () => {
+    it('runs the handler for the app index.html top frame', async () => {
+        const { guard, ipcMain } = makeGuard();
+        const fn = vi.fn(async () => 'ok');
+        guard.handle('ch', [], fn);
+        expect(await ipcMain.handlers.get('ch')(trusted())).toBe('ok');
+    });
+
+    it('ignores query and fragment on the sender URL', async () => {
+        const { guard, ipcMain } = makeGuard();
+        guard.handle('ch', [], async () => 'ok');
+        expect(await ipcMain.handlers.get('ch')(trusted(APP_URL + '?x=1#y'))).toBe('ok');
+    });
+
+    it.each([
+        ['another file', { senderFrame: { url: 'file:///C:/app/other.html', parent: null } }],
+        ['a sub-frame', { senderFrame: { url: APP_URL, parent: {} } }],
+        ['a null frame', { senderFrame: null }],
+        ['a remote page', { senderFrame: { url: 'https://example.com/', parent: null } }],
+    ])('refuses %s with the default reject value and logs it', async (_label, event) => {
+        const { guard, ipcMain, logger } = makeGuard();
+        const fn = vi.fn();
+        guard.handle('ch', [], fn);
+        expect(await ipcMain.handlers.get('ch')(event)).toEqual(DEFAULT_REJECT);
+        expect(fn).not.toHaveBeenCalled();
+        expect(logger.warn).toHaveBeenCalledWith('ipc-guard', expect.stringContaining('Refused ch'));
+    });
+
+    it('compares the drive letter case-insensitively on win32', async () => {
+        const { guard, ipcMain } = makeGuard({ platform: 'win32' });
+        guard.handle('ch', [], async () => 'ok');
+        expect(await ipcMain.handlers.get('ch')(trusted('file:///c:/app/index.html'))).toBe('ok');
+    });
+
+    it('drops an on() message from an untrusted sender', () => {
+        const { guard, ipcMain } = makeGuard();
+        const fn = vi.fn();
+        guard.on('evt', fn);
+        ipcMain.listeners.get('evt')({ senderFrame: null }, 'x');
+        expect(fn).not.toHaveBeenCalled();
+        ipcMain.listeners.get('evt')(trusted(), 'x');
+        expect(fn).toHaveBeenCalledWith(trusted(), 'x');
+    });
+});
+
+describe('createIpcGuard argument kinds', () => {
+    it('passes the ORIGINAL argument string to the handler', async () => {
+        const { guard, ipcMain, grants } = makeGuard();
+        grants.resolveAllowed.mockImplementation(async () => 'C:\\CANONICAL\\different');
+        const fn = vi.fn(async (_e, p) => p);
+        guard.handle('ch', [guard.kinds.grantedPath], fn);
+        const original = join(GRANTED, 'a.jpg');
+        expect(await ipcMain.handlers.get('ch')(trusted(), original)).toBe(original);
+    });
+
+    it('refuses a path outside every grant, and a relative one', async () => {
+        const { guard, ipcMain } = makeGuard();
+        guard.handle('ch', [guard.kinds.grantedPath], async () => 'ok');
+        const h = ipcMain.handlers.get('ch');
+        expect(await h(trusted(), join(tmpdir(), 'elsewhere', 'a.jpg'))).toEqual(DEFAULT_REJECT);
+        expect(await h(trusted(), 'relative/a.jpg')).toEqual(DEFAULT_REJECT);
+        expect(await h(trusted(), 42)).toEqual(DEFAULT_REJECT);
+    });
+
+    it('refuses more arguments than the channel declares', async () => {
+        const { guard, ipcMain } = makeGuard();
+        guard.handle('ch', [guard.kinds.string], async () => 'ok');
+        expect(await ipcMain.handlers.get('ch')(trusted(), 'a', 'b')).toEqual(DEFAULT_REJECT);
+    });
+
+    it('returns a per-channel reject value (value or factory)', async () => {
+        const { guard, ipcMain } = makeGuard();
+        guard.handle('a', [guard.kinds.grantedPath], async () => true, { rejectValue: false });
+        guard.handle('b', [guard.kinds.grantedPath], async () => 'x', { rejectValue: null });
+        guard.handle('c', [guard.kinds.grantedPath], async () => 'x', { rejectValue: () => ({ entries: [] }) });
+        expect(await ipcMain.handlers.get('a')(trusted(), 'rel')).toBe(false);
+        expect(await ipcMain.handlers.get('b')(trusted(), 'rel')).toBeNull();
+        expect(await ipcMain.handlers.get('c')(trusted(), 'rel')).toEqual({ entries: [] });
+    });
+
+    it('validates trackedTempDir and grantedOrTempPath against the registry', async () => {
+        const { guard, ipcMain, tempDirs } = makeGuard();
+        const dir = join(tmpdir(), 'mv-keyframes-1');
+        tempDirs.add(dir);
+        guard.handle('rm', [guard.kinds.trackedTempDir], async () => 'ok');
+        guard.handle('clip', [guard.arrayOf(guard.kinds.grantedOrTempPath, 3)], async () => 'ok');
+        expect(await ipcMain.handlers.get('rm')(trusted(), dir)).toBe('ok');
+        expect(await ipcMain.handlers.get('rm')(trusted(), join(tmpdir(), 'mv-keyframes-2'))).toEqual(DEFAULT_REJECT);
+        expect(await ipcMain.handlers.get('clip')(trusted(), [join(dir, 'f.png'), join(GRANTED, 'a.jpg')])).toBe('ok');
+        expect(await ipcMain.handlers.get('clip')(trusted(), [join(dir, 'sub', 'f.png')])).toEqual(DEFAULT_REJECT);
+        expect(
+            await ipcMain.handlers.get('clip')(
+                trusted(),
+                ['a', 'b', 'c', 'd'].map((n) => join(dir, n))
+            )
+        ).toEqual(DEFAULT_REJECT);
+    });
+
+    it('int, optional, oneOf, shape and binary behave as declared', async () => {
+        const { guard } = makeGuard();
+        const i = guard.int(1, 100);
+        expect([i(1), i(100), i(0), i(101), i(1.5), i('5')]).toEqual([true, true, false, false, false, false]);
+        const o = guard.optional(i);
+        expect([o(undefined), o(null), o(5), o(0)]).toEqual([true, true, true, false]);
+        const one = guard.oneOf('hash', 'sort');
+        expect([one('hash'), one('feature'), one(undefined)]).toEqual([true, false, false]);
+        const s = guard.shape({ a: guard.kinds.string, b: guard.kinds.basename });
+        expect(await s({ a: 'x', b: 'y.jpg' })).toBe(true);
+        expect(await s({ a: 'x', b: '../y.jpg' })).toBe(false);
+        expect(await s(null)).toBe(false);
+        expect(await s(['x'])).toBe(false);
+        expect(guard.kinds.binary(new ArrayBuffer(4))).toBe(true);
+        expect(guard.kinds.binary(new Uint8Array(4))).toBe(true);
+        expect(guard.kinds.binary('bytes')).toBe(false);
+    });
+});
+
+describe('isPlainBasename', () => {
+    it.each([
+        ['a.jpg', 'linux', true],
+        ['a b (1).jpg', 'win32', true],
+        ['', 'linux', false],
+        ['.', 'linux', false],
+        ['..', 'linux', false],
+        ['a/b.jpg', 'linux', false],
+        ['a\\b.jpg', 'linux', false],
+        ['a\0b', 'linux', false],
+        ['a.jpg:stream', 'win32', false],
+        ['a.jpg:stream', 'linux', true],
+        ['x'.repeat(256), 'linux', false],
+    ])('%j on %s → %s', (name, platform, expected) => {
+        expect(isPlainBasename(name, platform)).toBe(expected);
+    });
+});
+
+describe('normalizeFileUrl', () => {
+    it('strips query and hash, folds case on win32 only, rejects non-file URLs', () => {
+        expect(normalizeFileUrl('file:///C:/a/index.html?x#y', 'linux')).toBe('file:///C:/a/index.html');
+        expect(normalizeFileUrl('file:///C:/a/Index.html', 'win32')).toBe('file:///c:/a/index.html');
+        expect(normalizeFileUrl('https://x/index.html', 'linux')).toBeNull();
+        expect(normalizeFileUrl('not a url', 'linux')).toBeNull();
+    });
+});
