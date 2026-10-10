@@ -3,7 +3,7 @@
 // this file existed; their failure on the unfixed renderer was checked by reverting the fix.
 // The HTML probe is an inert <b data-probe>; the CSP probe only sets a window flag.
 import { test, expect } from '@playwright/test';
-import { writeFile, rm, mkdtemp } from 'fs/promises';
+import { writeFile, rm, mkdtemp, readdir, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
@@ -93,7 +93,6 @@ test.describe('G1 renderer sinks render values as text', () => {
 
 test.describe('G1 CSP and navigation lock', () => {
     test('an inline event-handler attribute does not run (the image itself loads)', async () => {
-        test.fail(true, 'RED until the G1 CSP task');
         const r = await page.evaluate(async () => {
             window.__inlineRan = false;
             const host = document.createElement('div');
@@ -115,8 +114,24 @@ test.describe('G1 CSP and navigation lock', () => {
         expect(r.ran).toBe(false);
     });
 
+    // Breakage must be loud (spec § 6.1): the renderer forwards every violation to the session log.
+    test('a CSP violation reaches the session log', async () => {
+        const logsDir = await electronApp.evaluate(({ app }) => app.getPath('logs'));
+        await page.evaluate(() => {
+            const host = document.createElement('div');
+            host.innerHTML =
+                '<img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAACAkQBADs=" ' +
+                'onload="window.__inlineRan = true">';
+            document.body.append(host);
+        });
+        const newestSessionLog = async () => {
+            const names = (await readdir(logsDir)).filter((n) => /^media-viewer-\d.*\.log$/.test(n)).sort();
+            return names.length > 0 ? readFile(join(logsDir, names[names.length - 1]), 'utf-8') : '';
+        };
+        await expect.poll(newestSessionLog, { timeout: 5000 }).toContain('CSP violation: script-src');
+    });
+
     test('the window cannot be navigated away from the app', async () => {
-        test.fail(true, 'RED until the G1 navigation-lock task');
         const dir = await mkdtemp(join(tmpdir(), 'mv-e2e-nav-'));
         try {
             const other = join(dir, 'other.html');
@@ -133,7 +148,6 @@ test.describe('G1 CSP and navigation lock', () => {
     });
 
     test('window.open is denied', async () => {
-        test.fail(true, 'RED until the G1 navigation-lock task');
         await page.evaluate(() => {
             window.open('about:blank');
         });

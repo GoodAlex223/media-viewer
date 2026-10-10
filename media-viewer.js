@@ -10164,8 +10164,23 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+// G1 § 6.1: make Content-Security-Policy breakage loud. A blocked script, worker, WASM compile or
+// fetch otherwise fails silently somewhere lazy; every violation reaches the session log instead.
+document.addEventListener('securitypolicyviolation', (e) => {
+    window.electronAPI?.logError?.({
+        level: 'warn',
+        message: `CSP violation: ${e.violatedDirective} blocked ${e.blockedURI || '(inline)'}`,
+        source: 'renderer',
+    });
+});
+
 // Initialize the viewer when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    // Static Lucide icons in index.html. This was an inline <script> there, which the CSP now
+    // forbids (G1); it ran first, before the viewer, and still does.
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
     console.log('=== MediaViewer Starting ===');
     console.log('DOM loaded, initializing MediaViewer...');
     const viewer = new MediaViewer();

@@ -45,7 +45,12 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - A lint rule bans built strings reaching the HTML parser in renderer code.
   - A second lint rule bans IPC registration in the main process that bypasses the guard.
   - A test proves both rules fire.
-- [ ] **Remaining:** CSP and the navigation lock, then verification (unit, E2E, user's _Scan changes_, deep review, manual real-folder session).
+- [x] **8. Content-Security-Policy, navigation lock, media-tool protocol pin:**
+  - **Policy:** each directive was measured by an E2E walk of the main flows, which asserts zero violations and that each flow actually ran.
+  - **Violation logging:** every violation reaches the session log.
+  - **Navigation:** the window can't navigate away or open new windows.
+  - **ffmpeg/ffprobe:** restricted to local files.
+- [ ] **Remaining:** verification (fresh whole-branch review, user's _Scan changes_, deep review, manual real-folder session), then the PR.
 
 ## Progress Log
 
@@ -82,6 +87,14 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
     - No HTML or path exposure.
     - One cache's values are now checked at load. A malformed entry is recomputed (test failed first).
     - Two defense-in-depth residuals go to the closeout extract.
+- **2026-10-11** — Task 7 (remaining sinks + lint guard) done.
+  - **Failing-first evidence:** the lint test failed on every case it must flag, while its allow cases passed.
+  - **Conversion:** ESLint then flagged exactly the remaining sites, and 0 after the conversion.
+  - **Results:** unit 1149 passed, 1 skipped. Full E2E 118 passed, 4 skipped, 1 known flake (an existing tournament test passed 8/8 on repeat; filed for the extract).
+- **2026-10-11** — Task 8 (CSP, navigation lock, media-tool pin) done.
+  - **Failing-first evidence:** each new test failed first.
+  - **Policy measurement:** directives were removed one at a time and the walk caught each one that mattered. Two directives the draft carried proved unnecessary and were dropped.
+  - **Remaining markers:** none of the RED-until-fixed markers remain.
 
 ## Key Discoveries
 

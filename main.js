@@ -9,7 +9,7 @@ const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
 const { pathToFileURL } = require('url');
 const { createGrantStore, createTempDirRegistry, isInsideDir } = require('./path-grants');
-const { createIpcGuard, tierAssignmentsKind } = require('./ipc-guard');
+const { createIpcGuard, tierAssignmentsKind, normalizeFileUrl } = require('./ipc-guard');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
 // name, so the renderer never names a file path for these channels.
@@ -52,6 +52,14 @@ try {
 }
 
 const execFileAsync = promisify(execFile);
+
+// Every ffmpeg/ffprobe run is pinned to the file protocol (G1): a media file is opened by path,
+// and nothing it references (a playlist entry, a concat list) may reach the network or another
+// protocol. Measured on the bundled builds: real files, keyframe extraction and Windows drive
+// paths are unaffected. tests/main-hardening.test.js pins that no call bypasses this wrapper.
+function runMediaTool(toolPath, args, options) {
+    return execFileAsync(toolPath, ['-protocol_whitelist', 'file', ...args], options);
+}
 
 // CLIP model for semantic embedding extraction (lazy-loaded)
 let clipProcessor = null;
@@ -130,6 +138,21 @@ function createWindow() {
     });
 
     mainWindow.loadFile(INDEX_HTML);
+
+    // Navigation lock (G1 § 6.2): the window only ever shows the app's own index.html, the same
+    // page the IPC guard authorizes. A page-initiated navigation anywhere else, and every
+    // window.open, is refused and logged. Reloading the app page itself stays allowed.
+    const appUrl = normalizeFileUrl(pathToFileURL(INDEX_HTML).href);
+    mainWindow.webContents.on('will-navigate', (event, legacyUrl) => {
+        const url = event.url ?? legacyUrl;
+        if (normalizeFileUrl(url) === appUrl) return;
+        event.preventDefault();
+        logger.warn('navigation', `Blocked navigation to ${String(url).slice(0, 200)}`);
+    });
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        logger.warn('navigation', `Blocked window.open of ${String(url).slice(0, 200)}`);
+        return { action: 'deny' };
+    });
 
     // Enable DevTools toggle with F12 or Ctrl+Shift+I
     mainWindow.webContents.on('before-input-event', (event, input) => {
@@ -851,7 +874,7 @@ app.whenReady().then(async () => {
         try {
             const args = ['-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', videoPath];
 
-            const { stdout } = await execFileAsync(ffprobePath, args, {
+            const { stdout } = await runMediaTool(ffprobePath, args, {
                 timeout: 10000, // 10 second timeout
                 maxBuffer: 1024 * 1024, // 1MB buffer
             });
@@ -911,7 +934,7 @@ app.whenReady().then(async () => {
             try {
                 // Scene-change detection: extract frames where scene score > 0.3
                 const outputPattern = path.join(tempDir, 'frame-%03d.png');
-                await execFileAsync(
+                await runMediaTool(
                     ffmpegPath,
                     [
                         '-i',
@@ -945,7 +968,7 @@ app.whenReady().then(async () => {
                     let duration = 10; // default fallback
                     if (ffprobePath) {
                         try {
-                            const probeResult = await execFileAsync(ffprobePath, [
+                            const probeResult = await runMediaTool(ffprobePath, [
                                 '-v',
                                 'error',
                                 '-show_entries',
@@ -969,7 +992,7 @@ app.whenReady().then(async () => {
                     for (let idx = 0; idx < timestamps.length; idx++) {
                         const outPath = path.join(tempDir, `fallback-${idx}.png`);
                         try {
-                            await execFileAsync(
+                            await runMediaTool(
                                 ffmpegPath,
                                 [
                                     '-ss',

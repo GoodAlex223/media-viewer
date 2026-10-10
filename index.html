@@ -3,6 +3,16 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <!-- G1 § 6.1 Content-Security-Policy. No inline script; the Lucide init lives in media-viewer.js.
+             Measured 2026-10-11 with the zero-violation walk (tests/e2e/security-csp-walk.test.js):
+             'wasm-unsafe-eval' and 'unsafe-inline' styles are needed (removing either breaks the walk:
+             a page-level WASM compile, and this file's style attributes plus the renderer's <style>);
+             img-src blob: carries decoded JXL frames. worker-src needs no blob: and connect-src no file:
+             ('self' covers the local face models), so neither is granted. -->
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'none'; script-src 'self' https://unpkg.com/lucide@1.14.0/dist/umd/lucide.min.js 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' file: blob: data:; media-src 'self' file: blob:; font-src 'self' data:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"
+        />
         <title>Media Viewer</title>
         <link rel="stylesheet" href="styles.css" />
         <!-- Lucide pinned. To bump: update version, then regenerate SRI via:
@@ -519,13 +529,5 @@
         <script src="feature-extractor.js"></script>
         <script src="face-detector.js"></script>
         <script type="module" src="media-viewer.js"></script>
-        <script>
-            // Initialize Lucide icons after DOM is ready
-            document.addEventListener('DOMContentLoaded', function () {
-                if (typeof lucide !== 'undefined') {
-                    lucide.createIcons();
-                }
-            });
-        </script>
     </body>
 </html>
