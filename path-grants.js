@@ -15,13 +15,34 @@ const fsp = require('fs').promises;
 
 const GRANTS_VERSION = 1;
 
+// A `.` or `..` segment, with either separator. Such a path is refused outright rather than
+// normalized: the check would see `a/link/../x` as `a/x`, while a POSIX kernel resolves `link`
+// first and acts on `<link target's parent>/x` (final review I3). No legitimate caller sends
+// one — every path the renderer holds came from main already normalized.
+function hasDotSegment(p) {
+    return p.split(/[\\/]+/).some((s) => s === '.' || s === '..');
+}
+
+// Lexical, boundary-aware containment (`C:\Photos2` is not inside `C:\Photos`); accepts the root
+// itself, and a root that already ends in a separator (a drive root such as `E:\` — final
+// review I4). Case-folded on Windows.
+function isInsideDir(child, root, platform = process.platform) {
+    const fold = (p) => (platform === 'win32' ? p.toLowerCase() : p);
+    const c = fold(child);
+    const r = fold(root);
+    if (c === r) {
+        return true;
+    }
+    return c.startsWith(r.endsWith(path.sep) ? r : r + path.sep);
+}
+
 function createGrantStore({ storePath, fs = fsp, platform = process.platform } = {}) {
     const fold = (p) => (platform === 'win32' ? p.toLowerCase() : p);
     let roots = []; // [{ path: canonical, grantedAt }]
     let saveChain = Promise.resolve();
 
     async function canonicalize(p) {
-        if (typeof p !== 'string' || p.length === 0 || p.includes('\0') || !path.isAbsolute(p)) {
+        if (typeof p !== 'string' || p.length === 0 || p.includes('\0') || !path.isAbsolute(p) || hasDotSegment(p)) {
             return null;
         }
         let current = path.resolve(p);
@@ -44,14 +65,7 @@ function createGrantStore({ storePath, fs = fsp, platform = process.platform } =
         }
     }
 
-    function isInside(child, root) {
-        const c = fold(child);
-        const r = fold(root);
-        if (c === r) {
-            return true;
-        }
-        return c.startsWith(r.endsWith(path.sep) ? r : r + path.sep);
-    }
+    const isInside = (child, root) => isInsideDir(child, root, platform);
 
     async function load() {
         try {
@@ -114,7 +128,8 @@ function createGrantStore({ storePath, fs = fsp, platform = process.platform } =
 function createTempDirRegistry({ platform = process.platform } = {}) {
     const fold = (p) => (platform === 'win32' ? p.toLowerCase() : p);
     const dirs = new Set();
-    const key = (p) => (typeof p === 'string' && path.isAbsolute(p) ? fold(path.resolve(p)) : null);
+    const key = (p) =>
+        typeof p === 'string' && path.isAbsolute(p) && !hasDotSegment(p) ? fold(path.resolve(p)) : null;
     return {
         add(dir) {
             const k = key(dir);
@@ -139,4 +154,4 @@ function createTempDirRegistry({ platform = process.platform } = {}) {
     };
 }
 
-module.exports = { createGrantStore, createTempDirRegistry, GRANTS_VERSION };
+module.exports = { createGrantStore, createTempDirRegistry, hasDotSegment, isInsideDir, GRANTS_VERSION };

@@ -1,7 +1,7 @@
 // G1 — main-process file IPC authorization (F2) and tournament-apply confinement (F6/F7).
 // Every probe stays inside this test's own mkdtemp directories.
 import { test, expect } from '@playwright/test';
-import { access, mkdir, mkdtemp, rm, writeFile, cp, symlink } from 'fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile, readFile, cp, symlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -142,5 +142,51 @@ test.describe('G1 F6/F7 — tournament apply stays inside the folder', () => {
         );
         expect(res.success).toBe(true);
         await expect(access(join(folder, '_Tier-2', 'red-1x1.png'))).resolves.toBeUndefined();
+    });
+});
+
+// Final review I2: main joins a fixed file name onto a granted folder, but the file at that name
+// can itself be a link out of the folder. Each probe links to a file in this test's own `outside`
+// temp directory. File symlinks on Windows need Developer Mode; without it the test skips.
+test.describe('G1 F2 — a fixed-name file that is a link is not followed', () => {
+    async function plantFileLink(linkPath, target) {
+        try {
+            await symlink(target, linkPath, 'file');
+            return true;
+        } catch (err) {
+            if (err.code === 'EPERM') {
+                return false;
+            }
+            throw err;
+        }
+    }
+
+    test('reading a folder cache through a planted link is refused', async () => {
+        const target = join(outside, 'note.txt');
+        const planted = await plantFileLink(join(tmpFixtures.dir, '.sort_cache.json'), target);
+        test.skip(!planted, 'file symlinks need Developer Mode on Windows');
+        const data = await page.evaluate((f) => window.electronAPI.readFolderCache(f, 'sort'), tmpFixtures.dir);
+        expect(data).toBeNull();
+    });
+
+    test('writing a folder cache through a planted link is refused and the target is unchanged', async () => {
+        const target = join(outside, 'note.txt');
+        const planted = await plantFileLink(join(tmpFixtures.dir, '.hash_cache.json'), target);
+        test.skip(!planted, 'file symlinks need Developer Mode on Windows');
+        const res = await page.evaluate((f) => window.electronAPI.writeFolderCache(f, 'hash', '{}'), tmpFixtures.dir);
+        expect(res.success).toBe(false);
+        expect(await readFile(target, 'utf-8')).toBe('not for the app');
+    });
+
+    test('a saved-state write through a planted temp-file link is refused and the target is unchanged', async () => {
+        const target = join(outside, 'note.txt');
+        const planted = await plantFileLink(join(tmpFixtures.dir, '.tournament_state.json.tmp'), target);
+        test.skip(!planted, 'file symlinks need Developer Mode on Windows');
+        const res = await page.evaluate(
+            (f) => window.electronAPI.writeTournamentState(f, { version: 2 }),
+            tmpFixtures.dir
+        );
+        expect(res.success).toBe(false);
+        expect(await readFile(target, 'utf-8')).toBe('not for the app');
     });
 });

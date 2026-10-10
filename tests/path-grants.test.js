@@ -185,3 +185,52 @@ describe('createTempDirRegistry', () => {
         expect(reg.isChildFile(42)).toBe(false);
     });
 });
+
+// Final-review fixes (G1): raw dot segments and drive-root containment. Paths are built by string
+// concatenation on purpose — join() would normalize the segments away before the code sees them.
+describe('dot segments and roots (final review I3, I4)', () => {
+    const { isInsideDir, hasDotSegment } = require('../path-grants.js');
+    const sep = require('path').sep;
+
+    it('refuses a raw . or .. segment even when it would resolve inside a granted folder', async () => {
+        const photos = await makeDir('photos');
+        await makeDir('photos', 'sub');
+        const store = createGrantStore({ storePath });
+        await store.grant(photos);
+        expect(await store.resolveAllowed(photos + sep + 'sub' + sep + '..' + sep + 'a.jpg')).toBeNull();
+        expect(await store.resolveAllowed(photos + sep + '.' + sep + 'a.jpg')).toBeNull();
+        expect(await store.resolveAllowed(photos + sep + 'a.jpg')).not.toBeNull(); // control
+    });
+
+    it('the temp registry refuses a child path with a raw .. segment', () => {
+        const reg = createTempDirRegistry();
+        const dir = join(tmpdir(), 'mv-keyframes-dots');
+        reg.add(dir);
+        expect(reg.isChildFile(dir + sep + 'x' + sep + '..' + sep + 'f.png')).toBe(false);
+        expect(reg.isChildFile(dir + sep + 'f.png')).toBe(true); // control
+    });
+
+    it('hasDotSegment finds . and .. segments with either separator, and nothing else', () => {
+        expect(hasDotSegment('C:\\a\\..\\b')).toBe(true);
+        expect(hasDotSegment('/a/./b')).toBe(true);
+        expect(hasDotSegment('/a/b..c/.d')).toBe(false);
+        expect(hasDotSegment('\\\\server\\share\\x')).toBe(false);
+    });
+
+    it.runIf(process.platform === 'win32')('treats every path on a drive-root folder as inside it', () => {
+        expect(isInsideDir('E:\\_Tier-1', 'E:\\')).toBe(true);
+        expect(isInsideDir('E:\\_Tier-1\\a.jpg', 'E:\\')).toBe(true);
+        expect(isInsideDir('F:\\_Tier-1', 'E:\\')).toBe(false);
+    });
+
+    it.runIf(process.platform !== 'win32')('treats every path under / as inside it', () => {
+        expect(isInsideDir('/_Tier-1', '/')).toBe(true);
+    });
+
+    it('isInsideDir is boundary-aware and accepts the root itself', () => {
+        const root = join(tmpdir(), 'photos');
+        expect(isInsideDir(join(root, 'a.jpg'), root)).toBe(true);
+        expect(isInsideDir(root, root)).toBe(true);
+        expect(isInsideDir(join(tmpdir(), 'photos2', 'a.jpg'), root)).toBe(false);
+    });
+});

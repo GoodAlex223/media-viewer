@@ -6,6 +6,7 @@
 // Pure CommonJS with no Electron import, so Vitest can load it.
 
 const path = require('path');
+const { hasDotSegment } = require('./path-grants');
 
 const DEFAULT_REJECT = Object.freeze({ success: false, error: 'Not permitted' });
 
@@ -130,9 +131,11 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, platfo
         });
     }
 
-    function on(channel, fn) {
+    // `isTrusted` replaces the URL check for a channel that must work even if the URL check ever
+    // fails — closing the window (final review I1: a refused app-close-allow trapped the app).
+    function on(channel, fn, { isTrusted = isTrustedSender } = {}) {
         ipcMain.on(channel, (event, ...args) => {
-            if (!isTrustedSender(event)) {
+            if (!isTrusted(event)) {
                 logger.warn('ipc-guard', `Refused ${channel}: untrusted sender`);
                 return;
             }
@@ -151,7 +154,7 @@ function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000, 
     const fold = (p) => (platform === 'win32' ? p.toLowerCase() : p);
     return (assignments, args) => {
         const folderPath = args?.[0];
-        if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath)) {
+        if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath) || hasDotSegment(folderPath)) {
             return false;
         }
         if (assignments === null || typeof assignments !== 'object' || Array.isArray(assignments)) {
@@ -166,7 +169,7 @@ function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000, 
             if (!Number.isSafeInteger(tier) || tier < 0 || tier > maxTier) {
                 return false;
             }
-            if (!path.isAbsolute(src) || fold(path.dirname(path.resolve(src))) !== folder) {
+            if (!path.isAbsolute(src) || hasDotSegment(src) || fold(path.dirname(path.resolve(src))) !== folder) {
                 return false;
             }
             if (!isMediaFile(path.extname(src).toLowerCase())) {

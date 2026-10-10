@@ -215,3 +215,48 @@ describe('tierAssignmentsKind', () => {
         expect(check({ [join(folder, 'a.jpg')]: 1 }, 'relative')).toBe(false);
     });
 });
+
+describe('tierAssignmentsKind dot segments (final review I3)', () => {
+    const { tierAssignmentsKind } = require('../ipc-guard.js');
+    const { isMediaFile } = require('../media-formats.js');
+    const sep = require('path').sep;
+    const folder = join(tmpdir(), 'media');
+    const kind = tierAssignmentsKind({ isMediaFile });
+
+    it('refuses a key with a raw .. segment even when it resolves to a direct child', () => {
+        const key = folder + sep + 'sub' + sep + '..' + sep + 'a.jpg';
+        expect(kind({ [key]: 1 }, [folder])).toBe(false);
+        expect(kind({ [folder + sep + 'a.jpg']: 1 }, [folder])).toBe(true); // control
+    });
+});
+
+describe('sender identity (final review I1)', () => {
+    it('on() accepts a per-channel sender check in place of the URL check', () => {
+        const { guard, ipcMain } = makeGuard();
+        const win = {};
+        const fn = vi.fn();
+        guard.on('close-ok', fn, { isTrusted: (event) => event.sender === win });
+        // A frame URL the default check would refuse, from the app's own window: accepted.
+        ipcMain.listeners.get('close-ok')({
+            sender: win,
+            senderFrame: { url: 'file:///elsewhere.html', parent: null },
+        });
+        expect(fn).toHaveBeenCalledTimes(1);
+        // Another sender: refused.
+        ipcMain.listeners.get('close-ok')({ sender: {}, senderFrame: { url: APP_URL, parent: null } });
+        expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    // Source-text wiring check (main.js needs Electron, so it is not unit-loadable). loadFile()
+    // with a relative name resolves against app.getAppPath(), which keeps a link in the launch
+    // path, while __dirname is the resolved real path — so the window's URL and the URL the guard
+    // expected differed whenever the app was launched through a link, and every call was refused.
+    it('main.js loads the window from, and authorizes, the same INDEX_HTML constant', () => {
+        const fs = require('fs');
+        const src = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
+        expect(src).toContain("const INDEX_HTML = path.join(__dirname, 'index.html');");
+        expect(src).toContain('mainWindow.loadFile(INDEX_HTML)');
+        expect(src).toContain('expectedUrl: pathToFileURL(INDEX_HTML).href');
+        expect(src).not.toContain("loadFile('index.html')");
+    });
+});

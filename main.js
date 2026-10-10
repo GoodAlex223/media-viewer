@@ -8,7 +8,7 @@ const logger = require('./logger');
 const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
 const { pathToFileURL } = require('url');
-const { createGrantStore, createTempDirRegistry } = require('./path-grants');
+const { createGrantStore, createTempDirRegistry, isInsideDir } = require('./path-grants');
 const { createIpcGuard, tierAssignmentsKind } = require('./ipc-guard');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
@@ -18,6 +18,12 @@ const FOLDER_CACHE_FILES = Object.freeze({
     sort: '.sort_cache.json',
     feature: '.feature_cache.json',
 });
+
+// The one page this app shows, loaded AND authorized from this constant (final review I1).
+// loadFile() with a relative name resolves against app.getAppPath(), which keeps a link in the
+// launch path, while __dirname is the resolved real path: two expressions meant the window's URL
+// and the URL the IPC guard expected differed whenever the app was launched through a link.
+const INDEX_HTML = path.join(__dirname, 'index.html');
 
 // Streaming JSON reader for the feature cache (parse a 250MB+ file with a tiny memory
 // footprint instead of fs.readFile + JSON.parse, which peaks past ~1GB and kills the process).
@@ -123,7 +129,7 @@ function createWindow() {
         title: 'Media Viewer',
     });
 
-    mainWindow.loadFile('index.html');
+    mainWindow.loadFile(INDEX_HTML);
 
     // Enable DevTools toggle with F12 or Ctrl+Shift+I
     mainWindow.webContents.on('before-input-event', (event, input) => {
@@ -189,10 +195,30 @@ app.whenReady().then(async () => {
         ipcMain,
         grants,
         tempDirs,
-        expectedUrl: pathToFileURL(path.join(__dirname, 'index.html')).href,
+        expectedUrl: pathToFileURL(INDEX_HTML).href,
         logger,
     });
     const { kinds, int, optional, oneOf, arrayOf, shape } = guard;
+
+    // A fixed-name file inside a granted folder can itself be a planted link out of it (final
+    // review I2): the folder argument passed the guard, but readFile/writeFile would follow a link
+    // at the joined name. Every concrete path a handler opens is checked here: it must not be a
+    // link (the app never creates one), and it must resolve inside a granted folder. Throws, so
+    // each handler's existing catch turns it into that channel's usual failure value.
+    async function assertFixedPath(p) {
+        try {
+            if ((await fs.lstat(p)).isSymbolicLink()) {
+                throw new Error(`Not permitted: ${path.basename(p)} is a link`);
+            }
+        } catch (err) {
+            if (err.code !== 'ENOENT') {
+                throw err;
+            }
+        }
+        if ((await grants.resolveAllowed(p)) === null) {
+            throw new Error(`Not permitted: ${path.basename(p)}`);
+        }
+    }
 
     createWindow();
 
@@ -200,14 +226,20 @@ app.whenReady().then(async () => {
     // Registered once here (not in createWindow) so it does not accumulate when a window is
     // re-created via the macOS dock-activate path. It closes over the module-level mainWindow,
     // which createWindow reassigns, so it always targets the current window.
-    guard.on('app-close-allow', () => {
-        // mainWindow is never nulled, so guard on isDestroyed() (symmetric to the close
-        // handler's send-side guard) — calling close() on a destroyed window would throw.
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            isQuitting = true;
-            mainWindow.close();
-        }
-    });
+    // Trusted by sender identity, not the page URL: closing is not privileged, and the close
+    // handler has already called preventDefault — a refusal here would trap the window.
+    guard.on(
+        'app-close-allow',
+        () => {
+            // mainWindow is never nulled, so guard on isDestroyed() (symmetric to the close
+            // handler's send-side guard) — calling close() on a destroyed window would throw.
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                isQuitting = true;
+                mainWindow.close();
+            }
+        },
+        { isTrusted: (event) => !!mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents }
+    );
 
     // Register Alt+F4 to close the focused window (Windows compatibility)
     globalShortcut.register('Alt+F4', () => {
@@ -321,6 +353,7 @@ app.whenReady().then(async () => {
     guard.handle('readTournamentState', [kinds.grantedPath], async (_event, folderPath) => {
         try {
             const statePath = path.join(folderPath, '.tournament_state.json');
+            await assertFixedPath(statePath);
             const text = await fs.readFile(statePath, 'utf-8');
             const json = JSON.parse(text);
             return { success: true, state: json };
@@ -336,6 +369,8 @@ app.whenReady().then(async () => {
         const statePath = path.join(folderPath, '.tournament_state.json');
         const tmpPath = statePath + '.tmp';
         try {
+            await assertFixedPath(tmpPath);
+            await assertFixedPath(statePath);
             const text = JSON.stringify(state, null, 2);
             await fs.writeFile(tmpPath, text, 'utf-8');
             await fs.rename(tmpPath, statePath); // atomic replace — no torn file on crash mid-write
@@ -393,6 +428,7 @@ app.whenReady().then(async () => {
     guard.handle('readBulkRatedFile', [kinds.grantedPath], async (_event, folderPath) => {
         try {
             const filePath = path.join(folderPath, '.bulk_rated.json');
+            await assertFixedPath(filePath);
             const text = await fs.readFile(filePath, 'utf-8');
             const json = JSON.parse(text);
             return { success: true, data: json };
@@ -407,6 +443,7 @@ app.whenReady().then(async () => {
     guard.handle('writeBulkRatedFile', [kinds.grantedPath, kinds.any], async (_event, folderPath, data) => {
         try {
             const filePath = path.join(folderPath, '.bulk_rated.json');
+            await assertFixedPath(filePath);
             const text = JSON.stringify(data, null, 2);
             await fs.writeFile(filePath, text, 'utf-8');
             return { success: true };
@@ -426,7 +463,9 @@ app.whenReady().then(async () => {
             // this re-checks the paths actually built, so a future change to how they are built
             // cannot silently reopen it.
             const root = path.resolve(folderPath);
-            const insideRoot = (p) => path.resolve(p).startsWith(root + path.sep);
+            // isInsideDir, not `startsWith(root + sep)`: that form rejected every path on a
+            // drive-root folder such as E:\ (final review I4).
+            const insideRoot = (p) => isInsideDir(path.resolve(p), root);
             const fold = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
             let realRoot;
             try {
@@ -564,7 +603,9 @@ app.whenReady().then(async () => {
         [kinds.grantedPath, oneOf('hash', 'sort', 'feature')],
         async (_event, folderPath, name) => {
             try {
-                return await fs.readFile(path.join(folderPath, FOLDER_CACHE_FILES[name]), 'utf8');
+                const filePath = path.join(folderPath, FOLDER_CACHE_FILES[name]);
+                await assertFixedPath(filePath);
+                return await fs.readFile(filePath, 'utf8');
             } catch (_error) {
                 return null; // missing or unreadable — same contract as the old read-file
             }
@@ -577,7 +618,9 @@ app.whenReady().then(async () => {
         [kinds.grantedPath, oneOf('hash', 'sort', 'feature'), kinds.string],
         async (_event, folderPath, name, data) => {
             try {
-                await fs.writeFile(path.join(folderPath, FOLDER_CACHE_FILES[name]), data, 'utf8');
+                const filePath = path.join(folderPath, FOLDER_CACHE_FILES[name]);
+                await assertFixedPath(filePath);
+                await fs.writeFile(filePath, data, 'utf8');
                 return { success: true };
             } catch (error) {
                 console.error('Write folder cache error:', error);
@@ -651,6 +694,12 @@ app.whenReady().then(async () => {
     guard.handle('feature-cache-open', [kinds.grantedPath], async (_event, folderPath) => {
         const filePath = path.join(folderPath, FOLDER_CACHE_FILES.feature);
         try {
+            await assertFixedPath(filePath);
+        } catch (err) {
+            featureCacheSession = null;
+            return { success: false, error: err.message };
+        }
+        try {
             // Fail fast if the file is missing (avoids a dangling stream).
             await fs.access(filePath);
         } catch (_e) {
@@ -713,6 +762,8 @@ app.whenReady().then(async () => {
                 featureCacheWriter = null;
             }
             const tmpPath = filePath + '.tmp';
+            await assertFixedPath(tmpPath);
+            await assertFixedPath(filePath);
             const stream = fsSync.createWriteStream(tmpPath, { encoding: 'utf8' });
             const h = header || {};
             const prefix =
