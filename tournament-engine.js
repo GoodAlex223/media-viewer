@@ -10,8 +10,9 @@
 const UNDO_HISTORY_CAP = 100;
 
 // Saved state is untrusted input (G1): .tournament_state.json travels with the media folder, and
-// the resume prompt and the summary read it. Both deserialize()s validate before constructing
-// anything. Rounds follow the config modal's own clamp; the summary iterates tiers 0..rounds, so
+// the resume prompt and the summary read it. TournamentEngine.deserialize validates before
+// constructing anything; SwissStrategy.deserialize deliberately does not (it also restores trusted
+// in-memory undo snapshots, after the history entry is popped — deep review #11). Rounds follow the config modal's own clamp; the summary iterates tiers 0..rounds, so
 // the upper bound matters beyond type safety. Integer-ness is the safety property for counts;
 // the 2 × rounds bound on a win count is deliberately loose (a file gains at most one win per
 // round — pinned by a property test), so a bound that turned out tight cannot reject a legitimate

@@ -1426,6 +1426,17 @@ class MediaViewer {
         return idx === undefined ? -1 : idx;
     }
 
+    // Where an undo actually put a file back (PR #78 review). move-file never replaces an entry
+    // (deep review #1), so if a same-named file appeared in the source folder after the move, the
+    // restore lands at "name (n).ext". Re-point the popped history entry at that path, so the list
+    // entry, the notice and the feature caches built from it follow the file, not its old name.
+    _followRestoredFile(move, moveResult) {
+        const restoredPath = moveResult?.targetPath;
+        if (!restoredPath || restoredPath === move.originalPath) return;
+        move.originalPath = restoredPath;
+        move.fileName = window.electronAPI.path.basename(restoredPath);
+    }
+
     restoreFeatureCachesFromHistory(entry) {
         if (!entry) return;
         // Re-admit the rated-pair keys removeFileFromList pruned for this file (captured by the move
@@ -4415,6 +4426,7 @@ class MediaViewer {
                     if (!moveResult.success) {
                         throw new Error(moveResult.error);
                     }
+                    this._followRestoredFile(lastMove, moveResult); // land where it was actually put back
 
                     // Find the remaining file (should be at the end of the list)
                     const remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === lastMove.remainingFile.path);
@@ -4476,6 +4488,7 @@ class MediaViewer {
                     if (!firstMoveResult.success) {
                         throw new Error(firstMoveResult.error);
                     }
+                    this._followRestoredFile(firstMove, firstMoveResult); // land where it was actually put back
 
                     // Restore second file
                     const secondMoveResult = await window.electronAPI.moveFile({
@@ -4487,6 +4500,7 @@ class MediaViewer {
                     if (!secondMoveResult.success) {
                         throw new Error(secondMoveResult.error);
                     }
+                    this._followRestoredFile(secondMove, secondMoveResult); // land where it was actually put back
 
                     // Add both files back to mediaFiles
                     this.mediaFiles.push({
@@ -4547,6 +4561,7 @@ class MediaViewer {
                     if (!firstMoveResult.success) {
                         throw new Error(firstMoveResult.error);
                     }
+                    this._followRestoredFile(firstMove, firstMoveResult); // land where it was actually put back
 
                     const secondMoveResult = await window.electronAPI.moveFile({
                         sourcePath: secondMove.newPath,
@@ -4556,6 +4571,7 @@ class MediaViewer {
                     if (!secondMoveResult.success) {
                         throw new Error(secondMoveResult.error);
                     }
+                    this._followRestoredFile(secondMove, secondMoveResult); // land where it was actually put back
 
                     this.mediaFiles.push({
                         name: firstMove.fileName,
@@ -4598,6 +4614,7 @@ class MediaViewer {
                     if (!moveResult.success) {
                         throw new Error(moveResult.error);
                     }
+                    this._followRestoredFile(undoMove, moveResult); // land where it was actually put back
 
                     // Insert file back at current position to maintain order
                     this.mediaFiles.splice(this.currentIndex, 0, {
@@ -5472,6 +5489,7 @@ class MediaViewer {
                 if (!moveResult.success) {
                     throw new Error(moveResult.error);
                 }
+                this._followRestoredFile(move, moveResult); // land where it was actually put back
             } catch (error) {
                 restoreFailed = true;
                 console.error('Error undoing tournament special:', error);
@@ -5526,7 +5544,7 @@ class MediaViewer {
                 const rollback = await window.electronAPI.moveFile({
                     sourcePath: move.originalPath,
                     targetFolder: window.electronAPI.path.dirname(move.newPath),
-                    fileName: move.fileName,
+                    fileName: window.electronAPI.path.basename(move.newPath), // its name there, not the restored one
                 });
                 if (!rollback.success) {
                     // Rollback failed: the file sits in the source folder but is not in mediaFiles.
@@ -7903,7 +7921,7 @@ class MediaViewer {
         };
 
         try {
-            // Preferred path: stream batches to main (main appends + atomic-renames). Keeps the
+            // The only write path: stream batches to main (main appends + atomic-renames). Keeps the
             // renderer from ever building a ~130MB JSON string on every 30s auto-save.
             if (window.electronAPI.featureCacheWriteOpen) {
                 const opened = await window.electronAPI.featureCacheWriteOpen(this.baseFolderPath, {

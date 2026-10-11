@@ -115,6 +115,21 @@ test.describe('G1 F2 — file IPC is confined to granted folders', () => {
         await access(join(tmpFixtures.likeDir, 'red-1x1 (1).png'));
     });
 
+    // PR #78 review #1: the no-overwrite loop counted the source file itself as a collision, so a
+    // move into the folder the file already sits in (the Like folder opened as the source) renamed
+    // it to "name (1).ext". Before G1 that rename was a no-op; it is again.
+    test('a move into the folder the file already sits in leaves it untouched', async () => {
+        const src = join(tmpFixtures.dir, 'red-1x1.png');
+        const res = await page.evaluate(
+            ({ s, dir }) => window.electronAPI.moveFile({ sourcePath: s, targetFolder: dir, fileName: 'red-1x1.png' }),
+            { s: src, dir: tmpFixtures.dir }
+        );
+        expect(res.success).toBe(true);
+        expect(res.targetPath).toBe(src);
+        await access(src);
+        await expect(access(join(tmpFixtures.dir, 'red-1x1 (1).png'))).rejects.toThrow();
+    });
+
     // Deep review #8: a cache file of chosen text could be renamed to any name under a grant.
     test('a move cannot give a non-media file a chosen name', async () => {
         const wrote = await page.evaluate(

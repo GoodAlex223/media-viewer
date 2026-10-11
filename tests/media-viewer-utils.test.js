@@ -1758,6 +1758,7 @@ describe('handleCancel feature restore', () => {
             requestPredictionScores: vi.fn(),
             // Helper under test — extracted as a real method so the handler can call it
             restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+            _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             ...overrides,
         };
     }
@@ -2671,6 +2672,7 @@ describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
         showMedia: vi.fn(async () => {}),
         requestPredictionScores: vi.fn(),
         restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+        _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
         ...overrides,
     });
 
@@ -5207,6 +5209,7 @@ describe('handleTournamentUndo (unified undo stack)', () => {
             showNotification: vi.fn(),
             showError: vi.fn(),
             restoreFeatureCachesFromHistory: vi.fn(),
+            _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             updateFolderInfo: vi.fn(),
             showTournamentPair: vi.fn(async () => {}),
             ...overrides,
@@ -5228,7 +5231,7 @@ describe('handleTournamentUndo (unified undo stack)', () => {
                 moveFile: vi.fn(async () => ({ success: true })),
                 // Reached only by the stack-changed rollback path; real dirname so the target
                 // folder assertion is faithful rather than tautological.
-                path: { dirname: (p) => path.dirname(p) },
+                path: { dirname: (p) => path.dirname(p), basename: (p) => path.basename(p) },
                 logError: vi.fn(),
             },
         };
@@ -6927,6 +6930,7 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
             featureCache: new Map(),
             areFoldersConfigured: () => true,
             _refuseIfNeedsRegrant: () => false,
+            _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
             removeFileFromList: vi.fn(function (p) {
@@ -7748,5 +7752,82 @@ describe('grant refresh is single-flight (deep review #3)', () => {
         expect(getGrantStatus).toHaveBeenCalledTimes(2);
         expect([...ctx.folderNeedsRegrant]).toEqual(['dislike']);
         expect(ctx.showNotification).toHaveBeenCalledTimes(1); // the queued notify, on the fresh reply
+    });
+});
+
+// PR #78 review #2: move-file never replaces an entry, so when a same-named file appeared in the
+// source folder after a move, undo restores to "name (n).ext". The restore legs rebuilt the list
+// entry (and the feature caches) from the OLD name, pointing at the other file.
+describe('undo follows where a file was actually put back (PR #78 review #2)', () => {
+    const handleCancel = extractAsyncMethod('handleCancel');
+    const _followRestoredFile = extractMethod('_followRestoredFile');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function useMoveResult(targetPath) {
+        globalThis.window = {
+            electronAPI: {
+                moveFile: vi.fn(async () => ({ success: true, targetPath })),
+                path: { basename: (p) => p.split('/').pop() },
+            },
+        };
+    }
+
+    function singleCtx() {
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: false,
+            isTournamentMode: false,
+            isSortedByPrediction: false,
+            baseFolderPath: '/f',
+            currentIndex: 0,
+            mediaFiles: [{ name: 'b.jpg', path: '/f/b.jpg', size: 1, type: 'image/jpeg' }],
+            moveHistory: [
+                {
+                    fileName: 'a.jpg',
+                    originalPath: '/f/a.jpg',
+                    newPath: '/liked/a.jpg',
+                    fileSize: 10,
+                    fileType: 'image/jpeg',
+                    actionType: 'like',
+                    mlFeatures: null,
+                },
+            ],
+            _followRestoredFile,
+            restoreFeatureCachesFromHistory: vi.fn(),
+            requestPredictionScores: vi.fn(),
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+        };
+    }
+
+    it('rebuilds the list entry and restores the caches under the name the file was restored to', async () => {
+        useMoveResult('/f/a (1).jpg');
+        const ctx = singleCtx();
+        await handleCancel.call(ctx);
+        expect(ctx.mediaFiles[0]).toMatchObject({ name: 'a (1).jpg', path: '/f/a (1).jpg' });
+        expect(ctx.mediaFiles[1].path).toBe('/f/b.jpg'); // the other file keeps its own entry
+        expect(ctx.restoreFeatureCachesFromHistory).toHaveBeenCalledWith(
+            expect.objectContaining({ originalPath: '/f/a (1).jpg', fileName: 'a (1).jpg' })
+        );
+    });
+
+    it('control: a file restored under its own name keeps its entry', async () => {
+        useMoveResult('/f/a.jpg');
+        const ctx = singleCtx();
+        await handleCancel.call(ctx);
+        expect(ctx.mediaFiles[0]).toMatchObject({ name: 'a.jpg', path: '/f/a.jpg' });
     });
 });

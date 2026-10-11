@@ -4,15 +4,18 @@ const path = require('path');
 console.log('Preload script loading...');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    // File operations. Since G1 the main process allows only paths inside folders the user
-    // picked in its own dialog; anything else is refused with the call's usual failure value.
+    // File operations. Since G1 the main process allows paths inside folders the user picked in
+    // its own dialog, with the exceptions ipc-guard.js's argument kinds document (main's own
+    // keyframe temp folders, link entries and linked media); anything else is refused with the
+    // call's usual failure value.
     moveFile: (data) => ipcRenderer.invoke('move-file', data),
     checkFolderExists: (folderPath) => ipcRenderer.invoke('check-folder-exists', folderPath),
     checkFileExists: (filePath) => ipcRenderer.invoke('check-file-exists', filePath),
     createFolder: (folderPath) => ipcRenderer.invoke('create-folder', folderPath),
     readFileBuffer: (filePath) => ipcRenderer.invoke('read-file-buffer', filePath),
     readJxlWasm: () => ipcRenderer.invoke('read-jxl-wasm'),
-    // Per-folder caches by NAME ('hash' | 'sort' | 'feature'): main joins the file name.
+    // Per-folder caches by NAME: main joins the file name. Read: 'hash' | 'sort' | 'feature'
+    // (the feature cache's single-read fallback); write: 'hash' | 'sort' (feature writes stream).
     readFolderCache: (folderPath, name) => ipcRenderer.invoke('read-folder-cache', folderPath, name),
     writeFolderCache: (folderPath, name, data) => ipcRenderer.invoke('write-folder-cache', folderPath, name, data),
     // Streaming feature-cache reader (parse in main, pull in batches) — avoids the renderer

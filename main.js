@@ -202,8 +202,10 @@ app.whenReady().then(async () => {
         `Media Viewer ${app.getVersion()} (${app.isPackaged ? 'packaged' : 'dev'}) — session log: ${logger.getLogPath()}`
     );
 
-    // Folder grants (G1): every privileged file IPC acts only on paths inside a folder the user
-    // picked in main's own dialog. MV_E2E_GRANTS_FILE gives each E2E launch a fresh store and
+    // Folder grants (G1): privileged file IPC acts on paths inside a folder the user picked in main's
+    // own dialog, with the exceptions ipc-guard's argument kinds document (main's own keyframe temp
+    // folders; a link entry inside a granted folder; a link there to a media file). The page itself
+    // is not confined by this (spec residual I1). MV_E2E_GRANTS_FILE gives each E2E launch a fresh store and
     // exposes it to electronApp.evaluate (main process only — the renderer cannot reach it).
     const grants = createGrantStore({
         storePath: process.env.MV_E2E_GRANTS_FILE || path.join(app.getPath('userData'), 'folder-grants.json'),
@@ -385,6 +387,31 @@ app.whenReady().then(async () => {
                 const ext = path.extname(fileName);
                 const stem = path.basename(fileName, ext);
                 let targetPath = path.join(targetFolder, fileName);
+                // Already there (moved into the folder it sits in, e.g. the Like folder opened as the
+                // source): a no-op, as before G1, not a collision with itself (PR #78 review). Same
+                // real parent folder and same device + inode; not a name compare, which a
+                // case-sensitive folder would get wrong.
+                const sameEntry = async (a, b) => {
+                    try {
+                        const [pa, pb] = await Promise.all([
+                            fs.realpath(path.dirname(a)),
+                            fs.realpath(path.dirname(b)),
+                        ]);
+                        if (pa !== pb) {
+                            return false;
+                        }
+                        const [x, y] = await Promise.all([
+                            fs.lstat(a, { bigint: true }),
+                            fs.lstat(b, { bigint: true }),
+                        ]);
+                        return x.dev === y.dev && x.ino === y.ino;
+                    } catch (_err) {
+                        return false;
+                    }
+                };
+                if (await sameEntry(sourcePath, targetPath)) {
+                    return { success: true, targetPath: sourcePath };
+                }
                 for (let n = 1; ; n++) {
                     try {
                         await fs.lstat(targetPath);
@@ -685,8 +712,9 @@ app.whenReady().then(async () => {
         }
     );
 
-    // Read any file as raw bytes (no encoding) and return an ArrayBuffer. Used by the JXL
-    // decode pipeline, which needs the original compressed bytes rather than a UTF-8 string.
+    // Read a media file inside a granted folder (or a link there to a media file — see ipc-guard's
+    // grantedMediaRead) as raw bytes, returned as an ArrayBuffer. Used by the JXL decode pipeline,
+    // which needs the original compressed bytes rather than a UTF-8 string.
     guard.handle(
         'read-file-buffer',
         [kinds.grantedMediaRead],
