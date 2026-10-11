@@ -62,7 +62,8 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - It covered the branch through its first 15 commits: no findings, verified, run at `high` because `max` is retired.
   - The three later commits weren't covered.
   - A path-authorization issue found and fixed afterwards lay inside its range. That's recorded for the trial's evaluation.
-- [ ] **Remaining:** a _Scan changes_ re-run covering the three later commits, the deep review, the manual real-folder session, then the PR.
+- **User ruling (2026-10-11):** the _Scan changes_ run counts as the spec's deep review. Commits made while it ran mean it read a moving working tree, so a re-run at the frozen head is recommended.
+- [ ] **Remaining:** the _Scan changes_ re-run at the frozen head (also the deep review), the manual real-folder session, then the PR.
 
 ## Progress Log
 
