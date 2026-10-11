@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
+import {
+    TournamentEngine,
+    SwissStrategy,
+    validateTournamentState,
+    InvalidTournamentStateError,
+} from '../tournament-engine.js';
 
 function makeMockStrategy(pairSequence) {
     let idx = 0;
@@ -226,9 +231,10 @@ describe('TournamentEngine serialize/deserialize', () => {
         expect(() => JSON.parse(text)).not.toThrow();
     });
 
+    // Since G1 the version check is part of validateTournamentState, which runs first.
     it('deserialize throws on an unsupported version', () => {
         expect(() => TournamentEngine.deserialize({ version: 3, strategy: 'swiss' }, [])).toThrow(
-            'Unsupported tournament state version: 3'
+            'Invalid tournament state: unsupported version'
         );
     });
 
@@ -675,5 +681,208 @@ describe('TournamentEngine.dropEntry', () => {
 
         // The pick beneath is now reachable — this is what un-wedges the stack.
         expect(eng.peekUndoKind()).toBe('pick');
+    });
+});
+
+// G1: a saved .tournament_state.json travels with the media folder, so the resume path treats it
+// as untrusted input. Validation runs before anything is constructed or shown.
+describe('validateTournamentState (G1)', () => {
+    const MARKUP = '<b data-probe="1">7</b>';
+
+    function playedState({ files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg'], rounds = 3, picks = 3 } = {}) {
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds });
+        for (let i = 0; i < picks; i++) {
+            const pair = eng.getCurrentPair();
+            if (!pair) break;
+            eng.recordResult(pair.left, pair.right);
+        }
+        return JSON.parse(JSON.stringify(eng.serialize()));
+    }
+
+    // toThrow(undefined) accepts ANY throw, so a missing export would pass every reject case.
+    const expectInvalid = (json) => {
+        expect(InvalidTournamentStateError).toBeTypeOf('function');
+        expect(() => validateTournamentState(json)).toThrow(InvalidTournamentStateError);
+    };
+
+    it('accepts what the engine itself serialized, and returns it', () => {
+        const s = playedState();
+        expect(validateTournamentState(s)).toBe(s);
+    });
+
+    it('accepts a legacy version-1 payload with its persisted history', () => {
+        const s = playedState();
+        s.version = 1;
+        delete s.gamesPlayed;
+        s.history = [{ winner: 'a.jpg', loser: 'b.jpg', round: 1, gameIndex: 0, timestamp: 1 }];
+        expect(validateTournamentState(s)).toBe(s);
+    });
+
+    it('ignores unknown fields, at the top level and in the strategy state', () => {
+        const s = playedState();
+        s.futureField = { anything: [1, 'x'] };
+        s.strategyState.futureField = 'x';
+        expect(validateTournamentState(s)).toBe(s);
+    });
+
+    it.each([1, 50])('accepts %i rounds, the config modal clamp bounds', (rounds) => {
+        expect(() => validateTournamentState(playedState({ rounds }))).not.toThrow();
+    });
+
+    it('names its error class and the reason', () => {
+        const s = playedState();
+        s.gamesPlayed = MARKUP;
+        let err;
+        try {
+            validateTournamentState(s);
+        } catch (e) {
+            err = e;
+        }
+        expect(err).toBeInstanceOf(InvalidTournamentStateError);
+        expect(err.name).toBe('InvalidTournamentStateError');
+        expect(err.message).toMatch(/^Invalid tournament state: \S/);
+    });
+
+    it.each([
+        ['markup as the top-level game count', (s) => (s.gamesPlayed = MARKUP)],
+        ['a fractional top-level game count', (s) => (s.gamesPlayed = 1.5)],
+        ['markup as the start time', (s) => (s.createdAt = MARKUP)],
+        ['a negative strategy game count', (s) => (s.strategyState.gamesPlayed = -1)],
+        ['markup as the current round', (s) => (s.strategyState.currentRound = MARKUP)],
+        ['top-level rounds as a string', (s) => (s.options.rounds = '3')],
+        ['top-level rounds of 0', (s) => (s.options.rounds = 0)],
+        ['top-level rounds of 51', (s) => (s.options.rounds = 51)],
+        ['fractional top-level rounds', (s) => (s.options.rounds = 2.5)],
+        ['markup as the strategy rounds', (s) => (s.strategyState.options.rounds = MARKUP)],
+        ['strategy rounds above the clamp', (s) => (s.strategyState.options.rounds = 1e9)],
+        ['a fractional win count', (s) => (s.strategyState.winCounts[0][1] = 0.5)],
+        ['a win count above twice the rounds', (s) => (s.strategyState.winCounts[0][1] = 7)],
+        ['a negative win count', (s) => (s.strategyState.winCounts[0][1] = -1)],
+        ['a markup win count', (s) => (s.strategyState.winCounts[0][1] = MARKUP)],
+        ['a non-string win-count key', (s) => (s.strategyState.winCounts[0][0] = 5)],
+        ['win counts as an object', (s) => (s.strategyState.winCounts = { 'a.jpg': 1 })],
+        ['a non-string file', (s) => (s.files[0] = 7)],
+        ['files missing', (s) => delete s.files],
+        ['a non-string strategy file', (s) => (s.strategyState.files[0] = {})],
+        ['byes as a string', (s) => (s.strategyState.byes = 'a.jpg')],
+        ['a non-string bye', (s) => (s.strategyState.byes = [1])],
+        ['a round-queue entry that is not a pair', (s) => (s.strategyState.roundQueue = [['a.jpg']])],
+        ['a non-string in a round-queue pair', (s) => (s.strategyState.roundQueue = [['a.jpg', 2]])],
+        ['a non-string played pair', (s) => (s.strategyState.playedPairs = [3])],
+        ['an unsupported version', (s) => (s.version = 3)],
+        ['an unknown strategy', (s) => (s.strategy = 'elo')],
+        ['missing strategy state', (s) => delete s.strategyState],
+        // Null-shaped JSON must reach the validator's own error, never a stray TypeError.
+        ['top-level options of null', (s) => (s.options = null)],
+        ['strategy options of null', (s) => (s.strategyState.options = null)],
+        ['a null win-count entry', (s) => (s.strategyState.winCounts = [null])],
+        ['a null round-queue entry', (s) => (s.strategyState.roundQueue = [null])],
+    ])('rejects %s', (_label, mutate) => {
+        const s = playedState();
+        mutate(s);
+        expectInvalid(s);
+    });
+
+    it.each([null, [], 'state', 42])('rejects a payload that is not an object (%j)', (json) => {
+        expectInvalid(json);
+    });
+
+    it('TournamentEngine.deserialize refuses an invalid state before constructing anything', () => {
+        const s = playedState();
+        s.strategyState.options.rounds = MARKUP;
+        expect(() => TournamentEngine.deserialize(s, s.files)).toThrow(InvalidTournamentStateError);
+    });
+
+    // (SwissStrategy.deserialize itself no longer validates: it restores trusted undo snapshots —
+    // deep review #11; the load boundary is covered below.)
+
+    // Property: every state the engine can reach validates — so the check can never reject a
+    // legitimate saved tournament — and no file ever wins more often than there are rounds,
+    // which is the headroom that justifies the loose 2 × rounds bound.
+    it('every state reached by random play validates, and no win count exceeds the rounds', () => {
+        let seed = 20261011;
+        const rand = () => {
+            seed = (seed * 1103515245 + 12345) % 2147483648;
+            return seed / 2147483648;
+        };
+        let checked = 0;
+        for (let t = 0; t < 80; t++) {
+            const n = 2 + Math.floor(rand() * 11);
+            const rounds = 1 + Math.floor(rand() * 7);
+            const files = Array.from({ length: n }, (_, i) => `f${i}.jpg`);
+            const eng = new TournamentEngine(files, new SwissStrategy(), { rounds });
+            for (let step = 0; step < 300; step++) {
+                const pair = eng.getCurrentPair();
+                if (!pair) break;
+                const r = rand();
+                if (r < 0.35) eng.recordResult(pair.left, pair.right);
+                else if (r < 0.65) eng.recordResult(pair.right, pair.left);
+                else if (r < 0.75) eng.recordDraw(pair.left, pair.right, 'win');
+                else if (r < 0.85) eng.recordDraw(pair.left, pair.right, 'lose');
+                else if (r < 0.92 && eng.files.length > 2) eng.removeFile(pair.left, { trackUndo: true });
+                else eng.undoUserAction();
+                const json = JSON.parse(JSON.stringify(eng.serialize()));
+                expect(() => validateTournamentState(json)).not.toThrow();
+                for (const [file, wins] of json.strategyState.winCounts) {
+                    expect(wins, `${file} after step ${step} of tournament ${t}`).toBeLessThanOrEqual(rounds);
+                }
+                checked++;
+            }
+        }
+        expect(checked).toBeGreaterThan(500);
+    });
+});
+
+// Deep review fix pass (Task 10), group C.
+describe('tournament state checks at the load boundary only, with membership (deep review #11, #14)', () => {
+    const GHOST = 'ghost.jpg';
+
+    function playedState({ files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg'], rounds = 3, picks = 3 } = {}) {
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds });
+        for (let i = 0; i < picks; i++) {
+            const pair = eng.getCurrentPair();
+            if (!pair) break;
+            eng.recordResult(pair.left, pair.right);
+        }
+        return JSON.parse(JSON.stringify(eng.serialize()));
+    }
+
+    // #11: undo restores in-memory snapshots through SwissStrategy.deserialize AFTER the history
+    // entry is popped; validating there threw mid-undo and lost the entry (and, for a special
+    // move, left the restored file out of the list).
+    it('undo restores a snapshot the load-time bound would reject, without throwing', () => {
+        const json = playedState({ files: ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], rounds: 1, picks: 0 });
+        json.strategyState.winCounts = json.strategyState.winCounts.map(([f]) => [f, f === 'a.jpg' ? 2 : 0]);
+        const eng = TournamentEngine.deserialize(json, json.files); // at the 2 × rounds bound: accepted
+        eng.strategy.winCounts.set('a.jpg', 3); // one more win in play
+        eng.removeFile('d.jpg', { trackUndo: true, kind: 'special' }); // snapshot holds a.jpg at 3
+        expect(() => eng.undoUserAction()).not.toThrow();
+        expect(eng.files).toContain('d.jpg');
+        expect(eng.strategy.winCounts.get('a.jpg')).toBe(3);
+    });
+
+    it('the load boundary still refuses an invalid strategy state', () => {
+        const s = playedState();
+        s.strategyState.winCounts[0][1] = '<b data-probe="1">7</b>';
+        expect(() => TournamentEngine.deserialize(s, s.files)).toThrow(InvalidTournamentStateError);
+    });
+
+    // #14: shape alone let a planted state name a file outside the tournament in its queue; the
+    // missing-file net's removeFile() then did nothing for it, and the render recursed once per
+    // media file (a measured freeze, up to a stack overflow).
+    it.each([
+        [
+            'a queue entry naming a file outside the tournament',
+            (s) => (s.strategyState.roundQueue = [[GHOST, s.files[0]]]),
+        ],
+        ['a queue pair of one file with itself', (s) => (s.strategyState.roundQueue = [[s.files[0], s.files[0]]])],
+        ['a bye outside the strategy files', (s) => (s.strategyState.byes = [GHOST])],
+        ['a win count for a file outside the strategy files', (s) => s.strategyState.winCounts.push([GHOST, 0])],
+        ['strategy files outside the tournament files', (s) => s.strategyState.files.push(GHOST)],
+    ])('rejects %s', (_label, mutate) => {
+        const s = playedState();
+        mutate(s);
+        expect(InvalidTournamentStateError).toBeTypeOf('function');
+        expect(() => validateTournamentState(s)).toThrow(InvalidTournamentStateError);
     });
 });

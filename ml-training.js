@@ -109,8 +109,6 @@ const round6 = (arr) => {
 };
 
 export class MlTrainingManager {
-    static CACHE_FILENAME = '.feature_cache.json';
-
     /**
      * @param {Object} o
      * @param {(path: string) => Promise<{success: boolean, files?: Array}>} o.loadFolder
@@ -125,7 +123,9 @@ export class MlTrainingManager {
      *        trainingConfigVersion) -- the renderer's handler forwards only these two fields.
      * @param {() => Object} o.getConfig
      * @param {() => Object} o.getBulkRatedContext
-     * @param {Object} o.cacheIo    Streaming feature-cache IO, all calls serialized by acquireLock
+     * @param {Object} o.cacheIo    Streaming feature-cache IO, all calls serialized by acquireLock.
+     *        `open(folder)` / `writeOpen(folder, header)` take the training FOLDER; main names the
+     *        `.feature_cache.json` file inside it (G1: the renderer never names a file path).
      * @param {Object} o.modelCache `{ read(), write(store) }`
      * @param {(p: Object) => void} o.onProgress
      * @param {(msg: string) => void} o.logError
@@ -149,11 +149,6 @@ export class MlTrainingManager {
         // model-cache hit. This is what makes a repeat sort in one session free.
         this.sessionFingerprint = null;
         this.sessionStats = null;
-    }
-
-    _cachePath(folderPath) {
-        const sep = folderPath.includes('\\') ? '\\' : '/';
-        return folderPath.replace(/[\\/]+$/, '') + sep + MlTrainingManager.CACHE_FILENAME;
     }
 
     /**
@@ -197,7 +192,7 @@ export class MlTrainingManager {
         let diskCount = 0;
         let aborted = false;
         try {
-            const opened = await this.cacheIo.open(this._cachePath(folderPath));
+            const opened = await this.cacheIo.open(folderPath);
             if (!opened?.success) return { entries, diskCount: 0, aborted: false };
             if (expectedVersion !== undefined && opened.version !== expectedVersion) {
                 await this.cacheIo.close();
@@ -309,7 +304,7 @@ export class MlTrainingManager {
             // exist but return undefined (the harness's bare-vi.fn() failure mode), and only the
             // second `?.` guards that.
             const version = this.getConfig?.()?.versions?.featureCacheVersion;
-            const opened = await this.cacheIo.writeOpen(this._cachePath(folderPath), {
+            const opened = await this.cacheIo.writeOpen(folderPath, {
                 version,
                 featureDim: FEATURE_DIM,
                 clipDim: CLIP_DIM,
@@ -742,8 +737,10 @@ export class MlTrainingManager {
         // both-empty check above.
         //
         // `scanFailed` suppresses the guard on purpose. Design doc § 7.2 rules that a folder that
-        // will not scan is "Report; train on whatever is available," and that row is still the
-        // contract -- a failed scan is not evidence that the class is empty. It is also where the
+        // will not scan is "Report; train on whatever is available." Since G1 the renderer refuses
+        // the AI sort up front for a training folder that is not granted or not reachable, so this
+        // row now covers a scan that fails after that check (e.g. a folder deleted mid-session) --
+        // and a failed scan is still not evidence that the class is empty. It is also where the
         // guard's own justification stops applying: `cacheable` already excludes a failed scan, so
         // no dead-end model can reach the model cache down that path, leaving only the wasted
         // extraction, which § 7.2 deliberately accepts.

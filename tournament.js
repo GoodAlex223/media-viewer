@@ -4,7 +4,12 @@
 // pattern (see fullscreen.js): receives MediaViewer dependencies via constructor;
 // MediaViewer delegates to this.tournament.*.
 
-import { TournamentEngine, SwissStrategy } from './tournament-engine.js';
+import {
+    TournamentEngine,
+    SwissStrategy,
+    validateTournamentState,
+    InvalidTournamentStateError,
+} from './tournament-engine.js';
 
 // Trailing-edge debounce for state writes. Picks coalesce within this window into a
 // single write of the latest state; a hard crash can lose at most this much progress.
@@ -85,6 +90,21 @@ export class TournamentManager {
                     'Tournament discard: state delete failed twice: ' + (retry.error ?? 'unknown')
                 );
             }
+        }
+    }
+
+    // G1: may a saved state be shown and resumed at all? The resume path asks this before the
+    // Continue prompt reads anything from it. Only a validation failure answers false: any other
+    // error propagates, so a validator bug can never silently discard a legitimate save (a fresh
+    // start would then overwrite it on the next persist).
+    isLoadableState(state) {
+        try {
+            validateTournamentState(state);
+            return true;
+        } catch (err) {
+            if (!(err instanceof InvalidTournamentStateError)) throw err;
+            window.electronAPI?.logError?.({ level: 'warn', message: err.message, source: 'renderer' });
+            return false;
         }
     }
 

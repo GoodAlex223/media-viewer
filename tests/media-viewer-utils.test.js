@@ -1333,6 +1333,7 @@ describe('handleSortByPrediction lifecycle', () => {
         const ctx = {
             isTournamentMode: false,
             isMlEnabled: true,
+            _refuseIfNeedsRegrant: () => false,
             isSortedByPrediction: false,
             mlWorker: {},
             featureWorkers: [{}],
@@ -1757,6 +1758,7 @@ describe('handleCancel feature restore', () => {
             requestPredictionScores: vi.fn(),
             // Helper under test — extracted as a real method so the handler can call it
             restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+            _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             ...overrides,
         };
     }
@@ -2490,6 +2492,7 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             moveHistory: [],
             showRatingConfirmations: false,
             areFoldersConfigured: () => true,
+            _refuseIfNeedsRegrant: () => false,
             getCombinedFeatures: () => null,
             removeFileFromList,
             updateFolderInfo: vi.fn(),
@@ -2669,6 +2672,7 @@ describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
         showMedia: vi.fn(async () => {}),
         requestPredictionScores: vi.fn(),
         restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+        _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
         ...overrides,
     });
 
@@ -4042,12 +4046,38 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             showLoadingSpinner: vi.fn(),
             hideLoadingSpinner: vi.fn(),
             showDropZone: vi.fn(),
+            folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(),
             showError: vi.fn(),
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
             _abortInFlightPredictionSort: vi.fn(abortInFlightPredictionSortImpl),
         };
     }
+
+    // Deep review #13: a startup grant reply computed before this folder was opened could land later
+    // and re-mark a saved folder this load's grant now covers. A load now re-checks whenever a
+    // folder is saved, marks or no marks, and invalidates any reply still in flight.
+    it('re-checks the saved folders after a load even when nothing is marked', async () => {
+        const ctx = makeCtx();
+        ctx.customLikeFolder = '/new/empty-folder/liked';
+        ctx._grantRefreshGen = 0;
+        ctx.refreshFolderGrants = vi.fn(async () => {});
+        await loadFolder.call(ctx, '/new/empty-folder');
+        expect(ctx.refreshFolderGrants).toHaveBeenCalledTimes(1);
+        expect(ctx._grantRefreshGen).toBe(1);
+    });
+
+    it('asks nothing after a load when no folder is saved', async () => {
+        const ctx = makeCtx();
+        ctx.customLikeFolder = '';
+        ctx.customDislikeFolder = '';
+        ctx.customSpecialFolder = '';
+        ctx._grantRefreshGen = 0;
+        ctx.refreshFolderGrants = vi.fn(async () => {});
+        await loadFolder.call(ctx, '/new/empty-folder');
+        expect(ctx.refreshFolderGrants).not.toHaveBeenCalled();
+    });
 
     it('tears down an in-flight sort even when the new folder is empty', async () => {
         const ctx = makeCtx();
@@ -4388,7 +4418,14 @@ describe('methodSource — literal-brace guard', () => {
 describe('showTournamentLeavePrompt continuation', () => {
     const showTournamentLeavePrompt = extractMethod('showTournamentLeavePrompt');
 
-    const makeEl = () => ({ textContent: '', innerHTML: '', style: {}, onclick: null });
+    const makeEl = () => ({
+        textContent: '',
+        innerHTML: '',
+        style: {},
+        onclick: null,
+        append: () => {},
+        replaceChildren: () => {},
+    });
     let elements;
 
     beforeEach(() => {
@@ -4400,7 +4437,7 @@ describe('showTournamentLeavePrompt continuation', () => {
             tournamentResumeDiscard: makeEl(),
             tournamentResumeCancel: makeEl(),
         };
-        globalThis.document = { getElementById: (id) => elements[id] };
+        globalThis.document = { getElementById: (id) => elements[id], createElement: () => makeEl() };
     });
     afterEach(() => {
         delete globalThis.document;
@@ -4458,6 +4495,118 @@ describe('showTournamentLeavePrompt continuation', () => {
         } finally {
             delete globalThis.window;
         }
+    });
+});
+
+// .tournament_state.json travels inside the media folder, so every value read from it is
+// untrusted. These modal bodies used to be assigned via innerHTML, which parsed whatever markup a
+// saved value held. The stand-in throws on any innerHTML write, so a regression back to HTML parsing
+// fails here instead of passing silently. The probe is inert markup: the test only needs to see
+// whether it would have been parsed.
+describe('tournament modals render persisted state as text, not HTML', () => {
+    const showTournamentContinuePrompt = extractMethod('showTournamentContinuePrompt');
+    const showTournamentLeavePrompt = extractMethod('showTournamentLeavePrompt');
+    const showTournamentSummaryModal = extractMethod('showTournamentSummaryModal');
+    const PAYLOAD = '<b data-probe="1">7</b>';
+
+    function makeNode() {
+        const node = {
+            textContent: '',
+            className: '',
+            style: {},
+            onclick: null,
+            disabled: false,
+            children: [],
+            append(...kids) {
+                this.children.push(...kids);
+            },
+            replaceChildren(...kids) {
+                this.children = kids;
+            },
+        };
+        Object.defineProperty(node, 'innerHTML', {
+            get: () => '',
+            set: () => {
+                throw new Error('innerHTML assigned');
+            },
+        });
+        return node;
+    }
+    // Text of a node and all its descendants, in order: what the user reads.
+    const renderedText = (node) => node.textContent + node.children.map(renderedText).join('');
+
+    let elements;
+    beforeEach(() => {
+        elements = {};
+        globalThis.document = {
+            getElementById: (id) => {
+                if (!elements[id]) elements[id] = makeNode();
+                return elements[id];
+            },
+            createElement: () => makeNode(),
+        };
+    });
+    afterEach(() => {
+        delete globalThis.document;
+    });
+
+    it('resume prompt shows a planted gamesPlayed as literal text', () => {
+        const ctx = { tournament: { validateStateFile: () => ({ valid: true, removed: [], added: [] }) } };
+        const state = {
+            version: 2,
+            strategy: 'swiss',
+            files: ['a', 'b'],
+            createdAt: Date.now(),
+            gamesPlayed: PAYLOAD,
+        };
+        showTournamentContinuePrompt.call(ctx, state, ['a', 'b']);
+        expect(renderedText(elements.tournamentResumeBody)).toContain(`${PAYLOAD}/3 games`);
+    });
+
+    it('leave prompt shows the resumed gamesPlayed as literal text', () => {
+        const ctx = { tournament: { engine: { getProgress: () => ({ gamesPlayed: PAYLOAD, gamesTotal: 3 }) } } };
+        showTournamentLeavePrompt.call(ctx, vi.fn());
+        expect(renderedText(elements.tournamentResumeBody)).toContain(`${PAYLOAD}/3 games`);
+    });
+
+    it('summary shows a planted rounds value as literal text', () => {
+        const ctx = {
+            baseFolderPath: '/media',
+            tournament: {
+                engine: {
+                    getTierBreakdown: () => ({}),
+                    strategy: { options: { rounds: PAYLOAD } },
+                    peekUndoKind: () => null,
+                },
+            },
+        };
+        showTournamentSummaryModal.call(ctx);
+        expect(renderedText(elements.tournamentSummaryBody)).toContain(`_Tier-{0..${PAYLOAD}}/ inside /media`);
+    });
+
+    it('summary still renders one tier row per tier, highest first, with proportional bars', () => {
+        const ctx = {
+            baseFolderPath: '/media',
+            tournament: {
+                engine: {
+                    getTierBreakdown: () => ({ 0: 2, 1: 1 }),
+                    strategy: { options: { rounds: 1 } },
+                    peekUndoKind: () => null,
+                },
+            },
+        };
+        showTournamentSummaryModal.call(ctx);
+        const [top, bottom, destination] = elements.tournamentSummaryBody.children;
+        expect(top.className).toBe('tier-row');
+        expect(top.children[0].textContent).toBe('Tier-1');
+        expect(top.children[1].className).toBe('tier-bar');
+        expect(top.children[1].children[0].className).toBe('tier-bar-fill');
+        expect(top.children[1].children[0].style.width).toBe('50%');
+        expect(top.children[2].textContent).toBe('1 files');
+        expect(bottom.children[0].textContent).toBe('Tier-0');
+        expect(bottom.children[1].children[0].style.width).toBe('100%');
+        expect(bottom.children[2].textContent).toBe('2 files');
+        expect(destination.textContent).toBe('→ Files will move into _Tier-{0..1}/ inside /media');
     });
 });
 
@@ -4640,7 +4789,7 @@ describe('loadFeatureCache incremental + signal', () => {
                 path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
                 featureCacheOpen: () => Promise.resolve({ success: false, notFound: true }),
                 featureCacheClose: () => Promise.resolve({ success: true }),
-                readFile: () => Promise.resolve(null),
+                readFolderCache: () => Promise.resolve(null),
             },
         };
         const existing = new Map([['/d/a.png', new Float32Array(64)]]);
@@ -4693,12 +4842,12 @@ describe('loadFeatureCache incremental + signal', () => {
     it('falls through to the legacy read when a chunk fetch throws mid-stream', async () => {
         // Staging is local, so a mid-stream chunk throw commits NOTHING into this.* — the
         // existing cache is intact and the streaming failure safely falls through to the legacy
-        // single-read path, which rebuilds from scratch. readFile returns a full valid cache;
+        // single-read path, which rebuilds from scratch. readFolderCache returns a full valid cache;
         // the assertions prove the legacy path ran AND produced the complete 1500-entry cache
         // (the partial staged chunk 1 was cleared, never clobbering the on-disk cache mid-way).
         const files = Array.from({ length: 1500 }, (_, i) => mkFile(`f${i}.png`, i, i));
         const all = files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)]);
-        let readFileCalled = false;
+        let legacyReadArgs = null;
         globalThis.window = {
             electronAPI: {
                 path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
@@ -4708,8 +4857,8 @@ describe('loadFeatureCache incremental + signal', () => {
                     return Promise.reject(new Error('IPC hiccup on chunk 2'));
                 },
                 featureCacheClose: () => Promise.resolve({ success: true }),
-                readFile: () => {
-                    readFileCalled = true;
+                readFolderCache: (...args) => {
+                    legacyReadArgs = args;
                     return Promise.resolve(JSON.stringify({ version: 4, features: Object.fromEntries(all) }));
                 },
             },
@@ -4722,7 +4871,9 @@ describe('loadFeatureCache incremental + signal', () => {
             clipCache: new Map(),
         };
         const size = await loadFeatureCacheLocked.call(ctx, {});
-        expect(readFileCalled).toBe(true); // streaming failure fell through to legacy
+        // Streaming failure fell through to legacy — through the fixed-name channel (G1): the
+        // renderer names the folder and the cache kind, never a file path.
+        expect(legacyReadArgs).toEqual(['/d', 'feature']);
         expect(size).toBe(1500); // full legacy contents, not the partial chunk 1
         expect(ctx.featureCache.size).toBe(1500);
     });
@@ -4912,7 +5063,7 @@ describe('saveFeatureCache data-loss guards', () => {
                 return Promise.resolve({ success: true });
             }),
             featureCacheWriteClose: vi.fn(() => Promise.resolve({ success: true })),
-            writeFile: vi.fn(() => Promise.resolve({ success: true })),
+            writeFolderCache: vi.fn(() => Promise.resolve({ success: true })),
             logError: vi.fn(),
         };
         globalThis.window = { electronAPI: api };
@@ -4954,7 +5105,7 @@ describe('saveFeatureCache data-loss guards', () => {
         expect(api.featureCacheWriteOpen).not.toHaveBeenCalled();
         expect(api.featureCacheWriteChunk).not.toHaveBeenCalled();
         expect(api.featureCacheWriteClose).not.toHaveBeenCalled();
-        expect(api.writeFile).not.toHaveBeenCalled();
+        expect(api.writeFolderCache).not.toHaveBeenCalled();
         expect(api.logError).toHaveBeenCalledWith(expect.stringContaining('shrink guard'));
         expect(ctx._featureCacheDiskCount).toBe(23559); // baseline untouched by the skipped save
     });
@@ -5006,24 +5157,27 @@ describe('saveFeatureCache data-loss guards', () => {
         expect(ctx._featureCacheDiskCount).toBe(2); // counts what was written, not map size (3)
     });
 
-    it('skips unresolvable entries on the legacy single-write path too', async () => {
-        delete api.featureCacheWriteOpen; // force the legacy fallback
+    // Deep review #10: a refused or failed write-open used to fall through to a legacy single write
+    // that built the whole cache as one string (~131 MB at 24k files) and wrote it non-atomically on
+    // every 30 s auto-save. On main that path was dead; G1's refusals made it live. It is gone:
+    // nothing is written, and the shrink guard keeps its baseline.
+    it('a refused write-open saves nothing and keeps the shrink baseline', async () => {
+        api.featureCacheWriteOpen = vi.fn(() => Promise.resolve({ success: false, error: 'Not permitted' }));
+        api.featureCacheWriteChunk = vi.fn();
+        api.writeFolderCache = vi.fn();
         const ctx = {
             baseFolderPath: '/d',
             mediaFiles: [],
-            featureCache: new Map([
-                ['/d/meta.png', new Float32Array(64).fill(0.1)],
-                ['/d/orphan.png', new Float32Array(64).fill(0.3)],
-            ]),
+            featureCache: new Map([['/d/meta.png', new Float32Array(64).fill(0.1)]]),
             featureMetadata: new Map([['/d/meta.png', { size: 111, mtime: 1111 }]]),
             clipCache: new Map(),
-            _featureCacheDiskCount: 0,
+            _featureCacheDiskCount: 7,
         };
         await saveFeatureCacheLocked.call(ctx);
-        expect(api.writeFile).toHaveBeenCalledTimes(1);
-        const payload = JSON.parse(api.writeFile.mock.calls[0][1]);
-        expect(Object.keys(payload.features)).toEqual(['meta.png']);
-        expect(ctx._featureCacheDiskCount).toBe(1);
+        expect(api.featureCacheWriteOpen).toHaveBeenCalledTimes(1);
+        expect(api.featureCacheWriteChunk).not.toHaveBeenCalled();
+        expect(api.writeFolderCache).not.toHaveBeenCalled();
+        expect(ctx._featureCacheDiskCount).toBe(7);
     });
 });
 
@@ -5055,6 +5209,7 @@ describe('handleTournamentUndo (unified undo stack)', () => {
             showNotification: vi.fn(),
             showError: vi.fn(),
             restoreFeatureCachesFromHistory: vi.fn(),
+            _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             updateFolderInfo: vi.fn(),
             showTournamentPair: vi.fn(async () => {}),
             ...overrides,
@@ -5076,7 +5231,7 @@ describe('handleTournamentUndo (unified undo stack)', () => {
                 moveFile: vi.fn(async () => ({ success: true })),
                 // Reached only by the stack-changed rollback path; real dirname so the target
                 // folder assertion is faithful rather than tautological.
-                path: { dirname: (p) => path.dirname(p) },
+                path: { dirname: (p) => path.dirname(p), basename: (p) => path.basename(p) },
                 logError: vi.fn(),
             },
         };
@@ -5213,6 +5368,32 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         expect(globalThis.window.electronAPI.moveFile).toHaveBeenCalledTimes(2);
         expect(globalThis.window.electronAPI.moveFile).toHaveBeenLastCalledWith({
             sourcePath: '/src/c.jpg',
+            targetFolder: path.dirname('/special/c.jpg'),
+            fileName: 'c.jpg',
+        });
+    });
+
+    // PR #78 close-out A: the entry was re-pointed at the restored path BEFORE the stack check, so an
+    // interrupted undo left it re-pointed and a retry restored under the suffixed name even after the
+    // original name came free. It is re-pointed only once the undo proceeds; the rollback moves the
+    // file from where it actually is.
+    it('an interrupted undo of a suffixed restore leaves the entry as it was and rolls back from the real path', async () => {
+        const meta = { ...SPECIAL_META };
+        const pending = { kind: 'special', meta };
+        const ctx = makeCtx(pending, { moveHistory: [meta] });
+        let peeks = 0;
+        ctx.tournament.engine.peekUndoEntry = vi.fn(() => (peeks++ === 0 ? pending : { kind: 'pick' }));
+        globalThis.window.electronAPI.moveFile = vi
+            .fn()
+            .mockResolvedValueOnce({ success: true, targetPath: '/src/c (1).jpg' })
+            .mockResolvedValueOnce({ success: true, targetPath: '/special/c.jpg' });
+
+        await handleTournamentUndo.call(ctx);
+
+        expect(meta.originalPath).toBe(SPECIAL_META.originalPath);
+        expect(meta.fileName).toBe(SPECIAL_META.fileName);
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenLastCalledWith({
+            sourcePath: '/src/c (1).jpg',
             targetFolder: path.dirname('/special/c.jpg'),
             fileName: 'c.jpg',
         });
@@ -6243,6 +6424,16 @@ describe('updateSpecialButtonsState tooltips', () => {
         expect(ctx.leftSpecialBtn.title).toBe('Move left to special folder (9)');
     });
 
+    it('appends the re-confirm suffix when the special folder is marked (G1 re-pick)', () => {
+        const ctx = ctxWith({ folder: 'C:/special' });
+        ctx.folderNeedsRegrant = new Set(['special']);
+        updateSpecialButtonsState.call(ctx);
+        expect(ctx.specialBtn.title).toBe('Move to special folder (1) — folder needs re-confirming (F1)');
+        expect(ctx.leftSpecialBtn.title).toBe('Move left to special folder (1) — folder needs re-confirming (F1)');
+        expect(ctx.rightSpecialBtn.title).toBe('Move right to special folder (2) — folder needs re-confirming (F1)');
+        expect(ctx.specialBtn.disabled).toBe(false);
+    });
+
     it('omits the suffix entirely when no special folder is configured', () => {
         const ctx = ctxWith({ folder: '' });
         updateSpecialButtonsState.call(ctx);
@@ -6320,6 +6511,318 @@ describe('updateRatingButtonsState tooltips (G1)', () => {
             expect(ctx[b].title, b).toBe('Configure like/dislike folders in Settings (F1)');
             expect(ctx[b].disabled, b).toBe(true);
         }
+    });
+
+    // G1 re-pick: a saved folder main has not granted keeps its buttons enabled (a click explains
+    // the refusal) and says so in the title, on that list's buttons only.
+    it('appends the re-confirm suffix to the marked list only', () => {
+        const ctx = ctxWith();
+        ctx.folderNeedsRegrant = new Set(['like']);
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.likeBtn.title).toBe('Like (Q) — folder needs re-confirming (F1)');
+        expect(ctx.leftLikeBtn.title).toBe('Like Left (Q) — folder needs re-confirming (F1)');
+        expect(ctx.rightLikeBtn.title).toBe('Like Right (E) — folder needs re-confirming (F1)');
+        expect(ctx.dislikeBtn.title).toBe('Dislike (W)');
+        expect(ctx.leftDislikeBtn.title).toBe('Dislike Left (W)');
+        expect(ctx.likeBtn.disabled).toBe(false);
+    });
+
+    it('says a folder on an absent drive is not reachable (review M-b)', () => {
+        const ctx = ctxWith();
+        ctx.folderUnreachable = new Set(['dislike']);
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.dislikeBtn.title).toBe('Dislike (W) — folder not reachable');
+        expect(ctx.likeBtn.title).toBe('Like (Q)');
+    });
+});
+
+// G1 cache trace: the hash cache lives in the media folder, so its values are untrusted. They feed
+// calculateHammingDistance's loop bound (hash.length) on the main thread and in the sorting
+// worker: an object with a huge `length` passed its guard and spun the loop forever.
+describe('loadHashCache keeps only well-formed hashes (G1)', () => {
+    const loadHashCache = extractAsyncMethod('loadHashCache');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('drops non-string, non-binary and oversized values, keeping real hashes', async () => {
+        const good = '01'.repeat(128);
+        const cache = {
+            'a.jpg': good,
+            'b.jpg': { length: 1e300 },
+            'c.jpg': 1e300,
+            'd.jpg': ['0', '1'],
+            'e.jpg': '<b data-probe="1">7</b>',
+            'f.jpg': '0'.repeat(5000),
+            'g.jpg': '',
+            'h.jpg': null,
+        };
+        globalThis.window = {
+            electronAPI: {
+                readFolderCache: vi.fn(async () => JSON.stringify(cache)),
+                path: { join: (a, b) => `${a}/${b}` },
+            },
+        };
+        const ctx = { baseFolderPath: '/f', perceptualHashes: new Map() };
+        const count = await loadHashCache.call(ctx);
+        expect([...ctx.perceptualHashes.entries()]).toEqual([['/f/a.jpg', good]]);
+        expect(count).toBe(1);
+    });
+});
+
+describe('enterTournamentMode resume validation (G1)', () => {
+    const enterTournamentMode = extractAsyncMethod('enterTournamentMode');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function ctxWith(state, loadable) {
+        globalThis.window = {
+            electronAPI: {
+                readTournamentState: vi.fn(async () => ({ success: true, state })),
+                logError: vi.fn(),
+            },
+        };
+        return {
+            restoreOriginalOrderForTournament: vi.fn(),
+            tournament: { engine: null, isLoadableState: vi.fn(() => loadable) },
+            baseFolderPath: '/f',
+            mediaFiles: [{ path: '/f/a.jpg' }, { path: '/f/b.jpg' }],
+            _logSlowPhase: vi.fn(),
+            showTournamentContinuePrompt: vi.fn(),
+            showTournamentConfigModal: vi.fn(),
+            showNotification: vi.fn(),
+        };
+    }
+
+    it('treats a saved tournament that fails validation as absent: one notice, then a fresh start', async () => {
+        const state = { version: 2, gamesPlayed: '<b data-probe="1">7</b>' };
+        const ctx = ctxWith(state, false);
+        await enterTournamentMode.call(ctx);
+        expect(ctx.tournament.isLoadableState).toHaveBeenCalledWith(state);
+        expect(ctx.showTournamentContinuePrompt).not.toHaveBeenCalled();
+        expect(ctx.showTournamentConfigModal).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledWith("Saved tournament couldn't be read — starting fresh", 'info');
+    });
+
+    it('still offers a saved tournament that validates', async () => {
+        const state = { version: 2 };
+        const ctx = ctxWith(state, true);
+        await enterTournamentMode.call(ctx);
+        expect(ctx.showTournamentContinuePrompt).toHaveBeenCalledWith(state, ['/f/a.jpg', '/f/b.jpg']);
+        expect(ctx.showTournamentConfigModal).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+});
+
+describe('re-pick marks for folders saved before grants (G1)', () => {
+    const refreshFolderGrants = extractAsyncMethod('refreshFolderGrants');
+    const _refuseIfNeedsRegrant = extractMethod('_refuseIfNeedsRegrant');
+    const _regrantListText = extractMethod('_regrantListText');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function ctxWith({
+        like = '/liked',
+        dislike = '/disliked',
+        special = '',
+        status = async (paths) => paths.map(() => false),
+    } = {}) {
+        const getGrantStatus = vi.fn(status);
+        globalThis.window = { electronAPI: { getGrantStatus, logError: vi.fn() } };
+        return {
+            customLikeFolder: like,
+            customDislikeFolder: dislike,
+            customSpecialFolder: special,
+            folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(),
+            _grantRefreshGen: 0,
+            showNotification: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
+            updateSpecialButtonsState: vi.fn(),
+            _regrantListText,
+            refreshFolderGrants, // re-asks itself after a stale reply
+            getGrantStatus,
+        };
+    }
+
+    it('marks only the saved folders main has not granted, and skips empty settings', async () => {
+        const ctx = ctxWith({ status: async () => [false, true] });
+        await refreshFolderGrants.call(ctx);
+        expect(ctx.getGrantStatus).toHaveBeenCalledWith(['/liked', '/disliked']);
+        expect([...ctx.folderNeedsRegrant]).toEqual(['like']);
+        expect(ctx.updateRatingButtonsState).toHaveBeenCalled();
+        expect(ctx.updateSpecialButtonsState).toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('clears a mark once main grants the folder', async () => {
+        const ctx = ctxWith({ status: async () => [true, true] });
+        ctx.folderNeedsRegrant.add('like');
+        await refreshFolderGrants.call(ctx);
+        expect(ctx.folderNeedsRegrant.size).toBe(0);
+    });
+
+    it('asks nothing and clears the marks when no folder is saved', async () => {
+        const ctx = ctxWith({ like: '', dislike: '' });
+        ctx.folderNeedsRegrant.add('special');
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect(ctx.getGrantStatus).not.toHaveBeenCalled();
+        expect(ctx.folderNeedsRegrant.size).toBe(0);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('with notify, shows one notice naming every marked folder', async () => {
+        const ctx = ctxWith({ special: '/special', status: async () => [false, false, false] });
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your like, dislike and special folders in Settings (F1) — click Browse and pick each again (security update)',
+            'warning'
+        );
+    });
+
+    it('with notify, words the notice for a single folder', async () => {
+        const ctx = ctxWith({ status: async () => [false, true] });
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your like folder in Settings (F1) — click Browse and pick it again (security update)',
+            'warning'
+        );
+    });
+
+    it('with notify, stays silent when every saved folder is granted', async () => {
+        const ctx = ctxWith({ status: async () => [true, true] });
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    // Review M-c: dropping the stale reply lost the OTHER folders' marks and the startup notice for
+    // the session when the first query was slow (realpath on an offline network path) and the
+    // user re-picked one folder meanwhile. The reply is now replaced by a fresh query.
+    it('asks again when a folder setting changed while the query was in flight', async () => {
+        let release;
+        const replies = [() => new Promise((r) => (release = r)), async () => [true, false]];
+        const ctx = ctxWith({ status: () => replies.shift()() });
+        const pending = refreshFolderGrants.call(ctx, { notify: true });
+        ctx._grantRefreshGen++; // the user re-picked the like folder while the query was in flight
+        release([false, false]); // describes the settings from before the re-pick
+        await pending;
+        expect(ctx.getGrantStatus).toHaveBeenCalledTimes(2);
+        expect([...ctx.folderNeedsRegrant]).toEqual(['dislike']);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your dislike folder in Settings (F1) — click Browse and pick it again (security update)',
+            'warning'
+        );
+    });
+
+    it('keeps the marks, logs, and resolves when main refuses the query', async () => {
+        const ctx = ctxWith({ status: async () => null });
+        ctx.folderNeedsRegrant.add('dislike');
+        await expect(refreshFolderGrants.call(ctx, { notify: true })).resolves.toBeUndefined();
+        expect([...ctx.folderNeedsRegrant]).toEqual(['dislike']);
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('resolves, keeping the marks, when the query throws', async () => {
+        const ctx = ctxWith({
+            status: async () => {
+                throw new Error('ipc gone');
+            },
+        });
+        ctx.folderNeedsRegrant.add('like');
+        await expect(refreshFolderGrants.call(ctx)).resolves.toBeUndefined();
+        expect([...ctx.folderNeedsRegrant]).toEqual(['like']);
+    });
+
+    it('refuses a move to a marked folder with the exact notice', () => {
+        const ctx = { folderNeedsRegrant: new Set(['like']), showNotification: vi.fn(), _regrantListText };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['like'], 'move')).toBe(true);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your like folder in Settings (F1) before moving files there',
+            'warning'
+        );
+    });
+
+    it('names only the marked folders among those asked about, in like/dislike/special order', () => {
+        const ctx = {
+            folderNeedsRegrant: new Set(['dislike', 'like', 'special']),
+            showNotification: vi.fn(),
+            _regrantListText,
+        };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['dislike', 'like', 'dislike'], 'sort')).toBe(true);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your like and dislike folders in Settings (F1) before using the AI sort',
+            'warning'
+        );
+    });
+
+    it('lets an unmarked folder through silently', () => {
+        const ctx = { folderNeedsRegrant: new Set(['special']), showNotification: vi.fn(), _regrantListText };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['like', 'dislike'], 'move')).toBe(false);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    // Review M-b: a granted folder on an absent drive is 'unreachable', not "needs re-confirming".
+    it('marks an unreachable folder apart from the re-confirm marks, with no security-update notice', async () => {
+        const ctx = ctxWith({ status: async () => ['unreachable', true] });
+        ctx.folderUnreachable = new Set();
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect([...ctx.folderNeedsRegrant]).toEqual([]);
+        expect([...ctx.folderUnreachable]).toEqual(['like']);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('refuses a move to an unreachable folder, and re-checks so the next press works', () => {
+        const ctx = {
+            folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(['like']),
+            showNotification: vi.fn(),
+            refreshFolderGrants: vi.fn(async () => {}),
+            _regrantListText,
+        };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['like'], 'move')).toBe(true);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            "Your like folder isn't reachable — check that its drive is connected",
+            'warning'
+        );
+        expect(ctx.refreshFolderGrants).toHaveBeenCalledTimes(1);
+    });
+
+    it('words the unreachable notice for several folders', () => {
+        const ctx = {
+            folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(['like', 'dislike']),
+            showNotification: vi.fn(),
+            refreshFolderGrants: vi.fn(async () => {}),
+            _regrantListText,
+        };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['like', 'dislike'], 'sort')).toBe(true);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            "Your like and dislike folders aren't reachable — check that their drives are connected",
+            'warning'
+        );
     });
 });
 
@@ -6452,6 +6955,8 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
             showRatingConfirmations: false,
             featureCache: new Map(),
             areFoldersConfigured: () => true,
+            _refuseIfNeedsRegrant: () => false,
+            _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
             removeFileFromList: vi.fn(function (p) {
@@ -6630,6 +7135,7 @@ describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
             customDislikeFolder: '/disliked',
             showRatingConfirmations: false,
             areFoldersConfigured: () => true,
+            _refuseIfNeedsRegrant: () => false,
             _bulkPairKeysReferencing: () => [],
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
@@ -7053,4 +7559,301 @@ describe('G3 final review: no skipped file reaches the summary (Apply never tier
             );
         });
     }
+});
+
+// Deep review #7: main now refuses a folder check on an ungranted folder with null, distinct
+// from false = missing. A refusal must never become a create-folder prompt (or the pair move's
+// silent create), and the folder checks run BEFORE any media teardown, so a refused or declined
+// move leaves the media on screen and moves nothing.
+describe('a refused folder check is not "missing" (deep review #7)', () => {
+    const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+    const moveToSpecialFolder = extractAsyncMethod('moveToSpecialFolder');
+    const moveComparePair = extractAsyncMethod('moveComparePair');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function useApi(exists) {
+        const api = {
+            checkFolderExists: vi.fn(async (f) => exists(f)),
+            createFolder: vi.fn(async () => ({ success: true })),
+            moveFile: vi.fn(async ({ targetFolder, fileName }) => ({
+                success: true,
+                targetPath: `${targetFolder}/${fileName}`,
+            })),
+            path: { basename: (p) => p.split('/').pop() },
+        };
+        globalThis.window = { electronAPI: api };
+        return api;
+    }
+
+    function baseCtx(overrides = {}) {
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isTournamentMode: false,
+            isSortedByPrediction: false,
+            isMlEnabled: false,
+            mlWorker: null,
+            moveHistory: [],
+            currentIndex: 0,
+            customLikeFolder: '/liked',
+            customDislikeFolder: '/disliked',
+            customSpecialFolder: '/special',
+            showRatingConfirmations: false,
+            featureCache: new Map(),
+            areFoldersConfigured: () => true,
+            _refuseIfNeedsRegrant: () => false,
+            _refuseUngrantedFolder: vi.fn(() => true),
+            getCombinedFeatures: () => null,
+            _bulkPairKeysReferencing: () => [],
+            removeFileFromList: vi.fn(function (p) {
+                this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
+            }),
+            signalUserActivity: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            forceVideoCleanup: vi.fn(async () => {}),
+            cleanupCompareMedia: vi.fn(async () => {}),
+            showMedia: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            showFolderCreationDialog: vi.fn(async () => false),
+            switchToSingleModeUI: vi.fn(),
+            showEmptyStateWithUndo: vi.fn(),
+            hideLoadingSpinner: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    const videos = () => [
+        { name: 'a.mp4', path: '/f/a.mp4', size: 1, type: 'video/mp4' },
+        { name: 'b.mp4', path: '/f/b.mp4', size: 1, type: 'video/mp4' },
+    ];
+
+    function singleCtx(overrides = {}) {
+        return baseCtx({ currentMedia: { tagName: 'VIDEO' }, mediaFiles: videos(), ...overrides });
+    }
+
+    function pairCtx(overrides = {}) {
+        const files = ['a', 'b', 'c'].map((n) => ({
+            name: `${n}.jpg`,
+            path: `/f/${n}.jpg`,
+            size: 1,
+            type: 'image/jpeg',
+        }));
+        return baseCtx({
+            isCompareMode: true,
+            leftMedia: { tagName: 'IMG' },
+            rightMedia: { tagName: 'IMG' },
+            mediaFiles: files,
+            compareLeftFile: files[0],
+            compareRightFile: files[1],
+            mlComparePairIndex: 0,
+            ...overrides,
+        });
+    }
+
+    it('moveCurrentFile: a refused check asks for re-confirmation, with no prompt, no move and no teardown', async () => {
+        const api = useApi(() => null);
+        const ctx = singleCtx();
+        await moveCurrentFile.call(ctx, 'like');
+        expect(ctx._refuseUngrantedFolder).toHaveBeenCalledWith('like');
+        expect(ctx.showFolderCreationDialog).not.toHaveBeenCalled();
+        expect(api.moveFile).not.toHaveBeenCalled();
+        expect(ctx.forceVideoCleanup).not.toHaveBeenCalled();
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('moveCurrentFile: a declined create prompt leaves the video in place', async () => {
+        const api = useApi(() => false);
+        const ctx = singleCtx();
+        await moveCurrentFile.call(ctx, 'like');
+        expect(ctx.showFolderCreationDialog).toHaveBeenCalledTimes(1);
+        expect(ctx.forceVideoCleanup).not.toHaveBeenCalled();
+        expect(api.moveFile).not.toHaveBeenCalled();
+    });
+
+    it('moveCurrentFile: control — an existing folder still tears the video down and moves', async () => {
+        const api = useApi(() => true);
+        const ctx = singleCtx();
+        await moveCurrentFile.call(ctx, 'like');
+        expect(ctx.forceVideoCleanup).toHaveBeenCalledTimes(1);
+        expect(api.moveFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('moveToSpecialFolder: a refused check asks for re-confirmation and tears nothing down', async () => {
+        const api = useApi(() => null);
+        const ctx = singleCtx();
+        await moveToSpecialFolder.call(ctx);
+        expect(ctx._refuseUngrantedFolder).toHaveBeenCalledWith('special');
+        expect(ctx.showFolderCreationDialog).not.toHaveBeenCalled();
+        expect(api.moveFile).not.toHaveBeenCalled();
+        expect(ctx.forceVideoCleanup).not.toHaveBeenCalled();
+    });
+
+    it('moveComparePair: a refused second folder moves neither file and tears nothing down', async () => {
+        const api = useApi((f) => (f === '/disliked' ? null : true));
+        const ctx = pairCtx();
+        await moveComparePair.call(ctx, 'left', 'like', 'dislike');
+        expect(ctx._refuseUngrantedFolder).toHaveBeenCalledWith('dislike');
+        expect(api.moveFile).not.toHaveBeenCalled();
+        expect(api.createFolder).not.toHaveBeenCalled();
+        expect(ctx.cleanupCompareMedia).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toEqual([]);
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('moveComparePair: control — both folders present still moves both files', async () => {
+        const api = useApi(() => true);
+        const ctx = pairCtx();
+        await moveComparePair.call(ctx, 'left', 'like', 'dislike');
+        expect(api.moveFile).toHaveBeenCalledTimes(2);
+    });
+
+    it('_refuseUngrantedFolder marks the folder, refreshes the titles, re-checks, and refuses with the notice', () => {
+        const _refuseUngrantedFolder = extractMethod('_refuseUngrantedFolder');
+        const ctx = {
+            folderNeedsRegrant: new Set(),
+            updateRatingButtonsState: vi.fn(),
+            updateSpecialButtonsState: vi.fn(),
+            refreshFolderGrants: vi.fn(async () => {}),
+            _refuseIfNeedsRegrant: vi.fn(() => true),
+        };
+        expect(_refuseUngrantedFolder.call(ctx, 'dislike')).toBe(true);
+        expect([...ctx.folderNeedsRegrant]).toEqual(['dislike']);
+        expect(ctx.updateRatingButtonsState).toHaveBeenCalled();
+        expect(ctx.refreshFolderGrants).toHaveBeenCalledTimes(1);
+        expect(ctx._refuseIfNeedsRegrant).toHaveBeenCalledWith(['dislike'], 'move');
+    });
+});
+
+// Deep review #3: every refused 'unreachable' press, every folder load and startup each started
+// their own grant query, so several realpaths on an offline share piled up. One at a time now:
+// a call during a query shares it and queues ONE more (notify OR-ed in).
+describe('grant refresh is single-flight (deep review #3)', () => {
+    const refreshFolderGrants = extractAsyncMethod('refreshFolderGrants');
+    const _regrantListText = extractMethod('_regrantListText');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('calls during a query share it, and one trailing query runs on the latest settings', async () => {
+        const releases = [];
+        const getGrantStatus = vi.fn(() => new Promise((r) => releases.push(r)));
+        globalThis.window = { electronAPI: { getGrantStatus, logError: vi.fn() } };
+        const ctx = {
+            customLikeFolder: '/liked',
+            customDislikeFolder: '/disliked',
+            customSpecialFolder: '',
+            folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(),
+            _grantRefreshGen: 0,
+            showNotification: vi.fn(),
+            updateRatingButtonsState: vi.fn(),
+            updateSpecialButtonsState: vi.fn(),
+            _regrantListText,
+        };
+        const a = refreshFolderGrants.call(ctx);
+        const b = refreshFolderGrants.call(ctx);
+        const c = refreshFolderGrants.call(ctx, { notify: true });
+        expect(getGrantStatus).toHaveBeenCalledTimes(1);
+        releases[0]([false, false]);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(getGrantStatus).toHaveBeenCalledTimes(2);
+        releases[1]([true, false]);
+        await Promise.all([a, b, c]);
+        expect(getGrantStatus).toHaveBeenCalledTimes(2);
+        expect([...ctx.folderNeedsRegrant]).toEqual(['dislike']);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1); // the queued notify, on the fresh reply
+    });
+});
+
+// PR #78 review #2: move-file never replaces an entry, so when a same-named file appeared in the
+// source folder after a move, undo restores to "name (n).ext". The restore legs rebuilt the list
+// entry (and the feature caches) from the OLD name, pointing at the other file.
+describe('undo follows where a file was actually put back (PR #78 review #2)', () => {
+    const handleCancel = extractAsyncMethod('handleCancel');
+    const _followRestoredFile = extractMethod('_followRestoredFile');
+    let origWindow;
+
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function useMoveResult(targetPath) {
+        globalThis.window = {
+            electronAPI: {
+                moveFile: vi.fn(async () => ({ success: true, targetPath })),
+                path: { basename: (p) => p.split('/').pop() },
+            },
+        };
+    }
+
+    function singleCtx() {
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: false,
+            isTournamentMode: false,
+            isSortedByPrediction: false,
+            baseFolderPath: '/f',
+            currentIndex: 0,
+            mediaFiles: [{ name: 'b.jpg', path: '/f/b.jpg', size: 1, type: 'image/jpeg' }],
+            moveHistory: [
+                {
+                    fileName: 'a.jpg',
+                    originalPath: '/f/a.jpg',
+                    newPath: '/liked/a.jpg',
+                    fileSize: 10,
+                    fileType: 'image/jpeg',
+                    actionType: 'like',
+                    mlFeatures: null,
+                },
+            ],
+            _followRestoredFile,
+            restoreFeatureCachesFromHistory: vi.fn(),
+            requestPredictionScores: vi.fn(),
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+        };
+    }
+
+    it('rebuilds the list entry and restores the caches under the name the file was restored to', async () => {
+        useMoveResult('/f/a (1).jpg');
+        const ctx = singleCtx();
+        await handleCancel.call(ctx);
+        expect(ctx.mediaFiles[0]).toMatchObject({ name: 'a (1).jpg', path: '/f/a (1).jpg' });
+        expect(ctx.mediaFiles[1].path).toBe('/f/b.jpg'); // the other file keeps its own entry
+        expect(ctx.restoreFeatureCachesFromHistory).toHaveBeenCalledWith(
+            expect.objectContaining({ originalPath: '/f/a (1).jpg', fileName: 'a (1).jpg' })
+        );
+    });
+
+    it('control: a file restored under its own name keeps its entry', async () => {
+        useMoveResult('/f/a.jpg');
+        const ctx = singleCtx();
+        await handleCancel.call(ctx);
+        expect(ctx.mediaFiles[0]).toMatchObject({ name: 'a.jpg', path: '/f/a.jpg' });
+    });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TournamentManager } from '../tournament.js';
+import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
 
 function makeHost(mediaFiles = []) {
     return {
@@ -522,5 +523,42 @@ describe('TournamentManager.reconcileWithFiles', () => {
         tm.cancelPending();
 
         expect(host.showNotification).toHaveBeenCalledWith(expect.stringContaining('1 file left'), 'info');
+    });
+});
+
+// G1: the resume path asks this before showing anything from a saved state.
+describe('TournamentManager.isLoadableState (G1)', () => {
+    function savedState() {
+        const eng = new TournamentEngine(['a.jpg', 'b.jpg', 'c.jpg'], new SwissStrategy(), { rounds: 2 });
+        const pair = eng.getCurrentPair();
+        eng.recordResult(pair.left, pair.right);
+        return JSON.parse(JSON.stringify(eng.serialize()));
+    }
+
+    it('accepts a state the engine serialized', () => {
+        const tm = new TournamentManager(makeHost());
+        expect(tm.isLoadableState(savedState())).toBe(true);
+    });
+
+    it('refuses an invalid state without throwing, and logs why', () => {
+        globalThis.window.electronAPI.logError = vi.fn();
+        const tm = new TournamentManager(makeHost());
+        const s = savedState();
+        s.options.rounds = '<b data-probe="1">7</b>';
+        expect(tm.isLoadableState(s)).toBe(false);
+        expect(globalThis.window.electronAPI.logError).toHaveBeenCalledWith(
+            expect.objectContaining({ level: 'warn', message: expect.stringContaining('Invalid tournament state') })
+        );
+    });
+
+    it('lets an unexpected error through rather than reading it as "invalid"', () => {
+        const tm = new TournamentManager(makeHost());
+        const trap = {};
+        Object.defineProperty(trap, 'version', {
+            get() {
+                throw new RangeError('not a validation failure');
+            },
+        });
+        expect(() => tm.isLoadableState(trap)).toThrow(RangeError);
     });
 });

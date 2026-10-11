@@ -1,7 +1,8 @@
 // ESLint flat configuration for Electron media_viewer project.
 //
-// Twelve file-group blocks:
-//   1.  Node/Electron main           — main.js, logger.js
+// Twelve file-group blocks, plus one rule-only object (1c):
+//   1.  Node/Electron main           — main.js, logger.js, path-grants.js, ipc-guard.js
+//   1c. main.js IPC guard            — no ipcMain registration outside ipc-guard (G1)
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
 //   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
@@ -14,6 +15,7 @@
 //   5b. E2E tests (Playwright)       — tests/e2e/**/*.js, playwright.config.js
 //   6.  Scripts + Claude Code hooks  — scripts/**/*.js, .claude/hooks/**/*.js (Node CJS)
 //
+// Renderer blocks (2a, 2b, 2c, 3b) share htmlSinkGuard (G1): no built string reaches the HTML parser.
 // eslint-config-prettier applied last to suppress formatting rule conflicts.
 
 import globals from 'globals';
@@ -30,6 +32,31 @@ const sharedRules = {
     'no-console': 'off',
 };
 
+// G1 lint guard (spec § 6.4): renderer code never hands a built string to the HTML parser.
+// innerHTML/outerHTML may take only a static string; insertAdjacentHTML and document.write are
+// banned outright. tests/lint-guard.test.js proves every selector fires. Flat config REPLACES a
+// rule's options for a matching file, so any later no-restricted-syntax entry for these files
+// must be merged into this array, not set in another object.
+const NOT_STATIC = ":not([right.type='Literal']):not([right.type='TemplateLiteral'][right.expressions.length=0])";
+const HTML_SINK_MESSAGE =
+    'Build DOM nodes (createElement + textContent) instead of handing a built string to the HTML parser (G1).';
+const htmlSinkGuard = [
+    'error',
+    {
+        selector: `AssignmentExpression[left.property.name=/^(innerHTML|outerHTML)$/]${NOT_STATIC}`,
+        message: HTML_SINK_MESSAGE,
+    },
+    {
+        selector: `AssignmentExpression[left.computed=true][left.property.value=/^(innerHTML|outerHTML)$/]${NOT_STATIC}`,
+        message: HTML_SINK_MESSAGE,
+    },
+    { selector: "CallExpression[callee.property.name='insertAdjacentHTML']", message: HTML_SINK_MESSAGE },
+    {
+        selector: "CallExpression[callee.object.name='document'][callee.property.name=/^(write|writeln)$/]",
+        message: HTML_SINK_MESSAGE,
+    },
+];
+
 export default [
     // Global ignores
     {
@@ -38,7 +65,7 @@ export default [
 
     // 1. Node / Electron main process
     {
-        files: ['main.js', 'logger.js'],
+        files: ['main.js', 'logger.js', 'path-grants.js', 'ipc-guard.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',
@@ -49,6 +76,24 @@ export default [
         rules: {
             ...sharedRules,
             'no-undef': 'error',
+        },
+    },
+
+    // 1c. main.js — every privileged channel registers through ipc-guard's handle/on (G1 § 3.3),
+    // which checks the sender frame and each argument. ipc-guard.js itself must call ipcMain, so
+    // this object names main.js alone. tests/lint-guard.test.js proves it fires.
+    {
+        files: ['main.js'],
+        rules: {
+            'no-restricted-syntax': [
+                'error',
+                {
+                    selector:
+                        "CallExpression[callee.object.name='ipcMain'][callee.property.name=/^(handle|handleOnce|on|once|addListener|prependListener|prependOnceListener)$/]",
+                    message:
+                        'Register IPC through guard.handle / guard.on (ipc-guard.js), never on ipcMain directly (G1).',
+                },
+            ],
         },
     },
 
@@ -88,6 +133,7 @@ export default [
         rules: {
             ...sharedRules,
             'no-undef': 'error',
+            'no-restricted-syntax': htmlSinkGuard,
         },
     },
 
@@ -105,6 +151,7 @@ export default [
         rules: {
             ...sharedRules,
             'no-undef': 'error',
+            'no-restricted-syntax': htmlSinkGuard,
         },
     },
 
@@ -121,6 +168,7 @@ export default [
         rules: {
             ...sharedRules,
             'no-undef': 'error',
+            'no-restricted-syntax': htmlSinkGuard,
         },
     },
 
@@ -182,6 +230,7 @@ export default [
         rules: {
             ...sharedRules,
             'no-undef': 'error',
+            'no-restricted-syntax': htmlSinkGuard,
         },
     },
 

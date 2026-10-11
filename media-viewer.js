@@ -272,6 +272,16 @@ class MediaViewer {
         this.customLikeFolder = localStorage.getItem('customLikeFolder') || '';
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
+        // G1 re-pick: which saved folders main has not granted ('like' | 'dislike' | 'special'),
+        // filled by refreshFolderGrants(). A Browse or Clear bumps the generation so a query
+        // already in flight cannot re-mark the folder the user just picked.
+        this.folderNeedsRegrant = new Set();
+        // Granted, but nothing on the path resolves right now (its drive is absent): refused with
+        // a "check the drive" notice rather than a re-confirm one (review M-b).
+        this.folderUnreachable = new Set();
+        this._grantRefreshGen = 0;
+        this._grantRefresh = null; // the in-flight grant query (single-flight, deep review #3)
+        this._grantRefreshQueued = null;
         this.shortcuts = this.loadShortcuts();
         this.shortcutReverseMap = this.buildReverseMap();
         this._listeningState = null;
@@ -328,6 +338,9 @@ class MediaViewer {
         // After initializeElements(): loadShortcuts runs far earlier in this constructor, before
         // the notification container exists, so the report is deferred to here.
         this._reportShortcutCollisions();
+        // Folders saved before G1 are not granted in main: mark them and say so once. Not
+        // awaited (never rejects); a move or AI sort checks the marks synchronously.
+        this.refreshFolderGrants({ notify: true });
         // ML worker and feature pool are initialized lazily when user clicks "Sort by Prediction"
 
         if (!window.electronAPI) {
@@ -458,41 +471,51 @@ class MediaViewer {
     }
 
     // Sole runtime owner of the six static like/dislike titles: overwrites index.html's at init,
-    // on every like/dislike-folder browse/clear, and from saveShortcut/resetShortcuts.
+    // on every like/dislike-folder browse/clear, from saveShortcut/resetShortcuts, and from
+    // refreshFolderGrants when a re-confirm mark changes (G1).
     updateRatingButtonsState() {
         const enabled = this.areFoldersConfigured();
         const tooltip = enabled ? '' : 'Configure like/dislike folders in Settings (F1)';
         // Hotkeys come from the live bindings (G1). The single-mode titles once read
         // 'Arrow Up'/'Arrow Down' — wrong even with the default Q/W.
-        const title = (label, mode, action) => (enabled ? label + this._shortcutSuffix(mode, action) : tooltip);
+        // A folder main has not granted (G1 re-pick) stays enabled — a click explains the refusal —
+        // and says so here.
+        const regrant = (list) =>
+            this.folderNeedsRegrant?.has(list)
+                ? ' — folder needs re-confirming (F1)'
+                : this.folderUnreachable?.has(list)
+                  ? ' — folder not reachable'
+                  : '';
+        const title = (label, mode, action, list) =>
+            enabled ? label + this._shortcutSuffix(mode, action) + regrant(list) : tooltip;
 
         // Single mode buttons
         if (this.likeBtn) {
             this.likeBtn.disabled = !enabled;
-            this.likeBtn.title = title('Like', 'single', 'like');
+            this.likeBtn.title = title('Like', 'single', 'like', 'like');
         }
         if (this.dislikeBtn) {
             this.dislikeBtn.disabled = !enabled;
-            this.dislikeBtn.title = title('Dislike', 'single', 'dislike');
+            this.dislikeBtn.title = title('Dislike', 'single', 'dislike', 'dislike');
         }
 
         // Compare mode buttons. Like the special pair, these live in .left/.right-media-controls,
         // which CSS hides in tournament mode, so they always read the compare map.
         if (this.leftLikeBtn) {
             this.leftLikeBtn.disabled = !enabled;
-            this.leftLikeBtn.title = title('Like Left', 'compare', 'leftLike');
+            this.leftLikeBtn.title = title('Like Left', 'compare', 'leftLike', 'like');
         }
         if (this.leftDislikeBtn) {
             this.leftDislikeBtn.disabled = !enabled;
-            this.leftDislikeBtn.title = title('Dislike Left', 'compare', 'leftDislike');
+            this.leftDislikeBtn.title = title('Dislike Left', 'compare', 'leftDislike', 'dislike');
         }
         if (this.rightLikeBtn) {
             this.rightLikeBtn.disabled = !enabled;
-            this.rightLikeBtn.title = title('Like Right', 'compare', 'rightLike');
+            this.rightLikeBtn.title = title('Like Right', 'compare', 'rightLike', 'like');
         }
         if (this.rightDislikeBtn) {
             this.rightDislikeBtn.disabled = !enabled;
-            this.rightDislikeBtn.title = title('Dislike Right', 'compare', 'rightDislike');
+            this.rightDislikeBtn.title = title('Dislike Right', 'compare', 'rightDislike', 'dislike');
         }
 
         // Update folder config warning
@@ -512,15 +535,22 @@ class MediaViewer {
 
     // Sole runtime owner of the three static special-button titles: it overwrites whatever
     // index.html declared, on init and on every special-folder browse/clear. saveShortcut and
-    // resetShortcuts also call it so a rebinding refreshes the suffix.
+    // resetShortcuts also call it so a rebinding refreshes the suffix, and refreshFolderGrants
+    // so a re-confirm mark (G1) reaches the titles.
     updateSpecialButtonsState() {
         const enabled = !!this.customSpecialFolder;
         const tooltip = enabled ? 'Move to special folder' : 'Configure special folder in Settings (F1)';
+        // Not granted in main (G1 re-pick): stays enabled, a click explains the refusal.
+        const regrant = this.folderNeedsRegrant?.has('special')
+            ? ' — folder needs re-confirming (F1)'
+            : this.folderUnreachable?.has('special')
+              ? ' — folder not reachable'
+              : '';
 
         // Single mode button — suffix from single's `special` binding (Digit1 by default).
         if (this.specialBtn) {
             this.specialBtn.disabled = !enabled;
-            this.specialBtn.title = enabled ? tooltip + this._shortcutSuffix('single', 'special') : tooltip;
+            this.specialBtn.title = enabled ? tooltip + this._shortcutSuffix('single', 'special') + regrant : tooltip;
         }
 
         // Compare mode buttons. These live in .left/.right-media-controls, which CSS hides in
@@ -528,15 +558,132 @@ class MediaViewer {
         if (this.leftSpecialBtn) {
             this.leftSpecialBtn.disabled = !enabled;
             this.leftSpecialBtn.title = enabled
-                ? 'Move left to special folder' + this._shortcutSuffix('compare', 'leftSpecial')
+                ? 'Move left to special folder' + this._shortcutSuffix('compare', 'leftSpecial') + regrant
                 : tooltip;
         }
         if (this.rightSpecialBtn) {
             this.rightSpecialBtn.disabled = !enabled;
             this.rightSpecialBtn.title = enabled
-                ? 'Move right to special folder' + this._shortcutSuffix('compare', 'rightSpecial')
+                ? 'Move right to special folder' + this._shortcutSuffix('compare', 'rightSpecial') + regrant
                 : tooltip;
         }
+    }
+
+    // G1 re-pick. Every file IPC on a folder main has not granted is refused, and folders saved
+    // before grants existed never were. The marks mirror main's answer so a move or AI sort can
+    // refuse up front with a re-confirm notice, instead of failing halfway (review C1). Never
+    // rejects: a refused or failed query logs and leaves the marks as they were.
+    //
+    // Single-flight (deep review #3): one query at a time. A call while one runs shares it and
+    // queues ONE trailing query (notify OR-ed in), which reads the settings as they are then;
+    // startup, every folder load and every refused 'unreachable' press used to start their own,
+    // piling realpaths on an offline share. Overlapping replies could also land last-wins.
+    async refreshFolderGrants({ notify = false } = {}) {
+        if (this._grantRefresh) {
+            this._grantRefreshQueued = { notify: notify || !!this._grantRefreshQueued?.notify };
+            return this._grantRefresh;
+        }
+        const run = async (first) => {
+            for (let next = first; next; next = this._grantRefreshQueued) {
+                this._grantRefreshQueued = null;
+                const saved = [
+                    ['like', this.customLikeFolder],
+                    ['dislike', this.customDislikeFolder],
+                    ['special', this.customSpecialFolder],
+                ].filter(([, folder]) => !!folder);
+                const gen = this._grantRefreshGen;
+                // Per folder: true (granted), false (re-pick needed) or 'unreachable' (granted,
+                // drive absent).
+                let statuses = [];
+                if (saved.length > 0) {
+                    try {
+                        statuses = await window.electronAPI.getGrantStatus(saved.map(([, folder]) => folder));
+                    } catch (_err) {
+                        statuses = null;
+                    }
+                    if (!Array.isArray(statuses) || statuses.length !== saved.length) {
+                        window.electronAPI?.logError?.({
+                            level: 'warn',
+                            message: 'Could not check which saved folders are granted; re-confirm marks unchanged',
+                            source: 'renderer',
+                        });
+                        continue;
+                    }
+                }
+                // A Browse, Clear or folder load landed while the query was in flight, so this reply
+                // describes settings that no longer hold. Ask again rather than drop it: dropping lost
+                // the OTHER folders' marks and the startup notice for the session (review M-c).
+                if (gen !== this._grantRefreshGen) {
+                    this._grantRefreshQueued = { notify: next.notify || !!this._grantRefreshQueued?.notify };
+                    continue;
+                }
+
+                const listsWhere = (test) => new Set(saved.filter((_, i) => test(statuses[i])).map(([list]) => list));
+                this.folderUnreachable = listsWhere((st) => st === 'unreachable');
+                this.folderNeedsRegrant = listsWhere((st) => st !== true && st !== 'unreachable'); // fail safe
+                this.updateRatingButtonsState();
+                this.updateSpecialButtonsState();
+                if (next.notify && this.folderNeedsRegrant.size > 0) {
+                    const { list, plural } = this._regrantListText([...this.folderNeedsRegrant]);
+                    this.showNotification(
+                        `Re-confirm your ${list} folder${plural ? 's' : ''} in Settings (F1) — click Browse and pick ${plural ? 'each' : 'it'} again (security update)`,
+                        'warning'
+                    );
+                }
+            }
+        };
+        this._grantRefresh = run({ notify }).finally(() => {
+            this._grantRefresh = null;
+        });
+        return this._grantRefresh;
+    }
+
+    // Main refused a folder check: the marks were stale (e.g. the startup query still in flight),
+    // and the folder is not granted. Mark it, ask main again, and refuse with the re-confirm notice
+    // — never the create-folder prompt a "missing" folder gets (deep review #7).
+    _refuseUngrantedFolder(list) {
+        this.folderNeedsRegrant.add(list);
+        this.updateRatingButtonsState();
+        this.updateSpecialButtonsState();
+        this.refreshFolderGrants();
+        return this._refuseIfNeedsRegrant([list], 'move');
+    }
+
+    // 'like' / 'like and dislike' / 'like, dislike and special': fixed order, duplicates dropped.
+    _regrantListText(lists) {
+        const names = ['like', 'dislike', 'special'].filter((name) => lists.includes(name));
+        const list =
+            names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || '';
+        return { list, plural: names.length > 1 };
+    }
+
+    // Synchronous on purpose: the move methods call it before their first await, so a refusal
+    // tears no media down (review C1) and leaves nothing in flight. `purpose`: 'move' | 'sort'.
+    _refuseIfNeedsRegrant(lists, purpose) {
+        const marked = lists.filter((name) => this.folderNeedsRegrant?.has(name));
+        if (marked.length > 0) {
+            const { list, plural } = this._regrantListText(marked);
+            const tail = purpose === 'sort' ? 'before using the AI sort' : 'before moving files there';
+            this.showNotification(
+                `Re-confirm your ${list} folder${plural ? 's' : ''} in Settings (F1) ${tail}`,
+                'warning'
+            );
+            return true;
+        }
+        const unreachable = lists.filter((name) => this.folderUnreachable?.has(name));
+        if (unreachable.length > 0) {
+            const { list, plural } = this._regrantListText(unreachable);
+            this.showNotification(
+                plural
+                    ? `Your ${list} folders aren't reachable — check that their drives are connected`
+                    : `Your ${list} folder isn't reachable — check that its drive is connected`,
+                'warning'
+            );
+            // Re-check in the background, so the next press works once the drive is back (M-b).
+            this.refreshFolderGrants();
+            return true;
+        }
+        return false;
     }
 
     setupFolderSettings() {
@@ -558,8 +705,13 @@ class MediaViewer {
         // Browse button for like folder
         if (likeFolderBrowse) {
             likeFolderBrowse.addEventListener('click', async () => {
-                const folder = await window.electronAPI.openFolderDialog();
+                // Opens at the saved folder, so a re-pick (G1) is one click.
+                const folder = await window.electronAPI.openFolderDialog(this.customLikeFolder || undefined);
                 if (folder) {
+                    // The pick granted it in main: drop its mark, and any query still in flight.
+                    this._grantRefreshGen++;
+                    this.folderNeedsRegrant.delete('like');
+                    this.folderUnreachable.delete('like');
                     this.customLikeFolder = folder;
                     localStorage.setItem('customLikeFolder', folder);
                     if (likeFolderInput) {
@@ -574,8 +726,13 @@ class MediaViewer {
         // Browse button for dislike folder
         if (dislikeFolderBrowse) {
             dislikeFolderBrowse.addEventListener('click', async () => {
-                const folder = await window.electronAPI.openFolderDialog();
+                // Opens at the saved folder, so a re-pick (G1) is one click.
+                const folder = await window.electronAPI.openFolderDialog(this.customDislikeFolder || undefined);
                 if (folder) {
+                    // The pick granted it in main: drop its mark, and any query still in flight.
+                    this._grantRefreshGen++;
+                    this.folderNeedsRegrant.delete('dislike');
+                    this.folderUnreachable.delete('dislike');
                     this.customDislikeFolder = folder;
                     localStorage.setItem('customDislikeFolder', folder);
                     if (dislikeFolderInput) {
@@ -590,6 +747,9 @@ class MediaViewer {
         // Clear button for like folder
         if (likeFolderClear) {
             likeFolderClear.addEventListener('click', () => {
+                this._grantRefreshGen++;
+                this.folderNeedsRegrant.delete('like');
+                this.folderUnreachable.delete('like');
                 this.customLikeFolder = '';
                 localStorage.removeItem('customLikeFolder');
                 if (likeFolderInput) {
@@ -603,6 +763,9 @@ class MediaViewer {
         // Clear button for dislike folder
         if (dislikeFolderClear) {
             dislikeFolderClear.addEventListener('click', () => {
+                this._grantRefreshGen++;
+                this.folderNeedsRegrant.delete('dislike');
+                this.folderUnreachable.delete('dislike');
                 this.customDislikeFolder = '';
                 localStorage.removeItem('customDislikeFolder');
                 if (dislikeFolderInput) {
@@ -626,8 +789,13 @@ class MediaViewer {
         // Browse button for special folder
         if (specialFolderBrowse) {
             specialFolderBrowse.addEventListener('click', async () => {
-                const folder = await window.electronAPI.openFolderDialog();
+                // Opens at the saved folder, so a re-pick (G1) is one click.
+                const folder = await window.electronAPI.openFolderDialog(this.customSpecialFolder || undefined);
                 if (folder) {
+                    // The pick granted it in main: drop its mark, and any query still in flight.
+                    this._grantRefreshGen++;
+                    this.folderNeedsRegrant.delete('special');
+                    this.folderUnreachable.delete('special');
                     this.customSpecialFolder = folder;
                     localStorage.setItem('customSpecialFolder', folder);
                     if (specialFolderInput) {
@@ -641,6 +809,9 @@ class MediaViewer {
         // Clear button for special folder
         if (specialFolderClear) {
             specialFolderClear.addEventListener('click', () => {
+                this._grantRefreshGen++;
+                this.folderNeedsRegrant.delete('special');
+                this.folderUnreachable.delete('special');
                 this.customSpecialFolder = '';
                 localStorage.removeItem('customSpecialFolder');
                 if (specialFolderInput) {
@@ -656,6 +827,7 @@ class MediaViewer {
             const modal = document.createElement('div');
             modal.className = 'folder-creation-modal';
 
+            // Static markup only; the path (a saved setting) goes in as text, never parsed (G1).
             modal.innerHTML = `
                 <div class="folder-creation-content">
                     <div class="folder-creation-title">
@@ -665,13 +837,14 @@ class MediaViewer {
                     <p class="folder-creation-text">
                         The target folder doesn't exist. Would you like to create it?
                     </p>
-                    <div class="folder-creation-path">${folderPath}</div>
+                    <div class="folder-creation-path"></div>
                     <div class="folder-creation-actions">
                         <button id="createBtn" class="folder-creation-btn folder-creation-btn-create">Create Folder</button>
                         <button id="cancelBtn" class="folder-creation-btn folder-creation-btn-cancel">Cancel</button>
                     </div>
                 </div>
             `;
+            modal.querySelector('.folder-creation-path').textContent = folderPath;
 
             // Initialize Lucide icons in the modal
             if (typeof lucide !== 'undefined') {
@@ -1253,6 +1426,19 @@ class MediaViewer {
         return idx === undefined ? -1 : idx;
     }
 
+    // Where an undo actually put a file back (PR #78 review). move-file never replaces an entry
+    // (deep review #1), so if a same-named file appeared in the source folder after the move, the
+    // restore lands at "name (n).ext". Re-point the history entry being undone at that path, so the
+    // list entry, the notice and the feature caches built from it follow the file, not its old name.
+    // (handleCancel's legs pop the entry first; the tournament leg peeks it and re-points it only
+    // once the undo proceeds.)
+    _followRestoredFile(move, moveResult) {
+        const restoredPath = moveResult?.targetPath;
+        if (!restoredPath || restoredPath === move.originalPath) return;
+        move.originalPath = restoredPath;
+        move.fileName = window.electronAPI.path.basename(restoredPath);
+    }
+
     restoreFeatureCachesFromHistory(entry) {
         if (!entry) return;
         // Re-admit the rated-pair keys removeFileFromList pruned for this file (captured by the move
@@ -1387,11 +1573,9 @@ class MediaViewer {
         el.className = 'notification info notification-progress';
 
         if (!el.querySelector('.progress-phase')) {
-            el.innerHTML =
-                '<div class="progress-phase"></div>' +
-                '<div class="progress-track"><div class="progress-fill"></div></div>' +
-                '<div class="progress-meta"><span class="progress-counts"></span>' +
-                '<button type="button" class="notification-action progress-cancel">Cancel</button></div>';
+            // One static literal (no whitespace between the nodes, as before); the lint guard (G1)
+            // accepts only a static string here, and the phase text goes in below as textContent.
+            el.innerHTML = `<div class="progress-phase"></div><div class="progress-track"><div class="progress-fill"></div></div><div class="progress-meta"><span class="progress-counts"></span><button type="button" class="notification-action progress-cancel">Cancel</button></div>`;
             el.querySelector('.progress-cancel').addEventListener('click', () => {
                 this.sortAbortController?.abort();
             });
@@ -1488,6 +1672,9 @@ class MediaViewer {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
             return;
         }
+        // Before the first await: the video cleanup below must not run for a move main would
+        // refuse (G1 re-pick, review C1).
+        if (this._refuseIfNeedsRegrant([actionType], 'move')) return;
 
         this._fileOpInFlight = true;
         try {
@@ -1522,15 +1709,13 @@ class MediaViewer {
             }
 
             try {
-                // For videos, ensure proper cleanup before moving
-                if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
-                    await this.forceVideoCleanup();
-                    // Additional wait for file handles to be fully released
-                    await new Promise((resolve) => setTimeout(resolve, 500));
-                }
-
+                // The folder is checked (and created if the user agrees) BEFORE the video is torn
+                // down, so a refused or declined move leaves it playing (deep review #7, as C1).
                 const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
-
+                if (folderExists === null) {
+                    this._refuseUngrantedFolder(actionType); // refused by main, not missing
+                    return;
+                }
                 if (!folderExists) {
                     const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
                     if (!shouldCreate) return;
@@ -1539,6 +1724,13 @@ class MediaViewer {
                     if (!createResult.success) {
                         throw new Error(createResult.error);
                     }
+                }
+
+                // For videos, ensure proper cleanup before moving
+                if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                    await this.forceVideoCleanup();
+                    // Additional wait for file handles to be fully released
+                    await new Promise((resolve) => setTimeout(resolve, 500));
                 }
 
                 // Move the file
@@ -1608,6 +1800,8 @@ class MediaViewer {
 
         // Shared by all three modes; see moveCurrentFile for why a second file action is refused.
         if (this.isLoading || this._fileOpInFlight) return;
+        // Before the pane/video cleanup below (G1 re-pick, review C1).
+        if (this._refuseIfNeedsRegrant(['special'], 'move')) return;
         this.signalUserActivity();
 
         this._fileOpInFlight = true;
@@ -1636,7 +1830,39 @@ class MediaViewer {
                 remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === remainingFile.path);
 
                 if (fileIndex === -1) return;
+            } else {
+                // Single mode
+                if (this.mediaFiles.length === 0) return;
+                fileIndex = this.currentIndex;
+                fileToMove = this.mediaFiles[fileIndex];
+            }
 
+            if (!fileToMove) return;
+
+            const targetFolderPath = this.customSpecialFolder;
+
+            // The folder is checked (and created if the user agrees) BEFORE any media is torn down,
+            // so a refused or declined move leaves it on screen (deep review #7, as C1).
+            try {
+                const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
+                if (folderExists === null) {
+                    this._refuseUngrantedFolder('special'); // refused by main, not missing
+                    return;
+                }
+                if (!folderExists) {
+                    if (!(await this.showFolderCreationDialog(targetFolderPath))) return;
+                    const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error moving file to special folder:', error);
+                this.showError(`Failed to move file: ${error.message}`);
+                return;
+            }
+
+            if (side === 'left' || side === 'right') {
                 // Cleanup both media before moving
                 const cleanupPromises = [];
                 if (this.leftMedia) {
@@ -1647,22 +1873,11 @@ class MediaViewer {
                 }
                 await Promise.all(cleanupPromises);
                 await new Promise((resolve) => setTimeout(resolve, 50));
-            } else {
-                // Single mode
-                if (this.mediaFiles.length === 0) return;
-                fileIndex = this.currentIndex;
-                fileToMove = this.mediaFiles[fileIndex];
-
+            } else if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
                 // For videos, ensure proper cleanup before moving
-                if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
-                    await this.forceVideoCleanup();
-                    await new Promise((resolve) => setTimeout(resolve, 500));
-                }
+                await this.forceVideoCleanup();
+                await new Promise((resolve) => setTimeout(resolve, 500));
             }
-
-            if (!fileToMove) return;
-
-            const targetFolderPath = this.customSpecialFolder;
             const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
 
             // Extract ML features BEFORE moving file (while media is still accessible).
@@ -1676,18 +1891,6 @@ class MediaViewer {
             }
 
             try {
-                const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
-
-                if (!folderExists) {
-                    const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
-                    if (!shouldCreate) return;
-
-                    const createResult = await window.electronAPI.createFolder(targetFolderPath);
-                    if (!createResult.success) {
-                        throw new Error(createResult.error);
-                    }
-                }
-
                 // Move the file
                 const moveResult = await window.electronAPI.moveFile({
                     sourcePath: fileToMove.path,
@@ -2757,6 +2960,15 @@ class MediaViewer {
                 this.showDropZone();
                 this.showError(result.error || 'Failed to load folder');
                 return;
+            }
+
+            // This folder's grant covers any saved like/dislike/special folder inside it (G1), so a
+            // mark may be stale now, or a reply still in flight from before this grant would re-mark
+            // it (deep review #13): invalidate that reply and re-check whenever a folder is saved,
+            // marks or no marks. Not awaited; refreshFolderGrants never rejects.
+            if (this.customLikeFolder || this.customDislikeFolder || this.customSpecialFolder) {
+                this._grantRefreshGen++;
+                this.refreshFolderGrants();
             }
 
             // Folder switches always exit tournament mode (mode is folder-scoped, mirrors the
@@ -4216,6 +4428,7 @@ class MediaViewer {
                     if (!moveResult.success) {
                         throw new Error(moveResult.error);
                     }
+                    this._followRestoredFile(lastMove, moveResult); // land where it was actually put back
 
                     // Find the remaining file (should be at the end of the list)
                     const remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === lastMove.remainingFile.path);
@@ -4277,6 +4490,7 @@ class MediaViewer {
                     if (!firstMoveResult.success) {
                         throw new Error(firstMoveResult.error);
                     }
+                    this._followRestoredFile(firstMove, firstMoveResult); // land where it was actually put back
 
                     // Restore second file
                     const secondMoveResult = await window.electronAPI.moveFile({
@@ -4288,6 +4502,7 @@ class MediaViewer {
                     if (!secondMoveResult.success) {
                         throw new Error(secondMoveResult.error);
                     }
+                    this._followRestoredFile(secondMove, secondMoveResult); // land where it was actually put back
 
                     // Add both files back to mediaFiles
                     this.mediaFiles.push({
@@ -4348,6 +4563,7 @@ class MediaViewer {
                     if (!firstMoveResult.success) {
                         throw new Error(firstMoveResult.error);
                     }
+                    this._followRestoredFile(firstMove, firstMoveResult); // land where it was actually put back
 
                     const secondMoveResult = await window.electronAPI.moveFile({
                         sourcePath: secondMove.newPath,
@@ -4357,6 +4573,7 @@ class MediaViewer {
                     if (!secondMoveResult.success) {
                         throw new Error(secondMoveResult.error);
                     }
+                    this._followRestoredFile(secondMove, secondMoveResult); // land where it was actually put back
 
                     this.mediaFiles.push({
                         name: firstMove.fileName,
@@ -4399,6 +4616,7 @@ class MediaViewer {
                     if (!moveResult.success) {
                         throw new Error(moveResult.error);
                     }
+                    this._followRestoredFile(undoMove, moveResult); // land where it was actually put back
 
                     // Insert file back at current position to maintain order
                     this.mediaFiles.splice(this.currentIndex, 0, {
@@ -4561,6 +4779,12 @@ class MediaViewer {
         } catch (err) {
             window.electronAPI.logError?.(`Tournament state read failed: ${err.message}`);
         }
+        // The saved file travels with the folder (G1): one that fails validation is treated as
+        // absent. It is not deleted; a fresh start overwrites it through the normal persist.
+        if (state && !this.tournament.isLoadableState(state)) {
+            state = null;
+            this.showNotification("Saved tournament couldn't be read — starting fresh", 'info');
+        }
         if (state) {
             this._logSlowPhase('tournament state read+parse', _tResume, 0); // always record resume timing
             const currentFiles = this.mediaFiles.map((f) => f.path);
@@ -4582,9 +4806,19 @@ class MediaViewer {
         const cancelBtn = document.getElementById('tournamentResumeCancel');
         title.textContent = 'Leave tournament?';
         const p = this.tournament.engine.getProgress();
-        body.innerHTML =
-            `<div class="modal-row"><span>Progress:</span><span>${p.gamesPlayed}/${p.gamesTotal} games</span></div>` +
-            `<p style="font-size:12px;color:#888">Save to resume later from this folder, or discard it.</p>`;
+        // Built from text nodes, never parsed as HTML: on a resumed tournament gamesPlayed comes
+        // from the folder's untrusted .tournament_state.json (see showTournamentContinuePrompt).
+        const progressRow = document.createElement('div');
+        progressRow.className = 'modal-row';
+        const progressLabel = document.createElement('span');
+        progressLabel.textContent = 'Progress:';
+        const progressValue = document.createElement('span');
+        progressValue.textContent = `${p.gamesPlayed}/${p.gamesTotal} games`;
+        progressRow.append(progressLabel, progressValue);
+        const hint = document.createElement('p');
+        hint.style.cssText = 'font-size:12px;color:#888';
+        hint.textContent = 'Save to resume later from this folder, or discard it.';
+        body.replaceChildren(progressRow, hint);
         acceptBtn.textContent = 'Save & leave';
         discardBtn.textContent = 'Discard';
         if (cancelBtn) cancelBtn.style.display = '';
@@ -4674,16 +4908,31 @@ class MediaViewer {
         // v2 payloads carry no history; read gamesPlayed (falls back to strategyState for legacy v1 files).
         const progress = state.gamesPlayed ?? state.strategyState?.gamesPlayed ?? 0;
         const totalGames = Math.floor(state.files.length / 2) * (state.options?.rounds ?? 3);
-        let deltaNote = '';
+        // `state` is parsed from the folder's .tournament_state.json, which travels with the media
+        // folder and can be planted by whoever supplied it: render it as text nodes, never parse it
+        // as HTML (an innerHTML sink here ran script with the full electronAPI bridge).
+        const rows = [
+            ['Started:', `${startedAgo} min ago`],
+            ['Progress:', `${progress}/${totalGames} games`],
+        ].map(([label, value]) => {
+            const row = document.createElement('div');
+            row.className = 'modal-row';
+            const labelEl = document.createElement('span');
+            labelEl.textContent = label;
+            const valueEl = document.createElement('span');
+            valueEl.textContent = value;
+            row.append(labelEl, valueEl);
+            return row;
+        });
         if (!v.valid) {
-            deltaNote =
-                `<p style="font-size:12px;color:#888">${v.removed.length} file(s) removed, ` +
-                `${v.added.length} added since start — they'll be reconciled on continue.</p>`;
+            const deltaNote = document.createElement('p');
+            deltaNote.style.cssText = 'font-size:12px;color:#888';
+            deltaNote.textContent =
+                `${v.removed.length} file(s) removed, ` +
+                `${v.added.length} added since start — they'll be reconciled on continue.`;
+            rows.push(deltaNote);
         }
-        body.innerHTML =
-            `<div class="modal-row"><span>Started:</span><span>${startedAgo} min ago</span></div>` +
-            `<div class="modal-row"><span>Progress:</span><span>${progress}/${totalGames} games</span></div>` +
-            deltaNote;
+        body.replaceChildren(...rows);
         acceptBtn.textContent = 'Continue';
         discardBtn.textContent = 'Start over';
         if (cancelBtn) cancelBtn.style.display = '';
@@ -5232,6 +5481,10 @@ class MediaViewer {
             // reverse the entry we peeked.
             let restoreFailed = false;
             let droppedWedged = false;
+            // Where the restore actually put the file (a suffixed name when the original was taken).
+            // The entry is re-pointed at it only once the undo proceeds, below the stack check: an
+            // interrupted undo must leave the entry as it was (PR #78 close-out A).
+            let restoredPath = move.originalPath;
             this.isLoading = true;
             try {
                 const moveResult = await window.electronAPI.moveFile({
@@ -5242,6 +5495,7 @@ class MediaViewer {
                 if (!moveResult.success) {
                     throw new Error(moveResult.error);
                 }
+                restoredPath = moveResult.targetPath || move.originalPath;
             } catch (error) {
                 restoreFailed = true;
                 console.error('Error undoing tournament special:', error);
@@ -5294,9 +5548,9 @@ class MediaViewer {
             // needed on the failure path above: the restore failed, so the file never moved.)
             if (stackMoved) {
                 const rollback = await window.electronAPI.moveFile({
-                    sourcePath: move.originalPath,
+                    sourcePath: restoredPath, // from where the restore actually put it
                     targetFolder: window.electronAPI.path.dirname(move.newPath),
-                    fileName: move.fileName,
+                    fileName: window.electronAPI.path.basename(move.newPath), // its name there, not the restored one
                 });
                 if (!rollback.success) {
                     // Rollback failed: the file sits in the source folder but is not in mediaFiles.
@@ -5311,6 +5565,7 @@ class MediaViewer {
             // Disk restored — safe to advance. undoUserAction reverses any trailing prunes plus
             // this removal, restoring strategy state (files/winCounts/byes/roundQueue) AND
             // engine.files from the snapshot, so the file re-pairs and reports its real tier.
+            this._followRestoredFile(move, { targetPath: restoredPath }); // only now: see above
             this.tournament.engine.undoUserAction();
             this.mediaFiles.push({
                 name: move.fileName,
@@ -5376,22 +5631,31 @@ class MediaViewer {
         const maxCount = Math.max(...Object.values(bd), 1);
         const R = this.tournament.engine.strategy.options.rounds;
 
+        // Built from DOM nodes, never parsed as HTML: on a resumed tournament `rounds` comes from
+        // the folder's untrusted .tournament_state.json (see showTournamentContinuePrompt).
         const rows = [];
         for (let i = R; i >= 0; i--) {
             const count = bd[i] ?? 0;
             const pct = Math.round((count / maxCount) * 100);
-            rows.push(
-                `<div class="tier-row">` +
-                    `<span>Tier-${i}</span>` +
-                    `<div class="tier-bar"><div class="tier-bar-fill" style="width:${pct}%"></div></div>` +
-                    `<span>${count} files</span>` +
-                    `</div>`
-            );
+            const row = document.createElement('div');
+            row.className = 'tier-row';
+            const tierLabel = document.createElement('span');
+            tierLabel.textContent = `Tier-${i}`;
+            const bar = document.createElement('div');
+            bar.className = 'tier-bar';
+            const fill = document.createElement('div');
+            fill.className = 'tier-bar-fill';
+            fill.style.width = `${pct}%`;
+            bar.append(fill);
+            const countLabel = document.createElement('span');
+            countLabel.textContent = `${count} files`;
+            row.append(tierLabel, bar, countLabel);
+            rows.push(row);
         }
-        body.innerHTML =
-            rows.join('') +
-            `<p style="font-size:12px;margin-top:12px;color:#888">` +
-            `→ Files will move into _Tier-{0..${R}}/ inside ${this.baseFolderPath}</p>`;
+        const destination = document.createElement('p');
+        destination.style.cssText = 'font-size:12px;margin-top:12px;color:#888';
+        destination.textContent = `→ Files will move into _Tier-{0..${R}}/ inside ${this.baseFolderPath}`;
+        body.replaceChildren(...rows, destination);
 
         const cleanup = () => {
             modal.style.display = 'none';
@@ -5567,6 +5831,8 @@ class MediaViewer {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
             return;
         }
+        // Before the pane cleanup below (G1 re-pick, review C1). A pair move uses both folders.
+        if (this._refuseIfNeedsRegrant([primaryAction, secondaryAction], 'move')) return;
 
         this._fileOpInFlight = true;
         try {
@@ -5650,6 +5916,39 @@ class MediaViewer {
             }
 
             try {
+                const primaryFile = primarySide === 'left' ? leftFile : rightFile;
+                const primaryFolderPath = primaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
+                const primaryFolderName = window.electronAPI.path.basename(primaryFolderPath);
+                const secondaryFile = primarySide === 'left' ? rightFile : leftFile;
+                const secondaryFolderPath =
+                    secondaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
+                const secondaryFolderName = window.electronAPI.path.basename(secondaryFolderPath);
+
+                // BOTH folders are checked (and created) before either file moves and before the
+                // panes are torn down (deep review #7). A refusal used to read as "missing": the
+                // primary file had already moved when the secondary create was refused, leaving a
+                // phantom entry with an orphan history entry.
+                const primaryExists = await window.electronAPI.checkFolderExists(primaryFolderPath);
+                const secondaryExists = await window.electronAPI.checkFolderExists(secondaryFolderPath);
+                if (primaryExists === null || secondaryExists === null) {
+                    this._refuseUngrantedFolder(primaryExists === null ? primaryAction : secondaryAction);
+                    return;
+                }
+                if (!primaryExists) {
+                    const shouldCreate = await this.showFolderCreationDialog(primaryFolderPath);
+                    if (!shouldCreate) return;
+                    const createResult = await window.electronAPI.createFolder(primaryFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+                if (!secondaryExists && secondaryFolderPath !== primaryFolderPath) {
+                    const createResult = await window.electronAPI.createFolder(secondaryFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+
                 // Cleanup both media in parallel before moving
                 const cleanupPromises = [];
                 if (this.leftMedia) {
@@ -5662,20 +5961,6 @@ class MediaViewer {
                 await new Promise((resolve) => setTimeout(resolve, 50));
 
                 // Move primary file (the one being rated)
-                const primaryFile = primarySide === 'left' ? leftFile : rightFile;
-                const primaryFolderPath = primaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
-                const primaryFolderName = window.electronAPI.path.basename(primaryFolderPath);
-
-                let folderExists = await window.electronAPI.checkFolderExists(primaryFolderPath);
-                if (!folderExists) {
-                    const shouldCreate = await this.showFolderCreationDialog(primaryFolderPath);
-                    if (!shouldCreate) return;
-                    const createResult = await window.electronAPI.createFolder(primaryFolderPath);
-                    if (!createResult.success) {
-                        throw new Error(createResult.error);
-                    }
-                }
-
                 const primaryMoveResult = await window.electronAPI.moveFile({
                     sourcePath: primaryFile.path,
                     targetFolder: primaryFolderPath,
@@ -5704,20 +5989,7 @@ class MediaViewer {
                 if (primaryPrunedKeys.length > 0) primaryEntry.prunedPairKeys = primaryPrunedKeys;
                 this.moveHistory.push(primaryEntry);
 
-                // Move secondary file (the other one)
-                const secondaryFile = primarySide === 'left' ? rightFile : leftFile;
-                const secondaryFolderPath =
-                    secondaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
-                const secondaryFolderName = window.electronAPI.path.basename(secondaryFolderPath);
-
-                folderExists = await window.electronAPI.checkFolderExists(secondaryFolderPath);
-                if (!folderExists) {
-                    const createResult = await window.electronAPI.createFolder(secondaryFolderPath);
-                    if (!createResult.success) {
-                        throw new Error(createResult.error);
-                    }
-                }
-
+                // Move secondary file (the other one); its folder was checked above
                 const secondaryMoveResult = await window.electronAPI.moveFile({
                     sourcePath: secondaryFile.path,
                     targetFolder: secondaryFolderPath,
@@ -6424,14 +6696,17 @@ class MediaViewer {
         if (!this.baseFolderPath) return 0;
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.hash_cache.json');
-            const cacheData = await window.electronAPI.readFile(cacheFile);
+            const cacheData = await window.electronAPI.readFolderCache(this.baseFolderPath, 'hash');
 
             if (cacheData) {
                 const cache = JSON.parse(cacheData);
                 // Convert cache entries back to Map with full paths
                 this.perceptualHashes = new Map();
                 for (const [fileName, hash] of Object.entries(cache)) {
+                    // The file lives in the media folder, so its values are untrusted (G1): only a
+                    // blockhash bit string may reach calculateHammingDistance, whose loop runs to
+                    // hash.length. Anything else is skipped and simply recomputed.
+                    if (typeof hash !== 'string' || hash.length > 4096 || !/^[01]+$/.test(hash)) continue;
                     // Reconstruct full path from base folder + filename
                     const fullPath = await window.electronAPI.path.join(this.baseFolderPath, fileName);
                     this.perceptualHashes.set(fullPath, hash);
@@ -6458,7 +6733,14 @@ class MediaViewer {
                 const fileName = await window.electronAPI.path.basename(fullPath);
                 cache[fileName] = hash;
             }
-            await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
+            const res = await window.electronAPI.writeFolderCache(
+                this.baseFolderPath,
+                'hash',
+                JSON.stringify(cache, null, 2)
+            );
+            if (!res?.success) {
+                throw new Error(res?.error || 'write failed'); // a refused write is reported, not silent
+            }
             console.log(`Hash cache saved to: ${cacheFile}`);
         } catch (error) {
             console.error('Failed to save hash cache:', error);
@@ -6472,8 +6754,7 @@ class MediaViewer {
         if (!this.baseFolderPath) return null;
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.sort_cache.json');
-            const cacheData = await window.electronAPI.readFile(cacheFile);
+            const cacheData = await window.electronAPI.readFolderCache(this.baseFolderPath, 'sort');
 
             if (cacheData) {
                 const cache = JSON.parse(cacheData);
@@ -6492,12 +6773,10 @@ class MediaViewer {
         if (!this.baseFolderPath) return;
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.sort_cache.json');
-
             // Load existing cache or create new
             let cache = {};
             try {
-                const existingData = await window.electronAPI.readFile(cacheFile);
+                const existingData = await window.electronAPI.readFolderCache(this.baseFolderPath, 'sort');
                 if (existingData) {
                     cache = JSON.parse(existingData);
                 }
@@ -6526,7 +6805,14 @@ class MediaViewer {
                 totalFiles: fileNames.length,
             };
 
-            await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
+            const res = await window.electronAPI.writeFolderCache(
+                this.baseFolderPath,
+                'sort',
+                JSON.stringify(cache, null, 2)
+            );
+            if (!res?.success) {
+                throw new Error(res?.error || 'write failed');
+            }
             console.log(`Sort cache saved for ${algorithm}: ${fileNames.length} files`);
         } catch (error) {
             console.error('Failed to save sort cache:', error);
@@ -6538,11 +6824,9 @@ class MediaViewer {
         if (!this.baseFolderPath) return;
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.sort_cache.json');
-
             let existingData;
             try {
-                existingData = await window.electronAPI.readFile(cacheFile);
+                existingData = await window.electronAPI.readFolderCache(this.baseFolderPath, 'sort');
             } catch (_e) {
                 // Cache file does not exist — nothing to delete
                 return;
@@ -6561,7 +6845,14 @@ class MediaViewer {
             if (!cache[algorithm]) return;
 
             delete cache[algorithm];
-            await window.electronAPI.writeFile(cacheFile, JSON.stringify(cache, null, 2));
+            const res = await window.electronAPI.writeFolderCache(
+                this.baseFolderPath,
+                'sort',
+                JSON.stringify(cache, null, 2)
+            );
+            if (!res?.success) {
+                throw new Error(res?.error || 'write failed');
+            }
             console.log(`Sort cache deleted for algorithm: ${algorithm}`);
         } catch (error) {
             console.error('Failed to delete sort cache entry:', error);
@@ -7399,8 +7690,6 @@ class MediaViewer {
     async _loadFeatureCacheLocked({ signal, onProgress } = {}) {
         if (!this.baseFolderPath) return 0;
 
-        const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
-
         // Build lookup of current files for pruning + staleness validation.
         const currentFiles = new Map();
         for (const file of this.mediaFiles) {
@@ -7449,7 +7738,7 @@ class MediaViewer {
         // Keeps the renderer from ever holding the full (potentially 250MB+) JSON string.
         if (window.electronAPI.featureCacheOpen) {
             try {
-                const opened = await window.electronAPI.featureCacheOpen(cacheFile);
+                const opened = await window.electronAPI.featureCacheOpen(this.baseFolderPath);
                 if (!opened.success) {
                     this._featureCacheDiskCount = 0; // nothing usable on disk
                     return 0; // notFound/parse error — leave existing cache untouched
@@ -7525,7 +7814,7 @@ class MediaViewer {
         // Legacy fallback: single read + parse (older preload, or streaming failed).
         // Only safe for modest cache sizes.
         try {
-            const data = await window.electronAPI.readFile(cacheFile);
+            const data = await window.electronAPI.readFolderCache(this.baseFolderPath, 'feature');
             if (data) {
                 const parsed = JSON.parse(data);
                 if (parsed.version !== MediaViewer.FEATURE_CACHE_VERSION) {
@@ -7639,12 +7928,10 @@ class MediaViewer {
         };
 
         try {
-            const cacheFile = await window.electronAPI.path.join(this.baseFolderPath, '.feature_cache.json');
-
-            // Preferred path: stream batches to main (main appends + atomic-renames). Keeps the
+            // The only write path: stream batches to main (main appends + atomic-renames). Keeps the
             // renderer from ever building a ~130MB JSON string on every 30s auto-save.
             if (window.electronAPI.featureCacheWriteOpen) {
-                const opened = await window.electronAPI.featureCacheWriteOpen(cacheFile, {
+                const opened = await window.electronAPI.featureCacheWriteOpen(this.baseFolderPath, {
                     version: MediaViewer.FEATURE_CACHE_VERSION,
                     featureDim: 64,
                     clipDim: 512,
@@ -7674,30 +7961,12 @@ class MediaViewer {
                     this._featureCacheDiskCount = writtenCount;
                     return;
                 }
-                // If open failed, fall through to legacy single-write.
+                // Deep review #10: a failed or refused open saves NOTHING this tick. There is no
+                // single-write fallback any more: it built the whole cache as one string (~131 MB at
+                // 24k files) and wrote it non-atomically; dead on main, G1's refusals made it live.
+                // The shrink guard keeps its baseline, so the next successful save is still guarded.
+                console.warn('Feature cache not saved:', opened?.error || 'write-open failed');
             }
-
-            // Legacy fallback: build the whole object and write once (older preload / small caches).
-            const features = {};
-            let legacyWrittenCount = 0;
-            for (const [fullPath, featureArray] of this.featureCache.entries()) {
-                const entry = buildEntry(fullPath, featureArray);
-                if (!entry) continue; // unresolvable metadata — never poison the cache
-                const filename = await window.electronAPI.path.basename(fullPath);
-                features[filename] = entry;
-                legacyWrittenCount++;
-            }
-            await window.electronAPI.writeFile(
-                cacheFile,
-                JSON.stringify({
-                    version: MediaViewer.FEATURE_CACHE_VERSION,
-                    featureDim: 64,
-                    clipDim: 512,
-                    features,
-                })
-            );
-            // Re-baseline the shrink guard to what is now actually on disk.
-            this._featureCacheDiskCount = legacyWrittenCount;
         } catch (error) {
             console.error('Failed to save feature cache:', error);
         }
@@ -8237,6 +8506,10 @@ class MediaViewer {
             this.showNotification('Restored original order', 'info');
             return;
         }
+
+        // Training reads both folders, which main refuses until they are re-confirmed (G1). Stop
+        // here — no worker, no CLIP lease, no training — rather than train on a failed scan.
+        if (this._refuseIfNeedsRegrant(['like', 'dislike'], 'sort')) return;
 
         this.isPredictionSorting = true;
         this.sortAbortController = new AbortController();
@@ -9536,21 +9809,27 @@ class MediaViewer {
 
         const percentage = displayTotal > 0 ? Math.round((displayCurrent / displayTotal) * 100) : 0;
 
+        // Static icon markup; the counts go in as text (G1 lint guard: no built string is parsed).
+        const cachedSuffix = displayCached > 0 ? ` \u2014 ${displayCached} cached` : '';
         if (paused) {
             indicator.innerHTML = `
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
                 </svg>
-                <span>Paused \u2014 ${displayCurrent}/${displayTotal} (${percentage}%)${displayCached > 0 ? ` \u2014 ${displayCached} cached` : ''}</span>
+                <span></span>
             `;
+            indicator.querySelector('span').textContent =
+                `Paused \u2014 ${displayCurrent}/${displayTotal} (${percentage}%)${cachedSuffix}`;
         } else {
             const etaSuffix = etaText ? ` \u2014 ${etaText}` : '';
             indicator.innerHTML = `
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
                     <path d="M12 2v4m0 12v4m-7-7H3m18 0h-2M5.6 5.6l1.4 1.4m9.9 9.9l1.4 1.4M5.6 18.4l1.4-1.4m9.9-9.9l1.4-1.4"/>
                 </svg>
-                <span>Extracting features: ${displayCurrent}/${displayTotal} (${percentage}%)${displayCached > 0 ? ` \u2014 ${displayCached} cached` : ''}${etaSuffix}</span>
+                <span></span>
             `;
+            indicator.querySelector('span').textContent =
+                `Extracting features: ${displayCurrent}/${displayTotal} (${percentage}%)${cachedSuffix}${etaSuffix}`;
         }
 
         // Add spin animation if not already present
@@ -9833,18 +10112,27 @@ class MediaViewer {
         singleGrid.innerHTML = '';
         compareGrid.innerHTML = '';
 
-        for (const [action, key] of Object.entries(this.shortcuts.single)) {
+        // Built from DOM nodes (G1): action names and keys come from localStorage.
+        const buildRow = (mode, action, key) => {
             const row = document.createElement('div');
             row.className = 'shortcut-item';
-            row.innerHTML = `<kbd class="shortcut-key" data-action="${action}" data-mode="single">${this.keyDisplayName(key)}</kbd> <span>${ACTION_LABELS[action]}</span>`;
-            singleGrid.appendChild(row);
+            const kbd = document.createElement('kbd');
+            kbd.className = 'shortcut-key';
+            kbd.dataset.action = action;
+            kbd.dataset.mode = mode;
+            kbd.textContent = this.keyDisplayName(key);
+            const label = document.createElement('span');
+            label.textContent = ACTION_LABELS[action];
+            row.append(kbd, ' ', label);
+            return row;
+        };
+
+        for (const [action, key] of Object.entries(this.shortcuts.single)) {
+            singleGrid.appendChild(buildRow('single', action, key));
         }
 
         for (const [action, key] of Object.entries(this.shortcuts.compare)) {
-            const row = document.createElement('div');
-            row.className = 'shortcut-item';
-            row.innerHTML = `<kbd class="shortcut-key" data-action="${action}" data-mode="compare">${this.keyDisplayName(key)}</kbd> <span>${ACTION_LABELS[action]}</span>`;
-            compareGrid.appendChild(row);
+            compareGrid.appendChild(buildRow('compare', action, key));
         }
     }
 
@@ -9978,8 +10266,25 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+// G1 § 6.1: make Content-Security-Policy breakage loud. A blocked script, worker, WASM compile or
+// fetch otherwise fails silently somewhere lazy; every violation raised after this module runs
+// reaches the session log. (One raised earlier, in the page head, is not seen here; the E2E
+// zero-violation walk covers those.)
+document.addEventListener('securitypolicyviolation', (e) => {
+    window.electronAPI?.logError?.({
+        level: 'warn',
+        message: `CSP violation: ${e.violatedDirective} blocked ${e.blockedURI || '(inline)'}`,
+        source: 'renderer',
+    });
+});
+
 // Initialize the viewer when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    // Static Lucide icons in index.html. This was an inline <script> there, which the CSP now
+    // forbids (G1); it ran first, before the viewer, and still does.
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
     console.log('=== MediaViewer Starting ===');
     console.log('DOM loaded, initializing MediaViewer...');
     const viewer = new MediaViewer();

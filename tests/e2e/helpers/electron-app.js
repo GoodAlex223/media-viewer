@@ -13,6 +13,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..', '..', '..');
 const FIXTURES_DIR = resolve(__dirname, '..', 'fixtures');
 
+// page → electronApp, so page-only helpers (loadFolder, seedLocalStorage) can reach the main
+// process to grant a folder without every call site changing signature (G1).
+const appByPage = new WeakMap();
+// electronApp → its per-launch grant-store directory, removed by closeApp.
+const grantsDirByApp = new WeakMap();
+
 /**
  * Get the path to the Electron wrapper script.
  * Workaround for Playwright + Electron 30+ incompatibility:
@@ -46,11 +52,18 @@ function getLaunchArgs() {
  * Returns { electronApp, page }.
  */
 export async function launchApp() {
+    // A fresh grant store per launch (G1): main reads MV_E2E_GRANTS_FILE instead of
+    // <userData>/folder-grants.json, so a grant left by an earlier test can never make a
+    // refusal test pass for the wrong reason. The same env var exposes global.__mvGrants in the
+    // main process, reachable only through electronApp.evaluate — never from the renderer.
+    const grantsDir = await mkdtemp(join(tmpdir(), 'mv-e2e-grants-'));
     const electronApp = await electron.launch({
         executablePath: getElectronWrapperPath(),
         args: getLaunchArgs(),
         cwd: PROJECT_ROOT,
+        env: { ...process.env, MV_E2E_GRANTS_FILE: join(grantsDir, 'folder-grants.json') },
     });
+    grantsDirByApp.set(electronApp, grantsDir);
 
     // Stub lucide CDN before firstWindow() — the synchronous <script src> in <head>
     // fires during page load, so the route must be registered before the page exists.
@@ -65,6 +78,7 @@ export async function launchApp() {
     });
 
     const page = await electronApp.firstWindow();
+    appByPage.set(page, electronApp);
 
     // Wait for the renderer to be fully initialized
     await page.waitForFunction(() => typeof window.mediaViewer !== 'undefined', null, { timeout: 10_000 });
@@ -81,6 +95,20 @@ export async function launchApp() {
  * kill the entire process tree.
  */
 export async function closeApp(electronApp) {
+    // Don't leak saved folders into the next launch: since G1, a saved folder main has not
+    // granted raises a re-confirm notice at startup, and E2E launches share one profile.
+    try {
+        const win = electronApp.windows()[0];
+        if (win) {
+            await win.evaluate(() => {
+                for (const k of ['customLikeFolder', 'customDislikeFolder', 'customSpecialFolder']) {
+                    localStorage.removeItem(k);
+                }
+            });
+        }
+    } catch {
+        // Renderer already gone — nothing to clear
+    }
     const CLOSE_TIMEOUT = 5_000;
     let timer;
     try {
@@ -108,15 +136,47 @@ export async function closeApp(electronApp) {
             // Process already exited
         }
     }
+    const grantsDir = grantsDirByApp.get(electronApp);
+    if (grantsDir) {
+        await rm(grantsDir, { recursive: true, force: true }).catch(() => {});
+    }
+}
+
+/**
+ * Grant a folder in the main process, as a pick in the native folder dialog would (G1).
+ * Returns 'no-hook' on a build without grants (before G1), so RED tests run unchanged there.
+ */
+export async function grantFolder(electronApp, folderPath) {
+    const outcome = await electronApp.evaluate(async (_electron, p) => {
+        if (!global.__mvGrants) {
+            return 'no-hook';
+        }
+        const res = await global.__mvGrants.grant(p);
+        return res.path ? 'granted' : 'failed';
+    }, folderPath);
+    if (outcome === 'failed') {
+        throw new Error(`grantFolder: main refused to grant ${folderPath}`);
+    }
+    return outcome;
 }
 
 /**
  * Set localStorage keys and update the running MediaViewer instance properties.
  * The constructor reads localStorage during init, so we must also update
  * the instance properties and re-enable buttons for the current session.
+ * Since G1 the three folder keys are also granted in main first (pass { grant: false } to seed
+ * a folder main has not granted, as a folder saved before G1 would be).
  */
-export async function seedLocalStorage(page, kvMap) {
-    await page.evaluate((kv) => {
+export async function seedLocalStorage(page, kvMap, { grant = true } = {}) {
+    const app = appByPage.get(page);
+    if (grant && app) {
+        for (const key of ['customLikeFolder', 'customDislikeFolder', 'customSpecialFolder']) {
+            if (kvMap[key]) {
+                await grantFolder(app, kvMap[key]);
+            }
+        }
+    }
+    await page.evaluate(async (kv) => {
         const viewer = window.mediaViewer;
         for (const [key, value] of Object.entries(kv)) {
             localStorage.setItem(key, value);
@@ -131,6 +191,8 @@ export async function seedLocalStorage(page, kvMap) {
                 viewer.customSpecialFolder = value;
             }
         }
+        // Since G1: re-ask main which saved folders are granted (marks + tooltips).
+        await viewer.refreshFolderGrants?.();
         // Re-enable rating buttons after updating folder paths
         viewer.updateRatingButtonsState();
         viewer.updateSpecialButtonsState();
@@ -144,15 +206,25 @@ export async function seedLocalStorage(page, kvMap) {
 export async function mockFolderDialog(electronApp, returnPath) {
     await electronApp.evaluate(({ ipcMain }, folderPath) => {
         ipcMain.removeHandler('open-folder-dialog');
-        ipcMain.handle('open-folder-dialog', async () => folderPath);
+        ipcMain.handle('open-folder-dialog', async (_event, defaultPath) => {
+            // Where the dialog would have opened (G1 re-pick opens it at the saved folder).
+            global.__mvLastDialogDefaultPath = defaultPath;
+            // A real pick grants the folder (G1); mirror that so later IPC on it is allowed.
+            await global.__mvGrants?.grant(folderPath);
+            return folderPath;
+        });
     }, returnPath);
 }
 
 /**
  * Load a folder directly via the renderer's loadFolder method.
- * Waits for media to be displayed.
+ * Waits for media to be displayed. Grants the folder in main first (G1), as the dialog would.
  */
 export async function loadFolder(page, folderPath) {
+    const app = appByPage.get(page);
+    if (app) {
+        await grantFolder(app, folderPath);
+    }
     await page.evaluate((fp) => window.mediaViewer.loadFolder(fp), folderPath);
     // Wait for the drop zone to be hidden (folder loaded successfully)
     await page.waitForFunction(
