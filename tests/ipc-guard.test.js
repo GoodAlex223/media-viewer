@@ -118,12 +118,12 @@ describe('createIpcGuard argument kinds', () => {
         expect(await ipcMain.handlers.get('c')(trusted(), 'rel')).toEqual({ entries: [] });
     });
 
-    it('validates trackedTempDir and grantedOrTempPath against the registry', async () => {
+    it('validates trackedTempDir and grantedOrTempMediaRead against the registry', async () => {
         const { guard, ipcMain, tempDirs } = makeGuard();
         const dir = join(tmpdir(), 'mv-keyframes-1');
         tempDirs.add(dir);
         guard.handle('rm', [guard.kinds.trackedTempDir], async () => 'ok');
-        guard.handle('clip', [guard.arrayOf(guard.kinds.grantedOrTempPath, 3)], async () => 'ok');
+        guard.handle('clip', [guard.arrayOf(guard.kinds.grantedOrTempMediaRead, 3)], async () => 'ok');
         expect(await ipcMain.handlers.get('rm')(trusted(), dir)).toBe('ok');
         expect(await ipcMain.handlers.get('rm')(trusted(), join(tmpdir(), 'mv-keyframes-2'))).toEqual(DEFAULT_REJECT);
         expect(await ipcMain.handlers.get('clip')(trusted(), [join(dir, 'f.png'), join(GRANTED, 'a.jpg')])).toBe('ok');
@@ -174,9 +174,10 @@ describe('isPlainBasename', () => {
 });
 
 describe('normalizeFileUrl', () => {
-    it('strips query and hash, folds case on win32 only, rejects non-file URLs', () => {
-        expect(normalizeFileUrl('file:///C:/a/index.html?x#y', 'linux')).toBe('file:///C:/a/index.html');
-        expect(normalizeFileUrl('file:///C:/a/Index.html', 'win32')).toBe('file:///c:/a/index.html');
+    // Since deep review #2 the result is the decoded path that identifies the document.
+    it('strips query and hash, folds ASCII case on win32 only, rejects non-file URLs', () => {
+        expect(normalizeFileUrl('file:///C:/a/index.html?x#y', 'linux')).toBe('/C:/a/index.html');
+        expect(normalizeFileUrl('file:///C:/a/Index.html', 'win32')).toBe('/c:/a/index.html');
         expect(normalizeFileUrl('https://x/index.html', 'linux')).toBeNull();
         expect(normalizeFileUrl('not a url', 'linux')).toBeNull();
     });
@@ -341,5 +342,125 @@ describe('tierAssignmentsKind and Unicode look-alikes (commit security review)',
         const lookAlike = join(tmpdir(), '\u212Aeys', 'a.png');
         expect(kind({ [join(folder, 'a.png')]: 1 }, [folder])).toBe(true); // control
         expect(kind({ [lookAlike]: 1 }, [folder])).toBe(false);
+    });
+});
+
+// Deep review #2: Chromium's frame URL keeps ~ [ ] % raw where Node's pathToFileURL escapes them
+// (measured: MEDIA_~1 vs MEDIA_%7E1), so from an app path containing one every guarded IPC was
+// refused as an untrusted sender. Both sides are now compared as decoded paths.
+describe('normalizeFileUrl compares decoded paths (deep review #2)', () => {
+    it.each([
+        ['an 8.3 alias (~)', 'file:///C:/Users/a/MEDIA_~1/index.html', 'file:///C:/Users/a/MEDIA_%7E1/index.html'],
+        [
+            'brackets',
+            'file:///D:/Tools%20[portable]/app/index.html',
+            'file:///D:/Tools%20%5Bportable%5D/app/index.html',
+        ],
+        ['a percent sign', 'file:///C:/100%/app/index.html', 'file:///C:/100%25/app/index.html'],
+    ])('treats Chromium and Node spellings with %s as one document', (_label, chromium, node) => {
+        expect(normalizeFileUrl(chromium, 'win32')).not.toBeNull();
+        expect(normalizeFileUrl(chromium, 'win32')).toBe(normalizeFileUrl(node, 'win32'));
+    });
+
+    it('trusts a sender whose frame URL is the raw spelling of an escaped expected URL', async () => {
+        const { guard, ipcMain } = makeGuard({ expectedUrl: 'file:///C:/Users/a/MEDIA_%7E1/index.html' });
+        guard.handle('ch', [], async () => 'ok');
+        const frame = { senderFrame: { url: 'file:///C:/Users/a/MEDIA_~1/index.html', parent: null } };
+        expect(await ipcMain.handlers.get('ch')(frame)).toBe('ok');
+    });
+
+    it('still folds only ASCII case: a Unicode look-alike path is a different document', () => {
+        const k = String.fromCharCode(0x212a);
+        const lookAlike = 'file:///C:/apps/' + encodeURIComponent(k) + 'eys/index.html';
+        expect(normalizeFileUrl(lookAlike, 'win32')).not.toBe(
+            normalizeFileUrl('file:///C:/apps/keys/index.html', 'win32')
+        );
+        expect(normalizeFileUrl('file:///c:/APPS/keys/index.html', 'win32')).toBe(
+            normalizeFileUrl('file:///C:/apps/keys/index.html', 'win32')
+        );
+    });
+});
+
+// Deep review #9 and #8: entry operations are authorized by the entry's own folder only, and a
+// move may only carry a media file under a media file name, so a cache file of chosen text can
+// no longer be renamed to an arbitrary name (desktop.ini, run.bat, x.url) under a grant.
+describe('move kinds (deep review #8, #9)', () => {
+    const IN = join(GRANTED, 'a.png');
+    const isMediaFile = (ext) => ['.png', '.jpg', '.mp4', '.jxl'].includes(ext);
+
+    function guardWith({ entryInside = true, targetInside = true, media = isMediaFile } = {}) {
+        const grants = {
+            resolveAllowed: vi.fn(async (x) => (targetInside ? x : null)),
+            resolveEntry: vi.fn(async (x) => (entryInside ? x : null)),
+            canonicalize: vi.fn(async (x) => x),
+        };
+        return makeGuard({ grants, isMediaFile: media });
+    }
+
+    async function verdict(g, kind, arg) {
+        g.guard.handle('ch', [kind], async () => 'ok');
+        return g.ipcMain.handlers.get('ch')(trusted(), arg);
+    }
+
+    it('grantedEntry refuses an entry outside every grant even when it resolves into one', async () => {
+        const g = guardWith({ entryInside: false, targetInside: true });
+        expect(await verdict(g, g.guard.kinds.grantedEntry, join(tmpdir(), 'x', 'link.png'))).toEqual(DEFAULT_REJECT);
+    });
+
+    it('mediaEntry accepts a media file entry in a granted folder', async () => {
+        const g = guardWith();
+        expect(await verdict(g, g.guard.kinds.mediaEntry, IN)).toBe('ok');
+    });
+
+    it.each(['.hash_cache.json', '.sort_cache.json', 'notes.txt'])(
+        'mediaEntry refuses the non-media source %s',
+        async (name) => {
+            const g = guardWith();
+            expect(await verdict(g, g.guard.kinds.mediaEntry, join(GRANTED, name))).toEqual(DEFAULT_REJECT);
+        }
+    );
+
+    it('mediaBasename accepts a media file name', async () => {
+        const g = guardWith();
+        expect(await verdict(g, g.guard.kinds.mediaBasename, 'IMG_0001 (1).jpg')).toBe('ok');
+    });
+
+    it.each(['desktop.ini', 'run.bat', 'x.url', 'a.png.lnk', 'a.png/x', ''])(
+        'mediaBasename refuses %j',
+        async (name) => {
+            const g = guardWith();
+            expect(await verdict(g, g.guard.kinds.mediaBasename, name)).toEqual(DEFAULT_REJECT);
+        }
+    );
+
+    it('both media kinds refuse everything when the guard has no isMediaFile', async () => {
+        const g = guardWith({ media: null });
+        expect(await verdict(g, g.guard.kinds.mediaEntry, IN)).toEqual(DEFAULT_REJECT);
+        const h = guardWith({ media: null });
+        expect(await verdict(h, h.guard.kinds.mediaBasename, 'a.png')).toEqual(DEFAULT_REJECT);
+    });
+});
+
+// Deep review #5: the _Tier-N link check folded the WHOLE realpath, so in a case-sensitive tree a
+// junction into a sibling differing only by case passed. Only the tier folder's own name may differ
+// (by ASCII case); its parent must be exactly the real folder.
+describe('tierDirMatches (deep review #5)', () => {
+    const { tierDirMatches } = require('../ipc-guard.js');
+    const root = join(tmpdir(), 'Photos');
+
+    it('accepts the tier folder directly inside the real folder, in any ASCII case', () => {
+        expect(tierDirMatches(join(root, '_Tier-1'), root, '_Tier-1')).toBe(true);
+        expect(tierDirMatches(join(root, '_tier-1'), root, '_Tier-1')).toBe(true);
+    });
+
+    it('refuses a parent that differs only by case (a sibling in a case-sensitive tree)', () => {
+        expect(tierDirMatches(join(tmpdir(), 'photos', '_Tier-1'), root, '_Tier-1')).toBe(false);
+    });
+
+    it('refuses a Unicode look-alike name, another tier, and a deeper path', () => {
+        const k = String.fromCharCode(0x212a);
+        expect(tierDirMatches(join(root, '_Tier-1' + k), root, '_Tier-1')).toBe(false);
+        expect(tierDirMatches(join(root, '_Tier-2'), root, '_Tier-1')).toBe(false);
+        expect(tierDirMatches(join(root, 'x', '_Tier-1'), root, '_Tier-1')).toBe(false);
     });
 });

@@ -1,17 +1,33 @@
 // ipc-guard.js
-// Registration wrapper for every privileged ipcMain channel (G1). A call reaches its handler
-// only after two checks: the sender is the app's own top-level index.html, and every argument
-// passes the kind its channel declared. A refused call returns that channel's own failure value
-// (the renderer's existing error branches already handle it) and is logged; it never throws.
-// Pure CommonJS with no Electron import, so Vitest can load it.
+// Registration wrapper for every privileged ipcMain channel (G1). A `handle` call reaches its
+// handler only after two checks: the sender is the app's own top-level index.html, and every
+// argument passes the kind its channel declared (`any` checks nothing; it marks an argument the
+// handler validates itself or treats as opaque data). An `on` channel may replace the URL check
+// with its own sender test (app-close-allow checks the sender's identity). A refused call returns
+// that channel's own failure value (the renderer's existing error branches already handle it) and
+// is logged; it never throws. Pure CommonJS with no Electron import, so Vitest can load it.
 
 const path = require('path');
-const { hasDotSegment } = require('./path-grants');
+const { isCleanAbsolute, asciiFold } = require('./path-grants');
 
 const DEFAULT_REJECT = Object.freeze({ success: false, error: 'Not permitted' });
 
-// A file: URL reduced to what identifies the document: no query or fragment, and case-folded on
-// Windows, where Chromium and pathToFileURL can disagree on the drive letter's case.
+// Percent-decode only well-formed %XX runs: Chromium leaves a lone `%` raw, which a whole-string
+// decodeURIComponent would reject.
+const decodeEscapes = (s) =>
+    s.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+        try {
+            return decodeURIComponent(run);
+        } catch (_err) {
+            return run;
+        }
+    });
+
+// A file: URL reduced to what identifies the document, compared as a DECODED path (deep review
+// #2): Chromium's frame URL keeps `~ [ ] %` raw where Node's pathToFileURL escapes them, so from
+// an app path such as the checkout's 8.3 alias (MEDIA_~1) every sender was refused. No query or
+// fragment; ASCII case folded on Windows (Chromium and Node can disagree on the drive letter) and
+// only ASCII, so a Unicode look-alike path stays a different document.
 function normalizeFileUrl(raw, platform = process.platform) {
     let u;
     try {
@@ -22,9 +38,8 @@ function normalizeFileUrl(raw, platform = process.platform) {
     if (u.protocol !== 'file:') {
         return null;
     }
-    u.search = '';
-    u.hash = '';
-    return platform === 'win32' ? u.href.toLowerCase() : u.href;
+    const id = (u.host ? '//' + u.host : '') + decodeEscapes(u.pathname);
+    return platform === 'win32' ? asciiFold(id) : id;
 }
 
 function isPlainBasename(v, platform = process.platform) {
@@ -70,17 +85,23 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMedi
         const target = await grants.canonicalize(v);
         return target !== null && isMediaFile(path.extname(target).toLowerCase());
     };
+    const isMediaName = (v) => typeof isMediaFile === 'function' && isMediaFile(path.extname(v).toLowerCase());
+    const grantedEntry = async (v) => isString(v) && (await grants.resolveEntry(v)) !== null;
     const kinds = {
         any: () => true,
         string: isString,
         grantedPath: async (v) => isString(v) && (await grants.resolveAllowed(v)) !== null,
         basename: (v) => isPlainBasename(v, platform),
         trackedTempDir: (v) => isString(v) && tempDirs.has(v),
-        grantedOrTempPath: async (v) =>
-            isString(v) && (tempDirs.isChildFile(v) || (await grants.resolveAllowed(v)) !== null),
-        // An operation on a directory entry (rename, existence): its folder must be granted; the
-        // entry may be a link that points anywhere (review M-a).
-        grantedEntry: async (v) => isString(v) && ((await allowed(v)) || (await grants.resolveEntry(v)) !== null),
+        // An operation on a directory entry (rename, existence): authorized by the folder that
+        // HOLDS it, which must be granted; the entry itself may be a link that points anywhere
+        // (review M-a). Only that: following the entry (deep review #9) also accepted a link
+        // outside every grant that points into one, and a granted root itself.
+        grantedEntry,
+        // move-file's source and new name (deep review #8): a media file under a media file name.
+        // A move could otherwise rename a cache file of chosen text to any name under a grant.
+        mediaEntry: async (v) => isString(v) && isMediaName(v) && (await grantedEntry(v)),
+        mediaBasename: (v) => isPlainBasename(v, platform) && isMediaName(v),
         // A read of a media file's content: inside a grant, or a link from a granted folder to media.
         grantedMediaRead: async (v) => isString(v) && ((await allowed(v)) || (await linkedMedia(v))),
         grantedOrTempMediaRead: async (v) =>
@@ -168,13 +189,13 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMedi
 // folder (args[0], itself checked by grantedPath), every value a small non-negative integer —
 // integer-ness is what keeps `_Tier-${tier}` a plain folder name (G1, F6/F7). All or nothing:
 // one bad entry refuses the whole call before any mkdir or rename runs.
-function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000, platform: _platform }) {
+function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000 }) {
     // Exact comparison, not case-folded (commit security review): JS toLowerCase() equates names
     // NTFS keeps distinct (U+212A KELVIN SIGN vs 'k'). Every key load-folder produced starts with
     // this exact folder string, so a legitimate call is unaffected.
     return (assignments, args) => {
         const folderPath = args?.[0];
-        if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath) || hasDotSegment(folderPath)) {
+        if (!isCleanAbsolute(folderPath)) {
             return false;
         }
         if (assignments === null || typeof assignments !== 'object' || Array.isArray(assignments)) {
@@ -189,7 +210,7 @@ function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000, 
             if (!Number.isSafeInteger(tier) || tier < 0 || tier > maxTier) {
                 return false;
             }
-            if (!path.isAbsolute(src) || hasDotSegment(src) || path.dirname(path.resolve(src)) !== folder) {
+            if (!isCleanAbsolute(src) || path.dirname(path.resolve(src)) !== folder) {
                 return false;
             }
             if (!isMediaFile(path.extname(src).toLowerCase())) {
@@ -200,4 +221,19 @@ function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000, 
     };
 }
 
-module.exports = { createIpcGuard, normalizeFileUrl, isPlainBasename, tierAssignmentsKind, DEFAULT_REJECT };
+// applyTournamentResults' link check for one tier folder (deep review #5): the realpath of
+// `<folder>/_Tier-N` must sit DIRECTLY in the folder's own realpath, compared exactly, and only the
+// tier folder's name may differ, by ASCII case (a user-made `_tier-3`). Folding the whole path
+// let a junction into a sibling differing only by case (a case-sensitive tree) pass.
+function tierDirMatches(realTier, realRoot, tierName) {
+    return path.dirname(realTier) === realRoot && asciiFold(path.basename(realTier)) === asciiFold(tierName);
+}
+
+module.exports = {
+    createIpcGuard,
+    normalizeFileUrl,
+    isPlainBasename,
+    tierAssignmentsKind,
+    tierDirMatches,
+    DEFAULT_REJECT,
+};

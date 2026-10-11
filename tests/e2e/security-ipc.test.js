@@ -3,7 +3,8 @@
 import { test, expect } from '@playwright/test';
 import { access, mkdir, mkdtemp, rm, writeFile, readFile, cp, symlink, lstat } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join, resolve, dirname } from 'path';
+import { join, resolve, dirname, sep } from 'path';
+import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { launchApp, closeApp, loadFolder, createTempFixtureDir } from './helpers/electron-app.js';
 
@@ -96,6 +97,64 @@ test.describe('G1 F2 — file IPC is confined to granted folders', () => {
     test('a planted link to a non-media file is still refused for reading', async () => {
         const link = await plantLink(join(outside, 'note.txt'), 'planted.png');
         expect(await page.evaluate((p) => window.electronAPI.readFileBuffer(p), link)).toBeNull();
+    });
+
+    // Deep review #1 (pre-existing): fs.rename replaces an existing file on Windows, so liking a
+    // second IMG_0001.jpg silently destroyed the first one already in the like folder.
+    test('a move never replaces a same-named file at the destination', async () => {
+        await cp(join(FIXTURES, 'green-1x1.png'), join(tmpFixtures.likeDir, 'red-1x1.png'));
+        const before = await readFile(join(tmpFixtures.likeDir, 'red-1x1.png'));
+        const res = await page.evaluate(
+            ({ src, dir }) =>
+                window.electronAPI.moveFile({ sourcePath: src, targetFolder: dir, fileName: 'red-1x1.png' }),
+            { src: join(tmpFixtures.dir, 'red-1x1.png'), dir: tmpFixtures.likeDir }
+        );
+        expect(res.success).toBe(true);
+        expect(res.targetPath).toBe(join(tmpFixtures.likeDir, 'red-1x1 (1).png'));
+        expect(await readFile(join(tmpFixtures.likeDir, 'red-1x1.png'))).toEqual(before);
+        await access(join(tmpFixtures.likeDir, 'red-1x1 (1).png'));
+    });
+
+    // Deep review #8: a cache file of chosen text could be renamed to any name under a grant.
+    test('a move cannot give a non-media file a chosen name', async () => {
+        const wrote = await page.evaluate(
+            (d) => window.electronAPI.writeFolderCache(d, 'hash', 'not a hash'),
+            tmpFixtures.dir
+        );
+        expect(wrote.success).toBe(true);
+        const res = await page.evaluate(
+            ({ src, dir }) => window.electronAPI.moveFile({ sourcePath: src, targetFolder: dir, fileName: 'x.url' }),
+            { src: join(tmpFixtures.dir, '.hash_cache.json'), dir: tmpFixtures.likeDir }
+        );
+        expect(res.success).toBe(false);
+        await expect(access(join(tmpFixtures.likeDir, 'x.url'))).rejects.toThrow();
+        await access(join(tmpFixtures.dir, '.hash_cache.json'));
+    });
+
+    // Deep review #7: a refusal returned false, the same as "missing", so the renderer offered to
+    // create a folder that exists, or auto-created one mid-pair.
+    test('an existence check on a folder outside every grant is refused as null, not "missing"', async () => {
+        expect(
+            await page.evaluate((p) => window.electronAPI.checkFolderExists(p), join(outside, 'keep-dir'))
+        ).toBeNull();
+        expect(await page.evaluate((p) => window.electronAPI.checkFolderExists(p), tmpFixtures.likeDir)).toBe(true);
+    });
+
+    // Deep review #4: a pick main cannot grant used to look exactly like Cancel.
+    test('a folder pick that cannot be granted tells the user instead of looking like Cancel', async () => {
+        const ungrantable = [outside, '..', 'x'].join(sep); // a dot segment: canonicalize refuses it
+        await electronApp.evaluate(({ dialog }, p) => {
+            global.__mvMessageBoxes = [];
+            dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [p] });
+            dialog.showMessageBox = async (_win, opts) => {
+                global.__mvMessageBoxes.push(opts);
+                return { response: 0 };
+            };
+        }, ungrantable);
+        expect(await page.evaluate(() => window.electronAPI.openFolderDialog())).toBeNull();
+        const boxes = await electronApp.evaluate(() => global.__mvMessageBoxes);
+        expect(boxes).toHaveLength(1);
+        expect(boxes[0].message).toBe("This folder couldn't be opened");
     });
 
     test('reading bytes outside every granted folder is refused', async () => {
@@ -211,6 +270,33 @@ test.describe('G1 F6/F7 — tournament apply stays inside the folder', () => {
         expect(res.success).toBe(false);
         await expect(access(src)).resolves.toBeUndefined();
         await expect(access(join(lookAlike, '_Tier-1', 'red-1x1.png'))).rejects.toThrow();
+    });
+
+    // Deep review #5: the _Tier-N link check folded the whole realpath, so in a case-sensitive tree
+    // a junction into a sibling differing only by case passed and Apply moved the files out.
+    test('in a case-sensitive tree, a _Tier-N junction into a case-variant sibling is refused', async () => {
+        const cs = join(parent, 'cs');
+        await mkdir(cs);
+        try {
+            execFileSync('fsutil.exe', ['file', 'setCaseSensitiveInfo', cs, 'enable'], { stdio: 'ignore' });
+        } catch {
+            test.skip(true, 'needs the per-directory case-sensitivity feature (Windows)');
+        }
+        const Photos = join(cs, 'Photos');
+        const photos = join(cs, 'photos');
+        await mkdir(Photos);
+        await mkdir(join(photos, '_Tier-1'), { recursive: true });
+        await cp(join(FIXTURES, 'red-1x1.png'), join(Photos, 'red-1x1.png'));
+        await symlink(join(photos, '_Tier-1'), join(Photos, '_Tier-1'), 'junction');
+        await loadFolder(page, Photos);
+        const src = join(Photos, 'red-1x1.png');
+        const res = await page.evaluate(
+            ([f, s]) => window.electronAPI.applyTournamentResults(f, { [s]: 1 }),
+            [Photos, src]
+        );
+        expect(res.success).toBe(false);
+        await expect(access(src)).resolves.toBeUndefined();
+        await expect(access(join(photos, '_Tier-1', 'red-1x1.png'))).rejects.toThrow();
     });
 
     test('control: a valid apply still moves the file into _Tier-N', async () => {

@@ -337,3 +337,154 @@ describe('Unicode case-fold look-alikes (commit security review)', () => {
         expect(reg.isChildFile(join(lookAlike, 'frame-001.png'))).toBe(false);
     });
 });
+
+// Deep review fix pass (Task 10): #12 case-only renames, #6 offline mapped drives, #15 two
+// instances, #4 volumes where native realpath fails, #3 sequential status lookups.
+describe('grant store, deep review fix pass', () => {
+    const nodePath = require('path');
+    const { execFileSync } = require('child_process');
+
+    const enoent = () => {
+        const err = new Error('no such file or directory');
+        err.code = 'ENOENT';
+        return err;
+    };
+
+    // #12: realpath now returns the new casing, and exact containment used to revoke the grant.
+    it.runIf(process.platform === 'win32')(
+        'keeps a grant after the folder is renamed by case only, and persists it',
+        async () => {
+            const photos = await makeDir('photos');
+            const store = createGrantStore({ storePath });
+            await store.grant(photos);
+            const Photos = join(tmp, 'Photos');
+            await require('fs/promises').rename(photos, Photos);
+            expect(await store.resolveAllowed(join(Photos, 'x.png'))).not.toBeNull();
+            const reloaded = createGrantStore({ storePath });
+            await reloaded.load();
+            expect(reloaded.list()).toContain(await reloaded.canonicalize(Photos)); // the new casing, persisted
+        }
+    );
+
+    it('does not move a root through a junction swapped in under its name', async () => {
+        const photos = await makeDir('photos');
+        const elsewhere = await makeDir('elsewhere');
+        const store = createGrantStore({ storePath });
+        await store.grant(photos);
+        await require('fs/promises').rename(photos, join(tmp, 'photos-old'));
+        await symlink(elsewhere, join(tmp, 'photos'), process.platform === 'win32' ? 'junction' : 'dir');
+        expect(await store.resolveAllowed(join(tmp, 'photos', 'x.png'))).toBeNull();
+        expect(await store.resolveAllowed(join(elsewhere, 'x.png'))).toBeNull();
+    });
+
+    it.runIf(process.platform === 'win32')(
+        'in a case-sensitive folder, a sibling differing only by case stays outside',
+        async (ctx) => {
+            const cs = await makeDir('cs');
+            try {
+                execFileSync('fsutil.exe', ['file', 'setCaseSensitiveInfo', cs, 'enable'], { stdio: 'ignore' });
+            } catch {
+                ctx.skip(); // needs the per-directory case-sensitivity feature
+            }
+            const Photos = join(cs, 'Photos');
+            await mkdir(Photos);
+            await mkdir(join(cs, 'photos'));
+            const store = createGrantStore({ storePath });
+            await store.grant(Photos);
+            expect(await store.resolveAllowed(join(cs, 'photos', 'x.png'))).toBeNull();
+            expect(await store.resolveAllowed(join(Photos, 'x.png'))).not.toBeNull();
+        }
+    );
+
+    // #6: native realpath maps a mapped/subst drive to its target, so the stored root no longer
+    // looked like the saved path once the drive was offline.
+    it.runIf(process.platform === 'win32')(
+        'reports a folder on an offline mapped drive as unreachable via its picked spelling',
+        async () => {
+            const picked = nodePath.win32.join('Z:/', 'Liked');
+            const target = nodePath.win32.join('//nas/share', 'Liked');
+            let online = true;
+            const files = new Map();
+            const fakeFs = {
+                realpath: async (p) => {
+                    if (online && nodePath.win32.resolve(p).toLowerCase().startsWith('z:')) {
+                        return nodePath.win32.join(target, nodePath.win32.relative(picked, p));
+                    }
+                    throw enoent();
+                },
+                readFile: async (p) => {
+                    if (!files.has(p)) throw enoent();
+                    return files.get(p);
+                },
+                writeFile: async (p, d) => files.set(p, d),
+                rename: async (a, b) => {
+                    files.set(b, files.get(a));
+                    files.delete(a);
+                },
+                mkdir: async () => {},
+            };
+            const store = createGrantStore({ storePath, fs: fakeFs });
+            await store.load();
+            expect((await store.grant(picked)).path).toBe(target);
+            online = false;
+            expect(await store.status(picked)).toBe('unreachable');
+            const reloaded = createGrantStore({ storePath, fs: fakeFs });
+            await reloaded.load();
+            expect(await reloaded.status(picked)).toBe('unreachable'); // the alias is persisted
+        }
+    );
+
+    // #15: each instance used to overwrite the store with its own in-memory roots.
+    it('a save merges with grants another instance wrote in the meantime', async () => {
+        const a = await makeDir('a');
+        const b = await makeDir('b');
+        const first = createGrantStore({ storePath });
+        const second = createGrantStore({ storePath });
+        await first.load();
+        await second.load();
+        await first.grant(a);
+        await second.grant(b);
+        const reloaded = createGrantStore({ storePath });
+        await reloaded.load();
+        expect(await reloaded.resolveAllowed(join(a, 'x.png'))).not.toBeNull();
+        expect(await reloaded.resolveAllowed(join(b, 'x.png'))).not.toBeNull();
+    });
+
+    // #4: native realpath (GetFinalPathNameByHandleW) throws EISDIR / UNKNOWN on some RAM-disk and
+    // WinFsp volumes; Node's JS realpath walks lstat/readlink and still resolves links.
+    it.each(['EISDIR', 'UNKNOWN'])('falls back to the JS realpath when native realpath fails with %s', async (code) => {
+        const photos = await makeDir('photos');
+        const native = {
+            ...require('fs').promises,
+            realpath: async () => {
+                const err = new Error(code);
+                err.code = code;
+                throw err;
+            },
+        };
+        const store = createGrantStore({ storePath, fs: native });
+        expect((await store.grant(photos)).path).not.toBeNull();
+        expect(await store.resolveAllowed(join(photos, 'x.png'))).not.toBeNull();
+    });
+
+    // #3: get-grant-status ran native realpath for every saved folder at once; on an offline SMB
+    // share each holds a libuv thread for ~21 s, stalling every other file IPC.
+    it('statusMany checks one path at a time', async () => {
+        let active = 0;
+        let peak = 0;
+        const slow = {
+            ...require('fs').promises,
+            realpath: async (p) => {
+                active++;
+                peak = Math.max(peak, active);
+                await new Promise((r) => setTimeout(r, 20));
+                active--;
+                return require('fs').promises.realpath(p);
+            },
+        };
+        const store = createGrantStore({ storePath, fs: slow });
+        const dirs = [await makeDir('p1'), await makeDir('p2'), await makeDir('p3')];
+        expect(await store.statusMany(dirs)).toEqual(['denied', 'denied', 'denied']);
+        expect(peak).toBe(1);
+    });
+});

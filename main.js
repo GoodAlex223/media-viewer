@@ -9,7 +9,7 @@ const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
 const { pathToFileURL } = require('url');
 const { createGrantStore, createTempDirRegistry, isInsideDir } = require('./path-grants');
-const { createIpcGuard, tierAssignmentsKind, normalizeFileUrl } = require('./ipc-guard');
+const { createIpcGuard, tierAssignmentsKind, tierDirMatches, normalizeFileUrl } = require('./ipc-guard');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
 // name, so the renderer never names a file path for these channels.
@@ -294,7 +294,16 @@ app.whenReady().then(async () => {
                 const picked = result.filePaths[0];
                 const granted = await grants.grant(picked);
                 if (!granted.path) {
+                    // Say so (deep review #4): returning null alone looked exactly like Cancel.
                     console.warn('Folder grant failed for', picked);
+                    await dialog.showMessageBox(mainWindow, {
+                        type: 'warning',
+                        title: 'Folder not opened',
+                        message: "This folder couldn't be opened",
+                        detail:
+                            'Media Viewer could not confirm where this folder is on disk, so it will not use it. ' +
+                            'Some RAM disks and virtual drives do not support that check; a folder on another drive will work.',
+                    });
                     return null;
                 }
                 if (!granted.persisted) {
@@ -315,12 +324,10 @@ app.whenReady().then(async () => {
         [arrayOf(kinds.string, 16)],
         // true = granted, false = not granted (re-pick), 'unreachable' = granted but nothing on the
         // path resolves, e.g. its drive is absent (review M-b). Reveals grant membership only.
+        // One path at a time (deep review #3): realpath on an offline share holds a thread for ~21 s.
         async (_event, paths) =>
-            Promise.all(
-                paths.map(async (p) => {
-                    const s = await grants.status(p);
-                    return s === 'granted' ? true : s === 'unreachable' ? 'unreachable' : false;
-                })
+            (await grants.statusMany(paths)).map((s) =>
+                s === 'granted' ? true : s === 'unreachable' ? 'unreachable' : false
             ),
         { rejectValue: null }
     );
@@ -363,15 +370,32 @@ app.whenReady().then(async () => {
         }
     });
 
-    // File operations
+    // File operations. A move carries a media file under a media file name (deep review #8).
     guard.handle(
         'move-file',
-        [shape({ sourcePath: kinds.grantedEntry, targetFolder: kinds.grantedPath, fileName: kinds.basename })],
+        [shape({ sourcePath: kinds.mediaEntry, targetFolder: kinds.grantedPath, fileName: kinds.mediaBasename })],
         async (event, data) => {
             try {
                 const { sourcePath, targetFolder, fileName } = data;
                 await fs.mkdir(targetFolder, { recursive: true });
-                const targetPath = path.join(targetFolder, fileName);
+                // Never replace an existing entry (deep review #1): fs.rename overwrites on Windows,
+                // so liking a second IMG_0001.jpg destroyed the first one, beyond undo's reach.
+                // lstat, not access: a dangling link at the name is taken too. The returned
+                // targetPath is the real one; the renderer's history and undo already use it.
+                const ext = path.extname(fileName);
+                const stem = path.basename(fileName, ext);
+                let targetPath = path.join(targetFolder, fileName);
+                for (let n = 1; ; n++) {
+                    try {
+                        await fs.lstat(targetPath);
+                    } catch (err) {
+                        if (err.code === 'ENOENT') {
+                            break;
+                        }
+                        throw err;
+                    }
+                    targetPath = path.join(targetFolder, `${stem} (${n})${ext}`);
+                }
                 await fs.rename(sourcePath, targetPath);
                 return { success: true, targetPath };
             } catch (error) {
@@ -498,11 +522,6 @@ app.whenReady().then(async () => {
             // isInsideDir, not `startsWith(root + sep)`: that form rejected every path on a
             // drive-root folder such as E:\ (final review I4).
             const insideRoot = (p) => isInsideDir(path.resolve(p), root);
-            // ASCII-only case fold (commit security review): JS toLowerCase() also maps characters
-            // NTFS keeps distinct (U+212A KELVIN SIGN to 'k'), so a _Tier-N junction into a look-alike
-            // sibling passed the link check below. Both sides are realpaths; only the _Tier-N name
-            // itself may differ in ASCII case (a user-made _tier-3).
-            const fold = (p) => (process.platform === 'win32' ? p.replace(/[A-Z]/g, (c) => c.toLowerCase()) : p);
             let realRoot;
             try {
                 realRoot = await fs.realpath(root);
@@ -543,7 +562,8 @@ app.whenReady().then(async () => {
                 // before the first rename, so a refusal moves nothing.
                 try {
                     const realTier = await fs.realpath(tierDir);
-                    if (fold(realTier) !== fold(path.join(realRoot, `_Tier-${tier}`))) {
+                    // Exact parent, ASCII case on the tier name only (deep review #5; ipc-guard).
+                    if (!tierDirMatches(realTier, realRoot, `_Tier-${tier}`)) {
                         return { success: false, error: `Tier folder is a link: _Tier-${tier}`, moved, failed };
                     }
                 } catch (err) {
@@ -605,7 +625,7 @@ app.whenReady().then(async () => {
                 return false;
             }
         },
-        { rejectValue: false }
+        { rejectValue: null } // refused ≠ missing (deep review #7): the renderer must not offer to create it
     );
 
     guard.handle(
