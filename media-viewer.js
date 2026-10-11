@@ -280,6 +280,8 @@ class MediaViewer {
         // a "check the drive" notice rather than a re-confirm one (review M-b).
         this.folderUnreachable = new Set();
         this._grantRefreshGen = 0;
+        this._grantRefresh = null; // the in-flight grant query (single-flight, deep review #3)
+        this._grantRefreshQueued = null;
         this.shortcuts = this.loadShortcuts();
         this.shortcutReverseMap = this.buildReverseMap();
         this._listeningState = null;
@@ -571,48 +573,80 @@ class MediaViewer {
     // before grants existed never were. The marks mirror main's answer so a move or AI sort can
     // refuse up front with a re-confirm notice, instead of failing halfway (review C1). Never
     // rejects: a refused or failed query logs and leaves the marks as they were.
+    //
+    // Single-flight (deep review #3): one query at a time. A call while one runs shares it and
+    // queues ONE trailing query (notify OR-ed in), which reads the settings as they are then;
+    // startup, every folder load and every refused 'unreachable' press used to start their own,
+    // piling realpaths on an offline share. Overlapping replies could also land last-wins.
     async refreshFolderGrants({ notify = false } = {}) {
-        const saved = [
-            ['like', this.customLikeFolder],
-            ['dislike', this.customDislikeFolder],
-            ['special', this.customSpecialFolder],
-        ].filter(([, folder]) => !!folder);
-        const gen = this._grantRefreshGen;
-        // Per folder: true (granted), false (re-pick needed) or 'unreachable' (granted, drive absent).
-        let statuses = [];
-        if (saved.length > 0) {
-            try {
-                statuses = await window.electronAPI.getGrantStatus(saved.map(([, folder]) => folder));
-            } catch (_err) {
-                statuses = null;
-            }
-            if (!Array.isArray(statuses) || statuses.length !== saved.length) {
-                window.electronAPI?.logError?.({
-                    level: 'warn',
-                    message: 'Could not check which saved folders are granted; re-confirm marks unchanged',
-                    source: 'renderer',
-                });
-                return;
-            }
+        if (this._grantRefresh) {
+            this._grantRefreshQueued = { notify: notify || !!this._grantRefreshQueued?.notify };
+            return this._grantRefresh;
         }
-        // A Browse or Clear landed while the query was in flight, so this reply describes settings
-        // that no longer hold. Ask again rather than drop it: dropping lost the OTHER folders' marks
-        // and the startup notice for the session when the query was slow (realpath on an offline
-        // network path) and the user re-picked one folder meanwhile (review M-c).
-        if (gen !== this._grantRefreshGen) return this.refreshFolderGrants({ notify });
+        const run = async (first) => {
+            for (let next = first; next; next = this._grantRefreshQueued) {
+                this._grantRefreshQueued = null;
+                const saved = [
+                    ['like', this.customLikeFolder],
+                    ['dislike', this.customDislikeFolder],
+                    ['special', this.customSpecialFolder],
+                ].filter(([, folder]) => !!folder);
+                const gen = this._grantRefreshGen;
+                // Per folder: true (granted), false (re-pick needed) or 'unreachable' (granted,
+                // drive absent).
+                let statuses = [];
+                if (saved.length > 0) {
+                    try {
+                        statuses = await window.electronAPI.getGrantStatus(saved.map(([, folder]) => folder));
+                    } catch (_err) {
+                        statuses = null;
+                    }
+                    if (!Array.isArray(statuses) || statuses.length !== saved.length) {
+                        window.electronAPI?.logError?.({
+                            level: 'warn',
+                            message: 'Could not check which saved folders are granted; re-confirm marks unchanged',
+                            source: 'renderer',
+                        });
+                        continue;
+                    }
+                }
+                // A Browse, Clear or folder load landed while the query was in flight, so this reply
+                // describes settings that no longer hold. Ask again rather than drop it: dropping lost
+                // the OTHER folders' marks and the startup notice for the session (review M-c).
+                if (gen !== this._grantRefreshGen) {
+                    this._grantRefreshQueued = { notify: next.notify || !!this._grantRefreshQueued?.notify };
+                    continue;
+                }
 
-        const listsWhere = (test) => new Set(saved.filter((_, i) => test(statuses[i])).map(([list]) => list));
-        this.folderUnreachable = listsWhere((st) => st === 'unreachable');
-        this.folderNeedsRegrant = listsWhere((st) => st !== true && st !== 'unreachable'); // fail safe
+                const listsWhere = (test) => new Set(saved.filter((_, i) => test(statuses[i])).map(([list]) => list));
+                this.folderUnreachable = listsWhere((st) => st === 'unreachable');
+                this.folderNeedsRegrant = listsWhere((st) => st !== true && st !== 'unreachable'); // fail safe
+                this.updateRatingButtonsState();
+                this.updateSpecialButtonsState();
+                if (next.notify && this.folderNeedsRegrant.size > 0) {
+                    const { list, plural } = this._regrantListText([...this.folderNeedsRegrant]);
+                    this.showNotification(
+                        `Re-confirm your ${list} folder${plural ? 's' : ''} in Settings (F1) — click Browse and pick ${plural ? 'each' : 'it'} again (security update)`,
+                        'warning'
+                    );
+                }
+            }
+        };
+        this._grantRefresh = run({ notify }).finally(() => {
+            this._grantRefresh = null;
+        });
+        return this._grantRefresh;
+    }
+
+    // Main refused a folder check: the marks were stale (e.g. the startup query still in flight),
+    // and the folder is not granted. Mark it, ask main again, and refuse with the re-confirm notice
+    // — never the create-folder prompt a "missing" folder gets (deep review #7).
+    _refuseUngrantedFolder(list) {
+        this.folderNeedsRegrant.add(list);
         this.updateRatingButtonsState();
         this.updateSpecialButtonsState();
-        if (notify && this.folderNeedsRegrant.size > 0) {
-            const { list, plural } = this._regrantListText([...this.folderNeedsRegrant]);
-            this.showNotification(
-                `Re-confirm your ${list} folder${plural ? 's' : ''} in Settings (F1) — click Browse and pick ${plural ? 'each' : 'it'} again (security update)`,
-                'warning'
-            );
-        }
+        this.refreshFolderGrants();
+        return this._refuseIfNeedsRegrant([list], 'move');
     }
 
     // 'like' / 'like and dislike' / 'like, dislike and special': fixed order, duplicates dropped.
@@ -1662,15 +1696,13 @@ class MediaViewer {
             }
 
             try {
-                // For videos, ensure proper cleanup before moving
-                if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
-                    await this.forceVideoCleanup();
-                    // Additional wait for file handles to be fully released
-                    await new Promise((resolve) => setTimeout(resolve, 500));
-                }
-
+                // The folder is checked (and created if the user agrees) BEFORE the video is torn
+                // down, so a refused or declined move leaves it playing (deep review #7, as C1).
                 const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
-
+                if (folderExists === null) {
+                    this._refuseUngrantedFolder(actionType); // refused by main, not missing
+                    return;
+                }
                 if (!folderExists) {
                     const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
                     if (!shouldCreate) return;
@@ -1679,6 +1711,13 @@ class MediaViewer {
                     if (!createResult.success) {
                         throw new Error(createResult.error);
                     }
+                }
+
+                // For videos, ensure proper cleanup before moving
+                if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                    await this.forceVideoCleanup();
+                    // Additional wait for file handles to be fully released
+                    await new Promise((resolve) => setTimeout(resolve, 500));
                 }
 
                 // Move the file
@@ -1778,7 +1817,39 @@ class MediaViewer {
                 remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === remainingFile.path);
 
                 if (fileIndex === -1) return;
+            } else {
+                // Single mode
+                if (this.mediaFiles.length === 0) return;
+                fileIndex = this.currentIndex;
+                fileToMove = this.mediaFiles[fileIndex];
+            }
 
+            if (!fileToMove) return;
+
+            const targetFolderPath = this.customSpecialFolder;
+
+            // The folder is checked (and created if the user agrees) BEFORE any media is torn down,
+            // so a refused or declined move leaves it on screen (deep review #7, as C1).
+            try {
+                const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
+                if (folderExists === null) {
+                    this._refuseUngrantedFolder('special'); // refused by main, not missing
+                    return;
+                }
+                if (!folderExists) {
+                    if (!(await this.showFolderCreationDialog(targetFolderPath))) return;
+                    const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error moving file to special folder:', error);
+                this.showError(`Failed to move file: ${error.message}`);
+                return;
+            }
+
+            if (side === 'left' || side === 'right') {
                 // Cleanup both media before moving
                 const cleanupPromises = [];
                 if (this.leftMedia) {
@@ -1789,22 +1860,11 @@ class MediaViewer {
                 }
                 await Promise.all(cleanupPromises);
                 await new Promise((resolve) => setTimeout(resolve, 50));
-            } else {
-                // Single mode
-                if (this.mediaFiles.length === 0) return;
-                fileIndex = this.currentIndex;
-                fileToMove = this.mediaFiles[fileIndex];
-
+            } else if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
                 // For videos, ensure proper cleanup before moving
-                if (this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
-                    await this.forceVideoCleanup();
-                    await new Promise((resolve) => setTimeout(resolve, 500));
-                }
+                await this.forceVideoCleanup();
+                await new Promise((resolve) => setTimeout(resolve, 500));
             }
-
-            if (!fileToMove) return;
-
-            const targetFolderPath = this.customSpecialFolder;
             const targetFolderName = window.electronAPI.path.basename(targetFolderPath);
 
             // Extract ML features BEFORE moving file (while media is still accessible).
@@ -1818,18 +1878,6 @@ class MediaViewer {
             }
 
             try {
-                const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
-
-                if (!folderExists) {
-                    const shouldCreate = await this.showFolderCreationDialog(targetFolderPath);
-                    if (!shouldCreate) return;
-
-                    const createResult = await window.electronAPI.createFolder(targetFolderPath);
-                    if (!createResult.success) {
-                        throw new Error(createResult.error);
-                    }
-                }
-
                 // Move the file
                 const moveResult = await window.electronAPI.moveFile({
                     sourcePath: fileToMove.path,
@@ -2901,9 +2949,14 @@ class MediaViewer {
                 return;
             }
 
-            // This folder's grant covers any saved like/dislike/special folder inside it (G1), so
-            // a mark may be stale now. Not awaited; refreshFolderGrants never rejects.
-            if (this.folderNeedsRegrant.size > 0 || this.folderUnreachable.size > 0) this.refreshFolderGrants();
+            // This folder's grant covers any saved like/dislike/special folder inside it (G1), so a
+            // mark may be stale now, or a reply still in flight from before this grant would re-mark
+            // it (deep review #13): invalidate that reply and re-check whenever a folder is saved,
+            // marks or no marks. Not awaited; refreshFolderGrants never rejects.
+            if (this.customLikeFolder || this.customDislikeFolder || this.customSpecialFolder) {
+                this._grantRefreshGen++;
+                this.refreshFolderGrants();
+            }
 
             // Folder switches always exit tournament mode (mode is folder-scoped, mirrors the
             // compare-mode reset pattern from 2fbe174). Must run BEFORE both branches diverge
@@ -5838,6 +5891,39 @@ class MediaViewer {
             }
 
             try {
+                const primaryFile = primarySide === 'left' ? leftFile : rightFile;
+                const primaryFolderPath = primaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
+                const primaryFolderName = window.electronAPI.path.basename(primaryFolderPath);
+                const secondaryFile = primarySide === 'left' ? rightFile : leftFile;
+                const secondaryFolderPath =
+                    secondaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
+                const secondaryFolderName = window.electronAPI.path.basename(secondaryFolderPath);
+
+                // BOTH folders are checked (and created) before either file moves and before the
+                // panes are torn down (deep review #7). A refusal used to read as "missing": the
+                // primary file had already moved when the secondary create was refused, leaving a
+                // phantom entry with an orphan history entry.
+                const primaryExists = await window.electronAPI.checkFolderExists(primaryFolderPath);
+                const secondaryExists = await window.electronAPI.checkFolderExists(secondaryFolderPath);
+                if (primaryExists === null || secondaryExists === null) {
+                    this._refuseUngrantedFolder(primaryExists === null ? primaryAction : secondaryAction);
+                    return;
+                }
+                if (!primaryExists) {
+                    const shouldCreate = await this.showFolderCreationDialog(primaryFolderPath);
+                    if (!shouldCreate) return;
+                    const createResult = await window.electronAPI.createFolder(primaryFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+                if (!secondaryExists && secondaryFolderPath !== primaryFolderPath) {
+                    const createResult = await window.electronAPI.createFolder(secondaryFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+
                 // Cleanup both media in parallel before moving
                 const cleanupPromises = [];
                 if (this.leftMedia) {
@@ -5850,20 +5936,6 @@ class MediaViewer {
                 await new Promise((resolve) => setTimeout(resolve, 50));
 
                 // Move primary file (the one being rated)
-                const primaryFile = primarySide === 'left' ? leftFile : rightFile;
-                const primaryFolderPath = primaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
-                const primaryFolderName = window.electronAPI.path.basename(primaryFolderPath);
-
-                let folderExists = await window.electronAPI.checkFolderExists(primaryFolderPath);
-                if (!folderExists) {
-                    const shouldCreate = await this.showFolderCreationDialog(primaryFolderPath);
-                    if (!shouldCreate) return;
-                    const createResult = await window.electronAPI.createFolder(primaryFolderPath);
-                    if (!createResult.success) {
-                        throw new Error(createResult.error);
-                    }
-                }
-
                 const primaryMoveResult = await window.electronAPI.moveFile({
                     sourcePath: primaryFile.path,
                     targetFolder: primaryFolderPath,
@@ -5892,20 +5964,7 @@ class MediaViewer {
                 if (primaryPrunedKeys.length > 0) primaryEntry.prunedPairKeys = primaryPrunedKeys;
                 this.moveHistory.push(primaryEntry);
 
-                // Move secondary file (the other one)
-                const secondaryFile = primarySide === 'left' ? rightFile : leftFile;
-                const secondaryFolderPath =
-                    secondaryAction === 'like' ? this.customLikeFolder : this.customDislikeFolder;
-                const secondaryFolderName = window.electronAPI.path.basename(secondaryFolderPath);
-
-                folderExists = await window.electronAPI.checkFolderExists(secondaryFolderPath);
-                if (!folderExists) {
-                    const createResult = await window.electronAPI.createFolder(secondaryFolderPath);
-                    if (!createResult.success) {
-                        throw new Error(createResult.error);
-                    }
-                }
-
+                // Move secondary file (the other one); its folder was checked above
                 const secondaryMoveResult = await window.electronAPI.moveFile({
                     sourcePath: secondaryFile.path,
                     targetFolder: secondaryFolderPath,
@@ -7877,36 +7936,12 @@ class MediaViewer {
                     this._featureCacheDiskCount = writtenCount;
                     return;
                 }
-                // If open failed, fall through to legacy single-write.
+                // Deep review #10: a failed or refused open saves NOTHING this tick. There is no
+                // single-write fallback any more: it built the whole cache as one string (~131 MB at
+                // 24k files) and wrote it non-atomically; dead on main, G1's refusals made it live.
+                // The shrink guard keeps its baseline, so the next successful save is still guarded.
+                console.warn('Feature cache not saved:', opened?.error || 'write-open failed');
             }
-
-            // Legacy fallback: build the whole object and write once (older preload / small caches).
-            const features = {};
-            let legacyWrittenCount = 0;
-            for (const [fullPath, featureArray] of this.featureCache.entries()) {
-                const entry = buildEntry(fullPath, featureArray);
-                if (!entry) continue; // unresolvable metadata — never poison the cache
-                const filename = await window.electronAPI.path.basename(fullPath);
-                features[filename] = entry;
-                legacyWrittenCount++;
-            }
-            const res = await window.electronAPI.writeFolderCache(
-                this.baseFolderPath,
-                'feature',
-                JSON.stringify({
-                    version: MediaViewer.FEATURE_CACHE_VERSION,
-                    featureDim: 64,
-                    clipDim: 512,
-                    features,
-                })
-            );
-            // Checked: before G1 this write's result was ignored, so a failed write still
-            // re-baselined the shrink guard to a count that never reached disk.
-            if (!res?.success) {
-                throw new Error(res?.error || 'legacy feature-cache write failed');
-            }
-            // Re-baseline the shrink guard to what is now actually on disk.
-            this._featureCacheDiskCount = legacyWrittenCount;
         } catch (error) {
             console.error('Failed to save feature cache:', error);
         }
@@ -10207,7 +10242,9 @@ style.textContent = `
 document.head.appendChild(style);
 
 // G1 § 6.1: make Content-Security-Policy breakage loud. A blocked script, worker, WASM compile or
-// fetch otherwise fails silently somewhere lazy; every violation reaches the session log instead.
+// fetch otherwise fails silently somewhere lazy; every violation raised after this module runs
+// reaches the session log. (One raised earlier, in the page head, is not seen here; the E2E
+// zero-violation walk covers those.)
 document.addEventListener('securitypolicyviolation', (e) => {
     window.electronAPI?.logError?.({
         level: 'warn',

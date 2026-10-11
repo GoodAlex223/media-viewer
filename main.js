@@ -671,7 +671,7 @@ app.whenReady().then(async () => {
 
     guard.handle(
         'write-folder-cache',
-        [kinds.grantedPath, oneOf('hash', 'sort', 'feature'), kinds.string],
+        [kinds.grantedPath, oneOf('hash', 'sort'), kinds.string], // 'feature' writes stream (deep review #10)
         async (_event, folderPath, name, data) => {
             try {
                 const filePath = path.join(folderPath, FOLDER_CACHE_FILES[name]);
