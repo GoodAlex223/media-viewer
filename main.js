@@ -498,7 +498,11 @@ app.whenReady().then(async () => {
             // isInsideDir, not `startsWith(root + sep)`: that form rejected every path on a
             // drive-root folder such as E:\ (final review I4).
             const insideRoot = (p) => isInsideDir(path.resolve(p), root);
-            const fold = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+            // ASCII-only case fold (commit security review): JS toLowerCase() also maps characters
+            // NTFS keeps distinct (U+212A KELVIN SIGN to 'k'), so a _Tier-N junction into a look-alike
+            // sibling passed the link check below. Both sides are realpaths; only the _Tier-N name
+            // itself may differ in ASCII case (a user-made _tier-3).
+            const fold = (p) => (process.platform === 'win32' ? p.replace(/[A-Z]/g, (c) => c.toLowerCase()) : p);
             let realRoot;
             try {
                 realRoot = await fs.realpath(root);

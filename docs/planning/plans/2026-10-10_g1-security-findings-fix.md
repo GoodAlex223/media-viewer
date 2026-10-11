@@ -55,6 +55,9 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - **Fix pass 2:** a test for the real grant site, the re-check race, and the residual note.
   - **Fix pass 3 (the user has both setups):** symlinked media keeps working, and a folder on an absent drive reads as unreachable, not as needing re-confirmation.
   - Each fix has a test that failed first.
+- [x] **Commit security review (background):** two path-authorization findings on the newest commit.
+  - Investigated by measurement. One was real and predates that commit: a case-handling mismatch in containment.
+  - It's fixed at every site, with tests that failed first.
 - [ ] **Remaining:** the user's _Scan changes_, the deep review, the manual real-folder session, then the PR.
 
 ## Progress Log

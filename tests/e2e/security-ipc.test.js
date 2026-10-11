@@ -188,6 +188,31 @@ test.describe('G1 F6/F7 — tournament apply stays inside the folder', () => {
         await expect(access(join(elsewhere, 'red-1x1.png'))).rejects.toThrow();
     });
 
+    // Commit security review: the tier-folder link check compared realpaths after JS toLowerCase(),
+    // which equates names NTFS keeps distinct (U+212A KELVIN SIGN vs 'k'), so a planted _Tier-N
+    // junction into a look-alike sibling of the folder passed it and the files moved out.
+    test('a _Tier-N junction into a look-alike sibling of the folder is refused', async () => {
+        const keys = join(parent, 'keys');
+        const lookAlike = join(parent, '\u212Aeys'); // NTFS keeps it apart from "keys"
+        await mkdir(keys);
+        await mkdir(join(lookAlike, '_Tier-1'), { recursive: true });
+        await cp(join(FIXTURES, 'red-1x1.png'), join(keys, 'red-1x1.png'));
+        await symlink(
+            join(lookAlike, '_Tier-1'),
+            join(keys, '_Tier-1'),
+            process.platform === 'win32' ? 'junction' : 'dir'
+        );
+        await loadFolder(page, keys);
+        const src = join(keys, 'red-1x1.png');
+        const res = await page.evaluate(
+            ([f, s]) => window.electronAPI.applyTournamentResults(f, { [s]: 1 }),
+            [keys, src]
+        );
+        expect(res.success).toBe(false);
+        await expect(access(src)).resolves.toBeUndefined();
+        await expect(access(join(lookAlike, '_Tier-1', 'red-1x1.png'))).rejects.toThrow();
+    });
+
     test('control: a valid apply still moves the file into _Tier-N', async () => {
         const src = join(folder, 'red-1x1.png');
         const res = await page.evaluate(

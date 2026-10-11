@@ -303,3 +303,37 @@ describe('entry authorization and grant status (review M-a, M-b)', () => {
         expect(await store.resolveAllowed(root)).toBeNull(); // unreachable authorizes nothing
     });
 });
+
+// Commit security review (2026-10-11): containment compared paths after JS toLowerCase(), but NTFS
+// decides name equality with its own upcase table. U+212A KELVIN SIGN lowercases to an ASCII 'k'
+// in JS, yet NTFS keeps "\u212Aeys" and "keys" as two directories (measured: separate inodes), so
+// a look-alike sibling of a granted folder read as inside it. Canonical paths come from native
+// realpath, which returns the on-disk casing, so containment now compares them exactly.
+describe('Unicode case-fold look-alikes (commit security review)', () => {
+    const { isInsideDir } = require('../path-grants.js');
+    const KELVIN_KEYS = '\u212Aeys'; // looks like, and JS-lowercases to, "keys"
+
+    it('a look-alike sibling of a granted folder is outside it, whether or not it exists', async () => {
+        const keys = await makeDir('keys');
+        const store = createGrantStore({ storePath });
+        await store.grant(keys);
+        expect(await store.resolveAllowed(join(tmp, KELVIN_KEYS, 'x.png'))).toBeNull();
+        await mkdir(join(tmp, KELVIN_KEYS), { recursive: true });
+        expect(await store.resolveAllowed(join(tmp, KELVIN_KEYS, 'x.png'))).toBeNull();
+        expect(await store.resolveAllowed(join(keys, 'x.png'))).not.toBeNull(); // control
+    });
+
+    it('isInsideDir does not equate a look-alike with the root', () => {
+        expect(isInsideDir(join(tmp, KELVIN_KEYS, 'x.png'), join(tmp, 'keys'), process.platform)).toBe(false);
+    });
+
+    it('the temp-dir registry does not accept a look-alike of a tracked directory', () => {
+        const reg = createTempDirRegistry();
+        const tracked = join(tmp, 'mv-keyframes-abc');
+        reg.add(tracked);
+        const lookAlike = join(tmp, 'mv-\u212Aeyframes-abc');
+        expect(reg.has(tracked)).toBe(true); // control
+        expect(reg.has(lookAlike)).toBe(false);
+        expect(reg.isChildFile(join(lookAlike, 'frame-001.png'))).toBe(false);
+    });
+});

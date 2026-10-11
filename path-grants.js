@@ -25,11 +25,14 @@ function hasDotSegment(p) {
 
 // Lexical, boundary-aware containment (`C:\Photos2` is not inside `C:\Photos`); accepts the root
 // itself, and a root that already ends in a separator (a drive root such as `E:\` — final
-// review I4). Case-folded on Windows.
-function isInsideDir(child, root, platform = process.platform) {
-    const fold = (p) => (platform === 'win32' ? p.toLowerCase() : p);
-    const c = fold(child);
-    const r = fold(root);
+// review I4). EXACT comparison, deliberately not case-folded (commit security review): JS
+// toLowerCase() equates names NTFS keeps distinct (U+212A KELVIN SIGN lowercases to 'k'), which
+// let a look-alike sibling of a granted folder read as inside it. Callers compare canonical
+// paths from native realpath, which carry the on-disk casing, so exactness costs a legitimate
+// caller nothing; only a deleted root reached with different casing now fails closed.
+function isInsideDir(child, root, _platform = process.platform) {
+    const c = child;
+    const r = root;
     if (c === r) {
         return true;
     }
@@ -37,7 +40,6 @@ function isInsideDir(child, root, platform = process.platform) {
 }
 
 function createGrantStore({ storePath, fs = fsp, platform = process.platform } = {}) {
-    const fold = (p) => (platform === 'win32' ? p.toLowerCase() : p);
     let roots = []; // [{ path: canonical, grantedAt }]
     let saveChain = Promise.resolve();
 
@@ -101,7 +103,7 @@ function createGrantStore({ storePath, fs = fsp, platform = process.platform } =
         if (!canonical) {
             return { path: null, persisted: false };
         }
-        if (!roots.some((r) => fold(r.path) === fold(canonical))) {
+        if (!roots.some((r) => r.path === canonical)) {
             roots.push({ path: canonical, grantedAt: Date.now() });
         }
         try {
@@ -168,11 +170,10 @@ function createGrantStore({ storePath, fs = fsp, platform = process.platform } =
 
 // Temp directories main itself created (extractKeyframes). The renderer gets each path from
 // main and hands it back unchanged, so exact string comparison is both sufficient and strict.
-function createTempDirRegistry({ platform = process.platform } = {}) {
-    const fold = (p) => (platform === 'win32' ? p.toLowerCase() : p);
+// (Exact: no case folding, which equated look-alike names — commit security review.)
+function createTempDirRegistry() {
     const dirs = new Set();
-    const key = (p) =>
-        typeof p === 'string' && path.isAbsolute(p) && !hasDotSegment(p) ? fold(path.resolve(p)) : null;
+    const key = (p) => (typeof p === 'string' && path.isAbsolute(p) && !hasDotSegment(p) ? path.resolve(p) : null);
     return {
         add(dir) {
             const k = key(dir);
@@ -192,7 +193,7 @@ function createTempDirRegistry({ platform = process.platform } = {}) {
         },
         isChildFile(p) {
             const k = key(p);
-            return k !== null && dirs.has(fold(path.dirname(path.resolve(p))));
+            return k !== null && dirs.has(path.dirname(path.resolve(p)));
         },
     };
 }

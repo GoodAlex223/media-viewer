@@ -168,8 +168,10 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMedi
 // folder (args[0], itself checked by grantedPath), every value a small non-negative integer —
 // integer-ness is what keeps `_Tier-${tier}` a plain folder name (G1, F6/F7). All or nothing:
 // one bad entry refuses the whole call before any mkdir or rename runs.
-function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000, platform = process.platform }) {
-    const fold = (p) => (platform === 'win32' ? p.toLowerCase() : p);
+function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000, platform: _platform }) {
+    // Exact comparison, not case-folded (commit security review): JS toLowerCase() equates names
+    // NTFS keeps distinct (U+212A KELVIN SIGN vs 'k'). Every key load-folder produced starts with
+    // this exact folder string, so a legitimate call is unaffected.
     return (assignments, args) => {
         const folderPath = args?.[0];
         if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath) || hasDotSegment(folderPath)) {
@@ -182,12 +184,12 @@ function tierAssignmentsKind({ isMediaFile, maxTier = 100, maxEntries = 100000, 
         if (entries.length > maxEntries) {
             return false;
         }
-        const folder = fold(path.resolve(folderPath));
+        const folder = path.resolve(folderPath);
         for (const [src, tier] of entries) {
             if (!Number.isSafeInteger(tier) || tier < 0 || tier > maxTier) {
                 return false;
             }
-            if (!path.isAbsolute(src) || hasDotSegment(src) || fold(path.dirname(path.resolve(src))) !== folder) {
+            if (!path.isAbsolute(src) || hasDotSegment(src) || path.dirname(path.resolve(src)) !== folder) {
                 return false;
             }
             if (!isMediaFile(path.extname(src).toLowerCase())) {

@@ -328,3 +328,18 @@ describe('entry and linked-media kinds (review M-a)', () => {
         expect(await h(trusted(), LINK)).toBe('ok');
     });
 });
+
+// Commit security review (2026-10-11): the direct-child check folded with JS toLowerCase(), which
+// equates names NTFS keeps distinct (U+212A KELVIN SIGN vs 'k'), so a file in a look-alike sibling
+// passed as a child of the folder being applied.
+describe('tierAssignmentsKind and Unicode look-alikes (commit security review)', () => {
+    const { tierAssignmentsKind } = require('../ipc-guard.js');
+
+    it('refuses a key in a look-alike sibling of the folder', () => {
+        const kind = tierAssignmentsKind({ isMediaFile: () => true, platform: process.platform });
+        const folder = join(tmpdir(), 'keys');
+        const lookAlike = join(tmpdir(), '\u212Aeys', 'a.png');
+        expect(kind({ [join(folder, 'a.png')]: 1 }, [folder])).toBe(true); // control
+        expect(kind({ [lookAlike]: 1 }, [folder])).toBe(false);
+    });
+});
