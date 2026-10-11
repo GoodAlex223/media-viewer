@@ -44,6 +44,21 @@ test.describe('G1 F2 — file IPC is confined to granted folders', () => {
         expect(exists).toBe(true);
     });
 
+    // The one production grant site (review M-d): mockFolderDialog replaces the whole handler and
+    // grants by itself, so without this test deleting main's grant call would leave the suite
+    // green. Only Electron's native dialog is stubbed here; the real guarded handler runs.
+    test('a pick in the real folder dialog grants the folder', async () => {
+        const probe = join(outside, 'note.txt');
+        expect(await page.evaluate((p) => window.electronAPI.checkFileExists(p), probe)).toBe(false);
+
+        await electronApp.evaluate(({ dialog }, dir) => {
+            dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
+        }, outside);
+        expect(await page.evaluate(() => window.electronAPI.openFolderDialog())).toBe(outside);
+
+        expect(await page.evaluate((p) => window.electronAPI.checkFileExists(p), probe)).toBe(true);
+    });
+
     test('reading bytes outside every granted folder is refused', async () => {
         const result = await page.evaluate((p) => window.electronAPI.readFileBuffer(p), join(outside, 'note.txt'));
         expect(result).toBeNull();

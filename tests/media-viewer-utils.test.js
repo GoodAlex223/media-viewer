@@ -6613,6 +6613,7 @@ describe('re-pick marks for folders saved before grants (G1)', () => {
             updateRatingButtonsState: vi.fn(),
             updateSpecialButtonsState: vi.fn(),
             _regrantListText,
+            refreshFolderGrants, // re-asks itself after a stale reply
             getGrantStatus,
         };
     }
@@ -6668,15 +6669,24 @@ describe('re-pick marks for folders saved before grants (G1)', () => {
         expect(ctx.showNotification).not.toHaveBeenCalled();
     });
 
-    it('drops a reply that arrives after a folder setting changed', async () => {
+    // Review M-c: dropping the stale reply lost the OTHER folders' marks and the startup notice for
+    // the session when the first query was slow (realpath on an offline network path) and the
+    // user re-picked one folder meanwhile. The reply is now replaced by a fresh query.
+    it('asks again when a folder setting changed while the query was in flight', async () => {
         let release;
-        const ctx = ctxWith({ status: () => new Promise((r) => (release = r)) });
+        const replies = [() => new Promise((r) => (release = r)), async () => [true, false]];
+        const ctx = ctxWith({ status: () => replies.shift()() });
         const pending = refreshFolderGrants.call(ctx, { notify: true });
-        ctx._grantRefreshGen++; // a Browse or Clear landed while the query was in flight
-        release([false, false]);
+        ctx._grantRefreshGen++; // the user re-picked the like folder while the query was in flight
+        release([false, false]); // describes the settings from before the re-pick
         await pending;
-        expect(ctx.folderNeedsRegrant.size).toBe(0);
-        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.getGrantStatus).toHaveBeenCalledTimes(2);
+        expect([...ctx.folderNeedsRegrant]).toEqual(['dislike']);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            'Re-confirm your dislike folder in Settings (F1) — click Browse and pick it again (security update)',
+            'warning'
+        );
     });
 
     it('keeps the marks, logs, and resolves when main refuses the query', async () => {

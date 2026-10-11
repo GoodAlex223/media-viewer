@@ -582,8 +582,11 @@ class MediaViewer {
                 return;
             }
         }
-        // A Browse or Clear while the query was in flight has already set the marks it affects.
-        if (gen !== this._grantRefreshGen) return;
+        // A Browse or Clear landed while the query was in flight, so this reply describes settings
+        // that no longer hold. Ask again rather than drop it: dropping lost the OTHER folders' marks
+        // and the startup notice for the session when the query was slow (realpath on an offline
+        // network path) and the user re-picked one folder meanwhile (review M-c).
+        if (gen !== this._grantRefreshGen) return this.refreshFolderGrants({ notify });
 
         this.folderNeedsRegrant = new Set(saved.filter((_, i) => granted[i] !== true).map(([list]) => list));
         this.updateRatingButtonsState();
