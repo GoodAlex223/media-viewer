@@ -31,6 +31,8 @@ function makeGuard(overrides = {}) {
         resolveAllowed: vi.fn(async (p) =>
             typeof p === 'string' && (p === GRANTED || p.startsWith(GRANTED + require('path').sep)) ? p : null
         ),
+        resolveEntry: vi.fn(async () => null), // the store's full read interface (no links here)
+        canonicalize: vi.fn(async (p) => p),
     };
     const guard = createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl: APP_URL, logger, ...overrides });
     return { guard, ipcMain, logger, tempDirs, grants };
@@ -119,7 +121,8 @@ describe('createIpcGuard argument kinds', () => {
     });
 
     it('validates trackedTempDir and grantedOrTempMediaRead against the registry', async () => {
-        const { guard, ipcMain, tempDirs } = makeGuard();
+        // Media reads need isMediaFile since PR #78's close-out (B).
+        const { guard, ipcMain, tempDirs } = makeGuard({ isMediaFile: (ext) => ['.png', '.jpg'].includes(ext) });
         const dir = join(tmpdir(), 'mv-keyframes-1');
         tempDirs.add(dir);
         guard.handle('rm', [guard.kinds.trackedTempDir], async () => 'ok');
@@ -296,6 +299,23 @@ describe('entry and linked-media kinds (review M-a)', () => {
         const { guard, ipcMain } = guardWith(MEDIA_TARGET);
         const outside = join(tmpdir(), 'x', 'pic.png');
         expect(await verdict(guard, ipcMain, guard.kinds.grantedEntry, outside)).toEqual(DEFAULT_REJECT);
+    });
+
+    // PR #78 close-out B: the in-grant branch read ANY file inside a granted folder; only the link
+    // branch checked for media. Every content-read caller (JXL decode, video probe, keyframes, CLIP)
+    // reads media, so the in-grant branch now requires a media file name too.
+    it('grantedMediaRead refuses a non-media file inside a grant, and accepts a media one', async () => {
+        const grants = {
+            resolveAllowed: vi.fn(async (x) => x),
+            resolveEntry: vi.fn(async (x) => x),
+            canonicalize: vi.fn(async (x) => x),
+        };
+        const a = makeGuard({ grants, isMediaFile });
+        expect(await verdict(a.guard, a.ipcMain, a.guard.kinds.grantedMediaRead, join(GRANTED, 'notes.txt'))).toEqual(
+            DEFAULT_REJECT
+        );
+        const b = makeGuard({ grants, isMediaFile });
+        expect(await verdict(b.guard, b.ipcMain, b.guard.kinds.grantedMediaRead, join(GRANTED, 'a.jxl'))).toBe('ok');
     });
 
     it('grantedMediaRead follows a link out of a granted folder to a media file', async () => {

@@ -5373,6 +5373,32 @@ describe('handleTournamentUndo (unified undo stack)', () => {
         });
     });
 
+    // PR #78 close-out A: the entry was re-pointed at the restored path BEFORE the stack check, so an
+    // interrupted undo left it re-pointed and a retry restored under the suffixed name even after the
+    // original name came free. It is re-pointed only once the undo proceeds; the rollback moves the
+    // file from where it actually is.
+    it('an interrupted undo of a suffixed restore leaves the entry as it was and rolls back from the real path', async () => {
+        const meta = { ...SPECIAL_META };
+        const pending = { kind: 'special', meta };
+        const ctx = makeCtx(pending, { moveHistory: [meta] });
+        let peeks = 0;
+        ctx.tournament.engine.peekUndoEntry = vi.fn(() => (peeks++ === 0 ? pending : { kind: 'pick' }));
+        globalThis.window.electronAPI.moveFile = vi
+            .fn()
+            .mockResolvedValueOnce({ success: true, targetPath: '/src/c (1).jpg' })
+            .mockResolvedValueOnce({ success: true, targetPath: '/special/c.jpg' });
+
+        await handleTournamentUndo.call(ctx);
+
+        expect(meta.originalPath).toBe(SPECIAL_META.originalPath);
+        expect(meta.fileName).toBe(SPECIAL_META.fileName);
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenLastCalledWith({
+            sourcePath: '/src/c (1).jpg',
+            targetFolder: path.dirname('/special/c.jpg'),
+            fileName: 'c.jpg',
+        });
+    });
+
     it('logs when the interrupted-undo rollback itself fails', async () => {
         const pending = { kind: 'special', meta: SPECIAL_META };
         const ctx = makeCtx(pending, { moveHistory: [SPECIAL_META] });

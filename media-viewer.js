@@ -1428,8 +1428,10 @@ class MediaViewer {
 
     // Where an undo actually put a file back (PR #78 review). move-file never replaces an entry
     // (deep review #1), so if a same-named file appeared in the source folder after the move, the
-    // restore lands at "name (n).ext". Re-point the popped history entry at that path, so the list
-    // entry, the notice and the feature caches built from it follow the file, not its old name.
+    // restore lands at "name (n).ext". Re-point the history entry being undone at that path, so the
+    // list entry, the notice and the feature caches built from it follow the file, not its old name.
+    // (handleCancel's legs pop the entry first; the tournament leg peeks it and re-points it only
+    // once the undo proceeds.)
     _followRestoredFile(move, moveResult) {
         const restoredPath = moveResult?.targetPath;
         if (!restoredPath || restoredPath === move.originalPath) return;
@@ -5479,6 +5481,10 @@ class MediaViewer {
             // reverse the entry we peeked.
             let restoreFailed = false;
             let droppedWedged = false;
+            // Where the restore actually put the file (a suffixed name when the original was taken).
+            // The entry is re-pointed at it only once the undo proceeds, below the stack check: an
+            // interrupted undo must leave the entry as it was (PR #78 close-out A).
+            let restoredPath = move.originalPath;
             this.isLoading = true;
             try {
                 const moveResult = await window.electronAPI.moveFile({
@@ -5489,7 +5495,7 @@ class MediaViewer {
                 if (!moveResult.success) {
                     throw new Error(moveResult.error);
                 }
-                this._followRestoredFile(move, moveResult); // land where it was actually put back
+                restoredPath = moveResult.targetPath || move.originalPath;
             } catch (error) {
                 restoreFailed = true;
                 console.error('Error undoing tournament special:', error);
@@ -5542,7 +5548,7 @@ class MediaViewer {
             // needed on the failure path above: the restore failed, so the file never moved.)
             if (stackMoved) {
                 const rollback = await window.electronAPI.moveFile({
-                    sourcePath: move.originalPath,
+                    sourcePath: restoredPath, // from where the restore actually put it
                     targetFolder: window.electronAPI.path.dirname(move.newPath),
                     fileName: window.electronAPI.path.basename(move.newPath), // its name there, not the restored one
                 });
@@ -5559,6 +5565,7 @@ class MediaViewer {
             // Disk restored — safe to advance. undoUserAction reverses any trailing prunes plus
             // this removal, restoring strategy state (files/winCounts/byes/roundQueue) AND
             // engine.files from the snapshot, so the file re-pairs and reports its real tier.
+            this._followRestoredFile(move, { targetPath: restoredPath }); // only now: see above
             this.tournament.engine.undoUserAction();
             this.mediaFiles.push({
                 name: move.fileName,

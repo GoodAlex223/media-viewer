@@ -102,10 +102,14 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMedi
         // A move could otherwise rename a cache file of chosen text to any name under a grant.
         mediaEntry: async (v) => isString(v) && isMediaName(v) && (await grantedEntry(v)),
         mediaBasename: (v) => isPlainBasename(v, platform) && isMediaName(v),
-        // A read of a media file's content: inside a grant, or a link from a granted folder to media.
-        grantedMediaRead: async (v) => isString(v) && ((await allowed(v)) || (await linkedMedia(v))),
+        // A read of a media file's content: a media file inside a grant, or a link from a granted
+        // folder to media. Every caller (JXL decode, video probe, keyframes, CLIP) reads media; the
+        // in-grant branch read ANY file until PR #78's close-out (B). Without isMediaFile, both refuse.
+        grantedMediaRead: async (v) =>
+            isString(v) && ((isMediaName(v) && (await allowed(v))) || (await linkedMedia(v))),
         grantedOrTempMediaRead: async (v) =>
-            isString(v) && (tempDirs.isChildFile(v) || (await allowed(v)) || (await linkedMedia(v))),
+            isString(v) &&
+            (tempDirs.isChildFile(v) || (isMediaName(v) && (await allowed(v))) || (await linkedMedia(v))),
         binary: (v) => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
     };
     const int = (min, max) => (v) => Number.isSafeInteger(v) && v >= min && v <= max;

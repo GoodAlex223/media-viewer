@@ -139,6 +139,7 @@ Recorded 2026-10-11 from the whole-branch review and the task ledger. Details ar
 - CSP violations raised in the page head before the renderer loads aren't logged in production (review M-f). The walk catches them in tests.
 - Deny device permission requests by default (review, declined-to-judge). Measure clipboard use first.
 - Per-folder cache reads have no size cap (cache trace).
+- Tournament engine re-key (PR #78 close-out A). Undoing a tournament special move under a suffixed name, because a same-named file appeared in the source folder mid-tournament, puts the file back in the list, but the engine keeps the old name, so the file doesn't rejoin the tournament.
 - The move handler should get the spec's one-line containment re-check on the joined target, as defense in depth (review M-g). It's redundant today: the file-name check already refuses separators and dot segments.
 - Flaky tests: the secret-scan test's 5 s timeout under load; the tournament undo E2E when the undecodable test video lands in the first pair.
 - **Deep-review low items** (one group), all low severity:
