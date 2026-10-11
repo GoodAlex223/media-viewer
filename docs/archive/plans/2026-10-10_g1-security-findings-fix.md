@@ -1,11 +1,13 @@
 # G1. High Security Findings Fix — Plan (public stub)
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G1 (🟤, 5 SP → ~6.5 SP); [TODO.md](../TODO.md) 🔴 [2026-10-08] "Fix the High security findings from the `claude-security` scan"; [BACKLOG.md](../BACKLOG.md) 🟤 `[2026-10-08] From: G4 trial batch` (three High stubs, one Medium, one Low)
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G1 (🟤, 5 SP → ~6.5 SP); [TODO.md](../../planning/TODO.md) 🔴 [2026-10-08] "Fix the High security findings from the `claude-security` scan"; [BACKLOG.md](../../planning/BACKLOG.md) 🟤 `[2026-10-08] From: G4 trial batch` (three High stubs, one Medium, one Low)
 **Created**: 2026-10-10
-**Status**: In progress
-**Branch**: `g1-security-findings-fix` (from `main` @ `d5fce61`)
+**Status**: **Complete**: merged 2026-10-11 via [PR #78](https://github.com/GoodAlex223/media-viewer/pull/78) (merge `e5cd3a8`)
+**Branch**: `g1-security-findings-fix` (from `main` @ `d5fce61`); deleted remote and local after the merge
 
 > **Disclosure.** This repo is public and the findings are unfixed, so this plan stays at stub level: finding IDs, components, vulnerability classes. The design spec and the detailed implementation plan are kept **local** until merge, in the self-ignored scan report folder (user decision 2026-10-10). At the post-merge closeout the spec moves to `docs/superpowers/specs/` and is indexed in `docs/README.md`.
+>
+> **Published 2026-10-11, after the merge:** the full write-up is on [PR #78](https://github.com/GoodAlex223/media-viewer/pull/78#issuecomment-6111546302), the spec is at [`docs/superpowers/specs/2026-10-10-g1-security-findings-fix-design.md`](../../superpowers/specs/2026-10-10-g1-security-findings-fix-design.md), and the execution rulings are below. The one open residual (I1) stays at stub level.
 
 ## Goal
 
@@ -70,7 +72,12 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - Each fix has a test that failed first.
 - [x] **Manual real-folder session (user, 2026-10-11):** passed.
 - [x] **_Scan changes_ re-run at the frozen head:** covered all 24 commits through the final code commit. No findings, verified. A clean pass, not a clearance: the first run's range held a path-authorization issue that was found and fixed afterwards.
-- [ ] **Remaining:** the PR (stub-level body until merge), its review, the merge, then the closeout.
+- [x] **PR #78:**
+  - **Body:** stub level.
+  - **Round 1:** 6 issues, all below 80, posted because they were confirmed real. Fixed in `dd97625`.
+  - **Close-out round 1:** 2 minor follow-ups, fixed in `7ac89d6`. The guard was tightened rather than the comment reworded.
+  - **Final close-out:** no issues found.
+  - **Merged:** 2026-10-11, `e5cd3a8`, as a merge commit.
 
 ## Progress Log
 
@@ -123,6 +130,15 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
 
 ## Key Discoveries
 
+- **JS `toLowerCase()` is not NTFS's name equality.**
+  - U+212A KELVIN SIGN lowercases to `k`, yet NTFS keeps `\u212Aeys` and `keys` as separate folders (measured).
+  - A case-folded containment check therefore admitted a look-alike sibling.
+  - Compare `realpath` outputs exactly; where a fold is needed, fold ASCII only.
+- **In a `file://` Electron page, CSP `'self'` matches every `file:` URL.** `script-src` and `connect-src` don't confine the page to the app folder or to granted folders (residual I1).
+- **Chromium's frame URL and Node's `pathToFileURL` disagree on `~ [ ] %`.** Comparing them as text refused every IPC from an app path such as the checkout's 8.3 alias. Compare decoded paths.
+- **Native `realpath` has quirks.** It resolves a mapped or subst drive to its target, and fails with EISDIR or UNKNOWN on some virtual volumes. Grant status therefore keeps the spelling each folder was picked under, and canonicalization falls back to Node's JS `realpath`.
+- **A clean `claude-security` Scan changes is not a clearance.** The first run's range held the case-fold bypass above and reported nothing.
+
 - Drag-and-drop folder loading has been dead since Electron 32: the renderer reads `File.path`, which Electron removed in favour of `webUtils.getPathForFile`. The installed version is 39.1.2. To be filed in BACKLOG 🟤 at closeout.
 
 ## Future Improvements
@@ -130,7 +146,7 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
 - Revive drag-and-drop folder loading through `webUtils.getPathForFile` in the preload, granting the dropped folder in main. Never trust a path the renderer supplies.
 - A grant-store eviction policy and a "forget folder" action (relevant to WEEKLY G4, recently opened folders).
 
-## Residuals (extract to BACKLOG 🟤 at closeout)
+## Residuals (extracted 2026-10-11: BACKLOG 🟤 `[2026-10-11] From: G1 closeout`; I1 to TODO)
 
 Recorded 2026-10-11 from the whole-branch review and the task ledger. Details are in the local spec § 10/§ 12 and the ledger; they go public after merge.
 
@@ -156,3 +172,44 @@ Recorded 2026-10-11 from the whole-branch review and the task ledger. Details ar
   - leftover cache-write blocks
   - an unreachable loop
   - stale ESLint file lists
+
+## Rulings made during execution (published after merge)
+
+The executor's ledger (`.superpowers/sdd/…/progress.md`, git-ignored) recorded every ruling with the cost if it was wrong. The consequential ones:
+
+- **Re-pick.**
+  - The startup notice is a 5 s `warning`, not a 2 s `info`; a startup toast is missed otherwise.
+  - Saved folders are re-checked after each folder load, which the spec didn't ask for: a folder's grant also covers saved folders inside it.
+  - Marked buttons stay enabled, and a click explains the refusal.
+- **Saved-state validation.**
+  - `createdAt`, the top-level `options` and `playedPairs` are validated too.
+  - `isLoadableState` lets any error other than a validation failure propagate. Otherwise a validator bug could silently discard a legitimate save, which the next persist would then overwrite.
+  - *Cost if wrong:* a hand-edited save starts fresh.
+- **Sinks.** Static templates plus `textContent`, rather than full `createElement` rebuilds. Same safety property, unchanged markup.
+- **Lint guard.** Applied to renderer blocks 2a, 2b, 2c and 3b. The bare-`ipcMain` rule lives in its own `main.js`-only object, so `ipc-guard.js` can still register handlers.
+- **CSP.** The final policy is the draft minus `worker-src blob:` and `connect-src file:`, both measured unnecessary by the walk. In a `file://` page, `'self'` matches every `file:` URL, which is the open residual I1.
+- **ffmpeg/ffprobe.** `-protocol_whitelist file` is pinned by source text (one wrapper, no bypassing call). No behavioural test can tell it apart, because the build's nested default already refuses `http`.
+- **Hash-cache hang.** Fixed in G1, although the spec's rule fixes only HTML sinks and paths. It's the same untrusted-folder-file class, and a one-line fix.
+- **Containment.**
+  - Exact comparison of canonical paths.
+  - Roots are re-resolved on a miss (#12). A new spelling is adopted only if it is the old one up to ASCII case, so a junction swap or a look-alike can't move a root.
+  - *Cost if wrong:* a non-ASCII case rename, e.g. `Ä` → `ä`, still revokes a grant until the folder is re-picked.
+- **Symlinked media (M-a, user: fix before merge).**
+  - Entry operations are authorized by the folder that holds the entry.
+  - Content reads follow a link only to a media file.
+  - Content reads inside a grant need a media file name too (PR #78 close-out B).
+  - *Cost if wrong:* a future content-read caller of a non-media file is refused (fails closed).
+- **Absent drives (M-b, #6).** `status()` reports `unreachable` from the canonical root or the spelling it was picked under. A refused press re-checks in the background.
+- **Move ordering (#7).** Every move checks its folders before any media is torn down, so a refused or declined move leaves the media on screen. The pair move checks both folders before either file moves.
+- **Same-folder moves (PR #78 review).** Identity is the real parent folder plus device and inode (bigint), not a name comparison.
+- **Undo after a suffixed restore.** The history entry follows the file. The tournament leg re-points it only after the stack check. The engine re-key is a residual.
+- **Tests.** Comment-only fixes carry no test. Two old contracts were updated: decoded-path URL identity, and the batch kind.
+
+## Deferred minors from the first whole-branch review (extracted at closeout)
+
+- **M1.** The grant store overwrites a newer-version or unreadable store; logs its load reason at `info`; never retries a rename on EPERM/EBUSY.
+- **M3.** `write-folder-cache` is a plain write, not atomic, which preserves the old behaviour.
+- **M4.** Weak tests: the concurrent-grant serialization test, and the folder-argument contract of the feature-cache open calls.
+- **M5.** `realpath` runs on any absolute string from the renderer before containment. A UNC path means outbound SMB. Defense in depth.
+- **M7.** `isPlainBasename` refuses a backslash on every platform, so a Linux or macOS name containing `\` can't be moved.
+- **Not carried:** M2 (a failed grant looked like Cancel) is fixed by #4's message box, and M6 (records lagging) is done.

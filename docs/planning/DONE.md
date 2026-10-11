@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-09 <!-- Group G5: Weekly Reviews (2026-10-09 run, ⚪ Overhead) — 5/5, MERGED 2026-10-09 via PR #77 (merge 0e298b4) after one review round and two close-outs. -->
+**Last Updated**: 2026-10-11 <!-- Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
+<!-- Previous: Group G5: Weekly Reviews (2026-10-09 run, ⚪ Overhead) — 5/5, MERGED 2026-10-09 via PR #77 (merge 0e298b4) after one review round and two close-outs. -->
 <!-- Previous: Group G4: Cleanup Week trial batch (🟤, Cleanup Week #4) — 2/2, MERGED 2026-10-08 via PR #76 (merge 44c282b) after one review round and a close-out. -->
 <!-- Previous: Group G3: Tournament render re-entry (🟤, Cleanup Week #4) — 1/1, MERGED 2026-10-07 via PR #75 (merge 482a3c8) after a pre-PR final review + fix pass, one review round and a close-out (no issues). -->
 <!-- Previous: Group G1: Single-mode rating safety (🔵 🏆, Cleanup Week #4) — 3/3, MERGED 2026-10-06 via PR #74 (merge 0bdcdb3) after a pre-PR final review, two review rounds and a close-out (no issues). -->
@@ -21,6 +22,69 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-11 — Group G1: High security findings fix 🟤 (Oct 12–16) — **MERGED `e5cd3a8`** (PR #78)
+
+**Spec**: [2026-10-10-g1-security-findings-fix-design.md](../superpowers/specs/2026-10-10-g1-security-findings-fix-design.md), kept local until the merge and published at closeout.
+**Plan**: [2026-10-10_g1-security-findings-fix.md](../archive/plans/2026-10-10_g1-security-findings-fix.md), stub level throughout; the execution rulings and deferred minors were published after the merge.
+**Branch**: `g1-security-findings-fix`, cut from `main` at `d5fce61`; deleted remote and local after the merge.
+
+✅ **Status: MERGED 2026-10-11 via PR #78** (merge `e5cd3a8`, 27 commits).
+
+**Pre-PR:**
+- Two fresh whole-branch reviews, plus a background per-commit security review.
+- The user's whole-branch `/code-review`: 15 findings, all fixed in G1 by user decision. Scope ~13.5 SP against 5 planned; the user accepted past the 2× line.
+- `/claude-security` _Scan changes_: clean (trial leg 2).
+- A manual real-folder session: passed.
+
+**PR review:**
+- Round 1: 6 issues, fixed in `dd97625`.
+- Close-out round 1: 2 follow-ups, fixed in `7ac89d6`.
+- Final close-out: no issues.
+
+**Summary**:
+- **Closed:** the 2026-10-08 `claude-security` scan's F1/F3, F4 (High, renderer CWE-79), F2 (High, main-process file IPC CWE-862), F5 (Medium) and F6/F7 (Low, tournament apply CWE-22).
+- **How:**
+  - The main process authorizes every path its file IPC acts on, against folders the user picked in its own dialog.
+  - The renderer builds the affected UI from DOM nodes.
+  - Saved tournament state is validated before use.
+  - Tournament apply is confined to the folder.
+  - A measured CSP and a navigation lock back all of this up.
+- **Every finding had a test that failed on the unfixed code first.**
+
+**Key changes**:
+
+- **New `path-grants.js`:** persisted folder grants, canonical containment compared exactly, entry vs. content-read authorization, three-state status for absent drives, merge-on-save.
+- **New `ipc-guard.js`:** sender-frame check (decoded-path URL identity), per-argument kinds, the tier-map validator, `tierDirMatches`.
+- **`main.js`:**
+  - Every channel registers through the guard, and a lint rule bans bare `ipcMain` registration.
+  - A move never replaces a same-named file.
+  - A navigation lock.
+  - `runMediaTool` pins `ffmpeg`/`ffprobe` to `-protocol_whitelist file`.
+- **`preload.js`:** the generic `invoke`, `readFile` and `writeFile` passthroughs are removed.
+- **Renderer:**
+  - Sinks are built from DOM nodes, with a lint guard proven to fire.
+  - A one-time re-pick flow for folders saved before grants, which refuses before any media teardown.
+  - Hash-cache values are validated.
+  - Undo follows the name a file was actually restored under.
+- **`index.html`:** a Content-Security-Policy, each directive measured by an E2E zero-violation walk; every violation is logged.
+- **`tournament-engine.js`:** `validateTournamentState`, with shape and membership checks at the load boundary only.
+- **Tests:**
+  - Unit 1006 → **1219**.
+  - E2E 111 → **136** (132 passed, 4 opt-in skipped).
+  - New files: `security-ipc`, `security-render`, `security-repick` and `security-csp-walk` (E2E); `path-grants`, `ipc-guard`, `lint-guard` and `main-hardening` (unit).
+
+**Spawned**:
+- BACKLOG 🟤 `[2026-10-11] From: G1 closeout`: 16 items. They include a flaky tournament E2E (raised priority), the engine re-key, lint-guard additions, device-permission denial, and drag-and-drop revival.
+- TODO 🔴: page-side file-load confinement (residual I1), before G4.
+- BACKLOG check-offs: the five finding stubs, the two `invoke` entries, the trial entry (`keep`, both legs), the conditional hook (not built), and re-derive-by-probe (done).
+
+**Learnings**:
+- JS `toLowerCase()` is not NTFS's name equality: U+212A lowercases to `k`, and containment must compare `realpath` outputs exactly.
+- In a `file://` page, CSP `'self'` matches every `file:` URL.
+- Chromium and Node encode `~ [ ] %` differently in file URLs.
+- A clean `claude-security` scan missed a real bypass in its own range.
+- The deep review falsified two of the executor's rulings, and caught two regressions introduced by the executor's own earlier fixes.
 
 ### 2026-10-09 — Group G5: Weekly Reviews ⚪ (2026-10-09 run, Cleanup Week #4) — **5/5, MERGED `0e298b4`** (PR #77)
 

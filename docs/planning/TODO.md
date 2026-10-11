@@ -24,9 +24,17 @@ Active tasks and backlog.
 
 <!-- Defined tasks ready to start. Ordered by priority: 🔴 → 🟠 → 🟡 → 🟢 -->
 
-<!-- [2026-10-08] Security findings from the G4 `claude-security` scan (public repo: stub-level text only; full report is local, uncommitted). -->
+<!-- [2026-10-11] G1 security findings fix merged (PR #78, `e5cd3a8`) — its 🔴 item moved to DONE.md. The one
+     open residual it left, I1, is the item below (user decision 2026-10-11: a follow-up before G4). -->
 
-- [ ] 🔴 **Fix the High security findings from the `claude-security` scan** — 📅 **Scheduled 2026-10-10: [WEEKLY.md](WEEKLY.md) G1** (Oct 12–16, Mon–Tue; front-loaded because G2's bulk move and G4's recent-folders list run through the same file IPC and HTML rendering; carries `claude-security` leg 2). Five BACKLOG 🟤 `[2026-10-08] From: G4 trial batch` entries (three High stubs, one Medium and one Low folded in) share one root: untrusted input is not validated or encoded at the boundaries the stubs name, and the main process does not authorize what the renderer asks of it. Scope: per the stubs and the local report — encode/validate at each named boundary, constrain the file IPC, confine destinations, and add defence in depth. Changes `preload.js` if the bridge is narrowed — security review applies (ask rules). **Acceptance**: each confirmed finding has a test that fails on `main` first; `/claude-security` Scan changes on the fix diff comes back clean for these sites (leg 2 of the trial); full detail goes public in the PR only after merge. Full finding text: local report `CLAUDE-SECURITY-20261008-084826/` (ask the owner; it is not in git). Effort: M (≈5 SP — set at planning; do not start before the next weekly plan schedules it).
+- [ ] 🔴 **Confine page-side file loads to the granted folders (G1 residual I1)** — 📅 **Before G4** (user decision 2026-10-11): G4's "recently opened folders" reopens a folder by path on top of G1's grant model.
+  - **The gap:** G1 confines what the main process does. But the app runs from a `file://` page, and there CSP `'self'` matches every `file:` URL. So the page's own loads are not confined to the granted folders. The measured detail stays in the git-ignored local spec original (`CLAUDE-SECURITY-20261008-084826/`) until the fix merges. It's Important (measured by G1's whole-branch review) and not a regression: the sink fixes close the entry point.
+  - **Fix direction, which needs a design pass first:** serve the app from a custom scheme, or `protocol.handle('file', …)`, limited to the app folder, the granted roots and main's tracked temp folders.
+  - **Scope also includes:**
+    - video range requests through the handler
+    - the symlinked-media decision for page-side loads (G1's M-a fix allows reads of links to media; keep page-side loads consistent with it)
+    - WebRTC and other egress CSP doesn't govern
+  - Spec: [g1 design § 10/§ 12](../superpowers/specs/2026-10-10-g1-security-findings-fix-design.md). Effort: M (~1.5–2.5 SP). Affected: `main.js`, `index.html` (CSP), the E2E CSP walk.
 
 <!-- [2026-10-04] Manual-testing intake (source: manual testing) — placed in TODO by user decision. The batch's
      other 7 items went to BACKLOG 🔵 [2026-10-04]; two of them (bulk dislike, single-mode special hotkey)

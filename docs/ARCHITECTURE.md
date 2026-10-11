@@ -49,21 +49,19 @@ System architecture and component relationships for Media Viewer.
 | Dialog Handling | System folder picker dialogs |
 | Global Shortcuts | Alt+F4 and other system shortcuts |
 
-**IPC Handlers**:
-- `open-folder-dialog` — Open system folder picker
-- `load-folder` — List media files in directory
-- `get-file-data` — Read file as base64 for display
-- `move-file` — Move file to rating folder
-- `get-file-hash` — Calculate file hash (for caching)
+**IPC Handlers**: every privileged channel is registered through `ipc-guard.js` (`guard.handle` / `guard.on`), never directly on `ipcMain`; a lint rule enforces this. Examples:
+- `open-folder-dialog` — open the system folder picker; **the only place a folder is granted**
+- `load-folder` — list media files in a granted folder
+- `move-file` — move a media file into a granted folder, never replacing an existing one
+- `read-folder-cache` / `write-folder-cache` — per-folder caches by fixed name (`hash`, `sort`, plus `feature` for reads)
+- `get-grant-status` — which saved folders are granted (`true`), not granted (`false`) or `unreachable`
+See `main.js` for the full list and each channel's argument kinds.
 
 ### Preload Script (`preload.js`)
 
 **Responsibility**: Security bridge between main and renderer.
 
-Exposes limited API via `contextBridge`:
-- `window.electronAPI.openFolderDialog()`
-- `window.electronAPI.loadFolder(path)`
-- `window.electronAPI.getFileData(path)`
+Exposes named, single-purpose calls via `contextBridge` (`window.electronAPI.*`). Since G1 (2026-10-11) there is no generic `invoke`, `readFile` or `writeFile` passthrough.
 - `window.electronAPI.moveFile(source, dest)`
 - `window.electronAPI.getFileHash(path)`
 
@@ -277,14 +275,22 @@ media_viewer/
 - **Context Isolation**: Enabled (renderer cannot access Node.js)
 - **Node Integration**: Disabled
 - **Sandbox**: Disabled (required for file operations)
-- **Preload Script**: Only exposes necessary APIs
+- **Preload Script**: named, folder-scoped calls only
+- **IPC guard** (`ipc-guard.js`): each call must come from the app's own top-level `index.html` frame, and each argument must pass its channel's declared kind. A refusal returns the channel's usual failure value and is logged.
+- **Content-Security-Policy** (meta tag in `index.html`): no inline script; each directive was measured by an end-to-end walk; violations are logged to the session log.
+- **Navigation lock**: the window cannot navigate away from `index.html` or open new windows.
+- **Renderer HTML**: values are inserted as text, never parsed as HTML. An ESLint rule enforces this.
 
 ### File Access
 
-- Read-only access to selected folder
-- Write access limited to configured rating folders
-- No network access required
-- No external API calls
+- **Folder grants** (`path-grants.js`): the main process acts only on paths inside folders the user picked in its own dialog. Grants persist in `userData/folder-grants.json`.
+  - Containment compares canonical (`realpath`) paths exactly.
+  - Moves are authorized by the folder holding the entry; content reads accept media files only.
+- **Saved data**: per-folder caches and saved tournament state are treated as untrusted folder content and validated before use. Tournament apply is confined to the folder.
+- **Media tools**: `ffmpeg`/`ffprobe` are restricted to local files (`-protocol_whitelist file`).
+- **Network**: none required; no external API calls (the Lucide icons CDN script is pinned by SRI and CSP).
+- **Known residual**: the `file://` page itself can still load local files outside the grants, because CSP `'self'` covers every `file:` URL. A follow-up is tracked in TODO.md.
+- Design: [G1 security findings fix spec](superpowers/specs/2026-10-10-g1-security-findings-fix-design.md).
 
 ---
 

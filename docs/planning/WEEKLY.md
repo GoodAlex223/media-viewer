@@ -24,7 +24,7 @@
 > **Front-loaded to Mon–Tue**: G2's bulk move and G4's reopen-by-path both go through the file IPC this group authorizes, and G2's confirmation and G4's folder list render text through the sinks it encodes — so **G2 and G4 branch after G1 merges**. **Disclosure**: this repo is public; the BACKLOG entries are stubs and the full report is local (`CLAUDE-SECURITY-20261008-084826/`, ask the owner). Keep the plan, commit messages and PR body at stub level until merge — full detail goes public in the PR only after it. `preload.js` edits prompt by design (the `permissions.ask` rules and `guard-preload-bash.js`). **Trial vehicle: `claude-security` leg 2** — the user starts _Scan changes_ on the fix diff before merge (REVIEW-QUEUE § 5; the leg's own trigger is the first PR touching `main.js` or `preload.js`).
 > **Model:** start Opus · `high` — **stepped up one row** from 5–7 SP because the group is safety-critical (file-IPC authorization, possibly `preload.js`); `xhigh` to write the spec and plan (which paths the renderer may name is the design decision — deeper reasoning) → execute Opus · `medium`; review deep (`max`) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **Fix the High security findings from the `claude-security` scan** — per the TODO 🔴 item and the five 🟤 `[2026-10-08] From: G4 trial batch` stubs (three High; the Medium and the Low folded in): encode or validate at each named renderer boundary, make the main process authorize the paths its file IPC acts on, and confine the tournament-apply destinations to the folder. **Acceptance**: each confirmed finding has a test that fails on `main` first; _Scan changes_ on the fix diff comes back clean for these sites. Re-derive by probe where the session's cyber safeguard allows — 🟤 `[2026-10-08]` "Re-derive scan findings with a probe…" names a method. `main.js`, `media-viewer.js`, possibly `preload.js`, `tests/` (5) — TODO 🔴 [2026-10-08] ← 🟤 [2026-10-08] G4 trial batch
+- [x] ✅ **MERGED 2026-10-11 via PR #78 (merge `e5cd3a8`)**; see [DONE.md](DONE.md). **Fix the High security findings from the `claude-security` scan** — per the TODO 🔴 item and the five 🟤 `[2026-10-08] From: G4 trial batch` stubs (three High; the Medium and the Low folded in): encode or validate at each named renderer boundary, make the main process authorize the paths its file IPC acts on, and confine the tournament-apply destinations to the folder. **Acceptance**: each confirmed finding has a test that fails on `main` first; _Scan changes_ on the fix diff comes back clean for these sites. Re-derive by probe where the session's cyber safeguard allows — 🟤 `[2026-10-08]` "Re-derive scan findings with a probe…" names a method. `main.js`, `media-viewer.js`, possibly `preload.js`, `tests/` (5) — TODO 🔴 [2026-10-08] ← 🟤 [2026-10-08] G4 trial batch
 
 ### G2. Like-or-skip flow `[batch]` 🔵 🏆 — single-mode AI-sort workflow — 8 SP
 
@@ -45,6 +45,7 @@
 
 > Added by the user at planning (2026-10-10), in place of a design-only session. Branch **after G1 merges**: reopening a folder without the dialog means the main process accepts a path the renderer supplies — exactly what G1's authorization decides — and the list renders folder names through the sinks G1 encodes. **Trial vehicle: `typescript-lsp`** (REVIEW-QUEUE § 5; the first group of the week to edit `media-viewer.js` that carries no other trial): install `typescript-language-server` and `typescript` on the host (ask first — a global install), enable `typescript-lsp@claude-plugins-official` at project scope, and confirm it ran from a `diagnostics` record in the session transcript. **Visual evidence**: committed screenshots of the drop zone with and without the list, as for G2.
 > **Model:** start Sonnet · `medium` → execute Sonnet · `medium`; review standard (`high`) — the 3–4 SP row; the security design it depends on is G1's — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
+> **Update 2026-10-11 (G1 closeout):** G1 merged with one open residual, I1: page-side file loads are not yet confined to the granted folders. **The user decided to fix it before G4**, so G4 waits for the TODO 🔴 item "Confine page-side file loads to the granted folders (G1 residual I1)" (~1.5–2.5 SP).
 
 - [ ] **Add a "Recently opened folders" quick-access list** — record each successfully loaded folder (path, name, timestamp) in `localStorage` (the constructor-prefs pattern: validate, clamp), list a few in the drop zone / empty state, reopen without the folder picker, and drop entries whose folder no longer exists. `media-viewer.js` (`loadFolder`, the drop zone), `index.html`, `styles.css`, `main.js`/`preload.js` only if G1's authorization needs a reopen path, `tests/` (3) — 🔵 [2026-07-01] manual testing
 
@@ -73,13 +74,13 @@
 
 > G1 goes first because G2 and G4 build on it.
 
-- **[G1](#g1-high-security-findings-fix-solo---main-process-file-ipc--renderer-html-encoding--5-sp)** 🟤 — spec and plan at stub level; a test per finding that fails on `main`; start the fix (part 1 of 2)
+- ✅ **[G1](#g1-high-security-findings-fix-solo---main-process-file-ipc--renderer-html-encoding--5-sp)** 🟤 — spec and plan at stub level; a test per finding that fails on `main`; start the fix (part 1 of 2)
 
 **Daily total**: ~3 SP
 
 ### Tuesday, October 13 — Security fix lands; like-or-skip starts
 
-- **[G1](#g1-high-security-findings-fix-solo---main-process-file-ipc--renderer-html-encoding--5-sp)** 🟤 — finish; the user starts _Scan changes_ (leg 2); review; merge (part 2 of 2)
+- ✅ **[G1](#g1-high-security-findings-fix-solo---main-process-file-ipc--renderer-html-encoding--5-sp)** 🟤 — finish; the user starts _Scan changes_ (leg 2); review; merge (part 2 of 2). Merged `e5cd3a8` (PR #78) on 2026-10-11, ahead of the week; scope ~13.5 SP after the deep review.
 - **[G2](#g2-like-or-skip-flow-batch----single-mode-ai-sort-workflow--8-sp)** 🔵 🏆 — branch after G1 merges; spec and plan (part 1 of 3)
 
 **Daily total**: ~3 SP
@@ -112,7 +113,7 @@
 
 | ID  | Group                                        | Domain                                      | Source      | Tasks  | Total SP | Day     | Status     |
 | --- | -------------------------------------------- | ------------------------------------------- | ----------- | ------ | -------- | ------- | ---------- |
-| G1  | High security findings fix `[solo]`          | Main-process file IPC + renderer encoding   | 🟤 Auto     | 1      | 5        | Mon–Tue | ☐ Planned  |
+| G1  | High security findings fix `[solo]`          | Main-process file IPC + renderer encoding   | 🟤 Auto     | 1      | 5        | Mon–Tue | ✅ `e5cd3a8` (PR #78) |
 | G2  | Like-or-skip flow `[batch]` 🏆               | Single-mode AI-sort workflow                | 🔵 User     | 2      | 8        | Tue–Thu | ☐ Planned  |
 | G3  | Source-folder vector reuse `[solo]`          | ML training pipeline                        | 🔵 User     | 1      | 3        | Wed     | ☐ Planned  |
 | G4  | Recently opened folders `[solo]`             | Folder open + empty state                   | 🔵 User     | 1      | 3        | Thu     | ☐ Planned  |
