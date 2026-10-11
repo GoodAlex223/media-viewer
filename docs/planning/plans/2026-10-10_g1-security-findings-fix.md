@@ -68,7 +68,9 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - **Renderer:** re-confirm flow and move ordering.
   - **Tournament state:** checks at the load boundary only, plus membership checks.
   - Each fix has a test that failed first.
-- [ ] **Remaining:** the manual real-folder session, then a _Scan changes_ re-run at the final frozen head (commits were made while the first run was reading the tree), then the PR.
+- [x] **Manual real-folder session (user, 2026-10-11):** passed.
+- [x] **_Scan changes_ re-run at the frozen head:** covered all 24 commits through the final code commit. No findings, verified. A clean pass, not a clearance: the first run's range held a path-authorization issue that was found and fixed afterwards.
+- [ ] **Remaining:** the PR (stub-level body until merge), its review, the merge, then the closeout.
 
 ## Progress Log
 
