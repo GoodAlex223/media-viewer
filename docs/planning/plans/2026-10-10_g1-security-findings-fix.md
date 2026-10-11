@@ -50,7 +50,12 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - **Violation logging:** every violation reaches the session log.
   - **Navigation:** the window can't navigate away or open new windows.
   - **ffmpeg/ffprobe:** restricted to local files.
-- [ ] **Remaining:** verification (fresh whole-branch review, user's _Scan changes_, deep review, manual real-folder session), then the PR.
+- [x] **Fresh whole-branch review:**
+  - Verdict "with fixes": no Critical findings, one Important.
+  - **Fix pass 2:** a test for the real grant site, the re-check race, and the residual note.
+  - **Fix pass 3 (the user has both setups):** symlinked media keeps working, and a folder on an absent drive reads as unreachable, not as needing re-confirmation.
+  - Each fix has a test that failed first.
+- [ ] **Remaining:** the user's _Scan changes_, the deep review, the manual real-folder session, then the PR.
 
 ## Progress Log
 
@@ -109,11 +114,10 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
 
 Recorded 2026-10-11 from the whole-branch review and the task ledger. Details are in the local spec § 10/§ 12 and the ledger; they go public after merge.
 
-- **Page-side file loads are not yet confined to granted folders** (review I1, Important; not a regression). Closing this needs a protocol-level design. Schedule it before G4 builds on the grant model.
-- Symlinked media files that point outside every granted folder can no longer be rated (review M-a). Ask the user whether this matters for them.
-- A granted folder on a missing drive reads as "needs re-confirming" until the next folder load (review M-b).
+- **Page-side file loads are not yet confined to granted folders** (review I1, Important; not a regression). Closing this needs a protocol-level design. **User decision 2026-10-11:** a follow-up task before G4 builds on the grant model. The design must also decide the symlinked-media question for page-side loads (see the M-a fix).
 - The lint guard should gain three more HTML-parsing APIs (review M-e). None is used today.
 - CSP violations raised in the page head before the renderer loads aren't logged in production (review M-f). The walk catches them in tests.
 - Deny device permission requests by default (review, declined-to-judge). Measure clipboard use first.
 - Per-folder cache reads have no size cap (cache trace).
+- The move handler should get the spec's one-line containment re-check on the joined target, as defense in depth (review M-g). It's redundant today: the file-name check already refuses separators and dot segments.
 - Flaky tests: the secret-scan test's 5 s timeout under load; the tournament undo E2E when the undecodable test video lands in the first pair.

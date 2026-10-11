@@ -1,7 +1,7 @@
 // G1 — main-process file IPC authorization (F2) and tournament-apply confinement (F6/F7).
 // Every probe stays inside this test's own mkdtemp directories.
 import { test, expect } from '@playwright/test';
-import { access, mkdir, mkdtemp, rm, writeFile, readFile, cp, symlink } from 'fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile, readFile, cp, symlink, lstat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -57,6 +57,45 @@ test.describe('G1 F2 — file IPC is confined to granted folders', () => {
         expect(await page.evaluate(() => window.electronAPI.openFolderDialog())).toBe(outside);
 
         expect(await page.evaluate((p) => window.electronAPI.checkFileExists(p), probe)).toBe(true);
+    });
+
+    // Review M-a: a media file that is a link to somewhere outside every grant. A move renames the
+    // link entry (its target never moves), so it is authorized by the folder holding the entry; a
+    // content read follows the link only to a media file.
+    async function plantLink(target, name) {
+        const link = join(tmpFixtures.dir, name);
+        try {
+            await symlink(target, link, 'file');
+        } catch (err) {
+            test.skip(err.code === 'EPERM', 'file symlinks need Developer Mode on Windows');
+            throw err;
+        }
+        return link;
+    }
+
+    test('a symlinked media file pointing outside the folder can be checked, read and moved', async () => {
+        await cp(join(FIXTURES, 'red-1x1.png'), join(outside, 'real.png'));
+        const link = await plantLink(join(outside, 'real.png'), 'linked.png');
+
+        expect(await page.evaluate((p) => window.electronAPI.checkFileExists(p), link)).toBe(true);
+        const bytes = await page.evaluate(async (p) => {
+            const b = await window.electronAPI.readFileBuffer(p);
+            return b ? b.byteLength : null;
+        }, link);
+        expect(bytes).toBeGreaterThan(0);
+        const res = await page.evaluate(
+            ({ src, dir }) =>
+                window.electronAPI.moveFile({ sourcePath: src, targetFolder: dir, fileName: 'linked.png' }),
+            { src: link, dir: tmpFixtures.likeDir }
+        );
+        expect(res.success).toBe(true);
+        expect((await lstat(join(tmpFixtures.likeDir, 'linked.png'))).isSymbolicLink()).toBe(true);
+        await access(join(outside, 'real.png')); // the target never moved
+    });
+
+    test('a planted link to a non-media file is still refused for reading', async () => {
+        const link = await plantLink(join(outside, 'note.txt'), 'planted.png');
+        expect(await page.evaluate((p) => window.electronAPI.readFileBuffer(p), link)).toBeNull();
     });
 
     test('reading bytes outside every granted folder is refused', async () => {

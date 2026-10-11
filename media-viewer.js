@@ -276,6 +276,9 @@ class MediaViewer {
         // filled by refreshFolderGrants(). A Browse or Clear bumps the generation so a query
         // already in flight cannot re-mark the folder the user just picked.
         this.folderNeedsRegrant = new Set();
+        // Granted, but nothing on the path resolves right now (its drive is absent): refused with
+        // a "check the drive" notice rather than a re-confirm one (review M-b).
+        this.folderUnreachable = new Set();
         this._grantRefreshGen = 0;
         this.shortcuts = this.loadShortcuts();
         this.shortcutReverseMap = this.buildReverseMap();
@@ -475,7 +478,12 @@ class MediaViewer {
         // 'Arrow Up'/'Arrow Down' — wrong even with the default Q/W.
         // A folder main has not granted (G1 re-pick) stays enabled — a click explains the refusal —
         // and says so here.
-        const regrant = (list) => (this.folderNeedsRegrant?.has(list) ? ' — folder needs re-confirming (F1)' : '');
+        const regrant = (list) =>
+            this.folderNeedsRegrant?.has(list)
+                ? ' — folder needs re-confirming (F1)'
+                : this.folderUnreachable?.has(list)
+                  ? ' — folder not reachable'
+                  : '';
         const title = (label, mode, action, list) =>
             enabled ? label + this._shortcutSuffix(mode, action) + regrant(list) : tooltip;
 
@@ -531,7 +539,11 @@ class MediaViewer {
         const enabled = !!this.customSpecialFolder;
         const tooltip = enabled ? 'Move to special folder' : 'Configure special folder in Settings (F1)';
         // Not granted in main (G1 re-pick): stays enabled, a click explains the refusal.
-        const regrant = this.folderNeedsRegrant?.has('special') ? ' — folder needs re-confirming (F1)' : '';
+        const regrant = this.folderNeedsRegrant?.has('special')
+            ? ' — folder needs re-confirming (F1)'
+            : this.folderUnreachable?.has('special')
+              ? ' — folder not reachable'
+              : '';
 
         // Single mode button — suffix from single's `special` binding (Digit1 by default).
         if (this.specialBtn) {
@@ -566,14 +578,15 @@ class MediaViewer {
             ['special', this.customSpecialFolder],
         ].filter(([, folder]) => !!folder);
         const gen = this._grantRefreshGen;
-        let granted = [];
+        // Per folder: true (granted), false (re-pick needed) or 'unreachable' (granted, drive absent).
+        let statuses = [];
         if (saved.length > 0) {
             try {
-                granted = await window.electronAPI.getGrantStatus(saved.map(([, folder]) => folder));
+                statuses = await window.electronAPI.getGrantStatus(saved.map(([, folder]) => folder));
             } catch (_err) {
-                granted = null;
+                statuses = null;
             }
-            if (!Array.isArray(granted) || granted.length !== saved.length) {
+            if (!Array.isArray(statuses) || statuses.length !== saved.length) {
                 window.electronAPI?.logError?.({
                     level: 'warn',
                     message: 'Could not check which saved folders are granted; re-confirm marks unchanged',
@@ -588,7 +601,9 @@ class MediaViewer {
         // network path) and the user re-picked one folder meanwhile (review M-c).
         if (gen !== this._grantRefreshGen) return this.refreshFolderGrants({ notify });
 
-        this.folderNeedsRegrant = new Set(saved.filter((_, i) => granted[i] !== true).map(([list]) => list));
+        const listsWhere = (test) => new Set(saved.filter((_, i) => test(statuses[i])).map(([list]) => list));
+        this.folderUnreachable = listsWhere((st) => st === 'unreachable');
+        this.folderNeedsRegrant = listsWhere((st) => st !== true && st !== 'unreachable'); // fail safe
         this.updateRatingButtonsState();
         this.updateSpecialButtonsState();
         if (notify && this.folderNeedsRegrant.size > 0) {
@@ -612,11 +627,29 @@ class MediaViewer {
     // tears no media down (review C1) and leaves nothing in flight. `purpose`: 'move' | 'sort'.
     _refuseIfNeedsRegrant(lists, purpose) {
         const marked = lists.filter((name) => this.folderNeedsRegrant?.has(name));
-        if (marked.length === 0) return false;
-        const { list, plural } = this._regrantListText(marked);
-        const tail = purpose === 'sort' ? 'before using the AI sort' : 'before moving files there';
-        this.showNotification(`Re-confirm your ${list} folder${plural ? 's' : ''} in Settings (F1) ${tail}`, 'warning');
-        return true;
+        if (marked.length > 0) {
+            const { list, plural } = this._regrantListText(marked);
+            const tail = purpose === 'sort' ? 'before using the AI sort' : 'before moving files there';
+            this.showNotification(
+                `Re-confirm your ${list} folder${plural ? 's' : ''} in Settings (F1) ${tail}`,
+                'warning'
+            );
+            return true;
+        }
+        const unreachable = lists.filter((name) => this.folderUnreachable?.has(name));
+        if (unreachable.length > 0) {
+            const { list, plural } = this._regrantListText(unreachable);
+            this.showNotification(
+                plural
+                    ? `Your ${list} folders aren't reachable — check that their drives are connected`
+                    : `Your ${list} folder isn't reachable — check that its drive is connected`,
+                'warning'
+            );
+            // Re-check in the background, so the next press works once the drive is back (M-b).
+            this.refreshFolderGrants();
+            return true;
+        }
+        return false;
     }
 
     setupFolderSettings() {
@@ -644,6 +677,7 @@ class MediaViewer {
                     // The pick granted it in main: drop its mark, and any query still in flight.
                     this._grantRefreshGen++;
                     this.folderNeedsRegrant.delete('like');
+                    this.folderUnreachable.delete('like');
                     this.customLikeFolder = folder;
                     localStorage.setItem('customLikeFolder', folder);
                     if (likeFolderInput) {
@@ -664,6 +698,7 @@ class MediaViewer {
                     // The pick granted it in main: drop its mark, and any query still in flight.
                     this._grantRefreshGen++;
                     this.folderNeedsRegrant.delete('dislike');
+                    this.folderUnreachable.delete('dislike');
                     this.customDislikeFolder = folder;
                     localStorage.setItem('customDislikeFolder', folder);
                     if (dislikeFolderInput) {
@@ -680,6 +715,7 @@ class MediaViewer {
             likeFolderClear.addEventListener('click', () => {
                 this._grantRefreshGen++;
                 this.folderNeedsRegrant.delete('like');
+                this.folderUnreachable.delete('like');
                 this.customLikeFolder = '';
                 localStorage.removeItem('customLikeFolder');
                 if (likeFolderInput) {
@@ -695,6 +731,7 @@ class MediaViewer {
             dislikeFolderClear.addEventListener('click', () => {
                 this._grantRefreshGen++;
                 this.folderNeedsRegrant.delete('dislike');
+                this.folderUnreachable.delete('dislike');
                 this.customDislikeFolder = '';
                 localStorage.removeItem('customDislikeFolder');
                 if (dislikeFolderInput) {
@@ -724,6 +761,7 @@ class MediaViewer {
                     // The pick granted it in main: drop its mark, and any query still in flight.
                     this._grantRefreshGen++;
                     this.folderNeedsRegrant.delete('special');
+                    this.folderUnreachable.delete('special');
                     this.customSpecialFolder = folder;
                     localStorage.setItem('customSpecialFolder', folder);
                     if (specialFolderInput) {
@@ -739,6 +777,7 @@ class MediaViewer {
             specialFolderClear.addEventListener('click', () => {
                 this._grantRefreshGen++;
                 this.folderNeedsRegrant.delete('special');
+                this.folderUnreachable.delete('special');
                 this.customSpecialFolder = '';
                 localStorage.removeItem('customSpecialFolder');
                 if (specialFolderInput) {
@@ -2864,7 +2903,7 @@ class MediaViewer {
 
             // This folder's grant covers any saved like/dislike/special folder inside it (G1), so
             // a mark may be stale now. Not awaited; refreshFolderGrants never rejects.
-            if (this.folderNeedsRegrant.size > 0) this.refreshFolderGrants();
+            if (this.folderNeedsRegrant.size > 0 || this.folderUnreachable.size > 0) this.refreshFolderGrants();
 
             // Folder switches always exit tournament mode (mode is folder-scoped, mirrors the
             // compare-mode reset pattern from 2fbe174). Must run BEFORE both branches diverge

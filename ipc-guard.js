@@ -44,7 +44,7 @@ function describe(v) {
     return Array.isArray(v) ? `array(${v.length})` : typeof v;
 }
 
-function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, platform = process.platform }) {
+function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMediaFile, platform = process.platform }) {
     const expected = normalizeFileUrl(expectedUrl, platform);
     if (!expected) {
         throw new Error('ipc-guard: expectedUrl must be a file: URL');
@@ -59,6 +59,17 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, platfo
     };
 
     const isString = (v) => typeof v === 'string';
+    const allowed = async (v) => (await grants.resolveAllowed(v)) !== null;
+    // Review M-a. A link in a granted folder may be READ only when its real target is a media
+    // file: symlinked media keeps working (CLIP, JXL decode, video probe), while a planted link to
+    // a key file or a document is still refused. Without isMediaFile, content reads stay strict.
+    const linkedMedia = async (v) => {
+        if (typeof isMediaFile !== 'function' || (await grants.resolveEntry(v)) === null) {
+            return false;
+        }
+        const target = await grants.canonicalize(v);
+        return target !== null && isMediaFile(path.extname(target).toLowerCase());
+    };
     const kinds = {
         any: () => true,
         string: isString,
@@ -67,6 +78,13 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, platfo
         trackedTempDir: (v) => isString(v) && tempDirs.has(v),
         grantedOrTempPath: async (v) =>
             isString(v) && (tempDirs.isChildFile(v) || (await grants.resolveAllowed(v)) !== null),
+        // An operation on a directory entry (rename, existence): its folder must be granted; the
+        // entry may be a link that points anywhere (review M-a).
+        grantedEntry: async (v) => isString(v) && ((await allowed(v)) || (await grants.resolveEntry(v)) !== null),
+        // A read of a media file's content: inside a grant, or a link from a granted folder to media.
+        grantedMediaRead: async (v) => isString(v) && ((await allowed(v)) || (await linkedMedia(v))),
+        grantedOrTempMediaRead: async (v) =>
+            isString(v) && (tempDirs.isChildFile(v) || (await allowed(v)) || (await linkedMedia(v))),
         binary: (v) => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
     };
     const int = (min, max) => (v) => Number.isSafeInteger(v) && v >= min && v <= max;

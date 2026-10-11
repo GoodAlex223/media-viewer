@@ -120,7 +120,50 @@ function createGrantStore({ storePath, fs = fsp, platform = process.platform } =
         return roots.some((r) => isInside(canonical, r.path)) ? canonical : null;
     }
 
-    return { load, grant, resolveAllowed, canonicalize, list: () => roots.map((r) => r.path) };
+    // A directory ENTRY, authorized by the folder that holds it: the canonical parent must be inside
+    // a grant, and the entry itself may be a link whose target lies anywhere (review M-a). For
+    // operations on the entry only — a move renames the link, never its target. Content reads must
+    // not use this alone (see ipc-guard's grantedMediaRead).
+    async function resolveEntry(p) {
+        if (typeof p !== 'string' || !path.isAbsolute(p) || hasDotSegment(p)) {
+            return null;
+        }
+        const resolved = path.resolve(p);
+        const name = path.basename(resolved);
+        const parent = path.dirname(resolved);
+        if (!name || parent === resolved) {
+            return null; // a root has no entry name
+        }
+        const allowedParent = await resolveAllowed(parent);
+        return allowedParent ? path.join(allowedParent, name) : null;
+    }
+
+    // For the renderer's re-confirm marks only — it authorizes nothing. 'unreachable': nothing on
+    // the path resolves (typically its drive is absent: a removable or offline network drive), yet
+    // it lies under a stored root, so it was granted and is merely unavailable (review M-b).
+    async function status(p) {
+        const canonical = await canonicalize(p);
+        if (canonical) {
+            return roots.some((r) => isInside(canonical, r.path)) ? 'granted' : 'denied';
+        }
+        if (typeof p === 'string' && path.isAbsolute(p) && !hasDotSegment(p) && !p.includes('\0')) {
+            const lexical = path.resolve(p);
+            if (roots.some((r) => isInside(lexical, r.path))) {
+                return 'unreachable';
+            }
+        }
+        return 'denied';
+    }
+
+    return {
+        load,
+        grant,
+        resolveAllowed,
+        resolveEntry,
+        status,
+        canonicalize,
+        list: () => roots.map((r) => r.path),
+    };
 }
 
 // Temp directories main itself created (extractKeyframes). The renderer gets each path from

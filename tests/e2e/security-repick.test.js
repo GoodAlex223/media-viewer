@@ -3,7 +3,8 @@
 // torn down, and never through the folder-creation prompt (review C1). Every probe stays inside
 // this test's own mkdtemp directories.
 import { test, expect } from '@playwright/test';
-import { access, mkdir, mkdtemp, rm } from 'fs/promises';
+import { existsSync } from 'fs';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -239,6 +240,36 @@ test.describe('G1 re-pick — folders saved before grants', () => {
                 return { worker: !!mv.mlWorker, sorting: mv.isPredictionSorting, sorted: mv.isSortedByPrediction };
             })
         ).toEqual({ worker: false, sorting: false, sorted: false });
+    });
+
+    // Review M-b: a folder granted in an earlier session whose drive is absent now (removable or
+    // offline network drive) is not "needs re-confirming": refusing with the security-update text
+    // sent the user to re-pick a folder they cannot reach.
+    test('a granted folder on an absent drive is refused as unreachable, not as needing re-confirming', async () => {
+        test.skip(process.platform !== 'win32', 'the absent-drive case is exercised on Windows');
+        const letter = [...'QRSTUVWXYZ'].find((l) => !existsSync(`${l}:/`));
+        test.skip(!letter, 'no free drive letter');
+        const absent = join(`${letter}:/`, 'Liked'); // join gives the native separator
+
+        // Persist a grant for the absent folder, as an earlier session would have, and reload it.
+        const storeFile = await electronApp.evaluate(() => process.env.MV_E2E_GRANTS_FILE);
+        await writeFile(storeFile, JSON.stringify({ version: 1, roots: [{ path: absent, grantedAt: 1 }] }));
+        await electronApp.evaluate(() => global.__mvGrants.load());
+
+        await openSource();
+        const dislikeDir = join(saved, 'disliked');
+        await grantFolder(electronApp, dislikeDir);
+        await seedLocalStorage(page, { customLikeFolder: absent, customDislikeFolder: dislikeDir }, { grant: false });
+        await page.evaluate(() => window.mediaViewer.refreshFolderGrants({ notify: true }));
+
+        expect(await marks()).toEqual([]);
+        await expect(page.locator('.notification').filter({ hasText: 'Re-confirm your' })).toHaveCount(0);
+        expect(await page.evaluate(() => window.mediaViewer.likeBtn.title)).toMatch(/ — folder not reachable$/);
+
+        await runAction('moveCurrentFile', ['like']);
+
+        await expectRefused("Your like folder isn't reachable — check that its drive is connected");
+        expect(await page.evaluate(() => window.mediaViewer.mediaFiles.length)).toBe(3);
     });
 
     test('opening a folder that contains a saved folder clears its mark', async () => {

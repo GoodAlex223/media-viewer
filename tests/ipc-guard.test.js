@@ -260,3 +260,71 @@ describe('sender identity (final review I1)', () => {
         expect(src).not.toContain("loadFile('index.html')");
     });
 });
+
+// Review M-a: entry operations (a move renames the link itself, an existence check) are
+// authorized by the entry's folder; content reads follow a link out of a granted folder only to a
+// media file, so a planted link to a key file or a document is still refused.
+describe('entry and linked-media kinds (review M-a)', () => {
+    const LINK = join(GRANTED, 'pic.png');
+    const MEDIA_TARGET = join(tmpdir(), 'elsewhere', 'real.png');
+    const SECRET_TARGET = join(tmpdir(), 'elsewhere', 'id_rsa');
+    const isMediaFile = (ext) => ['.png', '.jpg', '.mp4', '.jxl'].includes(ext);
+
+    function guardWith(target, { media = isMediaFile } = {}) {
+        const grants = {
+            resolveAllowed: vi.fn(async () => null), // the link's target is outside every grant
+            resolveEntry: vi.fn(async (x) => (x === LINK ? x : null)), // the entry itself is inside
+            canonicalize: vi.fn(async () => target),
+        };
+        return makeGuard({ grants, isMediaFile: media });
+    }
+
+    async function verdict(guard, ipcMain, kind, arg) {
+        guard.handle('ch', [kind], async () => 'ok');
+        return ipcMain.handlers.get('ch')(trusted(), arg);
+    }
+
+    it('grantedEntry accepts a link entry in a granted folder, where grantedPath refuses it', async () => {
+        const a = guardWith(MEDIA_TARGET);
+        expect(await verdict(a.guard, a.ipcMain, a.guard.kinds.grantedEntry, LINK)).toBe('ok');
+        const b = guardWith(MEDIA_TARGET);
+        expect(await verdict(b.guard, b.ipcMain, b.guard.kinds.grantedPath, LINK)).toEqual(DEFAULT_REJECT);
+    });
+
+    it('grantedEntry refuses an entry whose folder is not granted', async () => {
+        const { guard, ipcMain } = guardWith(MEDIA_TARGET);
+        const outside = join(tmpdir(), 'x', 'pic.png');
+        expect(await verdict(guard, ipcMain, guard.kinds.grantedEntry, outside)).toEqual(DEFAULT_REJECT);
+    });
+
+    it('grantedMediaRead follows a link out of a granted folder to a media file', async () => {
+        const { guard, ipcMain } = guardWith(MEDIA_TARGET);
+        expect(await verdict(guard, ipcMain, guard.kinds.grantedMediaRead, LINK)).toBe('ok');
+    });
+
+    it('grantedMediaRead refuses a link whose real target is not a media file', async () => {
+        const { guard, ipcMain } = guardWith(SECRET_TARGET);
+        expect(await verdict(guard, ipcMain, guard.kinds.grantedMediaRead, LINK)).toEqual(DEFAULT_REJECT);
+    });
+
+    it('grantedMediaRead refuses an entry whose folder is not granted, whatever it links to', async () => {
+        const { guard, ipcMain } = guardWith(MEDIA_TARGET);
+        const outside = join(tmpdir(), 'x', 'pic.png');
+        expect(await verdict(guard, ipcMain, guard.kinds.grantedMediaRead, outside)).toEqual(DEFAULT_REJECT);
+    });
+
+    it('grantedMediaRead stays strict when the guard has no isMediaFile', async () => {
+        const { guard, ipcMain } = guardWith(MEDIA_TARGET, { media: null }); // null: an undefined would take the default;
+        expect(await verdict(guard, ipcMain, guard.kinds.grantedMediaRead, LINK)).toEqual(DEFAULT_REJECT);
+    });
+
+    it('grantedOrTempMediaRead accepts a tracked temp file and a linked media file', async () => {
+        const { guard, ipcMain, tempDirs } = guardWith(MEDIA_TARGET);
+        const tmpDir = join(tmpdir(), 'mv-keyframes-x');
+        tempDirs.add(tmpDir);
+        guard.handle('batch', [guard.kinds.grantedOrTempMediaRead], async () => 'ok');
+        const h = ipcMain.handlers.get('batch');
+        expect(await h(trusted(), join(tmpDir, 'frame-001.png'))).toBe('ok');
+        expect(await h(trusted(), LINK)).toBe('ok');
+    });
+});

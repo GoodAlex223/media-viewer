@@ -220,6 +220,7 @@ app.whenReady().then(async () => {
         tempDirs,
         expectedUrl: pathToFileURL(INDEX_HTML).href,
         logger,
+        isMediaFile, // lets a symlinked media file be read (review M-a); see ipc-guard's grantedMediaRead
     });
     const { kinds, int, optional, oneOf, arrayOf, shape } = guard;
 
@@ -312,7 +313,15 @@ app.whenReady().then(async () => {
     guard.handle(
         'get-grant-status',
         [arrayOf(kinds.string, 16)],
-        async (_event, paths) => Promise.all(paths.map(async (p) => (await grants.resolveAllowed(p)) !== null)),
+        // true = granted, false = not granted (re-pick), 'unreachable' = granted but nothing on the
+        // path resolves, e.g. its drive is absent (review M-b). Reveals grant membership only.
+        async (_event, paths) =>
+            Promise.all(
+                paths.map(async (p) => {
+                    const s = await grants.status(p);
+                    return s === 'granted' ? true : s === 'unreachable' ? 'unreachable' : false;
+                })
+            ),
         { rejectValue: null }
     );
 
@@ -357,7 +366,7 @@ app.whenReady().then(async () => {
     // File operations
     guard.handle(
         'move-file',
-        [shape({ sourcePath: kinds.grantedPath, targetFolder: kinds.grantedPath, fileName: kinds.basename })],
+        [shape({ sourcePath: kinds.grantedEntry, targetFolder: kinds.grantedPath, fileName: kinds.basename })],
         async (event, data) => {
             try {
                 const { sourcePath, targetFolder, fileName } = data;
@@ -597,7 +606,7 @@ app.whenReady().then(async () => {
 
     guard.handle(
         'check-file-exists',
-        [kinds.grantedPath],
+        [kinds.grantedEntry],
         async (event, filePath) => {
             try {
                 await fs.access(filePath);
@@ -656,7 +665,7 @@ app.whenReady().then(async () => {
     // decode pipeline, which needs the original compressed bytes rather than a UTF-8 string.
     guard.handle(
         'read-file-buffer',
-        [kinds.grantedPath],
+        [kinds.grantedMediaRead],
         async (_event, filePath) => {
             try {
                 const data = await fs.readFile(filePath); // Buffer (no encoding)
@@ -866,7 +875,7 @@ app.whenReady().then(async () => {
     });
 
     // Video probing using ffprobe
-    guard.handle('probe-video', [kinds.grantedPath], async (_event, videoPath) => {
+    guard.handle('probe-video', [kinds.grantedMediaRead], async (_event, videoPath) => {
         if (!ffprobePath) {
             return { success: false, error: 'ffprobe not available' };
         }
@@ -921,7 +930,7 @@ app.whenReady().then(async () => {
 
     guard.handle(
         'extractKeyframes',
-        [kinds.grantedPath, optional(int(1, 100))],
+        [kinds.grantedMediaRead, optional(int(1, 100))],
         async (_event, videoPath, maxFrames = 20) => {
             if (!ffmpegPath) {
                 return { success: false, error: 'ffmpeg not available' };
@@ -1067,7 +1076,7 @@ app.whenReady().then(async () => {
         return { success: true };
     });
 
-    guard.handle('extractClipEmbedding', [kinds.grantedPath], async (event, imagePath) => {
+    guard.handle('extractClipEmbedding', [kinds.grantedMediaRead], async (event, imagePath) => {
         // Load model if needed
         const loadResult = await loadClipModel(event);
         if (!loadResult.success) {
@@ -1156,7 +1165,8 @@ app.whenReady().then(async () => {
         }
     });
 
-    guard.handle('extractClipEmbeddingBatch', [arrayOf(kinds.grantedOrTempPath, 100)], async (event, imagePaths) => {
+    const clipBatchPaths = arrayOf(kinds.grantedOrTempMediaRead, 100); // keyframes or (linked) media
+    guard.handle('extractClipEmbeddingBatch', [clipBatchPaths], async (event, imagePaths) => {
         // Load model if needed
         const loadResult = await loadClipModel(event);
         if (!loadResult.success) {

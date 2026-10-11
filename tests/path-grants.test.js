@@ -234,3 +234,72 @@ describe('dot segments and roots (final review I3, I4)', () => {
         expect(isInsideDir(join(tmpdir(), 'photos2', 'a.jpg'), root)).toBe(false);
     });
 });
+
+// Review M-a: a media file that is a link to somewhere outside every grant was refused for every
+// operation, including a move, which renames the link entry and never touches its target.
+// Review M-b: a granted folder whose drive is absent canonicalized to null and read as "denied",
+// so the renderer asked the user to re-confirm it ("security update") on every launch.
+describe('entry authorization and grant status (review M-a, M-b)', () => {
+    const nodePath = require('path');
+
+    it('resolveEntry accepts a file link inside a granted folder whose target is outside it', async (ctx) => {
+        const photos = await makeDir('photos');
+        const elsewhere = await makeDir('elsewhere');
+        await writeFile(join(elsewhere, 'pic.png'), 'x');
+        const link = join(photos, 'pic.png');
+        try {
+            await symlink(join(elsewhere, 'pic.png'), link, 'file');
+        } catch (err) {
+            if (err.code === 'EPERM') ctx.skip(); // Windows without Developer Mode
+            throw err;
+        }
+        const store = createGrantStore({ storePath });
+        await store.grant(photos);
+        expect(await store.resolveAllowed(link)).toBeNull(); // the target is outside: unchanged
+        expect(await store.resolveEntry(link)).not.toBeNull();
+    });
+
+    it('resolveEntry refuses an entry whose folder is outside every grant', async () => {
+        const photos = await makeDir('photos');
+        const other = await makeDir('other');
+        const store = createGrantStore({ storePath });
+        await store.grant(photos);
+        expect(await store.resolveEntry(join(other, 'a.jpg'))).toBeNull();
+    });
+
+    it('resolveEntry refuses a root, a dot segment and a relative path', async () => {
+        const photos = await makeDir('photos');
+        const store = createGrantStore({ storePath });
+        await store.grant(photos);
+        expect(await store.resolveEntry(nodePath.parse(photos).root)).toBeNull();
+        expect(await store.resolveEntry(photos + nodePath.sep + '..' + nodePath.sep + 'x.jpg')).toBeNull();
+        expect(await store.resolveEntry('relative/a.jpg')).toBeNull();
+    });
+
+    it('status reports granted and denied', async () => {
+        const photos = await makeDir('photos');
+        const other = await makeDir('other');
+        const store = createGrantStore({ storePath });
+        await store.grant(photos);
+        expect(await store.status(join(photos, 'liked'))).toBe('granted');
+        expect(await store.status(join(other, 'liked'))).toBe('denied');
+    });
+
+    it('status reports a path under a stored root that resolves nowhere (absent drive) as unreachable', async () => {
+        const root = process.platform === 'win32' ? nodePath.join('Q:', nodePath.sep, 'Liked') : '/mnt/absent/Liked';
+        const absentDrive = {
+            readFile: async () => JSON.stringify({ version: GRANTS_VERSION, roots: [{ path: root, grantedAt: 1 }] }),
+            realpath: async () => {
+                const err = new Error('no such file or directory');
+                err.code = 'ENOENT';
+                throw err;
+            },
+        };
+        const store = createGrantStore({ storePath, fs: absentDrive });
+        await store.load();
+        expect(await store.status(root)).toBe('unreachable');
+        expect(await store.status(join(root, 'sub'))).toBe('unreachable');
+        expect(await store.status(root + '2')).toBe('denied'); // boundary-aware, like containment
+        expect(await store.resolveAllowed(root)).toBeNull(); // unreachable authorizes nothing
+    });
+});

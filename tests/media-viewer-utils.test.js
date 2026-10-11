@@ -4045,6 +4045,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             hideLoadingSpinner: vi.fn(),
             showDropZone: vi.fn(),
             folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(),
             showError: vi.fn(),
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
@@ -6488,6 +6489,14 @@ describe('updateRatingButtonsState tooltips (G1)', () => {
         expect(ctx.leftDislikeBtn.title).toBe('Dislike Left (W)');
         expect(ctx.likeBtn.disabled).toBe(false);
     });
+
+    it('says a folder on an absent drive is not reachable (review M-b)', () => {
+        const ctx = ctxWith();
+        ctx.folderUnreachable = new Set(['dislike']);
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.dislikeBtn.title).toBe('Dislike (W) — folder not reachable');
+        expect(ctx.likeBtn.title).toBe('Like (Q)');
+    });
 });
 
 // G1 cache trace: the hash cache lives in the media folder, so its values are untrusted. They feed
@@ -6608,6 +6617,7 @@ describe('re-pick marks for folders saved before grants (G1)', () => {
             customDislikeFolder: dislike,
             customSpecialFolder: special,
             folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(),
             _grantRefreshGen: 0,
             showNotification: vi.fn(),
             updateRatingButtonsState: vi.fn(),
@@ -6735,6 +6745,47 @@ describe('re-pick marks for folders saved before grants (G1)', () => {
         const ctx = { folderNeedsRegrant: new Set(['special']), showNotification: vi.fn(), _regrantListText };
         expect(_refuseIfNeedsRegrant.call(ctx, ['like', 'dislike'], 'move')).toBe(false);
         expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    // Review M-b: a granted folder on an absent drive is 'unreachable', not "needs re-confirming".
+    it('marks an unreachable folder apart from the re-confirm marks, with no security-update notice', async () => {
+        const ctx = ctxWith({ status: async () => ['unreachable', true] });
+        ctx.folderUnreachable = new Set();
+        await refreshFolderGrants.call(ctx, { notify: true });
+        expect([...ctx.folderNeedsRegrant]).toEqual([]);
+        expect([...ctx.folderUnreachable]).toEqual(['like']);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('refuses a move to an unreachable folder, and re-checks so the next press works', () => {
+        const ctx = {
+            folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(['like']),
+            showNotification: vi.fn(),
+            refreshFolderGrants: vi.fn(async () => {}),
+            _regrantListText,
+        };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['like'], 'move')).toBe(true);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            "Your like folder isn't reachable — check that its drive is connected",
+            'warning'
+        );
+        expect(ctx.refreshFolderGrants).toHaveBeenCalledTimes(1);
+    });
+
+    it('words the unreachable notice for several folders', () => {
+        const ctx = {
+            folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(['like', 'dislike']),
+            showNotification: vi.fn(),
+            refreshFolderGrants: vi.fn(async () => {}),
+            _regrantListText,
+        };
+        expect(_refuseIfNeedsRegrant.call(ctx, ['like', 'dislike'], 'sort')).toBe(true);
+        expect(ctx.showNotification).toHaveBeenCalledWith(
+            "Your like and dislike folders aren't reachable — check that their drives are connected",
+            'warning'
+        );
     });
 });
 
