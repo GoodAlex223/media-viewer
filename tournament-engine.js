@@ -56,6 +56,22 @@ export function validateStrategyState(s) {
         'round queue'
     );
     requireValid(isCount(s.gamesPlayed), 'strategy game count');
+    // Membership (deep review #14): shape alone let a planted state name a file outside the
+    // tournament in its queue; the missing-file net's removeFile() then did nothing for it and the
+    // render recursed once per media file. Every reachable state keeps these (property test).
+    const files = new Set(s.files);
+    requireValid(
+        s.roundQueue.every(([a, b]) => a !== b && files.has(a) && files.has(b)),
+        'round queue names a file outside the tournament'
+    );
+    requireValid(
+        s.byes.every((f) => files.has(f)),
+        'byes name a file outside the tournament'
+    );
+    requireValid(
+        s.winCounts.every(([f]) => files.has(f)),
+        'win counts name a file outside the tournament'
+    );
     return s;
 }
 
@@ -74,6 +90,11 @@ export function validateTournamentState(json) {
     requireValid(json.gamesPlayed === undefined || isCount(json.gamesPlayed), 'game count');
     requireValid(json.createdAt === undefined || Number.isFinite(json.createdAt), 'start time');
     validateStrategyState(json.strategyState);
+    const tournamentFiles = new Set(json.files);
+    requireValid(
+        json.strategyState.files.every((f) => tournamentFiles.has(f)),
+        'strategy files outside the tournament'
+    );
     return json;
 }
 
@@ -362,8 +383,10 @@ export class SwissStrategy {
         };
     }
 
+    // Restores TRUSTED state: an in-memory undo snapshot, or a strategyState that
+    // TournamentEngine.deserialize has already validated. It must not validate itself (deep review
+    // #11): undo calls it after popping the history entry, so a throw there lost the entry.
     static deserialize(json) {
-        validateStrategyState(json);
         const s = new SwissStrategy();
         s.files = [...json.files];
         s.options = { ...json.options };

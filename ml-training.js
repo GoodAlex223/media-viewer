@@ -737,8 +737,10 @@ export class MlTrainingManager {
         // both-empty check above.
         //
         // `scanFailed` suppresses the guard on purpose. Design doc § 7.2 rules that a folder that
-        // will not scan is "Report; train on whatever is available," and that row is still the
-        // contract -- a failed scan is not evidence that the class is empty. It is also where the
+        // will not scan is "Report; train on whatever is available." Since G1 the renderer refuses
+        // the AI sort up front for a training folder that is not granted or not reachable, so this
+        // row now covers a scan that fails after that check (e.g. a folder deleted mid-session) --
+        // and a failed scan is still not evidence that the class is empty. It is also where the
         // guard's own justification stops applying: `cacheable` already excludes a failed scan, so
         // no dead-end model can reach the model cache down that path, leaving only the wasted
         // extraction, which § 7.2 deliberately accepts.

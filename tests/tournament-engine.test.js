@@ -793,11 +793,8 @@ describe('validateTournamentState (G1)', () => {
         expect(() => TournamentEngine.deserialize(s, s.files)).toThrow(InvalidTournamentStateError);
     });
 
-    it('SwissStrategy.deserialize refuses an invalid strategy state', () => {
-        const s = playedState();
-        s.strategyState.winCounts[0][1] = MARKUP;
-        expect(() => SwissStrategy.deserialize(s.strategyState)).toThrow(InvalidTournamentStateError);
-    });
+    // (SwissStrategy.deserialize itself no longer validates: it restores trusted undo snapshots —
+    // deep review #11; the load boundary is covered below.)
 
     // Property: every state the engine can reach validates — so the check can never reject a
     // legitimate saved tournament — and no file ever wins more often than there are rounds,
@@ -833,5 +830,59 @@ describe('validateTournamentState (G1)', () => {
             }
         }
         expect(checked).toBeGreaterThan(500);
+    });
+});
+
+// Deep review fix pass (Task 10), group C.
+describe('tournament state checks at the load boundary only, with membership (deep review #11, #14)', () => {
+    const GHOST = 'ghost.jpg';
+
+    function playedState({ files = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg'], rounds = 3, picks = 3 } = {}) {
+        const eng = new TournamentEngine(files, new SwissStrategy(), { rounds });
+        for (let i = 0; i < picks; i++) {
+            const pair = eng.getCurrentPair();
+            if (!pair) break;
+            eng.recordResult(pair.left, pair.right);
+        }
+        return JSON.parse(JSON.stringify(eng.serialize()));
+    }
+
+    // #11: undo restores in-memory snapshots through SwissStrategy.deserialize AFTER the history
+    // entry is popped; validating there threw mid-undo and lost the entry (and, for a special
+    // move, left the restored file out of the list).
+    it('undo restores a snapshot the load-time bound would reject, without throwing', () => {
+        const json = playedState({ files: ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'], rounds: 1, picks: 0 });
+        json.strategyState.winCounts = json.strategyState.winCounts.map(([f]) => [f, f === 'a.jpg' ? 2 : 0]);
+        const eng = TournamentEngine.deserialize(json, json.files); // at the 2 × rounds bound: accepted
+        eng.strategy.winCounts.set('a.jpg', 3); // one more win in play
+        eng.removeFile('d.jpg', { trackUndo: true, kind: 'special' }); // snapshot holds a.jpg at 3
+        expect(() => eng.undoUserAction()).not.toThrow();
+        expect(eng.files).toContain('d.jpg');
+        expect(eng.strategy.winCounts.get('a.jpg')).toBe(3);
+    });
+
+    it('the load boundary still refuses an invalid strategy state', () => {
+        const s = playedState();
+        s.strategyState.winCounts[0][1] = '<b data-probe="1">7</b>';
+        expect(() => TournamentEngine.deserialize(s, s.files)).toThrow(InvalidTournamentStateError);
+    });
+
+    // #14: shape alone let a planted state name a file outside the tournament in its queue; the
+    // missing-file net's removeFile() then did nothing for it, and the render recursed once per
+    // media file (a measured freeze, up to a stack overflow).
+    it.each([
+        [
+            'a queue entry naming a file outside the tournament',
+            (s) => (s.strategyState.roundQueue = [[GHOST, s.files[0]]]),
+        ],
+        ['a queue pair of one file with itself', (s) => (s.strategyState.roundQueue = [[s.files[0], s.files[0]]])],
+        ['a bye outside the strategy files', (s) => (s.strategyState.byes = [GHOST])],
+        ['a win count for a file outside the strategy files', (s) => s.strategyState.winCounts.push([GHOST, 0])],
+        ['strategy files outside the tournament files', (s) => s.strategyState.files.push(GHOST)],
+    ])('rejects %s', (_label, mutate) => {
+        const s = playedState();
+        mutate(s);
+        expect(InvalidTournamentStateError).toBeTypeOf('function');
+        expect(() => validateTournamentState(s)).toThrow(InvalidTournamentStateError);
     });
 });

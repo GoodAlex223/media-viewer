@@ -62,7 +62,13 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - It covered the branch through its first 15 commits: no findings, verified, run at `high` because `max` is retired.
   - The three later commits weren't covered.
   - A path-authorization issue found and fixed afterwards lay inside its range. That's recorded for the trial's evaluation.
-- [ ] **Remaining:** the deep review, then the manual real-folder session, then a _Scan changes_ re-run at the final frozen head (commits were made while the first run was reading the tree), then the PR.
+- [x] **Deep review (user's whole-branch `/code-review`):** 15 findings. The user chose to fix all of them in G1, including two pre-existing ones. The scope is now ~2.7× the estimate, which the user accepted.
+- [x] **10. Deep-review fix pass**, in three code commits plus docs:
+  - **Main-process checks:** grant handling, move safety, the tier-folder check.
+  - **Renderer:** re-confirm flow and move ordering.
+  - **Tournament state:** checks at the load boundary only, plus membership checks.
+  - Each fix has a test that failed first.
+- [ ] **Remaining:** the manual real-folder session, then a _Scan changes_ re-run at the final frozen head (commits were made while the first run was reading the tree), then the PR.
 
 ## Progress Log
 
@@ -107,6 +113,11 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
   - **Failing-first evidence:** each new test failed first.
   - **Policy measurement:** directives were removed one at a time and the walk caught each one that mattered. Two directives the draft carried proved unnecessary and were dropped.
   - **Remaining markers:** none of the RED-until-fixed markers remain.
+- **2026-10-11** — Task 10 (deep-review fix pass) done.
+  - **Commits:** groups A (`13b0f8a`), B (`1eb68ea`), C and D.
+  - **Failing-first evidence:** the new tests failed first, including end-to-end ones in a real case-sensitive folder.
+  - **Property test:** it now also checks the new membership rules on every reachable tournament state.
+  - **Results:** unit 1215 passed, 1 skipped. Full E2E 131 passed, 4 skipped (before group C); tournament E2E 24/24.
 
 ## Key Discoveries
 
@@ -128,3 +139,17 @@ Recorded 2026-10-11 from the whole-branch review and the task ledger. Details ar
 - Per-folder cache reads have no size cap (cache trace).
 - The move handler should get the spec's one-line containment re-check on the joined target, as defense in depth (review M-g). It's redundant today: the file-name check already refuses separators and dot segments.
 - Flaky tests: the secret-scan test's 5 s timeout under load; the tournament undo E2E when the undecodable test video lands in the first pair.
+- **Deep-review low items** (one group), all low severity:
+  - the re-confirm hint on the overlay-bar buttons
+  - the E2E helper's localStorage clear outside its close race
+  - an optional argument's null default
+  - CLAUDE.md's Lucide recipe vs the CSP pin
+  - an E2E helper duplication
+  - a temp file left by a failed grant save
+  - grants never shrink
+  - a slow synchronous check at very large folders
+  - a double path lookup for linked media
+  - copy-pasted re-pick handlers
+  - leftover cache-write blocks
+  - an unreachable loop
+  - stale ESLint file lists

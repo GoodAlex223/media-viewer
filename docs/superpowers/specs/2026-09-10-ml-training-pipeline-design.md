@@ -224,7 +224,7 @@ Left in place. Nothing reads or writes them after this change. Deleting a user's
 | Condition | Behaviour |
 | --- | --- |
 | Like or dislike folder unset | Early return, as today (`media-viewer.js:7653`) |
-| A training folder will not scan | Report; train on whatever is available |
+| A training folder will not scan | Report; train on whatever is available. *Since G1 (2026-10): the AI sort refuses up front, before any training, when a like or dislike folder is not granted or not reachable (re-confirm flow). This row now covers only a scan that fails after that check, e.g. a folder deleted mid-session.* |
 | Cancel / abort mid-run | Signal-checked at every loop and phase boundary; no partial `trainHistorical` message is ever sent (unchanged) |
 | Model-cache read failure or malformed entry | Treated as a miss |
 | Model-cache write failure | Logged via `window.electronAPI.logError`; the sort continues |
