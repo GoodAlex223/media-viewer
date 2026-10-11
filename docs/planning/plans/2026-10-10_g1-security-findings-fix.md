@@ -58,7 +58,11 @@ Close the 2026-10-08 scan's three High findings (F1/F3, F4: renderer, CWE-79; F2
 - [x] **Commit security review (background):** two path-authorization findings on the newest commit.
   - Investigated by measurement. One was real and predates that commit: a case-handling mismatch in containment.
   - It's fixed at every site, with tests that failed first.
-- [ ] **Remaining:** the user's _Scan changes_, the deep review, the manual real-folder session, then the PR.
+- [x] **User's _Scan changes_ (trial leg 2):**
+  - It covered the branch through its first 15 commits: no findings, verified, run at `high` because `max` is retired.
+  - The three later commits weren't covered.
+  - A path-authorization issue found and fixed afterwards lay inside its range. That's recorded for the trial's evaluation.
+- [ ] **Remaining:** a _Scan changes_ re-run covering the three later commits, the deep review, the manual real-folder session, then the PR.
 
 ## Progress Log
 
