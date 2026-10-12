@@ -121,6 +121,11 @@ class MediaViewer {
         // Bumped by every reorder of mediaFiles. A batch undo restores exact positions only when no
         // reorder happened since the batch (spec § 7).
         this._orderGeneration = 0;
+        // The out-of-date mark (G2 spec § 8): a snapshot of moveHistory's entry references taken when the
+        // AI order on screen was computed (null off the AI order). _pendingStaleMark is the snapshot a
+        // running sort took before training; _onOrderChanged commits it when the result applies.
+        this._staleMark = null;
+        this._pendingStaleMark = null;
 
         // Compare mode state
         this.isCompareMode = false;
@@ -457,6 +462,7 @@ class MediaViewer {
 
         // ML Prediction button
         this.sortPredictionBtn = document.getElementById('sortPredictionBtn');
+        this.resortPredictionBtn = document.getElementById('resortPredictionBtn');
 
         // Zoom popover controls
         this.zoomControlsMap = {};
@@ -1435,18 +1441,26 @@ class MediaViewer {
     // its reviewed list, so a new order-changing site cannot skip it silently.
     // 'ai-fresh' / 'ai-resort' turn like-or-skip tracking on (skips emptied / kept); 'other' / 'folder'
     // turn it off — 'other' tells the user how many un-disliked skips it discarded.
+    // An AI order also commits the out-of-date mark (spec § 8) the re-sort chip counts from; any other
+    // order drops it.
     _onOrderChanged(kind) {
         this._orderGeneration++;
         if (kind === 'ai-fresh' || kind === 'ai-resort') {
             this.likeOrSkip.activate({ keepSkips: kind === 'ai-resort' });
+            // The training set this order was computed with (spec § 8): the snapshot the sort took before
+            // training, else — an order applied outside a sort run — the history now.
+            this._staleMark = this._pendingStaleMark ?? this.moveHistory.slice();
         } else {
             const discarded = this.likeOrSkip.skippedIn(this.mediaFiles).length;
             this.likeOrSkip.deactivate();
+            this._staleMark = null;
             if (discarded > 0 && kind !== 'folder') {
                 this.showNotification(`Skipped list cleared (${LikeOrSkip.formatCount(discarded, 'file')})`, 'info');
             }
         }
+        this._pendingStaleMark = null;
         this.updateDislikeSkippedButton();
+        this._updateResortChip();
     }
 
     getMediaIndex(path) {
@@ -3155,6 +3169,9 @@ class MediaViewer {
         if (this.sortPredictionBtn) {
             this.sortPredictionBtn.style.display = 'none';
         }
+        if (this.resortPredictionBtn) {
+            this.resortPredictionBtn.style.display = 'none';
+        }
         // Hide prediction badges
         this.hidePredictionBadges();
         if (this.currentMedia) {
@@ -3265,6 +3282,7 @@ class MediaViewer {
         this.updateCompareUndoButton();
         this.updateBulkRateButtonsVisibility();
         this.updateDislikeSkippedButton();
+        this._updateResortChip();
         if (this.mediaFiles.length === 0) {
             if (this.moveHistory.length > 0) {
                 this.showEmptyStateWithUndo();
@@ -4644,6 +4662,7 @@ class MediaViewer {
             } else {
                 this.updateNavigationInfo();
                 this.updateDislikeSkippedButton();
+                this._updateResortChip();
             }
         } finally {
             this._fileOpInFlight = false;
@@ -4740,6 +4759,7 @@ class MediaViewer {
         } else {
             this.updateNavigationInfo();
             this.updateDislikeSkippedButton();
+            this._updateResortChip();
         }
     }
 
@@ -5141,6 +5161,9 @@ class MediaViewer {
         } else {
             if (this.sortSettings) this.sortSettings.style.display = 'none';
             if (this.sortPredictionBtn) this.sortPredictionBtn.style.display = 'none';
+            if (this.resortPredictionBtn) {
+                this.resortPredictionBtn.style.display = 'none';
+            }
         }
     }
 
@@ -8838,6 +8861,7 @@ class MediaViewer {
         // Sorting is disabled in tournament mode — keep the button hidden even if ML events fire.
         if (this.isTournamentMode) {
             this.sortPredictionBtn.style.display = 'none';
+            this._updateResortChip();
             return;
         }
 
@@ -8868,6 +8892,30 @@ class MediaViewer {
             labelEl.textContent = 'Sort by Predicted';
             this.sortPredictionBtn.title = 'Sort by predicted preference (learned from your ratings)';
         }
+        this._updateResortChip();
+    }
+
+    // "↻ Re-sort · N new" (G2 spec § 8): visible only while the AI order is on screen and the training set
+    // has changed since it was computed. Called from showMedia (every rating renders), from
+    // updateSortPredictionButton, _onOrderChanged, and the batch / batch-undo branches that do not render.
+    _updateResortChip() {
+        if (!this.resortPredictionBtn) {
+            return;
+        }
+        const count = LikeOrSkip.computeStaleCount(this.moveHistory, this._staleMark);
+        const visible =
+            count > 0 &&
+            this.likeOrSkip.active &&
+            this.isMlEnabled &&
+            !this.isPredictionSorting &&
+            !this.isTournamentMode &&
+            this.mediaFiles.length > 0;
+        this.resortPredictionBtn.style.display = visible ? 'inline-flex' : 'none';
+        if (!visible) {
+            return;
+        }
+        this.resortPredictionBtn.querySelector('.btn-label').textContent = `Re-sort · ${count} new`;
+        this.resortPredictionBtn.title = `${LikeOrSkip.formatCount(count, 'rating')} since the last AI sort — re-sort to include them (retrains the model)`;
     }
 
     async handleSortByPrediction() {
@@ -8904,6 +8952,7 @@ class MediaViewer {
         if (this._refuseIfNeedsRegrant(['like', 'dislike'], 'sort')) return;
 
         this.isPredictionSorting = true;
+        this.updateSortPredictionButton(); // the re-sort chip hides while a sort runs
         this.sortAbortController = new AbortController();
         const runId = ++this.sortRunId;
         const signal = this.sortAbortController.signal;
@@ -8978,6 +9027,10 @@ class MediaViewer {
             }
             if (signal.aborted) throw new Error('cancelled');
 
+            // The out-of-date mark (G2 spec § 8): the history BEFORE training reads the folders. A rating
+            // made while the sort runs then counts as new even if training saw it — the hint may
+            // overcount, never undercount. _onOrderChanged commits it when the result applies.
+            this._pendingStaleMark = this.moveHistory.slice();
             // Ensure the worker holds a model trained on the CURRENT training set. The manager
             // decides whether that costs nothing (same session), a small read (model cache) or a
             // rebuild from cached vectors — the gate is the training set, not the source folder.
@@ -9041,6 +9094,8 @@ class MediaViewer {
             this.clearProgressNotification();
             this.sortAbortController = null;
             this.isPredictionSorting = false;
+            this._pendingStaleMark = null;
+            this.updateSortPredictionButton();
             this.extractionProgressSink = null;
             this.clipProgressSink = null;
             // Last out restarts the 30 s idle window, so a cancelled or thrown sort reclaims the

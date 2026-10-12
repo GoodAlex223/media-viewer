@@ -849,3 +849,91 @@ describe('handleCancel routes a skipBatch entry to _undoSkipBatch, and only that
         expect(ctx._undoSkipBatch).toHaveBeenCalledWith(batch);
     });
 });
+
+describe('the out-of-date mark (spec § 8)', () => {
+    const onOrderChanged = extract('_onOrderChanged');
+
+    function markCtx(overrides = {}) {
+        return {
+            _orderGeneration: 0,
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
+            mediaFiles: media('a'),
+            moveHistory: [{ actionType: 'like' }],
+            _staleMark: null,
+            _pendingStaleMark: null,
+            showNotification: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
+            _updateResortChip: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    it('an AI order commits the snapshot taken before training', () => {
+        const pending = [];
+        const ctx = markCtx({ _pendingStaleMark: pending });
+        onOrderChanged.call(ctx, 'ai-fresh');
+        expect(ctx._staleMark).toBe(pending);
+        expect(ctx._pendingStaleMark).toBeNull();
+    });
+
+    it('an AI order applied outside a sort run snapshots the history now (same entry references)', () => {
+        const ctx = markCtx();
+        onOrderChanged.call(ctx, 'ai-fresh');
+        expect(ctx._staleMark).not.toBe(ctx.moveHistory);
+        expect(ctx._staleMark[0]).toBe(ctx.moveHistory[0]);
+    });
+
+    it('leaving the AI order drops the mark and refreshes the chip', () => {
+        const ctx = markCtx({ _staleMark: [] });
+        onOrderChanged.call(ctx, 'other');
+        expect(ctx._staleMark).toBeNull();
+        expect(ctx._updateResortChip).toHaveBeenCalled();
+    });
+});
+
+describe('_updateResortChip (spec § 8)', () => {
+    const updateResortChip = extract('_updateResortChip');
+
+    function chipCtx(overrides = {}) {
+        const label = { textContent: '' };
+        const before = { actionType: 'like' };
+        return {
+            resortPredictionBtn: { style: { display: 'none' }, title: '', querySelector: () => label },
+            _label: label,
+            moveHistory: [before, { actionType: 'like' }, { actionType: 'dislike' }],
+            _staleMark: [before],
+            likeOrSkip: activeTracker(),
+            isMlEnabled: true,
+            isPredictionSorting: false,
+            isTournamentMode: false,
+            mediaFiles: media('a'),
+            ...overrides,
+        };
+    }
+
+    it('shows the count of training changes since the AI order was computed', () => {
+        const ctx = chipCtx();
+        updateResortChip.call(ctx);
+        expect(ctx.resortPredictionBtn.style.display).toBe('inline-flex');
+        expect(ctx._label.textContent).toBe('Re-sort · 2 new');
+        expect(ctx.resortPredictionBtn.title).toBe(
+            '2 ratings since the last AI sort — re-sort to include them (retrains the model)'
+        );
+    });
+
+    it('stays hidden when the order is fresh, off the AI order, mid-sort, in tournament, with ML off or no files', () => {
+        const hidden = [
+            { moveHistory: [], _staleMark: [] },
+            { likeOrSkip: new LikeOrSkip.SkipTracker() },
+            { isPredictionSorting: true },
+            { isTournamentMode: true },
+            { isMlEnabled: false },
+            { mediaFiles: [] },
+        ];
+        for (const overrides of hidden) {
+            const ctx = chipCtx(overrides);
+            updateResortChip.call(ctx);
+            expect(ctx.resortPredictionBtn.style.display, JSON.stringify(Object.keys(overrides))).toBe('none');
+        }
+    });
+});

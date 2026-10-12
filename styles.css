@@ -966,6 +966,12 @@ body {
     height: 16px;
 }
 
+/* Out-of-date AI order (G2): a smaller sibling of the AI-sort button, shown only while stale. */
+.resort-chip {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--font-size-xs);
+}
+
 /* Prediction Badge */
 .prediction-badge {
     position: absolute;

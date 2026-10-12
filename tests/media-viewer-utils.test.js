@@ -1393,6 +1393,8 @@ describe('handleSortByPrediction lifecycle', () => {
                 return true;
             },
             showMedia: () => {},
+            moveHistory: [],
+            _pendingStaleMark: null,
             ...overrides,
         };
         ctx._phases = phases;
@@ -1412,6 +1414,28 @@ describe('handleSortByPrediction lifecycle', () => {
         // dependency at all) — handleSortByPrediction's finally is the single owner, on the
         // success path too, not just on cancel.
         expect(ctx.clearProgressNotification).toHaveBeenCalled();
+    });
+
+    it('takes the out-of-date mark before training reads the folders, and clears the pending mark on exit (G2)', async () => {
+        const earlier = { actionType: 'like' };
+        let markAtTraining;
+        const ctx = makeCtx({ moveHistory: [earlier] });
+        ctx.mlTraining = {
+            ensureTrainedModel: () => {
+                markAtTraining = ctx._pendingStaleMark;
+                ctx.moveHistory.push({ actionType: 'like' }); // a rating made while training runs
+                return Promise.resolve({
+                    source: 'trained',
+                    stats: { isReady: true },
+                    fingerprint: 'fp',
+                    descriptor: {},
+                });
+            },
+        };
+        await handleSortByPrediction.call(ctx);
+        expect(markAtTraining).toEqual([earlier]);
+        expect(markAtTraining[0]).toBe(earlier);
+        expect(ctx._pendingStaleMark).toBeNull();
     });
 
     it('bails unsorted when aborted during the load phase', async () => {

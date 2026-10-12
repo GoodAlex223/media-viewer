@@ -229,4 +229,23 @@ test.describe('Like-or-skip (G2)', () => {
         expect(await onScreen(page)).toBe('normal-320x240.png');
         await expect(page.locator('#dislikeSkippedBtn .btn-label')).toHaveText('Dislike 3 skipped');
     });
+
+    test('the re-sort chip appears after a Like on the AI order, leaves on its undo, and is gone after Restore Order', async () => {
+        await enterAiOrder(page, ALL);
+        const chip = page.locator('#resortPredictionBtn');
+        await expect(chip).toBeHidden();
+
+        await press(page, 'q');
+        await expect(chip).toBeVisible();
+        await expect(chip.locator('.btn-label')).toHaveText('Re-sort · 1 new');
+
+        await press(page, 'Control+a'); // the Like made after the sort: the training set is back
+        await expect(chip).toBeHidden();
+
+        await press(page, 'q');
+        await expect(chip).toBeVisible();
+        await page.evaluate(() => window.mediaViewer.handleSortByPrediction()); // Restore Order
+        await waitForIdle(page);
+        await expect(chip).toBeHidden();
+    });
 });

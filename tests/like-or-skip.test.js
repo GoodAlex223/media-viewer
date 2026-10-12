@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { SkipTracker, planCursorAfterBatch, planUndoReinsertion, formatCount } from '../like-or-skip.js';
+import {
+    SkipTracker,
+    planCursorAfterBatch,
+    planUndoReinsertion,
+    formatCount,
+    trainingWeight,
+    computeStaleCount,
+} from '../like-or-skip.js';
 
 const file = (name) => ({ name, path: `/f/${name}` });
 const files = (...names) => names.map(file);
@@ -146,5 +153,65 @@ describe('formatCount', () => {
         expect(formatCount(1, 'file')).toBe('1 file');
         expect(formatCount(3, 'file')).toBe('3 files');
         expect(formatCount(0, 'rating')).toBe('0 ratings');
+    });
+});
+
+describe('trainingWeight', () => {
+    it('counts the files an entry moved into or out of the training set', () => {
+        expect(trainingWeight({ actionType: 'like' })).toBe(1);
+        expect(trainingWeight({ actionType: 'dislike', compareMode: true })).toBe(1);
+        expect(trainingWeight({ bothGood: true, bulkFiles: [{}, {}] })).toBe(2);
+        expect(trainingWeight({ bothBad: true, bulkFiles: [{}, {}] })).toBe(2);
+        expect(trainingWeight({ skipBatch: true, files: [{}, {}, {}] })).toBe(3);
+        expect(trainingWeight({ actionType: 'special' })).toBe(0);
+        expect(trainingWeight(undefined)).toBe(0);
+    });
+});
+
+describe('computeStaleCount — the weighted symmetric difference since the mark (spec § 8)', () => {
+    const like = () => ({ actionType: 'like' });
+
+    it('is 0 with no mark (not on the AI order)', () => {
+        expect(computeStaleCount([like()], null)).toBe(0);
+    });
+
+    it('counts ratings added since the mark', () => {
+        const before = like();
+        const mark = [before];
+        expect(computeStaleCount([before, like(), { skipBatch: true, files: [{}, {}] }], mark)).toBe(3);
+    });
+
+    it('an undo of a post-mark rating takes it back off', () => {
+        const before = like();
+        expect(computeStaleCount([before], [before])).toBe(0);
+    });
+
+    it('an undo of a pre-mark rating adds to the count', () => {
+        const a = like();
+        const b = like();
+        expect(computeStaleCount([a], [a, b])).toBe(1);
+    });
+
+    it('a failed undo that pushes the same entry back changes nothing', () => {
+        const a = like();
+        const history = [a];
+        const mark = history.slice();
+        history.pop();
+        history.push(a);
+        expect(computeStaleCount(history, mark)).toBe(0);
+    });
+
+    it('an in-place splice of a weight-0 entry changes nothing', () => {
+        const a = like();
+        const s = { actionType: 'special' };
+        const b = like();
+        expect(computeStaleCount([a, b], [a, s, b])).toBe(0);
+    });
+
+    it('a partially failed undo of a pre-mark batch overcounts, never undercounts', () => {
+        const batch = { skipBatch: true, files: [{}, {}, {}] };
+        const residual = { skipBatch: true, files: [{}] };
+        // 2 files came back (true change 2); the hint says 4.
+        expect(computeStaleCount([residual], [batch])).toBe(4);
     });
 });

@@ -101,6 +101,17 @@
                     <span class="btn-icon"><i data-lucide="sparkles"></i></span>
                     <span class="btn-label">Sort by Predicted</span>
                 </button>
+                <!-- Out-of-date AI order (G2): shown only while the training set has changed since the sort;
+                     _updateResortChip() owns its label, title and visibility. -->
+                <button
+                    class="sort-prediction-btn resort-chip"
+                    id="resortPredictionBtn"
+                    title="Re-sort with your new ratings"
+                    style="display: none"
+                >
+                    <span class="btn-icon"><i data-lucide="refresh-cw"></i></span>
+                    <span class="btn-label">Re-sort</span>
+                </button>
                 <button class="help-btn" id="helpBtn" title="Show keyboard shortcuts (F1)" style="display: none">
                     <i data-lucide="help-circle"></i>
                 </button>

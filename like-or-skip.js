@@ -106,3 +106,47 @@ export function planUndoReinsertion(mediaFiles, restored, { orderUnchanged, miss
 export function formatCount(n, noun) {
     return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
+
+/** How many files a history entry moved into or out of the training set (spec § 8). */
+export function trainingWeight(entry) {
+    if (!entry) {
+        return 0;
+    }
+    if (entry.skipBatch) {
+        return entry.files.length;
+    }
+    if (entry.bothGood || entry.bothBad) {
+        return entry.bulkFiles?.length ?? 2;
+    }
+    if (entry.actionType === 'like' || entry.actionType === 'dislike') {
+        return 1;
+    }
+    return 0; // special moves and anything else that does not feed training
+}
+
+/**
+ * Training-set changes since the AI order was computed (spec § 8): the weighted symmetric difference,
+ * by identity, between the history then (`markSnapshot`, a copy of moveHistory's entry references) and
+ * now. An undone pre-mark rating is in the snapshot only; a new rating in the history only; a failed
+ * undo pushes the same object back and so counts nothing. Order-insensitive, so an in-place splice of
+ * history cannot misalign it. 0 when there is no mark (not on the AI order).
+ */
+export function computeStaleCount(history, markSnapshot) {
+    if (!markSnapshot) {
+        return 0;
+    }
+    const now = new Set(history);
+    const then = new Set(markSnapshot);
+    let count = 0;
+    for (const entry of markSnapshot) {
+        if (!now.has(entry)) {
+            count += trainingWeight(entry);
+        }
+    }
+    for (const entry of history) {
+        if (!then.has(entry)) {
+            count += trainingWeight(entry);
+        }
+    }
+    return count;
+}
