@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
 import { MlTrainingManager } from '../ml-training.js';
+import * as LikeOrSkip from '../like-or-skip.js';
+// Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
+globalThis.LikeOrSkip = LikeOrSkip;
 const require = createRequire(import.meta.url);
 
 // MediaViewer methods are instance methods on an ES module class.
@@ -320,6 +323,7 @@ describe('formatTimeAgo', () => {
 describe('removeFileFromList', () => {
     function createContext(files, currentIndex) {
         return {
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
             mediaFiles: files.map((p) => ({ path: p })),
             currentIndex,
             predictionScores: new Map(),
@@ -959,6 +963,7 @@ describe('applyPredictionSortResult', () => {
             showMedia: () => {},
             updateSortPredictionButton: () => {},
             showNotification: () => {},
+            _onOrderChanged: vi.fn(),
         };
     }
 
@@ -1334,6 +1339,7 @@ describe('handleSortByPrediction lifecycle', () => {
             isTournamentMode: false,
             isMlEnabled: true,
             _refuseIfNeedsRegrant: () => false,
+            _onOrderChanged: vi.fn(),
             isSortedByPrediction: false,
             mlWorker: {},
             featureWorkers: [{}],
@@ -2307,6 +2313,7 @@ describe('removeFileFromList bulk-rated purge', () => {
             bulkRatedPairs: new Set(),
             _bulkPairKeysReferencing: extractMethod('_bulkPairKeysReferencing'),
             currentIndex: 0,
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
             saveBulkRatedFile: vi.fn(),
         };
     }
@@ -2439,6 +2446,7 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
         const ctx = {
             mediaFiles: [gone, keep, other],
             currentIndex: 0,
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
             predictionScores: new Map(),
             featureCache: new Map(),
             clipCache: new Map(),
@@ -2477,6 +2485,7 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             bulkPairKey,
             _bulkPairKeysReferencing: keysReferencing,
             saveBulkRatedFile: () => {},
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
         };
     }
 
@@ -4033,6 +4042,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
         return {
             isTournamentMode: false,
             tournament: { engine: 'stale-engine' },
+            _onOrderChanged: vi.fn(),
             mediaFiles: [{ name: 'stale.png', path: '/old/stale.png' }],
             baseFolderPath: '/old',
             currentFolderPath: 'old',
@@ -6932,6 +6942,7 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
 
     function guardCtx(overrides = {}) {
         return {
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
             _fileOpInFlight: false,
             isLoading: false,
             mediaNavigationInProgress: false,

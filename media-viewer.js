@@ -1,6 +1,7 @@
 import { FullscreenManager } from './fullscreen.js';
 import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
+import * as LikeOrSkip from './like-or-skip.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -109,6 +110,13 @@ class MediaViewer {
         // file action that arrives meanwhile is refused (G1). Not isLoading: render handlers clear
         // that at first paint, and showMedia() itself returns early on it.
         this._fileOpInFlight = false;
+        // Like-or-skip (G2): the files passed with Next while the AI order is on screen, and that token
+        // itself (likeOrSkip.active). Changed only by _onOrderChanged, nextMedia and removeFileFromList
+        // (spec §§ 4–5).
+        this.likeOrSkip = new LikeOrSkip.SkipTracker();
+        // Bumped by every reorder of mediaFiles. A batch undo restores exact positions only when no
+        // reorder happened since the batch (spec § 7).
+        this._orderGeneration = 0;
 
         // Compare mode state
         this.isCompareMode = false;
@@ -1367,12 +1375,13 @@ class MediaViewer {
 
     /**
      * Centralized file removal from the media list.
-     * Handles array splice, cache cleanup (predictionScores, featureCache, clipCache, featureMetadata, perceptualHashes),
-     * and currentIndex adjustment.
+     * Handles array splice, cache cleanup (predictionScores, featureCache, clipCache, featureMetadata, perceptualHashes,
+     * bulkRated (save deferrable), bulkRatedPairs keys, the like-or-skip set), and currentIndex adjustment.
      * @param {string} filePath - Absolute path of the file to remove
+     * @param {{deferBulkSave?: boolean}} [options] - skip the bulk-rated save; the caller saves once
      * @returns {number} The index the file was at before removal, or -1 if not found
      */
-    removeFileFromList(filePath) {
+    removeFileFromList(filePath, { deferBulkSave = false } = {}) {
         const index = this.mediaFiles.findIndex((f) => f.path === filePath);
         if (index === -1) return -1;
 
@@ -1386,12 +1395,15 @@ class MediaViewer {
         this.jxlFrameCache.delete(filePath);
         this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
-        if (this.bulkRated.delete(removedName)) {
+        // A batch (dislikeSkippedFiles) passes deferBulkSave and saves once at the end: one un-awaited
+        // save per file would start overlapping writes of the same .bulk_rated.json.
+        if (this.bulkRated.delete(removedName) && !deferBulkSave) {
             this.saveBulkRatedFile();
         }
 
         // A removed/moved file can never re-pair — drop any rated-pair key that references it.
         for (const key of this._bulkPairKeysReferencing(removedName)) this.bulkRatedPairs.delete(key);
+        this.likeOrSkip.forget(filePath); // a rated or moved file is no longer a skip (G2)
 
         if (this.currentIndex >= this.mediaFiles.length) {
             this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
@@ -1411,6 +1423,24 @@ class MediaViewer {
             if (a === fileName || b === fileName) keys.push(key);
         }
         return keys;
+    }
+
+    // The one place a new ORDER of mediaFiles is announced (G2 spec § 4). Every method that puts a new
+    // order on screen calls it; tests/like-or-skip-glue.test.js fails on a `this.mediaFiles =` outside
+    // its reviewed list, so a new order-changing site cannot skip it silently.
+    // 'ai-fresh' / 'ai-resort' turn like-or-skip tracking on (skips emptied / kept); 'other' / 'folder'
+    // turn it off — 'other' tells the user how many un-disliked skips it discarded.
+    _onOrderChanged(kind) {
+        this._orderGeneration++;
+        if (kind === 'ai-fresh' || kind === 'ai-resort') {
+            this.likeOrSkip.activate({ keepSkips: kind === 'ai-resort' });
+        } else {
+            const discarded = this.likeOrSkip.skippedIn(this.mediaFiles).length;
+            this.likeOrSkip.deactivate();
+            if (discarded > 0 && kind !== 'folder') {
+                this.showNotification(`Skipped list cleared (${LikeOrSkip.formatCount(discarded, 'file')})`, 'info');
+            }
+        }
     }
 
     getMediaIndex(path) {
@@ -1619,6 +1649,11 @@ class MediaViewer {
                 }
             }
         } else {
+            // Like-or-skip (G2): leaving a file with Next on the AI order records it as skipped. After the
+            // guards above, so a refused Next records nothing; never on a one-file list, where Next stays put.
+            if (this.mediaFiles.length > 1) {
+                this.likeOrSkip.recordSkip(this.mediaFiles[this.currentIndex].path);
+            }
             this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
         }
         this.showMedia();
@@ -2994,6 +3029,7 @@ class MediaViewer {
                 this.currentFolderPath = window.electronAPI.path.basename(folderPath);
                 this.currentIndex = 0;
                 this.moveHistory = [];
+                this._onOrderChanged('folder');
                 this.tournament.engine = null;
                 this.showDropZone();
                 this.showError('No media files found in the selected folder');
@@ -3014,6 +3050,7 @@ class MediaViewer {
             this.isSortedBySimilarity = false;
             this.isSortedByPrediction = false;
             this.originalMediaFiles = [];
+            this._onOrderChanged('folder');
             this.perceptualHashes.clear();
             this.featureCache.clear();
             this.clipCache.clear();
@@ -4741,6 +4778,7 @@ class MediaViewer {
         }
         this.isSortedBySimilarity = false;
         this.isSortedByPrediction = false;
+        this._onOrderChanged('other');
         this.mlComparePairIndex = 0;
         this.currentIndex = 0;
         const simLabel = this.sortSimilarityBtn?.querySelector('.btn-label');
@@ -6179,6 +6217,7 @@ class MediaViewer {
             // Restore original order
             this.mediaFiles = [...this.originalMediaFiles];
             this.isSortedBySimilarity = false;
+            this._onOrderChanged('other');
             this.currentIndex = 0;
             await this.showMedia();
             this.showNotification('📋 Restored original order', 'success');
@@ -6242,6 +6281,7 @@ class MediaViewer {
 
                 // Sorting completed from cache!
                 this.isSortedBySimilarity = true;
+                this._onOrderChanged('other');
                 this.currentIndex = 0;
                 this.clearProgressNotification();
 
@@ -6420,6 +6460,7 @@ class MediaViewer {
 
                 // Sorting completed successfully!
                 this.isSortedBySimilarity = true;
+                this._onOrderChanged('other');
                 this.currentIndex = 0;
                 this.clearProgressNotification();
 
@@ -6438,6 +6479,7 @@ class MediaViewer {
             if (!wasAlreadySorted && this.originalMediaFiles.length > 0) {
                 this.mediaFiles = [...this.originalMediaFiles];
                 this.originalMediaFiles = [];
+                this._onOrderChanged('other');
             }
         } finally {
             this.isComputingHashes = false;
@@ -7554,6 +7596,7 @@ class MediaViewer {
         this.mediaFiles = sorted;
         this.currentIndex = 0;
         this.isSortedByPrediction = true;
+        this._onOrderChanged('ai-fresh');
         this.showMedia();
         this.updateSortPredictionButton();
         this.showNotification('Sorted by predicted preference', 'success');
@@ -8499,6 +8542,7 @@ class MediaViewer {
                 this.mediaFiles = this.originalMediaFiles.filter((f) => currentPaths.has(f.path));
             }
             this.isSortedByPrediction = false;
+            this._onOrderChanged('other');
             this.mlComparePairIndex = 0;
             this.currentIndex = 0;
             await this.showMedia();
