@@ -880,6 +880,22 @@ describe('restoreFeatureCachesFromHistory', () => {
         expect(c[511]).toBe((64 + 511) % 256);
     });
 
+    // G2 final review F6 — CLAUDE.md "silent zero CLIP half": getCombinedFeatures zero-pads a missing CLIP
+    // half, and a real CLIP embedding is unit-normalised, never all zero. Writing the zeros back would feed
+    // them to training as if real.
+    it('leaves clipCache alone when the 576-dim entry carries an all-zero CLIP half', () => {
+        const ctx = makeCtx();
+        const mlFeatures = new Float32Array(576);
+        for (let i = 0; i < 64; i++) mlFeatures[i] = i + 1;
+        const entry = { originalPath: '/d/z.png', mlFeatures: Array.from(mlFeatures), fileSize: 7 };
+
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+
+        expect(Array.from(ctx.featureCache.get('/d/z.png'))).toEqual(Array.from(mlFeatures.slice(0, 64)));
+        expect(ctx.clipCache.has('/d/z.png')).toBe(false);
+        expect(ctx.featureMetadata.get('/d/z.png')).toEqual({ size: 7, mtime: 0 });
+    });
+
     it('restores only featureCache when mlFeatures is 64-dim', () => {
         const ctx = makeCtx();
         const mlFeatures = new Float32Array(64);
@@ -1418,6 +1434,8 @@ describe('handleSortByPrediction lifecycle', () => {
             showMedia: () => {},
             moveHistory: [],
             _pendingStaleMark: null,
+            _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
+            _waitForRenderIdle: extractAsyncMethod('_waitForRenderIdle'),
             ...overrides,
         };
         ctx._phases = phases;
@@ -1863,14 +1881,15 @@ describe('handleSortByPrediction lifecycle', () => {
         });
     });
 
-    // G2 review R6(c): a folder change to an EMPTY folder aborts the sort and shows the drop zone; the
-    // sort's finally must not re-show "Sort by Predicted" there (a click would train on an empty list).
-    it('does not re-show the sort button from its finally when the list emptied under the sort', async () => {
-        const listLengthAtCall = [];
+    // G2 review R6(c), re-targeted by the final review (F10): a folder change to an EMPTY folder aborts the
+    // sort. The sort's finally refreshes the button, and updateSortPredictionButton's own empty-list rule
+    // keeps it (and the chip) hidden there — a click would train on an empty list.
+    it('leaves the sort button hidden when the list emptied under the sort', async () => {
+        const label = { textContent: '' };
         const ctx = makeCtx({
-            updateSortPredictionButton: function () {
-                listLengthAtCall.push(this.mediaFiles.length);
-            },
+            sortPredictionBtn: { style: { display: 'none' }, disabled: false, title: '', querySelector: () => label },
+            updateSortPredictionButton: extractMethod('updateSortPredictionButton'),
+            _updateResortChip: vi.fn(),
             runMlSort: function () {
                 this.mediaFiles = []; // loadFolder of an empty folder...
                 this.sortAbortController.abort(); // ...aborts the running sort
@@ -1880,9 +1899,77 @@ describe('handleSortByPrediction lifecycle', () => {
         await handleSortByPrediction.call(ctx);
         expect(ctx.isPredictionSorting).toBe(false);
         expect(ctx._pendingStaleMark).toBeNull();
-        // The earlier calls (sort start, after training) saw the full list; none may run on the empty one.
-        expect(listLengthAtCall.length).toBeGreaterThan(0);
-        expect(listLengthAtCall).not.toContain(0);
+        expect(ctx.sortPredictionBtn.style.display).toBe('none');
+        expect(ctx._updateResortChip).toHaveBeenCalled();
+    });
+
+    // G2 final review F4: showMedia() returns early on isLoading, so an order applied while a render is in
+    // flight paints the old file under the new cursor; the next S then records a file never seen.
+    it('waits for an in-flight render to settle before applying the order', async () => {
+        let loadingAtApply = null;
+        const ctx = makeCtx({
+            runMlSort: function () {
+                this.isLoading = true; // a render started while the sort ran
+                setTimeout(() => {
+                    this.isLoading = false;
+                }, 60);
+                return Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} });
+            },
+            applyPredictionSortResult: function (r) {
+                loadingAtApply = this.isLoading;
+                this.mediaFiles = r.sortedFilenames.map((n) => this.mediaFiles.find((f) => f.name === n));
+                this.isSortedByPrediction = true;
+                return true;
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(loadingAtApply).toBe(false);
+        expect(ctx.isSortedByPrediction).toBe(true);
+    });
+
+    it('re-checks for a cancel after the render wait, and then does not apply', async () => {
+        const apply = vi.fn(() => true);
+        const showNotification = vi.fn();
+        const ctx = makeCtx({
+            showNotification,
+            applyPredictionSortResult: apply,
+            runMlSort: function () {
+                this.mediaNavigationInProgress = true;
+                setTimeout(() => {
+                    this.sortAbortController.abort(); // Cancel clicked while the render settles
+                    this.mediaNavigationInProgress = false;
+                }, 60);
+                return Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} });
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(apply).not.toHaveBeenCalled();
+        expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
+    });
+});
+
+describe('_waitForRenderIdle (G2 final review F4)', () => {
+    const waitForRenderIdle = extractAsyncMethod('_waitForRenderIdle');
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('returns at once when nothing renders', async () => {
+        vi.useFakeTimers();
+        let done = false;
+        waitForRenderIdle.call({ isLoading: false, mediaNavigationInProgress: false }).then(() => (done = true));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(done).toBe(true);
+    });
+
+    it('is capped: a stranded flag releases the wait after maxMs', async () => {
+        vi.useFakeTimers();
+        let done = false;
+        waitForRenderIdle.call({ isLoading: true, mediaNavigationInProgress: false }, 200).then(() => (done = true));
+        await vi.advanceTimersByTimeAsync(150);
+        expect(done).toBe(false);
+        await vi.advanceTimersByTimeAsync(100);
+        expect(done).toBe(true);
     });
 });
 
@@ -4222,6 +4309,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
             _abortInFlightPredictionSort: vi.fn(abortInFlightPredictionSortImpl),
+            _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
         };
     }
 
@@ -6644,11 +6732,21 @@ describe('updateRatingButtonsState tooltips (G1)', () => {
             },
             areFoldersConfigured,
             _shortcutSuffix,
+            _folderStateSuffix: extractMethod('_folderStateSuffix'),
             keyDisplayName,
+            updateDislikeSkippedButton: vi.fn(),
         };
         for (const b of BUTTONS) ctx[b] = { disabled: false, title: '' };
         return ctx;
     }
+
+    // G2 final review F12: every refresh point of the rating buttons (init, folder browse/clear,
+    // refreshFolderGrants, _refuseUngrantedFolder, the shortcut panel) reaches #dislikeSkippedBtn too.
+    it('refreshes #dislikeSkippedBtn as well', () => {
+        const ctx = ctxWith();
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.updateDislikeSkippedButton).toHaveBeenCalledOnce();
+    });
 
     it('shows the real default hotkeys (single mode read "Arrow Up"/"Arrow Down")', () => {
         const ctx = ctxWith();

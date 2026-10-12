@@ -187,7 +187,10 @@ test.describe('Like-or-skip (G2)', () => {
         await expect(page.locator('#dislikeSkippedBtn .btn-label')).toHaveText('Dislike 2 skipped');
     });
 
-    test('a video on screen in the batch is released and moved; the cursor goes to the next file', async () => {
+    // The handle release is NOT exercised here: tiny.mp4 is a stub with no decodable stream, so there is
+    // no open handle to release. The release-before-rename order is pinned by the unit test 'the batch
+    // releases an on-screen video BEFORE the first rename' (tests/like-or-skip-glue.test.js).
+    test('a video entry on screen is moved with the batch; the cursor goes to the next file', async () => {
         const order = ['tiny.mp4', 'red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'normal-320x240.png'];
         await enterAiOrder(page, order);
         await press(page, 's'); // tiny.mp4 skipped
@@ -228,6 +231,29 @@ test.describe('Like-or-skip (G2)', () => {
         expect(await listed(page)).toEqual(ALL);
         expect(await onScreen(page)).toBe('normal-320x240.png');
         await expect(page.locator('#dislikeSkippedBtn .btn-label')).toHaveText('Dislike 3 skipped');
+    });
+
+    // G2 final review F5: a mouse click left the header button focused, and Enter (unbound in single mode,
+    // never prevented) then activated it. F is dropped silently while a render is in flight, so "F then
+    // Enter" could press Restore Order and discard every skip.
+    test('a mouse-clicked header button does not keep focus, so a later Enter cannot press it', async () => {
+        await enterAiOrder(page, ALL);
+        await page.evaluate(() => document.querySelector('.header').classList.add('show'));
+        await expect(page.locator('#sortPredictionBtn .btn-label')).toHaveText('Restore Order');
+        await page.click('#sortPredictionBtn'); // a real pointer click: Restore Order
+        await waitForIdle(page);
+        expect(await page.evaluate(() => window.mediaViewer.likeOrSkip.active)).toBe(false);
+        expect(await page.evaluate(() => document.activeElement?.id ?? null)).not.toBe('sortPredictionBtn');
+
+        // Back on the AI order, with skips, the same button (now "Restore Order" again) must not take Enter.
+        await enterAiOrder(page, ALL);
+        await press(page, 's');
+        await press(page, 's');
+        await press(page, 'Enter');
+        expect(await page.evaluate(() => window.mediaViewer.isSortedByPrediction)).toBe(true);
+        expect(await page.evaluate(() => window.mediaViewer.likeOrSkip.active)).toBe(true);
+        await expect(page.locator('#dislikeSkippedBtn .btn-label')).toHaveText('Dislike 2 skipped');
+        expect(await listed(page)).toEqual(ALL);
     });
 
     test('the re-sort chip appears after a Like on the AI order, leaves on its undo, and is gone after Restore Order', async () => {

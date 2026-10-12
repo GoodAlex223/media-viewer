@@ -42,7 +42,7 @@ npm start
 | `F1` | Open help/settings |
 | `ESC` | Reset zoom / Exit fullscreen |
 
-Single-mode defaults; every binding can be remapped in Settings (F1).
+Single-mode defaults; the rating, navigation and undo bindings can be remapped in Settings (F1).
 
 ### View Modes
 

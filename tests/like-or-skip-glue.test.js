@@ -217,6 +217,7 @@ describe('a failed similarity sort keeps the skips (spec D1)', () => {
             likeOrSkip: activeTracker('/f/a', '/f/b'),
             _orderGeneration: 0,
             _onOrderChanged: vi.fn(),
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             showNotification: vi.fn(),
             clearProgressNotification: vi.fn(),
             showMedia: vi.fn(),
@@ -245,7 +246,7 @@ describe('a failed similarity sort keeps the skips (spec D1)', () => {
     });
 });
 
-describe('every reorder of mediaFiles goes through _onOrderChanged (spec § 4 control)', () => {
+describe('every method that reassigns mediaFiles announces it through _onOrderChanged (spec § 4 control)', () => {
     // Methods that put a new ORDER of mediaFiles on screen. Each must call the hook.
     const ORDER_CHANGERS = [
         'loadFolder',
@@ -257,7 +258,8 @@ describe('every reorder of mediaFiles goes through _onOrderChanged (spec § 4 co
     // Reviewed exemptions: assignments that are not a new order on screen, and why.
     const EXEMPT = {
         constructor: 'the initial empty list',
-        setupEventListeners: 'the change-folder handler empties the list; loadFolder then announces the folder',
+        setupEventListeners:
+            'the change-folder handler empties the list once its file-op refusal passed, then loadFolder announces the folder',
         applyCachedSortOrder: "runs inside handleSortBySimilarity's cache path, which announces on success",
         insertNewFilesInSortedOrder: 'runs inside applyCachedSortOrder (same)',
         _undoSkipBatch: 'a batch undo re-inserts files; the others keep their order',
@@ -592,9 +594,11 @@ describe('updateDislikeSkippedButton (spec § 9)', () => {
             isTournamentMode: false,
             mediaFiles: media('a', 'b', 'c'),
             likeOrSkip: activeTracker('/f/a', '/f/b'),
+            customDislikeFolder: '/disliked',
             shortcuts: { single: { dislikeSkipped: 'KeyF' } },
             keyDisplayName: (k) => k.replace('Key', ''),
             _shortcutSuffix: extract('_shortcutSuffix'),
+            _folderStateSuffix: extract('_folderStateSuffix'),
             ...overrides,
         };
     }
@@ -1013,6 +1017,7 @@ describe('header actions refuse while a file action is in flight (G2 review R6)'
             showNotification: vi.fn(),
             showMedia: vi.fn(async () => {}),
             _onOrderChanged: vi.fn(),
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             ...overrides,
         };
     }
@@ -1122,4 +1127,734 @@ describe('header actions refuse while a file action is in flight (G2 review R6)'
             expect(untouched(ctx)).toEqual(before);
         });
     });
+});
+
+// ---------------------------------------------------------------------------------------------------
+// G2 final review (R7): each block below names the finding it pins.
+// ---------------------------------------------------------------------------------------------------
+
+/** The body of an inline arrow handler, found by the source text that opens it, as a callable. */
+function extractHandler(marker) {
+    const at = source.indexOf(marker);
+    if (at === -1 || source.indexOf(marker, at + 1) !== -1) {
+        throw new Error(`Handler marker not found exactly once: ${marker}`);
+    }
+    const open = at + marker.length - 1;
+    let depth = 0;
+    for (let i = open; i < source.length; i++) {
+        if (source[i] === '{') {
+            depth++;
+        } else if (source[i] === '}' && --depth === 0) {
+            return new AsyncFunction(source.slice(open + 1, i));
+        }
+    }
+    throw new Error(`Unbalanced braces in handler: ${marker}`);
+}
+
+const WAIT_MOVE = ['Wait for the move to finish', 'info'];
+const WAIT_SORT = ['Wait for the sort to finish', 'info'];
+
+describe('_refuseIfFileOpInFlight (G2 final review F1)', () => {
+    const refuse = extract('_refuseIfFileOpInFlight');
+
+    it('refuses with the notice while a file action holds the guard, and takes no guard itself', () => {
+        const ctx = { _fileOpInFlight: true, showNotification: vi.fn() };
+        expect(refuse.call(ctx)).toBe(true);
+        expect(ctx.showNotification.mock.calls).toEqual([WAIT_MOVE]);
+        expect(ctx._fileOpInFlight).toBe(true);
+    });
+
+    it('lets the call through, silently, when nothing is in flight', () => {
+        const ctx = { _fileOpInFlight: false, showNotification: vi.fn() };
+        expect(refuse.call(ctx)).toBe(false);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+});
+
+describe('the change-folder button refuses before it wipes anything (G2 final review F1)', () => {
+    const changeFolder = extractHandler("this.changeFolderBtn.addEventListener('click', async () => {");
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function folderCtx(overrides = {}) {
+        globalThis.window = { electronAPI: { openFolderDialog: vi.fn(async () => '/other') } };
+        return {
+            _fileOpInFlight: true,
+            mediaFiles: media('a', 'b'),
+            currentIndex: 1,
+            currentMedia: { tagName: 'IMG' },
+            currentFolderPath: 'f',
+            baseFolderPath: '/f',
+            moveHistory: [{ skipBatch: true, files: [] }],
+            isLoading: true,
+            isSortedBySimilarity: false,
+            originalMediaFiles: [],
+            perceptualHashes: new Map([['/f/a', '01']]),
+            sortSimilarityBtn: null,
+            cleanupCurrentMedia: vi.fn(async () => {}),
+            hideDropZone: vi.fn(),
+            loadFolder: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            ...overrides,
+        };
+    }
+
+    it('a pick during a batch leaves the list, the history and the folder as they were', async () => {
+        const ctx = folderCtx();
+        const history = ctx.moveHistory;
+        await changeFolder.call(ctx);
+        expect(ctx.showNotification.mock.calls).toEqual([WAIT_MOVE]);
+        expect(ctx.cleanupCurrentMedia).not.toHaveBeenCalled();
+        expect(ctx.hideDropZone).not.toHaveBeenCalled();
+        expect(ctx.loadFolder).not.toHaveBeenCalled();
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a', 'b']);
+        expect(ctx.currentIndex).toBe(1);
+        expect(ctx.baseFolderPath).toBe('/f');
+        expect(ctx.moveHistory).toBe(history);
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.perceptualHashes.size).toBe(1);
+        expect(ctx.isLoading).toBe(true);
+    });
+
+    it('with nothing in flight, it resets and loads the picked folder as before', async () => {
+        const ctx = folderCtx({ _fileOpInFlight: false });
+        await changeFolder.call(ctx);
+        expect(ctx.mediaFiles).toEqual([]);
+        expect(ctx.moveHistory).toEqual([]);
+        expect(ctx.loadFolder).toHaveBeenCalledWith('/other');
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('a cancelled dialog refuses nothing and changes nothing', async () => {
+        const ctx = folderCtx();
+        globalThis.window.electronAPI.openFolderDialog = vi.fn(async () => null);
+        await changeFolder.call(ctx);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.mediaFiles).toHaveLength(2);
+    });
+});
+
+describe('the tournament summary Apply and Discard refuse before acting (G2 final review F1)', () => {
+    const showTournamentSummaryModal = extract('showTournamentSummaryModal');
+    let origDocument;
+    let els;
+    beforeEach(() => {
+        origDocument = globalThis.document;
+        els = {
+            tournamentSummaryModal: { style: { display: 'none' } },
+            tournamentSummaryBody: { replaceChildren: vi.fn() },
+            tournamentSummaryApply: { onclick: null },
+            tournamentSummaryDiscard: { onclick: null },
+            tournamentSummaryUndo: null,
+        };
+        globalThis.document = {
+            getElementById: (id) => els[id] ?? null,
+            createElement: () => ({ style: {}, append: () => {} }),
+        };
+    });
+    afterEach(() => {
+        globalThis.document = origDocument;
+    });
+
+    function summaryCtx(overrides = {}) {
+        return {
+            _fileOpInFlight: true,
+            baseFolderPath: '/f',
+            tournament: {
+                engine: {
+                    getTierBreakdown: () => ({ 0: 1, 1: 1 }),
+                    strategy: { options: { rounds: 1 } },
+                    peekUndoKind: () => null,
+                },
+                handleApply: vi.fn(async () => ({ success: true, moved: 2 })),
+                handleDiscard: vi.fn(async () => {}),
+            },
+            showNotification: vi.fn(),
+            exitTournamentMode: vi.fn(),
+            loadFolder: vi.fn(async () => {}),
+            switchMode: vi.fn(async () => {}),
+            handleTournamentUndo: vi.fn(async () => {}),
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            ...overrides,
+        };
+    }
+
+    it.each([
+        ['Apply', 'tournamentSummaryApply', 'handleApply'],
+        ['Discard', 'tournamentSummaryDiscard', 'handleDiscard'],
+    ])('%s mid-move: nothing runs and the modal stays', async (_label, button, action) => {
+        const ctx = summaryCtx();
+        showTournamentSummaryModal.call(ctx);
+        expect(els.tournamentSummaryModal.style.display).toBe('flex');
+        await els[button].onclick();
+        expect(ctx.showNotification.mock.calls).toEqual([WAIT_MOVE]);
+        expect(ctx.tournament[action]).not.toHaveBeenCalled();
+        expect(ctx.exitTournamentMode).not.toHaveBeenCalled();
+        expect(ctx.switchMode).not.toHaveBeenCalled();
+        expect(els.tournamentSummaryModal.style.display).toBe('flex');
+        expect(typeof els.tournamentSummaryApply.onclick).toBe('function');
+        expect(typeof els.tournamentSummaryDiscard.onclick).toBe('function');
+    });
+
+    it('with nothing in flight, Apply still applies', async () => {
+        const ctx = summaryCtx({ _fileOpInFlight: false });
+        showTournamentSummaryModal.call(ctx);
+        await els.tournamentSummaryApply.onclick();
+        expect(ctx.tournament.handleApply).toHaveBeenCalledOnce();
+        expect(els.tournamentSummaryModal.style.display).toBe('none');
+    });
+});
+
+describe('handleCancel: a skipBatch undo waits for a running sort (G2 final review F2)', () => {
+    const handleCancel = extract('handleCancel');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function cancelCtx(history, overrides = {}) {
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: false,
+            isPredictionSorting: false,
+            isComputingHashes: false,
+            moveHistory: history,
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            _undoSkipBatch: vi.fn(async () => {}),
+            ...overrides,
+        };
+    }
+
+    it.each(['isPredictionSorting', 'isComputingHashes'])('refused while %s, the entry kept', async (flag) => {
+        const entry = { skipBatch: true, files: [] };
+        const ctx = cancelCtx([entry], { [flag]: true });
+        await handleCancel.call(ctx);
+        expect(ctx.showNotification.mock.calls).toEqual([WAIT_SORT]);
+        expect(ctx._undoSkipBatch).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toEqual([entry]);
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('another entry kind still undoes while a sort runs', async () => {
+        globalThis.window = {
+            electronAPI: {
+                path: { basename: (p) => p.split('/').pop() },
+                moveFile: vi.fn(async () => ({ success: true, targetPath: '/f/z.jpg' })),
+            },
+        };
+        const like = {
+            fileName: 'z.jpg',
+            originalPath: '/f/z.jpg',
+            newPath: '/liked/z.jpg',
+            fileSize: 1,
+            fileType: 'image/jpeg',
+            actionType: 'like',
+            mlFeatures: null,
+        };
+        const ctx = cancelCtx([like], {
+            isPredictionSorting: true,
+            baseFolderPath: '/f',
+            mediaFiles: [],
+            currentIndex: 0,
+            _followRestoredFile: extract('_followRestoredFile'),
+            restoreFeatureCachesFromHistory: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+        });
+        await handleCancel.call(ctx);
+        expect(ctx.moveHistory).toEqual([]);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['z.jpg']);
+    });
+});
+
+describe('handleCancel: the compare-pair branch never pops a skipBatch (G2 final review F9)', () => {
+    const handleCancel = extract('handleCancel');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('an orphan compare entry above a batch is undone alone, by the single-file branch', async () => {
+        globalThis.window = {
+            electronAPI: {
+                path: { basename: (p) => p.split('/').pop() },
+                moveFile: vi.fn(async ({ targetFolder, fileName }) => ({
+                    success: true,
+                    targetPath: `${targetFolder}/${fileName}`,
+                })),
+            },
+        };
+        const batch = { skipBatch: true, actionType: 'dislike', files: [] };
+        // A moveComparePair whose secondary rename failed: one compareMode entry, no partner.
+        const orphan = {
+            compareMode: true,
+            actionType: 'like',
+            fileName: 'z.jpg',
+            originalPath: '/f/z.jpg',
+            newPath: '/liked/z.jpg',
+            fileSize: 1,
+            fileType: 'image/jpeg',
+            mlFeatures: null,
+        };
+        const ctx = {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: true,
+            isPredictionSorting: false,
+            isComputingHashes: false,
+            baseFolderPath: '/f',
+            mediaFiles: media('x', 'y'),
+            currentIndex: 0,
+            moveHistory: [batch, orphan],
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            _undoSkipBatch: vi.fn(async () => {}),
+            _followRestoredFile: extract('_followRestoredFile'),
+            restoreFeatureCachesFromHistory: vi.fn(),
+            requestPredictionScores: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+        };
+        await handleCancel.call(ctx);
+        expect(globalThis.window.electronAPI.moveFile.mock.calls.map(([a]) => a.sourcePath)).toEqual(['/liked/z.jpg']);
+        expect(ctx.moveHistory).toEqual([batch]);
+        expect(ctx.moveHistory[0]).toBe(batch);
+        expect(ctx._undoSkipBatch).not.toHaveBeenCalled();
+        expect(ctx.mediaFiles.map((f) => f.name)).toContain('z.jpg');
+    });
+});
+
+describe('nextMedia with an out-of-range cursor (G2 final review F3)', () => {
+    const nextMedia = extract('nextMedia');
+
+    it('wraps as before instead of throwing, and records no skip', () => {
+        const ctx = {
+            mediaFiles: media('a', 'b', 'c'),
+            currentIndex: 5, // a stale cursor (the similarity sort's catch-block restore — deferred root)
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            _fileOpInFlight: false,
+            isCompareMode: false,
+            isSortedByPrediction: true,
+            likeOrSkip: activeTracker(),
+            signalUserActivity: vi.fn(),
+            showMedia: vi.fn(),
+            showDropZone: vi.fn(),
+        };
+        expect(() => nextMedia.call(ctx)).not.toThrow();
+        expect(ctx.currentIndex).toBe(0);
+        expect(ctx.likeOrSkip.skipped.size).toBe(0);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+    });
+});
+
+describe('switchMode: Tournament mode waits for a running sort (G2 final review F7)', () => {
+    const switchMode = extract('switchMode');
+
+    function modeCtx(overrides = {}) {
+        return {
+            _fileOpInFlight: false,
+            isTournamentMode: false,
+            isPredictionSorting: false,
+            isComputingHashes: false,
+            tournament: { engine: null },
+            showNotification: vi.fn(),
+            showTournamentLeavePrompt: vi.fn(),
+            _applyModeSwitch: vi.fn(async () => {}),
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            ...overrides,
+        };
+    }
+
+    it.each(['isPredictionSorting', 'isComputingHashes'])('refused while %s', async (flag) => {
+        const ctx = modeCtx({ [flag]: true });
+        await switchMode.call(ctx, 'tournament');
+        expect(ctx.showNotification.mock.calls).toEqual([WAIT_SORT]);
+        expect(ctx._applyModeSwitch).not.toHaveBeenCalled();
+    });
+
+    it.each(['single', 'compare'])('a switch to %s is not refused by a running sort', async (mode) => {
+        const ctx = modeCtx({ isPredictionSorting: true });
+        await switchMode.call(ctx, mode);
+        expect(ctx._applyModeSwitch).toHaveBeenCalledWith(mode);
+    });
+
+    it('enters Tournament mode when no sort runs', async () => {
+        const ctx = modeCtx();
+        await switchMode.call(ctx, 'tournament');
+        expect(ctx._applyModeSwitch).toHaveBeenCalledWith('tournament');
+    });
+});
+
+describe('the load-error Remove action resolves its file by path (G2 final review F8)', () => {
+    const removeByPath = () => extract('_removeFailedFileByPath');
+
+    function removeCtx(overrides = {}) {
+        return {
+            _fileOpInFlight: false,
+            mediaFiles: media('a', 'b', 'c'),
+            showNotification: vi.fn(),
+            removeFailedFile: vi.fn(),
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            ...overrides,
+        };
+    }
+
+    it('no Remove callback captures an index at error time', () => {
+        expect(source).not.toMatch(/removeFailedFile\(failedIndex/);
+        expect(source.match(/actionCallback: \(\) => this\._removeFailedFileByPath\(file\.path/g)).toHaveLength(4);
+    });
+
+    it('removes the failing file at its index NOW, after the list shifted', () => {
+        const ctx = removeCtx({ mediaFiles: media('c', 'b') }); // a batch removed a; b now sits at index 1
+        removeByPath().call(ctx, '/f/b', 'left');
+        expect(ctx.removeFailedFile).toHaveBeenCalledWith(1, 'left');
+    });
+
+    it('does nothing when the file is no longer listed', () => {
+        const ctx = removeCtx({ mediaFiles: media('c') });
+        removeByPath().call(ctx, '/f/b');
+        expect(ctx.removeFailedFile).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    it('is refused while a file action is in flight', () => {
+        const ctx = removeCtx({ _fileOpInFlight: true });
+        removeByPath().call(ctx, '/f/b');
+        expect(ctx.removeFailedFile).not.toHaveBeenCalled();
+        expect(ctx.showNotification.mock.calls).toEqual([WAIT_MOVE]);
+    });
+});
+
+describe('the AI-sort button, the chip and Dislike-skipped hide over an empty list (G2 final review F10)', () => {
+    it('updateSortPredictionButton hides the button and refreshes the chip on an empty list', () => {
+        const updateSortPredictionButton = extract('updateSortPredictionButton');
+        const label = { textContent: '' };
+        const ctx = {
+            sortPredictionBtn: {
+                style: { display: 'inline-flex' },
+                disabled: false,
+                title: '',
+                querySelector: () => label,
+            },
+            isTournamentMode: false,
+            isMlEnabled: true,
+            isSortedByPrediction: false,
+            mlWorker: {},
+            mlStats: { isReady: true },
+            mediaFiles: [],
+            _updateResortChip: vi.fn(),
+        };
+        updateSortPredictionButton.call(ctx);
+        expect(ctx.sortPredictionBtn.style.display).toBe('none');
+        expect(ctx._updateResortChip).toHaveBeenCalled();
+        ctx.mediaFiles = media('a');
+        updateSortPredictionButton.call(ctx);
+        expect(ctx.sortPredictionBtn.style.display).toBe('inline-flex');
+    });
+
+    // The other side of the rule above: an undo out of the empty state re-inserts files and renders through
+    // showMedia(), which must bring back the button showEmptyStateWithUndo hid.
+    it('showMedia leaving the empty state refreshes the sort button', async () => {
+        const showMedia = extract('showMedia');
+        const emptyState = { remove: vi.fn() };
+        const ctx = {
+            mediaFiles: media('a'),
+            moveHistory: [],
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: false,
+            mediaContainer: { querySelector: () => emptyState },
+            updateCompareUndoButton: vi.fn(),
+            updateBulkRateButtonsVisibility: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
+            _updateResortChip: vi.fn(),
+            updateSortPredictionButton: vi.fn(),
+            showSingleMedia: vi.fn(async () => {}),
+        };
+        await showMedia.call(ctx);
+        expect(emptyState.remove).toHaveBeenCalled();
+        expect(ctx.updateSortPredictionButton).toHaveBeenCalled();
+        expect(ctx.showSingleMedia).toHaveBeenCalled();
+    });
+
+    it('showEmptyStateWithUndo refreshes the sort button (and through it the chip) and Dislike-skipped', () => {
+        const showEmptyStateWithUndo = extract('showEmptyStateWithUndo');
+        const origDocument = globalThis.document;
+        globalThis.document = {
+            createElement: () => ({
+                className: '',
+                textContent: '',
+                appendChild: () => {},
+                addEventListener: () => {},
+            }),
+        };
+        try {
+            const ctx = {
+                currentMedia: null,
+                isCompareMode: false,
+                mediaFiles: [],
+                dropZone: { style: {} },
+                mediaContainer: { querySelector: () => null, appendChild: () => {} },
+                controls: { style: {} },
+                compareControls: { style: {} },
+                hideLoadingSpinner: vi.fn(),
+                updateFolderInfo: vi.fn(),
+                updateNavigationInfo: vi.fn(),
+                updateSortPredictionButton: vi.fn(),
+                updateDislikeSkippedButton: vi.fn(),
+            };
+            showEmptyStateWithUndo.call(ctx);
+            expect(ctx.updateSortPredictionButton).toHaveBeenCalled();
+            expect(ctx.updateDislikeSkippedButton).toHaveBeenCalled();
+        } finally {
+            globalThis.document = origDocument;
+        }
+    });
+});
+
+describe('#dislikeSkippedBtn carries the G1 folder state its neighbour has (G2 final review F12)', () => {
+    const updateDislikeSkippedButton = extract('updateDislikeSkippedButton');
+
+    function buttonCtx(overrides = {}) {
+        const label = { textContent: '' };
+        return {
+            dislikeSkippedBtn: { style: { display: 'none' }, disabled: false, title: '', querySelector: () => label },
+            isCompareMode: false,
+            isTournamentMode: false,
+            mediaFiles: media('a', 'b'),
+            likeOrSkip: activeTracker('/f/a'),
+            customDislikeFolder: '/disliked',
+            folderNeedsRegrant: new Set(),
+            folderUnreachable: new Set(),
+            shortcuts: { single: { dislikeSkipped: 'KeyF' } },
+            keyDisplayName: (k) => k.replace('Key', ''),
+            _shortcutSuffix: extract('_shortcutSuffix'),
+            _folderStateSuffix: extract('_folderStateSuffix'),
+            ...overrides,
+        };
+    }
+
+    it('is disabled without a dislike folder, enabled with one', () => {
+        const ctx = buttonCtx({ customDislikeFolder: '' });
+        updateDislikeSkippedButton.call(ctx);
+        expect(ctx.dislikeSkippedBtn.disabled).toBe(true);
+        ctx.customDislikeFolder = '/disliked';
+        updateDislikeSkippedButton.call(ctx);
+        expect(ctx.dislikeSkippedBtn.disabled).toBe(false);
+    });
+
+    it('says when the dislike folder needs re-confirming, after the shortcut, as #dislikeBtn does', () => {
+        const ctx = buttonCtx({ folderNeedsRegrant: new Set(['dislike']) });
+        updateDislikeSkippedButton.call(ctx);
+        expect(ctx.dislikeSkippedBtn.title).toBe('Dislike all skipped files (F) — folder needs re-confirming (F1)');
+        expect(ctx.dislikeSkippedBtn.disabled).toBe(false); // a click explains the refusal
+    });
+
+    it('says when the dislike folder is not reachable, and ignores the like folder', () => {
+        const ctx = buttonCtx({ folderUnreachable: new Set(['dislike']), folderNeedsRegrant: new Set(['like']) });
+        updateDislikeSkippedButton.call(ctx);
+        expect(ctx.dislikeSkippedBtn.title).toBe('Dislike all skipped files (F) — folder not reachable');
+    });
+});
+
+describe('a batch and its undo round-trip the per-file caches (G2 final review F13, F6)', () => {
+    const dislikeSkippedFiles = extract('dislikeSkippedFiles');
+    const undoSkipBatch = extract('_undoSkipBatch');
+    const KEY = ['a', 'x'].join(String.fromCharCode(0)); // bulkPairKey's separator
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        globalThis.window = {
+            electronAPI: {
+                path: { basename: (p) => p.split('/').pop() },
+                checkFolderExists: vi.fn(async () => true),
+                createFolder: vi.fn(async () => ({ success: true })),
+                moveFile: vi.fn(async ({ targetFolder, fileName }) => ({
+                    success: true,
+                    targetPath: `${targetFolder}/${fileName}`,
+                })),
+            },
+        };
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    // 64 hand-crafted dims (1..64), then the CLIP half: real (non-zero) or the zero padding
+    // getCombinedFeatures adds when the file has no CLIP vector.
+    function combined(realClip) {
+        const v = new Float32Array(576);
+        for (let i = 0; i < 64; i++) {
+            v[i] = i + 1;
+        }
+        if (realClip) {
+            for (let i = 64; i < 576; i++) {
+                v[i] = (i % 7) / 10 + 0.01;
+            }
+        }
+        return v;
+    }
+
+    function tripCtx(vector) {
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            isCompareMode: false,
+            isTournamentMode: false,
+            isPredictionSorting: false,
+            isComputingHashes: false,
+            likeOrSkip: activeTracker('/f/a'),
+            mediaFiles: media('a', 'b'),
+            currentIndex: 1,
+            currentMedia: { tagName: 'IMG' },
+            baseFolderPath: '/f',
+            customDislikeFolder: '/disliked',
+            moveHistory: [],
+            _orderGeneration: 3,
+            predictionScores: new Map(),
+            featureCache: new Map([['/f/a', vector.slice(0, 64)]]),
+            clipCache: new Map(),
+            jxlFrameCache: new Map(),
+            featureMetadata: new Map([['/f/a', { size: 10, mtime: 99 }]]),
+            perceptualHashes: new Map(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set([KEY]),
+            _bulkPairKeysReferencing: (name) => (name === 'a' ? [KEY] : []),
+            getCombinedFeatures: (p) => (p === '/f/a' ? vector : null),
+            removeFileFromList: extract('removeFileFromList'),
+            restoreFeatureCachesFromHistory: extract('restoreFeatureCachesFromHistory'),
+            _followRestoredFile: extract('_followRestoredFile'),
+            saveBulkRatedFile: vi.fn(async () => {}),
+            _refuseIfNeedsRegrant: () => false,
+            _refuseUngrantedFolder: vi.fn(),
+            showBulkDislikeConfirm: vi.fn(async () => true),
+            showFolderCreationDialog: vi.fn(async () => false),
+            forceVideoCleanup: vi.fn(async () => {}),
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            updateFolderInfo: vi.fn(),
+            updateNavigationInfo: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
+            _updateResortChip: vi.fn(),
+        };
+    }
+
+    async function roundTrip(ctx) {
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['b']);
+        expect(ctx.featureCache.has('/f/a')).toBe(false);
+        expect(ctx.bulkRatedPairs.has(KEY)).toBe(false);
+        expect(ctx.moveHistory[0].files[0].prunedPairKeys).toEqual([KEY]);
+        await undoSkipBatch.call(ctx, ctx.moveHistory.pop());
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a', 'b']);
+    }
+
+    it('a real CLIP half: both halves, the size with mtime 0, and the rated-pair keys come back', async () => {
+        const vector = combined(true);
+        const ctx = tripCtx(vector);
+        await roundTrip(ctx);
+        expect(Array.from(ctx.featureCache.get('/f/a'))).toEqual(Array.from(vector.slice(0, 64)));
+        expect(Array.from(ctx.clipCache.get('/f/a'))).toEqual(Array.from(vector.slice(64)));
+        expect(ctx.featureMetadata.get('/f/a')).toEqual({ size: 10, mtime: 0 });
+        expect(ctx.bulkRatedPairs.has(KEY)).toBe(true);
+    });
+
+    // CLAUDE.md "silent zero CLIP half": the zero padding must not come back as a real CLIP vector,
+    // or the bulk collector (hasClip checks length only) trains on it once the bulk label is restored.
+    it('a zero CLIP half (64-dim features only): the 64 dims come back, clipCache stays without the file', async () => {
+        const vector = combined(false);
+        const ctx = tripCtx(vector);
+        await roundTrip(ctx);
+        expect(Array.from(ctx.featureCache.get('/f/a'))).toEqual(Array.from(vector.slice(0, 64)));
+        expect(ctx.clipCache.has('/f/a')).toBe(false);
+        expect(ctx.featureMetadata.get('/f/a')).toEqual({ size: 10, mtime: 0 });
+    });
+});
+
+describe('the batch releases an on-screen video BEFORE the first rename (G2 final review F13)', () => {
+    const dislikeSkippedFiles = extract('dislikeSkippedFiles');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('forceVideoCleanup has resolved when moveFile is first called', async () => {
+        const order = [];
+        globalThis.window = {
+            electronAPI: {
+                path: { basename: (p) => p.split('/').pop() },
+                checkFolderExists: vi.fn(async () => true),
+                moveFile: vi.fn(async ({ targetFolder, fileName }) => {
+                    order.push(`move ${fileName}`);
+                    return { success: true, targetPath: `${targetFolder}/${fileName}` };
+                }),
+            },
+        };
+        const ctx = {
+            _fileOpInFlight: false,
+            isLoading: false,
+            isCompareMode: false,
+            isTournamentMode: false,
+            isPredictionSorting: false,
+            isComputingHashes: false,
+            likeOrSkip: activeTracker('/f/a', '/f/b'),
+            mediaFiles: media('a', 'b', 'c'),
+            currentIndex: 1,
+            currentMedia: { tagName: 'VIDEO' },
+            customDislikeFolder: '/disliked',
+            moveHistory: [],
+            _orderGeneration: 0,
+            predictionScores: new Map(),
+            featureCache: new Map(),
+            clipCache: new Map(),
+            jxlFrameCache: new Map(),
+            featureMetadata: new Map(),
+            perceptualHashes: new Map(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            _bulkPairKeysReferencing: () => [],
+            getCombinedFeatures: () => null,
+            removeFileFromList: extract('removeFileFromList'),
+            saveBulkRatedFile: vi.fn(async () => {}),
+            _refuseIfNeedsRegrant: () => false,
+            showBulkDislikeConfirm: vi.fn(async () => true),
+            forceVideoCleanup: vi.fn(async () => {
+                await Promise.resolve();
+                order.push('cleanup resolved');
+            }),
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            updateFolderInfo: vi.fn(),
+            updateNavigationInfo: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
+            _updateResortChip: vi.fn(),
+        };
+        await dislikeSkippedFiles.call(ctx);
+        expect(order).toEqual(['cleanup resolved', 'move a', 'move b']);
+    }, 3000);
 });
