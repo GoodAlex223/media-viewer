@@ -561,6 +561,23 @@ describe('dislikeSkippedFiles — one guarded batch (spec § 6)', () => {
         await dislikeSkippedFiles.call(ctx);
         expect(ctx.showNotification).toHaveBeenCalledWith('Moving 51 files…', 'info');
     });
+
+    // G2 review R6(b): the cursor and the recorded generation describe the list originalIndex refers to,
+    // not whatever the live fields read once the renames are done.
+    it('uses the pre-batch index and generation even if they change during the renames', async () => {
+        const electronAPI = api();
+        const rename = electronAPI.moveFile.getMockImplementation();
+        globalThis.window = { electronAPI };
+        const ctx = batchCtx(['a', 'b']); // d (index 3) on screen
+        electronAPI.moveFile.mockImplementation(async (arg) => {
+            ctx.currentIndex = 0; // e.g. something reset the cursor mid-batch
+            ctx._orderGeneration++; // ...and reordered the list
+            return rename(arg);
+        });
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.moveHistory[0].orderGeneration).toBe(7);
+        expect(ctx.mediaFiles[ctx.currentIndex].path).toBe('/f/d');
+    });
 });
 
 describe('updateDislikeSkippedButton (spec § 9)', () => {
@@ -739,6 +756,17 @@ describe('_undoSkipBatch — the whole batch back (spec § 7)', () => {
         expect(ctx.moveHistory[0]).toMatchObject({ skipBatch: true, prevCurrentPath: '/f/d', orderGeneration: 7 });
         expect(ctx.moveHistory[0].files.map((s) => s.fileName)).toEqual(['b']);
         expect(ctx.showError).toHaveBeenCalledWith('Restored 2 of 3 — 1 failed: EBUSY: resource busy');
+    });
+
+    // G2 review R6(d): computeStaleCount counts by identity, so a copy would count the batch twice.
+    it('a total failure pushes back the SAME entry object', async () => {
+        globalThis.window = { electronAPI: api({ failNames: ['a', 'b'] }) };
+        const ctx = undoCtx();
+        const entry = batchEntry(['a', 'b']);
+        await undoSkipBatch.call(ctx, entry);
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.moveHistory[0]).toBe(entry);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['d']);
     });
 
     it('restores bulk-rated membership with one save', async () => {
@@ -938,5 +966,160 @@ describe('_updateResortChip (spec § 8)', () => {
             updateResortChip.call(ctx);
             expect(ctx.resortPredictionBtn.style.display, JSON.stringify(Object.keys(overrides))).toBe('none');
         }
+    });
+});
+
+// G2 review R6(a): while a file action holds _fileOpInFlight, the header actions refuse. A reorder, mode
+// switch or folder change landing between the action's snapshot and its render would leave the screen and
+// the cursor on different files. The contexts stub each method's unguarded path in full, so a missing
+// guard fails an assertion, not on a missing stub.
+describe('header actions refuse while a file action is in flight (G2 review R6)', () => {
+    const WAIT = ['Wait for the move to finish', 'info'];
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    // The state none of the refused calls may touch.
+    function untouched(ctx) {
+        return {
+            mediaFiles: ctx.mediaFiles.map((f) => f.path),
+            currentIndex: ctx.currentIndex,
+            isSortedBySimilarity: ctx.isSortedBySimilarity,
+            isSortedByPrediction: ctx.isSortedByPrediction,
+            isCompareMode: ctx.isCompareMode,
+            isTournamentMode: ctx.isTournamentMode,
+            moveHistory: [...ctx.moveHistory],
+        };
+    }
+
+    function baseCtx(overrides = {}) {
+        return {
+            _fileOpInFlight: true,
+            mediaFiles: media('a', 'b', 'c', 'd'),
+            originalMediaFiles: [],
+            currentIndex: 2,
+            isSortedBySimilarity: false,
+            isSortedByPrediction: false,
+            isCompareMode: false,
+            isTournamentMode: false,
+            isPredictionSorting: false,
+            isComputingHashes: false,
+            sortAbortController: null,
+            moveHistory: [{ actionType: 'like' }],
+            showNotification: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            _onOrderChanged: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    describe('switchMode', () => {
+        const switchMode = extract('switchMode');
+
+        it.each(['single', 'compare', 'tournament'])('refuses a switch to %s', async (mode) => {
+            const ctx = baseCtx({ _applyModeSwitch: vi.fn(async () => {}), showTournamentLeavePrompt: vi.fn() });
+            const before = untouched(ctx);
+            await switchMode.call(ctx, mode);
+            expect(ctx.showNotification.mock.calls).toEqual([WAIT]);
+            expect(ctx._applyModeSwitch).not.toHaveBeenCalled();
+            expect(untouched(ctx)).toEqual(before);
+        });
+
+        it('refuses to leave an incomplete tournament too (no leave prompt)', async () => {
+            const ctx = baseCtx({
+                isTournamentMode: true,
+                tournament: { engine: { isComplete: () => false } },
+                _applyModeSwitch: vi.fn(async () => {}),
+                showTournamentLeavePrompt: vi.fn(),
+            });
+            const before = untouched(ctx);
+            await switchMode.call(ctx, 'single');
+            expect(ctx.showNotification.mock.calls).toEqual([WAIT]);
+            expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
+            expect(untouched(ctx)).toEqual(before);
+        });
+    });
+
+    describe('handleSortBySimilarity', () => {
+        const handleSortBySimilarity = extract('handleSortBySimilarity');
+
+        function similarityCtx(overrides = {}) {
+            const label = { textContent: 'Sort by Similarity' };
+            return baseCtx({
+                sortAlgorithm: 'vptree',
+                baseFolderPath: '/f',
+                sortSimilarityBtn: { disabled: false, querySelector: () => label },
+                loadSortCache: vi.fn(async () => ({ sortedPaths: ['/f/d', '/f/c', '/f/b', '/f/a'], timestamp: null })),
+                loadHashCache: vi.fn(async () => 0),
+                applyCachedSortOrder: vi.fn(async function () {
+                    this.mediaFiles = [...this.mediaFiles].reverse();
+                    return { cached: 4, added: 0, removed: 0 };
+                }),
+                saveHashCache: vi.fn(async () => {}),
+                saveSortCache: vi.fn(async () => {}),
+                deleteSortCache: vi.fn(async () => {}),
+                updateSortProgress: vi.fn(),
+                clearProgressNotification: vi.fn(),
+                formatTimeAgo: () => 'just now',
+                ...overrides,
+            });
+        }
+
+        it.each([false, true])('refuses to start a sort (force re-sort: %s)', async (force) => {
+            const ctx = similarityCtx();
+            const before = untouched(ctx);
+            await handleSortBySimilarity.call(ctx, force);
+            expect(ctx.showNotification.mock.calls).toEqual([WAIT]);
+            expect(ctx.loadSortCache).not.toHaveBeenCalled();
+            expect(ctx.deleteSortCache).not.toHaveBeenCalled();
+            expect(ctx.isComputingHashes).toBe(false);
+            expect(ctx.originalMediaFiles).toEqual([]);
+            expect(untouched(ctx)).toEqual(before);
+        });
+
+        it('refuses to restore the original order', async () => {
+            const ctx = similarityCtx({ isSortedBySimilarity: true, originalMediaFiles: media('d', 'c', 'b', 'a') });
+            const before = untouched(ctx);
+            await handleSortBySimilarity.call(ctx);
+            expect(ctx.showNotification.mock.calls).toEqual([WAIT]);
+            expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+            expect(ctx.showMedia).not.toHaveBeenCalled();
+            expect(untouched(ctx)).toEqual(before);
+        });
+
+        it('Cancel stays live: a running similarity sort still aborts', async () => {
+            const controller = new AbortController();
+            const ctx = similarityCtx({ isComputingHashes: true, sortAbortController: controller });
+            await handleSortBySimilarity.call(ctx);
+            expect(controller.signal.aborted).toBe(true);
+            expect(ctx.showNotification.mock.calls).toEqual([['❌ Sorting cancelled', 'info']]);
+        });
+    });
+
+    describe('loadFolder', () => {
+        const loadFolder = extract('loadFolder');
+
+        it('refuses a folder change', async () => {
+            globalThis.window = {
+                electronAPI: { loadFolder: vi.fn(async () => ({ success: false, error: 'stub' })) },
+            };
+            const ctx = baseCtx({
+                showLoadingSpinner: vi.fn(),
+                hideLoadingSpinner: vi.fn(),
+                showDropZone: vi.fn(),
+                showError: vi.fn(),
+            });
+            const before = untouched(ctx);
+            await loadFolder.call(ctx, '/other');
+            expect(ctx.showNotification.mock.calls).toEqual([WAIT]);
+            expect(globalThis.window.electronAPI.loadFolder).not.toHaveBeenCalled();
+            expect(ctx.showLoadingSpinner).not.toHaveBeenCalled();
+            expect(ctx.showDropZone).not.toHaveBeenCalled();
+            expect(untouched(ctx)).toEqual(before);
+        });
     });
 });

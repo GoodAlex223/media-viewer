@@ -1817,6 +1817,72 @@ describe('handleSortByPrediction lifecycle', () => {
             expect(ctx.runMlSort).not.toHaveBeenCalled();
             expect(ctx.isSortedByPrediction).toBe(false);
         });
+
+        // G2 review R6(a): a re-sort reorders mediaFiles under a file action's snapshot.
+        it('refuses while a file action is in flight', async () => {
+            const ctx = resortCtx({ _fileOpInFlight: true, showNotification: vi.fn() });
+            const order = ctx.mediaFiles.map((f) => f.path);
+            await handleSortByPrediction.call(ctx, { resort: true });
+            expect(ctx.showNotification.mock.calls).toEqual([['Wait for the move to finish', 'info']]);
+            expect(ctx.runMlSort).not.toHaveBeenCalled();
+            expect(ctx.isPredictionSorting).toBe(false);
+            expect(ctx._phases).toEqual([]);
+            expect(ctx.mediaFiles.map((f) => f.path)).toEqual(order);
+        });
+    });
+
+    // G2 review R6(a): Restore Order (or a fresh sort) mid-batch left the screen and the cursor on
+    // different files when the batch finished.
+    describe('refuses while a file action is in flight (G2 review)', () => {
+        it.each([
+            ['Restore Order', true],
+            ['Sort by Predicted', false],
+        ])('%s', async (_label, sorted) => {
+            const runMlSort = vi.fn(() => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} }));
+            const ctx = makeCtx({
+                _fileOpInFlight: true,
+                isSortedByPrediction: sorted,
+                originalMediaFiles: [
+                    { name: 'b.png', path: '/d/b.png' },
+                    { name: 'a.png', path: '/d/a.png' },
+                ],
+                currentIndex: 1,
+                showNotification: vi.fn(),
+                showMedia: vi.fn(),
+                runMlSort,
+            });
+            await handleSortByPrediction.call(ctx);
+            expect(ctx.showNotification.mock.calls).toEqual([['Wait for the move to finish', 'info']]);
+            expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a.png', 'b.png']);
+            expect(ctx.currentIndex).toBe(1);
+            expect(ctx.isSortedByPrediction).toBe(sorted);
+            expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+            expect(ctx.showMedia).not.toHaveBeenCalled();
+            expect(runMlSort).not.toHaveBeenCalled();
+            expect(ctx.isPredictionSorting).toBe(false);
+        });
+    });
+
+    // G2 review R6(c): a folder change to an EMPTY folder aborts the sort and shows the drop zone; the
+    // sort's finally must not re-show "Sort by Predicted" there (a click would train on an empty list).
+    it('does not re-show the sort button from its finally when the list emptied under the sort', async () => {
+        const listLengthAtCall = [];
+        const ctx = makeCtx({
+            updateSortPredictionButton: function () {
+                listLengthAtCall.push(this.mediaFiles.length);
+            },
+            runMlSort: function () {
+                this.mediaFiles = []; // loadFolder of an empty folder...
+                this.sortAbortController.abort(); // ...aborts the running sort
+                return Promise.resolve({ sortedFilenames: [], scores: {} });
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(ctx.isPredictionSorting).toBe(false);
+        expect(ctx._pendingStaleMark).toBeNull();
+        // The earlier calls (sort start, after training) saw the full list; none may run on the empty one.
+        expect(listLengthAtCall.length).toBeGreaterThan(0);
+        expect(listLengthAtCall).not.toContain(0);
     });
 });
 

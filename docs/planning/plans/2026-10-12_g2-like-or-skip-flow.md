@@ -116,7 +116,7 @@ T1 (pure module + "before" evidence) first — the before screenshot must be tak
   - `planUndoReinsertion(mediaFiles: Array, restored: Array<{ file, originalIndex: number }>, { orderUnchanged: boolean, missing?: number[] }): Array` — a new array.
   - `formatCount(n: number, noun: string): string` — `"1 file"`, `"3 files"`.
 
-- [ ] **Step 1: Add the opt-in like-or-skip evidence block** — append to `tests/e2e/visual-evidence.test.js` (after the existing `test.describe('G2 visual evidence', …)` block; reuse the file's existing imports):
+- [x] **Step 1: Add the opt-in like-or-skip evidence block** — append to `tests/e2e/visual-evidence.test.js` (after the existing `test.describe('G2 visual evidence', …)` block; reuse the file's existing imports):
 
 ```js
 // G2 like-or-skip (2026-10-12, spec docs/superpowers/specs/2026-10-12-g2-like-or-skip-flow-design.md):
@@ -195,12 +195,12 @@ test.describe('G2 like-or-skip visual evidence', () => {
 });
 ```
 
-- [ ] **Step 2: Capture the "before" screenshot on the unchanged renderer**
+- [x] **Step 2: Capture the "before" screenshot on the unchanged renderer**
 
 Run (PowerShell): `$env:LIKE_OR_SKIP_EVIDENCE_STAGE='before'; npx playwright test tests/e2e/visual-evidence.test.js -g "like-or-skip"; $env:LIKE_OR_SKIP_EVIDENCE_STAGE=$null`
 Expected: 1 passed; `docs/superpowers/specs/assets/g2-like-or-skip-single-before.png` exists. Open it (Read tool) and confirm: `normal-320x240.png` on screen, the single-mode bar with Zoom/Special/Undo/Like/Dislike and **no** "Dislike N skipped" button, the header with "Restore Order" and **no** re-sort chip. Then confirm the plain run skips it: `npx playwright test tests/e2e/visual-evidence.test.js` → the like-or-skip test reports skipped.
 
-- [ ] **Step 3: Write the failing pure-module tests** — create `tests/like-or-skip.test.js`:
+- [x] **Step 3: Write the failing pure-module tests** — create `tests/like-or-skip.test.js`:
 
 ```js
 import { describe, it, expect } from 'vitest';
@@ -347,12 +347,12 @@ describe('formatCount', () => {
 });
 ```
 
-- [ ] **Step 4: Run them to verify they fail**
+- [x] **Step 4: Run them to verify they fail**
 
 Run: `npx vitest run tests/like-or-skip.test.js`
 Expected: FAIL — the suite cannot load `../like-or-skip.js` (e.g. `Failed to load url ../like-or-skip.js` / `Cannot find module`). Record the message.
 
-- [ ] **Step 5: Create `like-or-skip.js`**
+- [x] **Step 5: Create `like-or-skip.js`**
 
 ```js
 // Like-or-skip flow (G2) — pure logic: no DOM, no IPC, no MediaViewer state.
@@ -449,16 +449,16 @@ export function formatCount(n, noun) {
 }
 ```
 
-- [ ] **Step 6: Add the module to ESLint block 2c** — in `eslint.config.mjs`, change
+- [x] **Step 6: Add the module to ESLint block 2c** — in `eslint.config.mjs`, change
 `files: ['fullscreen.js', 'tournament-engine.js', 'tournament.js', 'ml-training.js'],` to
 `files: ['fullscreen.js', 'tournament-engine.js', 'tournament.js', 'ml-training.js', 'like-or-skip.js'],`
 
-- [ ] **Step 7: Run the tests and lint**
+- [x] **Step 7: Run the tests and lint**
 
 Run: `npx vitest run tests/like-or-skip.test.js` → Expected: PASS (16 tests).
 Run: `npx eslint like-or-skip.js tests/like-or-skip.test.js tests/e2e/visual-evidence.test.js` → Expected: no errors.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add like-or-skip.js tests/like-or-skip.test.js eslint.config.mjs tests/e2e/visual-evidence.test.js docs/superpowers/specs/assets/g2-like-or-skip-single-before.png
@@ -479,7 +479,7 @@ git commit -m "feat(like-or-skip): pure skip tracker and batch/undo plans; befor
 - Consumes: `LikeOrSkip.SkipTracker`, `LikeOrSkip.formatCount` (T1).
 - Produces: `this.likeOrSkip` (a `SkipTracker`); `this._orderGeneration` (number); `_onOrderChanged(kind: 'ai-fresh' | 'ai-resort' | 'other' | 'folder'): void`; `removeFileFromList(filePath, { deferBulkSave = false } = {})` (returns the old index, as today).
 
-- [ ] **Step 1: Create the glue test file with the hook, recording, forget and control tests** — `tests/like-or-skip-glue.test.js`:
+- [x] **Step 1: Create the glue test file with the hook, recording, forget and control tests** — `tests/like-or-skip-glue.test.js`:
 
 ```js
 // G2 like-or-skip glue (spec docs/superpowers/specs/2026-10-12-g2-like-or-skip-flow-design.md):
@@ -736,12 +736,12 @@ describe('every reorder of mediaFiles goes through _onOrderChanged (spec § 4 co
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/like-or-skip-glue.test.js`
 Expected: FAIL — `Could not find method: _onOrderChanged` (hook block); `nextMedia` "records the file being left" (`expected [] to deeply equal [ '/f/a' ]`); `removeFileFromList` "drops the removed path" and "defers the save"; control test 2 lists all five order-changers. Control tests 1 and 3 **pass by construction** (the lists match today's sites — Premise Corrections 8); they are the guard that stays. Record the messages.
 
-- [ ] **Step 3: Import the module and add the constructor fields** — in `media-viewer.js`, after `import { MlTrainingManager } from './ml-training.js';` add:
+- [x] **Step 3: Import the module and add the constructor fields** — in `media-viewer.js`, after `import { MlTrainingManager } from './ml-training.js';` add:
 
 ```js
 import * as LikeOrSkip from './like-or-skip.js';
@@ -759,7 +759,7 @@ and in the constructor, directly after the `this._fileOpInFlight = false;` line:
         this._orderGeneration = 0;
 ```
 
-- [ ] **Step 4: Add `_onOrderChanged`** — directly after the closing brace of `_bulkPairKeysReferencing(fileName) { … }`:
+- [x] **Step 4: Add `_onOrderChanged`** — directly after the closing brace of `_bulkPairKeysReferencing(fileName) { … }`:
 
 ```js
     // The one place a new ORDER of mediaFiles is announced (G2 spec § 4). Every method that puts a new
@@ -781,7 +781,7 @@ and in the constructor, directly after the `this._fileOpInFlight = false;` line:
     }
 ```
 
-- [ ] **Step 5: Record the skip in `nextMedia`** — replace the single-mode branch
+- [x] **Step 5: Record the skip in `nextMedia`** — replace the single-mode branch
 
 ```js
         } else {
@@ -802,7 +802,7 @@ with
         this.showMedia();
 ```
 
-- [ ] **Step 6: `forget` and `deferBulkSave` in `removeFileFromList`** — change the signature to `removeFileFromList(filePath, { deferBulkSave = false } = {}) {`; replace
+- [x] **Step 6: `forget` and `deferBulkSave` in `removeFileFromList`** — change the signature to `removeFileFromList(filePath, { deferBulkSave = false } = {}) {`; replace
 
 ```js
         if (this.bulkRated.delete(removedName)) {
@@ -828,7 +828,7 @@ and directly after the `for (const key of this._bulkPairKeysReferencing(removedN
 
 Update the JSDoc above it: the cleanup list gains `bulkRated (save deferrable)`, `bulkRatedPairs keys` and `the like-or-skip set`, and add the line `@param {{deferBulkSave?: boolean}} [options] - skip the bulk-rated save; the caller saves once`.
 
-- [ ] **Step 7: Call the hook at every reorder site** (all in `media-viewer.js`; re-locate by the quoted line):
+- [x] **Step 7: Call the hook at every reorder site** (all in `media-viewer.js`; re-locate by the quoted line):
   1. `loadFolder`, empty branch — after `this.moveHistory = [];` (the one followed by `this.tournament.engine = null;` and `this.showDropZone();`): `this._onOrderChanged('folder');`
   2. `loadFolder`, main branch — after `this.originalMediaFiles = [];` in the "Reset sorting state when loading new folder" block: `this._onOrderChanged('folder');`
   3. `restoreOriginalOrderForTournament` — after `this.isSortedByPrediction = false;`: `this._onOrderChanged('other');`
@@ -839,11 +839,11 @@ Update the JSDoc above it: the cleanup list gains `bulkRated (save deferrable)`,
   8. `applyPredictionSortResult` — after `this.isSortedByPrediction = true;`: `this._onOrderChanged('ai-fresh');`
   9. `handleSortByPrediction`, toggle-off — after `this.isSortedByPrediction = false;` inside `if (this.isSortedByPrediction) {`: `this._onOrderChanged('other');`
 
-- [ ] **Step 8: Run the glue tests**
+- [x] **Step 8: Run the glue tests**
 
 Run: `npx vitest run tests/like-or-skip-glue.test.js` → Expected: PASS.
 
-- [ ] **Step 9: Run the whole unit suite and fix the existing contexts** — `npx vitest run`. Expected failures are exactly the contexts in Premise Corrections 6 (`Cannot read properties of undefined (reading 'forget')` / `'recordSkip'`, `this._onOrderChanged is not a function`). At the top of `tests/media-viewer-utils.test.js`, after the `MlTrainingManager` import, add:
+- [x] **Step 9: Run the whole unit suite and fix the existing contexts** — `npx vitest run`. Expected failures are exactly the contexts in Premise Corrections 6 (`Cannot read properties of undefined (reading 'forget')` / `'recordSkip'`, `this._onOrderChanged is not a function`). At the top of `tests/media-viewer-utils.test.js`, after the `MlTrainingManager` import, add:
 
 ```js
 import * as LikeOrSkip from '../like-or-skip.js';
@@ -853,12 +853,12 @@ globalThis.LikeOrSkip = LikeOrSkip;
 
 then add `likeOrSkip: new LikeOrSkip.SkipTracker(),` to `createContext` (~L321), the bulk-rated-purge `makeCtx` (~L2293), the inline ctx of "removeFileFromList prunes bulkRatedPairs keys that reference the removed file" (~L2439), `cacheCtx` (~L2465) and `guardCtx` (~L6930); and `_onOrderChanged: vi.fn(),` to `baseCtx` in "applyPredictionSortResult" (~L949), `makeCtx` in the `handleSortByPrediction` block (~L1331) and `makeCtx` in the `loadFolder` block (~L4032). Re-run until green. Any failure outside this list is a finding — stop and log it.
 
-- [ ] **Step 10: Update `CLAUDE.md`**
+- [x] **Step 10: Update `CLAUDE.md`**
   - § Architecture tree, after the `ml-training.js` line: `├── like-or-skip.js      # Pure ESM (G2 like-or-skip): SkipTracker, batch cursor + undo re-insertion plans; imported as a namespace (LikeOrSkip)`
   - § Cache Management, the `removeFileFromList()` bullet: change "(+ `bulkRated`, with conditional `saveBulkRatedFile()`;" to "(+ `bulkRated`, with conditional `saveBulkRatedFile()` — skipped under `{ deferBulkSave: true }`, which a batch passes to save once;" and change "+ currentIndex adjustment." to "+ `likeOrSkip.forget(path)` + currentIndex adjustment."
   - § State Management, new bullet after "Empty state": `- **Like-or-skip (G2)**: \`this.likeOrSkip\` (\`LikeOrSkip.SkipTracker\`) records the file each single-mode Next leaves while the AI order is on screen. Its \`active\` flag is that token — not \`isSortedByPrediction\`, which the similarity sort leaves set. Every reorder of \`mediaFiles\` goes through \`_onOrderChanged(kind)\`: \`'ai-fresh'\`/\`'ai-resort'\` turn tracking on (skips emptied/kept), \`'other'\`/\`'folder'\` turn it off (\`'other'\` notices the discarded count); it also bumps \`_orderGeneration\`. \`tests/like-or-skip-glue.test.js\` fails on a new \`this.mediaFiles =\` outside its reviewed lists.`
 
-- [ ] **Step 11: Lint, full unit run, commit**
+- [x] **Step 11: Lint, full unit run, commit**
 
 Run: `npm run lint` (0 errors) and `npx vitest run` (all green).
 
@@ -883,7 +883,7 @@ git commit -m "feat(like-or-skip): order-change hook and skip tracking on the AI
 - Consumes: `this.likeOrSkip`, `_onOrderChanged`, `removeFileFromList(path, { deferBulkSave })` (T2); `LikeOrSkip.planCursorAfterBatch`, `LikeOrSkip.formatCount` (T1).
 - Produces: `async dislikeSkippedFiles(): void`; `showBulkDislikeConfirm({ count, folderName, includesOnScreen }): Promise<boolean>`; `updateDislikeSkippedButton(): void`; `this.dislikeSkippedBtn`; the history entry `{ skipBatch: true, actionType: 'dislike', files: Array<sub>, prevCurrentPath: string|null, orderGeneration: number }` where `sub = { file, originalIndex, fileName, originalPath, fileSize, mlFeatures, score, bulkBucket, newPath, prunedPairKeys? }`.
 
-- [ ] **Step 1: Write the failing unit tests for the batch and the button** — append to `tests/like-or-skip-glue.test.js`:
+- [x] **Step 1: Write the failing unit tests for the batch and the button** — append to `tests/like-or-skip-glue.test.js`:
 
 ```js
 describe('dislikeSkippedFiles — one guarded batch (spec § 6)', () => {
@@ -1166,7 +1166,7 @@ describe('updateDislikeSkippedButton (spec § 9)', () => {
 });
 ```
 
-- [ ] **Step 2: Write the failing shortcut tests** — in `tests/keyboard-shortcuts.test.js`:
+- [x] **Step 2: Write the failing shortcut tests** — in `tests/keyboard-shortcuts.test.js`:
   1. Rename `'single mode has like, dislike, next, previous, undo, special'` to `'single mode has like, dislike, next, previous, undo, special, dislikeSkipped'` and add `dislikeSkipped: 'KeyF',` after `special: 'Digit1',` in its `toEqual`.
   2. In `'builds correct reverse map for single mode'` add `expect(result.single['KeyF']).toBe('dislikeSkipped');`.
   3. After the test `'leaves single-mode special unbound when a stored single remap holds Digit1'`, add:
@@ -1221,7 +1221,7 @@ describe('updateDislikeSkippedButton (spec § 9)', () => {
 
   6. Add `updateDislikeSkippedButton: vi.fn(),` beside `updateSpecialButtonsState: vi.fn(),` in all seven `saveShortcut`/`resetShortcuts` contexts (~L878, 910, 931, 977, 1009, 1062, 1082), and in the first `saveShortcut` test add `expect(ctx.updateDislikeSkippedButton).toHaveBeenCalled();` (re-locate it by its ctx at ~L878).
 
-- [ ] **Step 3: Write the failing E2E** — create `tests/e2e/like-or-skip.test.js`:
+- [x] **Step 3: Write the failing E2E** — create `tests/e2e/like-or-skip.test.js`:
 
 ```js
 // G2 like-or-skip flow (docs/superpowers/specs/2026-10-12-g2-like-or-skip-flow-design.md): on the AI
@@ -1391,14 +1391,14 @@ test.describe('Like-or-skip (G2)', () => {
 });
 ```
 
-- [ ] **Step 4: Run all three test sets to verify they fail**
+- [x] **Step 4: Run all three test sets to verify they fail**
 
 Run: `npx vitest run tests/like-or-skip-glue.test.js tests/keyboard-shortcuts.test.js`
 Expected: FAIL — `Could not find method: dislikeSkippedFiles` / `updateDislikeSkippedButton`; the single-mode shape `toEqual` (missing `dislikeSkipped`); reverse map `single['KeyF']` undefined; the KeyF collision test; `executeAction` single mode; the new `updateDislikeSkippedButton` assertion in `saveShortcut`. **Pass by construction**: the repeat-filter case (`_isSuppressedRepeat` suppresses *any* named action outside `REPEATABLE_ACTIONS`, so `'dislikeSkipped'` is suppressed today — the case pins that it stays out of the set), the `executeAction` compare/tournament case, and the seven save/reset contexts (extra stubs are harmless).
 Run: `npx playwright test tests/e2e/like-or-skip.test.js`
 Expected: FAIL — `#dislikeSkippedBtn` not found (test 1), no `.bulk-dislike-modal` (tests 2–3). Record the messages.
 
-- [ ] **Step 5: The shortcut** — in `DEFAULT_SHORTCUTS.single`, after `special: 'Digit1',`:
+- [x] **Step 5: The shortcut** — in `DEFAULT_SHORTCUTS.single`, after `special: 'Digit1',`:
 
 ```js
         // Additive (G2 like-or-skip), mirroring compare's F = Both bad: no loadShortcuts version bump —
@@ -1418,7 +1418,7 @@ and in `executeAction`'s `actions`, after the `special` entry:
             },
 ```
 
-- [ ] **Step 6: The button** — in `index.html`, directly after the `#dislikeBtn` `</button>` inside `#controls`:
+- [x] **Step 6: The button** — in `index.html`, directly after the `#dislikeBtn` `</button>` inside `#controls`:
 
 ```html
                 <!-- Like-or-skip (G2): hidden until the AI order has skips; updateDislikeSkippedButton()
@@ -1438,7 +1438,7 @@ In `setupEventListeners`, after `this.dislikeBtn.addEventListener('click', () =>
         }
 ```
 
-- [ ] **Step 7: The three methods** — directly after `handleDislike() { … }`:
+- [x] **Step 7: The three methods** — directly after `handleDislike() { … }`:
 
 ```js
     // Sole owner of #dislikeSkippedBtn (G2 spec § 9): label, title and visibility follow the skipped set,
@@ -1661,9 +1661,9 @@ In `setupEventListeners`, after `this.dislikeBtn.addEventListener('click', () =>
 
 (Emptying the list implies the file on screen moved, so the empty-state render needs no separate condition.)
 
-- [ ] **Step 8: Refresh points** — at the top of `showMedia()`, after `this.updateBulkRateButtonsVisibility();`: `this.updateDislikeSkippedButton();`. At the end of `_onOrderChanged` (after the `if/else`): `this.updateDislikeSkippedButton();`. In `saveShortcut` and `resetShortcuts`, after `this.updateRatingButtonsState();`: `this.updateDislikeSkippedButton();`. Update the constructor comment above `this._fileOpInFlight = false;` to list `dislikeSkippedFiles` among the holders.
+- [x] **Step 8: Refresh points** — at the top of `showMedia()`, after `this.updateBulkRateButtonsVisibility();`: `this.updateDislikeSkippedButton();`. At the end of `_onOrderChanged` (after the `if/else`): `this.updateDislikeSkippedButton();`. In `saveShortcut` and `resetShortcuts`, after `this.updateRatingButtonsState();`: `this.updateDislikeSkippedButton();`. Update the constructor comment above `this._fileOpInFlight = false;` to list `dislikeSkippedFiles` among the holders.
 
-- [ ] **Step 9: Styles** — in `styles.css`, change the selector `.folder-creation-modal {` to `.folder-creation-modal,\n.bulk-dislike-modal {`, and after the `.folder-creation-btn-cancel:hover { … }` rule add:
+- [x] **Step 9: Styles** — in `styles.css`, change the selector `.folder-creation-modal {` to `.folder-creation-modal,\n.bulk-dislike-modal {`, and after the `.folder-creation-btn-cancel:hover { … }` rule add:
 
 ```css
 /* Like-or-skip bulk dislike (G2): the folder-creation shell above, with a danger confirm. */
@@ -1678,12 +1678,12 @@ In `setupEventListeners`, after `this.dislikeBtn.addEventListener('click', () =>
 }
 ```
 
-- [ ] **Step 10: Run the tests**
+- [x] **Step 10: Run the tests**
 
 Run: `npx vitest run` → Expected: PASS (all).
 Run: `npx playwright test tests/e2e/like-or-skip.test.js` three times in a row → Expected: 3 passed each time.
 
-- [ ] **Step 11: Docs**
+- [x] **Step 11: Docs**
   - `README.md` § Basic Navigation: replace the table (from `| Key | Action |` through the `ESC` row) with the real single-mode defaults:
 
 ```markdown
@@ -1706,7 +1706,7 @@ Single-mode defaults; every binding can be remapped in Settings (F1).
   - `CLAUDE.md` § UI Components, append: "Single-mode `#dislikeSkippedBtn` (owner `updateDislikeSkippedButton()`, refreshed from `showMedia()`) and `F` open `showBulkDislikeConfirm()`, a `.bulk-dislike-modal` that owns the keyboard while open (capture-phase `document` listeners, removed on every close path)."
   - `CLAUDE.md` § Cache Management `removeFileFromList()` bullet: after "+ currentIndex adjustment" add "(a clamp only — it never shifts the index, so a batch maps its cursor by path: `LikeOrSkip.planCursorAfterBatch`)".
 
-- [ ] **Step 12: Lint and commit**
+- [x] **Step 12: Lint and commit**
 
 Run: `npm run lint` (0 errors), `npm run format:check`.
 
@@ -1729,7 +1729,7 @@ git commit -m "feat(like-or-skip): Dislike N skipped — one guarded batch behin
 - Consumes: the `skipBatch` entry shape (T3); `LikeOrSkip.planUndoReinsertion` with `missing`, `LikeOrSkip.formatCount` (T1); `this.likeOrSkip.restore` (T1/T2); `_orderGeneration` (T2); `_followRestoredFile`, `restoreFeatureCachesFromHistory` (existing).
 - Produces: `async _undoSkipBatch(entry): void` — not guarded; called only from `handleCancel`.
 
-- [ ] **Step 1: Write the failing unit tests** — append to `tests/like-or-skip-glue.test.js`:
+- [x] **Step 1: Write the failing unit tests** — append to `tests/like-or-skip-glue.test.js`:
 
 ```js
 describe('_undoSkipBatch — the whole batch back (spec § 7)', () => {
@@ -1994,12 +1994,12 @@ and add one test to `tests/e2e/like-or-skip.test.js`:
     });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/like-or-skip-glue.test.js` → Expected: FAIL — `Could not find method: _undoSkipBatch`; both dispatch tests, because `_undoSkipBatch` is never called (the entry falls through to the single-file branch, which then throws on the missing `window`/`showError` or splices an `undefined`-named entry). The LIFO test's first half passes by construction (the single branch already handles the Like); its second half is the RED part.
 Run: `npx playwright test tests/e2e/like-or-skip.test.js -g "Ctrl\+A"` → Expected: FAIL — `mediaFiles.length === 5` times out (the batch entry is not undoable). Record.
 
-- [ ] **Step 3: Dispatch in `handleCancel`** — directly after the `if (lastMove.bothGood || lastMove.bothBad) { … return; }` block:
+- [x] **Step 3: Dispatch in `handleCancel`** — directly after the `if (lastMove.bothGood || lastMove.bothBad) { … return; }` block:
 
 ```js
             // Like-or-skip batch (G2 spec § 7): one entry, one Ctrl+A, the whole batch back.
@@ -2010,7 +2010,7 @@ Run: `npx playwright test tests/e2e/like-or-skip.test.js -g "Ctrl\+A"` → Expec
             }
 ```
 
-- [ ] **Step 4: `_undoSkipBatch`** — directly after `undoBulkRating(lastMove) { … }`:
+- [x] **Step 4: `_undoSkipBatch`** — directly after `undoBulkRating(lastMove) { … }`:
 
 ```js
     // Batch undo for dislikeSkippedFiles (G2 spec § 7). Runs inside handleCancel's _fileOpInFlight hold
@@ -2085,16 +2085,16 @@ Run: `npx playwright test tests/e2e/like-or-skip.test.js -g "Ctrl\+A"` → Expec
     }
 ```
 
-- [ ] **Step 5: Register the new assignment site** — in `tests/like-or-skip-glue.test.js`, add to `EXEMPT`: `_undoSkipBatch: 'a batch undo re-inserts files; the others keep their order',`.
+- [x] **Step 5: Register the new assignment site** — in `tests/like-or-skip-glue.test.js`, add to `EXEMPT`: `_undoSkipBatch: 'a batch undo re-inserts files; the others keep their order',`.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `npx vitest run` → Expected: PASS.
 Run: `npx playwright test tests/e2e/like-or-skip.test.js` → Expected: 4 passed.
 
-- [ ] **Step 7: `CLAUDE.md`** — § State Management, the "Compare-pair undo" bullet: after "then compare-pair." add "A `skipBatch` entry (G2 bulk dislike) goes to `_undoSkipBatch` beside the bulk check: exact original positions when `entry.orderGeneration === _orderGeneration`, else parked at the front; positions shift past files that failed to come back, which are pushed back as a smaller entry."
+- [x] **Step 7: `CLAUDE.md`** — § State Management, the "Compare-pair undo" bullet: after "then compare-pair." add "A `skipBatch` entry (G2 bulk dislike) goes to `_undoSkipBatch` beside the bulk check: exact original positions when `entry.orderGeneration === _orderGeneration`, else parked at the front; positions shift past files that failed to come back, which are pushed back as a smaller entry."
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add media-viewer.js tests/like-or-skip-glue.test.js tests/e2e/like-or-skip.test.js CLAUDE.md
@@ -2118,7 +2118,7 @@ git commit -m "feat(like-or-skip): one Ctrl+A undoes the whole batch (G2 T4)"
 - Consumes: `_onOrderChanged`, `likeOrSkip.active` (T2); the history entry shapes (existing + T3).
 - Produces: `trainingWeight(entry): number`; `computeStaleCount(history: Array, markSnapshot: Array | null): number`; `this._staleMark: Array | null`; `this._pendingStaleMark: Array | null`; `_updateResortChip(): void`; `this.resortPredictionBtn`.
 
-- [ ] **Step 1: Write the failing pure tests** — append to `tests/like-or-skip.test.js` (and add `trainingWeight, computeStaleCount` to its import):
+- [x] **Step 1: Write the failing pure tests** — append to `tests/like-or-skip.test.js` (and add `trainingWeight, computeStaleCount` to its import):
 
 ```js
 describe('trainingWeight', () => {
@@ -2182,7 +2182,7 @@ describe('computeStaleCount — the weighted symmetric difference since the mark
 });
 ```
 
-- [ ] **Step 2: Write the failing glue tests** — append to `tests/like-or-skip-glue.test.js`:
+- [x] **Step 2: Write the failing glue tests** — append to `tests/like-or-skip-glue.test.js`:
 
 ```js
 describe('the out-of-date mark (spec § 8)', () => {
@@ -2320,13 +2320,13 @@ Add to `tests/e2e/like-or-skip.test.js`:
     });
 ```
 
-- [ ] **Step 3: Run to verify they fail**
+- [x] **Step 3: Run to verify they fail**
 
 Run: `npx vitest run tests/like-or-skip.test.js tests/like-or-skip-glue.test.js tests/media-viewer-utils.test.js`
 Expected: FAIL — `trainingWeight is not a function` (import); `Could not find method: _updateResortChip`; the mark tests (`_staleMark` stays `null`); the `handleSortByPrediction` mark test (`markAtTraining` undefined).
 Run: `npx playwright test tests/e2e/like-or-skip.test.js -g "re-sort chip"` → Expected: FAIL — `#resortPredictionBtn` not found. Record.
 
-- [ ] **Step 4: The pure functions** — append to `like-or-skip.js`:
+- [x] **Step 4: The pure functions** — append to `like-or-skip.js`:
 
 ```js
 /** How many files a history entry moved into or out of the training set (spec § 8). */
@@ -2356,7 +2356,7 @@ export function computeStaleCount(history, markSnapshot) {
 }
 ```
 
-- [ ] **Step 5: The marks** — constructor, after `this._orderGeneration = 0;`:
+- [x] **Step 5: The marks** — constructor, after `this._orderGeneration = 0;`:
 
 ```js
         // The out-of-date mark (G2 spec § 8): a snapshot of moveHistory's entry references taken when the
@@ -2401,7 +2401,7 @@ In `handleSortByPrediction`: after `this.isPredictionSorting = true;` add `this.
 
 and in the `finally`, after `this.isPredictionSorting = false;`: `this._pendingStaleMark = null;` then `this.updateSortPredictionButton();`.
 
-- [ ] **Step 6: The chip** — `index.html`, directly after the `#sortPredictionBtn` `</button>`:
+- [x] **Step 6: The chip** — `index.html`, directly after the `#sortPredictionBtn` `</button>`:
 
 ```html
                 <!-- Out-of-date AI order (G2): shown only while the training set has changed since the sort;
@@ -2449,14 +2449,14 @@ New method directly after `updateSortPredictionButton() { … }`:
 
 Refresh and hide points: in `updateSortPredictionButton`, inside the tournament early-return branch add `this._updateResortChip();` before its `return;`, and add `this._updateResortChip();` as its last line. In `showMedia()`, after `this.updateDislikeSkippedButton();`: `this._updateResortChip();`. In `showDropZone()`, after the block that hides `this.sortPredictionBtn`: `if (this.resortPredictionBtn) this.resortPredictionBtn.style.display = 'none';`. In `setSortControlsVisible`'s `else` branch, after the `sortPredictionBtn` line: `if (this.resortPredictionBtn) this.resortPredictionBtn.style.display = 'none';`. In the no-render `else` branches of `dislikeSkippedFiles` and `_undoSkipBatch`, after `this.updateDislikeSkippedButton();`: `this._updateResortChip();`.
 
-- [ ] **Step 7: Run the tests**
+- [x] **Step 7: Run the tests**
 
 Run: `npx vitest run` → Expected: PASS.
 Run: `npx playwright test tests/e2e/like-or-skip.test.js` → Expected: 5 passed.
 
-- [ ] **Step 8: `CLAUDE.md`** — append to the like-or-skip State Management bullet: "The out-of-date chip `#resortPredictionBtn` (`_updateResortChip()`, refreshed from `showMedia()` and `updateSortPredictionButton()`) shows `LikeOrSkip.computeStaleCount(moveHistory, _staleMark)`: `_staleMark` is a snapshot of `moveHistory`'s entry references taken before training (`_pendingStaleMark`, committed by `_onOrderChanged`), counted as the weighted symmetric difference by identity — no undo hook."
+- [x] **Step 8: `CLAUDE.md`** — append to the like-or-skip State Management bullet: "The out-of-date chip `#resortPredictionBtn` (`_updateResortChip()`, refreshed from `showMedia()` and `updateSortPredictionButton()`) shows `LikeOrSkip.computeStaleCount(moveHistory, _staleMark)`: `_staleMark` is a snapshot of `moveHistory`'s entry references taken before training (`_pendingStaleMark`, committed by `_onOrderChanged`), counted as the weighted symmetric difference by identity — no undo hook."
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add like-or-skip.js tests/like-or-skip.test.js media-viewer.js index.html styles.css tests/like-or-skip-glue.test.js tests/media-viewer-utils.test.js tests/e2e/like-or-skip.test.js CLAUDE.md
@@ -2479,7 +2479,7 @@ git commit -m "feat(like-or-skip): out-of-date count and the Re-sort chip (G2 T5
 - Consumes: `this.likeOrSkip` (T2), `_onOrderChanged('ai-resort')` (T2), the chip (T5).
 - Produces: `parkSkippedOrder(currentFiles, sortedFiles, skippedSet): { files, cursor }`; `handleSortByPrediction({ resort = false } = {})`; `applyPredictionSortResult(result, { resort = false } = {})`.
 
-- [ ] **Step 1: Write the failing pure tests** — append to `tests/like-or-skip.test.js` (add `parkSkippedOrder` to the import):
+- [x] **Step 1: Write the failing pure tests** — append to `tests/like-or-skip.test.js` (add `parkSkippedOrder` to the import):
 
 ```js
 describe('parkSkippedOrder — re-sort keeps skips behind the cursor (spec D2, D3)', () => {
@@ -2506,7 +2506,7 @@ describe('parkSkippedOrder — re-sort keeps skips behind the cursor (spec D2, D
 });
 ```
 
-- [ ] **Step 2: Write the failing glue tests** — in `tests/media-viewer-utils.test.js`, inside `describe('applyPredictionSortResult', …)` add `likeOrSkip: new LikeOrSkip.SkipTracker(), mlComparePairIndex: 3,` to `baseCtx`, then:
+- [x] **Step 2: Write the failing glue tests** — in `tests/media-viewer-utils.test.js`, inside `describe('applyPredictionSortResult', …)` add `likeOrSkip: new LikeOrSkip.SkipTracker(), mlComparePairIndex: 3,` to `baseCtx`, then:
 
 ```js
     it('a fresh sort announces ai-fresh and lands on the top file', () => {
@@ -2579,12 +2579,12 @@ and inside the `handleSortByPrediction` describe:
     });
 ```
 
-- [ ] **Step 3: Run to verify they fail**
+- [x] **Step 3: Run to verify they fail**
 
 Run: `npx vitest run tests/like-or-skip.test.js tests/media-viewer-utils.test.js`
 Expected: FAIL — `parkSkippedOrder is not a function`; the resort `applyPredictionSortResult` test (order stays `['c.png','b.png','a.png']`, `ai-fresh`); `re-sorts instead of restoring` (`runMlSort` not called — the ignored `{ resort }` lets the toggle-off run). **Pass by construction on the unfixed code**, each labelled in the Progress Log: `a fresh sort announces ai-fresh` (T2 already calls the hook); `keeps the original-order snapshot` (the toggle-off returns before the snapshot line — the test exists to fail if the `if (!resort)` guard is ever dropped, which would replace the snapshot with a new array); `does nothing when the AI order is no longer on screen` and `a plain click … restores` (the toggle-off). Record.
 
-- [ ] **Step 4: `parkSkippedOrder`** — append to `like-or-skip.js`:
+- [x] **Step 4: `parkSkippedOrder`** — append to `like-or-skip.js`:
 
 ```js
 /**
@@ -2601,7 +2601,7 @@ export function parkSkippedOrder(currentFiles, sortedFiles, skippedSet) {
 }
 ```
 
-- [ ] **Step 5: `applyPredictionSortResult(result, { resort })`** — change the signature to `applyPredictionSortResult(result, { resort = false } = {}) {` and replace
+- [x] **Step 5: `applyPredictionSortResult(result, { resort })`** — change the signature to `applyPredictionSortResult(result, { resort = false } = {}) {` and replace
 
 ```js
         this.mediaFiles = sorted;
@@ -2636,7 +2636,7 @@ with
         return true;
 ```
 
-- [ ] **Step 6: `handleSortByPrediction({ resort })`** — change the signature to `async handleSortByPrediction({ resort = false } = {}) {`. After the `if (!this.isMlEnabled) { … return; }` guard add:
+- [x] **Step 6: `handleSortByPrediction({ resort })`** — change the signature to `async handleSortByPrediction({ resort = false } = {}) {`. After the `if (!this.isMlEnabled) { … return; }` guard add:
 
 ```js
         // The chip re-sort (G2) acts only on the AI order it was shown for.
@@ -2653,7 +2653,7 @@ change `if (this.isSortedByPrediction) {` (the toggle-off) to `if (this.isSorted
 
 and change `this.applyPredictionSortResult(result);` to `this.applyPredictionSortResult(result, { resort });`.
 
-- [ ] **Step 7: Wire the chip** — `setupEventListeners`, after the `sortPredictionBtn` listener block:
+- [x] **Step 7: Wire the chip** — `setupEventListeners`, after the `sortPredictionBtn` listener block:
 
 ```js
         // The out-of-date chip re-sorts in place, keeping skips (G2). Never the plain button's handler:
@@ -2663,13 +2663,13 @@ and change `this.applyPredictionSortResult(result);` to `this.applyPredictionSor
         }
 ```
 
-- [ ] **Step 8: Run the tests**
+- [x] **Step 8: Run the tests**
 
 Run: `npx vitest run` → Expected: PASS. Run: `npx playwright test tests/e2e/like-or-skip.test.js` → Expected: 5 passed.
 
-- [ ] **Step 9: `CLAUDE.md`** — § Architecture tree `like-or-skip.js` line → `# Pure ESM (G2 like-or-skip): SkipTracker, batch cursor + undo re-insertion plans, re-sort parking, out-of-date count; imported as a namespace (LikeOrSkip)`; the `predictionScores` sync bullet: after "`applyPredictionSortResult(result)`" insert "(`{ resort }` on a chip re-sort — `handleSortByPrediction({ resort: true })` skips the toggle-off, keeps `originalMediaFiles`, and the result parks un-disliked skips first with the cursor on the first unjudged file)".
+- [x] **Step 9: `CLAUDE.md`** — § Architecture tree `like-or-skip.js` line → `# Pure ESM (G2 like-or-skip): SkipTracker, batch cursor + undo re-insertion plans, re-sort parking, out-of-date count; imported as a namespace (LikeOrSkip)`; the `predictionScores` sync bullet: after "`applyPredictionSortResult(result)`" insert "(`{ resort }` on a chip re-sort — `handleSortByPrediction({ resort: true })` skips the toggle-off, keeps `originalMediaFiles`, and the result parks un-disliked skips first with the cursor on the first unjudged file)".
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add like-or-skip.js tests/like-or-skip.test.js media-viewer.js tests/media-viewer-utils.test.js CLAUDE.md
@@ -2683,14 +2683,14 @@ git commit -m "feat(like-or-skip): one-click re-sort that keeps the skips (G2 T6
 **Files:**
 - Create: `docs/superpowers/specs/assets/g2-like-or-skip-single-after.png`, `docs/superpowers/specs/assets/g2-like-or-skip-dialog-after.png`
 
-- [ ] **Step 1: Capture**
+- [x] **Step 1: Capture**
 
 Run (PowerShell): `$env:LIKE_OR_SKIP_EVIDENCE_STAGE='after'; npx playwright test tests/e2e/visual-evidence.test.js -g "like-or-skip"; $env:LIKE_OR_SKIP_EVIDENCE_STAGE=$null`
 Expected: 1 passed; both PNGs exist.
 
-- [ ] **Step 2: Look at them** (Read tool) beside `g2-like-or-skip-single-before.png`. Acceptance: in `single-after` the bar shows "DISLIKE 3 SKIPPED" after Dislike, the header shows "Restore Order" and "↻ Re-sort · 1 new" (absent if T5–T6 were dropped — say so in the PR); nothing else moved relative to `single-before`. In `dialog-after` the dialog reads "Dislike 3 skipped files?", names `disliked`, has "Move 3 files" (red) and "Cancel". Any layout defect is a finding: fix it in the owning task's files, re-capture, and log it.
+- [x] **Step 2: Look at them** (Read tool) beside `g2-like-or-skip-single-before.png`. Acceptance: in `single-after` the bar shows "DISLIKE 3 SKIPPED" after Dislike, the header shows "Restore Order" and "↻ Re-sort · 1 new" (absent if T5–T6 were dropped — say so in the PR); nothing else moved relative to `single-before`. In `dialog-after` the dialog reads "Dislike 3 skipped files?", names `disliked`, has "Move 3 files" (red) and "Cancel". Any layout defect is a finding: fix it in the owning task's files, re-capture, and log it.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/assets/g2-like-or-skip-single-after.png docs/superpowers/specs/assets/g2-like-or-skip-dialog-after.png
@@ -2701,10 +2701,10 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
 
 ## Finish (after Task 7)
 
-- [ ] `npx vitest run`, `npm run lint`, `npm run format:check` green; `git status --short` clean.
-- [ ] `for i in 1 2 3; do npx playwright test tests/e2e/like-or-skip.test.js --reporter=line || break; done` — three runs in a row.
-- [ ] `npx playwright test` — the full suite once. An existing E2E that now fails because `F` or the button changed something it relied on is a finding; fix the test only if its premise was wrong, and log it.
-- [ ] Grep sweep (CLAUDE.md § Best Practices): `_onOrderChanged`, `skipBatch`, `dislikeSkipped`, `deferBulkSave`, `_staleMark`, `resort` across code, tests **and comments**; re-read every comment attached to changed code (especially `handleSortByPrediction`'s toggle-off, `applyPredictionSortResult`, `removeFileFromList`'s JSDoc, the `_fileOpInFlight` constructor comment).
+- [x] `npx vitest run`, `npm run lint`, `npm run format:check` green; `git status --short` clean.
+- [x] `for i in 1 2 3; do npx playwright test tests/e2e/like-or-skip.test.js --reporter=line || break; done` — three runs in a row.
+- [x] `npx playwright test` — the full suite once. An existing E2E that now fails because `F` or the button changed something it relied on is a finding; fix the test only if its premise was wrong, and log it.
+- [x] Grep sweep (CLAUDE.md § Best Practices): `_onOrderChanged`, `skipBatch`, `dislikeSkipped`, `deferBulkSave`, `_staleMark`, `resort` across code, tests **and comments**; re-read every comment attached to changed code (especially `handleSortByPrediction`'s toggle-off, `applyPredictionSortResult`, `removeFileFromList`'s JSDoc, the `_fileOpInFlight` constructor comment).
 - [ ] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
 - [ ] Final review: `/code-review max` on the branch; fix, re-verify.
 - [ ] Push (`git push -u origin g2-like-or-skip-flow`; pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
@@ -2750,6 +2750,7 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
   - **Review fix:** the glue "stays hidden" test started the chip hidden and asserted hidden — it could not fail. Each case now starts it visible; mutation checks (deleting `!this.isTournamentMode`, then `this.likeOrSkip.active`) fail with `["isTournamentMode"]: expected 'inline-flex' to be 'none'` / `["likeOrSkip"]: …`. Reverted; glue 49/49.
 - **2026-10-12 — Task 6** (Opus · medium). RED: `parkSkippedOrder is not a function` (3); the re-sort `applyPredictionSortResult` test (`expected [ 'c.png', 'b.png', 'a.png' ] to deeply equal [ 'a.png', 'c.png', 'b.png' ]`); `re-sorts instead of restoring` (`runMlSort` called 0 times). **Pass by construction**, confirmed: `a fresh sort announces ai-fresh`, `keeps the original-order snapshot`, `does nothing when the AI order is no longer on screen`, `a plain click on a sorted list still restores`. GREEN: full unit suite green; like-or-skip E2E 5/5; `ml-retrain-skip` E2E 5/5. Deviation from Step 6: the stale-chip guard `if (resort && !this.likeOrSkip.active) return;` is the **first** statement of `handleSortByPrediction`, not after the `isMlEnabled` guard — in the brief's position a stale chip click during a similarity sort or with ML off would still have shown a notice; only `resort` calls are affected.
 - **2026-10-12 — Task 7** (Sonnet · medium). The first "after" capture caught a layout defect no test saw: "DISLIKE 3 SKIPPED" wrapped to two lines and the bottom bar grew 80 → 96 px, lifting every button. Cause, measured: `#controls` is centred with `position: fixed; left: 50%; transform: translateX(-50%)`, which caps a shrink-to-fit width at 50vw (bar 594.23 px vs `innerWidth / 2` = 594) — six buttons exceed it. Fixed in `.controls` (`width: max-content; max-width: calc(100vw - 2 * var(--space-4))`), not by `nowrap` on the label (that would overflow the capped box to the right, off-centre); five-button layouts stay under 50vw and are unchanged. Re-captured: label on one line, every button top back at the before-shot's y, bar centred, chip "Re-sort · 1 new" beside Restore Order; dialog "Dislike 3 skipped files?", names `disliked`, red "Move 3 files", Cancel. E2E: like-or-skip 5/5, app-launch 5/5, compare-mode 13/13.
+- **2026-10-12 — Finish.** vitest/lint/format green; like-or-skip E2E 5/5 three runs in a row; full E2E 137 passed, 5 skipped (the opt-in evidence captures). Grep sweep clean. The `regression-checker` found one Important the per-task reviews missed: the header — Restore Order, the mode buttons (re-clicking Single too), the similarity sort, Change folder — ignored `_fileOpInFlight`, so a click during a batch's renames (dialog closed; seconds for hundreds of files) reordered or re-rendered under it; the batch then planned its cursor from the live index, skipped its render and recorded the post-reorder generation — screen and cursor on different files, and the next Like moves a file the user cannot see. Fixed at the root: `switchMode`, `handleSortBySimilarity` (start/toggle only — its Cancel stays live), `handleSortByPrediction` and `loadFolder` refuse with "Wait for the move to finish" while any file action holds the flag; the batch also captures its index and generation with its snapshot. Two Minors fixed alongside: the sort's `finally` no longer re-shows the AI-sort button on an empty list, and a batch undo that restores nothing pushes the same entry back (the chip counted it twice). 16 new unit tests, RED first (the Cancel-stays-live test by a placement mutation). Full unit suite green; E2E like-or-skip, compare-mode, ml-retrain-skip, tournament-mode, rating-safety, sort-progress 49/49.
 
 ## Key Discoveries
 

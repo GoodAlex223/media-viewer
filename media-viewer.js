@@ -111,8 +111,9 @@ class MediaViewer {
         this.isBeingCleaned = false; // Flag to prevent error notifications during cleanup
         // Held by every file-acting method (moveCurrentFile, moveToSpecialFolder, handleCancel — and
         // moveComparePair, applyBulkRating, dislikeSkippedFiles) from before its first await until its
-        // finally. Any other file action that arrives meanwhile is refused (G1). Not isLoading: render
-        // handlers clear that at first paint, and showMedia() itself returns early on it.
+        // finally. Any other file action that arrives meanwhile is refused (G1), and so are the header
+        // actions (switchMode, both sort handlers except the similarity sort's Cancel, loadFolder — G2).
+        // Not isLoading: render handlers clear that at first paint, and showMedia() itself returns early on it.
         this._fileOpInFlight = false;
         // Like-or-skip (G2): the files passed with Next while the AI order is on screen, and that token
         // itself (likeOrSkip.active). Changed only by _onOrderChanged, nextMedia and removeFileFromList
@@ -3006,6 +3007,13 @@ class MediaViewer {
     }
 
     async loadFolder(folderPath) {
+        // A file action (G1 guard) is moving files: a reorder, mode switch or folder change now would
+        // leave the screen and the cursor on different files when it finishes (G2 review). It would also
+        // push the old folder's history entry into the new folder's moveHistory.
+        if (this._fileOpInFlight) {
+            this.showNotification('Wait for the move to finish', 'info');
+            return;
+        }
         if (!window.electronAPI) {
             this.showError('Electron API not available');
             return;
@@ -4549,6 +4557,9 @@ class MediaViewer {
             const batch = this.likeOrSkip.skippedIn(this.mediaFiles);
             const filesBefore = [...this.mediaFiles];
             const onScreen = this.mediaFiles[this.currentIndex] ?? null;
+            // Captured with the snapshot: they describe the list originalIndex refers to, not the live fields.
+            const indexBefore = this.currentIndex;
+            const generationBefore = this._orderGeneration;
             const includesOnScreen = onScreen !== null && batch.includes(onScreen);
             const targetFolderPath = this.customDislikeFolder;
             const folderName = window.electronAPI.path.basename(targetFolderPath);
@@ -4630,7 +4641,7 @@ class MediaViewer {
             }
 
             const movedPaths = new Set(moved.map((m) => m.originalPath));
-            const target = LikeOrSkip.planCursorAfterBatch(filesBefore, movedPaths, this.currentIndex);
+            const target = LikeOrSkip.planCursorAfterBatch(filesBefore, movedPaths, indexBefore);
             for (const m of moved) {
                 this.removeFileFromList(m.originalPath, { deferBulkSave: true });
             }
@@ -4647,7 +4658,7 @@ class MediaViewer {
                     actionType: 'dislike',
                     files: moved,
                     prevCurrentPath: onScreen?.path ?? null,
-                    orderGeneration: this._orderGeneration,
+                    orderGeneration: generationBefore,
                 });
             }
             if (failures.length === 0) {
@@ -4687,7 +4698,8 @@ class MediaViewer {
 
     // Batch undo for dislikeSkippedFiles (G2 spec § 7). Runs inside handleCancel's _fileOpInFlight hold
     // and takes no guard itself. The entry is already popped: files that fail to come back are pushed
-    // back as a smaller skipBatch entry, so the next Ctrl+A retries just those.
+    // back as a smaller skipBatch entry (the same entry when none came back), so the next Ctrl+A retries
+    // just those.
     async _undoSkipBatch(entry) {
         const onScreenBefore = this.mediaFiles[this.currentIndex] ?? null;
         let targetPath = entry.prevCurrentPath;
@@ -4740,7 +4752,12 @@ class MediaViewer {
             }
         }
         if (failed.length > 0) {
-            this.moveHistory.push({ ...entry, files: failed, prevCurrentPath: targetPath });
+            // Nothing came back: the SAME object goes back. computeStaleCount counts entries by identity,
+            // so a copy would count the unchanged batch twice ("Re-sort · 2N new"). A partial failure's
+            // smaller entry still counts as new; spec § 8 accepts that overcount.
+            this.moveHistory.push(
+                restored.length === 0 ? entry : { ...entry, files: failed, prevCurrentPath: targetPath }
+            );
         }
 
         const targetIndex = targetPath ? this.mediaFiles.findIndex((f) => f.path === targetPath) : -1;
@@ -5093,6 +5110,12 @@ class MediaViewer {
 
     // ---------- Tournament Mode ----------
     async switchMode(mode) {
+        // A file action (G1 guard) is moving files: a reorder, mode switch or folder change now would
+        // leave the screen and the cursor on different files when it finishes (G2 review).
+        if (this._fileOpInFlight) {
+            this.showNotification('Wait for the move to finish', 'info');
+            return;
+        }
         // Leaving an active, incomplete tournament → confirm Save/Discard first. The leave
         // prompt resumes the switch (to `mode`) after the user chooses.
         if (
@@ -6563,6 +6586,14 @@ class MediaViewer {
 
         if (this.isComputingHashes) {
             this.showNotification('⏳ Hash computation already in progress', 'info');
+            return;
+        }
+
+        // A file action (G1 guard) is moving files: a reorder, mode switch or folder change now would
+        // leave the screen and the cursor on different files when it finishes (G2 review). Below the
+        // Cancel branch above, which stays live.
+        if (this._fileOpInFlight) {
+            this.showNotification('Wait for the move to finish', 'info');
             return;
         }
 
@@ -8946,6 +8977,13 @@ class MediaViewer {
         }
         if (this.isTournamentMode) return;
         if (this.isPredictionSorting) return; // re-entrancy guard; Cancel is the abort affordance
+        // A file action (G1 guard) is moving files: a reorder, mode switch or folder change now would
+        // leave the screen and the cursor on different files when it finishes (G2 review). Ahead of the
+        // two notices below, so a refused click shows only this one.
+        if (this._fileOpInFlight) {
+            this.showNotification('Wait for the move to finish', 'info');
+            return;
+        }
         // Mutual exclusion with the similarity sort — both share this.sortAbortController.
         if (this.isComputingHashes) {
             this.showNotification('⏳ Similarity sort in progress', 'info');
@@ -9124,7 +9162,11 @@ class MediaViewer {
             this.sortAbortController = null;
             this.isPredictionSorting = false;
             this._pendingStaleMark = null;
-            this.updateSortPredictionButton();
+            // Not on an emptied list: a folder change to an empty folder aborts the sort and shows the
+            // drop zone, which hides the button and the chip; re-showing it there invites a sort of nothing.
+            if (this.mediaFiles.length > 0) {
+                this.updateSortPredictionButton();
+            }
             this.extractionProgressSink = null;
             this.clipProgressSink = null;
             // Last out restarts the 30 s idle window, so a cancelled or thrown sort reclaims the
