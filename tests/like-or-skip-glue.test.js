@@ -932,6 +932,9 @@ describe('_updateResortChip (spec § 8)', () => {
         ];
         for (const overrides of hidden) {
             const ctx = chipCtx(overrides);
+            // Start visible (a chip shown before the state changed), so a case passes only if the
+            // method actively hides it — a no-op _updateResortChip fails every case.
+            ctx.resortPredictionBtn.style.display = 'inline-flex';
             updateResortChip.call(ctx);
             expect(ctx.resortPredictionBtn.style.display, JSON.stringify(Object.keys(overrides))).toBe('none');
         }
