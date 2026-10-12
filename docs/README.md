@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_     | —                                      |
+| [G2 Like-or-Skip Flow Plan](planning/plans/2026-10-12_g2-like-or-skip-flow.md) | Seven tasks, RED first: pure `like-or-skip.js`; the `_onOrderChanged` hook + source-scan control; the guarded "Dislike N skipped" batch, dialog, button and `F`; the one-Ctrl+A batch undo; the out-of-date chip and re-sort (T5–T6, first drop on overrun); before/after screenshots (Group G2, Oct 12–16) |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md

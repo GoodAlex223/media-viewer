@@ -78,7 +78,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| _(none)_ | | |
+| [2026-10-12_g2-like-or-skip-flow.md](2026-10-12_g2-like-or-skip-flow.md) | G2 (Oct 12–16) 🏆 | Planning — awaiting review and the execution choice |
 
 <!-- 2026-10-11 (Group G1 closeout): 2026-10-10_g1-security-findings-fix.md left this table on
      archive — merged `e5cd3a8` via PR #78, moved to docs/archive/plans/ with `git mv` and indexed in

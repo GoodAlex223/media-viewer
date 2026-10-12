@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 12–16 § G2 (🔵 🏆, 8 SP → **~10 SP**, see § 13) ← BACKLOG 🔵 [2026-10-04] "Add a bulk 'dislike the skipped files' action to single mode" and "Show that the AI-sort order is out of date after ratings, and offer a one-click re-sort" (the user's workaround recorded in the first entry of the same section, "Help the user separate better from worse…", is the design evidence)
 **Created**: 2026-10-12
-**Status**: Draft — awaiting user review. Brainstormed and approved section by section on 2026-10-12 (decisions D1–D6, § 3).
+**Status**: Approved by the user 2026-10-12 (brainstormed section by section, decisions D1–D6, § 3). **Amended at planning, same day, before any code**: the out-of-date count's mechanism became a reference snapshot of `moveHistory` (§ 8) — same semantics, no undo hook; § 6 step 9's render rule was made explicit for an image on screen that moves; the batch is refused while a sort runs and maps its cursor by path (§ 6, E11); and a partial undo shifts positions past the files that did not come back (§ 7 step 2). Plan: [2026-10-12_g2-like-or-skip-flow.md](../../planning/plans/2026-10-12_g2-like-or-skip-flow.md).
 **Branch**: `g2-like-or-skip-flow` (from `main` @ `15cec8c`, after G1 merged `e5cd3a8`; one PR, per the week's branch/PR shape)
 **Trial vehicle**: _You should know_ (REVIEW-QUEUE § 5, 2026-10-09 row) — the user enables it in this group's session (`/plugin enable cc-plugin-you-should-know@builtin`); read-out at G6.
 
@@ -126,11 +126,11 @@ export class SkipTracker {
     skippedIn(mediaFiles)     // → file objects, list order, intersection only (the count source)
 }
 
-export function planCursorAfterBatch(filesBefore, movedPaths, currentIndex) // → index into filesAfter
-export function planUndoReinsertion(mediaFiles, restored, { orderUnchanged }) // → new array
+export function planCursorAfterBatch(filesBefore, movedPaths, currentIndex) // → path | null (§ 6 step 8)
+export function planUndoReinsertion(mediaFiles, restored, { orderUnchanged, missing }) // → new array (§ 7)
+export function formatCount(n, noun)                       // → "1 file" / "3 files"
 export function parkSkippedOrder(sortedFiles, skippedSet)  // → { files, cursor }
-export function computeStaleCount(history, mark)           // → number
-export function reconcileMarkAfterUndo(mark, before, after) // → new mark
+export function computeStaleCount(history, markSnapshot)   // → number (§ 8)
 export function trainingWeight(historyEntry)               // like/dislike 1, bothGood/bothBad 2, skipBatch N, special 0
 ```
 
@@ -183,7 +183,9 @@ Called by `#dislikeSkippedBtn`'s click and the `dislikeSkipped` action. **Must n
 
 **Synchronous refusals, before the guard** (the order `moveCurrentFile` uses):
 1. `_fileOpInFlight`, `isLoading`, not single mode (`isCompareMode`/`isTournamentMode`), or tracker inactive →
-   return silently.
+   return silently. A sort running (`isPredictionSorting || isComputingHashes`) → `info` notice "Wait for the
+   sort to finish" (amended at planning): a chip re-sort's result reassigns `mediaFiles` and renders, and
+   `showMedia` gates on `isLoading`, not `_fileOpInFlight` — so it would land under an open dialog.
 2. `skippedIn(mediaFiles)` empty → `info` notice "Nothing skipped yet" (the button is hidden at 0; `F` is not).
 3. No dislike folder → the existing "Configure like/dislike folders in Settings (F1)" error notice.
 4. `_refuseIfNeedsRegrant(['dislike'], 'move')`.
@@ -211,12 +213,15 @@ around everything below:
    `saveBulkRatedFile()` if any bulk-rated entry was dropped (F6). Push **one** history entry, only if ≥ 1 file
    moved: `{ skipBatch: true, actionType: 'dislike', files: [...], prevCurrentPath: onScreen.path,
    orderGeneration: this._orderGeneration }`.
-8. **Cursor** — `planCursorAfterBatch(filesBefore, movedPaths, currentIndex)`: if `onScreen` survived, the
-   cursor follows it by path (F2); if it moved, the cursor goes to the first surviving file after it in the
-   pre-batch order, wrapping to 0 (`moveCurrentFile`'s wrap).
-9. **Render** iff the on-screen media was torn down (step 5) — including when every rename failed, so the screen
-   is never left blank — and before the `finally`, so the `isLoading` gates take over with no gap. Otherwise
-   (file on screen survived and was never torn down): `updateFolderInfo()`, `updateNavigationInfo()`,
+8. **Cursor** — `planCursorAfterBatch(filesBefore, movedPaths, currentIndex)` returns a **path**, which the glue
+   maps onto the list as it stands after the renames (amended at planning — nothing then depends on the list
+   keeping its pre-batch order across the awaits): if `onScreen` survived, that file (F2); if it moved, the
+   first surviving file after it in the pre-batch order, else the first survivor (`moveCurrentFile`'s wrap);
+   `null` when nothing survived (index 0).
+9. **Render** iff the file on screen moved **or** its media was torn down (step 5) — the latter including when
+   every rename failed, so the screen is never left blank; an image on screen that moved is not torn down but
+   still shows a file that is gone — and before the `finally`, so the `isLoading` gates take over with no gap.
+   Otherwise (file on screen survived and was never torn down): `updateFolderInfo()`, `updateNavigationInfo()`,
    `updateDislikeSkippedButton()`, `updateSortPredictionButton()` only — no reload of the file on screen.
 10. **Notices** — all moved: "👎 Moved 14 files to Liked_1" (`dislike`, shown regardless of
     `showRatingConfirmations` — it is the largest move the app makes); partial: "Moved 12 of 14 — 2 failed:
@@ -235,7 +240,9 @@ leaves the tournament.
    `try`; `_followRestoredFile(sub, result)` per success, and rebuild the file object with the followed
    `path`/`name` (other fields as captured).
 2. **Reinsert** — `planUndoReinsertion`: if `entry.orderGeneration === this._orderGeneration` (no reorder since
-   the batch), each restored file goes back at its original index, ascending — the exact pre-batch order;
+   the batch), each restored file goes back at its original index, ascending — the exact pre-batch order —
+   shifted down by the batch files that did not come back (`missing`; amended at planning: with `a b c` before
+   `d` and `b` failing, `c` at its original index 2 would land after `d`);
    otherwise (re-sort or Restore Order since) the restored files are parked at the front of the list
    (consistent with "skips live behind the cursor"). Indices are clamped. Accepted approximation: a
    non-history removal or insertion since the batch (a load-failure removal, new files detected) shifts the
@@ -250,9 +257,7 @@ leaves the tournament.
 6. **Partial failure** — sub-entries that failed to restore are pushed back as a smaller `skipBatch` entry
    (same `prevCurrentPath`/`orderGeneration`), so the next Ctrl+A retries just those. Notices: "✅ Restored 14
    files" / "Restored 12 of 14 — 2 failed: <first error>".
-7. The out-of-date mark is reconciled **once, in `handleCancel`'s `finally`** (single owner, every branch —
-   single, compare-pair, bulk, `skipBatch`), from a shallow copy of `moveHistory` taken at entry (§ 8). No branch
-   carries its own stale-count code.
+7. The out-of-date count needs nothing from any undo branch: it is computed from the history itself (§ 8).
 
 ---
 
@@ -270,20 +275,20 @@ leaves the tournament.
 
 Undoing a change made **after** the mark takes it back off (its entry leaves history). Undoing one made
 **before** the mark *adds* to the count (the model trained on something now gone). A failed undo that pushes its
-entry back changes nothing. Mechanism (pure, over `moveHistory`): `mark = { historyLength, undoneBefore }`;
-count = Σ weight(entries at index ≥ `mark.historyLength`) + `mark.undoneBefore`. After every undo,
-`reconcileMarkAfterUndo(mark, before, after)` finds the length `p` of the common prefix (by reference) of the
-pre-undo copy and the post-undo history; if `p < mark.historyLength`, it adds Σ weight(`before[p..mark.historyLength)`)
-to `undoneBefore` and sets `historyLength = p`. A failed undo re-pushes the same object, so the prefix is
-whole and nothing changes. No counter at the five push sites; no code in the individual undo branches.
-Accepted overcount: a *partially* failed undo of a pre-mark `skipBatch` counts the residual entry's files twice
-(once as undone, once as a post-mark entry) — the hint may overcount, never undercount.
+entry back changes nothing. Mechanism (pure, over `moveHistory`; amended at planning): the **mark is a snapshot
+of the history's entry references** (`moveHistory.slice()`), and count = Σ weight over the **symmetric
+difference by identity** — entries in the snapshot no longer in the history (undone since the sort) plus entries
+in the history not in the snapshot (added since). A failed undo re-pushes the same object, so it is in both and
+counts nothing. No counter at the five push sites, no code in any undo branch, and an in-place splice of history
+(e.g. a tournament special-twin drop) cannot misalign it — a prefix comparison could. Accepted overcount: a
+*partially* failed undo of a pre-mark `skipBatch` counts the batch (gone) and its smaller residual (new) — the
+hint may overcount, never undercount.
 
 **Mark timing** — taken just **before** `ensureTrainedModel` starts (not when the result applies) and committed
 when the sort applies; a rating made mid-sort then counts as new even if training picked it up. Overcounts by at
 most the ratings made during training; never undercounts. A cancelled or failed sort commits nothing. When
 `applyPredictionSortResult` runs with no pending mark (called outside a sort run, as the E2E does), the mark is
-the current history position.
+a snapshot of the history at that moment.
 
 **Chip** `#resortPredictionBtn` — "↻ Re-sort · 12 new" beside `#sortPredictionBtn`. Visible iff the AI order is
 on screen (`likeOrSkip.active`), count > 0, `isMlEnabled`, `!isPredictionSorting`, `!isTournamentMode`, and a
@@ -309,7 +314,7 @@ set, mark committed.
 ## 9. UI and keyboard
 
 - **`#dislikeSkippedBtn`** in `.controls` (single-mode bar), after `#dislikeBtn`: dislike styling, Lucide
-  `thumbs-down` + count, label "Dislike 14 skipped"; hidden at count 0 or when tracking is inactive. Title
+  `list-x` (distinct from Dislike's `thumbs-down`), label "Dislike 14 skipped"; hidden at count 0 or when tracking is inactive. Title
   derived: "Dislike all skipped files" + `_shortcutSuffix('single', 'dislikeSkipped')`. Owner:
   `updateDislikeSkippedButton()`, called from the render's navigation-info update, after a batch or undo, on
   every `_onOrderChanged`, and from `saveShortcut`/`resetShortcuts`. Hidden by `showDropZone()`.
@@ -317,8 +322,9 @@ set, mark committed.
   `_mergeModeShortcuts` leaves it unbound if a stored single-mode remap holds `F`), an `ACTION_LABELS` row
   ("Dislike all skipped"), an `executeAction` case gated on single mode (second line of defence, as
   `special`). Not in `REPEATABLE_ACTIONS` — a held `F` fires once. `_isTextEntryTarget` already applies.
-- **Confirmation dialog** — `showBulkDislikeConfirm()`, reusing the `.folder-creation-modal` shell and styles
-  with a danger confirm button. Static markup; count and folder name as `textContent` (G1 lint guard). The
+- **Confirmation dialog** — `showBulkDislikeConfirm()`, reusing the folder-creation modal's shell and styles
+  under its own root class `.bulk-dislike-modal` (it shares the shell's CSS rule, so a test counting
+  `.folder-creation-modal` never sees it), with a danger confirm button. Static markup; count and folder name as `textContent` (G1 lint guard). The
   confirm button takes focus. While open it **owns the keyboard**: a capture-phase `keydown` listener on
   `document` (it runs before the app's bubble-phase handler at `:~2431`) handles Enter (confirm) and Escape
   (cancel) and stops every other key except Tab from reaching the shortcuts (Space play/pause, F1, Q…). The
@@ -345,7 +351,7 @@ set, mark committed.
 | E8  | Undo after a chip re-sort                                            | Order generation differs → restored files parked at the front; cursor to `prevCurrentPath`        |
 | E9  | Undo pressed in compare mode                                         | Same branch; reinsertion as E8 or exact; `showMedia()` renders a pair from the restored scores    |
 | E10 | Skipped file was bulk-rated (Both good earlier)                      | Bulk entry dropped with the move, one save; undo restores it, one save                            |
-| E11 | AI sort running while the user likes/skips                           | Allowed (unchanged). Files moved mid-sort drop out of the result; mid-sort ratings count as new   |
+| E11 | AI sort running while the user likes/skips                           | Likes/skips allowed (unchanged); files moved mid-sort drop out of the result; mid-sort ratings count as new. `F` refused with "Wait for the sort to finish" (amended at planning) |
 | E12 | Similarity sort on top of the AI order                               | `_onOrderChanged('other')` → tracking off, discard notice, chip hidden (despite F5's stale flag)  |
 | E13 | Dislike folder unreachable / needs re-confirming                     | Refused before the guard, with the existing notice; nothing torn down                             |
 | E14 | One file left, Next                                                  | Records nothing                                                                                   |
@@ -364,11 +370,12 @@ is zero coverage").
 - `skippedIn`: list order, never an unlisted path;
 - `planCursorAfterBatch`: survivor with moved files before and after it; on-screen file in the batch; batch
   reaching the end (wrap to 0); everything moved;
-- `planUndoReinsertion`: exact order when unchanged; parked at the front when reordered; clamping;
+- `planUndoReinsertion`: exact order when unchanged; shifted past files that did not come back; parked at the
+  front when reordered; clamping;
 - `parkSkippedOrder`: skips first in current relative order, unjudged in model order, cursor; all-skipped → 0;
-- `computeStaleCount` + `trainingWeight` + `reconcileMarkAfterUndo`: weights; post-mark undo takes back;
-  pre-mark undo adds; a failed undo that pushes back the same entry changes nothing; a partially failed
-  pre-mark `skipBatch` undo overcounts, never undercounts.
+- `computeStaleCount` + `trainingWeight`: weights; post-mark undo takes back; pre-mark undo adds; a failed
+  undo that pushes back the same entry changes nothing; an in-place splice of a weight-0 entry changes nothing;
+  a partially failed pre-mark `skipBatch` undo overcounts, never undercounts.
 
 **Unit — `MediaViewer` glue** (`extractMethod`/`extractAsyncMethod`):
 - `nextMedia` records only when active, single mode, > 1 file and the guards pass;
