@@ -134,14 +134,53 @@ test.describe('Like-or-skip (G2)', () => {
         await press(page, 's');
         await holdKey(page, 'f');
         await expect(page.locator('.bulk-dislike-modal')).toHaveCount(1);
+        // The dialog holds _fileOpInFlight, so q/s/Ctrl+A would be refused downstream even if they
+        // leaked. Count dispatches instead (the main keydown handler calls this.executeAction), and
+        // press guard-independent keys too: i (file info) and F1 (help) act without the guard.
+        await page.evaluate(() => {
+            const mv = window.mediaViewer;
+            window.__dispatched = [];
+            const original = mv.executeAction.bind(mv);
+            mv.executeAction = (action) => {
+                window.__dispatched.push(action);
+                return original(action);
+            };
+            // Every notice raised from here on, read from the call rather than the DOM: an info notice
+            // auto-closes after 2 s and the info cap removes older ones, so a DOM count can miss it.
+            window.__notices = [];
+            const notify = mv.showNotification.bind(mv);
+            mv.showNotification = (message, ...rest) => {
+                window.__notices.push(String(message));
+                return notify(message, ...rest);
+            };
+        });
         await page.keyboard.press('q'); // Like — must not reach the dispatcher
         await page.keyboard.press('s'); // Next — nor this
         await page.keyboard.press('Control+a'); // Undo (spec E3) — nor this: no "No moves to undo" notice
+        await page.keyboard.press('i'); // File-info toggle — a fixed utility, not behind the guard
+        await page.keyboard.press('F1'); // Help toggle — global, not behind the guard
+        expect(await page.evaluate(() => window.__dispatched)).toEqual([]);
         await page.keyboard.press('Escape');
         await expect(page.locator('.bulk-dislike-modal')).toHaveCount(0);
         await waitForIdle(page);
+        // showFileInfo adds its class in a requestAnimationFrame: let two frames pass before asserting.
+        await page.evaluate(
+            () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        );
 
+        expect(await page.evaluate(() => document.getElementById('helpOverlay').classList.contains('show'))).toBe(
+            false
+        );
+        expect(await page.evaluate(() => document.getElementById('fileInfoPanel').classList.contains('show'))).toBe(
+            false
+        );
         await expect(page.locator('.notification').filter({ hasText: 'No moves to undo' })).toHaveCount(0);
+        await expect(page.locator('.notification').filter({ hasText: 'A move is still in progress' })).toHaveCount(0);
+        expect(
+            (await page.evaluate(() => window.__notices)).filter(
+                (m) => m.includes('No moves to undo') || m.includes('A move is still in progress')
+            )
+        ).toEqual([]);
         expect(await readdir(tmpFixtures.likeDir)).toEqual([]);
         expect(await readdir(tmpFixtures.dislikeDir)).toEqual([]);
         expect(await onScreen(page)).toBe('blue-1x1.png');
