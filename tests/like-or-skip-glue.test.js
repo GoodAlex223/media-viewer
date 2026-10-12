@@ -198,6 +198,53 @@ describe('removeFileFromList forgets the skip and can defer the bulk-rated save'
     });
 });
 
+describe('a failed similarity sort keeps the skips (spec D1)', () => {
+    const handleSortBySimilarity = extract('handleSortBySimilarity');
+
+    it('puts back the order it started from without announcing a reorder, and bumps the generation', async () => {
+        const files = media('a', 'b', 'c');
+        const ctx = {
+            isTournamentMode: false,
+            isPredictionSorting: false,
+            isComputingHashes: false,
+            isSortedBySimilarity: false,
+            sortAbortController: null,
+            sortAlgorithm: 'vptree',
+            baseFolderPath: '/f',
+            mediaFiles: [...files],
+            originalMediaFiles: [],
+            currentIndex: 0,
+            likeOrSkip: activeTracker('/f/a', '/f/b'),
+            _orderGeneration: 0,
+            _onOrderChanged: vi.fn(),
+            showNotification: vi.fn(),
+            clearProgressNotification: vi.fn(),
+            showMedia: vi.fn(),
+            sortSimilarityBtn: { disabled: false, querySelector: () => ({ textContent: '' }) },
+            // loadSortCache is the first collaborator called after the originalMediaFiles snapshot
+            // (forceResort is false, so deleteSortCache is skipped): its throw drives the catch.
+            loadSortCache: vi.fn(() => {
+                throw new Error('boom');
+            }),
+        };
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await handleSortBySimilarity.call(ctx, false);
+        } finally {
+            errorSpy.mockRestore();
+        }
+
+        expect(ctx.loadSortCache).toHaveBeenCalledOnce();
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx._orderGeneration).toBe(1);
+        expect(ctx.likeOrSkip.active).toBe(true);
+        expect([...ctx.likeOrSkip.skipped]).toEqual(['/f/a', '/f/b']);
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/f/a', '/f/b', '/f/c']);
+        const messages = ctx.showNotification.mock.calls.map((c) => String(c[0]));
+        expect(messages.filter((m) => m.includes('Skipped list cleared'))).toEqual([]);
+    });
+});
+
 describe('every reorder of mediaFiles goes through _onOrderChanged (spec § 4 control)', () => {
     // Methods that put a new ORDER of mediaFiles on screen. Each must call the hook.
     const ORDER_CHANGERS = [

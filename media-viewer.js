@@ -6479,7 +6479,11 @@ class MediaViewer {
             if (!wasAlreadySorted && this.originalMediaFiles.length > 0) {
                 this.mediaFiles = [...this.originalMediaFiles];
                 this.originalMediaFiles = [];
-                this._onOrderChanged('other');
+                // Not an order change on screen (G2): this puts back the order the sort started from,
+                // without re-rendering, so like-or-skip tracking is left as it was. The generation still
+                // bumps: membership can differ from the snapshot (a file moved mid-sort comes back), so a
+                // later batch undo parks its files instead of trusting old positions.
+                this._orderGeneration++;
             }
         } finally {
             this.isComputingHashes = false;
