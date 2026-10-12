@@ -32,13 +32,17 @@ npm start
 
 | Key | Action |
 |-----|--------|
-| `Left Arrow` / `A` | Previous media |
-| `Right Arrow` / `D` | Next media |
-| `Enter` / `F` | Like current media |
-| `Space` / `J` | Dislike current media |
-| `Backspace` / `Z` | Undo last action |
+| `Q` | Like current media |
+| `W` | Dislike current media |
+| `S` | Next media |
+| `A` | Previous media |
+| `1` | Move current media to the special folder |
+| `F` | Dislike every file skipped on the AI order (after a confirmation) |
+| `Ctrl+A` | Undo last action |
 | `F1` | Open help/settings |
 | `ESC` | Reset zoom / Exit fullscreen |
+
+Single-mode defaults; every binding can be remapped in Settings (F1).
 
 ### View Modes
 

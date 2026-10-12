@@ -1,6 +1,6 @@
 // G2 like-or-skip glue (spec docs/superpowers/specs/2026-10-12-g2-like-or-skip-flow-design.md):
 // the MediaViewer methods that connect like-or-skip.js to the app, tested by extracting their source.
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as LikeOrSkip from '../like-or-skip.js';
 
@@ -306,5 +306,308 @@ describe('every reorder of mediaFiles goes through _onOrderChanged (spec § 4 co
     it('every listed method still assigns this.mediaFiles (no stale entries)', () => {
         const sites = assignmentSites();
         expect([...ORDER_CHANGERS, ...Object.keys(EXEMPT)].filter((m) => !sites.has(m))).toEqual([]);
+    });
+});
+
+describe('dislikeSkippedFiles — one guarded batch (spec § 6)', () => {
+    const dislikeSkippedFiles = extract('dislikeSkippedFiles');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function api({ exists = true, failNames = [] } = {}) {
+        return {
+            path: { basename: (p) => p.split('/').pop() },
+            checkFolderExists: vi.fn(async () => exists),
+            createFolder: vi.fn(async () => ({ success: true })),
+            moveFile: vi.fn(async ({ targetFolder, fileName }) =>
+                failNames.includes(fileName)
+                    ? { success: false, error: 'ENOENT: no such file' }
+                    : { success: true, targetPath: `${targetFolder}/${fileName}` }
+            ),
+        };
+    }
+
+    // a, b, c, d listed; d (index 3) on screen as an image; the test decides what was skipped.
+    function batchCtx(skipped, overrides = {}) {
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            isCompareMode: false,
+            isTournamentMode: false,
+            isPredictionSorting: false,
+            isComputingHashes: false,
+            likeOrSkip: activeTracker(...skipped.map((n) => `/f/${n}`)),
+            mediaFiles: media('a', 'b', 'c', 'd'),
+            currentIndex: 3,
+            currentMedia: { tagName: 'IMG' },
+            customDislikeFolder: '/disliked',
+            moveHistory: [],
+            _orderGeneration: 7,
+            predictionScores: new Map([['/f/a', 0.9]]),
+            featureCache: new Map(),
+            clipCache: new Map(),
+            jxlFrameCache: new Map(),
+            featureMetadata: new Map(),
+            perceptualHashes: new Map(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            _bulkPairKeysReferencing: () => [],
+            getCombinedFeatures: () => null,
+            removeFileFromList: extract('removeFileFromList'),
+            saveBulkRatedFile: vi.fn(async () => {}),
+            _refuseIfNeedsRegrant: () => false,
+            _refuseUngrantedFolder: vi.fn(),
+            showBulkDislikeConfirm: vi.fn(async () => true),
+            showFolderCreationDialog: vi.fn(async () => false),
+            forceVideoCleanup: vi.fn(async () => {}),
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            updateFolderInfo: vi.fn(),
+            updateNavigationInfo: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
+            _updateResortChip: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    it('moves every skipped file and records one history entry; the file on screen stays, unrendered', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = batchCtx(['a', 'b', 'c']);
+        await dislikeSkippedFiles.call(ctx);
+
+        expect(globalThis.window.electronAPI.moveFile.mock.calls.map(([arg]) => arg.sourcePath)).toEqual([
+            '/f/a',
+            '/f/b',
+            '/f/c',
+        ]);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['d']);
+        expect(ctx.currentIndex).toBe(0);
+        expect(ctx.moveHistory).toHaveLength(1);
+        const entry = ctx.moveHistory[0];
+        expect(entry).toMatchObject({
+            skipBatch: true,
+            actionType: 'dislike',
+            prevCurrentPath: '/f/d',
+            orderGeneration: 7,
+        });
+        expect(entry.files.map((s) => [s.fileName, s.originalIndex, s.newPath])).toEqual([
+            ['a', 0, '/disliked/a'],
+            ['b', 1, '/disliked/b'],
+            ['c', 2, '/disliked/c'],
+        ]);
+        expect(entry.files[0].score).toBe(0.9);
+        expect(ctx.likeOrSkip.skippedIn(ctx.mediaFiles)).toEqual([]);
+        expect(ctx.showMedia).not.toHaveBeenCalled();
+        expect(ctx.updateNavigationInfo).toHaveBeenCalled();
+        expect(ctx.updateDislikeSkippedButton).toHaveBeenCalled();
+        expect(ctx.showNotification).toHaveBeenCalledWith('👎 Moved 3 files to disliked', 'dislike');
+        expect(ctx.showBulkDislikeConfirm).toHaveBeenCalledWith({
+            count: 3,
+            folderName: 'disliked',
+            includesOnScreen: false,
+        });
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    it('holds the guard across the dialog: a second call meanwhile shows no second dialog', async () => {
+        globalThis.window = { electronAPI: api() };
+        let answer;
+        const ctx = batchCtx(['a'], { showBulkDislikeConfirm: vi.fn(() => new Promise((r) => (answer = r))) });
+        const first = dislikeSkippedFiles.call(ctx);
+        expect(ctx._fileOpInFlight).toBe(true);
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.showBulkDislikeConfirm).toHaveBeenCalledOnce();
+        answer(false);
+        await first;
+        expect(ctx._fileOpInFlight).toBe(false);
+        expect(globalThis.window.electronAPI.moveFile).not.toHaveBeenCalled();
+        expect(ctx.showMedia).not.toHaveBeenCalled(); // a declined dialog renders nothing
+    });
+
+    it('refuses before taking the guard', async () => {
+        const cases = [
+            [{ _fileOpInFlight: true }, null],
+            [{ isLoading: true }, null],
+            [{ isCompareMode: true }, null],
+            [{ isTournamentMode: true }, null],
+            [{ likeOrSkip: new LikeOrSkip.SkipTracker() }, null],
+            [{ isPredictionSorting: true }, ['Wait for the sort to finish', 'info']],
+            [{ isComputingHashes: true }, ['Wait for the sort to finish', 'info']],
+            [{ customDislikeFolder: '' }, ['Configure like/dislike folders in Settings (F1)', 'error']],
+            [{ _refuseIfNeedsRegrant: () => true }, null],
+        ];
+        for (const [overrides, notice] of cases) {
+            globalThis.window = { electronAPI: api() };
+            const ctx = batchCtx(['a'], overrides);
+            await dislikeSkippedFiles.call(ctx);
+            const label = JSON.stringify(Object.keys(overrides));
+            expect(ctx.showBulkDislikeConfirm, label).not.toHaveBeenCalled();
+            expect(ctx._fileOpInFlight, label).toBe(overrides._fileOpInFlight === true);
+            if (notice) {
+                expect(ctx.showNotification, label).toHaveBeenCalledWith(...notice);
+            }
+        }
+    });
+
+    it('says so when nothing was skipped', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = batchCtx([]);
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.showNotification).toHaveBeenCalledWith('Nothing skipped yet', 'info');
+        expect(ctx.showBulkDislikeConfirm).not.toHaveBeenCalled();
+    });
+
+    // Review Focus 1
+    it('a failed rename does not stop the loop; the failed file stays listed and skipped', async () => {
+        globalThis.window = { electronAPI: api({ failNames: ['b'] }) };
+        const ctx = batchCtx(['a', 'b', 'c']);
+        await dislikeSkippedFiles.call(ctx);
+        expect(globalThis.window.electronAPI.moveFile).toHaveBeenCalledTimes(3);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['b', 'd']);
+        expect(ctx.moveHistory[0].files.map((s) => s.fileName)).toEqual(['a', 'c']);
+        expect(ctx.likeOrSkip.skippedIn(ctx.mediaFiles).map((f) => f.name)).toEqual(['b']);
+        expect(ctx.showError).toHaveBeenCalledWith('Moved 2 of 3 — 1 failed: ENOENT: no such file');
+        expect(ctx.mediaFiles[ctx.currentIndex].name).toBe('d');
+    });
+
+    it('the file on screen in the batch: the cursor goes to the next survivor and the view renders', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = batchCtx(['a', 'b'], { currentIndex: 1 });
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.showBulkDislikeConfirm).toHaveBeenCalledWith({
+            count: 2,
+            folderName: 'disliked',
+            includesOnScreen: true,
+        });
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['c', 'd']);
+        expect(ctx.currentIndex).toBe(0);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        expect(ctx.forceVideoCleanup).not.toHaveBeenCalled(); // an image is not torn down
+    });
+
+    it('a video on screen in the batch is released first; if every rename fails it is still re-rendered', async () => {
+        globalThis.window = { electronAPI: api({ failNames: ['a', 'b'] }) };
+        const ctx = batchCtx(['a', 'b'], { currentIndex: 1, currentMedia: { tagName: 'VIDEO' } });
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.forceVideoCleanup).toHaveBeenCalledOnce();
+        expect(ctx.moveHistory).toEqual([]);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        expect(ctx.mediaFiles).toHaveLength(4);
+    }, 3000);
+
+    it('a batch reaching the end of the list wraps the cursor to the first survivor', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = batchCtx(['c', 'd']);
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a', 'b']);
+        expect(ctx.currentIndex).toBe(0);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+    });
+
+    it('emptying the list renders (the empty state)', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = batchCtx(['a', 'b', 'c', 'd']);
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.mediaFiles).toEqual([]);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+    });
+
+    it('bulk-rated files are dropped with ONE save and captured for undo', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = batchCtx(['a', 'b'], {
+            bulkRated: new Map([
+                ['a', 'good'],
+                ['b', 'bad'],
+            ]),
+        });
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+        expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.moveHistory[0].files.map((s) => s.bulkBucket)).toEqual(['good', 'bad']);
+    });
+
+    // Review Focus 4
+    it('declining the create prompt moves nothing and keeps the skips', async () => {
+        globalThis.window = { electronAPI: api({ exists: false }) };
+        const ctx = batchCtx(['a', 'b']);
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.showFolderCreationDialog).toHaveBeenCalledWith('/disliked');
+        expect(globalThis.window.electronAPI.moveFile).not.toHaveBeenCalled();
+        expect(ctx._fileOpInFlight).toBe(false);
+        expect(ctx.likeOrSkip.skippedIn(ctx.mediaFiles)).toHaveLength(2);
+    });
+
+    it('a folder main refuses (null) goes to _refuseUngrantedFolder, not the create prompt', async () => {
+        globalThis.window = { electronAPI: api({ exists: null }) };
+        const ctx = batchCtx(['a']);
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx._refuseUngrantedFolder).toHaveBeenCalledWith('dislike');
+        expect(ctx.showFolderCreationDialog).not.toHaveBeenCalled();
+        expect(globalThis.window.electronAPI.moveFile).not.toHaveBeenCalled();
+    });
+
+    it('a large batch says it is moving first', async () => {
+        globalThis.window = { electronAPI: api() };
+        const many = Array.from({ length: 51 }, (_, i) => `f${i}`);
+        const ctx = batchCtx(many, { mediaFiles: media(...many, 'd'), currentIndex: 51 });
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.showNotification).toHaveBeenCalledWith('Moving 51 files…', 'info');
+    });
+});
+
+describe('updateDislikeSkippedButton (spec § 9)', () => {
+    const updateDislikeSkippedButton = extract('updateDislikeSkippedButton');
+
+    function buttonCtx(overrides = {}) {
+        const label = { textContent: '' };
+        return {
+            dislikeSkippedBtn: { style: { display: 'none' }, title: '', querySelector: () => label },
+            _label: label,
+            isCompareMode: false,
+            isTournamentMode: false,
+            mediaFiles: media('a', 'b', 'c'),
+            likeOrSkip: activeTracker('/f/a', '/f/b'),
+            shortcuts: { single: { dislikeSkipped: 'KeyF' } },
+            keyDisplayName: (k) => k.replace('Key', ''),
+            _shortcutSuffix: extract('_shortcutSuffix'),
+            ...overrides,
+        };
+    }
+
+    it('shows the count and the live binding', () => {
+        const ctx = buttonCtx();
+        updateDislikeSkippedButton.call(ctx);
+        expect(ctx.dislikeSkippedBtn.style.display).toBe('');
+        expect(ctx._label.textContent).toBe('Dislike 2 skipped');
+        expect(ctx.dislikeSkippedBtn.title).toBe('Dislike all skipped files (F)');
+    });
+
+    it('hides at zero', () => {
+        const ctx = buttonCtx({ likeOrSkip: activeTracker() });
+        updateDislikeSkippedButton.call(ctx);
+        expect(ctx.dislikeSkippedBtn.style.display).toBe('none');
+    });
+
+    // Review Focus 5
+    it('hides in compare mode and shows the same count back in single mode', () => {
+        const ctx = buttonCtx({ isCompareMode: true });
+        updateDislikeSkippedButton.call(ctx);
+        expect(ctx.dislikeSkippedBtn.style.display).toBe('none');
+        ctx.isCompareMode = false;
+        updateDislikeSkippedButton.call(ctx);
+        expect(ctx._label.textContent).toBe('Dislike 2 skipped');
+    });
+
+    it('drops the suffix when the action is unbound', () => {
+        const ctx = buttonCtx({ shortcuts: { single: { dislikeSkipped: null } } });
+        updateDislikeSkippedButton.call(ctx);
+        expect(ctx.dislikeSkippedBtn.title).toBe('Dislike all skipped files');
     });
 });

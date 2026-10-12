@@ -1524,7 +1524,8 @@ body {
 }
 
 /* Folder creation modal */
-.folder-creation-modal {
+.folder-creation-modal,
+.bulk-dislike-modal {
     position: fixed;
     top: 0;
     left: 0;
@@ -1614,6 +1615,17 @@ body {
 .folder-creation-btn-cancel:hover {
     background: var(--bg-elevated);
     border-color: var(--border-strong);
+}
+
+/* Like-or-skip bulk dislike (G2): the folder-creation shell above, with a danger confirm. */
+.bulk-dislike-btn-confirm {
+    background: var(--color-danger);
+    color: var(--text-inverse);
+}
+
+.bulk-dislike-btn-confirm:hover,
+.bulk-dislike-btn-confirm:focus-visible {
+    box-shadow: var(--shadow-glow-danger);
 }
 
 /* Compare mode controls */

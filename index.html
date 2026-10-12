@@ -214,6 +214,17 @@
                     <span class="btn-icon"><i data-lucide="thumbs-down"></i></span>
                     <span class="btn-label">Dislike</span>
                 </button>
+                <!-- Like-or-skip (G2): hidden until the AI order has skips; updateDislikeSkippedButton()
+                     owns its label, title and visibility. -->
+                <button
+                    class="control-btn dislike-btn"
+                    id="dislikeSkippedBtn"
+                    title="Dislike all skipped files"
+                    style="display: none"
+                >
+                    <span class="btn-icon"><i data-lucide="list-x"></i></span>
+                    <span class="btn-label">Dislike skipped</span>
+                </button>
             </div>
 
             <!-- Controls for compare view -->

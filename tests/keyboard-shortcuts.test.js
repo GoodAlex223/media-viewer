@@ -57,7 +57,7 @@ describe('DEFAULT_SHORTCUTS', () => {
         expect(shortcuts).toHaveProperty('compare');
     });
 
-    it('single mode has like, dislike, next, previous, undo, special', () => {
+    it('single mode has like, dislike, next, previous, undo, special, dislikeSkipped', () => {
         const shortcuts = extractDefaultShortcuts();
         expect(shortcuts.single).toEqual({
             like: 'KeyQ',
@@ -66,6 +66,7 @@ describe('DEFAULT_SHORTCUTS', () => {
             previous: 'KeyA',
             undo: 'Ctrl+KeyA',
             special: 'Digit1',
+            dislikeSkipped: 'KeyF',
         });
     });
 
@@ -329,6 +330,29 @@ describe('loadShortcuts — a stored remap outranks a later additive default', (
         expect(ctx._shortcutCollisions).toEqual([{ mode: 'single', action: 'special', key: 'Digit1', heldBy: 'next' }]);
     });
 
+    // G2 adds single.dislikeSkipped = 'KeyF'; a user who already put KeyF on a single-mode action keeps
+    // it, and the new action yields — no batch started by their key.
+    it('leaves single-mode dislikeSkipped unbound when a stored single remap holds KeyF', () => {
+        globalThis.localStorage = {
+            getItem: () =>
+                JSON.stringify({
+                    version: 2,
+                    single: { like: 'KeyQ', dislike: 'KeyW', next: 'KeyF', previous: 'KeyA', undo: 'Ctrl+KeyA' },
+                }),
+            setItem: () => {},
+        };
+        const ctx = loadCtx();
+        const shortcuts = loadShortcuts.call(ctx);
+        expect(shortcuts.single.dislikeSkipped).toBeNull();
+        expect(buildReverseMap.call({ shortcuts }).single['KeyF']).toBe('next');
+        expect(ctx._shortcutCollisions).toContainEqual({
+            mode: 'single',
+            action: 'dislikeSkipped',
+            key: 'KeyF',
+            heldBy: 'next',
+        });
+    });
+
     it('records the collision so it can be surfaced to the user', () => {
         seedPreG3Compare({ next: 'Digit1' });
         const ctx = loadCtx();
@@ -468,7 +492,16 @@ describe('_isSuppressedRepeat (held-key filter, G1)', () => {
     });
 
     it('suppresses the auto-repeat of every other bound action, undo included', () => {
-        const actions = ['like', 'dislike', 'special', 'undo', 'leftLike', 'rightDislike', 'leftSpecial'];
+        const actions = [
+            'like',
+            'dislike',
+            'special',
+            'undo',
+            'leftLike',
+            'rightDislike',
+            'leftSpecial',
+            'dislikeSkipped',
+        ];
         for (const action of [...actions, 'bothGood', 'bothBad', 'bothWin', 'bothLose']) {
             expect(_isSuppressedRepeat.call({}, { repeat: true }, action), action).toBe(true);
         }
@@ -503,6 +536,7 @@ describe('buildReverseMap', () => {
         expect(result.single['KeyS']).toBe('next');
         expect(result.single['KeyA']).toBe('previous');
         expect(result.single['Ctrl+KeyA']).toBe('undo');
+        expect(result.single['KeyF']).toBe('dislikeSkipped');
     });
 
     it('builds correct reverse map for compare mode', () => {
@@ -673,6 +707,29 @@ describe('executeAction', () => {
                 executeAction.call(ctx, 'special');
                 expect(ctx.moveToSpecialFolder, mode).not.toHaveBeenCalled();
                 expect(ctx.handleTournamentSpecial, mode).not.toHaveBeenCalled();
+            }
+        });
+    });
+
+    describe('dislikeSkipped (G2)', () => {
+        const modeCtx = (mode) => ({
+            isCompareMode: mode === 'compare',
+            isTournamentMode: mode === 'tournament',
+            dislikeSkippedFiles: vi.fn(),
+        });
+
+        it('single mode starts the bulk dislike', () => {
+            const ctx = modeCtx('single');
+            executeAction.call(ctx, 'dislikeSkipped');
+            expect(ctx.dislikeSkippedFiles).toHaveBeenCalledOnce();
+        });
+
+        // Review Focus 5: the reverse map never produces it there; this is the second line of defence.
+        it('compare and tournament ignore it', () => {
+            for (const mode of ['compare', 'tournament']) {
+                const ctx = modeCtx(mode);
+                executeAction.call(ctx, 'dislikeSkipped');
+                expect(ctx.dislikeSkippedFiles, mode).not.toHaveBeenCalled();
             }
         });
     });
@@ -876,11 +933,13 @@ describe('saveShortcut', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
             updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
         saveShortcut.call(ctx, 'single', 'like', 'KeyT');
         expect(ctx.shortcuts.single.like).toBe('KeyT');
+        expect(ctx.updateDislikeSkippedButton).toHaveBeenCalled();
         const saved = JSON.parse(stored.customShortcuts);
         expect(saved.single.like).toBe('KeyT');
         expect(saved.version).toBe(2); // version persisted so migration does not re-run
@@ -908,6 +967,7 @@ describe('saveShortcut', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
             updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
@@ -929,6 +989,7 @@ describe('saveShortcut', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
             updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
@@ -975,6 +1036,7 @@ describe('saveShortcut does not persist an unbound collision', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
             updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
@@ -1007,6 +1069,7 @@ describe('saveShortcut does not persist an unbound collision', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
             updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
         };
@@ -1060,6 +1123,7 @@ describe('resetShortcuts', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
             updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
             stopListeningMode() {},
@@ -1080,6 +1144,7 @@ describe('resetShortcuts', () => {
                 return { single: {}, compare: {} };
             },
             updateSpecialButtonsState: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
             updateRatingButtonsState: vi.fn(),
             _persistableBindings: extractMethod('_persistableBindings'),
             stopListeningMode() {},

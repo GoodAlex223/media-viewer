@@ -13,6 +13,9 @@ const DEFAULT_SHORTCUTS = {
         // Additive (G1), matching compare/tournament's leftSpecial: no loadShortcuts version bump —
         // _mergeModeShortcuts leaves it unbound if a stored single-mode remap already holds Digit1.
         special: 'Digit1',
+        // Additive (G2 like-or-skip), mirroring compare's F = Both bad: no loadShortcuts version bump —
+        // _mergeModeShortcuts leaves it unbound if a stored single-mode remap already holds KeyF.
+        dislikeSkipped: 'KeyF',
     },
     compare: {
         leftLike: 'KeyQ',
@@ -52,6 +55,7 @@ const ACTION_LABELS = {
     previous: 'Previous media',
     undo: 'Undo last move',
     special: 'Move to special folder',
+    dislikeSkipped: 'Dislike all skipped',
     leftLike: 'Left media Like',
     leftDislike: 'Left media Dislike',
     rightLike: 'Right media Like',
@@ -106,9 +110,9 @@ class MediaViewer {
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
         this.isBeingCleaned = false; // Flag to prevent error notifications during cleanup
         // Held by every file-acting method (moveCurrentFile, moveToSpecialFolder, handleCancel — and
-        // moveComparePair, applyBulkRating) from before its first await until its finally. Any other
-        // file action that arrives meanwhile is refused (G1). Not isLoading: render handlers clear
-        // that at first paint, and showMedia() itself returns early on it.
+        // moveComparePair, applyBulkRating, dislikeSkippedFiles) from before its first await until its
+        // finally. Any other file action that arrives meanwhile is refused (G1). Not isLoading: render
+        // handlers clear that at first paint, and showMedia() itself returns early on it.
         this._fileOpInFlight = false;
         // Like-or-skip (G2): the files passed with Next while the AI order is on screen, and that token
         // itself (likeOrSkip.active). Changed only by _onOrderChanged, nextMedia and removeFileFromList
@@ -383,6 +387,7 @@ class MediaViewer {
         this.controls = document.getElementById('controls');
         this.likeBtn = document.getElementById('likeBtn');
         this.dislikeBtn = document.getElementById('dislikeBtn');
+        this.dislikeSkippedBtn = document.getElementById('dislikeSkippedBtn');
         this.cancelBtn = document.getElementById('cancelBtn');
         this.navInfo = document.getElementById('navInfo');
         this.mediaIndex = document.getElementById('mediaIndex');
@@ -1441,6 +1446,7 @@ class MediaViewer {
                 this.showNotification(`Skipped list cleared (${LikeOrSkip.formatCount(discarded, 'file')})`, 'info');
             }
         }
+        this.updateDislikeSkippedButton();
     }
 
     getMediaIndex(path) {
@@ -2112,6 +2118,9 @@ class MediaViewer {
 
         this.likeBtn.addEventListener('click', () => this.handleLike());
         this.dislikeBtn.addEventListener('click', () => this.handleDislike());
+        if (this.dislikeSkippedBtn) {
+            this.dislikeSkippedBtn.addEventListener('click', () => this.dislikeSkippedFiles());
+        }
         this.cancelBtn.addEventListener('click', () => this.handleCancel());
         if (this.specialBtn) {
             this.specialBtn.addEventListener('click', () => this.moveToSpecialFolder());
@@ -3255,6 +3264,7 @@ class MediaViewer {
     async showMedia() {
         this.updateCompareUndoButton();
         this.updateBulkRateButtonsVisibility();
+        this.updateDislikeSkippedButton();
         if (this.mediaFiles.length === 0) {
             if (this.moveHistory.length > 0) {
                 this.showEmptyStateWithUndo();
@@ -4394,6 +4404,250 @@ class MediaViewer {
         if (this.mediaFiles.length === 0 || this.isLoading) return;
         this.signalUserActivity();
         await this.moveCurrentFile('dislike');
+    }
+
+    // Sole owner of #dislikeSkippedBtn (G2 spec § 9): label, title and visibility follow the skipped set,
+    // the mode and the live binding. Called on every render (showMedia), after a batch or an undo that
+    // does not render, from _onOrderChanged, and from saveShortcut/resetShortcuts.
+    updateDislikeSkippedButton() {
+        if (!this.dislikeSkippedBtn) {
+            return;
+        }
+        const count =
+            this.isCompareMode || this.isTournamentMode ? 0 : this.likeOrSkip.skippedIn(this.mediaFiles).length;
+        this.dislikeSkippedBtn.style.display = count > 0 ? '' : 'none';
+        if (count === 0) {
+            return;
+        }
+        this.dislikeSkippedBtn.querySelector('.btn-label').textContent = `Dislike ${count} skipped`;
+        this.dislikeSkippedBtn.title = 'Dislike all skipped files' + this._shortcutSuffix('single', 'dislikeSkipped');
+    }
+
+    // The like-or-skip confirmation (G2 spec § 9). Static markup; the count and the folder go in as text
+    // (G1 lint guard). While open it owns the keyboard: capture-phase listeners on document run before
+    // the app's own keydown handler, so Enter/Escape decide, Tab moves between the two buttons, and no
+    // other key reaches a shortcut. Both listeners come off on every close path.
+    showBulkDislikeConfirm({ count, folderName, includesOnScreen }) {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'bulk-dislike-modal';
+            modal.innerHTML = `
+                <div class="folder-creation-content">
+                    <div class="folder-creation-title">
+                        <i data-lucide="thumbs-down"></i>
+                        <span class="bulk-dislike-title"></span>
+                    </div>
+                    <p class="folder-creation-text bulk-dislike-text"></p>
+                    <p class="folder-creation-text bulk-dislike-onscreen"></p>
+                    <div class="folder-creation-actions">
+                        <button type="button" class="folder-creation-btn bulk-dislike-btn-confirm"></button>
+                        <button type="button" class="folder-creation-btn folder-creation-btn-cancel bulk-dislike-btn-cancel">Cancel</button>
+                    </div>
+                </div>
+            `;
+            modal.querySelector('.bulk-dislike-title').textContent =
+                `Dislike ${count} skipped ${count === 1 ? 'file' : 'files'}?`;
+            modal.querySelector('.bulk-dislike-text').textContent =
+                `They'll move to ${folderName}. One Undo${this._shortcutSuffix('single', 'undo')} brings them all back.`;
+            modal.querySelector('.bulk-dislike-onscreen').textContent = includesOnScreen
+                ? 'Includes the file on screen.'
+                : '';
+            const confirmBtn = modal.querySelector('.bulk-dislike-btn-confirm');
+            const cancelBtn = modal.querySelector('.bulk-dislike-btn-cancel');
+            confirmBtn.textContent = `Move ${LikeOrSkip.formatCount(count, 'file')}`;
+
+            const close = (result) => {
+                document.removeEventListener('keydown', onKeydown, true);
+                document.removeEventListener('keyup', swallow, true);
+                modal.remove();
+                resolve(result);
+            };
+            const swallow = (e) => {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            };
+            const onKeydown = (e) => {
+                swallow(e);
+                if (e.key === 'Tab') {
+                    (document.activeElement === confirmBtn ? cancelBtn : confirmBtn).focus();
+                } else if (e.repeat) {
+                    // a held key (the F that opened this, or Enter) decides nothing
+                } else if (e.key === 'Enter') {
+                    close(document.activeElement !== cancelBtn);
+                } else if (e.key === 'Escape') {
+                    close(false);
+                }
+            };
+            document.addEventListener('keydown', onKeydown, true);
+            document.addEventListener('keyup', swallow, true);
+            confirmBtn.addEventListener('click', () => close(true));
+            cancelBtn.addEventListener('click', () => close(false));
+
+            document.body.appendChild(modal);
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons({ root: modal });
+            }
+            confirmBtn.focus();
+        });
+    }
+
+    // Like-or-skip (G2 spec § 6): dislike every file passed with Next on the AI order, as ONE file action.
+    // Holds _fileOpInFlight across the dialog and every rename, and never calls moveCurrentFile — a
+    // guarded method calling another is silently refused. One history entry; one Ctrl+A undoes it.
+    async dislikeSkippedFiles() {
+        if (this._fileOpInFlight || this.isLoading) {
+            return;
+        }
+        if (this.isCompareMode || this.isTournamentMode || !this.likeOrSkip.active) {
+            return;
+        }
+        // A sort still running would reorder mediaFiles under the batch, dialog open or not.
+        if (this.isPredictionSorting || this.isComputingHashes) {
+            this.showNotification('Wait for the sort to finish', 'info');
+            return;
+        }
+        if (this.likeOrSkip.skippedIn(this.mediaFiles).length === 0) {
+            this.showNotification('Nothing skipped yet', 'info');
+            return;
+        }
+        if (!this.customDislikeFolder) {
+            this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
+            return;
+        }
+        // Before the first await, as in moveCurrentFile: nothing is torn down for a move main would refuse.
+        if (this._refuseIfNeedsRegrant(['dislike'], 'move')) {
+            return;
+        }
+
+        this._fileOpInFlight = true;
+        try {
+            this.signalUserActivity();
+            const batch = this.likeOrSkip.skippedIn(this.mediaFiles);
+            const filesBefore = [...this.mediaFiles];
+            const onScreen = this.mediaFiles[this.currentIndex] ?? null;
+            const includesOnScreen = onScreen !== null && batch.includes(onScreen);
+            const targetFolderPath = this.customDislikeFolder;
+            const folderName = window.electronAPI.path.basename(targetFolderPath);
+
+            const confirmed = await this.showBulkDislikeConfirm({ count: batch.length, folderName, includesOnScreen });
+            if (!confirmed) {
+                return;
+            }
+
+            // Checked (and created if the user agrees) before anything is torn down, as in moveCurrentFile.
+            try {
+                const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
+                if (folderExists === null) {
+                    this._refuseUngrantedFolder('dislike'); // refused by main, not missing
+                    return;
+                }
+                if (!folderExists) {
+                    if (!(await this.showFolderCreationDialog(targetFolderPath))) {
+                        return;
+                    }
+                    const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error preparing the dislike folder:', error);
+                this.showError(`Failed to move files: ${error.message}`);
+                return;
+            }
+
+            // Captured before any file leaves: undo rebuilds every per-file cache from these (spec § 6 step 4).
+            const captured = batch.map((file) => {
+                const combined = this.getCombinedFeatures(file.path);
+                const raw = this.featureCache.get(file.path);
+                const prunedPairKeys = this._bulkPairKeysReferencing(file.name);
+                return {
+                    file: { ...file },
+                    originalIndex: filesBefore.indexOf(file),
+                    fileName: file.name,
+                    originalPath: file.path,
+                    fileSize: file.size,
+                    mlFeatures: combined ? Array.from(combined) : raw ? Array.from(raw) : null,
+                    score: this.predictionScores.get(file.path),
+                    bulkBucket: this.bulkRated.get(file.name),
+                    ...(prunedPairKeys.length > 0 ? { prunedPairKeys } : {}),
+                };
+            });
+
+            let tornDown = false;
+            if (includesOnScreen && this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                await this.forceVideoCleanup();
+                // Additional wait for file handles to be fully released (as moveCurrentFile)
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                tornDown = true;
+            }
+
+            if (captured.length > 50) {
+                this.showNotification(`Moving ${LikeOrSkip.formatCount(captured.length, 'file')}…`, 'info');
+            }
+
+            // One at a time: main's no-overwrite suffix probe (lstat, then rename) is not atomic.
+            const moved = [];
+            const failures = [];
+            for (const sub of captured) {
+                try {
+                    const result = await window.electronAPI.moveFile({
+                        sourcePath: sub.originalPath,
+                        targetFolder: targetFolderPath,
+                        fileName: sub.fileName,
+                    });
+                    if (!result.success) {
+                        throw new Error(result.error);
+                    }
+                    moved.push({ ...sub, newPath: result.targetPath });
+                } catch (error) {
+                    failures.push(error.message);
+                }
+            }
+
+            const movedPaths = new Set(moved.map((m) => m.originalPath));
+            const target = LikeOrSkip.planCursorAfterBatch(filesBefore, movedPaths, this.currentIndex);
+            for (const m of moved) {
+                this.removeFileFromList(m.originalPath, { deferBulkSave: true });
+            }
+            if (moved.some((m) => m.bulkBucket)) {
+                await this.saveBulkRatedFile();
+            }
+            // Mapped by path onto the list as it is now (removeFileFromList only clamps the index).
+            const targetIndex = target ? this.mediaFiles.findIndex((f) => f.path === target) : -1;
+            this.currentIndex = targetIndex === -1 ? 0 : targetIndex;
+
+            if (moved.length > 0) {
+                this.moveHistory.push({
+                    skipBatch: true,
+                    actionType: 'dislike',
+                    files: moved,
+                    prevCurrentPath: onScreen?.path ?? null,
+                    orderGeneration: this._orderGeneration,
+                });
+            }
+            if (failures.length === 0) {
+                this.showNotification(
+                    `👎 Moved ${LikeOrSkip.formatCount(moved.length, 'file')} to ${folderName}`,
+                    'dislike'
+                );
+            } else {
+                this.showError(
+                    `Moved ${moved.length} of ${captured.length} — ${failures.length} failed: ${failures[0]}`
+                );
+            }
+
+            this.updateFolderInfo();
+            if (tornDown || (onScreen !== null && movedPaths.has(onScreen.path))) {
+                // showMedia() sets isLoading synchronously, before finally releases _fileOpInFlight.
+                this.showMedia();
+            } else {
+                this.updateNavigationInfo();
+                this.updateDislikeSkippedButton();
+            }
+        } finally {
+            this._fileOpInFlight = false;
+        }
     }
 
     async undoBulkRating(lastMove) {
@@ -10095,6 +10349,13 @@ class MediaViewer {
             special: () => {
                 if (!this.isCompareMode && !this.isTournamentMode) this.moveToSpecialFolder();
             },
+            // Single mode only, like `special`: the reverse map produces it nowhere else, and the mode
+            // check is the second line of defence. Same guarded path as #dislikeSkippedBtn's click.
+            dislikeSkipped: () => {
+                if (!this.isCompareMode && !this.isTournamentMode) {
+                    this.dislikeSkippedFiles();
+                }
+            },
             // Bound in compare and tournament only. Tournament needs the engine-sync wrapper;
             // compare goes straight to the move, the same path #leftSpecialBtn's click takes.
             // Single mode binds `special` instead, so the reverse map never produces these there —
@@ -10132,6 +10393,7 @@ class MediaViewer {
         // advertising the old key while the F1 row already shows the new one.
         this.updateSpecialButtonsState();
         this.updateRatingButtonsState();
+        this.updateDislikeSkippedButton();
 
         // Persist the current shortcuts — loadShortcuts merges on load so full save is safe.
         // version must be written so the v1->v2 migration in loadShortcuts does not re-run and
@@ -10271,6 +10533,7 @@ class MediaViewer {
         localStorage.removeItem('customShortcuts');
         this.updateSpecialButtonsState();
         this.updateRatingButtonsState();
+        this.updateDislikeSkippedButton();
         this.renderShortcutRows?.();
         this.attachShortcutKeyListeners?.();
     }
