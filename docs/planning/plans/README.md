@@ -78,7 +78,12 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| [2026-10-12_g2-like-or-skip-flow.md](2026-10-12_g2-like-or-skip-flow.md) | G2 (Oct 12–16) 🏆 | In Progress |
+| _(none)_ | | |
+
+<!-- 2026-10-12 (Group G2 closeout): 2026-10-12_g2-like-or-skip-flow.md left this table on
+     archive. Merged `96467f7` via PR #79, moved to docs/archive/plans/ with `git mv`, and indexed in
+     docs/README.md as "G2 Like-or-Skip Flow Plan" in the same commit. Its spec row under Design Specs
+     now records the implementation and the post-implementation note. -->
 
 <!-- 2026-10-11 (Group G1 closeout): 2026-10-10_g1-security-findings-fix.md left this table on
      archive — merged `e5cd3a8` via PR #78, moved to docs/archive/plans/ with `git mv` and indexed in

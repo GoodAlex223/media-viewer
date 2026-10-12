@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-11 <!-- Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
+**Last Updated**: 2026-10-12 <!-- Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
 <!-- Previous: Group G5: Weekly Reviews (2026-10-09 run, ⚪ Overhead) — 5/5, MERGED 2026-10-09 via PR #77 (merge 0e298b4) after one review round and two close-outs. -->
 <!-- Previous: Group G4: Cleanup Week trial batch (🟤, Cleanup Week #4) — 2/2, MERGED 2026-10-08 via PR #76 (merge 44c282b) after one review round and a close-out. -->
 <!-- Previous: Group G3: Tournament render re-entry (🟤, Cleanup Week #4) — 1/1, MERGED 2026-10-07 via PR #75 (merge 482a3c8) after a pre-PR final review + fix pass, one review round and a close-out (no issues). -->
@@ -22,6 +22,68 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-12 — Group G2: Like-or-skip flow 🔵 🏆 (Oct 12–16) — **2/2, MERGED `96467f7`** (PR #79)
+
+**Spec**: [2026-10-12-g2-like-or-skip-flow-design.md](../superpowers/specs/2026-10-12-g2-like-or-skip-flow-design.md). Approved 2026-10-12 and amended at planning; it carries a post-implementation note.
+**Plan**: [2026-10-12_g2-like-or-skip-flow.md](../archive/plans/2026-10-12_g2-like-or-skip-flow.md). Its Progress Log holds the RED→GREEN evidence for every task and fix round.
+**Branch**: `g2-like-or-skip-flow`, cut from `main` at `15cec8c`; deleted remote and local after the merge.
+
+✅ **Status: MERGED 2026-10-12 via PR #79** (merge `96467f7`, 16 commits). Merged a day ahead of the schedule, with the stale-order hint included (it was the first item to drop on overrun, and nothing dropped).
+
+**How it was built and reviewed:**
+- Subagent-driven: a fresh implementer for each task, a fresh task reviewer for each, a scoped re-review for each fix round, and the controller committing.
+- Task fix rounds:
+  - T2: a cancelled similarity sort kept the skips.
+  - T3: the keyboard-ownership E2E could not fail.
+  - T5: the hidden-chip test could not fail.
+  - T7: the "after" screenshot showed `.controls` capped at 50vw, which wrapped the new button's label.
+- `regression-checker`: header actions ignored `_fileOpInFlight` during a long batch.
+- The in-chat `/code-review max` found 15 confirmed findings. One was a regression from the controller's own fix: Change folder wiped state before `loadFolder` refused. Twelve plus that one were fixed in one wave, and the re-review came back clean.
+- The review ran in the implementation chat, which the user accepted. The usual flow reviews in a separate chat, so ask first next time.
+- PR close-out: no issues, with an expanded per-finding ruling table.
+
+**Summary**:
+- **Skips are remembered.** On the AI order in single mode, every file passed with Next is a skip, tracked only while that order is on screen.
+- **One action dislikes them all.** `F` or "Dislike N skipped", plus one confirmation, moves every skip to the dislike folder as **one** guarded file action, and **one** Ctrl+A undoes it.
+- **The re-sort chip.** "↻ Re-sort · N new" shows when ratings have changed the training set since the sort. It re-sorts in place, keeping the skips parked behind the cursor and landing on the new best unjudged file.
+- **Every new behavioural test failed first** against the unfixed code, or was mutation-checked where it pins existing code.
+
+**Key changes**:
+- **New `like-or-skip.js`** (pure): `SkipTracker`, `planCursorAfterBatch` (which returns a path), `planUndoReinsertion` (shifted past files that failed to come back), `trainingWeight`, `computeStaleCount` (the weighted symmetric difference by identity), `parkSkippedOrder` and `formatCount`.
+- **`media-viewer.js`:**
+  - `_onOrderChanged(kind)` is the one announcement of a new order, guarded by a source-scan control test.
+  - `dislikeSkippedFiles` holds the guard across the dialog and every rename, saves the bulk-rated file once, maps the cursor by path, and writes one `skipBatch` entry.
+  - `showBulkDislikeConfirm` owns the keyboard while it is open.
+  - `_undoSkipBatch` follows renamed restores, and pushes back the same entry when nothing came back.
+  - The out-of-date mark and `_updateResortChip`.
+  - `handleSortByPrediction({ resort })` and `applyPredictionSortResult(result, { resort })`.
+  - Header actions, the tournament summary and the load-error Remove refuse while a file action runs, through `_refuseIfFileOpInFlight`. A batch undo and Tournament entry refuse while a sort runs.
+  - The prediction sort waits for an in-flight render before it applies.
+  - Mouse-clicked buttons blur.
+  - No all-zero CLIP half is restored into `clipCache`.
+  - The compare-pair undo pops two entries only when both are compare entries.
+- **`index.html` / `styles.css`:** `#dislikeSkippedBtn`, `#resortPredictionBtn` and `.bulk-dislike-modal`. `.controls` now sizes to its buttons.
+- **`README.md`:** the single-mode shortcut table was stale (it said `F` = Like), and now matches the defaults. **`CLAUDE.md`:** the guard, like-or-skip, keyboard and UI sections.
+- **Tests:**
+  - Unit 1219 → **1357**.
+  - E2E 136 → **143** (138 passed, 5 opt-in skipped).
+  - New files: `like-or-skip.test.js` and `like-or-skip-glue.test.js` (unit); `like-or-skip.test.js` (E2E, 6 tests).
+  - Before/after screenshots are committed under `docs/superpowers/specs/assets/`.
+
+**Spawned**:
+- BACKLOG 🟤 `[2026-10-12] From: G2 closeout`: 19 items. They include the per-folder skipped set, a reusable confirmation dialog, and the similarity sort's stale-snapshot restore and render window. They also include the special-move weight, the bulk-rated write atomicity, the click-blur listener's phase, and DOM-count E2E absence checks.
+- The [2026-10-11] check-secrets timeout entry is annotated, because it recurred.
+- BACKLOG check-offs: 🔵 [2026-10-04] bulk dislike of skipped files, and the out-of-date AI order with its re-sort.
+- No TODO items. The 🟤 trial entry for *You should know* stays open for G6's read-out (REVIEW-QUEUE § 5 row added).
+
+**SP**: 8 planned → ~10 at planning → ~13 delivered, including the review fix waves. That is under the 2× line, and nothing dropped.
+
+**Learnings**:
+- A refusal guard inside a callee does not protect a caller that mutates before calling it. The R6 fix made a half-reset app worse than no guard.
+- Lengthening a guarded window (a batch of N renames) turns every unguarded entry point into a real race. Seven per-task reviews missed this; the cross-cutting regression pass found it.
+- The visual evidence caught a layout cap that no test saw, as it did on PR #70.
+- *You should know*: the user saw no notes during the whole session (evidence handed to G6).
 
 ### 2026-10-11 — Group G1: High security findings fix 🟤 (Oct 12–16) — **MERGED `e5cd3a8`** (PR #78)
 

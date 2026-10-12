@@ -6,6 +6,18 @@
 **Branch**: `g2-like-or-skip-flow` (from `main` @ `15cec8c`, after G1 merged `e5cd3a8`; one PR, per the week's branch/PR shape)
 **Trial vehicle**: _You should know_ (REVIEW-QUEUE § 5, 2026-10-09 row) — the user enables it in this group's session (`/plugin enable cc-plugin-you-should-know@builtin`); read-out at G6.
 
+> **Post-implementation note (2026-10-12, PR #79, merge `96467f7`).** Implemented as specified, with these departures, all made during review. The archived plan's Progress Log has the evidence; the sections below are frozen as approved.
+> 1. **§ 4 hook sites.** The similarity sort's catch-block restore bumps only `_orderGeneration` and does not call `_onOrderChanged`. It puts back the order the sort started from without re-rendering, so announcing it would discard the skips while the AI order stays on screen, contradicting D1. "Every reorder goes through the hook" means every *reassignment* of `mediaFiles` to a new order. In-place insertions and removals by moves and undos are not announced.
+> 2. **§ 6 / § 7 refusals.** Spec amendment 3 refused only the batch during a sort. Review added more refusals:
+>    - A `skipBatch` undo is also refused while a sort runs.
+>    - Tournament entry is refused while a sort runs.
+>    - While any file action holds `_fileOpInFlight`, the header actions refuse to start with "Wait for the move to finish" (`_refuseIfFileOpInFlight`). These are mode switch, both sorts outside the similarity Cancel, `loadFolder` and the Change-folder button before its reset, plus the tournament summary's Apply/Discard and load-error Remove. A long batch had made each of them a real race.
+>    - The prediction sort waits (capped at 2 s) for an in-flight render before applying its order.
+> 3. **§ 7 partial undo.** When *nothing* came back, the same entry object is pushed back rather than a smaller copy, because the § 8 count is by identity.
+> 4. **§ 8 weight table.** "Special move | 0" undercounts when the special-moved file was bulk-rated: the move deletes its label, and bulk-rated membership feeds the training fingerprint. This is deferred to BACKLOG 🟤 [2026-10-12] G2 closeout.
+> 5. **§ 9 UI.** `#dislikeSkippedBtn` carries `#dislikeBtn`'s G1 folder state: disabled without a dislike folder, with the re-confirm/unreachable title suffix. Mouse-clicked buttons blur, so "F then Enter" cannot re-activate a focused Restore Order. `.controls` sizes to its buttons, because its 50vw shrink-to-fit cap wrapped the sixth button's label.
+> 6. **§ 6 step 4 capture.** A batch undo never writes an all-zero CLIP half into `clipCache`. The restored bulk-rated membership would otherwise route the zeros into training.
+
 ---
 
 ## 1. Goal

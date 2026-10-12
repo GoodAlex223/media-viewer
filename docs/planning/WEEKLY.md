@@ -31,8 +31,8 @@
 > The user's own way out of the "Both good" fatigue (🔵 [2026-10-04], first entry): on the AI order in single mode, like a file or skip it, then dislike the skipped ones in bulk — and see when the order has gone stale. Branch **after G1 merges**. **Trial vehicle: _You should know_** — enable it in this group's session (`/plugin enable cc-plugin-you-should-know@builtin`), measure its side-agent token cost, and read it out per REVIEW-QUEUE § 5. **Visual evidence (plan-level acceptance check)**: committed before/after screenshots of the bulk-dislike confirmation and the stale-order hint — the practice kept when evidence-gating read out `drop` (2026-10-10). The BACKLOG line numbers are as filed on 2026-10-04 — re-locate before editing.
 > **Model:** start Opus · `high` (the 8+ SP row; edge cases likely — this becomes the largest file move the app makes in one action); `xhigh` to write the spec and plan → execute Opus · `medium`, Sonnet · `medium` for the hint steps the plan spells out; review deep (`max`) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **Bulk "dislike the skipped files" in single mode** — a skip-tracking set (files passed with Next and not rated; cleared on folder change and re-sort), one "Dislike N skipped" action behind a confirmation that shows the count, **one** batched `moveHistory` entry so a single Ctrl+A undoes the whole batch, per-file `removeFileFromList` cleanup, and `currentIndex` handling. Hold `_fileOpInFlight` for the **whole batch** (one `try/finally` around every rename) and do **not** call `moveCurrentFile` per file — a guarded method calling another is silently refused (the entry's 2026-10-06 annotation). `media-viewer.js` (`nextMedia`, `moveCurrentFile`, `removeFileFromList`, `handleCancel`), `index.html`, `styles.css`, `tests/` (5) — 🔵 [2026-10-04] manual testing
-- [ ] **Show that the AI-sort order is out of date after ratings, with a one-click re-sort** — e.g. "N ratings since the last AI sort" on the sort button, and a re-sort that keeps the current file in view. Each re-sort is a full rebuild, because rating a file changes the training set (G3 makes that rebuild cheaper). `media-viewer.js` (`moveCurrentFile`, `handleSortByPrediction`, the `sortPredictionBtn` titles, `applyPredictionSortResult`), `tests/` (3) — 🔵 [2026-10-04] manual testing
+- [x] **Bulk "dislike the skipped files" in single mode** — ✅ PR #79 (`96467f7`): `like-or-skip.js` plus `dislikeSkippedFiles`. One guard hold and one `skipBatch` entry; one Ctrl+A undoes it. See [DONE.md](DONE.md). _Planned:_ a skip-tracking set (files passed with Next and not rated; cleared on folder change and re-sort), one "Dislike N skipped" action behind a confirmation that shows the count, **one** batched `moveHistory` entry so a single Ctrl+A undoes the whole batch, per-file `removeFileFromList` cleanup, and `currentIndex` handling. Hold `_fileOpInFlight` for the **whole batch** (one `try/finally` around every rename) and do **not** call `moveCurrentFile` per file — a guarded method calling another is silently refused (the entry's 2026-10-06 annotation). `media-viewer.js` (`nextMedia`, `moveCurrentFile`, `removeFileFromList`, `handleCancel`), `index.html`, `styles.css`, `tests/` (5) — 🔵 [2026-10-04] manual testing
+- [x] **Show that the AI-sort order is out of date after ratings, with a one-click re-sort** — ✅ PR #79 (`96467f7`): the "↻ Re-sort · N new" chip, which re-sorts in place, keeps the skips and lands on the new best unjudged file. _Planned:_ e.g. "N ratings since the last AI sort" on the sort button, and a re-sort that keeps the current file in view. Each re-sort is a full rebuild, because rating a file changes the training set (G3 makes that rebuild cheaper). `media-viewer.js` (`moveCurrentFile`, `handleSortByPrediction`, the `sortPredictionBtn` titles, `applyPredictionSortResult`), `tests/` (3) — 🔵 [2026-10-04] manual testing
 
 ### G3. Source-folder vector reuse on a training-cache miss `[solo]` 🔵 — ML training pipeline — 3 SP
 
@@ -81,20 +81,20 @@
 ### Tuesday, October 13 — Security fix lands; like-or-skip starts
 
 - ✅ **[G1](#g1-high-security-findings-fix-solo---main-process-file-ipc--renderer-html-encoding--5-sp)** 🟤 — finish; the user starts _Scan changes_ (leg 2); review; merge (part 2 of 2). Merged `e5cd3a8` (PR #78) on 2026-10-11, ahead of the week; scope ~13.5 SP after the deep review.
-- **[G2](#g2-like-or-skip-flow-batch----single-mode-ai-sort-workflow--8-sp)** 🔵 🏆 — branch after G1 merges; spec and plan (part 1 of 3)
+- ✅ **[G2](#g2-like-or-skip-flow-batch----single-mode-ai-sort-workflow--8-sp)** 🔵 🏆 — branch after G1 merges; spec and plan (part 1 of 3). Done 2026-10-12.
 
 **Daily total**: ~3 SP
 
 ### Wednesday, October 14 — Bulk dislike; the real-folder run
 
-- **[G2](#g2-like-or-skip-flow-batch----single-mode-ai-sort-workflow--8-sp)** 🔵 🏆 — bulk "dislike the skipped files" (part 2 of 3)
+- ✅ **[G2](#g2-like-or-skip-flow-batch----single-mode-ai-sort-workflow--8-sp)** 🔵 🏆 — bulk "dislike the skipped files" (part 2 of 3). Done 2026-10-12.
 - **[G3](#g3-source-folder-vector-reuse-on-a-training-cache-miss-solo---ml-training-pipeline--3-sp)** 🔵 — instrument; the user's before run; implement; the user's after run; review; merge
 
 **Daily total**: ~7 SP
 
 ### Thursday, October 15 — Like-or-skip lands; recent folders
 
-- **[G2](#g2-like-or-skip-flow-batch----single-mode-ai-sort-workflow--8-sp)** 🔵 🏆 — stale-order hint; screenshots; review; merge (part 3 of 3)
+- ✅ **[G2](#g2-like-or-skip-flow-batch----single-mode-ai-sort-workflow--8-sp)** 🔵 🏆 — stale-order hint; screenshots; review; merge (part 3 of 3). Merged `96467f7` (PR #79) on 2026-10-12, ahead of the week. Scope ~13 SP after the review fix waves; nothing dropped, so the stale-order hint shipped and the delivered 🟤 share is unchanged.
 - **[G4](#g4-recently-opened-folders-solo---folder-open--empty-state--3-sp)** 🔵 — recent folders; screenshots; review; merge
 
 **Daily total**: ~6 SP
@@ -114,7 +114,7 @@
 | ID  | Group                                        | Domain                                      | Source      | Tasks  | Total SP | Day     | Status     |
 | --- | -------------------------------------------- | ------------------------------------------- | ----------- | ------ | -------- | ------- | ---------- |
 | G1  | High security findings fix `[solo]`          | Main-process file IPC + renderer encoding   | 🟤 Auto     | 1      | 5        | Mon–Tue | ✅ `e5cd3a8` (PR #78) |
-| G2  | Like-or-skip flow `[batch]` 🏆               | Single-mode AI-sort workflow                | 🔵 User     | 2      | 8        | Tue–Thu | ☐ Planned  |
+| G2  | Like-or-skip flow `[batch]` 🏆               | Single-mode AI-sort workflow                | 🔵 User     | 2      | 8        | Tue–Thu | ✅ `96467f7` (PR #79) |
 | G3  | Source-folder vector reuse `[solo]`          | ML training pipeline                        | 🔵 User     | 1      | 3        | Wed     | ☐ Planned  |
 | G4  | Recently opened folders `[solo]`             | Folder open + empty state                   | 🔵 User     | 1      | 3        | Thu     | ☐ Planned  |
 | G5  | `CLAUDE.md` size audit `[solo]`              | Project instructions                        | 🟡 Ops      | 1      | 3        | Fri     | ☐ Planned  |

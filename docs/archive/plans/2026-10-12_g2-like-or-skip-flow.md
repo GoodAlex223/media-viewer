@@ -2,12 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆, 8 SP → ~10 SP); BACKLOG 🔵 [2026-10-04] "Add a bulk 'dislike the skipped files' action to single mode", "Show that the AI-sort order is out of date after ratings, and offer a one-click re-sort"
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G2 (🔵 🏆, 8 SP → ~10 SP); BACKLOG 🔵 [2026-10-04] "Add a bulk 'dislike the skipped files' action to single mode", "Show that the AI-sort order is out of date after ratings, and offer a one-click re-sort"
 **Spec**: [2026-10-12-g2-like-or-skip-flow-design.md](../../superpowers/specs/2026-10-12-g2-like-or-skip-flow-design.md) (committed `d919f18`, user-approved 2026-10-12; amended at planning — see Premise Corrections 1–4)
 **Created**: 2026-10-12
-**Status**: In Progress — Tasks 1–7, the regression check and the final review are done; awaiting the user's go-ahead to push and open the PR
+**Status**: **Complete**: merged 2026-10-12 via [PR #79](https://github.com/GoodAlex223/media-viewer/pull/79) (merge `96467f7`)
 **Last Updated**: 2026-10-12
-**Branch**: `g2-like-or-skip-flow`
+**Branch**: `g2-like-or-skip-flow` (from `main` @ `15cec8c`); deleted remote and local after the merge
 **Trial vehicle**: _You should know_ — enabled by the user 2026-10-12 (REVIEW-QUEUE § 5). Note every *Heads up* / *You should know* it raises in the Progress Log, with what happened to it; G6 reads it out.
 
 **Goal:** On the AI order in single mode, every file the user passes with Next is remembered; `F` (or a button) plus one confirmation moves all of them to the dislike folder as one file action that one Ctrl+A undoes; and a "↻ Re-sort · N new" chip shows when the order is out of date and re-sorts without losing the skips.
@@ -2707,8 +2707,8 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
 - [x] Grep sweep (CLAUDE.md § Best Practices): `_onOrderChanged`, `skipBatch`, `dislikeSkipped`, `deferBulkSave`, `_staleMark`, `resort` across code, tests **and comments**; re-read every comment attached to changed code (especially `handleSortByPrediction`'s toggle-off, `applyPredictionSortResult`, `removeFileFromList`'s JSDoc, the `_fileOpInFlight` constructor comment).
 - [x] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
 - [x] Final review: `/code-review max` on the branch; fix, re-verify.
-- [ ] Push (`git push -u origin g2-like-or-skip-flow`; pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
-- [ ] Open the PR: spec + plan links, the decisions D1–D6, the planning amendments (Premise Corrections 1–4), RED→GREEN evidence per task, the before/after screenshots inline, test deltas, the Residuals, and the *You should know* notes so far. Merge only on the user's go-ahead.
+- [x] Push (`git push -u origin g2-like-or-skip-flow`; pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
+- [x] Open the PR: spec + plan links, the decisions D1–D6, the planning amendments (Premise Corrections 1–4), RED→GREEN evidence per task, the before/after screenshots inline, test deltas, the Residuals, and the *You should know* notes so far. Merge only on the user's go-ahead.
 
 ## Improvements (minimum 2 required before Extract)
 
@@ -2724,7 +2724,7 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
 - `README.md`'s other sections (view modes, sorting) were not audited beyond the shortcut table this plan corrects. → BACKLOG 🟤 if the closeout finds them stale.
 - **E2E "no such notice" assertions that count `.notification` elements in the DOM can pass falsely** (found by T3's mutation check): `info` notices self-dismiss after ~2 s and the oldest are dropped, so a leaked notice can be gone before the count. T3's test 2 records `showNotification` calls instead. Audit the existing E2E suite for absence checks done by DOM count. → BACKLOG 🟤.
 - **`tests/check-secrets.test.js` › "flags a planted key from real diff output (end-to-end through git)" flakes under load** — it spawns real `git` and runs under Vitest's default 5 s timeout; it timed out at 7.3 s in T4's pre-commit hook (the file took 9.8 s; 3.0 s on the immediate retry), and T3's implementer saw it (and a `path-grants` test) time out once too. Pre-existing; give the subprocess tests an explicit timeout. → BACKLOG 🟤.
-- **Entering Tournament mode during an AI sort** (found by T5's review; mechanism unverified at runtime): `switchMode` has no `isPredictionSorting` guard, so `restoreOriginalOrderForTournament` → `_onOrderChanged('other')` clears the sort's pending out-of-date mark, and the still-running sort then applies with a fresh snapshot — ratings made during training drop out of the count (an undercount, against spec § 8's "never undercount"; the chip is hidden in the tournament, wrong on return). The root hazard is pre-existing: a prediction result may apply over a tournament entry at all. Verify with a probe first. → BACKLOG 🟤.
+- **Entering Tournament mode during an AI sort** (found by T5's review; mechanism unverified at runtime): `switchMode` has no `isPredictionSorting` guard, so `restoreOriginalOrderForTournament` → `_onOrderChanged('other')` clears the sort's pending out-of-date mark, and the still-running sort then applies with a fresh snapshot — ratings made during training drop out of the count (an undercount, against spec § 8's "never undercount"; the chip is hidden in the tournament, wrong on return). The root hazard is pre-existing: a prediction result may apply over a tournament entry at all. Verify with a probe first. → ~~BACKLOG 🟤~~ **Resolved in-branch (final review F7, verified at runtime):** Tournament entry is refused while a sort runs, so this is not extracted.
 - **Restore Order drops a file whose pre-sort move was undone after the sort** (pre-existing; T6's review): Restore Order rebuilds the list as `originalMediaFiles.filter(currentPaths.has)`, so a file restored by undoing a move made *before* the first AI sort is absent from the snapshot and vanishes from the list (it stays on disk; a reload brings it back). The similarity sort has the same pattern. T6 makes it likelier: the snapshot now lives across any number of chip re-sorts. → BACKLOG 🟤.
 - **From the final review (deferred by ruling, each → BACKLOG 🟤):**
   - **The similarity sort's catch restores a stale snapshot** (`this.mediaFiles = [...this.originalMediaFiles]`) without re-pointing `currentIndex` by path, clamping it or rendering. An undo made during the sort is then reverted (restored files vanish from the list, still on disk), and the cursor can land on a different file than the screen, or past the end. It is pre-existing on `main` via single undo. The branch closed its batch-undo path (a `skipBatch` undo is refused while a sort runs) and null-guarded `nextMedia`'s new lookup. Fix: keep current membership in the catch, re-point the cursor by path, or restore only if the sort had already reassigned the list.
@@ -2737,12 +2737,28 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
 
 ## Closeout (after the merge, on `main`)
 
-- [ ] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G2 closeout`), archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans), DONE.md entry, WEEKLY Summary-Table Status → `✅ PR #N` + the Tue/Wed/Thu G2 Daily-Schedule rows, check off both BACKLOG 🔵 [2026-10-04] entries — **in the closeout commit**.
-- [ ] Remove this plan's row from [README.md](README.md) § Current Plans and from `docs/README.md` § Active Plans.
-- [ ] Spec: add a post-implementation note (the frozen spec gets a note, not a rewrite) for anything the code departed from.
-- [ ] Propagation check: re-read every live surface this plan touched (`CLAUDE.md`, `README.md`, the code comments, `index.html`) for a late correction that did not reach it.
-- [ ] REVIEW-QUEUE § 5: hand the *You should know* notes and the side-agent token cost to G6.
-- [ ] Memory: session file + MEMORY.md line; durable lessons only.
+- [x] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G2 closeout`), archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans), DONE.md entry, WEEKLY Summary-Table Status → `✅ PR #N` + the Tue/Wed/Thu G2 Daily-Schedule rows, check off both BACKLOG 🔵 [2026-10-04] entries — **in the closeout commit**.
+- [x] Remove this plan's row from [plans/README.md](../../planning/plans/README.md) § Current Plans and from `docs/README.md` § Active Plans.
+- [x] Spec: add a post-implementation note (the frozen spec gets a note, not a rewrite) for anything the code departed from.
+- [x] Propagation check: re-read every live surface this plan touched (`CLAUDE.md`, `README.md`, the code comments, `index.html`) for a late correction that did not reach it.
+- [x] REVIEW-QUEUE § 5: hand the *You should know* notes and the side-agent token cost to G6.
+- [x] Memory: session file + MEMORY.md line; durable lessons only.
+
+
+**Closeout artifacts** (2026-10-12, on `main` after merge `96467f7`):
+
+| Artifact | Done / N/A + reason |
+| --- | --- |
+| `BACKLOG.md` — improvements extracted | Done: 19 🟤 under `[2026-10-12] From: G2 closeout` (3 Improvements + Residuals); the check-secrets entry is annotated; 2 🔵 [2026-10-04] entries are checked off |
+| `TODO.md` | N/A: G2 was scheduled straight from BACKLOG 🔵, so it closed no TODO item and spawned none; the Last Updated note says so |
+| `DONE.md` | Done: the 2026-10-12 G2 entry |
+| `WEEKLY.md` | Done: Summary-Table Status ✅ `96467f7` (PR #79), the Tue/Wed/Thu G2 Daily-Schedule rows, and both G2 task boxes |
+| `docs/README.md` | Done: the plan moved from Active to Archived Plans; the spec row under Design Specs is updated |
+| `docs/archive/plans/` | Done: `git mv`, so the original is deleted |
+| Spec post-implementation note | Done: six departures noted at the top of the spec |
+| REVIEW-QUEUE § 5 | Done: a 2026-10-12 trial-log row hands the *You should know* evidence to G6 (zero observed notes; the host surface is unverified) |
+| Propagation check | Done: `CLAUDE.md`, `README.md`, `index.html` and the comments were re-read. One known overclaim (the click-blur comment) is filed in BACKLOG 🟤 rather than corrected on `main` |
+| Memory | Done: three feedback files plus the session file |
 
 ## Progress Log
 
@@ -2780,4 +2796,10 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
 
 ## Key Discoveries
 
-_(filled at completion)_
+1. **A refusal guard in a callee doesn't protect a caller that mutates first.** R6 made `loadFolder` refuse while a file action runs. But the Change-folder handler wipes the list, the folder and the history *before* calling it, so a pick during a batch left a half-reset app whose batch could never be undone. That was worse than no guard. The deep review's probes caught it; the unit test had called `loadFolder` directly. (memory `feedback_guard_in_callee_vs_caller_mutation`)
+2. **Lengthening a guarded window promotes every unguarded entry point to a real race.** A single move holds `_fileOpInFlight` for under a second; a batch holds it for seconds. Header clicks, a running sort's apply, toast actions, and Enter on a mouse-focused button all became reachable. Seven per-task reviews passed it, and the plan-mandated cross-cutting regression pass found it. (memory `feedback_long_guarded_window_exposes_entry_points`)
+3. **Visual evidence caught a layout bug no test could see.** A `position: fixed; left: 50%; transform: translateX(-50%)` box shrink-to-fits within 50vw. The sixth button wrapped its label and lifted the whole bar by 16 px. The fix belongs on the bar: a `nowrap` on the label would have overflowed the capped box off-centre.
+4. **A test can pass because another mechanism does its job.** The dialog's keyboard-ownership E2E passed without the capture listeners, because the held guard already refused every key it pressed. Only guard-independent keys (`i`, `F1`) and a dispatch counter discriminate. Two other tests passed by construction for the same reason (the hidden-chip cases started hidden), and both got mutation checks.
+5. **Counting by identity needs the identity kept.** `computeStaleCount`'s symmetric difference made undo hook-free, but a total-failure undo that pushed back a *copy* doubled the count. The contract ("push the same object back") lived only in a docstring until the regression check tested it.
+6. **Process (user correction):** code review normally runs in a separate chat after the PR. At the end of an implementation, ask "review here, or the usual flow?" instead of running it because the plan lists it. (memory `feedback_ask_before_in_chat_code_review`)
+7. **_You should know_ trial:** zero observable notes over a full feature session, in the VS Code extension. Whether the mod was silent or never surfaced is not discriminated; that goes to G6.
