@@ -629,6 +629,10 @@ body {
     bottom: 30px;
     left: 50%;
     transform: translateX(-50%);
+    /* left:50% + translateX centring caps a shrink-to-fit width at 50vw; size to the buttons
+       instead (G2: a sixth button, "Dislike N skipped", wrapped its label), within the viewport. */
+    width: max-content;
+    max-width: calc(100vw - 2 * var(--space-4));
     display: none;
     gap: var(--space-4);
     z-index: var(--z-dropdown);
