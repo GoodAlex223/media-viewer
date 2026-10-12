@@ -2253,6 +2253,12 @@ class MediaViewer {
             this.sortPredictionBtn.addEventListener('click', () => this.handleSortByPrediction());
         }
 
+        // The out-of-date chip re-sorts in place, keeping skips (G2). Never the plain button's handler:
+        // on a sorted list that one means Restore Order.
+        if (this.resortPredictionBtn) {
+            this.resortPredictionBtn.addEventListener('click', () => this.handleSortByPrediction({ resort: true }));
+        }
+
         if (this.sortAlgorithmSelect) {
             this.sortAlgorithmSelect.addEventListener('change', (e) => {
                 this.sortAlgorithm = e.target.value;
@@ -7945,8 +7951,10 @@ class MediaViewer {
         }
     }
 
-    // Apply a completed ML sort result to the file list. Returns true if an order was applied.
-    applyPredictionSortResult(result) {
+    // Apply a completed ML sort result to the file list. Returns true if an order was applied. A fresh
+    // sort lands on the top file; a chip re-sort (`resort`, G2) parks the skips first and lands on the
+    // first unjudged file.
+    applyPredictionSortResult(result, { resort = false } = {}) {
         if (!result || !result.sortedFilenames) {
             this.showNotification(result?.reason || 'Could not sort files', 'warning');
             return false;
@@ -7964,13 +7972,25 @@ class MediaViewer {
                 if (file) this.predictionScores.set(file.path, score);
             }
         }
-        this.mediaFiles = sorted;
-        this.currentIndex = 0;
+        if (resort) {
+            // A chip re-sort (G2 spec D2, D3): un-disliked skips stay parked behind the cursor, and the
+            // cursor lands on the new best unjudged file — and in compare mode on the new best pair.
+            const parked = LikeOrSkip.parkSkippedOrder(this.mediaFiles, sorted, this.likeOrSkip.skipped);
+            this.mediaFiles = parked.files;
+            this.currentIndex = parked.cursor;
+            this.mlComparePairIndex = 0;
+        } else {
+            this.mediaFiles = sorted;
+            this.currentIndex = 0;
+        }
         this.isSortedByPrediction = true;
-        this._onOrderChanged('ai-fresh');
+        this._onOrderChanged(resort ? 'ai-resort' : 'ai-fresh');
         this.showMedia();
         this.updateSortPredictionButton();
-        this.showNotification('Sorted by predicted preference', 'success');
+        this.showNotification(
+            resort ? 'Re-sorted by predicted preference' : 'Sorted by predicted preference',
+            'success'
+        );
         return true;
     }
 
@@ -8918,7 +8938,12 @@ class MediaViewer {
         this.resortPredictionBtn.title = `${LikeOrSkip.formatCount(count, 'rating')} since the last AI sort — re-sort to include them (retrains the model)`;
     }
 
-    async handleSortByPrediction() {
+    async handleSortByPrediction({ resort = false } = {}) {
+        // The chip re-sort (G2) acts only on the AI order it was shown for. First, ahead of the guards
+        // below that notify (similarity sort running, ML disabled): a stale chip click does nothing.
+        if (resort && !this.likeOrSkip.active) {
+            return;
+        }
         if (this.isTournamentMode) return;
         if (this.isPredictionSorting) return; // re-entrancy guard; Cancel is the abort affordance
         // Mutual exclusion with the similarity sort — both share this.sortAbortController.
@@ -8931,8 +8956,8 @@ class MediaViewer {
             return;
         }
 
-        // Toggle off — restore original order (unchanged behavior).
-        if (this.isSortedByPrediction) {
+        // Toggle off — restore original order. Not for the re-sort chip (G2), which re-sorts in place.
+        if (this.isSortedByPrediction && !resort) {
             if (this.originalMediaFiles.length > 0) {
                 const currentPaths = new Set(this.mediaFiles.map((f) => f.path));
                 this.mediaFiles = this.originalMediaFiles.filter((f) => currentPaths.has(f.path));
@@ -9049,7 +9074,11 @@ class MediaViewer {
                 return;
             }
 
-            this.originalMediaFiles = [...this.mediaFiles];
+            // A re-sort (G2) keeps the snapshot from the first sort: the list on screen is already the AI
+            // order, and copying it here would make Restore Order "restore" that.
+            if (!resort) {
+                this.originalMediaFiles = [...this.mediaFiles];
+            }
 
             // Phase 2 — extract any missing features (drives the SAME card via the sink).
             const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
@@ -9082,7 +9111,7 @@ class MediaViewer {
             this.updateSortProgress({ phase: 'Sorting…' });
             const result = await this.runMlSort(allFeatures, runId);
             if (signal.aborted || runId !== this.sortRunId) throw new Error('cancelled');
-            this.applyPredictionSortResult(result);
+            this.applyPredictionSortResult(result, { resort });
         } catch (err) {
             if (signal.aborted || err.message === 'cancelled') {
                 this.showNotification('Sorting cancelled', 'info');

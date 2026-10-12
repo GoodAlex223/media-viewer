@@ -6,6 +6,7 @@ import {
     formatCount,
     trainingWeight,
     computeStaleCount,
+    parkSkippedOrder,
 } from '../like-or-skip.js';
 
 const file = (name) => ({ name, path: `/f/${name}` });
@@ -213,5 +214,28 @@ describe('computeStaleCount — the weighted symmetric difference since the mark
         const residual = { skipBatch: true, files: [{}] };
         // 2 files came back (true change 2); the hint says 4.
         expect(computeStaleCount([residual], [batch])).toBe(4);
+    });
+});
+
+describe('parkSkippedOrder — re-sort keeps skips behind the cursor (spec D2, D3)', () => {
+    it('puts the skips first in their current order, then the unjudged in the new model order', () => {
+        const current = files('a', 'b', 'c', 'd', 'e'); // a and c skipped
+        const sorted = files('e', 'c', 'd', 'b', 'a');
+        const { files: result, cursor } = parkSkippedOrder(current, sorted, new Set(['/f/c', '/f/a']));
+        expect(names(result)).toEqual(['a', 'c', 'e', 'd', 'b']);
+        expect(cursor).toBe(2);
+    });
+
+    it('lands on 0 when every remaining file is skipped', () => {
+        const current = files('a', 'b');
+        const { files: result, cursor } = parkSkippedOrder(current, files('b', 'a'), new Set(['/f/a', '/f/b']));
+        expect(names(result)).toEqual(['a', 'b']);
+        expect(cursor).toBe(0);
+    });
+
+    it('keeps a skipped file the sort result left out (no features), and ignores stale paths', () => {
+        const current = files('a', 'b', 'c');
+        const { files: result } = parkSkippedOrder(current, files('c', 'b'), new Set(['/f/a', '/f/gone']));
+        expect(names(result)).toEqual(['a', 'c', 'b']);
     });
 });

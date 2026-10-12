@@ -150,3 +150,16 @@ export function computeStaleCount(history, markSnapshot) {
     }
     return count;
 }
+
+/**
+ * The list a chip re-sort shows (spec D2, D3): the skipped files first, in their current relative order
+ * (behind the cursor, where the like-or-skip flow keeps them), then every unjudged file in the new model
+ * order. A skipped file the sort result left out (no features) stays parked rather than vanishing. The
+ * cursor lands on the first unjudged file, or on 0 when every remaining file is skipped.
+ */
+export function parkSkippedOrder(currentFiles, sortedFiles, skippedSet) {
+    const parked = currentFiles.filter((f) => skippedSet.has(f.path));
+    const parkedPaths = new Set(parked.map((f) => f.path));
+    const unjudged = sortedFiles.filter((f) => !parkedPaths.has(f.path));
+    return { files: [...parked, ...unjudged], cursor: unjudged.length > 0 ? parked.length : 0 };
+}

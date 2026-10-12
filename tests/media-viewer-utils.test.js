@@ -964,8 +964,31 @@ describe('applyPredictionSortResult', () => {
             updateSortPredictionButton: () => {},
             showNotification: () => {},
             _onOrderChanged: vi.fn(),
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
+            mlComparePairIndex: 3,
         };
     }
+
+    it('a fresh sort announces ai-fresh and lands on the top file', () => {
+        const ctx = baseCtx();
+        applyPredictionSortResult.call(ctx, { sortedFilenames: ['c.png', 'b.png', 'a.png'] });
+        expect(ctx._onOrderChanged).toHaveBeenCalledWith('ai-fresh');
+        expect(ctx.currentIndex).toBe(0);
+    });
+
+    it('a re-sort parks the skips first and lands on the new best unjudged file (G2)', () => {
+        const ctx = baseCtx();
+        ctx.likeOrSkip.activate();
+        ctx.likeOrSkip.recordSkip('/d/a.png');
+        const notice = vi.fn();
+        ctx.showNotification = notice;
+        applyPredictionSortResult.call(ctx, { sortedFilenames: ['c.png', 'b.png', 'a.png'] }, { resort: true });
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a.png', 'c.png', 'b.png']);
+        expect(ctx.currentIndex).toBe(1);
+        expect(ctx.mlComparePairIndex).toBe(0);
+        expect(ctx._onOrderChanged).toHaveBeenCalledWith('ai-resort');
+        expect(notice).toHaveBeenCalledWith('Re-sorted by predicted preference', 'success');
+    });
 
     it('reorders mediaFiles and syncs predictionScores from scores', () => {
         const ctx = baseCtx();
@@ -1747,6 +1770,53 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(showMlLearningIndicator).not.toHaveBeenCalled();
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(showNotification).toHaveBeenCalledWith(expect.stringContaining('Need more ratings'), 'warning');
+    });
+
+    describe('re-sort from the chip (G2)', () => {
+        const resortCtx = (overrides = {}) => {
+            const likeOrSkip = new LikeOrSkip.SkipTracker();
+            likeOrSkip.activate();
+            const original = [
+                { name: 'b.png', path: '/d/b.png' },
+                { name: 'a.png', path: '/d/a.png' },
+            ];
+            return makeCtx({
+                isSortedByPrediction: true,
+                likeOrSkip,
+                originalMediaFiles: original,
+                applyPredictionSortResult: vi.fn(() => true),
+                runMlSort: vi.fn(() => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} })),
+                ...overrides,
+            });
+        };
+
+        it('re-sorts instead of restoring the order, and passes resort on', async () => {
+            const ctx = resortCtx();
+            await handleSortByPrediction.call(ctx, { resort: true });
+            expect(ctx.runMlSort).toHaveBeenCalledOnce();
+            expect(ctx.applyPredictionSortResult).toHaveBeenCalledWith(expect.anything(), { resort: true });
+            expect(ctx.isSortedByPrediction).toBe(true);
+        });
+
+        it('keeps the original-order snapshot, so Restore Order still returns the folder order', async () => {
+            const ctx = resortCtx();
+            const snapshot = ctx.originalMediaFiles;
+            await handleSortByPrediction.call(ctx, { resort: true });
+            expect(ctx.originalMediaFiles).toBe(snapshot);
+        });
+
+        it('does nothing when the AI order is no longer on screen', async () => {
+            const ctx = resortCtx({ likeOrSkip: new LikeOrSkip.SkipTracker() });
+            await handleSortByPrediction.call(ctx, { resort: true });
+            expect(ctx.runMlSort).not.toHaveBeenCalled();
+        });
+
+        it('a plain click on a sorted list still restores the order', async () => {
+            const ctx = resortCtx();
+            await handleSortByPrediction.call(ctx);
+            expect(ctx.runMlSort).not.toHaveBeenCalled();
+            expect(ctx.isSortedByPrediction).toBe(false);
+        });
     });
 });
 
