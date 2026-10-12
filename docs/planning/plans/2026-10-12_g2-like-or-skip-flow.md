@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆, 8 SP → ~10 SP); BACKLOG 🔵 [2026-10-04] "Add a bulk 'dislike the skipped files' action to single mode", "Show that the AI-sort order is out of date after ratings, and offer a one-click re-sort"
 **Spec**: [2026-10-12-g2-like-or-skip-flow-design.md](../../superpowers/specs/2026-10-12-g2-like-or-skip-flow-design.md) (committed `d919f18`, user-approved 2026-10-12; amended at planning — see Premise Corrections 1–4)
 **Created**: 2026-10-12
-**Status**: In Progress — subagent-driven execution (user's choice, 2026-10-12)
+**Status**: In Progress — Tasks 1–7, the regression check and the final review are done; awaiting the user's go-ahead to push and open the PR
 **Last Updated**: 2026-10-12
 **Branch**: `g2-like-or-skip-flow`
 **Trial vehicle**: _You should know_ — enabled by the user 2026-10-12 (REVIEW-QUEUE § 5). Note every *Heads up* / *You should know* it raises in the Progress Log, with what happened to it; G6 reads it out.
@@ -2705,8 +2705,8 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
 - [x] `for i in 1 2 3; do npx playwright test tests/e2e/like-or-skip.test.js --reporter=line || break; done` — three runs in a row.
 - [x] `npx playwright test` — the full suite once. An existing E2E that now fails because `F` or the button changed something it relied on is a finding; fix the test only if its premise was wrong, and log it.
 - [x] Grep sweep (CLAUDE.md § Best Practices): `_onOrderChanged`, `skipBatch`, `dislikeSkipped`, `deferBulkSave`, `_staleMark`, `resort` across code, tests **and comments**; re-read every comment attached to changed code (especially `handleSortByPrediction`'s toggle-off, `applyPredictionSortResult`, `removeFileFromList`'s JSDoc, the `_fileOpInFlight` constructor comment).
-- [ ] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
-- [ ] Final review: `/code-review max` on the branch; fix, re-verify.
+- [x] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
+- [x] Final review: `/code-review max` on the branch; fix, re-verify.
 - [ ] Push (`git push -u origin g2-like-or-skip-flow`; pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
 - [ ] Open the PR: spec + plan links, the decisions D1–D6, the planning amendments (Premise Corrections 1–4), RED→GREEN evidence per task, the before/after screenshots inline, test deltas, the Residuals, and the *You should know* notes so far. Merge only on the user's go-ahead.
 
@@ -2730,6 +2730,9 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
   - **The similarity sort's catch restores a stale snapshot** (`this.mediaFiles = [...this.originalMediaFiles]`) without re-pointing `currentIndex` by path, clamping it or rendering. An undo made during the sort is then reverted (restored files vanish from the list, still on disk), and the cursor can land on a different file than the screen, or past the end. It is pre-existing on `main` via single undo. The branch closed its batch-undo path (a `skipBatch` undo is refused while a sort runs) and null-guarded `nextMedia`'s new lookup. Fix: keep current membership in the catch, re-point the cursor by path, or restore only if the sort had already reassigned the list.
   - **A similarity-sort result can land under an in-flight render** (its applies call `showMedia()` while a navigation render may have already read its file), leaving screen and cursor apart. This is the same window the branch closed for the prediction sort with `_waitForRenderIdle`. It is pre-existing, and tracking is off on that order.
   - **A special move of a bulk-rated file weighs 0 in the out-of-date count**, but it deletes the file's bulk-rated label, and bulk-rated membership feeds the training fingerprint. The next sort retrains while the chip stays hidden (an undercount against spec § 8), and the special undo never restores the label. This is the same fix area as the residual above, "single-move undo drops bulk-rated membership": record `bulkBucket` on special/single entries, weigh a bulk-rated special 1, and restore the label on undo. Spec § 8's weight table needs a post-implementation note.
+  - **The click-blur listener is bubble-phase** (fix-wave re-review). Buttons whose handlers call `stopPropagation()` keep focus after a mouse click, so a later Enter can re-activate them. Those buttons are the compare/tournament overlay Like/Dislike/Special, zoom, and toast Close/Remove. This is pre-existing on `main`, but the listener's comment ("a mouse click never leaves a button holding keyboard focus") overclaims. Fix: register it with `{ capture: true }` (the bulk dialog's programmatic `confirmBtn.focus()` runs later and keeps focus), or narrow the comment.
+  - **`_waitForRenderIdle`'s 2 s cap.** A held S over long renders (video, large JXL) can outlast it and let one order apply mid-render. This is bounded by design.
+  - **`#dislikeSkippedBtn` disabled without a dislike folder gives no reason in its title**, while `#dislikeBtn` says "Configure like/dislike folders in Settings (F1)". Suggested: `'Configure a dislike folder in Settings (F1)'` (the batch needs only that folder).
   - **Cleanup cut from the review:** the like-or-skip and visual-evidence E2E files duplicate their idle/AI-order helpers with drifted defaults; there is a dead `raw` fallback in the batch's feature capture; and the per-render chip/button refresh costs about 2–4 ms at 24k files (the `skippedIn` scan and the symmetric difference).
 
 ## Closeout (after the merge, on `main`)
@@ -2771,7 +2774,8 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
   - The batch undo's cache and rated-pair-key round trip is pinned, and the video E2E is renamed to what it proves (tiny.mp4 is an undecodable stub; the teardown-before-rename order is pinned by a unit test).
   - The doc and comment claims the review found false are corrected.
   
-  Deferred by ruling, in the Residuals: the similarity catch's stale-snapshot restore, the similarity sort's render window, and the special-move weight. Unit suite 1357 passed; like-or-skip E2E 6/6 three runs in a row; compare-mode, tournament-mode, ml-retrain-skip, rating-safety, sort-progress and app-launch green.
+  Deferred by ruling, in the Residuals: the similarity catch's stale-snapshot restore, the similarity sort's render window, and the special-move weight.
+- **2026-10-12 — Fix-wave re-review**: every finding addressed, no new Critical/Important. Three Minors parked by ruling, in the Residuals: the click-blur listener's phase and comment, the render-wait cap, and the disabled button's missing reason. *You should know* trial: no notes reported by the user during execution so far (they appear on the user's screen only). Next: push (the pre-push hook runs the full E2E suite) and open the PR, on the user's go-ahead. Unit suite 1357 passed; like-or-skip E2E 6/6 three runs in a row; compare-mode, tournament-mode, ml-retrain-skip, rating-safety, sort-progress and app-launch green.
 
 ## Key Discoveries
 
