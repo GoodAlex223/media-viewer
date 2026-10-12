@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆, 8 SP → ~10 SP); BACKLOG 🔵 [2026-10-04] "Add a bulk 'dislike the skipped files' action to single mode", "Show that the AI-sort order is out of date after ratings, and offer a one-click re-sort"
 **Spec**: [2026-10-12-g2-like-or-skip-flow-design.md](../../superpowers/specs/2026-10-12-g2-like-or-skip-flow-design.md) (committed `d919f18`, user-approved 2026-10-12; amended at planning — see Premise Corrections 1–4)
 **Created**: 2026-10-12
-**Status**: Planning — awaiting user review of this plan and the choice of execution method
+**Status**: In Progress — subagent-driven execution (user's choice, 2026-10-12)
 **Last Updated**: 2026-10-12
 **Branch**: `g2-like-or-skip-flow`
 **Trial vehicle**: _You should know_ — enabled by the user 2026-10-12 (REVIEW-QUEUE § 5). Note every *Heads up* / *You should know* it raises in the Progress Log, with what happened to it; G6 reads it out.
@@ -2735,6 +2735,8 @@ git commit -m "docs(like-or-skip): after screenshots — button, chip, confirmat
 ## Progress Log
 
 - **2026-10-12** — Branch `g2-like-or-skip-flow` from `15cec8c`. Brainstormed with the user, section by section (D1 skips only on the AI order; D2 a re-sort keeps them parked behind the cursor; D3 land on the new best unjudged file; D4 a separate chip; D5 button + `F`; D6 pure module + glue); spec `d919f18`. The user enabled the *You should know* mod. Planning-time measurements: the enclosing method of every `this.mediaFiles =` (Premise Corrections 8); the existing test contexts each new call reaches (6); README's stale shortcut table (5). Spec amended before any code (1–4): snapshot mark, explicit render rule, batch refused during a sort + path-mapped cursor, shifted partial-undo indices.
+- **2026-10-12** — Execution started, subagent-driven (user's choice). Pre-flight scan of the tasks against each other found one plan defect: the code blocks write single-line `if`/`for` bodies without braces, but `eslint.config.mjs` enforces `curly: ['error', 'all']` (the Global Constraints line saying "braces on multi-line `if` bodies" was wrong) — every implementer adds braces, logic unchanged.
+- **2026-10-12 — Task 1** (Sonnet · medium). RED: `Error: Cannot find module '../like-or-skip.js' imported from '…/tests/like-or-skip.test.js'`. GREEN: 16/16. "Before" screenshot captured on the unchanged renderer: `normal-320x240.png` on screen; bar Zoom/Special/Undo/Like/Dislike, no "Dislike N skipped"; header "Restore Order", no chip. The plain evidence run reports the test skipped.
 
 ## Key Discoveries
 
