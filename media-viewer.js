@@ -1,6 +1,7 @@
 import { FullscreenManager } from './fullscreen.js';
 import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
+import * as LikeOrSkip from './like-or-skip.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -12,6 +13,9 @@ const DEFAULT_SHORTCUTS = {
         // Additive (G1), matching compare/tournament's leftSpecial: no loadShortcuts version bump —
         // _mergeModeShortcuts leaves it unbound if a stored single-mode remap already holds Digit1.
         special: 'Digit1',
+        // Additive (G2 like-or-skip), mirroring compare's F = Both bad: no loadShortcuts version bump —
+        // _mergeModeShortcuts leaves it unbound if a stored single-mode remap already holds KeyF.
+        dislikeSkipped: 'KeyF',
     },
     compare: {
         leftLike: 'KeyQ',
@@ -51,6 +55,7 @@ const ACTION_LABELS = {
     previous: 'Previous media',
     undo: 'Undo last move',
     special: 'Move to special folder',
+    dislikeSkipped: 'Dislike all skipped',
     leftLike: 'Left media Like',
     leftDislike: 'Left media Dislike',
     rightLike: 'Right media Like',
@@ -105,10 +110,26 @@ class MediaViewer {
         this.mediaNavigationInProgress = false; // Prevent overlapping navigation
         this.isBeingCleaned = false; // Flag to prevent error notifications during cleanup
         // Held by every file-acting method (moveCurrentFile, moveToSpecialFolder, handleCancel — and
-        // moveComparePair, applyBulkRating) from before its first await until its finally. Any other
-        // file action that arrives meanwhile is refused (G1). Not isLoading: render handlers clear
-        // that at first paint, and showMedia() itself returns early on it.
+        // moveComparePair, applyBulkRating, dislikeSkippedFiles) from before its first await until its
+        // finally. Any other file action that arrives meanwhile is refused (G1), and so are the header
+        // actions (switchMode, both sort handlers except the similarity sort's Cancel, loadFolder, the
+        // change-folder button), the tournament summary's Apply/Discard and the load-error Remove — G2,
+        // through _refuseIfFileOpInFlight().
+        // Not isLoading: render handlers clear that at first paint, and showMedia() itself returns early on it.
         this._fileOpInFlight = false;
+        // Like-or-skip (G2): the files passed with Next while the AI order is on screen, and that token
+        // itself (likeOrSkip.active). Changed only by _onOrderChanged, nextMedia, removeFileFromList and
+        // _undoSkipBatch (likeOrSkip.restore) (spec §§ 4–5, 7).
+        this.likeOrSkip = new LikeOrSkip.SkipTracker();
+        // Bumped by _onOrderChanged, i.e. by every method that puts a new ORDER of mediaFiles on screen
+        // (reassigns it). In-place insertions and removals by moves and undos do not bump it. A batch undo
+        // restores exact positions only when no new order was applied since the batch (spec § 7).
+        this._orderGeneration = 0;
+        // The out-of-date mark (G2 spec § 8): a snapshot of moveHistory's entry references taken when the
+        // AI order on screen was computed (null off the AI order). _pendingStaleMark is the snapshot a
+        // running sort took before training; _onOrderChanged commits it when the result applies.
+        this._staleMark = null;
+        this._pendingStaleMark = null;
 
         // Compare mode state
         this.isCompareMode = false;
@@ -375,6 +396,7 @@ class MediaViewer {
         this.controls = document.getElementById('controls');
         this.likeBtn = document.getElementById('likeBtn');
         this.dislikeBtn = document.getElementById('dislikeBtn');
+        this.dislikeSkippedBtn = document.getElementById('dislikeSkippedBtn');
         this.cancelBtn = document.getElementById('cancelBtn');
         this.navInfo = document.getElementById('navInfo');
         this.mediaIndex = document.getElementById('mediaIndex');
@@ -444,6 +466,7 @@ class MediaViewer {
 
         // ML Prediction button
         this.sortPredictionBtn = document.getElementById('sortPredictionBtn');
+        this.resortPredictionBtn = document.getElementById('resortPredictionBtn');
 
         // Zoom popover controls
         this.zoomControlsMap = {};
@@ -470,24 +493,30 @@ class MediaViewer {
         return this.customLikeFolder && this.customDislikeFolder;
     }
 
+    // The title suffix for a like/dislike folder main has not granted (G1 re-pick) or cannot reach: such a
+    // button stays enabled — a click explains the refusal — and its title says so. '' otherwise.
+    _folderStateSuffix(list) {
+        if (this.folderNeedsRegrant?.has(list)) {
+            return ' — folder needs re-confirming (F1)';
+        }
+        if (this.folderUnreachable?.has(list)) {
+            return ' — folder not reachable';
+        }
+        return '';
+    }
+
     // Sole runtime owner of the six static like/dislike titles: overwrites index.html's at init,
     // on every like/dislike-folder browse/clear, from saveShortcut/resetShortcuts, and from
-    // refreshFolderGrants when a re-confirm mark changes (G1).
+    // refreshFolderGrants when a re-confirm mark changes (G1). Ends by refreshing #dislikeSkippedBtn (G2).
     updateRatingButtonsState() {
         const enabled = this.areFoldersConfigured();
         const tooltip = enabled ? '' : 'Configure like/dislike folders in Settings (F1)';
         // Hotkeys come from the live bindings (G1). The single-mode titles once read
         // 'Arrow Up'/'Arrow Down' — wrong even with the default Q/W.
         // A folder main has not granted (G1 re-pick) stays enabled — a click explains the refusal —
-        // and says so here.
-        const regrant = (list) =>
-            this.folderNeedsRegrant?.has(list)
-                ? ' — folder needs re-confirming (F1)'
-                : this.folderUnreachable?.has(list)
-                  ? ' — folder not reachable'
-                  : '';
+        // and says so here (_folderStateSuffix).
         const title = (label, mode, action, list) =>
-            enabled ? label + this._shortcutSuffix(mode, action) + regrant(list) : tooltip;
+            enabled ? label + this._shortcutSuffix(mode, action) + this._folderStateSuffix(list) : tooltip;
 
         // Single mode buttons
         if (this.likeBtn) {
@@ -523,6 +552,10 @@ class MediaViewer {
         if (warning) {
             warning.style.display = enabled ? 'none' : 'block';
         }
+
+        // #dislikeSkippedBtn shares the dislike folder's state (G2 final review F12): every refresh point
+        // above reaches it from here.
+        this.updateDislikeSkippedButton();
     }
 
     // The " (Q)" a button tooltip carries for `action` in `mode`, derived from the live binding
@@ -655,6 +688,17 @@ class MediaViewer {
         const list =
             names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || '';
         return { list, plural: names.length > 1 };
+    }
+
+    // A file action holds _fileOpInFlight (G1): refuse a reorder, mode switch, folder change or other list
+    // change now, or the screen and the cursor end up on different files when it finishes (G2 review).
+    // Refuses only — it takes no guard, so a caller stays outside the "no guarded method calls another" rule.
+    _refuseIfFileOpInFlight() {
+        if (!this._fileOpInFlight) {
+            return false;
+        }
+        this.showNotification('Wait for the move to finish', 'info');
+        return true;
     }
 
     // Synchronous on purpose: the move methods call it before their first await, so a refusal
@@ -1367,12 +1411,13 @@ class MediaViewer {
 
     /**
      * Centralized file removal from the media list.
-     * Handles array splice, cache cleanup (predictionScores, featureCache, clipCache, featureMetadata, perceptualHashes),
-     * and currentIndex adjustment.
+     * Handles array splice, cache cleanup (predictionScores, featureCache, clipCache, featureMetadata, perceptualHashes,
+     * bulkRated (save deferrable), bulkRatedPairs keys, the like-or-skip set), and currentIndex adjustment.
      * @param {string} filePath - Absolute path of the file to remove
+     * @param {{deferBulkSave?: boolean}} [options] - skip the bulk-rated save; the caller saves once
      * @returns {number} The index the file was at before removal, or -1 if not found
      */
-    removeFileFromList(filePath) {
+    removeFileFromList(filePath, { deferBulkSave = false } = {}) {
         const index = this.mediaFiles.findIndex((f) => f.path === filePath);
         if (index === -1) return -1;
 
@@ -1386,12 +1431,15 @@ class MediaViewer {
         this.jxlFrameCache.delete(filePath);
         this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
-        if (this.bulkRated.delete(removedName)) {
+        // A batch (dislikeSkippedFiles) passes deferBulkSave and saves once at the end: one un-awaited
+        // save per file would start overlapping writes of the same .bulk_rated.json.
+        if (this.bulkRated.delete(removedName) && !deferBulkSave) {
             this.saveBulkRatedFile();
         }
 
         // A removed/moved file can never re-pair — drop any rated-pair key that references it.
         for (const key of this._bulkPairKeysReferencing(removedName)) this.bulkRatedPairs.delete(key);
+        this.likeOrSkip.forget(filePath); // a rated or moved file is no longer a skip (G2)
 
         if (this.currentIndex >= this.mediaFiles.length) {
             this.currentIndex = Math.max(0, this.mediaFiles.length - 1);
@@ -1413,6 +1461,35 @@ class MediaViewer {
         return keys;
     }
 
+    // The one place a new ORDER of mediaFiles is announced (G2 spec § 4). Every method that puts a new
+    // order on screen (reassigns mediaFiles) calls it; in-place insertions and removals by moves and undos
+    // (splice/push) are not announced. tests/like-or-skip-glue.test.js fails on a `this.mediaFiles =`
+    // outside its reviewed list — it matches those assignments only — so a new reassigning site cannot
+    // skip it silently.
+    // 'ai-fresh' / 'ai-resort' turn like-or-skip tracking on (skips emptied / kept); 'other' / 'folder'
+    // turn it off — 'other' tells the user how many un-disliked skips it discarded.
+    // An AI order also commits the out-of-date mark (spec § 8) the re-sort chip counts from; any other
+    // order drops it.
+    _onOrderChanged(kind) {
+        this._orderGeneration++;
+        if (kind === 'ai-fresh' || kind === 'ai-resort') {
+            this.likeOrSkip.activate({ keepSkips: kind === 'ai-resort' });
+            // The training set this order was computed with (spec § 8): the snapshot the sort took before
+            // training, else — an order applied outside a sort run — the history now.
+            this._staleMark = this._pendingStaleMark ?? this.moveHistory.slice();
+        } else {
+            const discarded = this.likeOrSkip.skippedIn(this.mediaFiles).length;
+            this.likeOrSkip.deactivate();
+            this._staleMark = null;
+            if (discarded > 0 && kind !== 'folder') {
+                this.showNotification(`Skipped list cleared (${LikeOrSkip.formatCount(discarded, 'file')})`, 'info');
+            }
+        }
+        this._pendingStaleMark = null;
+        this.updateDislikeSkippedButton();
+        this._updateResortChip();
+    }
+
     getMediaIndex(path) {
         if (
             !this._mediaPathIndex ||
@@ -1430,8 +1507,8 @@ class MediaViewer {
     // (deep review #1), so if a same-named file appeared in the source folder after the move, the
     // restore lands at "name (n).ext". Re-point the history entry being undone at that path, so the
     // list entry, the notice and the feature caches built from it follow the file, not its old name.
-    // (handleCancel's legs pop the entry first; the tournament leg peeks it and re-points it only
-    // once the undo proceeds.)
+    // (handleCancel's legs pop the entry first, and _undoSkipBatch re-points each file of a popped
+    // batch entry; the tournament leg peeks it and re-points it only once the undo proceeds.)
     _followRestoredFile(move, moveResult) {
         const restoredPath = moveResult?.targetPath;
         if (!restoredPath || restoredPath === move.originalPath) return;
@@ -1452,7 +1529,15 @@ class MediaViewer {
 
         if (features.length === 576) {
             this.featureCache.set(path, new Float32Array(features.slice(0, 64)));
-            this.clipCache.set(path, new Float32Array(features.slice(64, 576)));
+            // CLAUDE.md "silent zero CLIP half": getCombinedFeatures zero-pads a missing CLIP half. A real
+            // embedding is unit-normalised, never all zero, so an all-zero half is that padding — writing it
+            // here would hand it to training as a real vector (the bulk collector's hasClip checks length
+            // only, and a batch undo restores bulk labels too). Leave clipCache without the file instead, so
+            // the next extraction fills it (G2 final review F6).
+            const clipHalf = features.slice(64, 576);
+            if (clipHalf.some((v) => v !== 0)) {
+                this.clipCache.set(path, new Float32Array(clipHalf));
+            }
         } else if (features.length === 64) {
             this.featureCache.set(path, new Float32Array(features));
         } else {
@@ -1462,6 +1547,21 @@ class MediaViewer {
         if (entry.fileSize !== undefined) {
             this.featureMetadata.set(path, { size: entry.fileSize, mtime: 0 });
         }
+    }
+
+    // The load-error toast's Remove action (G2 final review F8). Error toasts persist, so the index at error
+    // time can name another file by the time Remove is clicked (a batch or a move shifts the list): resolve
+    // the failing file by path now, and do nothing if it is no longer listed. Refused while a file action
+    // is in flight — the removal is a list change plus a render.
+    _removeFailedFileByPath(filePath, side = null) {
+        if (this._refuseIfFileOpInFlight()) {
+            return;
+        }
+        const index = this.mediaFiles.findIndex((f) => f.path === filePath);
+        if (index === -1) {
+            return;
+        }
+        this.removeFailedFile(index, side);
     }
 
     removeFailedFile(index, side = null) {
@@ -1619,6 +1719,14 @@ class MediaViewer {
                 }
             }
         } else {
+            // Like-or-skip (G2): leaving a file with Next on the AI order records it as skipped. After the
+            // guards above, so a refused Next records nothing; never on a one-file list, where Next stays put.
+            // Read before the wrap: a stale out-of-range cursor (G2 final review F3) records nothing and
+            // self-heals through the modulo below, as it did before skips were tracked.
+            const leaving = this.mediaFiles[this.currentIndex];
+            if (this.mediaFiles.length > 1 && leaving) {
+                this.likeOrSkip.recordSkip(leaving.path);
+            }
             this.currentIndex = (this.currentIndex + 1) % this.mediaFiles.length;
         }
         this.showMedia();
@@ -2058,6 +2166,18 @@ class MediaViewer {
     }
 
     setupEventListeners() {
+        // A mouse click never leaves a button holding keyboard focus (G2 final review F5). Enter is unbound in
+        // single mode and never prevented, so a focused button takes it: after a click on Restore Order, the
+        // "F then Enter" of a bulk dislike whose F was dropped mid-render pressed Restore Order and discarded
+        // every skip. Bubble phase, after the button's own handler; only pointer clicks (detail > 0) — a
+        // keyboard activation (detail 0) keeps focus, for accessibility. The bulk-dislike dialog focuses its
+        // confirm button programmatically, and a click on either of its buttons closes it first.
+        document.addEventListener('click', (e) => {
+            if (e.detail > 0) {
+                e.target.closest?.('button')?.blur();
+            }
+        });
+
         this.dropZone.addEventListener('click', () => this.openFolderDialog());
 
         this.dropZone.addEventListener('dragover', (e) => {
@@ -2077,6 +2197,9 @@ class MediaViewer {
 
         this.likeBtn.addEventListener('click', () => this.handleLike());
         this.dislikeBtn.addEventListener('click', () => this.handleDislike());
+        if (this.dislikeSkippedBtn) {
+            this.dislikeSkippedBtn.addEventListener('click', () => this.dislikeSkippedFiles());
+        }
         this.cancelBtn.addEventListener('click', () => this.handleCancel());
         if (this.specialBtn) {
             this.specialBtn.addEventListener('click', () => this.moveToSpecialFolder());
@@ -2094,6 +2217,12 @@ class MediaViewer {
             this.changeFolderBtn.addEventListener('click', async () => {
                 const folderPath = await window.electronAPI.openFolderDialog();
                 if (folderPath && folderPath !== this.baseFolderPath) {
+                    // Before the reset below, not only in loadFolder (G2 final review F1): a pick during a
+                    // file action would otherwise wipe the list and the history, then be refused, and the
+                    // action would push onto the wiped history with an undo that targets ''.
+                    if (this._refuseIfFileOpInFlight()) {
+                        return;
+                    }
                     await this.cleanupCurrentMedia();
                     this.mediaFiles = [];
                     this.currentIndex = 0;
@@ -2193,6 +2322,12 @@ class MediaViewer {
         // Sort by prediction button
         if (this.sortPredictionBtn) {
             this.sortPredictionBtn.addEventListener('click', () => this.handleSortByPrediction());
+        }
+
+        // The out-of-date chip re-sorts in place, keeping skips (G2). Never the plain button's handler:
+        // on a sorted list that one means Restore Order.
+        if (this.resortPredictionBtn) {
+            this.resortPredictionBtn.addEventListener('click', () => this.handleSortByPrediction({ resort: true }));
         }
 
         if (this.sortAlgorithmSelect) {
@@ -2942,6 +3077,13 @@ class MediaViewer {
     }
 
     async loadFolder(folderPath) {
+        // A file action (G1 guard) is moving files: a folder change now would leave the screen and the
+        // cursor on different files when it finishes, and push the old folder's history entry into the new
+        // folder's moveHistory (G2 review). The change-folder button refuses before its own reset (G2 final
+        // review); this stays as defence in depth for the other callers.
+        if (this._refuseIfFileOpInFlight()) {
+            return;
+        }
         if (!window.electronAPI) {
             this.showError('Electron API not available');
             return;
@@ -2994,6 +3136,7 @@ class MediaViewer {
                 this.currentFolderPath = window.electronAPI.path.basename(folderPath);
                 this.currentIndex = 0;
                 this.moveHistory = [];
+                this._onOrderChanged('folder');
                 this.tournament.engine = null;
                 this.showDropZone();
                 this.showError('No media files found in the selected folder');
@@ -3014,6 +3157,7 @@ class MediaViewer {
             this.isSortedBySimilarity = false;
             this.isSortedByPrediction = false;
             this.originalMediaFiles = [];
+            this._onOrderChanged('folder');
             this.perceptualHashes.clear();
             this.featureCache.clear();
             this.clipCache.clear();
@@ -3109,6 +3253,9 @@ class MediaViewer {
         if (this.sortPredictionBtn) {
             this.sortPredictionBtn.style.display = 'none';
         }
+        if (this.resortPredictionBtn) {
+            this.resortPredictionBtn.style.display = 'none';
+        }
         // Hide prediction badges
         this.hidePredictionBadges();
         if (this.currentMedia) {
@@ -3172,6 +3319,11 @@ class MediaViewer {
 
         this.updateFolderInfo();
         this.updateNavigationInfo();
+        // The list is empty: the AI-sort button (and through it the re-sort chip) and Dislike-skipped hide.
+        // The move and pair-move empty branches render nothing else that would refresh them (G2 final review
+        // F10).
+        this.updateSortPredictionButton();
+        this.updateDislikeSkippedButton();
     }
 
     // Improved cleanup method
@@ -3218,6 +3370,8 @@ class MediaViewer {
     async showMedia() {
         this.updateCompareUndoButton();
         this.updateBulkRateButtonsVisibility();
+        this.updateDislikeSkippedButton();
+        this._updateResortChip();
         if (this.mediaFiles.length === 0) {
             if (this.moveHistory.length > 0) {
                 this.showEmptyStateWithUndo();
@@ -3231,6 +3385,9 @@ class MediaViewer {
         const emptyState = this.mediaContainer.querySelector('.empty-state-undo');
         if (emptyState) {
             emptyState.remove();
+            // showEmptyStateWithUndo hid the AI-sort button over the empty list; an undo brought files back
+            // (G2 final review F10).
+            this.updateSortPredictionButton();
         }
 
         if (this.isLoading || this.mediaNavigationInProgress) {
@@ -3817,10 +3974,9 @@ class MediaViewer {
             if (media && media.tagName === 'IMG' && !this.isBeingCleaned) {
                 console.error('Image load error:', e);
                 this.hideLoadingSpinner();
-                const failedIndex = this.mediaFiles.findIndex((f) => f.path === file.path);
                 this.showError(`Failed to load image: ${file.name}`, {
                     actionButton: 'Remove',
-                    actionCallback: () => this.removeFailedFile(failedIndex, side),
+                    actionCallback: () => this._removeFailedFileByPath(file.path, side),
                 });
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
@@ -3873,10 +4029,9 @@ class MediaViewer {
             if (media && media.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 console.error('Video load error:', e);
                 this.hideLoadingSpinner();
-                const failedIndex = this.mediaFiles.findIndex((f) => f.path === file.path);
                 this.showError(`Failed to load video: ${file.name}`, {
                     actionButton: 'Remove',
-                    actionCallback: () => this.removeFailedFile(failedIndex, side),
+                    actionCallback: () => this._removeFailedFileByPath(file.path, side),
                 });
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
@@ -3914,10 +4069,9 @@ class MediaViewer {
             if (this.currentMedia && this.currentMedia.tagName === 'IMG' && !this.isBeingCleaned) {
                 console.error('Image load error:', e);
                 this.hideLoadingSpinner();
-                const failedIndex = this.currentIndex;
                 this.showError(`Failed to load image: ${file.name}`, {
                     actionButton: 'Remove',
-                    actionCallback: () => this.removeFailedFile(failedIndex),
+                    actionCallback: () => this._removeFailedFileByPath(file.path),
                 });
                 this.isLoading = false;
                 this.mediaNavigationInProgress = false;
@@ -3981,10 +4135,9 @@ class MediaViewer {
             if (this.currentMedia && this.currentMedia.tagName === 'VIDEO' && !this.isBeingCleaned) {
                 console.error('Video load error:', e);
                 this.hideLoadingSpinner();
-                const failedIndex = this.currentIndex;
                 this.showError(`Failed to load video: ${file.name}`, {
                     actionButton: 'Remove',
-                    actionCallback: () => this.removeFailedFile(failedIndex),
+                    actionCallback: () => this._removeFailedFileByPath(file.path),
                 });
                 this.isLoading = false;
                 this.isVideoLoading = false;
@@ -4359,6 +4512,263 @@ class MediaViewer {
         await this.moveCurrentFile('dislike');
     }
 
+    // Sole owner of #dislikeSkippedBtn (G2 spec § 9): label, title and visibility follow the skipped set,
+    // the mode and the live binding; disabled state and title suffix follow the dislike folder (G1). Called
+    // on every render (showMedia), after a batch or an undo that does not render, from _onOrderChanged,
+    // showEmptyStateWithUndo, updateRatingButtonsState (every folder-state refresh) and
+    // saveShortcut/resetShortcuts.
+    updateDislikeSkippedButton() {
+        if (!this.dislikeSkippedBtn) {
+            return;
+        }
+        const count =
+            this.isCompareMode || this.isTournamentMode ? 0 : this.likeOrSkip.skippedIn(this.mediaFiles).length;
+        this.dislikeSkippedBtn.style.display = count > 0 ? '' : 'none';
+        if (count === 0) {
+            return;
+        }
+        this.dislikeSkippedBtn.querySelector('.btn-label').textContent = `Dislike ${count} skipped`;
+        // The G1 folder state #dislikeBtn carries (G2 final review F12): disabled without a dislike folder —
+        // the batch needs only that one, so not areFoldersConfigured — and the re-confirm / unreachable
+        // suffix after the shortcut, in #dislikeBtn's order.
+        this.dislikeSkippedBtn.disabled = !this.customDislikeFolder;
+        this.dislikeSkippedBtn.title =
+            'Dislike all skipped files' +
+            this._shortcutSuffix('single', 'dislikeSkipped') +
+            this._folderStateSuffix('dislike');
+    }
+
+    // The like-or-skip confirmation (G2 spec § 9). Static markup; the count and the folder go in as text
+    // (G1 lint guard). While open it owns the keyboard: capture-phase listeners on document run before
+    // the app's own keydown handler, so Enter/Escape decide, Tab moves between the two buttons, and no
+    // other key reaches a shortcut. Both listeners come off on every close path.
+    showBulkDislikeConfirm({ count, folderName, includesOnScreen }) {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'bulk-dislike-modal';
+            modal.innerHTML = `
+                <div class="folder-creation-content">
+                    <div class="folder-creation-title">
+                        <i data-lucide="thumbs-down"></i>
+                        <span class="bulk-dislike-title"></span>
+                    </div>
+                    <p class="folder-creation-text bulk-dislike-text"></p>
+                    <p class="folder-creation-text bulk-dislike-onscreen"></p>
+                    <div class="folder-creation-actions">
+                        <button type="button" class="folder-creation-btn bulk-dislike-btn-confirm"></button>
+                        <button type="button" class="folder-creation-btn folder-creation-btn-cancel bulk-dislike-btn-cancel">Cancel</button>
+                    </div>
+                </div>
+            `;
+            modal.querySelector('.bulk-dislike-title').textContent =
+                `Dislike ${count} skipped ${count === 1 ? 'file' : 'files'}?`;
+            modal.querySelector('.bulk-dislike-text').textContent =
+                `They'll move to ${folderName}. One Undo${this._shortcutSuffix('single', 'undo')} brings them all back.`;
+            modal.querySelector('.bulk-dislike-onscreen').textContent = includesOnScreen
+                ? 'Includes the file on screen.'
+                : '';
+            const confirmBtn = modal.querySelector('.bulk-dislike-btn-confirm');
+            const cancelBtn = modal.querySelector('.bulk-dislike-btn-cancel');
+            confirmBtn.textContent = `Move ${LikeOrSkip.formatCount(count, 'file')}`;
+
+            const close = (result) => {
+                document.removeEventListener('keydown', onKeydown, true);
+                document.removeEventListener('keyup', swallow, true);
+                modal.remove();
+                resolve(result);
+            };
+            const swallow = (e) => {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            };
+            const onKeydown = (e) => {
+                swallow(e);
+                if (e.key === 'Tab') {
+                    (document.activeElement === confirmBtn ? cancelBtn : confirmBtn).focus();
+                } else if (e.repeat) {
+                    // a held key (the F that opened this, or Enter) decides nothing
+                } else if (e.key === 'Enter') {
+                    close(document.activeElement !== cancelBtn);
+                } else if (e.key === 'Escape') {
+                    close(false);
+                }
+            };
+            document.addEventListener('keydown', onKeydown, true);
+            document.addEventListener('keyup', swallow, true);
+            confirmBtn.addEventListener('click', () => close(true));
+            cancelBtn.addEventListener('click', () => close(false));
+
+            document.body.appendChild(modal);
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons({ root: modal });
+            }
+            confirmBtn.focus();
+        });
+    }
+
+    // Like-or-skip (G2 spec § 6): dislike every file passed with Next on the AI order, as ONE file action.
+    // Holds _fileOpInFlight across the dialog and every rename, and never calls moveCurrentFile — a
+    // guarded method calling another is silently refused. One history entry; one Ctrl+A undoes it.
+    async dislikeSkippedFiles() {
+        if (this._fileOpInFlight || this.isLoading) {
+            return;
+        }
+        if (this.isCompareMode || this.isTournamentMode || !this.likeOrSkip.active) {
+            return;
+        }
+        // A sort still running would reorder mediaFiles under the batch, dialog open or not.
+        if (this.isPredictionSorting || this.isComputingHashes) {
+            this.showNotification('Wait for the sort to finish', 'info');
+            return;
+        }
+        if (this.likeOrSkip.skippedIn(this.mediaFiles).length === 0) {
+            this.showNotification('Nothing skipped yet', 'info');
+            return;
+        }
+        if (!this.customDislikeFolder) {
+            this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
+            return;
+        }
+        // Before the first await, as in moveCurrentFile: nothing is torn down for a move main would refuse.
+        if (this._refuseIfNeedsRegrant(['dislike'], 'move')) {
+            return;
+        }
+
+        this._fileOpInFlight = true;
+        try {
+            this.signalUserActivity();
+            const batch = this.likeOrSkip.skippedIn(this.mediaFiles);
+            const filesBefore = [...this.mediaFiles];
+            const onScreen = this.mediaFiles[this.currentIndex] ?? null;
+            // Captured with the snapshot: they describe the list originalIndex refers to, not the live fields.
+            const indexBefore = this.currentIndex;
+            const generationBefore = this._orderGeneration;
+            const includesOnScreen = onScreen !== null && batch.includes(onScreen);
+            const targetFolderPath = this.customDislikeFolder;
+            const folderName = window.electronAPI.path.basename(targetFolderPath);
+
+            const confirmed = await this.showBulkDislikeConfirm({ count: batch.length, folderName, includesOnScreen });
+            if (!confirmed) {
+                return;
+            }
+
+            // Checked (and created if the user agrees) before anything is torn down, as in moveCurrentFile.
+            try {
+                const folderExists = await window.electronAPI.checkFolderExists(targetFolderPath);
+                if (folderExists === null) {
+                    this._refuseUngrantedFolder('dislike'); // refused by main, not missing
+                    return;
+                }
+                if (!folderExists) {
+                    if (!(await this.showFolderCreationDialog(targetFolderPath))) {
+                        return;
+                    }
+                    const createResult = await window.electronAPI.createFolder(targetFolderPath);
+                    if (!createResult.success) {
+                        throw new Error(createResult.error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error preparing the dislike folder:', error);
+                this.showError(`Failed to move files: ${error.message}`);
+                return;
+            }
+
+            // Captured before any file leaves: undo rebuilds every per-file cache from these (spec § 6 step 4).
+            const captured = batch.map((file) => {
+                const combined = this.getCombinedFeatures(file.path);
+                const raw = this.featureCache.get(file.path);
+                const prunedPairKeys = this._bulkPairKeysReferencing(file.name);
+                return {
+                    file: { ...file },
+                    originalIndex: filesBefore.indexOf(file),
+                    fileName: file.name,
+                    originalPath: file.path,
+                    fileSize: file.size,
+                    mlFeatures: combined ? Array.from(combined) : raw ? Array.from(raw) : null,
+                    score: this.predictionScores.get(file.path),
+                    bulkBucket: this.bulkRated.get(file.name),
+                    ...(prunedPairKeys.length > 0 ? { prunedPairKeys } : {}),
+                };
+            });
+
+            let tornDown = false;
+            if (includesOnScreen && this.currentMedia && this.currentMedia.tagName === 'VIDEO') {
+                await this.forceVideoCleanup();
+                // Additional wait for file handles to be fully released (as moveCurrentFile)
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                tornDown = true;
+            }
+
+            if (captured.length > 50) {
+                this.showNotification(`Moving ${LikeOrSkip.formatCount(captured.length, 'file')}…`, 'info');
+            }
+
+            // One at a time: main's no-overwrite suffix probe (lstat, then rename) is not atomic.
+            const moved = [];
+            const failures = [];
+            for (const sub of captured) {
+                try {
+                    const result = await window.electronAPI.moveFile({
+                        sourcePath: sub.originalPath,
+                        targetFolder: targetFolderPath,
+                        fileName: sub.fileName,
+                    });
+                    if (!result.success) {
+                        throw new Error(result.error);
+                    }
+                    moved.push({ ...sub, newPath: result.targetPath });
+                } catch (error) {
+                    failures.push(error.message);
+                }
+            }
+
+            const movedPaths = new Set(moved.map((m) => m.originalPath));
+            const target = LikeOrSkip.planCursorAfterBatch(filesBefore, movedPaths, indexBefore);
+            for (const m of moved) {
+                this.removeFileFromList(m.originalPath, { deferBulkSave: true });
+            }
+            if (moved.some((m) => m.bulkBucket)) {
+                await this.saveBulkRatedFile();
+            }
+            // Mapped by path onto the list as it is now (removeFileFromList only clamps the index).
+            const targetIndex = target ? this.mediaFiles.findIndex((f) => f.path === target) : -1;
+            this.currentIndex = targetIndex === -1 ? 0 : targetIndex;
+
+            if (moved.length > 0) {
+                this.moveHistory.push({
+                    skipBatch: true,
+                    actionType: 'dislike',
+                    files: moved,
+                    prevCurrentPath: onScreen?.path ?? null,
+                    orderGeneration: generationBefore,
+                });
+            }
+            if (failures.length === 0) {
+                this.showNotification(
+                    `👎 Moved ${LikeOrSkip.formatCount(moved.length, 'file')} to ${folderName}`,
+                    'dislike'
+                );
+            } else {
+                this.showError(
+                    `Moved ${moved.length} of ${captured.length} — ${failures.length} failed: ${failures[0]}`
+                );
+            }
+
+            this.updateFolderInfo();
+            if (tornDown || (onScreen !== null && movedPaths.has(onScreen.path))) {
+                // showMedia() sets isLoading synchronously, before finally releases _fileOpInFlight.
+                this.showMedia();
+            } else {
+                this.updateNavigationInfo();
+                this.updateDislikeSkippedButton();
+                this._updateResortChip();
+            }
+        } finally {
+            this._fileOpInFlight = false;
+        }
+    }
+
     async undoBulkRating(lastMove) {
         for (const f of lastMove.bulkFiles) {
             this.bulkRated.delete(f.name);
@@ -4367,6 +4777,96 @@ class MediaViewer {
         // Re-admit the exact combo so it can reappear at its natural extreme position on re-render.
         this.bulkRatedPairs.delete(this.bulkPairKey(lastMove.bulkFiles[0].name, lastMove.bulkFiles[1].name));
         this.showNotification('↩️ Bulk rating undone', 'info');
+    }
+
+    // Batch undo for dislikeSkippedFiles (G2 spec § 7). Runs inside handleCancel's _fileOpInFlight hold
+    // and takes no guard itself. The entry is already popped: files that fail to come back are pushed
+    // back as a smaller skipBatch entry (the same entry when none came back), so the next Ctrl+A retries
+    // just those.
+    async _undoSkipBatch(entry) {
+        const onScreenBefore = this.mediaFiles[this.currentIndex] ?? null;
+        let targetPath = entry.prevCurrentPath;
+        const restored = [];
+        const failed = [];
+        let firstError = null;
+        for (const sub of entry.files) {
+            try {
+                const result = await window.electronAPI.moveFile({
+                    sourcePath: sub.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: sub.fileName,
+                });
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+                const wasOnScreen = sub.originalPath === targetPath;
+                this._followRestoredFile(sub, result); // lands at "name (n).ext" if the name was taken
+                if (wasOnScreen) {
+                    targetPath = sub.originalPath;
+                }
+                restored.push(sub);
+            } catch (error) {
+                failed.push(sub);
+                firstError ??= error.message;
+            }
+        }
+
+        if (restored.length > 0) {
+            const reinsert = restored.map((sub) => ({
+                file: { ...sub.file, path: sub.originalPath, name: sub.fileName },
+                originalIndex: sub.originalIndex,
+            }));
+            this.mediaFiles = LikeOrSkip.planUndoReinsertion(this.mediaFiles, reinsert, {
+                orderUnchanged: entry.orderGeneration === this._orderGeneration,
+                missing: failed.map((sub) => sub.originalIndex),
+            });
+            for (const sub of restored) {
+                this.restoreFeatureCachesFromHistory(sub); // feature caches + rated-pair keys
+                if (typeof sub.score === 'number') {
+                    this.predictionScores.set(sub.originalPath, sub.score);
+                }
+                if (sub.bulkBucket) {
+                    this.bulkRated.set(sub.fileName, sub.bulkBucket);
+                }
+                this.likeOrSkip.restore(sub.originalPath);
+            }
+            if (restored.some((sub) => sub.bulkBucket)) {
+                await this.saveBulkRatedFile();
+            }
+        }
+        if (failed.length > 0) {
+            // Nothing came back: the SAME object goes back. computeStaleCount counts entries by identity,
+            // so a copy would count the unchanged batch twice ("Re-sort · 2N new"). A partial failure's
+            // smaller entry still counts as new; spec § 8 accepts that overcount.
+            this.moveHistory.push(
+                restored.length === 0 ? entry : { ...entry, files: failed, prevCurrentPath: targetPath }
+            );
+        }
+
+        const targetIndex = targetPath ? this.mediaFiles.findIndex((f) => f.path === targetPath) : -1;
+        if (targetIndex !== -1) {
+            this.currentIndex = targetIndex;
+        } else if (onScreenBefore) {
+            this.currentIndex = Math.max(0, this.mediaFiles.indexOf(onScreenBefore));
+        }
+
+        if (failed.length === 0) {
+            this.showNotification(`✅ Restored ${LikeOrSkip.formatCount(restored.length, 'file')}`, 'success');
+        } else {
+            this.showError(
+                `Restored ${restored.length} of ${entry.files.length} — ${failed.length} failed: ${firstError}`
+            );
+        }
+        this.updateFolderInfo();
+
+        const nowOnScreen = this.mediaFiles[this.currentIndex] ?? null;
+        if (this.isCompareMode || nowOnScreen !== onScreenBefore || !this.currentMedia) {
+            await this.showMedia();
+        } else {
+            this.updateNavigationInfo();
+            this.updateDislikeSkippedButton();
+            this._updateResortChip();
+        }
     }
 
     async handleCancel() {
@@ -4380,6 +4880,18 @@ class MediaViewer {
 
         if (this.moveHistory.length === 0) {
             this.showNotification('No moves to undo', 'error');
+            return;
+        }
+
+        // A batch undo while a sort runs (G2 final review F2): a result applied mid-undo reorders mediaFiles
+        // under _undoSkipBatch, which decides about rendering from the file on screen before its renames —
+        // the screen and the cursor end up on different files. The batch itself is refused the same way.
+        // Other entry kinds are unchanged.
+        if (
+            this.moveHistory[this.moveHistory.length - 1].skipBatch &&
+            (this.isPredictionSorting || this.isComputingHashes)
+        ) {
+            this.showNotification('Wait for the sort to finish', 'info');
             return;
         }
 
@@ -4410,6 +4922,13 @@ class MediaViewer {
                 }
                 if (this.isSortedByPrediction) this.requestPredictionScores();
                 await this.showMedia();
+                return;
+            }
+
+            // Like-or-skip batch (G2 spec § 7): one entry, one Ctrl+A, the whole batch back.
+            if (lastMove.skipBatch) {
+                this.moveHistory.pop();
+                await this._undoSkipBatch(lastMove);
                 return;
             }
 
@@ -4474,8 +4993,16 @@ class MediaViewer {
                     this.showError(`Failed to undo move: ${error.message}`);
                     this.moveHistory.push(lastMove);
                 }
-            } else if (this.isCompareMode && lastMove.compareMode && this.moveHistory.length >= 2) {
-                // In compare mode, restore both files (last two moves from like/dislike)
+            } else if (
+                this.isCompareMode &&
+                lastMove.compareMode &&
+                this.moveHistory.length >= 2 &&
+                this.moveHistory[this.moveHistory.length - 2]?.compareMode
+            ) {
+                // In compare mode, restore both files (last two moves from like/dislike). Both entries must be
+                // compareMode, as in the single-mode branch below: an orphan compare entry (a pair move whose
+                // second rename failed) above a skipBatch would otherwise pop the batch as firstMove (G2 final
+                // review F9). An orphan falls through to the single-file branch.
                 const secondMove = this.moveHistory.pop();
                 const firstMove = this.moveHistory.pop();
 
@@ -4686,6 +5213,19 @@ class MediaViewer {
 
     // ---------- Tournament Mode ----------
     async switchMode(mode) {
+        // A file action (G1 guard) is moving files: a mode switch now would leave the screen and the cursor
+        // on different files when it finishes (G2 review).
+        if (this._refuseIfFileOpInFlight()) {
+            return;
+        }
+        // A sort still running would apply its order inside Tournament mode: the AI pair drawn on screen
+        // while picks go to the engine's unseen pair, and Apply later moving files from those picks. Entry's
+        // _onOrderChanged('other') would also drop the running sort's _pendingStaleMark (G2 final review F7).
+        // Before any leave or config prompt.
+        if (mode === 'tournament' && (this.isPredictionSorting || this.isComputingHashes)) {
+            this.showNotification('Wait for the sort to finish', 'info');
+            return;
+        }
         // Leaving an active, incomplete tournament → confirm Save/Discard first. The leave
         // prompt resumes the switch (to `mode`) after the user chooses.
         if (
@@ -4741,6 +5281,7 @@ class MediaViewer {
         }
         this.isSortedBySimilarity = false;
         this.isSortedByPrediction = false;
+        this._onOrderChanged('other');
         this.mlComparePairIndex = 0;
         this.currentIndex = 0;
         const simLabel = this.sortSimilarityBtn?.querySelector('.btn-label');
@@ -4759,6 +5300,9 @@ class MediaViewer {
         } else {
             if (this.sortSettings) this.sortSettings.style.display = 'none';
             if (this.sortPredictionBtn) this.sortPredictionBtn.style.display = 'none';
+            if (this.resortPredictionBtn) {
+                this.resortPredictionBtn.style.display = 'none';
+            }
         }
     }
 
@@ -5673,7 +6217,12 @@ class MediaViewer {
             };
         }
 
+        // Apply and Discard refuse at the start while a file action holds the guard (G2 final review F1):
+        // the modal stays and nothing irreversible runs.
         applyBtn.onclick = async () => {
+            if (this._refuseIfFileOpInFlight()) {
+                return;
+            }
             const result = await this.tournament.handleApply();
             cleanup();
             if (result.success) {
@@ -5692,6 +6241,9 @@ class MediaViewer {
         };
 
         discardBtn.onclick = async () => {
+            if (this._refuseIfFileOpInFlight()) {
+                return;
+            }
             await this.tournament.handleDiscard();
             cleanup();
             this.exitTournamentMode();
@@ -6155,6 +6707,12 @@ class MediaViewer {
             return;
         }
 
+        // A file action (G1 guard) is moving files: a reorder now would leave the screen and the cursor on
+        // different files when it finishes (G2 review). Below the Cancel branch above, which stays live.
+        if (this._refuseIfFileOpInFlight()) {
+            return;
+        }
+
         if (this.mediaFiles.length < 2) {
             this.showNotification('Need at least 2 media files to sort', 'error');
             return;
@@ -6179,6 +6737,7 @@ class MediaViewer {
             // Restore original order
             this.mediaFiles = [...this.originalMediaFiles];
             this.isSortedBySimilarity = false;
+            this._onOrderChanged('other');
             this.currentIndex = 0;
             await this.showMedia();
             this.showNotification('📋 Restored original order', 'success');
@@ -6242,6 +6801,7 @@ class MediaViewer {
 
                 // Sorting completed from cache!
                 this.isSortedBySimilarity = true;
+                this._onOrderChanged('other');
                 this.currentIndex = 0;
                 this.clearProgressNotification();
 
@@ -6420,6 +6980,7 @@ class MediaViewer {
 
                 // Sorting completed successfully!
                 this.isSortedBySimilarity = true;
+                this._onOrderChanged('other');
                 this.currentIndex = 0;
                 this.clearProgressNotification();
 
@@ -6438,6 +6999,11 @@ class MediaViewer {
             if (!wasAlreadySorted && this.originalMediaFiles.length > 0) {
                 this.mediaFiles = [...this.originalMediaFiles];
                 this.originalMediaFiles = [];
+                // Not an order change on screen (G2): this puts back the order the sort started from,
+                // without re-rendering, so like-or-skip tracking is left as it was. The generation still
+                // bumps: membership can differ from the snapshot (a file moved mid-sort comes back), so a
+                // later batch undo parks its files instead of trusting old positions.
+                this._orderGeneration++;
             }
         } finally {
             this.isComputingHashes = false;
@@ -7532,8 +8098,10 @@ class MediaViewer {
         }
     }
 
-    // Apply a completed ML sort result to the file list. Returns true if an order was applied.
-    applyPredictionSortResult(result) {
+    // Apply a completed ML sort result to the file list. Returns true if an order was applied. A fresh
+    // sort lands on the top file; a chip re-sort (`resort`, G2) parks the skips first and lands on the
+    // first unjudged file.
+    applyPredictionSortResult(result, { resort = false } = {}) {
         if (!result || !result.sortedFilenames) {
             this.showNotification(result?.reason || 'Could not sort files', 'warning');
             return false;
@@ -7551,12 +8119,25 @@ class MediaViewer {
                 if (file) this.predictionScores.set(file.path, score);
             }
         }
-        this.mediaFiles = sorted;
-        this.currentIndex = 0;
+        if (resort) {
+            // A chip re-sort (G2 spec D2, D3): un-disliked skips stay parked behind the cursor, and the
+            // cursor lands on the new best unjudged file — and in compare mode on the new best pair.
+            const parked = LikeOrSkip.parkSkippedOrder(this.mediaFiles, sorted, this.likeOrSkip.skipped);
+            this.mediaFiles = parked.files;
+            this.currentIndex = parked.cursor;
+            this.mlComparePairIndex = 0;
+        } else {
+            this.mediaFiles = sorted;
+            this.currentIndex = 0;
+        }
         this.isSortedByPrediction = true;
+        this._onOrderChanged(resort ? 'ai-resort' : 'ai-fresh');
         this.showMedia();
         this.updateSortPredictionButton();
-        this.showNotification('Sorted by predicted preference', 'success');
+        this.showNotification(
+            resort ? 'Re-sorted by predicted preference' : 'Sorted by predicted preference',
+            'success'
+        );
         return true;
     }
 
@@ -8444,9 +9025,12 @@ class MediaViewer {
 
     updateSortPredictionButton() {
         if (!this.sortPredictionBtn) return;
-        // Sorting is disabled in tournament mode — keep the button hidden even if ML events fire.
-        if (this.isTournamentMode) {
+        // Sorting is disabled in tournament mode — keep the button hidden even if ML events fire. Hidden over
+        // an empty list too, as the chip is (G2 final review F10): a click there would train to sort nothing,
+        // and the post-training refresh of a sort a folder change aborted would otherwise re-show it.
+        if (this.isTournamentMode || this.mediaFiles.length === 0) {
             this.sortPredictionBtn.style.display = 'none';
+            this._updateResortChip();
             return;
         }
 
@@ -8477,11 +9061,56 @@ class MediaViewer {
             labelEl.textContent = 'Sort by Predicted';
             this.sortPredictionBtn.title = 'Sort by predicted preference (learned from your ratings)';
         }
+        this._updateResortChip();
     }
 
-    async handleSortByPrediction() {
+    // "↻ Re-sort · N new" (G2 spec § 8): visible only while the AI order is on screen and the training set
+    // has changed since it was computed. Called from showMedia (every rating renders), from
+    // updateSortPredictionButton, _onOrderChanged, and the batch / batch-undo branches that do not render.
+    _updateResortChip() {
+        if (!this.resortPredictionBtn) {
+            return;
+        }
+        const count = LikeOrSkip.computeStaleCount(this.moveHistory, this._staleMark);
+        const visible =
+            count > 0 &&
+            this.likeOrSkip.active &&
+            this.isMlEnabled &&
+            !this.isPredictionSorting &&
+            !this.isTournamentMode &&
+            this.mediaFiles.length > 0;
+        this.resortPredictionBtn.style.display = visible ? 'inline-flex' : 'none';
+        if (!visible) {
+            return;
+        }
+        this.resortPredictionBtn.querySelector('.btn-label').textContent = `Re-sort · ${count} new`;
+        this.resortPredictionBtn.title = `${LikeOrSkip.formatCount(count, 'rating')} since the last AI sort — re-sort to include them (retrains the model)`;
+    }
+
+    // Wait for an in-flight render to settle before applying a new order (G2 review): showMedia()
+    // returns early on isLoading, so an order applied mid-render would paint the old file under the
+    // new cursor. Capped — a stranded flag must not hold the sort (its card, its CLIP lease) forever.
+    async _waitForRenderIdle(maxMs = 2000) {
+        const start = Date.now();
+        while ((this.isLoading || this.mediaNavigationInProgress) && Date.now() - start < maxMs) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+    }
+
+    async handleSortByPrediction({ resort = false } = {}) {
+        // The chip re-sort (G2) acts only on the AI order it was shown for. First, ahead of the guards
+        // below that notify (similarity sort running, ML disabled): a stale chip click does nothing.
+        if (resort && !this.likeOrSkip.active) {
+            return;
+        }
         if (this.isTournamentMode) return;
         if (this.isPredictionSorting) return; // re-entrancy guard; Cancel is the abort affordance
+        // A file action (G1 guard) is moving files: a reorder now would leave the screen and the cursor on
+        // different files when it finishes (G2 review). Ahead of the two notices below, so a refused click
+        // shows only this one.
+        if (this._refuseIfFileOpInFlight()) {
+            return;
+        }
         // Mutual exclusion with the similarity sort — both share this.sortAbortController.
         if (this.isComputingHashes) {
             this.showNotification('⏳ Similarity sort in progress', 'info');
@@ -8492,13 +9121,14 @@ class MediaViewer {
             return;
         }
 
-        // Toggle off — restore original order (unchanged behavior).
-        if (this.isSortedByPrediction) {
+        // Toggle off — restore original order. Not for the re-sort chip (G2), which re-sorts in place.
+        if (this.isSortedByPrediction && !resort) {
             if (this.originalMediaFiles.length > 0) {
                 const currentPaths = new Set(this.mediaFiles.map((f) => f.path));
                 this.mediaFiles = this.originalMediaFiles.filter((f) => currentPaths.has(f.path));
             }
             this.isSortedByPrediction = false;
+            this._onOrderChanged('other');
             this.mlComparePairIndex = 0;
             this.currentIndex = 0;
             await this.showMedia();
@@ -8512,6 +9142,7 @@ class MediaViewer {
         if (this._refuseIfNeedsRegrant(['like', 'dislike'], 'sort')) return;
 
         this.isPredictionSorting = true;
+        this.updateSortPredictionButton(); // the re-sort chip hides while a sort runs
         this.sortAbortController = new AbortController();
         const runId = ++this.sortRunId;
         const signal = this.sortAbortController.signal;
@@ -8586,6 +9217,10 @@ class MediaViewer {
             }
             if (signal.aborted) throw new Error('cancelled');
 
+            // The out-of-date mark (G2 spec § 8): the history BEFORE training reads the folders. A rating
+            // made while the sort runs then counts as new even if training saw it — the hint may
+            // overcount, never undercount. _onOrderChanged commits it when the result applies.
+            this._pendingStaleMark = this.moveHistory.slice();
             // Ensure the worker holds a model trained on the CURRENT training set. The manager
             // decides whether that costs nothing (same session), a small read (model cache) or a
             // rebuild from cached vectors — the gate is the training set, not the source folder.
@@ -8604,7 +9239,11 @@ class MediaViewer {
                 return;
             }
 
-            this.originalMediaFiles = [...this.mediaFiles];
+            // A re-sort (G2) keeps the snapshot from the first sort: the list on screen is already the AI
+            // order, and copying it here would make Restore Order "restore" that.
+            if (!resort) {
+                this.originalMediaFiles = [...this.mediaFiles];
+            }
 
             // Phase 2 — extract any missing features (drives the SAME card via the sink).
             const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
@@ -8636,8 +9275,11 @@ class MediaViewer {
             // Phase 3 — sort (awaitable, stale-guarded).
             this.updateSortProgress({ phase: 'Sorting…' });
             const result = await this.runMlSort(allFeatures, runId);
+            // Let an in-flight render settle first (G2 final review F4), then check staleness and apply with
+            // no await in between — a cancel or a newer sort during the wait still wins.
+            await this._waitForRenderIdle();
             if (signal.aborted || runId !== this.sortRunId) throw new Error('cancelled');
-            this.applyPredictionSortResult(result);
+            this.applyPredictionSortResult(result, { resort });
         } catch (err) {
             if (signal.aborted || err.message === 'cancelled') {
                 this.showNotification('Sorting cancelled', 'info');
@@ -8649,6 +9291,8 @@ class MediaViewer {
             this.clearProgressNotification();
             this.sortAbortController = null;
             this.isPredictionSorting = false;
+            this._pendingStaleMark = null;
+            this.updateSortPredictionButton(); // hides itself over an emptied list (a folder change aborted us)
             this.extractionProgressSink = null;
             this.clipProgressSink = null;
             // Last out restarts the 30 s idle window, so a cancelled or thrown sort reclaims the
@@ -10047,6 +10691,13 @@ class MediaViewer {
             special: () => {
                 if (!this.isCompareMode && !this.isTournamentMode) this.moveToSpecialFolder();
             },
+            // Single mode only, like `special`: the reverse map produces it nowhere else, and the mode
+            // check is the second line of defence. Same guarded path as #dislikeSkippedBtn's click.
+            dislikeSkipped: () => {
+                if (!this.isCompareMode && !this.isTournamentMode) {
+                    this.dislikeSkippedFiles();
+                }
+            },
             // Bound in compare and tournament only. Tournament needs the engine-sync wrapper;
             // compare goes straight to the move, the same path #leftSpecialBtn's click takes.
             // Single mode binds `special` instead, so the reverse map never produces these there —
@@ -10084,6 +10735,7 @@ class MediaViewer {
         // advertising the old key while the F1 row already shows the new one.
         this.updateSpecialButtonsState();
         this.updateRatingButtonsState();
+        this.updateDislikeSkippedButton();
 
         // Persist the current shortcuts — loadShortcuts merges on load so full save is safe.
         // version must be written so the v1->v2 migration in loadShortcuts does not re-run and
@@ -10223,6 +10875,7 @@ class MediaViewer {
         localStorage.removeItem('customShortcuts');
         this.updateSpecialButtonsState();
         this.updateRatingButtonsState();
+        this.updateDislikeSkippedButton();
         this.renderShortcutRows?.();
         this.attachShortcutKeyListeners?.();
     }

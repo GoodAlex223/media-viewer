@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
 import { MlTrainingManager } from '../ml-training.js';
+import * as LikeOrSkip from '../like-or-skip.js';
+// Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
+globalThis.LikeOrSkip = LikeOrSkip;
 const require = createRequire(import.meta.url);
 
 // MediaViewer methods are instance methods on an ES module class.
@@ -320,6 +323,7 @@ describe('formatTimeAgo', () => {
 describe('removeFileFromList', () => {
     function createContext(files, currentIndex) {
         return {
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
             mediaFiles: files.map((p) => ({ path: p })),
             currentIndex,
             predictionScores: new Map(),
@@ -876,6 +880,22 @@ describe('restoreFeatureCachesFromHistory', () => {
         expect(c[511]).toBe((64 + 511) % 256);
     });
 
+    // G2 final review F6 — CLAUDE.md "silent zero CLIP half": getCombinedFeatures zero-pads a missing CLIP
+    // half, and a real CLIP embedding is unit-normalised, never all zero. Writing the zeros back would feed
+    // them to training as if real.
+    it('leaves clipCache alone when the 576-dim entry carries an all-zero CLIP half', () => {
+        const ctx = makeCtx();
+        const mlFeatures = new Float32Array(576);
+        for (let i = 0; i < 64; i++) mlFeatures[i] = i + 1;
+        const entry = { originalPath: '/d/z.png', mlFeatures: Array.from(mlFeatures), fileSize: 7 };
+
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+
+        expect(Array.from(ctx.featureCache.get('/d/z.png'))).toEqual(Array.from(mlFeatures.slice(0, 64)));
+        expect(ctx.clipCache.has('/d/z.png')).toBe(false);
+        expect(ctx.featureMetadata.get('/d/z.png')).toEqual({ size: 7, mtime: 0 });
+    });
+
     it('restores only featureCache when mlFeatures is 64-dim', () => {
         const ctx = makeCtx();
         const mlFeatures = new Float32Array(64);
@@ -959,8 +979,32 @@ describe('applyPredictionSortResult', () => {
             showMedia: () => {},
             updateSortPredictionButton: () => {},
             showNotification: () => {},
+            _onOrderChanged: vi.fn(),
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
+            mlComparePairIndex: 3,
         };
     }
+
+    it('a fresh sort announces ai-fresh and lands on the top file', () => {
+        const ctx = baseCtx();
+        applyPredictionSortResult.call(ctx, { sortedFilenames: ['c.png', 'b.png', 'a.png'] });
+        expect(ctx._onOrderChanged).toHaveBeenCalledWith('ai-fresh');
+        expect(ctx.currentIndex).toBe(0);
+    });
+
+    it('a re-sort parks the skips first and lands on the new best unjudged file (G2)', () => {
+        const ctx = baseCtx();
+        ctx.likeOrSkip.activate();
+        ctx.likeOrSkip.recordSkip('/d/a.png');
+        const notice = vi.fn();
+        ctx.showNotification = notice;
+        applyPredictionSortResult.call(ctx, { sortedFilenames: ['c.png', 'b.png', 'a.png'] }, { resort: true });
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a.png', 'c.png', 'b.png']);
+        expect(ctx.currentIndex).toBe(1);
+        expect(ctx.mlComparePairIndex).toBe(0);
+        expect(ctx._onOrderChanged).toHaveBeenCalledWith('ai-resort');
+        expect(notice).toHaveBeenCalledWith('Re-sorted by predicted preference', 'success');
+    });
 
     it('reorders mediaFiles and syncs predictionScores from scores', () => {
         const ctx = baseCtx();
@@ -1334,6 +1378,7 @@ describe('handleSortByPrediction lifecycle', () => {
             isTournamentMode: false,
             isMlEnabled: true,
             _refuseIfNeedsRegrant: () => false,
+            _onOrderChanged: vi.fn(),
             isSortedByPrediction: false,
             mlWorker: {},
             featureWorkers: [{}],
@@ -1387,6 +1432,10 @@ describe('handleSortByPrediction lifecycle', () => {
                 return true;
             },
             showMedia: () => {},
+            moveHistory: [],
+            _pendingStaleMark: null,
+            _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
+            _waitForRenderIdle: extractAsyncMethod('_waitForRenderIdle'),
             ...overrides,
         };
         ctx._phases = phases;
@@ -1406,6 +1455,28 @@ describe('handleSortByPrediction lifecycle', () => {
         // dependency at all) — handleSortByPrediction's finally is the single owner, on the
         // success path too, not just on cancel.
         expect(ctx.clearProgressNotification).toHaveBeenCalled();
+    });
+
+    it('takes the out-of-date mark before training reads the folders, and clears the pending mark on exit (G2)', async () => {
+        const earlier = { actionType: 'like' };
+        let markAtTraining;
+        const ctx = makeCtx({ moveHistory: [earlier] });
+        ctx.mlTraining = {
+            ensureTrainedModel: () => {
+                markAtTraining = ctx._pendingStaleMark;
+                ctx.moveHistory.push({ actionType: 'like' }); // a rating made while training runs
+                return Promise.resolve({
+                    source: 'trained',
+                    stats: { isReady: true },
+                    fingerprint: 'fp',
+                    descriptor: {},
+                });
+            },
+        };
+        await handleSortByPrediction.call(ctx);
+        expect(markAtTraining).toEqual([earlier]);
+        expect(markAtTraining[0]).toBe(earlier);
+        expect(ctx._pendingStaleMark).toBeNull();
     });
 
     it('bails unsorted when aborted during the load phase', async () => {
@@ -1717,6 +1788,188 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(showMlLearningIndicator).not.toHaveBeenCalled();
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(showNotification).toHaveBeenCalledWith(expect.stringContaining('Need more ratings'), 'warning');
+    });
+
+    describe('re-sort from the chip (G2)', () => {
+        const resortCtx = (overrides = {}) => {
+            const likeOrSkip = new LikeOrSkip.SkipTracker();
+            likeOrSkip.activate();
+            const original = [
+                { name: 'b.png', path: '/d/b.png' },
+                { name: 'a.png', path: '/d/a.png' },
+            ];
+            return makeCtx({
+                isSortedByPrediction: true,
+                likeOrSkip,
+                originalMediaFiles: original,
+                applyPredictionSortResult: vi.fn(() => true),
+                runMlSort: vi.fn(() => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} })),
+                ...overrides,
+            });
+        };
+
+        it('re-sorts instead of restoring the order, and passes resort on', async () => {
+            const ctx = resortCtx();
+            await handleSortByPrediction.call(ctx, { resort: true });
+            expect(ctx.runMlSort).toHaveBeenCalledOnce();
+            expect(ctx.applyPredictionSortResult).toHaveBeenCalledWith(expect.anything(), { resort: true });
+            expect(ctx.isSortedByPrediction).toBe(true);
+        });
+
+        it('keeps the original-order snapshot, so Restore Order still returns the folder order', async () => {
+            const ctx = resortCtx();
+            const snapshot = ctx.originalMediaFiles;
+            await handleSortByPrediction.call(ctx, { resort: true });
+            expect(ctx.originalMediaFiles).toBe(snapshot);
+        });
+
+        it('does nothing when the AI order is no longer on screen', async () => {
+            const ctx = resortCtx({ likeOrSkip: new LikeOrSkip.SkipTracker() });
+            await handleSortByPrediction.call(ctx, { resort: true });
+            expect(ctx.runMlSort).not.toHaveBeenCalled();
+        });
+
+        it('a plain click on a sorted list still restores the order', async () => {
+            const ctx = resortCtx();
+            await handleSortByPrediction.call(ctx);
+            expect(ctx.runMlSort).not.toHaveBeenCalled();
+            expect(ctx.isSortedByPrediction).toBe(false);
+        });
+
+        // G2 review R6(a): a re-sort reorders mediaFiles under a file action's snapshot.
+        it('refuses while a file action is in flight', async () => {
+            const ctx = resortCtx({ _fileOpInFlight: true, showNotification: vi.fn() });
+            const order = ctx.mediaFiles.map((f) => f.path);
+            await handleSortByPrediction.call(ctx, { resort: true });
+            expect(ctx.showNotification.mock.calls).toEqual([['Wait for the move to finish', 'info']]);
+            expect(ctx.runMlSort).not.toHaveBeenCalled();
+            expect(ctx.isPredictionSorting).toBe(false);
+            expect(ctx._phases).toEqual([]);
+            expect(ctx.mediaFiles.map((f) => f.path)).toEqual(order);
+        });
+    });
+
+    // G2 review R6(a): Restore Order (or a fresh sort) mid-batch left the screen and the cursor on
+    // different files when the batch finished.
+    describe('refuses while a file action is in flight (G2 review)', () => {
+        it.each([
+            ['Restore Order', true],
+            ['Sort by Predicted', false],
+        ])('%s', async (_label, sorted) => {
+            const runMlSort = vi.fn(() => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} }));
+            const ctx = makeCtx({
+                _fileOpInFlight: true,
+                isSortedByPrediction: sorted,
+                originalMediaFiles: [
+                    { name: 'b.png', path: '/d/b.png' },
+                    { name: 'a.png', path: '/d/a.png' },
+                ],
+                currentIndex: 1,
+                showNotification: vi.fn(),
+                showMedia: vi.fn(),
+                runMlSort,
+            });
+            await handleSortByPrediction.call(ctx);
+            expect(ctx.showNotification.mock.calls).toEqual([['Wait for the move to finish', 'info']]);
+            expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a.png', 'b.png']);
+            expect(ctx.currentIndex).toBe(1);
+            expect(ctx.isSortedByPrediction).toBe(sorted);
+            expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+            expect(ctx.showMedia).not.toHaveBeenCalled();
+            expect(runMlSort).not.toHaveBeenCalled();
+            expect(ctx.isPredictionSorting).toBe(false);
+        });
+    });
+
+    // G2 review R6(c), re-targeted by the final review (F10): a folder change to an EMPTY folder aborts the
+    // sort. The sort's finally refreshes the button, and updateSortPredictionButton's own empty-list rule
+    // keeps it (and the chip) hidden there — a click would train on an empty list.
+    it('leaves the sort button hidden when the list emptied under the sort', async () => {
+        const label = { textContent: '' };
+        const ctx = makeCtx({
+            sortPredictionBtn: { style: { display: 'none' }, disabled: false, title: '', querySelector: () => label },
+            updateSortPredictionButton: extractMethod('updateSortPredictionButton'),
+            _updateResortChip: vi.fn(),
+            runMlSort: function () {
+                this.mediaFiles = []; // loadFolder of an empty folder...
+                this.sortAbortController.abort(); // ...aborts the running sort
+                return Promise.resolve({ sortedFilenames: [], scores: {} });
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(ctx.isPredictionSorting).toBe(false);
+        expect(ctx._pendingStaleMark).toBeNull();
+        expect(ctx.sortPredictionBtn.style.display).toBe('none');
+        expect(ctx._updateResortChip).toHaveBeenCalled();
+    });
+
+    // G2 final review F4: showMedia() returns early on isLoading, so an order applied while a render is in
+    // flight paints the old file under the new cursor; the next S then records a file never seen.
+    it('waits for an in-flight render to settle before applying the order', async () => {
+        let loadingAtApply = null;
+        const ctx = makeCtx({
+            runMlSort: function () {
+                this.isLoading = true; // a render started while the sort ran
+                setTimeout(() => {
+                    this.isLoading = false;
+                }, 60);
+                return Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} });
+            },
+            applyPredictionSortResult: function (r) {
+                loadingAtApply = this.isLoading;
+                this.mediaFiles = r.sortedFilenames.map((n) => this.mediaFiles.find((f) => f.name === n));
+                this.isSortedByPrediction = true;
+                return true;
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(loadingAtApply).toBe(false);
+        expect(ctx.isSortedByPrediction).toBe(true);
+    });
+
+    it('re-checks for a cancel after the render wait, and then does not apply', async () => {
+        const apply = vi.fn(() => true);
+        const showNotification = vi.fn();
+        const ctx = makeCtx({
+            showNotification,
+            applyPredictionSortResult: apply,
+            runMlSort: function () {
+                this.mediaNavigationInProgress = true;
+                setTimeout(() => {
+                    this.sortAbortController.abort(); // Cancel clicked while the render settles
+                    this.mediaNavigationInProgress = false;
+                }, 60);
+                return Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} });
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(apply).not.toHaveBeenCalled();
+        expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
+    });
+});
+
+describe('_waitForRenderIdle (G2 final review F4)', () => {
+    const waitForRenderIdle = extractAsyncMethod('_waitForRenderIdle');
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('returns at once when nothing renders', async () => {
+        vi.useFakeTimers();
+        let done = false;
+        waitForRenderIdle.call({ isLoading: false, mediaNavigationInProgress: false }).then(() => (done = true));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(done).toBe(true);
+    });
+
+    it('is capped: a stranded flag releases the wait after maxMs', async () => {
+        vi.useFakeTimers();
+        let done = false;
+        waitForRenderIdle.call({ isLoading: true, mediaNavigationInProgress: false }, 200).then(() => (done = true));
+        await vi.advanceTimersByTimeAsync(150);
+        expect(done).toBe(false);
+        await vi.advanceTimersByTimeAsync(100);
+        expect(done).toBe(true);
     });
 });
 
@@ -2307,6 +2560,7 @@ describe('removeFileFromList bulk-rated purge', () => {
             bulkRatedPairs: new Set(),
             _bulkPairKeysReferencing: extractMethod('_bulkPairKeysReferencing'),
             currentIndex: 0,
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
             saveBulkRatedFile: vi.fn(),
         };
     }
@@ -2439,6 +2693,7 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
         const ctx = {
             mediaFiles: [gone, keep, other],
             currentIndex: 0,
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
             predictionScores: new Map(),
             featureCache: new Map(),
             clipCache: new Map(),
@@ -2477,6 +2732,7 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             bulkPairKey,
             _bulkPairKeysReferencing: keysReferencing,
             saveBulkRatedFile: () => {},
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
         };
     }
 
@@ -4033,6 +4289,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
         return {
             isTournamentMode: false,
             tournament: { engine: 'stale-engine' },
+            _onOrderChanged: vi.fn(),
             mediaFiles: [{ name: 'stale.png', path: '/old/stale.png' }],
             baseFolderPath: '/old',
             currentFolderPath: 'old',
@@ -4052,6 +4309,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
             _abortInFlightPredictionSort: vi.fn(abortInFlightPredictionSortImpl),
+            _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
         };
     }
 
@@ -6474,11 +6732,21 @@ describe('updateRatingButtonsState tooltips (G1)', () => {
             },
             areFoldersConfigured,
             _shortcutSuffix,
+            _folderStateSuffix: extractMethod('_folderStateSuffix'),
             keyDisplayName,
+            updateDislikeSkippedButton: vi.fn(),
         };
         for (const b of BUTTONS) ctx[b] = { disabled: false, title: '' };
         return ctx;
     }
+
+    // G2 final review F12: every refresh point of the rating buttons (init, folder browse/clear,
+    // refreshFolderGrants, _refuseUngrantedFolder, the shortcut panel) reaches #dislikeSkippedBtn too.
+    it('refreshes #dislikeSkippedBtn as well', () => {
+        const ctx = ctxWith();
+        updateRatingButtonsState.call(ctx);
+        expect(ctx.updateDislikeSkippedButton).toHaveBeenCalledOnce();
+    });
 
     it('shows the real default hotkeys (single mode read "Arrow Up"/"Arrow Down")', () => {
         const ctx = ctxWith();
@@ -6932,6 +7200,7 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
 
     function guardCtx(overrides = {}) {
         return {
+            likeOrSkip: new LikeOrSkip.SkipTracker(),
             _fileOpInFlight: false,
             isLoading: false,
             mediaNavigationInProgress: false,

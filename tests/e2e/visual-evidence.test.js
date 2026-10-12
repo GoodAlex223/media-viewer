@@ -140,3 +140,83 @@ test.describe('G2 visual evidence', () => {
         await captureScreenshot(page, 'g2-tournament-after');
     });
 });
+
+// G2 like-or-skip (2026-10-12, spec docs/superpowers/specs/2026-10-12-g2-like-or-skip-flow-design.md):
+// the same scenario on both runs — AI order, three skips, one Like — so the before/after pair differs
+// only by the feature. Opt-in, like the block above: a plain E2E run must never overwrite the
+// committed PNGs. Capture: LIKE_OR_SKIP_EVIDENCE_STAGE=before|after npx playwright test
+// tests/e2e/visual-evidence.test.js -g "like-or-skip"
+const LOS_STAGE = process.env.LIKE_OR_SKIP_EVIDENCE_STAGE;
+
+test.describe('G2 like-or-skip visual evidence', () => {
+    test.skip(!LOS_STAGE, 'Opt-in only — set LIKE_OR_SKIP_EVIDENCE_STAGE=before|after to (re)capture');
+
+    let electronApp, page, tmpFixtures;
+
+    test.afterEach(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+            tmpFixtures = null;
+        }
+    });
+
+    const idle = () =>
+        page.waitForFunction(
+            () =>
+                !window.mediaViewer.isLoading &&
+                !window.mediaViewer.mediaNavigationInProgress &&
+                !window.mediaViewer._fileOpInFlight
+        );
+
+    test('like-or-skip: single mode on the AI order after three skips and one Like', async () => {
+        tmpFixtures = await createTempFixtureDir([
+            'red-1x1.png',
+            'green-1x1.png',
+            'blue-1x1.png',
+            'normal-320x240.png',
+        ]);
+        await tmpFixtures.addFile('red-copy.png');
+        ({ electronApp, page } = await launchApp());
+        await seedLocalStorage(page, {
+            customLikeFolder: tmpFixtures.likeDir,
+            customDislikeFolder: tmpFixtures.dislikeDir,
+        });
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+        await idle();
+
+        const order = ['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'red-copy.png', 'normal-320x240.png'];
+        await page.evaluate((names) => {
+            const scores = Object.fromEntries(names.map((n, i) => [n, 0.9 - i * 0.1]));
+            window.mediaViewer.applyPredictionSortResult({ sortedFilenames: names, scores });
+        }, order);
+        await page.waitForFunction(() => window.mediaViewer.currentMedia !== null);
+        await idle();
+
+        for (let i = 0; i < 3; i++) {
+            await page.keyboard.press('s');
+            await idle();
+        }
+        await page.keyboard.press('q'); // Like red-copy.png — the training set changes, so the chip has a count
+        await idle();
+
+        // The header and the controls bar fade to opacity 0 at rest; reveal both for the shot.
+        await page.evaluate(() => {
+            document.querySelector('.header').classList.add('show');
+            document.getElementById('controls').classList.add('show');
+        });
+        await page.waitForTimeout(500);
+        await captureScreenshot(page, `g2-like-or-skip-single-${LOS_STAGE}`);
+
+        if (LOS_STAGE === 'after') {
+            await page.keyboard.press('f');
+            await page.locator('.bulk-dislike-modal').waitFor();
+            await page.waitForTimeout(300);
+            await captureScreenshot(page, 'g2-like-or-skip-dialog-after');
+            await page.keyboard.press('Escape');
+        }
+    });
+});
