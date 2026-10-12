@@ -1466,8 +1466,8 @@ class MediaViewer {
     // (deep review #1), so if a same-named file appeared in the source folder after the move, the
     // restore lands at "name (n).ext". Re-point the history entry being undone at that path, so the
     // list entry, the notice and the feature caches built from it follow the file, not its old name.
-    // (handleCancel's legs pop the entry first; the tournament leg peeks it and re-points it only
-    // once the undo proceeds.)
+    // (handleCancel's legs pop the entry first, and _undoSkipBatch re-points each file of a popped
+    // batch entry; the tournament leg peeks it and re-points it only once the undo proceeds.)
     _followRestoredFile(move, moveResult) {
         const restoredPath = moveResult?.targetPath;
         if (!restoredPath || restoredPath === move.originalPath) return;
@@ -4660,6 +4660,89 @@ class MediaViewer {
         this.showNotification('↩️ Bulk rating undone', 'info');
     }
 
+    // Batch undo for dislikeSkippedFiles (G2 spec § 7). Runs inside handleCancel's _fileOpInFlight hold
+    // and takes no guard itself. The entry is already popped: files that fail to come back are pushed
+    // back as a smaller skipBatch entry, so the next Ctrl+A retries just those.
+    async _undoSkipBatch(entry) {
+        const onScreenBefore = this.mediaFiles[this.currentIndex] ?? null;
+        let targetPath = entry.prevCurrentPath;
+        const restored = [];
+        const failed = [];
+        let firstError = null;
+        for (const sub of entry.files) {
+            try {
+                const result = await window.electronAPI.moveFile({
+                    sourcePath: sub.newPath,
+                    targetFolder: this.baseFolderPath,
+                    fileName: sub.fileName,
+                });
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+                const wasOnScreen = sub.originalPath === targetPath;
+                this._followRestoredFile(sub, result); // lands at "name (n).ext" if the name was taken
+                if (wasOnScreen) {
+                    targetPath = sub.originalPath;
+                }
+                restored.push(sub);
+            } catch (error) {
+                failed.push(sub);
+                firstError ??= error.message;
+            }
+        }
+
+        if (restored.length > 0) {
+            const reinsert = restored.map((sub) => ({
+                file: { ...sub.file, path: sub.originalPath, name: sub.fileName },
+                originalIndex: sub.originalIndex,
+            }));
+            this.mediaFiles = LikeOrSkip.planUndoReinsertion(this.mediaFiles, reinsert, {
+                orderUnchanged: entry.orderGeneration === this._orderGeneration,
+                missing: failed.map((sub) => sub.originalIndex),
+            });
+            for (const sub of restored) {
+                this.restoreFeatureCachesFromHistory(sub); // feature caches + rated-pair keys
+                if (typeof sub.score === 'number') {
+                    this.predictionScores.set(sub.originalPath, sub.score);
+                }
+                if (sub.bulkBucket) {
+                    this.bulkRated.set(sub.fileName, sub.bulkBucket);
+                }
+                this.likeOrSkip.restore(sub.originalPath);
+            }
+            if (restored.some((sub) => sub.bulkBucket)) {
+                await this.saveBulkRatedFile();
+            }
+        }
+        if (failed.length > 0) {
+            this.moveHistory.push({ ...entry, files: failed, prevCurrentPath: targetPath });
+        }
+
+        const targetIndex = targetPath ? this.mediaFiles.findIndex((f) => f.path === targetPath) : -1;
+        if (targetIndex !== -1) {
+            this.currentIndex = targetIndex;
+        } else if (onScreenBefore) {
+            this.currentIndex = Math.max(0, this.mediaFiles.indexOf(onScreenBefore));
+        }
+
+        if (failed.length === 0) {
+            this.showNotification(`✅ Restored ${LikeOrSkip.formatCount(restored.length, 'file')}`, 'success');
+        } else {
+            this.showError(
+                `Restored ${restored.length} of ${entry.files.length} — ${failed.length} failed: ${firstError}`
+            );
+        }
+        this.updateFolderInfo();
+
+        const nowOnScreen = this.mediaFiles[this.currentIndex] ?? null;
+        if (this.isCompareMode || nowOnScreen !== onScreenBefore || !this.currentMedia) {
+            await this.showMedia();
+        } else {
+            this.updateNavigationInfo();
+            this.updateDislikeSkippedButton();
+        }
+    }
+
     async handleCancel() {
         // Before the empty-history branch: an undo pressed during the session's first move would
         // otherwise read "No moves to undo". Refused WITH a notice — a silent drop lost a prompt
@@ -4701,6 +4784,13 @@ class MediaViewer {
                 }
                 if (this.isSortedByPrediction) this.requestPredictionScores();
                 await this.showMedia();
+                return;
+            }
+
+            // Like-or-skip batch (G2 spec § 7): one entry, one Ctrl+A, the whole batch back.
+            if (lastMove.skipBatch) {
+                this.moveHistory.pop();
+                await this._undoSkipBatch(lastMove);
                 return;
             }
 

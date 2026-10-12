@@ -207,4 +207,26 @@ test.describe('Like-or-skip (G2)', () => {
         // tiny.mp4's own decode failure ("Failed to load video") may be logged; a failed MOVE may not.
         expect((await page.evaluate(() => window.__errors)).filter((m) => m.startsWith('Moved'))).toEqual([]);
     });
+
+    test('one Ctrl+A puts the whole batch back on disk, in order, with the cursor where it was', async () => {
+        await enterAiOrder(page, ALL);
+        for (let i = 0; i < 3; i++) {
+            await press(page, 's');
+        }
+        await page.keyboard.press('f');
+        await expect(page.locator('.bulk-dislike-modal')).toBeVisible();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('.bulk-dislike-modal')).toHaveCount(0);
+        await waitForIdle(page);
+        expect((await readdir(tmpFixtures.dislikeDir)).length).toBe(3);
+
+        await page.keyboard.press('Control+a');
+        await page.waitForFunction(() => window.mediaViewer.mediaFiles.length === 5);
+        await waitForIdle(page);
+
+        expect(await readdir(tmpFixtures.dislikeDir)).toEqual([]);
+        expect(await listed(page)).toEqual(ALL);
+        expect(await onScreen(page)).toBe('normal-320x240.png');
+        await expect(page.locator('#dislikeSkippedBtn .btn-label')).toHaveText('Dislike 3 skipped');
+    });
 });

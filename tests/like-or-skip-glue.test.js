@@ -260,6 +260,7 @@ describe('every reorder of mediaFiles goes through _onOrderChanged (spec § 4 co
         setupEventListeners: 'the change-folder handler empties the list; loadFolder then announces the folder',
         applyCachedSortOrder: "runs inside handleSortBySimilarity's cache path, which announces on success",
         insertNewFilesInSortedOrder: 'runs inside applyCachedSortOrder (same)',
+        _undoSkipBatch: 'a batch undo re-inserts files; the others keep their order',
     };
 
     const lines = source.split('\n');
@@ -609,5 +610,242 @@ describe('updateDislikeSkippedButton (spec § 9)', () => {
         const ctx = buttonCtx({ shortcuts: { single: { dislikeSkipped: null } } });
         updateDislikeSkippedButton.call(ctx);
         expect(ctx.dislikeSkippedBtn.title).toBe('Dislike all skipped files');
+    });
+});
+
+describe('_undoSkipBatch — the whole batch back (spec § 7)', () => {
+    const undoSkipBatch = extract('_undoSkipBatch');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function api({ failNames = [], renamed = {} } = {}) {
+        return {
+            path: { basename: (p) => p.split('/').pop() },
+            moveFile: vi.fn(async ({ targetFolder, fileName }) =>
+                failNames.includes(fileName)
+                    ? { success: false, error: 'EBUSY: resource busy' }
+                    : { success: true, targetPath: renamed[fileName] ?? `${targetFolder}/${fileName}` }
+            ),
+        };
+    }
+
+    // As dislikeSkippedFiles records it: `names` sat at indices 0..n-1, before d (on screen).
+    function batchEntry(names, { prev = '/f/d', generation = 7, newPaths = {}, buckets = {} } = {}) {
+        return {
+            skipBatch: true,
+            actionType: 'dislike',
+            prevCurrentPath: prev,
+            orderGeneration: generation,
+            files: names.map((n, i) => ({
+                file: { name: n, path: `/f/${n}`, size: 10, type: 'image/jpeg', mtimeMs: 5 },
+                originalIndex: i,
+                fileName: n,
+                originalPath: `/f/${n}`,
+                fileSize: 10,
+                newPath: newPaths[n] ?? `/disliked/${n}`,
+                mlFeatures: null,
+                score: 0.5 + i / 10,
+                bulkBucket: buckets[n],
+            })),
+        };
+    }
+
+    function undoCtx(overrides = {}) {
+        const d = media('d')[0];
+        return {
+            baseFolderPath: '/f',
+            mediaFiles: [d],
+            currentIndex: 0,
+            currentMedia: { tagName: 'IMG' },
+            isCompareMode: false,
+            likeOrSkip: activeTracker(),
+            moveHistory: [],
+            _orderGeneration: 7,
+            predictionScores: new Map(),
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            restoreFeatureCachesFromHistory: extract('restoreFeatureCachesFromHistory'),
+            _followRestoredFile: extract('_followRestoredFile'),
+            saveBulkRatedFile: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+            updateFolderInfo: vi.fn(),
+            updateNavigationInfo: vi.fn(),
+            updateDislikeSkippedButton: vi.fn(),
+            _updateResortChip: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    it('puts every file back on disk and in its original position; the cursor stays on the file it was on', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = undoCtx();
+        await undoSkipBatch.call(ctx, batchEntry(['a', 'b', 'c']));
+        expect(globalThis.window.electronAPI.moveFile.mock.calls[0][0]).toEqual({
+            sourcePath: '/disliked/a',
+            targetFolder: '/f',
+            fileName: 'a',
+        });
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a', 'b', 'c', 'd']);
+        expect(ctx.mediaFiles[0].mtimeMs).toBe(5); // the captured file object, not a rebuilt stub
+        expect(ctx.currentIndex).toBe(3);
+        expect(ctx.predictionScores.get('/f/b')).toBe(0.6);
+        expect(ctx.likeOrSkip.skippedIn(ctx.mediaFiles).map((f) => f.name)).toEqual(['a', 'b', 'c']);
+        expect(ctx.moveHistory).toEqual([]);
+        expect(ctx.showNotification).toHaveBeenCalledWith('✅ Restored 3 files', 'success');
+        expect(ctx.showMedia).not.toHaveBeenCalled(); // d is still the file on screen
+        expect(ctx.updateNavigationInfo).toHaveBeenCalled();
+    });
+
+    it('parks the files at the front after a reorder since the batch', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = undoCtx({ mediaFiles: media('x', 'd'), currentIndex: 1 });
+        await undoSkipBatch.call(ctx, batchEntry(['a', 'b'], { generation: 6 }));
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a', 'b', 'x', 'd']);
+        expect(ctx.currentIndex).toBe(3);
+    });
+
+    // Review Focus 2
+    it('follows a restore that landed under a new name, from a suffixed dislike-folder path', async () => {
+        globalThis.window = { electronAPI: api({ renamed: { b: '/f/b (1)' } }) };
+        const ctx = undoCtx();
+        await undoSkipBatch.call(ctx, batchEntry(['a', 'b'], { prev: '/f/b', newPaths: { b: '/disliked/b (1)' } }));
+        expect(globalThis.window.electronAPI.moveFile.mock.calls[1][0]).toEqual({
+            sourcePath: '/disliked/b (1)',
+            targetFolder: '/f',
+            fileName: 'b',
+        });
+        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/f/a', '/f/b (1)', '/f/d']);
+        expect(ctx.mediaFiles[1].name).toBe('b (1)');
+        expect(ctx.currentIndex).toBe(1); // the file that was on screen, under its new name
+        expect(ctx.showMedia).toHaveBeenCalledOnce(); // b, not d, is the file to show
+    });
+
+    it('a partial failure pushes the failed files back as a smaller batch, and re-inserts the rest in order', async () => {
+        globalThis.window = { electronAPI: api({ failNames: ['b'] }) };
+        const ctx = undoCtx();
+        await undoSkipBatch.call(ctx, batchEntry(['a', 'b', 'c']));
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a', 'c', 'd']);
+        expect(ctx.moveHistory).toHaveLength(1);
+        expect(ctx.moveHistory[0]).toMatchObject({ skipBatch: true, prevCurrentPath: '/f/d', orderGeneration: 7 });
+        expect(ctx.moveHistory[0].files.map((s) => s.fileName)).toEqual(['b']);
+        expect(ctx.showError).toHaveBeenCalledWith('Restored 2 of 3 — 1 failed: EBUSY: resource busy');
+    });
+
+    it('restores bulk-rated membership with one save', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = undoCtx();
+        await undoSkipBatch.call(ctx, batchEntry(['a', 'b', 'c'], { buckets: { a: 'good', c: 'bad' } }));
+        expect([...ctx.bulkRated]).toEqual([
+            ['a', 'good'],
+            ['c', 'bad'],
+        ]);
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+    });
+
+    it('renders when the empty state was showing', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = undoCtx({ mediaFiles: [], currentMedia: null });
+        await undoSkipBatch.call(ctx, batchEntry(['a', 'b'], { prev: '/f/b' }));
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a', 'b']);
+        expect(ctx.currentIndex).toBe(1);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+    });
+
+    it('compare mode always re-renders', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = undoCtx({ isCompareMode: true });
+        await undoSkipBatch.call(ctx, batchEntry(['a']));
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+    });
+
+    it('restored files are skips again only while tracking is on', async () => {
+        globalThis.window = { electronAPI: api() };
+        const ctx = undoCtx({ likeOrSkip: new LikeOrSkip.SkipTracker() });
+        await undoSkipBatch.call(ctx, batchEntry(['a']));
+        expect(ctx.likeOrSkip.skipped.size).toBe(0);
+    });
+});
+
+describe('handleCancel routes a skipBatch entry to _undoSkipBatch, and only that entry', () => {
+    const handleCancel = extract('handleCancel');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    function cancelCtx(history, overrides = {}) {
+        return {
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            isCompareMode: false,
+            moveHistory: history,
+            signalUserActivity: vi.fn(),
+            showNotification: vi.fn(),
+            _undoSkipBatch: vi.fn(async () => {}),
+            ...overrides,
+        };
+    }
+
+    it('pops the batch entry and hands it over inside the guard', async () => {
+        const entry = { skipBatch: true, files: [] };
+        const ctx = cancelCtx([entry]);
+        let heldDuring;
+        ctx._undoSkipBatch = vi.fn(async () => {
+            heldDuring = ctx._fileOpInFlight;
+        });
+        await handleCancel.call(ctx);
+        expect(ctx._undoSkipBatch).toHaveBeenCalledWith(entry);
+        expect(ctx.moveHistory).toEqual([]);
+        expect(heldDuring).toBe(true);
+        expect(ctx._fileOpInFlight).toBe(false);
+    });
+
+    // Review Focus 3
+    it('a Like made after the batch is undone first, by the single-file branch', async () => {
+        globalThis.window = {
+            electronAPI: {
+                path: { basename: (p) => p.split('/').pop() },
+                moveFile: vi.fn(async () => ({ success: true, targetPath: '/f/z.jpg' })),
+            },
+        };
+        const batch = { skipBatch: true, files: [] };
+        const like = {
+            fileName: 'z.jpg',
+            originalPath: '/f/z.jpg',
+            newPath: '/liked/z.jpg',
+            fileSize: 1,
+            fileType: 'image/jpeg',
+            actionType: 'like',
+            mlFeatures: null,
+        };
+        const ctx = cancelCtx([batch, like], {
+            baseFolderPath: '/f',
+            mediaFiles: [],
+            currentIndex: 0,
+            _followRestoredFile: extract('_followRestoredFile'),
+            restoreFeatureCachesFromHistory: vi.fn(),
+            updateFolderInfo: vi.fn(),
+            showMedia: vi.fn(async () => {}),
+        });
+        await handleCancel.call(ctx);
+        expect(ctx._undoSkipBatch).not.toHaveBeenCalled();
+        expect(ctx.moveHistory).toEqual([batch]);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['z.jpg']);
+        await handleCancel.call(ctx);
+        expect(ctx._undoSkipBatch).toHaveBeenCalledWith(batch);
     });
 });
