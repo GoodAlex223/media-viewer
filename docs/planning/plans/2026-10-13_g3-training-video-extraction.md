@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵), re-scoped 2026-10-13. It supersedes [2026-10-13_g3-source-clip-reuse.md](2026-10-13_g3-source-clip-reuse.md), whose Task 1 (`713af35`) stays on this branch. Origin: BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app".
 **Spec**: [2026-10-13-g3-training-video-extraction-design.md](../../superpowers/specs/2026-10-13-g3-training-video-extraction-design.md) (committed `5d9b9e6`, user-approved 2026-10-13)
 **Created**: 2026-10-13
-**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 (the second after run) is pending; then Task 3.
+**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 ✅ 2026-10-14 (acceptance met — § After run 2). Task 3 ✅. Finish (final review, push, PR) next.
 **Last Updated**: 2026-10-13
 **Branch**: `g3-source-vector-reuse` @ `5d9b9e6` (from `main` @ `c2673c4`)
 
@@ -1342,6 +1342,8 @@ From spec § 8, each routed 🟤 at closeout with the before-run numbers:
 
   Its third minor (a failed call's time is dropped) is fixed by Task 2.
 
+- **Found at Finish (not G3's):** locally, `npm run format:check` fails on 6 git-ignored `CLAUDE-SECURITY-*/` scan artifacts (`.sarif`/`.json`). Prettier does not skip them, because they are ignored by git but not by `.prettierignore`. Route to BACKLOG 🟡/🟤: add `CLAUDE-SECURITY-*/` to `.prettierignore`. The branch's own files are clean.
+
 ## Closeout (after the merge, on `main`)
 
 Per `~/.claude/rules/planning-closeout.md`:
@@ -1466,6 +1468,36 @@ Build `341026c`, 2026-10-13, the user's Checkpoint B (run 1, then run 2 in the s
 - A lenient sharp decode (`failOn: 'none'`, `limitInputPixels: false`, shrink-on-load to fit inside 1024, forced 3-channel sRGB) decodes all 9.
 - The failure was invisible: the renderer only `console.warn`s a CLIP failure, and `misses` counts CLIP-only retries (Task 1's deferred minor).
 - This blocker predates G3. The before run's `dislikes: misses=72` = the 66 failing videos + these 6.
+
+### After run 2
+
+Build `32f92a2` (code `a19aef5`), 2026-10-14, the user's Checkpoint B2 (same three sorts):
+
+```
+[2026-10-14 01:34:15.953] [PERF] ML training: source=trained total=88793ms | scan=5549ms | likes: load=37274ms (disk 15864) misses=3 failed=0 noClip=0 features=0ms clip=3865ms save=4675ms | dislikes: load=29734ms (disk 13045) misses=6 failed=0 noClip=0 features=0ms clip=591ms save=3036ms | bulk=8ms | train=2459ms | modelCacheWrite=23ms
+[2026-10-14 01:34:22.649] [PERF] AI sort: outcome=done total=127798ms | mlInit=81ms | clipLoad=2715ms | sourceCacheLoad=29493ms | training=88805ms (trained) | extract=5273ms | sort=957ms | files=16208
+[2026-10-14 01:34:38.890] [PERF] ML training: source=session total=4912ms | scan=4801ms
+[2026-10-14 01:34:39.887] [PERF] AI sort: outcome=done total=5913ms | clipLoad=2ms | training=4912ms (session) | sort=593ms | files=16208
+[2026-10-14 01:35:40.366] [PERF] ML training: source=model-cache total=5247ms | scan=4574ms
+[2026-10-14 01:35:42.614] [PERF] AI sort: outcome=done total=33289ms | mlInit=80ms | clipLoad=1153ms | sourceCacheLoad=24559ms | training=5248ms (model-cache) | extract=622ms | sort=1115ms | files=16208
+```
+
+**Acceptance (spec § 7 + § 11.4): met.**
+- Run 1 has `failed=0 noClip=0` in both folders, `misses=3`/`misses=6` with `save=` > 0 (the 9 CLIP vectors were filled in), and `modelCacheWrite=23ms`.
+- Run 2 is `source=session`: the AI sort took **5.9 s**.
+- Run 3 is `source=model-cache`: the AI sort took **33.3 s**, of which `sourceCacheLoad` is 24.6 s (R4).
+
+| | Before (`713af35`, 16:51) | After |
+| --- | --- | --- |
+| Sort after a change to the training set | 119.8 s (retrained) | 127.8 s, one-off: it healed 9 CLIP vectors and cached the model |
+| Sort again, same session | retrained, ~86–120 s | **5.9 s** |
+| Sort after a restart | retrained, ~101 s | **33.3 s** |
+
+**Session log (run 1).**
+- 9 `CLIP: … needed the lenient decoder` warnings, one per known file, each with the strict error § 11.1 recorded.
+- 5 more warnings after training ended, during `extract`. These are source-folder (`Liked_2`) images that got a CLIP vector for the first time (D7's side benefit). Two of them carry a strict error not seen in the training set: `Warning treated as error due to failOn setting`.
+
+**What remains.** In a rebuild, `load=` (37.3 + 29.7 = 67 s of 88.8 s) is still the dominant cost (R3). A new session's first sort spends 24.6 s in `sourceCacheLoad` (R4).
 
 ## Key Discoveries
 
