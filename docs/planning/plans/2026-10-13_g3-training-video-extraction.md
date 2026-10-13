@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵), re-scoped 2026-10-13. It supersedes [2026-10-13_g3-source-clip-reuse.md](2026-10-13_g3-source-clip-reuse.md), whose Task 1 (`713af35`) stays on this branch. Origin: BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app".
 **Spec**: [2026-10-13-g3-training-video-extraction-design.md](../../superpowers/specs/2026-10-13-g3-training-video-extraction-design.md) (committed `5d9b9e6`, user-approved 2026-10-13)
 **Created**: 2026-10-13
-**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 ✅ 2026-10-14 (acceptance met — § After run 2). Task 3 ✅. Finish (final review, push, PR) next.
+**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 ✅ 2026-10-14 (acceptance met — § After run 2). Task 3 ✅. Final review ✅ with one fix round (`41792b9`). Push and PR await the user's approval.
 **Last Updated**: 2026-10-13
 **Branch**: `g3-source-vector-reuse` @ `5d9b9e6` (from `main` @ `c2673c4`)
 
@@ -1327,16 +1327,20 @@ From spec § 8, each routed 🟤 at closeout with the before-run numbers:
 - 🟤 **R1 — Remember a stable failure** (`name` + `size` + `mtime`) so a genuinely undecodable file stops being retried and stops blocking the model cache. This changes the 2026-09-10 rule. Trigger: `failed=N > 0` in a real run.
 - 🟤 **R2 — An ffmpeg frame fallback** for videos Chromium cannot decode, as the CLIP path already does with `extractKeyframes`.
 - 🟤 **R4 — The source-folder cache load costs 25.1 s** (`sourceCacheLoad`) on each session's first sort, for 16,213 entries.
-- 🟤 **R5 — F1 train/score skew:** source-folder 64-dim vectors are extracted without file metadata, so dims 42–47 and 54–61 differ between training and scoring.
+- 🟤 **R5 — F1 train/score skew:** source-folder 64-dim vectors are extracted without file metadata, so dims 42–47 and 54–61 differ between training and scoring. **G3 widened its reach (final review, M6):** the fixed loaders put 71 training videos into training (66 dislikes, 5 likes) with non-zero video dims (isVideo, animated, duration, fps, audio, bitrate). Source vectors score every video with those dims at 0, so the learned weights never apply, and video ranking may shift in a way no acceptance run measured. Eyeball where videos land in the next real sort.
 - 🟤 **R6 — The parked source-CLIP reuse** (`g3-departed-clips-parked` @ `e11b36e`, with F2/F3). Revisit only if a measurement shows CLIP on moved or rated files matters.
 - 🟤 **R7 — `loadMediaAsImageData` still empties `src`** (one stray `error` per video, no loop). Move it to `_releaseVideo`.
-- 🟤 **R9 — Bulk-rated rows without CLIP are not named.** `_collectBulkRatedVectors` (~L666) counts them into `clipMissing`, so they block the model cache, but neither the perf line nor the ML log names them. Main's `CLIP: cannot decode …` warn names image files only. Surfaced by Task 2b's review.
+- 🟤 **R9 — Bulk-rated rows are invisible in the perf line and the log.** Extended by the final review (M4): `bulk.failed` and `bulk.clipMissing` both gate `cacheable`, but the `bulk=` segment carries no counts. The line can read `failed=0 noClip=0` in both folders with no `modelCacheWrite`, and the toast's N can exceed the folders' `noClip` sum. Make it `bulk=Nms failed=N noClip=N`, and name the rows. Original note: `_collectBulkRatedVectors` (~L666) counts them into `clipMissing`, so they block the model cache, but neither the perf line nor the ML log names them. Main's `CLIP: cannot decode …` warn names image files only. Surfaced by Task 2b's review.
+- 🟤 **R10 — Perf-line precision (low).**
+  - (a) `misses` also counts CLIP-only re-extractions, so a healing retry reads like a new file once. Fix: a `clipOnly=M` sub-count.
+  - (b) A throwing `ensureTrainedModel` leaves no `training` phase in the `AI sort:` line. The same call's `ML training: source=failed total=…` line does record the time.
+  - From the superseded plan's Task 1 review; the final review routed both here.
 - 🟤 **R8 — Three other video teardown sites** (`media-viewer.js` ~L2143, ~L3350-3351, ~L6667) already release with `removeAttribute('src')` + `load()` by hand. Route them through `_releaseVideo` so the rule has one owner. Surfaced by Task 1's review.
 
 ## Residuals for Extract
 
 - **R3:** annotate BACKLOG item (1)'s 🟤 entry ("every rebuild re-streams both training folders' `.feature_cache.json` in full") with `load=` 31.2 s + 27.7 s = 58.9 s of a 90.7 s rebuild, measured 2026-10-13. After this fix it is the dominant cost of every rebuild.
-- From the superseded plan's Task 1 review, the deferred minors for the final review to triage:
+- From the superseded plan's Task 1 review, the deferred minors for the final review to triage. **Triaged: both are routed to R10.**
   - `misses` also counts CLIP-only re-extractions;
   - a throwing `ensureTrainedModel` leaves no `training` phase in the `AI sort:` line.
 
@@ -1416,6 +1420,15 @@ Propagation check: any late measurement or review fix that changes what `CLAUDE.
     - The 14031×19933 header-only PNG decodes in ~170 ms and ~60 MB; the 24000×24000 one is rejected in 5 ms.
     - Mutation: with the bound set back to `false`, the over-limit test fails after 15.7 s of real decoding.
   - Re-review (Sonnet): all 5 findings addressed, no new breakage. Task 2b ✅.
+
+- **2026-10-14 — Task 3 ✅ `f05552f`.** The controller reviewed it, since it is docs only, and fixed one wording: "names each one" became "up to 20 per folder".
+- **2026-10-14 — Final whole-branch review (Opus): "With fixes"**, 0 Critical, 1 Important, 6 Minor.
+  - **I1 (measured):** the lenient decode passed a *path* to sharp, so libvips' cache kept GIF/WebP files open. On Windows a move, undo or Explorer action on such a file then failed with `EBUSY` until the cache evicted it (~40 decodes, or a restart).
+  - **Fixed in `41792b9`:** `readFile`, then `sharp(buffer)`.
+    - New test: a truncated GIF, with the cache open-file count unchanged and an immediate rename. It was RED on path input (count +1; probe: `EBUSY`).
+    - Also: the `blockhash`-throws hash test (its mutation fails it), the detach labelled defensive, the `settle` comment rewrapped, the E2E JSDoc corrected, and the CLAUDE.md buffer-not-path clause.
+  - **Routed:** M4 extends R9; M6 annotates R5; parked items 5–6 became R10.
+  - Suite: 1393 passed, 1 skipped.
 
 ### Before run
 
