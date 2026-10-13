@@ -4,6 +4,7 @@ import {
     buildDescriptor,
     fingerprintDescriptor,
     seedFromFingerprint,
+    formatTrainingPerfLine,
     MlTrainingManager,
 } from '../ml-training.js';
 import { createRequire } from 'module';
@@ -211,6 +212,27 @@ describe('seedFromFingerprint', () => {
         expect(seed).toBeGreaterThanOrEqual(0);
         expect(seed).toBeLessThanOrEqual(0xffffffff);
         expect(seedFromFingerprint(fp)).toBe(seed);
+    });
+});
+
+// G3 spec § 7: the perf-log line for one ensureTrainedModel call.
+describe('formatTrainingPerfLine (G3)', () => {
+    it('rounds to whole milliseconds and leaves out phases that did not run', () => {
+        expect(
+            formatTrainingPerfLine({
+                source: 'trained',
+                totalMs: 1234.6,
+                scanMs: 4.4,
+                likes: { loadMs: 40.5, diskCount: 1200, misses: 5, featuresMs: 300.2, clipMs: 912.7, saveMs: 80 },
+                trainMs: 150.49,
+            })
+        ).toBe(
+            'ML training: source=trained total=1235ms | scan=4ms | likes: load=41ms (disk 1200) misses=5 features=300ms clip=913ms save=80ms | train=150ms'
+        );
+    });
+
+    it('is just the head when nothing ran', () => {
+        expect(formatTrainingPerfLine({ source: 'skipped', totalMs: 0 })).toBe('ML training: source=skipped total=0ms');
     });
 });
 
@@ -1935,5 +1957,75 @@ describe('ensureTrainedModel', () => {
         const res = await m.ensureTrainedModel({});
         const [, , seed] = m.trainModel.mock.calls[0];
         expect(seed).toBe(seedFromFingerprint(res.fingerprint));
+    });
+
+    // G3 spec § 7: one perf-log line per call, on every return path, written from a finally.
+    describe('perf line (G3)', () => {
+        const perfOverrides = () => ({ logPerf: vi.fn(), now: () => 0 });
+
+        it('writes one line for a rebuild, with every phase', async () => {
+            const { m } = scenario({ managerOverrides: perfOverrides() });
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls).toEqual([
+                [
+                    'ML training: source=trained total=0ms | scan=0ms | likes: load=0ms (disk 0) misses=3 features=0ms clip=0ms save=0ms | dislikes: load=0ms (disk 0) misses=3 features=0ms clip=0ms save=0ms | bulk=0ms | train=0ms | modelCacheWrite=0ms',
+                ],
+            ]);
+        });
+
+        it('writes a short line for a session hit', async () => {
+            const { m } = scenario({ managerOverrides: perfOverrides() });
+            await m.ensureTrainedModel({});
+            m.logPerf.mockClear();
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls).toEqual([['ML training: source=session total=0ms | scan=0ms']]);
+        });
+
+        it('writes source=skipped when no training folders are configured', async () => {
+            const { m } = scenario({
+                managerOverrides: { ...perfOverrides(), getConfig: vi.fn(() => ({ versions })) },
+            });
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls).toEqual([['ML training: source=skipped total=0ms']]);
+        });
+
+        it('writes source=aborted when the sort was cancelled', async () => {
+            const { m } = scenario({ managerOverrides: perfOverrides() });
+            const controller = new AbortController();
+            controller.abort();
+            await m.ensureTrainedModel({ signal: controller.signal });
+            expect(m.logPerf.mock.calls).toEqual([['ML training: source=aborted total=0ms']]);
+        });
+
+        it('writes source=failed and still rejects when training throws (Review Focus 3)', async () => {
+            const { m } = scenario({
+                managerOverrides: {
+                    ...perfOverrides(),
+                    trainModel: vi.fn(async () => {
+                        throw new Error('worker gone');
+                    }),
+                },
+            });
+            await expect(m.ensureTrainedModel({})).rejects.toThrow('worker gone');
+            expect(m.logPerf).toHaveBeenCalledTimes(1);
+            expect(m.logPerf.mock.calls[0][0]).toMatch(
+                /^ML training: source=failed total=0ms \| scan=0ms \| likes: .* \| dislikes: .* \| bulk=0ms$/
+            );
+        });
+
+        it('never fails a rebuild when the sink or the clock throws', async () => {
+            const { m } = scenario({
+                managerOverrides: {
+                    logPerf: vi.fn(() => {
+                        throw new Error('sink');
+                    }),
+                    now: () => {
+                        throw new Error('clock');
+                    },
+                },
+            });
+            const res = await m.ensureTrainedModel({});
+            expect(res.source).toBe('trained');
+        });
     });
 });

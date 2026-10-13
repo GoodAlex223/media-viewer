@@ -1432,6 +1432,7 @@ describe('handleSortByPrediction lifecycle', () => {
                 return true;
             },
             showMedia: () => {},
+            _logSortPerf: vi.fn(),
             moveHistory: [],
             _pendingStaleMark: null,
             _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
@@ -1945,6 +1946,104 @@ describe('handleSortByPrediction lifecycle', () => {
         await handleSortByPrediction.call(ctx);
         expect(apply).not.toHaveBeenCalled();
         expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
+    });
+
+    // G3 spec § 7: one perf-log record per sort, handed to _logSortPerf from the finally.
+    it('logs one sort perf record on success, with the phases that ran', async () => {
+        const ctx = makeCtx();
+        await handleSortByPrediction.call(ctx);
+        expect(ctx._logSortPerf).toHaveBeenCalledTimes(1);
+        const [perf] = ctx._logSortPerf.mock.calls[0];
+        expect(perf.outcome).toBe('done');
+        expect(perf.phases.map(([name, , note]) => [name, note])).toEqual([
+            ['training', 'trained'],
+            ['sort', undefined],
+        ]);
+    });
+
+    it('times the lazy init, the CLIP load, the cache load and the extraction when they run', async () => {
+        const ctx = makeCtx({ mlWorker: null, enableClipFeatures: true, featureCache: new Map() });
+        ctx.initializeMlWorker = function () {
+            this.mlWorker = {};
+        };
+        await handleSortByPrediction.call(ctx);
+        const [perf] = ctx._logSortPerf.mock.calls[0];
+        expect(perf.phases.map(([name]) => name)).toEqual([
+            'mlInit',
+            'clipLoad',
+            'sourceCacheLoad',
+            'training',
+            'extract',
+            'sort',
+        ]);
+    });
+
+    it('logs outcome "stopped" when the model is not ready', async () => {
+        const ctx = makeCtx();
+        ctx.mlTraining = {
+            ensureTrainedModel: () =>
+                Promise.resolve({ source: 'trained', stats: { isReady: false }, fingerprint: 'fp', descriptor: {} }),
+        };
+        await handleSortByPrediction.call(ctx);
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('stopped');
+    });
+
+    it('logs outcome "cancelled" when the sort is aborted', async () => {
+        const ctx = makeCtx();
+        ctx.mlTraining = {
+            ensureTrainedModel: () => {
+                ctx.sortAbortController.abort();
+                return Promise.resolve({ source: 'skipped', stats: null, fingerprint: null, descriptor: null });
+            },
+        };
+        await handleSortByPrediction.call(ctx);
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+    });
+
+    it('logs outcome "failed" when the sort throws', async () => {
+        const ctx = makeCtx({ runMlSort: () => Promise.reject(new Error('worker crashed')) });
+        await handleSortByPrediction.call(ctx);
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('failed');
+    });
+});
+
+describe('_logSortPerf (G3)', () => {
+    const logSortPerf = extractMethod('_logSortPerf');
+    const savedWindow = globalThis.window;
+    let nowSpy;
+    afterEach(() => {
+        globalThis.window = savedWindow;
+        nowSpy?.mockRestore();
+        nowSpy = undefined;
+    });
+
+    it('writes one AI sort line: outcome, total, the phases that ran, the file count', () => {
+        const logPerf = vi.fn();
+        globalThis.window = { electronAPI: { logPerf } };
+        nowSpy = vi.spyOn(performance, 'now').mockReturnValue(1000);
+        logSortPerf.call(
+            { mediaFiles: [{}, {}, {}] },
+            {
+                start: 0,
+                outcome: 'done',
+                phases: [
+                    ['clipLoad', 2.4],
+                    ['training', 812.6, 'trained'],
+                    ['sort', 40],
+                ],
+            }
+        );
+        expect(logPerf.mock.calls).toEqual([
+            ['AI sort: outcome=done total=1000ms | clipLoad=2ms | training=813ms (trained) | sort=40ms | files=3'],
+        ]);
+    });
+
+    // Ruling R1: `window = {}` (no electronAPI at all) makes `window.electronAPI.logPerf` throw a
+    // TypeError, so only the method's try/catch can absorb it. `{ electronAPI: {} }` could not fail
+    // under any single mutation (`logPerf?.()` on `{}` never throws).
+    it('never throws when the perf log is unavailable', () => {
+        globalThis.window = {};
+        expect(() => logSortPerf.call({ mediaFiles: [] }, { start: 0, outcome: 'stopped', phases: [] })).not.toThrow();
     });
 });
 

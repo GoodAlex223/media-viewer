@@ -238,6 +238,7 @@ class MediaViewer {
             },
             onProgress: (p) => this.updateSortProgress(p),
             logError: (msg) => window.electronAPI?.logError?.(msg),
+            logPerf: (line) => window.electronAPI?.logPerf?.(line),
             notify: (msg, level) => this.showNotification(msg, level),
         });
 
@@ -9149,6 +9150,9 @@ class MediaViewer {
         // Cancel must also stop an in-progress background extraction (frees CPU).
         signal.addEventListener('abort', () => this.cancelBackgroundExtraction(), { once: true });
         this.updateSortProgress({ phase: 'Preparing…' }); // card visible before any await
+        // One perf-log line per sort (G3 spec § 7), written by the finally below whatever the outcome.
+        const sortPerf = { start: performance.now(), outcome: 'stopped', phases: [] };
+        const timePhase = (name, startedAt, note) => sortPerf.phases.push([name, performance.now() - startedAt, note]);
 
         // Hold the CLIP model for the whole sort. The initClipModel() await below fixes
         // clipWorkerReady at the instant the sort starts; the lease is what keeps it true across
@@ -9164,7 +9168,9 @@ class MediaViewer {
             // ml-training.js's `versionsKnown` gate for the belt-and-suspenders half of this fix,
             // which still applies even if a worker replies unusually slowly.
             if (!this.mlWorker || this.featureWorkers.length === 0) {
+                const tInit = performance.now();
                 await Promise.all([this.initializeMlWorker(), this.initializeFeaturePool()]);
+                timePhase('mlInit', tInit);
             }
             // initializeMlWorker()'s own catch sets isMlEnabled=false and leaves mlWorker null
             // when Worker construction throws — the top-of-method guard already passed (ML was
@@ -9187,6 +9193,7 @@ class MediaViewer {
             // first. initClipModel() is documented lazy and concurrent-safe, so re-awaiting an
             // already-loaded model here is cheap.
             if (this.enableClipFeatures) {
+                const tClip = performance.now();
                 this.updateSortProgress({ phase: 'Loading CLIP model…' });
                 this.clipProgressSink = (percent) =>
                     this.updateSortProgress({
@@ -9199,6 +9206,7 @@ class MediaViewer {
                 } finally {
                     this.clipProgressSink = null;
                 }
+                timePhase('clipLoad', tClip);
             }
             // Cancel stays clickable throughout the load above; it cannot interrupt the
             // in-flight IPC download, so it takes effect here instead.
@@ -9209,11 +9217,13 @@ class MediaViewer {
             // current file (mirrors the CLIP-sort path's clipVectorsNeedExtraction() gate —
             // a repeat sort within the same folder session should not replay the full load).
             if (this.mediaFiles.some((f) => !this.featureCache.has(f.path))) {
+                const tLoad = performance.now();
                 await this.loadFeatureCache({
                     signal,
                     onProgress: (current, total) =>
                         this.updateSortProgress({ phase: 'Loading cached features…', current, total }),
                 });
+                timePhase('sourceCacheLoad', tLoad);
             }
             if (signal.aborted) throw new Error('cancelled');
 
@@ -9224,7 +9234,9 @@ class MediaViewer {
             // Ensure the worker holds a model trained on the CURRENT training set. The manager
             // decides whether that costs nothing (same session), a small read (model cache) or a
             // rebuild from cached vectors — the gate is the training set, not the source folder.
+            const tTraining = performance.now();
             const training = await this.mlTraining.ensureTrainedModel({ signal });
+            timePhase('training', tTraining, training.source);
             if (training.stats) this.mlStats = training.stats;
             this.updateSortPredictionButton();
             if (training.source !== 'skipped' && this.mlStats?.isReady) {
@@ -9248,6 +9260,7 @@ class MediaViewer {
             // Phase 2 — extract any missing features (drives the SAME card via the sink).
             const uncachedFiles = this.mediaFiles.filter((f) => !this.featureCache.has(f.path));
             if (uncachedFiles.length > 0) {
+                const tExtract = performance.now();
                 // No indeterminate priming needed: startBackgroundFeatureExtraction's head is
                 // await-free, so it reaches showBackgroundExtractionProgress — and through it
                 // this sink — synchronously, with a real cached/total count.
@@ -9258,6 +9271,7 @@ class MediaViewer {
                 } finally {
                     this.extractionProgressSink = null;
                 }
+                timePhase('extract', tExtract);
             }
             if (signal.aborted) throw new Error('cancelled');
 
@@ -9274,16 +9288,21 @@ class MediaViewer {
 
             // Phase 3 — sort (awaitable, stale-guarded).
             this.updateSortProgress({ phase: 'Sorting…' });
+            const tSort = performance.now();
             const result = await this.runMlSort(allFeatures, runId);
+            timePhase('sort', tSort);
             // Let an in-flight render settle first (G2 final review F4), then check staleness and apply with
             // no await in between — a cancel or a newer sort during the wait still wins.
             await this._waitForRenderIdle();
             if (signal.aborted || runId !== this.sortRunId) throw new Error('cancelled');
             this.applyPredictionSortResult(result, { resort });
+            sortPerf.outcome = 'done';
         } catch (err) {
             if (signal.aborted || err.message === 'cancelled') {
+                sortPerf.outcome = 'cancelled';
                 this.showNotification('Sorting cancelled', 'info');
             } else {
+                sortPerf.outcome = 'failed';
                 console.error('Error sorting by prediction:', err);
                 this.showNotification(`Could not sort: ${err.message}`, 'warning');
             }
@@ -9298,6 +9317,23 @@ class MediaViewer {
             // Last out restarts the 30 s idle window, so a cancelled or thrown sort reclaims the
             // model exactly like a completed one.
             this._releaseClipLease();
+            this._logSortPerf(sortPerf);
+        }
+    }
+
+    // One perf-log line per AI sort (G3 spec § 7), from handleSortByPrediction's finally: the outcome, the
+    // total, each phase that ran, and the file count. Read back beside the "ML training:" line the
+    // training phase writes.
+    _logSortPerf(perf) {
+        try {
+            const ms = (v) => `${Math.round(v)}ms`;
+            const parts = perf.phases.map(([name, v, note]) => `${name}=${ms(v)}${note ? ` (${note})` : ''}`);
+            parts.push(`files=${this.mediaFiles.length}`);
+            window.electronAPI.logPerf?.(
+                `AI sort: outcome=${perf.outcome} total=${ms(performance.now() - perf.start)} | ${parts.join(' | ')}`
+            );
+        } catch (_err) {
+            // Diagnostics only — the log line must never turn a finished sort into an error.
         }
     }
 
