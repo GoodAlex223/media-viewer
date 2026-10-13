@@ -1892,9 +1892,47 @@ Per `~/.claude/rules/planning-closeout.md`: Extract (Improvements → BACKLOG �
   - `misses` includes CLIP-only re-extractions;
   - a throwing `ensureTrainedModel` leaves no `training` phase in the sort line.
 
+- **2026-10-13** — **The user re-scoped G3 after the before run** (analysis under § Before run): CLIP on the moved files was ≤ 1.2 s of a 119.8 s sort, and every sort retrains because 71 videos never load. Their decision:
+  - keep Task 1's timing log, and fix it to count the time of failed calls;
+  - park Task 2's work, unmerged and unreviewed, on the local branch `g3-departed-clips-parked` @ `e11b36e` (hook: 1394 passed, 1 skipped);
+  - drop Task 3;
+  - brainstorm a fix for the 71 videos: why they fail, then make them load or stop them blocking the model cache.
+
+  Task 2's implementer flagged that the plan's mutation 2 did not fail its test (the load swallows the TypeError), so they added a return-value assertion. That is on the parked branch.
+- **2026-10-13** — **Root cause of the 71 failing videos, measured.** Throwaway Playwright probes ran in the real app and were then deleted.
+  1. `ffprobe`: 70 of the 71 use common codecs (h264 ×60, vp8 ×8, vp9 ×2) and 1 is HEVC.
+  2. Every video in the training folders fails: `Liked_1` has 66 videos and 66 fail; `Liked_3` has 5 and 5 fail.
+  3. A plain `<video>` loads and seeks the failing files from both the raw Windows path and `pathToFileURL`. An image is the control. The real `computeFeatures` on the same file still rejects with `Video load error`, which is the sentinel: the probe reproduces the failure.
+  4. Event order recorded on the element that `computeFeatures` creates: `loadeddata, seeked, abort, emptied, error(code=4, "Empty src attribute")`, then `emptied`/`error` without end.
+     - The `seeked` handler sets `video.src = ''` *before* the async `processImageData` resolves, and clearing `src` fires `error`.
+     - With face detection on (the default), `processImageData` awaits `FaceDetector.detect`, so the `error` handler's `reject` wins.
+     - With face detection off, the same call RESOLVES (64 dims).
+  5. **The `error` handler sets `video.src = ''` again**, which fires another `error`. Measured: 31k errors in the first second, then 74k and 111k over the next two, about 37,000 per second per element. It never stops, for every video `computeFeatures` touches, whether the call succeeds or fails.
+     - `computePerceptualHash` has the same re-clearing `error` handler. It resolves correctly, but it leaves the same endless loop.
+     - `loadMediaAsImageData` (the source-folder worker path) does not re-clear and has no loop.
+  6. With a correct loader (`{ once: true }`, no `src` clearing), **all 71 load and seek, the HEVC file included**.
+
 ### Before run
 
-_(Checkpoint A — the user's lines, verbatim.)_
+2026-10-13, build `713af35`. The user moved 5 files `Liked_2` → `Liked_3` in Explorer: 1 mp4, 1 gif, 2 jpg and 1 png. The source went from 16213 to 16208 files. The first pair of lines is an earlier sort in the same afternoon; the second pair is the before run:
+
+```
+[2026-10-13 16:35:53.682] [PERF] ML training: source=trained total=293535ms | scan=8474ms | likes: load=37649ms (disk 15434) misses=428 features=75511ms clip=66246ms save=3815ms | dislikes: load=31256ms (disk 12821) misses=230 features=27881ms clip=24165ms save=3020ms | bulk=30ms | train=2523ms
+[2026-10-13 16:37:05.012] [PERF] AI sort: outcome=done total=395896ms | mlInit=86ms | clipLoad=3716ms | sourceCacheLoad=27226ms | training=293536ms (trained) | extract=69242ms | sort=903ms | files=16213
+[2026-10-13 16:51:40.121] [PERF] ML training: source=trained total=90722ms | scan=3703ms | likes: load=31236ms (disk 15855) misses=12 features=5663ms clip=1202ms save=4065ms | dislikes: load=27675ms (disk 12979) misses=72 features=0ms clip=247ms save=0ms | bulk=2ms | train=2633ms
+[2026-10-13 16:51:42.292] [PERF] AI sort: outcome=done total=119804ms | mlInit=54ms | clipLoad=1803ms | sourceCacheLoad=25052ms | training=90723ms (trained) | extract=667ms | sort=1031ms | files=16208
+```
+
+**What it shows** (controller analysis, 2026-10-13):
+
+1. **CLIP for the moved files is about 1% of the sort.** The before run's `likes: clip=1202ms` covers every CLIP call in the like folder, so the 5 moved files cost at most ~1.2 s out of a 119.8 s sort. That is the most G3's reuse (Tasks 2–3) can save on this run.
+2. **Every sort retrains, moved files or not.** The session log `media-viewer-2026-10-13_16-49-16.log` has 71 lines of the form `Skipping <file> in …: Video load error` (`ml-training.js` `_collectFolderVectors` catch → `failed++`): 66 files in `Liked_1` and 5 in `Liked_3`, all `.mp4`/`.webm`. The earlier session had the same 66 + 4.
+   - `computeFeatures` throws on these files: its `<video>` element's `error` handler rejects with `Video load error`.
+   - Because they throw, they never get a training-cache entry, and every rebuild tries them again.
+   - `rowsFailed > 0` makes the model non-cacheable (`ml-training.js` `cacheable`). That also explains why the line has no `modelCacheWrite=` segment.
+   - So no session tier and no model-cache tier is ever set, and every AI sort pays the whole ~90 s rebuild.
+3. **On a rebuild, re-reading the training caches dominates.** `load=` took 31.2 s + 27.7 s = 58.9 s of the 90.7 s (BACKLOG item (1)). Next come `sourceCacheLoad` at 25.1 s on every sort, `features` at 5.7 s and `save` at 4.1 s.
+4. **About 14 s of the rebuild is not accounted for**, which is roughly 71 failing calls at ~200 ms each. Task 1's deferred minor 1 drops the time of an extraction call that throws, so `dislikes: features=0ms` hides 66 failed `computeFeatures` calls.
 
 ### After run
 

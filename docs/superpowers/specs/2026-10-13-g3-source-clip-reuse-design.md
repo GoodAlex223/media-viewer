@@ -6,6 +6,8 @@
 **Branch**: `g3-source-vector-reuse` (from `main` @ `c2673c4`, after G2's closeout)
 **Trial vehicle**: none — the group already carries a user dependency (§ 8).
 
+> **Redirected (2026-10-13).** The measure-first before run (§ 8) found that CLIP on the moved files costs at most 1.2 s of a 119.8 s sort. It also found that every sort retrains, because every training-folder video fails `computeFeatures` and a failed file blocks the model cache. The user re-scoped G3 to that cause: see [2026-10-13-g3-training-video-extraction-design.md](2026-10-13-g3-training-video-extraction-design.md). Under this spec, only § 7's instrumentation shipped (`713af35`). Task 2's `departedClips` + `_lookupSourceClip` is parked, unmerged and unreviewed, on the local branch `g3-departed-clips-parked` @ `e11b36e`. Task 3 was dropped. F1 carries over to the new spec as R5; F2 and F3 travel with the parked branch (R6).
+
 ---
 
 ## 1. Goal
