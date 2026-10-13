@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵), re-scoped 2026-10-13. It supersedes [2026-10-13_g3-source-clip-reuse.md](2026-10-13_g3-source-clip-reuse.md), whose Task 1 (`713af35`) stays on this branch. Origin: BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app".
 **Spec**: [2026-10-13-g3-training-video-extraction-design.md](../../superpowers/specs/2026-10-13-g3-training-video-extraction-design.md) (committed `5d9b9e6`, user-approved 2026-10-13)
 **Created**: 2026-10-13
-**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14). Then Checkpoint B2, then Task 3.
+**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 (the second after run) is pending; then Task 3.
 **Last Updated**: 2026-10-13
 **Branch**: `g3-source-vector-reuse` @ `5d9b9e6` (from `main` @ `c2673c4`)
 
@@ -1409,7 +1409,11 @@ Propagation check: any late measurement or review fix that changes what `CLAUDE.
     - (1) The fallback's `limitInputPixels: false` made a main-process decode unbounded for crafted files. A background commit security review flagged the same class. Measured: a 74-byte PNG declaring 10 GP took 3.6 s and 557 MB. Bounded to `2 ** 29` plus a 30 s timeout (D6 amended).
     - (2) The `No CLIP vector` line would flood the log while CLIP is enabled but unavailable. Capped at 20 per folder plus a summary line (D8 amended).
   - The minors became behavioural pixel-limit tests, a grey-alpha precondition, and R9.
-  - Fix round 1 is running. The commit is not pushed.
+  - Fix round 1 `a19aef5`.
+    - The cap test was RED before the fix.
+    - The 14031×19933 header-only PNG decodes in ~170 ms and ~60 MB; the 24000×24000 one is rejected in 5 ms.
+    - Mutation: with the bound set back to `false`, the over-limit test fails after 15.7 s of real decoding.
+  - Re-review (Sonnet): all 5 findings addressed, no new breakage. Task 2b ✅.
 
 ### Before run
 
