@@ -1278,7 +1278,7 @@ Each `ensureTrainedModel` call writes one `ML training: …` line and each AI so
 In § Architecture, after the line `├── ipc-guard.js         # IPC registration wrapper …`, insert:
 
 ```
-├── clip-image.js        # Main-process CLIP image decode (G3): strict RawImage.read first, then a lenient sharp decode (failOn none, no pixel limit, ≤1024 px, 3-ch sRGB) for files the strict read rejects
+├── clip-image.js        # Main-process CLIP image decode (G3): strict RawImage.read first, then a bounded lenient sharp decode (failOn none, ≤2^29 input px, 30 s timeout, ≤1024 px out, 3-ch sRGB) for files the strict read rejects
 ```
 
 In **Key Dependencies**, after `` `@huggingface/transformers` (CLIP via ONNX, main-process IPC); ``, insert `` `sharp` (direct since G3: `clip-image.js`'s lenient fallback; also transformers' own image decoder); ``.
@@ -1330,6 +1330,7 @@ From spec § 8, each routed 🟤 at closeout with the before-run numbers:
 - 🟤 **R5 — F1 train/score skew:** source-folder 64-dim vectors are extracted without file metadata, so dims 42–47 and 54–61 differ between training and scoring.
 - 🟤 **R6 — The parked source-CLIP reuse** (`g3-departed-clips-parked` @ `e11b36e`, with F2/F3). Revisit only if a measurement shows CLIP on moved or rated files matters.
 - 🟤 **R7 — `loadMediaAsImageData` still empties `src`** (one stray `error` per video, no loop). Move it to `_releaseVideo`.
+- 🟤 **R9 — Bulk-rated rows without CLIP are not named.** `_collectBulkRatedVectors` (~L666) counts them into `clipMissing`, so they block the model cache, but neither the perf line nor the ML log names them. Main's `CLIP: cannot decode …` warn names image files only. Surfaced by Task 2b's review.
 - 🟤 **R8 — Three other video teardown sites** (`media-viewer.js` ~L2143, ~L3350-3351, ~L6667) already release with `removeAttribute('src')` + `load()` by hand. Route them through `_releaseVideo` so the rule has one owner. Surfaced by Task 1's review.
 
 ## Residuals for Extract
@@ -1401,6 +1402,14 @@ Propagation check: any late measurement or review fix that changes what `CLAUDE.
   - The probes found the second blocker: the `clipMissing` rule, with 9 still images that main's strict sharp decode rejects. A lenient decode reads all 9. The probes are in the session scratchpad (throwaway); the control file decodes, and so does the 280-megapixel file once shrink-on-load is on.
   - The user chose "Lenient fallback" (AskUserQuestion) over re-saving the 9 files or relaxing the cache rule.
   - The spec gained § 11 (D6–D8, D4 amended). The plan gained Task 2b and Checkpoint B2, and Task 3 gained the `clip-image.js`, `sharp` and CLIP-decoder notes.
+- **2026-10-14 — Task 2b committed `2cd6186`.**
+  - Step 2 gate: the strict read rejects both generated fixtures.
+  - Tests: clip-image 5/5; ml-training 118/118; full suite 1389 passed, 1 skipped.
+  - **Task review (Opus): Needs fixes, 2 Important.**
+    - (1) The fallback's `limitInputPixels: false` made a main-process decode unbounded for crafted files. A background commit security review flagged the same class. Measured: a 74-byte PNG declaring 10 GP took 3.6 s and 557 MB. Bounded to `2 ** 29` plus a 30 s timeout (D6 amended).
+    - (2) The `No CLIP vector` line would flood the log while CLIP is enabled but unavailable. Capped at 20 per folder plus a summary line (D8 amended).
+  - The minors became behavioural pixel-limit tests, a grey-alpha precondition, and R9.
+  - Fix round 1 is running. The commit is not pushed.
 
 ### Before run
 

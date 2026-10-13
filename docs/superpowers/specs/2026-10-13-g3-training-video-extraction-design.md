@@ -199,6 +199,12 @@ The after run (build `341026c`; lines in the plan's § After run) shows the vide
   - It tries `RawImage.read(imagePath)` first, so every embedding the strict path can produce is byte-identical to today's.
   - Only on a throw does it decode with sharp: `{ failOn: 'none', limitInputPixels: false }`, then `.rotate()` (as `RawImage.read` does), `.resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })`, `.removeAlpha()`, `.toColourspace('srgb')`, `.raw()`. It wraps the result in a 3-channel `RawImage`.
   - If the lenient decode also throws, the strict error is rethrown, so the IPC reply's `error` is unchanged.
+- **D6 amended (Task 2b review, 2026-10-14):** the lenient decode is bounded.
+  - It uses `limitInputPixels: 2 ** 29` (536,870,912 px), not `false`. That is about 2× sharp's default, with 1.9× headroom over the user's 279.7-megapixel JPEG.
+  - It adds `.timeout({ seconds: 30 })`.
+  - Why: with no limit, a tiny crafted file with huge declared dimensions decoded unbounded in the main process. A 74-byte PNG declaring 10 GP took 3.6 s and 557 MB; a 100 GP one ran past 20 s. The strict path refuses anything over 268 MP, so the new ceiling stays the same order as today's.
+  - What a file over the bound gets: the strict error, rethrown.
+  - On garbage in: `failOn: 'none'` fills missing rows, so a header-only file decodes to a blank image. A training row only reaches CLIP after Chromium's `computeFeatures` succeeds, though, so a file Chromium cannot show still fails as `failed=1`, before any CLIP.
 - **D7 — scope.** Only main's `extractClipEmbedding` (path) handler uses it.
   - `extractClipEmbeddingBatch` reads ffmpeg-made keyframes, and `extractClipEmbeddingFromBuffer` reads jxl-oxide PNGs. Both inputs are clean, so both handlers stay unchanged.
   - The source folder benefits too: its background CLIP extraction uses the same handler.
@@ -206,7 +212,7 @@ The after run (build `341026c`; lines in the plan's § After run) shows the vide
 - **D8 — name what blocks the cache.**
   - Main logs one `warn` per fallback (`CLIP: <name> needed the lenient decoder (<strict error>)`) and per double failure (`CLIP: cannot decode <name>: <strict> (lenient: <lenient>)`).
   - `_collectFolderVectors` logs each training row left without a CLIP vector while CLIP is on: `No CLIP vector for <name> in <folder> — the model will not be cached`. It uses the injected `logError`, like the `Skipping …` line.
-  - The perf folder segment gains `noClip=N`, counting those rows. **D4 is amended to:** `<label>: load=Nms (disk N) misses=N failed=N noClip=N features=Nms clip=Nms save=Nms`.
+  - The perf folder segment gains `noClip=N`, counting those rows. **D8 amended (same review):** the per-row line is capped at 20 names per folder per call, then one `No CLIP vector for K more file(s) in <folder> — the model will not be cached` line. With CLIP enabled but unavailable (offline first run, a failed model load), every one of ~28k training rows would otherwise log a line, and a main-thread write, per sort. `noClip=N` still carries the full count. **D4 is amended to:** `<label>: load=Nms (disk N) misses=N failed=N noClip=N features=Nms clip=Nms save=Nms`.
 - **D1 still holds.** `cacheable` is unchanged; this fixes a loader.
 
 ### 11.3 Testing
