@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵), re-scoped 2026-10-13. It supersedes [2026-10-13_g3-source-clip-reuse.md](2026-10-13_g3-source-clip-reuse.md), whose Task 1 (`713af35`) stays on this branch. Origin: BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app".
 **Spec**: [2026-10-13-g3-training-video-extraction-design.md](../../superpowers/specs/2026-10-13-g3-training-video-extraction-design.md) (committed `5d9b9e6`, user-approved 2026-10-13)
 **Created**: 2026-10-13
-**Status**: Planned — awaiting the user's review of this plan. Execution method already chosen (spec § 9): subagent-driven, Sonnet · `high`, the controller commits.
+**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B (the user's after run) pending; then Task 3.
 **Last Updated**: 2026-10-13
 **Branch**: `g3-source-vector-reuse` @ `5d9b9e6` (from `main` @ `c2673c4`)
 
@@ -954,6 +954,7 @@ From spec § 8, each routed 🟤 at closeout with the before-run numbers:
 - 🟤 **R5 — F1 train/score skew:** source-folder 64-dim vectors are extracted without file metadata, so dims 42–47 and 54–61 differ between training and scoring.
 - 🟤 **R6 — The parked source-CLIP reuse** (`g3-departed-clips-parked` @ `e11b36e`, with F2/F3). Revisit only if a measurement shows CLIP on moved or rated files matters.
 - 🟤 **R7 — `loadMediaAsImageData` still empties `src`** (one stray `error` per video, no loop). Move it to `_releaseVideo`.
+- 🟤 **R8 — Three other video teardown sites** (`media-viewer.js` ~L2143, ~L3350-3351, ~L6667) already release with `removeAttribute('src')` + `load()` by hand. Route them through `_releaseVideo` so the rule has one owner. Surfaced by Task 1's review.
 
 ## Residuals for Extract
 
@@ -986,10 +987,55 @@ Propagation check: any late measurement or review fix that changes what `CLAUDE.
 ## Progress Log
 
 - **2026-10-13** — Re-scoped by the user after the before run (superseded plan, § Before run and its Progress Log). Root cause probed in the real app (spec § 2.2). Spec `5d9b9e6`, approved. Plan written. At planning, found that `tiny.mp4` is an unplayable 32-byte stub, so a playable fixture is added (refinement 1).
+- **2026-10-13** — The user approved the plan ("Agree with subagent-driven"). The pre-flight scan found no cross-task conflict; one prose overlap in Task 1 Step 7 was ruled on (the hash cannot-load test expects `… to be 1`). Ledger: `.superpowers/sdd/2026-10-13_g3-training-video-extraction/progress.md`.
+- **2026-10-13 — Task 1 ✅ `4c37cbd`.** Fixture: 2862 B, `h264 64x64`, `duration=1.000000`, byte-identical in the commit (`cmp`).
+  - **E2E RED (gate passed).**
+    - Test 1: `rejected:Video load error`, with events `["loadeddata","seeked","emptied","error(MEDIA_ELEMENT_ERROR: Empty src attribute)","emptied","error(…)",…]`. The fixture loaded and seeked, and the empty `src` failed it.
+    - Test 2 (`tiny.mp4`): `errorEvents` **31,898** in about 1 s. The first error is `PipelineStatus::DEMUXER_ERROR_COULD_NOT_OPEN`, then the empty-src loop.
+  - **Unit RED.**
+    - Step 5: 9/9 failed with `Could not find method: _releaseVideo`.
+    - Step 7: 8 failed, each for its named reason:
+      - 3 race rejections with `Video load error`;
+      - the stall test with `expected '/t/clip.mp4' to be null`;
+      - the loop tests with `expected 13|15 to be 0` and `expected 16 to be 1`.
+
+      The counts are 13–16, not the 50 of `ERROR_CAP`: a 150 ms settle window at Windows timer granularity. The cause is the same.
+  - **GREEN.** Unit 9/9; E2E 2/2. Test 1's events are `["loadeddata","seeked","emptied"]` and `errorEvents` is 0, so the real engine fires no `error` on `removeAttribute('src')` + `load()` (D2 holds).
+  - **Mutations.**
+    - Deleting the detach in `seeked` fails `still resolves if releasing fires an error…`.
+    - Setting `_releaseVideo`'s body to `src = ''` fails 6 unit tests. In the E2E, the first run caught nothing: Step 11's claim was wrong, because the single release `error` fired before `settled`, so `lateErrors` stayed 0. Ruled: test 1 now asserts `errorEvents === 0`, which the mutation fails (`expected 0, received 1`).
+  - Full suite 1381 passed, 1 skipped. Lint 0 errors.
+  - Step 10's grep returns 3 hits, not 1: two are comments that quote `video.src = ''` on purpose, and the code hit is `loadMediaAsImageData` (R7).
+  - **Rulings.**
+    - `_releaseVideo` sits above `computeFeatures`' JSDoc. The literal placement would have orphaned the JSDoc.
+    - The `settle` comment was corrected.
+  - **Task review (Opus):** spec ✅, Approved, 0 Critical/Important. Its 7 minors:
+    - 4 are parked for the final-review fix (labels, a `blockhash`-throws test, two comment wordings);
+    - 1 is new Improvement R8;
+    - 2 are kept or noted.
+- **2026-10-13 — Task 2 ✅ `341026c`.**
+  - **RED: 3 tests.** Both exact strings had no `failed=`. The new test showed `features=200ms` and no `failed=1`. Its `not.toContain('modelCacheWrite=')` passes by construction (D1).
+  - **GREEN:** `tests/ml-training.test.js` passes 116/116. The full suite has 1382 passed and 1 skipped.
+  - **Mutation:** moving the features timing out of `finally` gives `features=200ms` again.
+  - **Grep:** no other place spells out the old format.
+  - **Task review (Sonnet):** spec ✅, Approved, 0 Critical/Important. Its 2 cosmetic minors are accepted as is.
+  - Tasks 1 and 2 make the after-run build.
 
 ### Before run
 
-_(Copied from the superseded plan at Checkpoint B.)_
+Copied from the superseded plan's § Before run. Build `713af35`, 2026-10-13. The 16:51 pair is the before run (5 files moved into `Liked_3`: 1 mp4, 1 gif, 2 jpg, 1 png); 16:35 is the earlier first rebuild.
+
+```
+[2026-10-13 16:35:53.682] [PERF] ML training: source=trained total=293535ms | scan=8474ms | likes: load=37649ms (disk 15434) misses=428 features=75511ms clip=66246ms save=3815ms | dislikes: load=31256ms (disk 12821) misses=230 features=27881ms clip=24165ms save=3020ms | bulk=30ms | train=2523ms
+[2026-10-13 16:37:05.012] [PERF] AI sort: outcome=done total=395896ms | mlInit=86ms | clipLoad=3716ms | sourceCacheLoad=27226ms | training=293536ms (trained) | extract=69242ms | sort=903ms | files=16213
+[2026-10-13 16:51:40.121] [PERF] ML training: source=trained total=90722ms | scan=3703ms | likes: load=31236ms (disk 15855) misses=12 features=5663ms clip=1202ms save=4065ms | dislikes: load=27675ms (disk 12979) misses=72 features=0ms clip=247ms save=0ms | bulk=2ms | train=2633ms
+[2026-10-13 16:51:42.292] [PERF] AI sort: outcome=done total=119804ms | mlInit=54ms | clipLoad=1803ms | sourceCacheLoad=25052ms | training=90723ms (trained) | extract=667ms | sort=1031ms | files=16208
+```
+
+- CLIP for the moved files took ≤ 1.2 s, about 1% of the sort.
+- The training caches' `load=` took 31.2 + 27.7 = 58.9 s of the 90.7 s rebuild; `sourceCacheLoad` took 25.1 s.
+- Neither line has a `modelCacheWrite=` segment: the 71 failing videos made the model uncacheable.
+- About 14 s of the rebuild is unaccounted for: the time of failed calls, which the line dropped (Task 2 fixes this).
 
 ### After run
 
