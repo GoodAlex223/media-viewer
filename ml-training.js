@@ -122,7 +122,7 @@ export function formatTrainingPerfLine(perf) {
         const f = perf[label];
         if (!f) continue;
         parts.push(
-            `${label}: load=${ms(f.loadMs)} (disk ${f.diskCount}) misses=${f.misses} ` +
+            `${label}: load=${ms(f.loadMs)} (disk ${f.diskCount}) misses=${f.misses} failed=${f.failed} ` +
                 `features=${ms(f.featuresMs)} clip=${ms(f.clipMs)} save=${ms(f.saveMs)}`
         );
     }
@@ -510,7 +510,7 @@ export class MlTrainingManager {
      */
     async _collectFolderVectors(folderPath, files, phase, loadPhase, enableClipFeatures, signal) {
         // Per-folder timings and counts for the perf line (G3 spec § 7), returned on every path.
-        const stats = { loadMs: 0, diskCount: 0, misses: 0, featuresMs: 0, clipMs: 0, saveMs: 0 };
+        const stats = { loadMs: 0, diskCount: 0, misses: 0, failed: 0, featuresMs: 0, clipMs: 0, saveMs: 0 };
         const tLoad = this._now();
         const { entries, diskCount, aborted } = await this._loadVectorCache(folderPath, files, signal, loadPhase);
         stats.loadMs = this._now() - tLoad;
@@ -533,12 +533,22 @@ export class MlTrainingManager {
             if (!hadHit || needsClip) {
                 stats.misses++;
                 try {
+                    // Timed in `finally`, so a call that throws is counted too (G3 re-scope: the before run's
+                    // `features=0ms` hid 66 failed calls).
+                    let feature;
                     const tFeatures = this._now();
-                    const feature = hadHit ? hit.feature : await this.computeFeatures(file.path, file);
-                    if (!hadHit) stats.featuresMs += this._now() - tFeatures;
+                    try {
+                        feature = hadHit ? hit.feature : await this.computeFeatures(file.path, file);
+                    } finally {
+                        if (!hadHit) stats.featuresMs += this._now() - tFeatures;
+                    }
+                    let clip;
                     const tClip = this._now();
-                    const clip = await this.extractClipEmbedding(file.path);
-                    stats.clipMs += this._now() - tClip;
+                    try {
+                        clip = await this.extractClipEmbedding(file.path);
+                    } finally {
+                        stats.clipMs += this._now() - tClip;
+                    }
                     const gainedClip = needsClip && hasClip(clip);
                     hit = { feature, clip: hasClip(clip) ? clip : null, size: file.size, mtimeMs: file.mtimeMs };
                     entries.set(file.name, hit);
@@ -548,6 +558,7 @@ export class MlTrainingManager {
                     if (!hadHit || gainedClip) extracted++;
                 } catch (err) {
                     failed++;
+                    stats.failed++;
                     // review round 1, Important 6: this is the only diagnostic for a file the
                     // fingerprint still counts but the trained model never saw (Important 2) --
                     // console output is not persisted, so this MUST go through the injected

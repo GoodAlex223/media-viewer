@@ -223,11 +223,19 @@ describe('formatTrainingPerfLine (G3)', () => {
                 source: 'trained',
                 totalMs: 1234.6,
                 scanMs: 4.4,
-                likes: { loadMs: 40.5, diskCount: 1200, misses: 5, featuresMs: 300.2, clipMs: 912.7, saveMs: 80 },
+                likes: {
+                    loadMs: 40.5,
+                    diskCount: 1200,
+                    misses: 5,
+                    failed: 2,
+                    featuresMs: 300.2,
+                    clipMs: 912.7,
+                    saveMs: 80,
+                },
                 trainMs: 150.49,
             })
         ).toBe(
-            'ML training: source=trained total=1235ms | scan=4ms | likes: load=41ms (disk 1200) misses=5 features=300ms clip=913ms save=80ms | train=150ms'
+            'ML training: source=trained total=1235ms | scan=4ms | likes: load=41ms (disk 1200) misses=5 failed=2 features=300ms clip=913ms save=80ms | train=150ms'
         );
     });
 
@@ -1968,7 +1976,7 @@ describe('ensureTrainedModel', () => {
             await m.ensureTrainedModel({});
             expect(m.logPerf.mock.calls).toEqual([
                 [
-                    'ML training: source=trained total=0ms | scan=0ms | likes: load=0ms (disk 0) misses=3 features=0ms clip=0ms save=0ms | dislikes: load=0ms (disk 0) misses=3 features=0ms clip=0ms save=0ms | bulk=0ms | train=0ms | modelCacheWrite=0ms',
+                    'ML training: source=trained total=0ms | scan=0ms | likes: load=0ms (disk 0) misses=3 failed=0 features=0ms clip=0ms save=0ms | dislikes: load=0ms (disk 0) misses=3 failed=0 features=0ms clip=0ms save=0ms | bulk=0ms | train=0ms | modelCacheWrite=0ms',
                 ],
             ]);
         });
@@ -2026,6 +2034,28 @@ describe('ensureTrainedModel', () => {
             });
             const res = await m.ensureTrainedModel({});
             expect(res.source).toBe('trained');
+        });
+
+        it('counts the time of a call that throws, and shows failed=N (G3 re-scope, Review Focus 4)', async () => {
+            // Before: a throwing computeFeatures' time was dropped, so the before run's `dislikes: features=0ms`
+            // hid 66 failed calls, and nothing in the line said why the model was not cached.
+            let t = 0;
+            const { m } = scenario({
+                managerOverrides: {
+                    logPerf: vi.fn(),
+                    now: () => t,
+                    computeFeatures: vi.fn(async (p) => {
+                        t += 100;
+                        if (p === '/likes/l1.jpg') throw new Error('Video load error');
+                        return new Float32Array(64).fill(0.5);
+                    }),
+                },
+            });
+            await m.ensureTrainedModel({});
+            const line = m.logPerf.mock.calls[0][0];
+            expect(line).toContain('likes: load=0ms (disk 0) misses=3 failed=1 features=300ms clip=0ms save=0ms');
+            expect(line).toContain('dislikes: load=0ms (disk 0) misses=3 failed=0 features=300ms');
+            expect(line).not.toContain('modelCacheWrite='); // a failed file still blocks the model cache (D1)
         });
     });
 });
