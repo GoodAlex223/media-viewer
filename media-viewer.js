@@ -7052,7 +7052,7 @@ class MediaViewer {
                         video.currentTime = 0.1; // Seek to 0.1s to avoid black frames
                     } catch (error) {
                         cleanup();
-                        video.src = '';
+                        this._releaseVideo(video);
                         reject(error);
                     }
                 });
@@ -7069,20 +7069,25 @@ class MediaViewer {
 
                         const hash = this.blockhash(imageData, 16);
                         cleanup();
-                        video.src = '';
+                        this._releaseVideo(video);
                         resolve(hash);
                     } catch (error) {
                         cleanup();
-                        video.src = '';
+                        this._releaseVideo(video);
                         reject(error);
                     }
                 });
 
-                video.addEventListener('error', (error) => {
-                    cleanup();
-                    video.src = '';
-                    reject(new Error(`Video load error: ${error.message || 'Unknown error'}`));
-                });
+                // G3: never empties `src` (see _releaseVideo). The old `video.src = ''` here fired `error` again,
+                // forever, after every video this method hashed.
+                video.addEventListener(
+                    'error',
+                    (error) => {
+                        cleanup();
+                        reject(new Error(`Video load error: ${error.message || 'Unknown error'}`));
+                    },
+                    { once: true }
+                );
 
                 video.src = filePath;
             } else {
@@ -8554,6 +8559,15 @@ class MediaViewer {
         }
     }
 
+    // Lets go of a <video> without firing `error` (G3 spec D2). With NO src attribute, the media element load
+    // algorithm just empties the element; an EMPTY src attribute is a load failure that fires `error`, and an
+    // `error` handler that empties src again loops forever (~37,000 events a second, measured). The only way
+    // computeFeatures and computePerceptualHash release a video. Never `video.src = ''`.
+    _releaseVideo(video) {
+        video.removeAttribute('src');
+        video.load();
+    }
+
     /**
      * Compute features for a file with full metadata support (v2)
      * @param {string} filePath - Path to the file
@@ -8619,7 +8633,12 @@ class MediaViewer {
         }
 
         return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Timeout')), 30000);
+            // Set by the video branch, so a stalled video is released rather than left holding its decoder (G3).
+            let releaseOnTimeout = () => {};
+            const timeout = setTimeout(() => {
+                releaseOnTimeout();
+                reject(new Error('Timeout'));
+            }, 30000);
             const cleanup = () => clearTimeout(timeout);
 
             const processImageData = async (imageData, mediaWidth, mediaHeight) => {
@@ -8682,6 +8701,18 @@ class MediaViewer {
                 video.preload = 'metadata';
                 video.muted = true;
 
+                // G3: nothing here empties `src` (see _releaseVideo). Before, `seeked` emptied it ahead of the async
+                // processImageData, whose face-detection await let the resulting `error` reject every video —
+                // so every training-folder video failed and no training set with one could be cached.
+                const onError = () => {
+                    cleanup();
+                    reject(new Error('Video load error'));
+                };
+                releaseOnTimeout = () => {
+                    video.removeEventListener('error', onError);
+                    this._releaseVideo(video);
+                };
+
                 video.addEventListener('loadeddata', () => {
                     video.currentTime = 0.1;
                 });
@@ -8692,18 +8723,17 @@ class MediaViewer {
                     canvas.height = 256;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(video, 0, 0, 256, 256);
-                    const imageData = ctx.getImageData(0, 0, 256, 256);
+                    const imageData = ctx.getImageData(0, 0, 256, 256); // a copy: the element can go now
                     const videoWidth = video.videoWidth;
                     const videoHeight = video.videoHeight;
-                    video.src = '';
+                    // Detach before releasing: processImageData settles the promise later, so an `error`
+                    // reaching onError now would reject a frame that was read successfully.
+                    video.removeEventListener('error', onError);
+                    this._releaseVideo(video);
                     processImageData(imageData, videoWidth, videoHeight);
                 });
 
-                video.addEventListener('error', () => {
-                    video.src = '';
-                    cleanup();
-                    reject(new Error('Video load error'));
-                });
+                video.addEventListener('error', onError, { once: true });
 
                 video.src = filePath;
             } else {
