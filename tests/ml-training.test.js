@@ -2080,6 +2080,31 @@ describe('ensureTrainedModel', () => {
             );
         });
 
+        it('names at most 20 CLIP-less files per folder, then one line for the rest (G3 addendum, review)', async () => {
+            // With CLIP enabled but unavailable (offline first run), every one of ~28k training rows would log a
+            // line, and a main-thread write, per sort. noClip=N still carries the full count.
+            const likeFiles = Array.from({ length: 25 }, (_, i) => ({
+                name: `l${i + 1}.jpg`,
+                path: `/likes/l${i + 1}.jpg`,
+                size: 10 + i,
+                mtimeMs: 1 + i,
+            }));
+            const { m } = scenario({
+                likeFiles,
+                extractClipEmbedding: vi.fn(async (p) =>
+                    p.startsWith('/likes/') ? null : new Float32Array(512).fill(0.25)
+                ),
+                managerOverrides: { logPerf: vi.fn(), now: () => 0 },
+            });
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls[0][0]).toContain(
+                'likes: load=0ms (disk 0) misses=25 failed=0 noClip=25 features=0ms'
+            );
+            const messages = m.logError.mock.calls.map((c) => c[0]);
+            expect(messages.filter((x) => x.startsWith('No CLIP vector for l'))).toHaveLength(20);
+            expect(messages).toContain('No CLIP vector for 5 more file(s) in /likes — the model will not be cached');
+        });
+
         // A guard against over-counting. Mutation-check: drop the
         // `if (enableClipFeatures)` guard in _collectFolderVectors, keeping its body → this fails.
         it('does not count or log CLIP-less rows while CLIP is off', async () => {

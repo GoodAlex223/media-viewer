@@ -10,11 +10,37 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const sharp = require('sharp');
+const zlib = require('zlib');
 const { readClipImage, LENIENT_MAX_SIDE } = require('../clip-image');
 
 let RawImage;
 let dir;
 const files = {};
+
+// A PNG that is only its header: signature, an IHDR declaring width x height (8-bit greyscale, no interlace), an
+// IDAT holding one row of zeros (an empty stream is rejected as 'IDAT stream too short'), and IEND. Well under a
+// kilobyte that claims an enormous frame, like a crafted file.
+function headerOnlyPng(width, height) {
+    const chunk = (type, data) => {
+        const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+        const out = Buffer.alloc(body.length + 8);
+        out.writeUInt32BE(data.length, 0);
+        body.copy(out, 4);
+        out.writeUInt32BE(zlib.crc32(body), body.length + 4);
+        return out;
+    };
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr[8] = 8; // bit depth
+    ihdr[9] = 0; // colour type 0: greyscale
+    return Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        chunk('IHDR', ihdr),
+        chunk('IDAT', zlib.deflateSync(Buffer.alloc(width + 1))),
+        chunk('IEND', Buffer.alloc(0)),
+    ]);
+}
 
 beforeAll(async () => {
     ({ RawImage } = await import(
@@ -45,6 +71,10 @@ beforeAll(async () => {
         .toFile(files.greyAlpha);
     files.notImage = path.join(dir, 'not-an-image.jpg');
     fs.writeFileSync(files.notImage, Buffer.from('this is not an image'));
+    files.userSize = path.join(dir, 'header-14031x19933.png'); // the user's 279.7-megapixel JPEG, as a header
+    fs.writeFileSync(files.userSize, headerOnlyPng(14031, 19933));
+    files.overBound = path.join(dir, 'header-24000x24000.png'); // 576 MP, over the lenient bound of 2 ** 29
+    fs.writeFileSync(files.overBound, headerOnlyPng(24000, 24000));
 });
 
 afterAll(() => {
@@ -75,9 +105,12 @@ describe('readClipImage (G3 addendum)', () => {
     });
 
     it('decodes a grey+alpha PNG to 3 channels', async () => {
-        const image = await readClipImage(files.greyAlpha, { RawImage, sharp, warn: vi.fn() });
+        await expect(RawImage.read(files.greyAlpha)).rejects.toThrow(); // the fixture discriminates
+        const warn = vi.fn();
+        const image = await readClipImage(files.greyAlpha, { RawImage, sharp, warn });
         expect(image.channels).toBe(3);
         expect([image.width, image.height]).toEqual([64, 32]);
+        expect(warn).toHaveBeenCalledTimes(1);
     });
 
     it('rethrows the strict error when neither decoder can read the file', async () => {
@@ -91,11 +124,27 @@ describe('readClipImage (G3 addendum)', () => {
         expect(warn.mock.calls[0][0]).toMatch(/^CLIP: cannot decode not-an-image\.jpg: /);
     });
 
-    it('asks sharp for no failure threshold and no pixel limit (the 280-megapixel case)', async () => {
-        // A mechanism pin: no small fixture exceeds sharp's 268-megapixel default. Mutation-check: drop
-        // `limitInputPixels: false` from clip-image.js → this fails.
-        const spy = vi.fn(sharp);
-        await readClipImage(files.truncated, { RawImage, sharp: spy, warn: vi.fn() });
-        expect(spy).toHaveBeenCalledWith(files.truncated, { failOn: 'none', limitInputPixels: false });
+    it('decodes a 279.7-megapixel file that the strict read refuses, shrunk to LENIENT_MAX_SIDE', async () => {
+        // The user's 14031x19933 JPEG is over sharp's 268-megapixel default and under the lenient bound.
+        await expect(RawImage.read(files.userSize)).rejects.toThrow(); // the fixture discriminates
+        const warn = vi.fn();
+        const image = await readClipImage(files.userSize, { RawImage, sharp, warn });
+        expect(image.channels).toBe(3);
+        expect(Math.max(image.width, image.height)).toBe(LENIENT_MAX_SIDE);
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses a 576-megapixel header with the strict error, not an unbounded decode', async () => {
+        // Over 2 ** 29 pixels: the lenient decode refuses it too, so the strict message comes back.
+        // Mutation-check: set the bound to `false` in clip-image.js → this fails (the decode runs, seconds long).
+        const strictMessage = await RawImage.read(files.overBound).then(
+            () => 'resolved',
+            (err) => err.message
+        );
+        expect(strictMessage).not.toBe('resolved');
+        const warn = vi.fn();
+        await expect(readClipImage(files.overBound, { RawImage, sharp, warn })).rejects.toThrow(strictMessage);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0][0]).toMatch(/^CLIP: cannot decode header-24000x24000\.png: /);
     });
 });

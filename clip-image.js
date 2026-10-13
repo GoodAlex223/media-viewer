@@ -4,12 +4,18 @@
 // reject truncated or slightly malformed files that Chromium displays without complaint. A training-folder file
 // left without a CLIP vector keeps the model out of the cache (ml-training.js `cacheable`), so every AI sort
 // retrained. The strict read stays first, so every embedding it can produce is unchanged. Only a file it rejects
-// gets the lenient decode.
+// gets the lenient decode: failOn 'none', and an input bound of LENIENT_MAX_INPUT_PIXELS (2 ** 29 pixels) rather
+// than sharp's default; a file over the bound gets the strict error.
 
 const path = require('path');
 
 // Far above CLIP's 224-px input, and small enough that sharp shrinks a 280-megapixel JPEG while loading it.
 const LENIENT_MAX_SIDE = 1024;
+
+// The lenient decode's input bound, about 2x sharp's 268-megapixel default. It still admits the user's
+// 14031x19933 (279.7 MP) JPEG, and it keeps a crafted file's whole-frame decode (a header-only PNG declaring
+// a huge size) to the same order as the strict path's. Folder content is untrusted, so it is never unbounded.
+const LENIENT_MAX_INPUT_PIXELS = 2 ** 29;
 
 /**
  * @param {string} imagePath
@@ -24,12 +30,14 @@ async function readClipImage(imagePath, { RawImage, sharp, warn = () => {} }) {
         const name = path.basename(imagePath);
         let decoded;
         try {
-            decoded = await sharp(imagePath, { failOn: 'none', limitInputPixels: false })
+            decoded = await sharp(imagePath, { failOn: 'none', limitInputPixels: LENIENT_MAX_INPUT_PIXELS })
                 .rotate()
                 .resize(LENIENT_MAX_SIDE, LENIENT_MAX_SIDE, { fit: 'inside', withoutEnlargement: true })
                 .removeAlpha()
                 .toColourspace('srgb')
                 .raw()
+                // A defensive CPU backstop; no test exercises it.
+                .timeout({ seconds: 30 })
                 .toBuffer({ resolveWithObject: true });
         } catch (lenientError) {
             warn(`CLIP: cannot decode ${name}: ${strictError.message} (lenient: ${lenientError.message})`);
@@ -41,4 +49,4 @@ async function readClipImage(imagePath, { RawImage, sharp, warn = () => {} }) {
     }
 }
 
-module.exports = { readClipImage, LENIENT_MAX_SIDE };
+module.exports = { readClipImage, LENIENT_MAX_SIDE, LENIENT_MAX_INPUT_PIXELS };

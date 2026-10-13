@@ -97,6 +97,10 @@ const hasClip = (clip) => !!clip && clip.length === CLIP_DIM;
 
 const CHUNK_SIZE = 500;
 
+// How many CLIP-less training files one folder names in the log per call. With CLIP on but unavailable every
+// row is CLIP-less, and a line each is ~28k main-thread writes per sort; `noClip=N` carries the full count.
+const NO_CLIP_LOG_LIMIT = 20;
+
 // Round before serializing: full-precision floats stringify to ~17 chars each, and 6 decimals
 // is well below the noise floor for unit-normalized cosine similarity. Mirrors the source
 // folder's cache writer (media-viewer.js _saveFeatureCacheLocked).
@@ -574,11 +578,21 @@ export class MlTrainingManager {
                     // Names the file that keeps the model out of the cache (G3 addendum): before, only an
                     // unnamed toast and a console.warn did.
                     stats.noClip++;
-                    this.logError(`No CLIP vector for ${file.name} in ${folderPath} — the model will not be cached`);
+                    if (stats.noClip <= NO_CLIP_LOG_LIMIT) {
+                        this.logError(
+                            `No CLIP vector for ${file.name} in ${folderPath} — the model will not be cached`
+                        );
+                    }
                 }
             }
             rows.push(this._combine(hit.feature, hit.clip));
             this.onProgress({ phase, current: i + 1, total: files.length });
+        }
+
+        if (stats.noClip > NO_CLIP_LOG_LIMIT) {
+            this.logError(
+                `No CLIP vector for ${stats.noClip - NO_CLIP_LOG_LIMIT} more file(s) in ${folderPath} — the model will not be cached`
+            );
         }
 
         // scanCount = files.length: the third shrink-guard conjunct that tells a genuine folder
