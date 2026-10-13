@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵), re-scoped 2026-10-13. It supersedes [2026-10-13_g3-source-clip-reuse.md](2026-10-13_g3-source-clip-reuse.md), whose Task 1 (`713af35`) stays on this branch. Origin: BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app".
 **Spec**: [2026-10-13-g3-training-video-extraction-design.md](../../superpowers/specs/2026-10-13-g3-training-video-extraction-design.md) (committed `5d9b9e6`, user-approved 2026-10-13)
 **Created**: 2026-10-13
-**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 ✅ 2026-10-14 (acceptance met — § After run 2). Task 3 ✅. Final review ✅ with one fix round (`41792b9`). Push and PR await the user's approval.
+**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 ✅ 2026-10-14 (acceptance met — § After run 2). Task 3 ✅. Final review ✅ with one fix round (`41792b9`). Pushed with the user's approval 2026-10-14 (pre-push E2E: 140 passed, 5 skipped, 5.1 min); **PR #80** open — review in a separate chat, then closeout after the merge.
 **Last Updated**: 2026-10-13
 **Branch**: `g3-source-vector-reuse` @ `5d9b9e6` (from `main` @ `c2673c4`)
 
@@ -1429,6 +1429,8 @@ Propagation check: any late measurement or review fix that changes what `CLAUDE.
     - Also: the `blockhash`-throws hash test (its mutation fails it), the detach labelled defensive, the `settle` comment rewrapped, the E2E JSDoc corrected, and the CLAUDE.md buffer-not-path clause.
   - **Routed:** M4 extends R9; M6 annotates R5; parked items 5–6 became R10.
   - Suite: 1393 passed, 1 skipped.
+
+- **2026-10-14 — Pushed; PR #80.** The user approved the push. The pre-push E2E suite: 140 passed, 5 skipped (opt-in visual evidence), including both new `video-feature-extraction` tests. Both SDD workspaces were deleted after the clean final review. Next: the code review in a separate chat, then the closeout on `main`.
 
 ### Before run
 
