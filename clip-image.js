@@ -5,8 +5,11 @@
 // left without a CLIP vector keeps the model out of the cache (ml-training.js `cacheable`), so every AI sort
 // retrained. The strict read stays first, so every embedding it can produce is unchanged. Only a file it rejects
 // gets the lenient decode: failOn 'none', and an input bound of LENIENT_MAX_INPUT_PIXELS (2 ** 29 pixels) rather
-// than sharp's default; a file over the bound gets the strict error.
+// than sharp's default; a file over the bound gets the strict error. The lenient decode reads the file into a buffer
+// first, as RawImage.read does: a path input lets libvips keep GIF/WebP files open, which on Windows blocks moving
+// them (EBUSY).
 
+const fs = require('fs');
 const path = require('path');
 
 // Far above CLIP's 224-px input, and small enough that sharp shrinks a 280-megapixel JPEG while loading it.
@@ -30,7 +33,8 @@ async function readClipImage(imagePath, { RawImage, sharp, warn = () => {} }) {
         const name = path.basename(imagePath);
         let decoded;
         try {
-            decoded = await sharp(imagePath, { failOn: 'none', limitInputPixels: LENIENT_MAX_INPUT_PIXELS })
+            const input = await fs.promises.readFile(imagePath);
+            decoded = await sharp(input, { failOn: 'none', limitInputPixels: LENIENT_MAX_INPUT_PIXELS })
                 .rotate()
                 .resize(LENIENT_MAX_SIDE, LENIENT_MAX_SIDE, { fit: 'inside', withoutEnlargement: true })
                 .removeAlpha()

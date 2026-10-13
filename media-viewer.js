@@ -8709,6 +8709,8 @@ class MediaViewer {
                     reject(new Error('Video load error'));
                 };
                 releaseOnTimeout = () => {
+                    // Defensive: the timeout rejects right after this call, so an `error` still queued for the element
+                    // could only no-op in onError (_releaseVideo itself fires none).
                     video.removeEventListener('error', onError);
                     this._releaseVideo(video);
                 };

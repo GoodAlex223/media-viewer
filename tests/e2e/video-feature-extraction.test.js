@@ -9,9 +9,10 @@ import { join } from 'path';
 import { launchApp, closeApp, grantFolder, createTempFixtureDir } from './helpers/electron-app.js';
 
 /**
- * Runs window.mediaViewer.computeFeatures on `filePath` with face detection on, recording every event on the
- * <video> element it creates, then waits a second after it settles so that a post-settle `error` loop shows up in
- * `errorEvents`.
+ * Runs window.mediaViewer.computeFeatures on `filePath` with face detection on. On each <video> element it creates it
+ * records `loadeddata`, `seeked`, `emptied` and `error` events (the first 12, in `events`) and counts every `error`
+ * in `errorEvents`. It then waits a second after computeFeatures settles, so that a post-settle `error` loop shows up
+ * in `errorEvents`.
  */
 async function runComputeFeatures(page, filePath) {
     return page.evaluate(async (p) => {

@@ -86,7 +86,8 @@ class FakeVideo extends EventTarget {
     }
 }
 
-// Long enough for the old loop to fire many times (one setTimeout(0) per error: 13-16 in 150 ms on Windows' timer granularity, measured); ERROR_CAP only bounds it.
+// Long enough for the old loop to fire many times (one setTimeout(0) per error: 13-16 in 150 ms on Windows' timer
+// granularity, measured); ERROR_CAP only bounds it.
 const settle = (ms = 150) => new Promise((r) => setTimeout(r, ms));
 
 const saved = { window: globalThis.window, document: globalThis.document, extractFeatures: globalThis.extractFeatures };
@@ -222,5 +223,18 @@ describe('computePerceptualHash — video (G3)', () => {
         );
         await settle();
         expect(videos[0].errors).toBe(1);
+    });
+
+    it('a hash that throws rejects, and nothing empties its src afterwards', async () => {
+        const ctx = {
+            ...ctxFor(),
+            blockhash: vi.fn(() => {
+                throw new Error('hash failed');
+            }),
+        };
+        await expect(computePerceptualHash.call(ctx, '/t/clip.mp4')).rejects.toThrow('hash failed');
+        await settle();
+        expect(videos[0].errors).toBe(0);
+        expect(videos[0].getAttribute('src')).toBeNull();
     });
 });

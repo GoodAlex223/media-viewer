@@ -64,6 +64,20 @@ beforeAll(async () => {
     fs.writeFileSync(files.good, jpeg);
     files.truncated = path.join(dir, 'truncated.jpg');
     fs.writeFileSync(files.truncated, jpeg.subarray(0, Math.floor(jpeg.length * 0.6)));
+    // Noise again: without it the GIF compresses to almost nothing and a cut leaves it whole.
+    const gif = await sharp({
+        create: {
+            width: 400,
+            height: 300,
+            channels: 3,
+            background: '#808080',
+            noise: { type: 'gaussian', mean: 128, sigma: 40 },
+        },
+    })
+        .gif()
+        .toBuffer();
+    files.truncatedGif = path.join(dir, 'truncated.gif');
+    fs.writeFileSync(files.truncatedGif, gif.subarray(0, Math.floor(gif.length * 0.6)));
     files.greyAlpha = path.join(dir, 'grey-alpha.png');
     await sharp({ create: { width: 64, height: 32, channels: 4, background: { r: 90, g: 90, b: 90, alpha: 0.5 } } })
         .toColourspace('b-w')
@@ -102,6 +116,24 @@ describe('readClipImage (G3 addendum)', () => {
         expect(image.data.length).toBe(image.width * image.height * 3);
         expect(warn).toHaveBeenCalledTimes(1);
         expect(warn.mock.calls[0][0]).toMatch(/^CLIP: truncated\.jpg needed the lenient decoder \(.+\)$/);
+    });
+
+    it('does not keep the file open: it can be renamed right after a lenient decode (Windows EBUSY)', async () => {
+        // A path input lets libvips' operation cache hold a GIF/WebP handle open, and on Windows a move of that file
+        // then fails with EBUSY. The cache-count assertion is the portable one; the rename assertion is RED only on
+        // Windows and passes by construction elsewhere.
+        await expect(RawImage.read(files.truncatedGif)).rejects.toThrow(); // the fixture discriminates
+        const before = sharp.cache().files.current;
+        const warn = vi.fn();
+        const image = await readClipImage(files.truncatedGif, { RawImage, sharp, warn });
+        expect(image.channels).toBe(3);
+        expect(sharp.cache().files.current).toBe(before);
+        const moved = files.truncatedGif + '.moved';
+        try {
+            expect(() => fs.renameSync(files.truncatedGif, moved)).not.toThrow();
+        } finally {
+            if (fs.existsSync(moved)) fs.renameSync(moved, files.truncatedGif);
+        }
     });
 
     it('decodes a grey+alpha PNG to 3 channels', async () => {
