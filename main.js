@@ -10,6 +10,7 @@ const { packFeatureChunk } = require('./feature-cache-transport');
 const { pathToFileURL } = require('url');
 const { createGrantStore, createTempDirRegistry, isInsideDir } = require('./path-grants');
 const { createIpcGuard, tierAssignmentsKind, tierDirMatches, normalizeFileUrl } = require('./ipc-guard');
+const { readClipImage } = require('./clip-image');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
 // name, so the renderer never names a file path for these channels.
@@ -1145,8 +1146,13 @@ app.whenReady().then(async () => {
         try {
             const { RawImage } = await import('@huggingface/transformers');
 
-            // Read image file and create RawImage
-            const image = await RawImage.read(imagePath);
+            // Read the image. A file sharp's strict defaults reject gets a lenient decode (clip-image.js, G3), so a
+            // truncated or oversized training image still gets a CLIP vector and no longer blocks the model cache.
+            const image = await readClipImage(imagePath, {
+                RawImage,
+                sharp: require('sharp'),
+                warn: (message) => logger.warn('clip', message),
+            });
 
             // Process through CLIP vision encoder
             const inputs = await processor(image);

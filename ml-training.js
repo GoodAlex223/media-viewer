@@ -122,7 +122,7 @@ export function formatTrainingPerfLine(perf) {
         const f = perf[label];
         if (!f) continue;
         parts.push(
-            `${label}: load=${ms(f.loadMs)} (disk ${f.diskCount}) misses=${f.misses} failed=${f.failed} ` +
+            `${label}: load=${ms(f.loadMs)} (disk ${f.diskCount}) misses=${f.misses} failed=${f.failed} noClip=${f.noClip} ` +
                 `features=${ms(f.featuresMs)} clip=${ms(f.clipMs)} save=${ms(f.saveMs)}`
         );
     }
@@ -510,7 +510,7 @@ export class MlTrainingManager {
      */
     async _collectFolderVectors(folderPath, files, phase, loadPhase, enableClipFeatures, signal) {
         // Per-folder timings and counts for the perf line (G3 spec § 7), returned on every path.
-        const stats = { loadMs: 0, diskCount: 0, misses: 0, failed: 0, featuresMs: 0, clipMs: 0, saveMs: 0 };
+        const stats = { loadMs: 0, diskCount: 0, misses: 0, failed: 0, noClip: 0, featuresMs: 0, clipMs: 0, saveMs: 0 };
         const tLoad = this._now();
         const { entries, diskCount, aborted } = await this._loadVectorCache(folderPath, files, signal, loadPhase);
         stats.loadMs = this._now() - tLoad;
@@ -568,7 +568,15 @@ export class MlTrainingManager {
                 }
             }
 
-            if (!hasClip(hit.clip)) clipMissing++;
+            if (!hasClip(hit.clip)) {
+                clipMissing++;
+                if (enableClipFeatures) {
+                    // Names the file that keeps the model out of the cache (G3 addendum): before, only an
+                    // unnamed toast and a console.warn did.
+                    stats.noClip++;
+                    this.logError(`No CLIP vector for ${file.name} in ${folderPath} — the model will not be cached`);
+                }
+            }
             rows.push(this._combine(hit.feature, hit.clip));
             this.onProgress({ phase, current: i + 1, total: files.length });
         }

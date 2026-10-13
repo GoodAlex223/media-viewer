@@ -228,6 +228,7 @@ describe('formatTrainingPerfLine (G3)', () => {
                     diskCount: 1200,
                     misses: 5,
                     failed: 2,
+                    noClip: 1,
                     featuresMs: 300.2,
                     clipMs: 912.7,
                     saveMs: 80,
@@ -235,7 +236,7 @@ describe('formatTrainingPerfLine (G3)', () => {
                 trainMs: 150.49,
             })
         ).toBe(
-            'ML training: source=trained total=1235ms | scan=4ms | likes: load=41ms (disk 1200) misses=5 failed=2 features=300ms clip=913ms save=80ms | train=150ms'
+            'ML training: source=trained total=1235ms | scan=4ms | likes: load=41ms (disk 1200) misses=5 failed=2 noClip=1 features=300ms clip=913ms save=80ms | train=150ms'
         );
     });
 
@@ -1976,7 +1977,7 @@ describe('ensureTrainedModel', () => {
             await m.ensureTrainedModel({});
             expect(m.logPerf.mock.calls).toEqual([
                 [
-                    'ML training: source=trained total=0ms | scan=0ms | likes: load=0ms (disk 0) misses=3 failed=0 features=0ms clip=0ms save=0ms | dislikes: load=0ms (disk 0) misses=3 failed=0 features=0ms clip=0ms save=0ms | bulk=0ms | train=0ms | modelCacheWrite=0ms',
+                    'ML training: source=trained total=0ms | scan=0ms | likes: load=0ms (disk 0) misses=3 failed=0 noClip=0 features=0ms clip=0ms save=0ms | dislikes: load=0ms (disk 0) misses=3 failed=0 noClip=0 features=0ms clip=0ms save=0ms | bulk=0ms | train=0ms | modelCacheWrite=0ms',
                 ],
             ]);
         });
@@ -2053,9 +2054,43 @@ describe('ensureTrainedModel', () => {
             });
             await m.ensureTrainedModel({});
             const line = m.logPerf.mock.calls[0][0];
-            expect(line).toContain('likes: load=0ms (disk 0) misses=3 failed=1 features=300ms clip=0ms save=0ms');
-            expect(line).toContain('dislikes: load=0ms (disk 0) misses=3 failed=0 features=300ms');
+            expect(line).toContain(
+                'likes: load=0ms (disk 0) misses=3 failed=1 noClip=0 features=300ms clip=0ms save=0ms'
+            );
+            expect(line).toContain('dislikes: load=0ms (disk 0) misses=3 failed=0 noClip=0 features=300ms');
             expect(line).not.toContain('modelCacheWrite='); // a failed file still blocks the model cache (D1)
+        });
+
+        it('counts and names a training file left without a CLIP vector, which keeps the model out of the cache (G3 addendum)', async () => {
+            // Before: the perf line had no count for it and nothing logged its name, so a model that never cached
+            // looked unexplained (the first after run: failed=0, no modelCacheWrite, and no clue why).
+            const { m } = scenario({
+                extractClipEmbedding: vi.fn(async (p) =>
+                    p === '/dislikes/d2.jpg' ? null : new Float32Array(512).fill(0.25)
+                ),
+                managerOverrides: { logPerf: vi.fn(), now: () => 0 },
+            });
+            await m.ensureTrainedModel({});
+            const line = m.logPerf.mock.calls[0][0];
+            expect(line).toContain('likes: load=0ms (disk 0) misses=3 failed=0 noClip=0 features=0ms');
+            expect(line).toContain('dislikes: load=0ms (disk 0) misses=3 failed=0 noClip=1 features=0ms');
+            expect(line).not.toContain('modelCacheWrite='); // a CLIP-less row still blocks the cache (D1)
+            expect(m.logError).toHaveBeenCalledWith(
+                'No CLIP vector for d2.jpg in /dislikes — the model will not be cached'
+            );
+        });
+
+        // A guard against over-counting. Mutation-check: drop the
+        // `if (enableClipFeatures)` guard in _collectFolderVectors, keeping its body → this fails.
+        it('does not count or log CLIP-less rows while CLIP is off', async () => {
+            const { m } = scenario({
+                enableClipFeatures: false,
+                extractClipEmbedding: vi.fn(async () => null),
+                managerOverrides: { logPerf: vi.fn(), now: () => 0 },
+            });
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls[0][0]).toContain('misses=3 failed=0 noClip=0 features=0ms');
+            expect(m.logError).not.toHaveBeenCalledWith(expect.stringMatching(/^No CLIP vector/));
         });
     });
 });
