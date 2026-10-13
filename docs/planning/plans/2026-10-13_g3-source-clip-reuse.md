@@ -1881,6 +1881,16 @@ Per `~/.claude/rules/planning-closeout.md`: Extract (Improvements → BACKLOG �
 
 - **2026-10-13** — Branch `g3-source-vector-reuse` created from `main` @ `c2673c4`. Brainstormed with the user section by section: D1 CLIP half only (after finding the source 64-dim vectors lack file metadata), D2 the `departedClips` map + lookup, D3 perf log. mtime probe through `Shell.Application.MoveHere`: `mtimeMs 1709626272345.679, size 200` before and after (same volume). Spec committed `f8e1c53` (hook: 1357 passed, 1 skipped); user approved it.
 - **2026-10-13** — Plan written.
+- **2026-10-13** — User approved the plan; execution subagent-driven (Sonnet · `high` implementers, the controller commits). Pre-flight rulings: R1 — the `_logSortPerf` "never throws" test uses `window = {}` so it pins the try/catch (as written it could not fail against any single mutation); R2 — Task 2 may add any `this.*` field `_loadFeatureCacheLocked` touches to `hostCtx`; R3 — Task 2 starts once the before-run app is open, and Task 3 starts only after the before-run lines arrive (the app reads its code at launch, so later edits can't reach a running app, but Task 3's would change a later launch).
+- **2026-10-13** — **Task 1 done, `713af35`** (hook: 1372 passed, 1 skipped). This is the before-run build. RED, manager: `7 failed | 108 passed` — the 2 `formatTrainingPerfLine` tests (`not a function`) and 5 of the 6 `perf line (G3)` tests (`m.logPerf` undefined); `never fails a rebuild…` passed by construction, as labelled. RED, sort: collection failed (`Could not find method: _logSortPerf`); with a stub method, `6 failed | 417 passed` (5 lifecycle tests: `called 1 times, but got 0 times`; the format test: `expected [] to deeply equal [ Array(1) ]`). Mutation checks, all restored, each one FAILED its test:
+  - `_now` without the try → `Error: clock`;
+  - `_writeTrainingPerf` without the try → `Error: sink` (an extra check beyond the plan's);
+  - `_logSortPerf` without the try → `TypeError … reading 'logPerf'` (R1).
+
+  Task review: spec ✅, approved, 3 minors deferred to the final review:
+  - time from a failed extraction call is not counted;
+  - `misses` includes CLIP-only re-extractions;
+  - a throwing `ensureTrainedModel` leaves no `training` phase in the sort line.
 
 ### Before run
 
