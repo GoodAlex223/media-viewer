@@ -169,3 +169,62 @@ Baseline: the before run, § 2.1 (a 119.8 s sort, 90.7 s of it training).
 - The redirected spec gets a dated "Redirected" note pointing here, and its `docs/README.md` row says so.
 - This spec gets its own `docs/README.md` row.
 - A new plan file. The first plan (`2026-10-13_g3-source-clip-reuse.md`) is marked superseded and archived with this one at closeout.
+
+## 11. Addendum (2026-10-14): the CLIP blocker
+
+**Approved by the user 2026-10-14** (option "Lenient fallback", chosen after the after run).
+
+### 11.1 Finding
+
+The after run (build `341026c`; lines in the plan's § After run) shows the video fix works: `failed=0` in both folders, and all 71 videos were extracted. But no run has a `modelCacheWrite=` segment, and runs 2 and 3 are `source=trained`. Acceptance (§ 7) was not met.
+
+- **A second rule blocks the cache.** `cacheable` (`ml-training.js:941-942`) also requires `!(enableClipFeatures && clipMissing > 0)`. § 2.2 missed it.
+- **Nine training files have `clipVector: null`:** 3 in `Liked_3` and 6 in `Liked_1`, all still images. Each rebuild retries their CLIP, which is the `misses=3`/`misses=6` with `features=0ms`. Every retry fails again.
+- **Main's `RawImage.read` throws for all 9.** It decodes through sharp with its defaults (`failOn: 'warning'`, a 268-megapixel input limit). Chromium displays all 9. The errors:
+  - 4 × `Corrupt JPEG data: premature end of data segment`;
+  - 2 × `Invalid SOS parameters for sequential JPEG`;
+  - 1 × `Input image exceeds pixel limit` (14031×19933);
+  - 1 × `libspng read error`;
+  - 1 × `unsupported number of channels: 4`.
+
+  A file from the same folder that has a CLIP vector decodes fine (the control).
+- **A lenient decode reads all 9.** It is sharp with `failOn: 'none'` and `limitInputPixels: false`, shrunk on load to fit 1024 px, then forced to 3-channel sRGB.
+- **The failure was invisible.** The renderer only `console.warn`s a CLIP failure, the perf line's `misses` folds CLIP-only retries in with real misses, and the "Model trained without CLIP for N file(s)" toast names no file.
+- **This blocker predates G3.** The before run's `dislikes: misses=72` is the 66 failing videos plus these 6.
+
+### 11.2 Decisions
+
+- **D6 — a lenient fallback, after the strict read only.**
+  - New main-process module `clip-image.js` with `readClipImage(imagePath, { RawImage, sharp, warn })`.
+  - It tries `RawImage.read(imagePath)` first, so every embedding the strict path can produce is byte-identical to today's.
+  - Only on a throw does it decode with sharp: `{ failOn: 'none', limitInputPixels: false }`, then `.rotate()` (as `RawImage.read` does), `.resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })`, `.removeAlpha()`, `.toColourspace('srgb')`, `.raw()`. It wraps the result in a 3-channel `RawImage`.
+  - If the lenient decode also throws, the strict error is rethrown, so the IPC reply's `error` is unchanged.
+- **D7 — scope.** Only main's `extractClipEmbedding` (path) handler uses it.
+  - `extractClipEmbeddingBatch` reads ffmpeg-made keyframes, and `extractClipEmbeddingFromBuffer` reads jxl-oxide PNGs. Both inputs are clean, so both handlers stay unchanged.
+  - The source folder benefits too: its background CLIP extraction uses the same handler.
+  - `sharp` becomes a direct dependency at the version already installed through `@huggingface/transformers` (`^0.34.5`).
+- **D8 — name what blocks the cache.**
+  - Main logs one `warn` per fallback (`CLIP: <name> needed the lenient decoder (<strict error>)`) and per double failure (`CLIP: cannot decode <name>: <strict> (lenient: <lenient>)`).
+  - `_collectFolderVectors` logs each training row left without a CLIP vector while CLIP is on: `No CLIP vector for <name> in <folder> — the model will not be cached`. It uses the injected `logError`, like the `Skipping …` line.
+  - The perf folder segment gains `noClip=N`, counting those rows. **D4 is amended to:** `<label>: load=Nms (disk N) misses=N failed=N noClip=N features=Nms clip=Nms save=Nms`.
+- **D1 still holds.** `cacheable` is unchanged; this fixes a loader.
+
+### 11.3 Testing
+
+- **Unit, `tests/clip-image.test.js`.** It uses the real `RawImage` from `@huggingface/transformers` and the real sharp, on fixtures generated at test time: a valid JPEG, a truncated JPEG, a grey+alpha PNG and a non-image.
+  - A valid file returns exactly what `RawImage.read` returns, and the fallback is never called.
+  - A file the strict read rejects (asserted first, so the fixture discriminates) decodes to 3 channels within 1024 px, with one `warn`.
+  - A non-image rethrows the strict error.
+  - The lenient options pin the pixel-limit case, which no small fixture can reach.
+- **Unit, `tests/ml-training.test.js`.**
+  - The perf strings gain `noClip=N`.
+  - A new test: one dislike whose CLIP is `null` → `noClip=1`, the `No CLIP vector …` log line, and no `modelCacheWrite=`.
+- **No E2E.** It would need the ~87 MB CLIP model inside the E2E profile. The wiring in `main.js` is checked by review and by the user's second after run.
+
+### 11.4 Acceptance
+
+§ 7, re-run on the new build, plus `noClip=0` in both folder segments of run 1. If a file still shows `noClip`, the session log's `CLIP: cannot decode …` line names it, and it is follow-up material (R1).
+
+### 11.5 Estimate
+
+**+~1.5 SP** (Task 2b). The total is now ~3.5 SP. Same execution: subagent-driven, Sonnet · `high`, the controller commits.
