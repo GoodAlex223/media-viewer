@@ -4409,6 +4409,9 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             cancelBackgroundExtraction: vi.fn(),
             _abortInFlightPredictionSort: vi.fn(abortInFlightPredictionSortImpl),
             _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
+            _folderLoadInFlight: false,
+            _refuseIfFolderLoadInFlight: extractMethod('_refuseIfFolderLoadInFlight'),
+            _updateRecentFoldersButton: vi.fn(),
         };
     }
 

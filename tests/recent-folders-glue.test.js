@@ -36,6 +36,25 @@ function extract(name) {
 
 const entry = (p, openedAt = 1) => ({ path: p, openedAt });
 
+const WAIT_LOAD = ['Wait for the folder to finish loading', 'info'];
+
+describe('_refuseIfFolderLoadInFlight — one folder load at a time (PR #81 review #1)', () => {
+    const refuse = extract('_refuseIfFolderLoadInFlight');
+
+    it('refuses with the notice while a load runs, and takes nothing itself', () => {
+        const c = { _folderLoadInFlight: true, showNotification: vi.fn() };
+        expect(refuse.call(c)).toBe(true);
+        expect(c.showNotification.mock.calls).toEqual([WAIT_LOAD]);
+        expect(c._folderLoadInFlight).toBe(true);
+    });
+
+    it('lets the call through, silently, when no load runs', () => {
+        const c = { _folderLoadInFlight: false, showNotification: vi.fn() };
+        expect(refuse.call(c)).toBe(false);
+        expect(c.showNotification).not.toHaveBeenCalled();
+    });
+});
+
 describe('_setRecentFolders — the one writer: persist, then re-render (spec § 5)', () => {
     const setRecentFolders = extract('_setRecentFolders');
     let origStorage;
@@ -138,6 +157,9 @@ describe('loadFolder records only a folder that showed media (spec § 5)', () =>
             _folderIntentGen: 0,
             _fileOpInFlight: false,
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            _folderLoadInFlight: false,
+            _refuseIfFolderLoadInFlight: extract('_refuseIfFolderLoadInFlight'),
+            _updateRecentFoldersButton: vi.fn(),
             customLikeFolder: '',
             customDislikeFolder: '',
             customSpecialFolder: '',
@@ -223,6 +245,92 @@ describe('loadFolder records only a folder that showed media (spec § 5)', () =>
         expect(c.showNotification).toHaveBeenCalledWith('Wait for the move to finish', 'info');
         expect(c._folderIntentGen).toBe(0);
     });
+
+    // PR #81 review #1: two loads interleaved, and the older one's bulk-rating read resolved against the newer
+    // folder's files and saved into it. One load at a time; the ▾ follows the flag both ways.
+    describe('one load at a time (PR #81 review #1)', () => {
+        it('holds the load flag from before the listing until the load settles, refreshing the ▾ both times', async () => {
+            const c = loadCtx();
+            const seen = [];
+            c._updateRecentFoldersButton = vi.fn(() => seen.push(c._folderLoadInFlight));
+            let atListing;
+            globalThis.window = {
+                electronAPI: {
+                    loadFolder: vi.fn(async () => {
+                        atListing = c._folderLoadInFlight;
+                        return { success: true, files: [file] };
+                    }),
+                    path: { basename: (p) => p.split('\\').pop() },
+                },
+            };
+            await loadFolder.call(c, 'C:\\pics\\Liked_3');
+            expect(atListing).toBe(true);
+            expect(c._folderLoadInFlight).toBe(false);
+            expect(seen[0]).toBe(true);
+            expect(seen.at(-1)).toBe(false);
+        });
+
+        it.each([
+            ['an empty folder', { reply: { success: true, files: [] } }],
+            ['a failed load', { reply: { success: false, error: 'Not permitted' } }],
+            ['a listing that throws', { reply: new Error('ipc') }],
+            ['a render that throws', { reply: { success: true, files: [file] }, showMediaThrows: true }],
+        ])('releases the flag after %s', async (_label, { reply, showMediaThrows = false }) => {
+            globalThis.window = {
+                electronAPI: {
+                    loadFolder: vi.fn(async () => {
+                        if (reply instanceof Error) {
+                            throw reply;
+                        }
+                        return reply;
+                    }),
+                    path: { basename: (p) => p.split('\\').pop() },
+                },
+            };
+            const c = loadCtx(
+                showMediaThrows ? { showMedia: vi.fn(async () => Promise.reject(new Error('boom'))) } : {}
+            );
+            await loadFolder.call(c, 'C:\\pics\\Liked_3');
+            expect(c._folderLoadInFlight).toBe(false);
+            expect(c._updateRecentFoldersButton).toHaveBeenCalled();
+        });
+
+        it('refuses while another load runs: no listing, no spinner, no intent bump', async () => {
+            withReply({ success: true, files: [file] });
+            const c = loadCtx({ _folderLoadInFlight: true });
+            await loadFolder.call(c, 'C:\\pics\\Liked_3');
+            expect(c.showNotification.mock.calls).toEqual([WAIT_LOAD]);
+            expect(globalThis.window.electronAPI.loadFolder).not.toHaveBeenCalled();
+            expect(c.showLoadingSpinner).not.toHaveBeenCalled();
+            expect(c._folderIntentGen).toBe(0);
+            expect(c._folderLoadInFlight).toBe(true); // the running load still holds it
+        });
+    });
+
+    // PR #81 review #2: after Save & leave or Discard the engine is gone; a load that then failed returned before
+    // the tournament exit, leaving tournament mode on with no engine until the next successful load.
+    describe('a failed load leaves tournament mode too (PR #81 review #2)', () => {
+        it('when main refuses the listing', async () => {
+            withReply({ success: false, error: 'Not permitted' });
+            const c = loadCtx({ isTournamentMode: true });
+            await loadFolder.call(c, 'C:\\pics\\Liked_3');
+            expect(c.exitTournamentMode).toHaveBeenCalledTimes(1);
+            expect(c.showDropZone).toHaveBeenCalled();
+        });
+
+        it('when the listing throws', async () => {
+            globalThis.window = {
+                electronAPI: {
+                    loadFolder: vi.fn(async () => Promise.reject(new Error('ipc'))),
+                    path: { basename: (p) => p.split('\\').pop() },
+                },
+            };
+            const c = loadCtx({ isTournamentMode: true });
+            await loadFolder.call(c, 'C:\\pics\\Liked_3');
+            expect(c.exitTournamentMode).toHaveBeenCalledTimes(1);
+            expect(c.showError).toHaveBeenCalledWith('Failed to load folder: ipc');
+        });
+    });
 });
 
 describe('openFolderDialog — the drop zone click (G4 final review F1)', () => {
@@ -292,6 +400,14 @@ describe('the ▾ button (spec § 7)', () => {
         const c = btnCtx([], '');
         update.call(c);
         expect(c.recentFoldersBtn.disabled).toBe(true);
+    });
+
+    // PR #81 review #1: change-folder's reset empties baseFolderPath before the load, which made every listed
+    // folder "other" and enabled ▾ for the whole load.
+    it('is disabled while a folder is loading, and says why', () => {
+        const c = { ...btnCtx([entry('C:\\a'), entry('C:\\b')], ''), _folderLoadInFlight: true };
+        update.call(c);
+        expect(c.recentFoldersBtn).toEqual({ disabled: true, title: 'Wait for the folder to finish loading' });
     });
 });
 
@@ -382,6 +498,14 @@ describe('the header menu owns the keyboard while open, and lets go on every clo
 
     it('does not open when nothing but the folder on screen is listed', () => {
         const { c } = menuCtx([entry('C:\\a')]);
+        openMenu.call(c);
+        expect(listeners.size).toBe(0);
+        expect(c._recentMenuCleanup).toBeNull();
+    });
+
+    it('does not open while a folder is loading (PR #81 review #1)', () => {
+        const { c } = menuCtx();
+        c._folderLoadInFlight = true;
         openMenu.call(c);
         expect(listeners.size).toBe(0);
         expect(c._recentMenuCleanup).toBeNull();
@@ -492,12 +616,44 @@ describe('switchToFolder — change-folder, moved; asks first in an unfinished t
             tournament: { engine: { isComplete: () => complete } },
             _fileOpInFlight: false,
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            _folderLoadInFlight: false,
+            _refuseIfFolderLoadInFlight: extract('_refuseIfFolderLoadInFlight'),
             showNotification: vi.fn(),
             showTournamentLeavePrompt: vi.fn(),
             _switchToFolderNow: vi.fn(async () => {}),
             ...overrides,
         };
     }
+
+    // PR #81 review #1: a second switch during a load interleaved two loads (change-folder before G4; the ▾ menu
+    // made it one click).
+    it('refuses while a folder is loading, before it asks', async () => {
+        const c = tournamentCtx({ _folderLoadInFlight: true });
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showNotification.mock.calls).toEqual([WAIT_LOAD]);
+        expect(c.showTournamentLeavePrompt).not.toHaveBeenCalled();
+        expect(c._switchToFolderNow).not.toHaveBeenCalled();
+    });
+
+    it('the switch itself refuses before its reset while a folder is loading', async () => {
+        const c = {
+            _fileOpInFlight: false,
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            _folderLoadInFlight: true,
+            _refuseIfFolderLoadInFlight: extract('_refuseIfFolderLoadInFlight'),
+            showNotification: vi.fn(),
+            mediaFiles: [{ path: 'C:\\here\\a.png' }],
+            baseFolderPath: 'C:\\here',
+            cleanupCurrentMedia: vi.fn(async () => {}),
+            loadFolder: vi.fn(async () => {}),
+        };
+        await switchToFolderNow.call(c, 'C:\\there');
+        expect(c.showNotification.mock.calls).toEqual([WAIT_LOAD]);
+        expect(c.cleanupCurrentMedia).not.toHaveBeenCalled();
+        expect(c.loadFolder).not.toHaveBeenCalled();
+        expect(c.mediaFiles).toHaveLength(1);
+        expect(c.baseFolderPath).toBe('C:\\here');
+    });
 
     it('during an unfinished tournament it shows the leave prompt and changes nothing until the user chooses', async () => {
         const c = tournamentCtx();
@@ -650,6 +806,63 @@ describe('_markRecentFolderBusy — the chosen row reads "Checking…" while mai
     });
 });
 
+// PR #81 review #5: a re-render during a check (a ✕ on another row) rebuilt the rows without the mark, while every
+// row click was still being ignored.
+describe('_buildRecentFolderRows keeps the checked row marked across a re-render (PR #81 review #5)', () => {
+    const build = extract('_buildRecentFolderRows');
+    const A = 'C:\\pics\\Liked_3';
+    const B = 'C:\\pics\\Wallpapers';
+    let origDocument;
+    let origWindow;
+    beforeEach(() => {
+        origDocument = globalThis.document;
+        origWindow = globalThis.window;
+        globalThis.window = { electronAPI: { path: { basename: (p) => p.split('\\').pop() } } };
+        globalThis.document = {
+            createElement: (tag) => ({
+                tag,
+                children: [],
+                dataset: {},
+                attrs: {},
+                textContent: '',
+                classList: { add: vi.fn() },
+                setAttribute(name, value) {
+                    this.attrs[name] = value;
+                },
+                append(...kids) {
+                    this.children.push(...kids);
+                },
+                addEventListener: vi.fn(),
+            }),
+        };
+    });
+    afterEach(() => {
+        globalThis.document = origDocument;
+        globalThis.window = origWindow;
+    });
+
+    const parts = (row) => {
+        const item = row.children[0];
+        return { busy: item.attrs['aria-busy'], path: item.children[1].textContent };
+    };
+
+    it.each(['drop', 'menu'])('on the %s surface, only the row being checked reads "Checking…"', (surface) => {
+        const c = { recentFolders: [entry(A), entry(B)], baseFolderPath: '', _recentOpenInFlight: A };
+        const rows = build.call(c, surface);
+        expect(parts(rows[0])).toEqual({ busy: 'true', path: 'Checking…' });
+        expect(parts(rows[1])).toEqual({ busy: undefined, path: B });
+    });
+
+    it('with no check in flight, every row shows its path', () => {
+        const c = { recentFolders: [entry(A), entry(B)], baseFolderPath: '', _recentOpenInFlight: null };
+        const rows = build.call(c, 'drop');
+        expect(rows.map(parts)).toEqual([
+            { busy: undefined, path: A },
+            { busy: undefined, path: B },
+        ]);
+    });
+});
+
 describe('openRecentFolder — validate on click (spec § 6)', () => {
     const openRecentFolder = extract('openRecentFolder');
     let origWindow;
@@ -686,10 +899,13 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
 
     function openCtx(overrides = {}) {
         return {
-            _recentOpenInFlight: false,
+            recentFolders: [entry(DIR)],
+            _recentOpenInFlight: null,
             _folderIntentGen: 0,
             _fileOpInFlight: false,
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            _folderLoadInFlight: false,
+            _refuseIfFolderLoadInFlight: extract('_refuseIfFolderLoadInFlight'),
             _openRecentFolderOn: extract('_openRecentFolderOn'),
             _markRecentFolderBusy: vi.fn(),
             closeRecentFoldersMenu: vi.fn(),
@@ -783,11 +999,16 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
         expect(c.switchToFolder).not.toHaveBeenCalled();
     });
 
-    it('an unreachable folder is kept, with a notice', async () => {
+    // PR #81 review #6: main fails closed on EACCES/EPERM (path-grants canonicalize), so a granted folder that now
+    // denies access is 'unreachable' too, with its drive mounted. The notice names both causes.
+    it('an unreachable folder is kept, with a notice that covers a missing drive and a denied folder', async () => {
         const e = api({ status: ['unreachable'] });
         const c = openCtx();
         await openRecentFolder.call(c, DIR, 'drop');
-        expect(c.showNotification).toHaveBeenCalledWith('"Liked_3" is on a drive that isn\'t connected', 'warning');
+        expect(c.showNotification).toHaveBeenCalledWith(
+            '"Liked_3" isn\'t reachable — its drive may be disconnected, or access denied',
+            'warning'
+        );
         expect(c._removeRecentFolder).not.toHaveBeenCalled();
         expect(e.checkFolderExists).not.toHaveBeenCalled();
         expect(e.openFolderDialog).not.toHaveBeenCalled();
@@ -828,7 +1049,68 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
         await openRecentFolder.call(c, DIR, 'drop');
         expect(c.showNotification).toHaveBeenCalledWith('Wait for the move to finish', 'info');
         expect(e.getGrantStatus).not.toHaveBeenCalled();
-        expect(c._recentOpenInFlight).toBe(false);
+        expect(c._recentOpenInFlight).toBeNull();
+    });
+
+    it('refused while a folder is loading, with the notice, before any IPC (PR #81 review #1)', async () => {
+        const e = api();
+        const c = openCtx({ _folderLoadInFlight: true });
+        await openRecentFolder.call(c, DIR, 'menu');
+        expect(c.showNotification.mock.calls).toEqual([WAIT_LOAD]);
+        expect(e.getGrantStatus).not.toHaveBeenCalled();
+        expect(c.switchToFolder).not.toHaveBeenCalled();
+        expect(c._recentOpenInFlight).toBeNull();
+    });
+
+    // PR #81 review #5: the in-flight state names the folder, so a re-render can keep its row marked.
+    it('names the folder being checked while the check runs, and clears it after', async () => {
+        const e = api();
+        const c = openCtx();
+        let during;
+        e.getGrantStatus.mockImplementation(async () => {
+            during = c._recentOpenInFlight;
+            return [true];
+        });
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(during).toBe(DIR);
+        expect(c._recentOpenInFlight).toBeNull();
+    });
+
+    // PR #81 review #3: a ✕ on the row while its check ran did not cancel it — 'open' loaded the folder and listed
+    // it again at the top, 'regrant' opened a "Confirm …" dialog for a folder the user had just removed.
+    it.each([
+        ['open', { status: [true], exists: true }],
+        ['regrant', { status: [false], picked: 'C:\\pics\\Picked' }],
+        ['missing', { status: [true], exists: false }],
+        ['unreachable', { status: ['unreachable'] }],
+    ])('a ✕ on the row during the check drops its "%s" decision silently', async (_outcome, answers) => {
+        const e = api(answers);
+        const c = openCtx();
+        e.getGrantStatus.mockImplementation(async () => {
+            c.recentFolders = []; // the ✕: _removeRecentFolder, through _setRecentFolders
+            return answers.status;
+        });
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(c.loadFolder).not.toHaveBeenCalled();
+        expect(c.switchToFolder).not.toHaveBeenCalled();
+        expect(e.openFolderDialog).not.toHaveBeenCalled();
+        expect(c.showNotification).not.toHaveBeenCalled();
+        expect(c.showError).not.toHaveBeenCalled();
+        expect(c._removeRecentFolder).not.toHaveBeenCalled();
+        expect(c._recentOpenInFlight).toBeNull();
+        expect(c.renderRecentFolders).toHaveBeenCalled();
+    });
+
+    // Control for the block above: a ✕ on ANOTHER row leaves this row's decision in force.
+    it('a ✕ on another row during the check still opens this one', async () => {
+        const e = api();
+        const c = openCtx({ recentFolders: [entry(DIR), entry('C:\\pics\\Other')] });
+        e.getGrantStatus.mockImplementation(async () => {
+            c.recentFolders = [entry(DIR)];
+            return [true];
+        });
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(c.loadFolder).toHaveBeenCalledWith(DIR);
     });
 
     it('releases the flag and re-renders the list on every path — even when the open throws', async () => {
@@ -836,7 +1118,7 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
         const c = openCtx({ loadFolder: vi.fn(async () => Promise.reject(new Error('boom'))) });
         await openRecentFolder.call(c, DIR, 'drop');
         expect(c.showError).toHaveBeenCalledWith('Failed to open folder: boom');
-        expect(c._recentOpenInFlight).toBe(false);
+        expect(c._recentOpenInFlight).toBeNull();
         expect(c.renderRecentFolders).toHaveBeenCalled();
     });
 
@@ -856,7 +1138,7 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
             expect(c.switchToFolder).not.toHaveBeenCalled();
             expect(e.openFolderDialog).not.toHaveBeenCalled();
             expect(c.showNotification).not.toHaveBeenCalled();
-            expect(c._recentOpenInFlight).toBe(false);
+            expect(c._recentOpenInFlight).toBeNull();
             expect(c.closeRecentFoldersMenu).toHaveBeenCalled();
             expect(c.renderRecentFolders).toHaveBeenCalled();
         });
@@ -872,7 +1154,7 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
             expect(e.openFolderDialog).not.toHaveBeenCalled();
             expect(c.showNotification).not.toHaveBeenCalled();
             expect(c.loadFolder).not.toHaveBeenCalled();
-            expect(c._recentOpenInFlight).toBe(false);
+            expect(c._recentOpenInFlight).toBeNull();
         });
 
         // Guard — passes before the fix by construction (the old code ignored the generation): it pins that the
@@ -906,7 +1188,7 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
         // would contradict the refusal beside it.
         expect(c.showNotification.mock.calls).toEqual([['Wait for the move to finish', 'info']]);
         expect(c.loadFolder).not.toHaveBeenCalled();
-        expect(c._recentOpenInFlight).toBe(false);
+        expect(c._recentOpenInFlight).toBeNull();
         expect(c.renderRecentFolders).toHaveBeenCalled();
     });
 });

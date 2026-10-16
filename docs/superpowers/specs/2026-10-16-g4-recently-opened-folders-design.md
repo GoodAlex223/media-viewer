@@ -107,7 +107,8 @@ is caught and logged at `warn` via `logError`; the in-memory list still updates 
 ## 6. The open flow — `openRecentFolder(path, { surface })`
 
 1. **Guards.** Single-flight: while `_recentOpenInFlight` is set, a click is ignored (double-click, two quick
-   picks). `_refuseIfFileOpInFlight()` refuses with "Wait for the move to finish" before anything else. In the
+   picks). `_refuseIfFileOpInFlight()` refuses with "Wait for the move to finish" before anything else, and
+   `_refuseIfFolderLoadInFlight()` refuses during a folder load (amended — PR #81 review #1, below). In the
    menu the current folder (`=== this.baseFolderPath`, with media on screen) is disabled and never reaches here.
 2. **Busy row** (amended — F9). The chosen row gets `aria-busy="true"` and its path line reads "Checking…".
    The menu, if open, stays open **during the checks only** (milliseconds locally, up to ~21 s on an offline
@@ -121,7 +122,7 @@ is caught and logged at `warn` via `logError`; the in-memory list still updates 
    | | → `false` | `_removeRecentFolder(path)`; warning *"Liked_3" no longer exists — removed from recent folders* |
    | | → `null` (refused) | as `false` below |
    | `false` | info *Confirm "Liked_3" — press Select Folder (security update)*; `openFolderDialog(path)` | a pick → **open** the picked path (recorded by `loadFolder`); cancel → nothing |
-   | `'unreachable'` | keep the entry | warning *"Liked_3" is on a drive that isn't connected* |
+   | `'unreachable'` | keep the entry | warning *"Liked_3" isn't reachable — its drive may be disconnected, or access denied* (amended — PR #81 review #6: main fails closed on `EACCES`/`EPERM`, so a denied folder on a mounted drive reads `'unreachable'` too) |
    | anything else | `logError` at `warn` | `showError("Couldn't open that folder")`; entry kept |
 
 4. **Open** routes each surface like the existing button on it (amended): from the **drop zone**,
@@ -133,6 +134,30 @@ is caught and logged at `warn` via `logError`; the in-memory list still updates 
 
 A load that fails after the checks pass (e.g. `readdir` → `EACCES`) takes `loadFolder`'s existing path: drop zone
 plus error; the entry is kept.
+
+**Amended — PR #81 review** (`/code-review high`, 2026-10-16):
+- **One folder load at a time (#1).** Change-folder's reset empties `baseFolderPath` before its load, so ▾ was
+  enabled for the whole load, and nothing refused a second switch. Two loads then interleaved: the older load's
+  `loadBulkRatedFile` read resolved against the newer folder's files and saved into that folder's
+  `.bulk_rated.json`, flipping a rating there (measured by the reviewer, then as an E2E). Now `loadFolder` holds
+  `_folderLoadInFlight` from before its listing until it settles, on every path. While it is set,
+  `_refuseIfFolderLoadInFlight()` makes `loadFolder`, `switchToFolder`, `_switchToFolderNow` (before its reset),
+  `openRecentFolder` (before any IPC) and change-folder (before its dialog) refuse with info *Wait for the folder
+  to finish loading*, and ▾ is disabled with that title. The cost: while a slow listing runs (an offline share),
+  every other folder change waits.
+- **A failed load leaves tournament mode (#2).** `loadFolder` exits tournament mode before every branch, a failed
+  listing and a thrown one included. After a header switch's Save & leave or Discard the engine is already gone,
+  and a failure used to return first, leaving tournament mode on with no engine.
+- **A ✕ on the row being checked drops its decision (#3)**, whatever it is: no open (which would list the folder
+  again), no dialog, no notice. A ✕ on another row leaves it in force.
+- **A dialog supersedes a pending click, and a Cancel does not revive it (#4, kept as built).** The intent bump
+  (G4 final review F1) runs before the drop-zone and change-folder dialogs, not on a pick. Bumping on a pick only
+  would let a check that answers while the dialog is open act behind it: `'regrant'` would open a second dialog,
+  and `'open'` would start a load that the dialog's pick then collides with (refused under #1). The row reverts
+  from "Checking…" and can be clicked again.
+- **The busy mark survives a re-render (#5).** `_recentOpenInFlight` holds the path being checked, and
+  `_buildRecentFolderRows` marks that row, so a ✕ on another row no longer drops "Checking…" while clicks stay
+  ignored. Step 5's re-render runs after the path is cleared.
 
 **`switchToFolder(folderPath)`** is `#changeFolderBtn`'s inline handler body (`media-viewer.js:2218-2249`) moved
 into a method, **no behaviour change**, same order: same-folder no-op → `_refuseIfFileOpInFlight()` **before** the

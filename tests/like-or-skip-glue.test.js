@@ -1202,6 +1202,10 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
             loadFolder: vi.fn(async () => {}),
             showNotification: vi.fn(),
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            _folderLoadInFlight: false,
+            _refuseIfFolderLoadInFlight() {
+                return extract('_refuseIfFolderLoadInFlight').call(this);
+            },
             switchToFolder: extract('switchToFolder'),
             _switchToFolderNow: extract('_switchToFolderNow'),
             ...overrides,
@@ -1247,6 +1251,16 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
         globalThis.window.electronAPI.openFolderDialog = vi.fn(async () => null);
         await changeFolder.call(ctx);
         expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx.mediaFiles).toHaveLength(2);
+    });
+
+    // PR #81 review #1: the pick would only be refused by switchToFolder; refuse before the dialog instead.
+    it('while a folder is loading it refuses before the dialog, and bumps nothing', async () => {
+        const ctx = folderCtx({ _fileOpInFlight: false, _folderLoadInFlight: true });
+        await changeFolder.call(ctx);
+        expect(ctx.showNotification.mock.calls).toEqual([['Wait for the folder to finish loading', 'info']]);
+        expect(globalThis.window.electronAPI.openFolderDialog).not.toHaveBeenCalled();
+        expect(ctx._folderIntentGen).toBe(0);
         expect(ctx.mediaFiles).toHaveLength(2);
     });
 });

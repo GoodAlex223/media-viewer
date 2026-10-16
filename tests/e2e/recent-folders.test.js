@@ -2,7 +2,7 @@
 // Every folder lives under this test's own mkdtemp root. A "restart" is a page reload: the renderer's
 // constructor runs again over the same localStorage, and main keeps its grants.
 import { test, expect } from '@playwright/test';
-import { cp, mkdir, mkdtemp, readdir, rm } from 'fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -75,6 +75,21 @@ const dropRows = () => page.locator('#recentFoldersDrop .recent-folder-item');
 const dropNames = () => page.locator('#recentFoldersDrop .recent-folder-name').allTextContents();
 const revealHeader = () => page.evaluate(() => document.querySelector('.header').classList.add('show'));
 const menuNames = () => page.locator('#recentFoldersMenu .recent-folder-name').allTextContents();
+const dropRow = (name) => page.locator('#recentFoldersDrop .recent-folder-row').filter({ hasText: name });
+
+/**
+ * Main answers the click-time status query after 1.5 s, as an offline share (~21 s) or a waking NAS would, with
+ * `reply` for every path. The replaced handler lives only for this launch.
+ */
+async function slowGrantStatus(reply) {
+    await electronApp.evaluate(({ ipcMain }, answer) => {
+        ipcMain.removeHandler('get-grant-status');
+        ipcMain.handle('get-grant-status', async (_e, paths) => {
+            await new Promise((r) => setTimeout(r, 1500));
+            return paths.map(() => answer);
+        });
+    }, reply);
+}
 
 test.describe('G4 recent folders — the drop-zone list', () => {
     test('a first launch shows no list', async () => {
@@ -154,13 +169,7 @@ test.describe('G4 recent folders — the drop-zone list', () => {
         // Document click listeners see list clicks: G2 F5's blur leaves no clicked button holding keyboard focus,
         // even while a row's check runs (seconds on a slow share). Main answers slowly and 'unreachable', so the
         // drop zone stays.
-        await electronApp.evaluate(({ ipcMain }) => {
-            ipcMain.removeHandler('get-grant-status');
-            ipcMain.handle('get-grant-status', async (_e, paths) => {
-                await new Promise((r) => setTimeout(r, 1500));
-                return paths.map(() => 'unreachable');
-            });
-        });
+        await slowGrantStatus('unreachable');
         await dropRows().filter({ hasText: 'Liked_3' }).click();
         const during = await page.evaluate(() => ({
             checking: window.mediaViewer._recentOpenInFlight,
@@ -168,8 +177,8 @@ test.describe('G4 recent folders — the drop-zone list', () => {
                 document.activeElement?.tagName === 'BUTTON' &&
                 document.getElementById('recentFoldersDrop').contains(document.activeElement),
         }));
-        expect(during).toEqual({ checking: true, focusedListButton: false });
-        await waitForNotification(page, '"Liked_3" is on a drive that isn\'t connected');
+        expect(during).toEqual({ checking: b, focusedListButton: false });
+        await waitForNotification(page, '"Liked_3" isn\'t reachable — its drive may be disconnected, or access denied');
         expect(await dialogCalls()).toBe(0);
         await expect(page.locator('#dropZone')).toBeVisible();
         // Control: the drop zone outside the list still opens the dialog.
@@ -437,15 +446,7 @@ test.describe('G4 recent folders — opening one', () => {
         const b = await makeFolder('Liked_3');
         await openFolders(a, b);
         await restart();
-        // Main answers the click-time status query slowly, as an offline share (~21 s) or a waking NAS would
-        // (G4 final review F1). The replaced handler lives only for this launch.
-        await electronApp.evaluate(({ ipcMain }) => {
-            ipcMain.removeHandler('get-grant-status');
-            ipcMain.handle('get-grant-status', async (_e, paths) => {
-                await new Promise((r) => setTimeout(r, 1500));
-                return paths.map(() => true);
-            });
-        });
+        await slowGrantStatus(true); // G4 final review F1
         await mockFolderDialog(electronApp, b);
         await dropRows().filter({ hasText: 'Wallpapers' }).click();
         // The check is in flight: the row says so, and the rest of the drop zone stays live.
@@ -458,9 +459,115 @@ test.describe('G4 recent folders — opening one', () => {
         expect(await dialogCalls()).toBe(1);
         // Past the slow answer: the check has finished, and its stale 'open' did nothing.
         await page.waitForTimeout(2000);
-        expect(await page.evaluate(() => window.mediaViewer._recentOpenInFlight)).toBe(false);
+        expect(await page.evaluate(() => window.mediaViewer._recentOpenInFlight)).toBeNull();
         expect(await page.evaluate(() => window.mediaViewer.baseFolderPath)).toBe(b);
         expect(await page.evaluate(() => JSON.parse(localStorage.getItem('recentFolders')).entries[0].path)).toBe(b);
+    });
+
+    // PR #81 review #3: the ✕ is the user's last word on that folder, whatever the check answers.
+    test('✕ on the row being checked cancels its open', async () => {
+        const a = await makeFolder('Wallpapers');
+        const b = await makeFolder('Liked_3');
+        await openFolders(a, b);
+        await restart();
+        await slowGrantStatus(true);
+        await mockFolderDialog(electronApp, b);
+        await dropRow('Wallpapers').locator('.recent-folder-item').click();
+        await expect(dropRow('Wallpapers').locator('.recent-folder-path')).toHaveText('Checking…');
+        await dropRow('Wallpapers').locator('.recent-folder-remove').click();
+        expect(await dropNames()).toEqual(['Liked_3']);
+        // Past the slow answer: the check has finished, and opened nothing.
+        await page.waitForFunction(() => !window.mediaViewer._recentOpenInFlight);
+        await waitForIdle();
+        expect(await page.evaluate(() => window.mediaViewer.baseFolderPath)).toBe('');
+        await expect(page.locator('#dropZone')).toBeVisible();
+        expect(await dropNames()).toEqual(['Liked_3']);
+        expect(
+            await page.evaluate(() => JSON.parse(localStorage.getItem('recentFolders')).entries.map((e) => e.path))
+        ).toEqual([b]);
+        expect(await dialogCalls()).toBe(0);
+    });
+
+    // PR #81 review #5: the ✕ re-renders the list; the row still being checked keeps saying so.
+    test('a re-render during a check keeps the checked row marked', async () => {
+        const a = await makeFolder('Wallpapers');
+        const b = await makeFolder('Liked_3');
+        await openFolders(a, b);
+        await restart();
+        await slowGrantStatus(true);
+        await dropRow('Wallpapers').locator('.recent-folder-item').click();
+        await expect(dropRow('Wallpapers').locator('.recent-folder-path')).toHaveText('Checking…');
+        await dropRow('Liked_3').locator('.recent-folder-remove').click();
+        expect(await dropNames()).toEqual(['Wallpapers']); // the list was rebuilt
+        // Read once, not retried: the check answers in 1.5 s and the row's text must be right now.
+        expect(await dropRow('Wallpapers').locator('.recent-folder-path').textContent()).toBe('Checking…');
+        expect(await dropRow('Wallpapers').locator('.recent-folder-item').getAttribute('aria-busy')).toBe('true');
+        // The check answers, and the folder still opens.
+        await page.waitForFunction((dir) => window.mediaViewer.baseFolderPath === dir, a);
+        await waitForMedia(page);
+    });
+
+    // PR #81 review #1, the reviewer's probe as a test. Slow_C's ratings read takes 1.5 s; Local_B answers at once.
+    // Before the fix a pick of Local_B during Slow_C's load ran a second load beside it, and Slow_C's read then
+    // resolved against Local_B's files and saved into Local_B's .bulk_rated.json — flipping a rating the user made
+    // there.
+    test('a pick while a folder is still loading is refused, and no other folder’s ratings change', async () => {
+        const b = await makeFolder('Local_B');
+        const slow = await makeFolder('Slow_C');
+        const a = await makeFolder('Wallpapers');
+        await writeFile(join(b, '.bulk_rated.json'), JSON.stringify({ version: 1, good: [], bad: ['red-1x1.png'] }));
+        await openFolders(b, slow, a);
+        // Written after Slow_C's first open, which would have pruned it: the stale name makes the racing load save.
+        await writeFile(
+            join(slow, '.bulk_rated.json'),
+            JSON.stringify({ version: 1, good: ['red-1x1.png', 'gone.png'], bad: [] })
+        );
+        const bRatings = await readFile(join(b, '.bulk_rated.json'), 'utf-8');
+        await electronApp.evaluate(({ ipcMain }, dir) => {
+            const real = ipcMain._invokeHandlers.get('readBulkRatedFile');
+            if (typeof real !== 'function') {
+                throw new Error('readBulkRatedFile handler not found');
+            }
+            ipcMain.removeHandler('readBulkRatedFile');
+            ipcMain.handle('readBulkRatedFile', async (e, folderPath) => {
+                if (folderPath === dir) {
+                    await new Promise((r) => setTimeout(r, 1500));
+                }
+                return real(e, folderPath);
+            });
+        }, slow);
+
+        await mockFolderDialog(electronApp, slow);
+        await revealHeader();
+        await page.locator('#changeFolderBtn').click();
+        // Slow_C's listing is back and its ratings read is in flight: the load is still running.
+        await page.waitForFunction((dir) => window.mediaViewer.baseFolderPath === dir, slow);
+        const menuButtonDisabled = await page.locator('#recentFoldersBtn').isDisabled();
+        // A pick from the menu, as a click in an already open menu makes it. Nothing else runs until Slow_C settles:
+        // any other switch (change-folder, say) would move baseFolderPath again before Slow_C's read resolves, and
+        // the stale save would land somewhere else (measured: a change-folder click here hid the corruption). The
+        // switchToFolder and change-folder refusals are unit-tested.
+        await page.evaluate((dir) => window.mediaViewer.openRecentFolder(dir, 'menu'), b);
+        const refusalNotices = await page
+            .locator('.notification')
+            .filter({ hasText: 'Wait for the folder to finish loading' })
+            .count();
+
+        // Slow_C's load settles: listed first, nothing in flight.
+        await page.waitForFunction(
+            (dir) =>
+                window.mediaViewer.recentFolders[0]?.path === dir &&
+                !window.mediaViewer._folderLoadInFlight &&
+                !window.mediaViewer._recentOpenInFlight,
+            slow
+        );
+        await waitForIdle();
+        expect(await readFile(join(b, '.bulk_rated.json'), 'utf-8')).toBe(bRatings);
+        expect(await page.evaluate(() => window.mediaViewer.baseFolderPath)).toBe(slow);
+        expect(menuButtonDisabled).toBe(true);
+        expect(await dialogCalls()).toBe(1); // change-folder's own pick of Slow_C
+        expect(refusalNotices).toBeGreaterThan(0);
+        await expect(page.locator('#recentFoldersBtn')).toBeEnabled();
     });
 
     test('a folder main has not granted reopens through the dialog, opened at that folder', async () => {
@@ -565,5 +672,26 @@ test.describe('G4 recent folders — leaving an unfinished tournament (D3)', () 
         );
         await waitForMedia(page);
         expect(await readOnDisk()).toEqual(snap.expected);
+    });
+
+    // PR #81 review #2: the engine is gone once the user chose; a load that then failed returned before
+    // loadFolder's tournament exit, leaving tournament mode on with no engine.
+    test('a load that fails after Save & leave still leaves tournament mode', async () => {
+        const other = await makeFolder('Wallpapers');
+        const here = await makeFolder('Liked_3', ['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
+        await openFolders(other, here);
+        await startTournament();
+        await pickOnce();
+        // The folder turned unreadable after the click-time check (readdir EACCES, or it vanished).
+        await electronApp.evaluate(({ ipcMain }) => {
+            ipcMain.removeHandler('load-folder');
+            ipcMain.handle('load-folder', async () => ({ success: false, error: 'Not permitted' }));
+        });
+        await chooseFromMenu('Wallpapers');
+        await page.locator('#tournamentResumeAccept').click();
+        await waitForNotification(page, 'Not permitted');
+        await expect(page.locator('#dropZone')).toBeVisible();
+        expect(await page.evaluate(() => window.mediaViewer.isTournamentMode)).toBe(false);
+        await expect(page.locator('#tournamentOverlay')).toBeHidden();
     });
 });
