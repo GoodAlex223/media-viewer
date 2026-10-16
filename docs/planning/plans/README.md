@@ -78,7 +78,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| [2026-10-17_g5-claude-md-size-audit.md](2026-10-17_g5-claude-md-size-audit.md) | G5 (Oct 12–16) | Draft — awaiting the user's review |
+| [2026-10-17_g5-claude-md-size-audit.md](2026-10-17_g5-claude-md-size-audit.md) | G5 (Oct 12–16) | Approved 2026-10-17; T1–T11 done, PR open |
 
 <!-- 2026-10-16 (Group G4 closeout): 2026-10-16_g4-recently-opened-folders.md left this table on
      archive. Merged `51af1ab` via PR #81, moved to docs/archive/plans/ with `git mv`, and indexed in
