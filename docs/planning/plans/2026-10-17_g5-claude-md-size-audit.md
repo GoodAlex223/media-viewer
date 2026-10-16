@@ -1019,6 +1019,27 @@ The three `###` subheadings went with their bodies (removed, not renamed): nothi
 
 Pointers added: G2 spec (Like-or-skip), G4 spec (Recently opened folders; the recent-folders menu), ML pipeline spec (Training-vector cache), render re-entry spec (Tournament persistence), overlay spec (UI Components), rating-safety spec (File-op guard). Homes ledger rows 4 (leave prompt — not restated in Recently opened folders), 5 and 6 applied.
 
+### T8 — Git Insights
+
+| # | Removed text (first words, quoted) | Label | Where it lives now |
+|---|---|---|---|
+| 1 | CLIP lease: "Fixed at the kickoff site by `4ea65c3` (PR #34) and at the prediction-sort site by G5 four months later." | History | `git log`; DONE.md (PR #34, G5 2026-09-02) |
+| 2 | CLIP lease: "so G4 added a **CLIP lease**" → "so a **CLIP lease** guards the window" | History | G4 ML pipeline integrity plan (archived) |
+| 3 | Shortcut versioning: "(v1→v2 remapped `next` KeyD→KeyS)" | History | `loadShortcuts()` migration code; DONE.md |
+| 4 | Shortcut versioning: "— but *not* simply because `Object.assign({}, DEFAULT_SHORTCUTS[mode], custom[mode])` falls through: that argument holds only while the new **physical key** is unclaimed in that mode, and" → folded; "defaults-iterate-last silently repointed the key — pressing a user's remapped `1` ran `moveToSpecialFolder('left')` and **moved a file**" → one present-tense clause | Walk-through (the reasoning chain); History | G3 compare-special-hotkeys plan (archived); the rule (`_mergeModeShortcuts`, remap outranks default, new action left `null`, `checkShortcutConflict` never runs at load) and its why (a stolen key silently runs the new action — a file move for `1`) stay |
+| 5 | Tooltips: "(`Digit1`, G1)", "(`KeyF`, G2)", "(BACKLOG 🟤)"; "still" | History; tracker state | DONE.md; BACKLOG 🟤 |
+| 6 | Leave prompt: "(G4 D3)" | History | G4 spec D3 |
+| 7 | `_releaseVideo`: "(~37,000 events a second per element, measured)" | History (a measurement) | G3 training-video spec |
+| 8 | `_releaseVideo`: "Until G3 (2026-10-13) this made `computeFeatures` reject every video while face detection was on. Every training-folder video failed, and since a failed file blocks the model cache, every AI sort retrained. `computePerceptualHash` leaked the same loop." | History | G3 training-video spec; DONE.md 2026-10-16 G3 entry |
+| 9 | `_releaseVideo`: "(BACKLOG)" | History (tracker state) | BACKLOG |
+| 10 | CLIP decoder: "before G3's `clip-image.js` fallback (2026-10-14) 9 such images made every AI sort retrain" → present tense "so every AI sort retrains" | History | G3 training-video spec; the consequence stays as the why |
+| 11 | CLIP decoder: "(measured in G3's review; …)" and "(G3 final review, measured)" | History | G3 final-review notes in the archived G3 plan; "folder content is untrusted" stays |
+| 12 | Tournament folder-scoped: "PR #81 review #2:" | History | DONE.md G4 entry; the reason (the engine is already gone after Save & leave) stays |
+| 13 | `handleTournamentUndo`: "that peek was the G2 bug:" and "hijacked" → present tense "would hijack" | History (migration-relative) | G2 tournament-undo-hardening spec; the reason stays |
+| 14 | `reconcileWithFiles`: "would undo the PR #55 24k win" → "would make reconcile quadratic on a 24k-file folder" | History | DONE.md PR #55; the cost (one O(n) snapshot per pruned file) stays |
+
+Homes ledger: this section is the home for rows 1–4 (CLIP in main / npm in Workers; the `.claude/` allow-list; `clip-image.js` limits and decode order; the leave prompt) — all four kept complete.
+
 ## Progress Log
 
 - **2026-10-16/17** — Branch `g5-claude-md-size-audit` from `506e041`. Brainstormed section by section: D1 mixed handling of non-rule text; D2 authoring rule + never-blocking warning; D3 approach A (in place, per section); D4 Backlog Intake Rules → a three-line pointer (the user asked for a recommendation and agreed); D5 migration recommended only; D6 the trim on Opus. While writing the spec, measuring its own claim ("each feature commit added 1–3 KB") showed 14 of 17 commits under 1 KB, and a 200-line trigger would have fired on every growing commit after a trim landing above 200 lines; user ruling: bytes only, 500-byte growth threshold, audit trigger moved to the byte trigger. A side agent raised the same line-trigger issue after the amendment; it was already resolved. Spec `1e934cb`, approved 2026-10-17.
@@ -1030,6 +1051,7 @@ Pointers added: G2 spec (Like-or-skip), G4 spec (Recently opened folders; the re
 - **2026-10-17 — T5 Code Conventions**: 7,250 → 6,669 B (−581), 35 → 35 lines; file 63,006 → 62,425 B. Homes ledger row 5 applied (the file-op guard contract lives only in Async Patterns; the E2E bullet keeps the test-side rule).
 - **2026-10-17 — T6 Backlog Intake Rules**: 1,466 → 403 B (−1,063), 27 → 6 lines; file 62,425 → 61,362 B, 236 → 215 lines. The approved three-line pointer; BACKLOG 📌 § Intake rules gains the entry-shape bullet.
 - **2026-10-17 — T7 Detected Patterns**: 29,691 → 28,188 B (−1,503), 60 → 60 lines; file 61,362 → 59,859 B. Six spec pointers added; homes ledger rows 4–6 applied; 32 disposition rows. **The cut is smaller than the spec's 38–44 KB landing estimate implies** (spec § 5, an estimate — § 1 sets no target): the plan's per-bullet keep lists (T7 notes) hold most of this section as contract — editor rules such as the `_onOrderChanged` kinds, the `_folderIntentGen` bump sites, the file-op guard's holders and refusers, and the tournament render owner's never-await rule. Cutting them to reach a number would trade the plan's first goal (no rule lost) for its estimate; the final size is reported against both in T11.
+- **2026-10-17 — T8 Git Insights**: 15,723 → 15,036 B (−687), 31 → 31 lines; file 59,859 → 59,172 B. The four home gotchas (homes ledger rows 1–4) kept whole; "pre-G2" in the `.claude/` gotcha kept (the release name the bisect warning depends on).
 
 ## Key Discoveries
 
