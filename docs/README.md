@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_     | —                                      |
+| [G5 CLAUDE.md Size Audit Plan](planning/plans/2026-10-17_g5-claude-md-size-audit.md) | Read-only audit passes, a per-section trim with disposition tables, a never-blocking byte-based pre-commit size warning (`scripts/check-claude-md-size.js`), and a rule-loss check with a positive control (Group G5, Oct 12–16) |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md

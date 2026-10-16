@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 12–16 § G5 (🟡, 3 SP → **~4.5 SP**, see § 10) ← BACKLOG 🟡 [2026-09-21] "`CLAUDE.md` is at 212 lines, past the ~200 threshold…" and its 🟤 twin [2026-07-03] "CLAUDE.md is over its own ~200-line soft cap"
 **Created**: 2026-10-17
-**Status**: Approved by the user, brainstormed section by section 2026-10-16–17 (decisions D1–D6, § 3). **Amended while writing, by user ruling, before the user's review of this file**: the warning measures bytes only, its large-commit threshold is 500 bytes, and § Maintenance's audit trigger moves from "~200 lines" to the byte trigger (D2, § 2.8, § 6). Measuring the spec's own claim showed most growth came in commits under 1 KB, and a trim landing above 200 lines would have made a line trigger fire on every growing commit.
+**Status**: Approved by the user, brainstormed section by section 2026-10-16–17 (decisions D1–D6, § 3). **Amended while writing, by user ruling, before the user's review of this file**: the warning measures bytes only, its large-commit threshold is 500 bytes, and § Maintenance's audit trigger moves from "~200 lines" to the byte trigger (D2, § 2.8, § 6). Measuring the spec's own claim showed most growth came in commits under 1 KB, and a trim landing above 200 lines would have made a line trigger fire on every growing commit. **Written spec reviewed and approved by the user 2026-10-17**; plan [2026-10-17_g5-claude-md-size-audit.md](../../planning/plans/2026-10-17_g5-claude-md-size-audit.md).
 **Branch**: `g5-claude-md-size-audit` (from `main` @ `506e041`; one PR)
 **Runbook**: `docs/prompts/claude-md-audit.md` in `claude-code-universal-config` (its policy: `docs/prompts/claude-md-content-policy.md` there)
 
