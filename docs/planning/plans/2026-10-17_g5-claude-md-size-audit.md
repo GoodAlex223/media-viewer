@@ -966,6 +966,20 @@ Tightened, no row: "whole-tree `docs/README.md` index guard:" folded into the cl
 | 7 | E2E, `mlWorker`: "(no more `update`/`reverseUpdate` — those message types no longer exist)" and ", with no deferred re-scoring window" | History (migration-relative — P1 A4) | same; the rule "posts nothing to the worker for the rating itself" stays |
 | 8 | E2E, file actions: "A file action started while another holds `_fileOpInFlight` is refused (undo shows a notice)." | Duplicate | § Detected Patterns → Async Patterns "File-op guard" (home) |
 
+### T6 — Backlog Intake Rules (spec D4)
+
+| # | Removed text (first words, quoted) | Label | Where it lives now |
+|---|---|---|---|
+| 1 | "BACKLOG.md is split into three source sections. Authoritative rules live in…" | Duplicate | BACKLOG 📌 Process Rules § Source sections (and the pointer's first line) |
+| 2 | § Where new entries go: the three routing bullets with their examples, and "Unsure → ask before adding; default-to-🔵…" | Duplicate | BACKLOG 📌 § Source sections + § Intake rules (routing, the defaults); the pointer's second line keeps the routing |
+| 3 | § Intake format: "Group by intake date: `### [YYYY-MM-DD] <event description>`" | Duplicate | BACKLOG 📌 § Intake rules (the `### [YYYY-MM-DD]` headings); the global `planning-closeout.md` rule, which loads with any planning doc |
+| 4 | § Intake format: "One entry per concrete actionable item; never silently merge… `[possible-dup-of: …]`" | Duplicate | BACKLOG 📌 § Intake rules |
+| 5 | § Intake format: "Required entry shape: …" | Duplicate | BACKLOG 📌 § Intake rules (new bullet, this commit); the pointer's third line |
+| 6 | § Rate limit: "PR post-merge review follow-ups accumulate in a single `### [YYYY-MM-DD] PR #N post-merge review` section per PR — they do NOT spread…" | Duplicate | BACKLOG 📌 § Intake rules (the per-PR heading) + § Quotas ("PR-review items accumulate; they are NOT spread across the week") |
+| 7 | § Rate limit: "When 🟤 grows beyond ~20 SP of pending items, surface this…" | Duplicate | BACKLOG 📌 § Quotas (the Cleanup Week cadence, "when 🟤 grows beyond ~20 SP pending") |
+
+The three `###` subheadings went with their bodies (removed, not renamed): nothing live cites them (`git grep`, archive excluded — hits are frozen records only); `tests/backlog-structure.test.js` checks BACKLOG's headers, not `CLAUDE.md`.
+
 ## Progress Log
 
 - **2026-10-16/17** — Branch `g5-claude-md-size-audit` from `506e041`. Brainstormed section by section: D1 mixed handling of non-rule text; D2 authoring rule + never-blocking warning; D3 approach A (in place, per section); D4 Backlog Intake Rules → a three-line pointer (the user asked for a recommendation and agreed); D5 migration recommended only; D6 the trim on Opus. While writing the spec, measuring its own claim ("each feature commit added 1–3 KB") showed 14 of 17 commits under 1 KB, and a 200-line trigger would have fired on every growing commit after a trim landing above 200 lines; user ruling: bytes only, 500-byte growth threshold, audit trigger moved to the byte trigger. A side agent raised the same line-trigger issue after the amendment; it was already resolved. Spec `1e934cb`, approved 2026-10-17.
@@ -975,6 +989,7 @@ Tightened, no row: "whole-tree `docs/README.md` index guard:" folded into the cl
 - **2026-10-17 — T2 Overview: no change** (472 B, 11 lines). **T3 Build & Development Commands**: 1,521 → 1,406 B (−115), 13 → 13 lines; file 64,203 → 64,088 B.
 - **2026-10-17 — T4 Architecture**: 5,460 → 4,378 B (−1,082), 42 → 42 lines; file 64,088 → 63,006 B. Homes ledger rows 1–3 applied (CLIP reason, `.claude/` allow-list, `clip-image.js` limits now only in their § Active gotchas homes). Deviation logged under the T4 table: the `scripts/` row lost its function lists, so T10's entry follows that shape.
 - **2026-10-17 — T5 Code Conventions**: 7,250 → 6,669 B (−581), 35 → 35 lines; file 63,006 → 62,425 B. Homes ledger row 5 applied (the file-op guard contract lives only in Async Patterns; the E2E bullet keeps the test-side rule).
+- **2026-10-17 — T6 Backlog Intake Rules**: 1,466 → 403 B (−1,063), 27 → 6 lines; file 62,425 → 61,362 B, 236 → 215 lines. The approved three-line pointer; BACKLOG 📌 § Intake rules gains the entry-shape bullet.
 
 ## Key Discoveries
 

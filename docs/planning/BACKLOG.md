@@ -48,6 +48,7 @@ prompt had no source concept).
   Unattended runs never delete; they list candidates in WEEKLY.md Notes.
 - One entry per concrete actionable item; do NOT merge entries on intake even if they
   look similar — explicit `[possible-dup-of: ...]` tag instead
+- Entry shape: `- [ ] **Short title** — body with context, cross-refs, affected files`
 - **Weekly-Reviews `adopt` verdicts** (🟤): the entry MUST name its **trial vehicle** — the specific
   PR, session or measurement that will exercise it. No nameable vehicle → the verdict is `defer`, not
   `adopt`. Outcomes are recorded in [REVIEW-QUEUE.md](REVIEW-QUEUE.md) § 5 Adopt trials — never by
