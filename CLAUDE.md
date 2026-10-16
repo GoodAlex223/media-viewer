@@ -30,43 +30,43 @@ Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret sca
 
 ```
 media_viewer/
-├── main.js              # Electron main process: IPC handlers (every one registered through ipc-guard), file ops, JXL/CLIP/tournament/bulk-rated/feature-cache IPC, navigation lock
-├── path-grants.js       # Folder grants (G1 security): persisted userData/folder-grants.json; canonical containment (realpath, compared exactly), entry vs content-read authorization, grant status for absent drives
-├── ipc-guard.js         # IPC registration wrapper (G1 security): sender-frame check + per-argument kinds; refusals return the channel's failure value and are logged
-├── clip-image.js        # Main-process CLIP image decode (G3): strict RawImage.read first, then a bounded lenient sharp decode from a buffer (failOn none, ≤2^29 input px, 30 s timeout, ≤1024 px out, 3-ch sRGB) for files the strict read rejects
-├── logger.js            # Session logger (init/log/warn/error/logPerf/cleanup/getLogPath, normalizeRendererLogEntry): one media-viewer-<YYYY-MM-DD_HH-MM-SS>.log per launch in app.getPath('logs'), newest 10 kept, never deleted on quit (no "Session ended" footer = crash/kill) + append-only media-viewer-perf.log. `npm start` → %APPDATA%\media_viewer\logs; E2E (launches main.js, app name "Electron") → %APPDATA%\Electron\logs
-├── preload.js           # Security bridge (contextBridge → window.electronAPI): named, folder-scoped calls only (no generic invoke/readFile/writeFile since G1), CLIP, tournament, bulk-rated, logError
-├── media-viewer.js      # Renderer: all UI logic (~9400 lines, MediaViewer class); imports FullscreenManager + TournamentManager
+├── main.js              # Electron main process: IPC handlers (every one registered through ipc-guard), file ops, navigation lock
+├── path-grants.js       # Folder grants: persisted userData/folder-grants.json, containment checks, grant status for absent drives (§ Security)
+├── ipc-guard.js         # IPC registration wrapper: sender-frame check + per-argument kinds; refusals return the channel's failure value and are logged
+├── clip-image.js        # Main-process CLIP image decode: strict read first, then a bounded lenient fallback (§ Active gotchas)
+├── logger.js            # Session logger: one media-viewer-<YYYY-MM-DD_HH-MM-SS>.log per launch, newest 10 kept, never deleted on quit (no "Session ended" footer = crash/kill) + append-only media-viewer-perf.log. `npm start` → %APPDATA%\media_viewer\logs; E2E (app name "Electron") → %APPDATA%\Electron\logs
+├── preload.js           # Security bridge (contextBridge → window.electronAPI): named, folder-scoped calls only (no generic invoke/readFile/writeFile)
+├── media-viewer.js      # Renderer: all UI logic (MediaViewer class)
 ├── index.html           # Main HTML entry point
 ├── styles.css           # Application styling, design system
-├── sorting-worker.js    # Web Worker: sorting (MST, similarity, CLIP cosine); exports MinHeap, VPTree, calculateHammingDistance, calculateCosineDistance, sortMediaBySimilarityClip/Mst
+├── sorting-worker.js    # Web Worker: sorting (MST, similarity, CLIP cosine)
 ├── ml-worker.js         # Web Worker: ML prediction tasks
-├── ml-model.js          # ML model (OnlineLogisticRegression); v3: 576-dim input (64 hand-crafted + 512 CLIP)
+├── ml-model.js          # ML model (OnlineLogisticRegression): 576-dim input (64 hand-crafted + 512 CLIP)
 ├── feature-extractor.js # Image feature extraction (64-dim vectors)
 ├── feature-worker.js    # Web Worker: feature extraction
 ├── fullscreen.js        # FullscreenManager ES module (v2.0 modularization pattern)
 ├── tournament-engine.js # TournamentEngine + SwissStrategy (pure ESM; imported by tournament.js and Vitest tests directly)
 ├── tournament.js        # TournamentManager ES module (v2.0 pattern); IPC glue for tournament state persistence + apply
 ├── ml-training.js       # MlTrainingManager ES module (v2.0 pattern): training-set fingerprint, per-training-folder vector caches, fingerprint-keyed model cache
-├── like-or-skip.js      # Pure ESM (G2 like-or-skip): SkipTracker, batch cursor + undo re-insertion plans, re-sort parking, out-of-date count; imported as a namespace (LikeOrSkip)
-├── recent-folders.js    # Pure ESM (G4 recent folders): parse/record/remove/serialize the localStorage list (cap 8, exact-path identity), folderDisplayName, classifyRecentFolder (grant status × exists → open/missing/regrant/unreachable/error); imported as a namespace (RecentFolders)
-├── media-formats.js     # Shared CJS: isMediaFile(ext), getMimeType(ext); .jxl → image/jxl (ESLint block 3b)
+├── like-or-skip.js      # Pure ESM: skip tracking, batch cursor and undo re-insertion plans, the out-of-date count; imported as a namespace (LikeOrSkip)
+├── recent-folders.js    # Pure ESM: the recently-opened-folders list and its click-time classifier; imported as a namespace (RecentFolders)
+├── media-formats.js     # Shared CJS: isMediaFile(ext), getMimeType(ext); .jxl → image/jxl
 ├── jxl-decode-worker.js # Module Web Worker (type:'module'): decodes JXL via jxl-oxide-wasm; streaming meta/frame/done protocol over transferable ArrayBuffers
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
-├── scripts/             # Maintenance scripts (Node CJS): check-secrets.js (pre-commit secret guard — scanForSecrets + extractAddedLines + CLI); check-e2e-needed.js (pre-push E2E gate decision — parsePushRefs/classifyPaths + fail-safe RUN/SKIP CLI); check-docs-index.js (pre-commit docs-index guard — extractLinks/findUnindexed/findBrokenTargets + CLI)
+├── scripts/             # Maintenance scripts (Node CJS, each pure exported functions + a CLI): check-secrets.js (pre-commit secret guard); check-e2e-needed.js (pre-push E2E gate decision, fails safe to RUN); check-docs-index.js (pre-commit docs-index guard)
 ├── tests/               # Unit (Vitest, tests/*.test.js) + E2E (Playwright, tests/e2e/)
 │   └── e2e/             # fixtures/ (1x1 PNGs, tiny.mp4 — a 32-byte unplayable stub, playable-64x64.mp4 — a real 1 s H.264 clip, static.jxl) + helpers/ (electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs)
-├── .claude/             # Committed: agents/, hooks/ (format-edited-file.js, guard-preload-bash.js), rules/ (reserved — allow-listed, still empty), settings.json (ask rules, hooks, plugin enables), skills/ — everything else per-machine
+├── .claude/             # Committed: agents/, hooks/, rules/, settings.json, skills/ (§ Active gotchas)
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
 ```
 
 **Data Flow**:
-1. Main process: file system ops, JXL decode support (`read-file-buffer`, `read-jxl-wasm`), CLIP model inference (main-process IPC, not a Worker), tournament state (`.tournament_state.json`), bulk-rated cache (`.bulk_rated.json`), feature-cache streaming (stream-json parse + batched atomic writes)
+1. Main process: file system ops, JXL decode support (`read-file-buffer`, `read-jxl-wasm`), CLIP model inference, tournament state (`.tournament_state.json`), bulk-rated cache (`.bulk_rated.json`), feature-cache streaming (stream-json parse + batched atomic writes)
 2. Preload exposes a secure IPC bridge to the renderer (`onClipDownloadProgress` returns a cleanup function)
 3. Renderer (media-viewer.js) manages UI state; calls CLIP via `window.electronAPI`; TournamentManager delegates IPC
-4. CPU-intensive work → Web Workers (sorting, ML, feature extraction); CLIP is main-process IPC (npm packages can't resolve in Electron Web Workers)
+4. CPU-intensive work → Web Workers (sorting, ML, feature extraction); CLIP is main-process IPC (§ Active gotchas)
 
 ## Code Conventions
 

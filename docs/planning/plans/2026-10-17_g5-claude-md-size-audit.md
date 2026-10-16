@@ -931,6 +931,28 @@ No change: a product summary the whole file depends on.
 
 Tightened, no row: "whole-tree `docs/README.md` index guard:" folded into the clause, which keeps the rule (both directories must be linked from `docs/README.md`, every link must resolve); "prints RUN/SKIP" → "decides RUN or SKIP"; "any git/parse failure fails safe to RUN" → "any failure falls back to RUN".
 
+### T4 — Architecture
+
+| # | Removed text (first words, quoted) | Label | Where it lives now |
+|---|---|---|---|
+| 1 | `main.js`: "JXL/CLIP/tournament/bulk-rated/feature-cache IPC" | Readable from the code | `main.js` handler registrations; Data Flow 1 names the same duties |
+| 2 | `path-grants.js`, `ipc-guard.js`: "(G1 security)" | History | G1 security spec (linked from § Security) |
+| 3 | `path-grants.js`: "canonical containment (realpath, compared exactly), entry vs content-read authorization" | Duplicate | § Detected Patterns → Security (home) |
+| 4 | `clip-image.js`: "(G3)" and "(failOn none, ≤2^29 input px, 30 s timeout, ≤1024 px out, 3-ch sRGB) for files the strict read rejects" | History; Duplicate | § Active gotchas "CLIP's decoder is stricter than Chromium" (home: order, `2 ** 29`, 30 s, buffer); output size and colour space readable from `clip-image.js` |
+| 5 | `logger.js`: "(init/log/warn/error/logPerf/cleanup/getLogPath, normalizeRendererLogEntry)", "in app.getPath('logs')", "(launches main.js, …)" | Readable from the code | `logger.js` exports; the two log directories stay |
+| 6 | `preload.js`: "since G1" and ", CLIP, tournament, bulk-rated, logError" | History; Readable from the code | G1 security spec; `preload.js` |
+| 7 | `media-viewer.js`: "~9400 lines" and "imports FullscreenManager + TournamentManager" | Readable from the code (a stale derived count — P1 A1) | `wc -l`; § Code Conventions → Imports names the extracted modules |
+| 8 | `sorting-worker.js`: "exports MinHeap, VPTree, calculateHammingDistance, …" | Readable from the code | `sorting-worker.js` exports block |
+| 9 | `ml-model.js`: "v3:" | Readable from the code | `ml-model.js` version constant |
+| 10 | `like-or-skip.js`: "(G2 like-or-skip)" and the internals list | History; Readable from the code | G2 spec; `like-or-skip.js` |
+| 11 | `recent-folders.js`: "(G4 recent folders)" and "parse/record/remove/serialize … (grant status × exists → …)" | History; Readable from the code / Duplicate | G4 spec; `recent-folders.js`; cap 8 + exact-path identity stay in § Detected Patterns → Recently opened folders (home) |
+| 12 | `media-formats.js`: "(ESLint block 3b)" | Readable from the code | `eslint.config.mjs` |
+| 13 | `scripts/`: the per-script function lists ("scanForSecrets + extractAddedLines + CLI", …) | Readable from the code | each script's exports; replaced by "each exports pure functions + a CLI" |
+| 14 | `.claude/`: "(format-edited-file.js, guard-preload-bash.js)", "(reserved — allow-listed, still empty)", "(ask rules, hooks, plugin enables)", "— everything else per-machine" | Duplicate | § Active gotchas "`.claude/` is **allow-listed**" (home); `guard-preload-bash.js` named in § Best Practices |
+| 15 | Data Flow 1: "(main-process IPC, not a Worker)"; Data Flow 4: "(npm packages can't resolve in Electron Web Workers)" | Duplicate | § Active gotchas "`@huggingface/transformers` … cannot resolve in Electron Web Workers" (home) |
+
+**Deviation (T10 consequence)**: the `scripts/` row drops its per-script function lists, so T10's new entry follows the trimmed shape — `check-claude-md-size.js (pre-commit \`CLAUDE.md\` size warning, never blocks)` — not the plan's "measure/evaluate/formatWarning + a never-blocking CLI".
+
 ## Progress Log
 
 - **2026-10-16/17** — Branch `g5-claude-md-size-audit` from `506e041`. Brainstormed section by section: D1 mixed handling of non-rule text; D2 authoring rule + never-blocking warning; D3 approach A (in place, per section); D4 Backlog Intake Rules → a three-line pointer (the user asked for a recommendation and agreed); D5 migration recommended only; D6 the trim on Opus. While writing the spec, measuring its own claim ("each feature commit added 1–3 KB") showed 14 of 17 commits under 1 KB, and a 200-line trigger would have fired on every growing commit after a trim landing above 200 lines; user ruling: bytes only, 500-byte growth threshold, audit trigger moved to the byte trigger. A side agent raised the same line-trigger issue after the amendment; it was already resolved. Spec `1e934cb`, approved 2026-10-17.
@@ -938,6 +960,7 @@ Tightened, no row: "whole-tree `docs/README.md` index guard:" folded into the cl
 - **2026-10-17 — Plan review.** Approved. A side-agent note (10% headroom ≈ 4 KB, crossed within days at last week's pace) → user ruling: 25% headroom (Premise Correction 6, spec § 6.2 amended, Improvement 4 to measure the real rate). Execution: Native, after a `/compact`.
 - **2026-10-17 — T1 (passes).** Baseline `236 64203` matches spec § 2.2. Prompt-audit: 9 findings (A1–A9; 2 High contradicted counts, history/migration-relative/tracker rows High, patch accretion and duplicates Medium, bold Low/flag) + 2 out-of-scope Group 2 conflicts (regression-checker agent, new-e2e-test skill) → Residuals. Improver: 82/100 (B), edits declined. Stale-ref probe: `SENTINEL OK`, 15 hits, all runtime-only/external. Sweep: 14 concepts, no wrong statement outside `CLAUDE.md` but the planned `GOALS.md` chain; `GOALS.md:76` "~9,400-line" → Residuals. `.mcp.json` untracked, 0 server-memory. `GOALS.md` L74 chain corrected, dated comment at L5.
 - **2026-10-17 — T2 Overview: no change** (472 B, 11 lines). **T3 Build & Development Commands**: 1,521 → 1,406 B (−115), 13 → 13 lines; file 64,203 → 64,088 B.
+- **2026-10-17 — T4 Architecture**: 5,460 → 4,378 B (−1,082), 42 → 42 lines; file 64,088 → 63,006 B. Homes ledger rows 1–3 applied (CLIP reason, `.claude/` allow-list, `clip-image.js` limits now only in their § Active gotchas homes). Deviation logged under the T4 table: the `scripts/` row lost its function lists, so T10's entry follows that shape.
 
 ## Key Discoveries
 
