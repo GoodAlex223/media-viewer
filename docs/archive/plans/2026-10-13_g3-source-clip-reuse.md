@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵, 3 SP → ~4 SP); BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app", item (3) only
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G3 (🔵, 3 SP → ~4 SP); BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app", item (3) only
 **Spec**: [2026-10-13-g3-source-clip-reuse-design.md](../../superpowers/specs/2026-10-13-g3-source-clip-reuse-design.md) (committed `f8e1c53`, user-approved 2026-10-13)
 **Created**: 2026-10-13
-**Status**: **Superseded 2026-10-13** by [2026-10-13_g3-training-video-extraction.md](2026-10-13_g3-training-video-extraction.md) after the before run. Task 1 shipped (`713af35`); Task 2 is parked on the local branch `g3-departed-clips-parked` @ `e11b36e`; Tasks 3–4 were dropped. Archived together with its successor at closeout.
-**Last Updated**: 2026-10-13
+**Status**: **Superseded 2026-10-13** by [2026-10-13_g3-training-video-extraction.md](2026-10-13_g3-training-video-extraction.md) after the before run. Task 1 shipped (`713af35`); Task 2 is parked on the local branch `g3-departed-clips-parked` @ `e11b36e`; Tasks 3–4 were dropped. Archived together with its successor at closeout, 2026-10-16, after PR #80 merged (merge `bf6fcad`). Task 2's branch is the 🟤 [2026-10-16] G3 closeout entry "Decide the parked source-CLIP reuse branch".
+**Last Updated**: 2026-10-16
 **Branch**: `g3-source-vector-reuse` (from `main` @ `c2673c4`)
 **Trial vehicle**: none (the group already carries a user dependency — Checkpoints A and B)
 

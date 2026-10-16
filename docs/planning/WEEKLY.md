@@ -39,7 +39,7 @@
 > Item **(3)** of 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app" — its items (1) and (2) are the 🟤 entries tagged on it and stay out. A whole task, measure-first: instrument the rebuild phases into the retained session log, implement, accept on a before/after timing. **User-in-the-loop on Wednesday** (confirmed 2026-10-10): move a few files `Liked_2` → `Liked_3` in Explorer, run the AI sort on the instrumented build, then on the fix. First check: does an Explorer move preserve `mtime`? Constraints: the training-cache isolation rule (CLAUDE.md § Cache Management) allows **reading** source-folder maps, never writing training paths into them; and after an in-app move the only surviving copy of a vector is `moveHistory[].mlFeatures`. Carries no trial (it already has a user dependency). Branches after G1 only if G1 touches the feature-cache IPC; otherwise in parallel with G2.
 > **Model:** start Opus · `medium` — **stepped up** from the 3–4 SP row's Sonnet because the training-cache isolation rule is load-bearing and this repo has already lost a 126 MB feature cache to a cache-write defect (PR #64) → execute Sonnet · `high` (verification matters: the change reads across the isolation boundary); review standard (`high`) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **Fill a training-cache miss from the source folder's vector when name, size and mtime match** — time each rebuild phase first; then, before `_collectFolderVectors` extracts a missed file from scratch, look it up in the source folder's in-memory or on-disk vectors. **Acceptance**: the user's before/after run shows the moved files no longer extracted, with both timings recorded. `ml-training.js` (`_collectFolderVectors`, `ensureTrainedModel`), `media-viewer.js` (the injected callbacks), `tests/ml-training.test.js` (3) — 🔵 [2026-10-04] manual testing
+- [x] ✅ **MERGED 2026-10-16 via PR #80 (merge `bf6fcad`)**, **re-scoped**; see [DONE.md](DONE.md). The before run disproved this item's premise: CLIP for the moved files cost ≤ 1.2 s of a 119.8 s sort. Every sort retrained because the model was never cacheable. The user re-scoped G3 to that cause, which was 71 training videos failing `computeFeatures` and 9 images without a CLIP vector. A repeat sort now takes 5.9 s, and a sort after a restart 33.3 s. The reuse below was built but not merged; it is parked on a local branch (🟤 [2026-10-16] G3 closeout). _Planned:_ **Fill a training-cache miss from the source folder's vector when name, size and mtime match** — time each rebuild phase first; then, before `_collectFolderVectors` extracts a missed file from scratch, look it up in the source folder's in-memory or on-disk vectors. **Acceptance**: the user's before/after run shows the moved files no longer extracted, with both timings recorded. `ml-training.js` (`_collectFolderVectors`, `ensureTrainedModel`), `media-viewer.js` (the injected callbacks), `tests/ml-training.test.js` (3) — 🔵 [2026-10-04] manual testing
 
 ### G4. Recently opened folders `[solo]` 🔵 — folder open + empty state — 3 SP
 
@@ -88,7 +88,7 @@
 ### Wednesday, October 14 — Bulk dislike; the real-folder run
 
 - ✅ **[G2](#g2-like-or-skip-flow-batch----single-mode-ai-sort-workflow--8-sp)** 🔵 🏆 — bulk "dislike the skipped files" (part 2 of 3). Done 2026-10-12.
-- **[G3](#g3-source-folder-vector-reuse-on-a-training-cache-miss-solo---ml-training-pipeline--3-sp)** 🔵 — instrument; the user's before run; implement; the user's after run; review; merge
+- ✅ **[G3](#g3-source-folder-vector-reuse-on-a-training-cache-miss-solo---ml-training-pipeline--3-sp)** 🔵 — instrument; the user's before run; implement; the user's after run; review; merge. Merged `bf6fcad` (PR #80) on 2026-10-16, re-scoped after the before run. It took a second after run, on 2026-10-14, because the first exposed a second cache blocker; the review ran in a separate chat. Scope ~5 SP against 3 planned, under the 2× line.
 
 **Daily total**: ~7 SP
 
@@ -115,7 +115,7 @@
 | --- | -------------------------------------------- | ------------------------------------------- | ----------- | ------ | -------- | ------- | ---------- |
 | G1  | High security findings fix `[solo]`          | Main-process file IPC + renderer encoding   | 🟤 Auto     | 1      | 5        | Mon–Tue | ✅ `e5cd3a8` (PR #78) |
 | G2  | Like-or-skip flow `[batch]` 🏆               | Single-mode AI-sort workflow                | 🔵 User     | 2      | 8        | Tue–Thu | ✅ `96467f7` (PR #79) |
-| G3  | Source-folder vector reuse `[solo]`          | ML training pipeline                        | 🔵 User     | 1      | 3        | Wed     | ☐ Planned  |
+| G3  | Stop the retrain on every AI sort `[solo]` (re-scoped from source-folder vector reuse) | ML training pipeline | 🔵 User     | 1      | 3        | Wed     | ✅ `bf6fcad` (PR #80) |
 | G4  | Recently opened folders `[solo]`             | Folder open + empty state                   | 🔵 User     | 1      | 3        | Thu     | ☐ Planned  |
 | G5  | `CLAUDE.md` size audit `[solo]`              | Project instructions                        | 🟡 Ops      | 1      | 3        | Fri     | ☐ Planned  |
 | G6  | Weekly Reviews `[batch]`                     | Research / process                          | ⚪ Overhead | 4      | 5        | Fri     | ☐ Planned  |

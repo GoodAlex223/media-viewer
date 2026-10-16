@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-12 <!-- Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
+**Last Updated**: 2026-10-16 <!-- Group G3: Stop the retrain on every AI sort (🔵, Oct 12–16; re-scoped from source-folder vector reuse after the measure-first before run). MERGED 2026-10-16 via PR #80 (merge bf6fcad), after per-task reviews, a whole-branch final review with one fix round, and a PR review in a separate chat (no open items). --> <!-- Prior (2026-10-12): Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
 <!-- Previous: Group G5: Weekly Reviews (2026-10-09 run, ⚪ Overhead) — 5/5, MERGED 2026-10-09 via PR #77 (merge 0e298b4) after one review round and two close-outs. -->
 <!-- Previous: Group G4: Cleanup Week trial batch (🟤, Cleanup Week #4) — 2/2, MERGED 2026-10-08 via PR #76 (merge 44c282b) after one review round and a close-out. -->
 <!-- Previous: Group G3: Tournament render re-entry (🟤, Cleanup Week #4) — 1/1, MERGED 2026-10-07 via PR #75 (merge 482a3c8) after a pre-PR final review + fix pass, one review round and a close-out (no issues). -->
@@ -22,6 +22,57 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-16 — Group G3: Stop the retrain on every AI sort 🔵 (Oct 12–16; re-scoped from "Source-folder vector reuse") — **MERGED `bf6fcad`** (PR #80)
+
+**Spec**: [2026-10-13-g3-training-video-extraction-design.md](../superpowers/specs/2026-10-13-g3-training-video-extraction-design.md). Approved 2026-10-13, with § 11 added 2026-10-14; it carries a post-implementation note. It supersedes [2026-10-13-g3-source-clip-reuse-design.md](../superpowers/specs/2026-10-13-g3-source-clip-reuse-design.md), marked Redirected.
+**Plan**: [2026-10-13_g3-training-video-extraction.md](../archive/plans/2026-10-13_g3-training-video-extraction.md). Its Progress Log holds the RED→GREEN and mutation evidence, and its measurement sections hold the before run and both after runs. The superseded [2026-10-13_g3-source-clip-reuse.md](../archive/plans/2026-10-13_g3-source-clip-reuse.md) is archived with it.
+**Branch**: `g3-source-vector-reuse`, cut from `main` at `c2673c4`; deleted remote and local after the merge. The local `g3-departed-clips-parked` @ `e11b36e` is kept (🟤 [2026-10-16] "Decide the parked source-CLIP reuse branch").
+
+✅ **Status: MERGED 2026-10-16 via PR #80** (merge `bf6fcad`). The user ran the before run and both after runs on their real folders (`Liked_2` source, `Liked_3` like, `Liked_1` dislike).
+
+**The re-scope.** WEEKLY planned item (3) of 🔵 [2026-10-04]: when a file moved into a training folder misses that folder's cache, take its vector from the source folder's cache. The measure-first before run disproved the premise. CLIP for the moved files cost ≤ 1.2 s of a 119.8 s sort. The model had **never been cacheable**, so every AI sort retrained. The user re-scoped G3 to that cause. The first design's perf log (`713af35`) shipped; its reuse code is parked.
+
+**How it was built and reviewed:**
+- Subagent-driven, with a fresh implementer and task reviewer for each task, and the controller committing.
+- Task 1 review: 0 Critical/Important.
+- Task 2b review: 2 Important, fixed in one round.
+  - The lenient decode was unbounded. A 74-byte PNG declaring 10 GP took 3.6 s and 557 MB.
+  - The `No CLIP vector` log could flood.
+- The whole-branch final review (Opus) found and measured one Important. With a path input, sharp's libvips cache kept GIF/WebP files open, so a move on Windows failed with `EBUSY`. Fixed by decoding from a buffer.
+- The PR review in a separate chat found nothing new at the 80 cutoff and raised 2 items, both recorded (R9 confirmed; the hash-loader timeout folded into R8). Its close-out accepted all 9 responses.
+
+**Summary**:
+- **Blocker 1: every training video failed (71 files).** `computeFeatures` emptied `video.src` before an `await`. An empty `src` is itself a load failure that fires `error`, and the error handler emptied it again, an endless loop of ~37k events/s. A failed row blocks the model cache. Fix: `_releaseVideo` (`removeAttribute('src')` + `load()`) in `computeFeatures` and `computePerceptualHash`, with `{ once: true }` handlers that never touch `src`.
+- **Blocker 2: 9 images had no CLIP vector.** Only the first after run exposed it, with `failed=0` but still no cache. Main's `RawImage.read` uses sharp's strict defaults and rejected truncated JPEGs, odd SOS markers, a bad PNG, a grey+alpha PNG and a 14031×19933 JPEG. While CLIP is on, a CLIP-less row also blocks the cache. The user chose a lenient fallback.
+- **Result.** Before, every sort retrained: rebuild 90.7 s, sort 119.8 s. After, the same session's re-sort takes **5.9 s** (`session`), and a sort after a restart **33.3 s** (`model-cache`). A sort after the training set changes is still a full rebuild (88.8 s), dominated by the training caches' `load=` (R3).
+
+**Key changes**:
+- **`media-viewer.js`:** `_releaseVideo(video)`. `computeFeatures` detaches its `error` handler before releasing and releases a stalled video on timeout (`releaseOnTimeout`). `computePerceptualHash`'s three release sites now use the helper.
+- **New `clip-image.js`** (main process): `readClipImage` tries the strict `RawImage.read` first, so embeddings that decode are byte-identical. A rejected file gets a lenient sharp decode from a buffer: `failOn: 'none'`, at most 2²⁹ input pixels, a 30 s timeout, ≤ 1024 px out, 3-channel sRGB. If both fail, it rethrows the strict error. Wired into `main.js`'s `extractClipEmbedding` handler only. `sharp` ^0.34.5 is now a direct dependency.
+- **`ml-training.js`:**
+  - The perf line is `<label>: load=… (disk N) misses=N failed=N noClip=N features=… clip=… save=…`, and a failed call's time is counted.
+  - Each CLIP-less training row is named in the session log, up to 20 per folder, then one count line.
+- **`CLAUDE.md`:** two Active gotchas (video release; CLIP's stricter decoder and its bounds, buffer not path), `clip-image.js` in Architecture, `sharp` in Key Dependencies, the fixtures, and the perf lines.
+- **Tests:**
+  - Unit 1357 → **1393**. New files: `video-release.test.js` (10), with a fake `<video>` that follows the two HTML rules; `clip-image.test.js` (7), with the real RawImage and sharp on generated fixtures.
+  - E2E: new `video-feature-extraction.test.js` (2), run against the real engine with a playable 64×64 H.264 fixture. The full suite was 140 passed, 5 skipped, at the push.
+
+**Spawned**:
+- BACKLOG 🟤 `[2026-10-16] From: G3 closeout`: 10 entries.
+  - Remember a stable decode failure; an ffmpeg frame fallback for videos; the 25 s source-cache load; the train/score metadata skew G3 widened for videos; the parked branch.
+  - `loadMediaAsImageData`'s `src = ''`; the remaining video teardowns plus the hash loader's timeout; the invisible bulk-rated rows; two perf-line gaps; `.prettierignore` for `CLAUDE-SECURITY-*/`.
+- The 🟤 [2026-09-10] training-cache load entry is annotated with G3's measured `load=` times.
+- BACKLOG check-off: 🔵 [2026-10-04] "Explain and trim the retrain…", with the user's agreement. Its items (1) and (2) stay open as 🟤 entries.
+- No TODO items.
+
+**SP**: 3 planned → ~4 for the first design → re-scoped to ~2, then ~3.5 with § 11. Delivered ~5, counting the first design's shipped perf log and its parked Task 2. That is under the 2× line.
+
+**Learnings**:
+- A BACKLOG entry's mechanism is a hypothesis. Measuring first turned a planned feature (source-vector reuse) into two bug fixes worth ~114 s per sort.
+- Account for every conjunct of a gate before promising a fix opens it. The video fix opened `rowsFailed`, and `clipMissing` held the cache shut until a second after run.
+- A plan's mutation claim can be wrong. "E2E test 1 catches the mutation" did not, until it asserted `errorEvents === 0`.
+- The final whole-branch review found a Windows-only bug (sharp's path input → `EBUSY`) that no task review saw, and it was proved by measurement, not by reasoning.
 
 ### 2026-10-12 — Group G2: Like-or-skip flow 🔵 🏆 (Oct 12–16) — **2/2, MERGED `96467f7`** (PR #79)
 

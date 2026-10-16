@@ -2,11 +2,13 @@
 
 **Task Reference**: WEEKLY.md Oct 12–16 § G3 (🔵, 3 SP → **~4 SP**, see § 11) ← BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app", item **(3)** only. Items (1) (both training caches re-read in full on every rebuild) and (2) (the source folder scored twice per rebuild) are the 🟤 entries tagged on it and stay out.
 **Created**: 2026-10-13
-**Status**: Approved by the user 2026-10-13, brainstormed section by section (decisions D1–D6, § 3). Awaiting the user's review of this written spec.
+**Status**: Approved by the user 2026-10-13, brainstormed section by section (decisions D1–D6, § 3). Written spec approved 2026-10-13. **Redirected** the same day (note below); only § 7 shipped.
 **Branch**: `g3-source-vector-reuse` (from `main` @ `c2673c4`, after G2's closeout)
 **Trial vehicle**: none — the group already carries a user dependency (§ 8).
 
 > **Redirected (2026-10-13).** The measure-first before run (§ 8) found that CLIP on the moved files costs at most 1.2 s of a 119.8 s sort. It also found that every sort retrains, because every training-folder video fails `computeFeatures` and a failed file blocks the model cache. The user re-scoped G3 to that cause: see [2026-10-13-g3-training-video-extraction-design.md](2026-10-13-g3-training-video-extraction-design.md). Under this spec, only § 7's instrumentation shipped (`713af35`). Task 2's `departedClips` + `_lookupSourceClip` is parked, unmerged and unreviewed, on the local branch `g3-departed-clips-parked` @ `e11b36e`. Task 3 was dropped. F1 carries over to the new spec as R5; F2 and F3 travel with the parked branch (R6).
+>
+> **Post-implementation note (2026-10-16, PR #80, merge `bf6fcad`).** The successor spec shipped, and acceptance was met. Of this spec, only § 7's perf log is on `main`, and G3 amended its format to add `failed=N noClip=N`. Both plans are archived: [this one](../../archive/plans/2026-10-13_g3-source-clip-reuse.md) and [its successor](../../archive/plans/2026-10-13_g3-training-video-extraction.md). The parked Task 2 is BACKLOG 🟤 [2026-10-16] "Decide the parked source-CLIP reuse branch". Revisit it only if a measurement shows CLIP on moved or rated files matters.
 
 ---
 
