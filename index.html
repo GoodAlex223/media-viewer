@@ -123,6 +123,11 @@
                 <div class="drop-icon"><i data-lucide="folder"></i></div>
                 <div class="drop-title">Select folder to view media files</div>
                 <div class="drop-subtitle">Supports: JPG, PNG, GIF, MP4, WebM, MOV</div>
+                <!-- Recently opened folders (G4): filled by renderRecentFolders(); hidden while empty. -->
+                <div class="recent-folders" id="recentFoldersDrop" style="display: none">
+                    <div class="recent-folders-heading">Recent folders</div>
+                    <ul class="recent-folders-list"></ul>
+                </div>
             </div>
 
             <!-- Loading indicator -->

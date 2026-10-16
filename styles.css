@@ -568,6 +568,105 @@ body {
     color: var(--text-muted);
 }
 
+/* Recently opened folders (G4): the drop-zone list; the header menu (below .change-folder-btn) shares
+   the heading, list and row styles. */
+.recent-folders {
+    margin-top: var(--space-6);
+    width: min(480px, 90%);
+    flex-direction: column;
+    gap: var(--space-2);
+    cursor: default;
+}
+
+.recent-folders-heading {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.recent-folders-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.recent-folder-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-1);
+}
+
+.recent-folder-item {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: var(--space-2) var(--space-3);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.recent-folder-item:hover:not(:disabled),
+.recent-folder-item:focus-visible {
+    background: rgba(0, 120, 212, 0.15);
+    border-color: var(--color-primary-400);
+    outline: none;
+}
+
+.recent-folder-item:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.recent-folder-name,
+.recent-folder-path {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recent-folder-name {
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+}
+
+.recent-folder-path {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+.recent-folder-remove {
+    flex: none;
+    width: 32px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.recent-folder-remove:hover,
+.recent-folder-remove:focus-visible {
+    color: var(--text-primary);
+    border-color: var(--border-default);
+    outline: none;
+}
+
 /* Navigation arrows */
 .nav-arrows {
     position: fixed;

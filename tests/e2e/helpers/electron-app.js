@@ -83,6 +83,14 @@ export async function launchApp() {
     // Wait for the renderer to be fully initialized
     await page.waitForFunction(() => typeof window.mediaViewer !== 'undefined', null, { timeout: 10_000 });
 
+    // A recent-folders list left by a run that crashed before closeApp (G4): clear it and re-render, so every
+    // test starts on the bare drop zone — app-launch.test.js clicks its centre.
+    await page.evaluate(() => {
+        localStorage.removeItem('recentFolders');
+        window.mediaViewer.recentFolders = [];
+        window.mediaViewer.renderRecentFolders?.();
+    });
+
     return { electronApp, page };
 }
 
@@ -96,12 +104,13 @@ export async function launchApp() {
  */
 export async function closeApp(electronApp) {
     // Don't leak saved folders into the next launch: since G1, a saved folder main has not
-    // granted raises a re-confirm notice at startup, and E2E launches share one profile.
+    // granted raises a re-confirm notice at startup, and E2E launches share one profile. The
+    // recent-folders list (G4) would otherwise list folders from earlier tests on the drop zone.
     try {
         const win = electronApp.windows()[0];
         if (win) {
             await win.evaluate(() => {
-                for (const k of ['customLikeFolder', 'customDislikeFolder', 'customSpecialFolder']) {
+                for (const k of ['customLikeFolder', 'customDislikeFolder', 'customSpecialFolder', 'recentFolders']) {
                     localStorage.removeItem(k);
                 }
             });
@@ -206,7 +215,10 @@ export async function seedLocalStorage(page, kvMap, { grant = true } = {}) {
 export async function mockFolderDialog(electronApp, returnPath) {
     await electronApp.evaluate(({ ipcMain }, folderPath) => {
         ipcMain.removeHandler('open-folder-dialog');
+        // How often the dialog opened since this mock was installed (G4: "no dialog" is asserted directly).
+        global.__mvDialogCalls = 0;
         ipcMain.handle('open-folder-dialog', async (_event, defaultPath) => {
+            global.__mvDialogCalls += 1;
             // Where the dialog would have opened (G1 re-pick opens it at the saved folder).
             global.__mvLastDialogDefaultPath = defaultPath;
             // A real pick grants the folder (G1); mirror that so later IPC on it is allowed.

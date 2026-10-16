@@ -2,6 +2,7 @@ import { FullscreenManager } from './fullscreen.js';
 import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
 import * as LikeOrSkip from './like-or-skip.js';
+import * as RecentFolders from './recent-folders.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -294,6 +295,9 @@ class MediaViewer {
         this.customLikeFolder = localStorage.getItem('customLikeFolder') || '';
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
+        // Recently opened folders (G4): validated and clamped like the prefs above; a corrupted value reads as an
+        // empty list. Hygiene only — main's grant check on every folder IPC is the boundary (spec § 5).
+        this.recentFolders = RecentFolders.parseRecentFolders(localStorage.getItem('recentFolders'));
         // G1 re-pick: which saved folders main has not granted ('like' | 'dislike' | 'special'),
         // filled by refreshFolderGrants(). A Browse or Clear bumps the generation so a query
         // already in flight cannot re-mark the folder the user just picked.
@@ -357,6 +361,8 @@ class MediaViewer {
         this.setupControlsVisibility();
         this.updateRatingButtonsState();
         this.updateSpecialButtonsState();
+        // The drop zone is visible at startup (index.html), so its recent-folders list renders now (G4).
+        this.renderRecentFolders();
         // After initializeElements(): loadShortcuts runs far earlier in this constructor, before
         // the notification container exists, so the report is deferred to here.
         this._reportShortcutCollisions();
@@ -418,6 +424,7 @@ class MediaViewer {
         this.navPrev = document.getElementById('navPrev');
         this.navNext = document.getElementById('navNext');
         this.changeFolderBtn = document.getElementById('changeFolderBtn');
+        this.recentFoldersDrop = document.getElementById('recentFoldersDrop');
         this.helpBtn = document.getElementById('helpBtn');
 
         // Special folder button (single mode)
@@ -2196,6 +2203,12 @@ class MediaViewer {
             this.handleFolderDrop(e);
         });
 
+        if (this.recentFoldersDrop) {
+            // The list sits inside the drop zone, whose click opens the dialog: a click on the list is not
+            // a click on the drop zone (G4 spec F3).
+            this.recentFoldersDrop.addEventListener('click', (e) => e.stopPropagation());
+        }
+
         this.likeBtn.addEventListener('click', () => this.handleLike());
         this.dislikeBtn.addEventListener('click', () => this.handleDislike());
         if (this.dislikeSkippedBtn) {
@@ -3173,6 +3186,8 @@ class MediaViewer {
             this.hideDropZone();
             await this.showMedia();
             this.updateFolderInfo();
+            // G4: only a folder that showed media is worth reopening (spec § 5).
+            this._recordRecentFolder(folderPath);
 
             // Lazy extraction (Group P3): feature/CLIP vectors are produced on first use of an
             // AI feature (CLIP sort / Sort by Prediction), not on folder open — keeps large
@@ -3232,6 +3247,7 @@ class MediaViewer {
             emptyState.remove();
         }
         this.dropZone.style.display = 'flex';
+        this.renderRecentFolders();
         this.controls.style.display = 'none';
         this.fileInfo.style.display = 'none';
         this.navInfo.style.display = 'none';
@@ -3275,6 +3291,89 @@ class MediaViewer {
             this.rightMediaWrapper = null;
             this.rightMedia = null;
         }
+    }
+
+    // G4 (spec § 5): the list changes only through these three. A write that throws (quota, a blocked
+    // accessor) is logged; the session list still updates.
+    _recordRecentFolder(folderPath) {
+        this._setRecentFolders(RecentFolders.recordRecentFolder(this.recentFolders, folderPath, Date.now()));
+    }
+
+    _removeRecentFolder(folderPath) {
+        this._setRecentFolders(RecentFolders.removeRecentFolder(this.recentFolders, folderPath));
+    }
+
+    _setRecentFolders(entries) {
+        this.recentFolders = entries;
+        try {
+            localStorage.setItem('recentFolders', RecentFolders.serializeRecentFolders(entries));
+        } catch (err) {
+            window.electronAPI?.logError?.({
+                level: 'warn',
+                message: `Could not save recent folders: ${err.message}`,
+                source: 'renderer',
+            });
+        }
+        this.renderRecentFolders();
+    }
+
+    // One row per entry, for the drop-zone list ('drop') or the header menu ('menu'): the folder button (name;
+    // full path, ellipsized, title = full path) and a sibling ✕ button. Text only — no markup is ever built
+    // from a path (spec § 7). In the menu the folder on screen is marked current and disabled.
+    _buildRecentFolderRows(surface) {
+        return this.recentFolders.map(({ path: folderPath }) => {
+            const name = RecentFolders.folderDisplayName(folderPath, window.electronAPI?.path?.basename);
+            const isCurrent = surface === 'menu' && folderPath === this.baseFolderPath;
+
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'recent-folder-item';
+            item.title = folderPath;
+            item.dataset.path = folderPath;
+            if (surface === 'menu') {
+                item.setAttribute('role', 'menuitem');
+            }
+            const nameEl = document.createElement('span');
+            nameEl.className = 'recent-folder-name';
+            nameEl.textContent = name;
+            const pathEl = document.createElement('span');
+            pathEl.className = 'recent-folder-path';
+            pathEl.textContent = folderPath;
+            item.append(nameEl, pathEl);
+            if (isCurrent) {
+                item.disabled = true;
+                item.classList.add('current');
+                const tag = document.createElement('span');
+                tag.className = 'recent-folder-current';
+                tag.textContent = 'current';
+                item.append(tag);
+            }
+
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'recent-folder-remove';
+            remove.textContent = '✕';
+            remove.title = 'Remove from recent folders';
+            remove.setAttribute('aria-label', `Remove "${name}" from recent folders`);
+            remove.addEventListener('click', () => this._removeRecentFolder(folderPath));
+
+            const row = document.createElement('li');
+            row.className = 'recent-folder-row';
+            row.append(item, remove);
+            return row;
+        });
+    }
+
+    // The drop-zone list (spec § 7): hidden when empty, so a first launch looks as before. Runs at init, from
+    // showDropZone() and after every change. It asks main nothing: a folder is checked when it is chosen,
+    // never when it is listed — one status query on an offline share holds main ~21 s (spec F7).
+    renderRecentFolders() {
+        const container = this.recentFoldersDrop;
+        if (!container) {
+            return;
+        }
+        container.querySelector('.recent-folders-list').replaceChildren(...this._buildRecentFolderRows('drop'));
+        container.style.display = this.recentFolders.length > 0 ? 'flex' : 'none';
     }
 
     showEmptyStateWithUndo() {

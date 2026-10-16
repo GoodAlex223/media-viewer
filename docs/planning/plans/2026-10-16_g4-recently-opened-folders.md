@@ -582,7 +582,7 @@ git commit -m "feat(recent-folders): pure list module and click-time classifier;
   - `renderRecentFolders(): void`
   - E2E helpers: `global.__mvDialogCalls` (reset to 0 by each `mockFolderDialog`), `recentFolders` cleared by `launchApp` and `closeApp`
 
-- [ ] **Step 1: Write the failing glue tests**
+- [x] **Step 1: Write the failing glue tests**
 
 Create `tests/recent-folders-glue.test.js`:
 
@@ -937,14 +937,14 @@ test.describe('G4 recent folders — the drop-zone list', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npx vitest run tests/recent-folders-glue.test.js`
 Expected: the file fails to collect — `Error: Could not find method: _setRecentFolders`.
 Run: `npx playwright test tests/e2e/recent-folders.test.js --reporter=line`
 Expected: `a first launch shows no list` passes **by construction** (the element does not exist yet, so it is hidden — it guards the after-state, not RED); the other five fail — `#recentFoldersDrop` never becomes visible / `.recent-folders-heading` not found. Record in the Progress Log.
 
-- [ ] **Step 3: E2E helper changes**
+- [x] **Step 3: E2E helper changes**
 
 In `tests/e2e/helpers/electron-app.js`:
 
@@ -997,7 +997,7 @@ export async function mockFolderDialog(electronApp, returnPath) {
 }
 ```
 
-- [ ] **Step 4: Markup and styles**
+- [x] **Step 4: Markup and styles**
 
 `index.html`, the drop zone (lines 122-126):
 
@@ -1119,7 +1119,7 @@ export async function mockFolderDialog(electronApp, returnPath) {
 
 (`display` is not set on `.recent-folders`: `renderRecentFolders()` sets `flex` or `none` inline.)
 
-- [ ] **Step 5: The glue**
+- [x] **Step 5: The glue**
 
 `media-viewer.js`:
 
@@ -1260,12 +1260,12 @@ New methods, after `showDropZone()`:
     }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/recent-folders-glue.test.js` → all pass. Then `npx vitest run` → the full unit suite green.
 Run: `npx playwright test tests/e2e/recent-folders.test.js tests/e2e/app-launch.test.js --reporter=line` → all pass.
 
-- [ ] **Step 7: CLAUDE.md**
+- [x] **Step 7: CLAUDE.md**
 
 § State Management, a new bullet after the Like-or-skip (G2) bullet:
 
@@ -1275,7 +1275,7 @@ Run: `npx playwright test tests/e2e/recent-folders.test.js tests/e2e/app-launch.
 
 § Testing (E2E) Helpers bullet — append: `` `closeApp` also clears `recentFolders`, and `launchApp` clears it at start; `mockFolderDialog` counts opens in `global.__mvDialogCalls` (reset on each install). ``
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add media-viewer.js index.html styles.css tests/recent-folders-glue.test.js tests/e2e/recent-folders.test.js tests/e2e/helpers/electron-app.js CLAUDE.md
@@ -2675,6 +2675,7 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 - **2026-10-16 — Pre-flight.** The user approved the global install: `typescript-language-server` 5.3.0 (+ `typescript`). The user enabled `typescript-lsp@claude-plugins-official` through `/plugin` (`95dd933`; `/plugin` rewrote `.claude/settings.json` at 2-space indent, and lint-staged restored 4 spaces, leaving a one-line diff). The controller session gained the `LSP` tool mid-turn. Diagnostics are checked at Finish.
 - **2026-10-16 — Controller pre-flight scan, Ruling 1 (T3).** The plan's T3 code focuses `menu.querySelector('button:not(:disabled)')`, which in the menu is the current row's ✕: the current item is disabled and its ✕ is not (spec § 7). That contradicts T3's own E2E (`items.nth(1)` focused) and T5's acceptance. Ruling: open and refresh focus the first enabled `.recent-folder-item`; ArrowUp/ArrowDown cycle the enabled items, which are the spec's "rows"; Tab/Shift+Tab cycle every enabled button, ✕ included.
 - **2026-10-16 — T1.** The before shot was taken on the unchanged renderer and shows the bare drop zone, with no folder icon because E2E stubs Lucide (Premise Correction 3). A plain run skips the G4 block. RED: `Cannot find module '../recent-folders.js'`, and 10 lint-guard `flags …` cases failed with `expected [] to have a length of 1`. GREEN: 127 tests in the two files; full suite 1443 passed, 1 skipped; lint 0 errors.
+- **2026-10-16 — T2.** RED: the glue file fails to collect with `Could not find method: _setRecentFolders`. E2E: 5 failed, and `a first launch shows no list` passed, by construction as planned. GREEN: glue 10/10; recent-folders + app-launch E2E 11/11; full suite 1453 passed, 1 skipped; lint 0 errors. The brief's `loadCtx` needed no additions.
 
 ## Key Discoveries
 
