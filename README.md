@@ -5,6 +5,7 @@ Electron desktop application for browsing, rating, and managing media files (ima
 ## Features
 
 - **Media Browsing** — Navigate through image and video files with keyboard shortcuts
+- **Recent Folders** — Reopen a recently used folder from the start screen or the header's ▾ menu, without the folder picker
 - **Rating System** — Like/Dislike/Special with automatic file organization
 - **Compare Mode** — Side-by-side comparison for decision making
 - **Similarity Sorting** — Group visually similar images using perceptual hashing

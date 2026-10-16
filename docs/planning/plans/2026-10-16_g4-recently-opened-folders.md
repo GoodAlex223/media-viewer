@@ -2600,14 +2600,14 @@ git commit -m "feat(recent-folders): open a listed folder, validated on click; s
 - Create: `docs/superpowers/specs/assets/g4-drop-zone-after.png`, `docs/superpowers/specs/assets/g4-header-menu-after.png`
 - Modify: `README.md` (§ Features)
 
-- [ ] **Step 1: Capture**
+- [x] **Step 1: Capture**
 
 Run (PowerShell): `$env:G4_EVIDENCE_STAGE='after'; npx playwright test tests/e2e/visual-evidence.test.js -g "recent folders"; $env:G4_EVIDENCE_STAGE=$null`
 Expected: 1 passed; both PNGs exist.
 
-- [ ] **Step 2: Look at them** (Read tool) beside `g4-drop-zone-before.png`. Acceptance: `drop-zone-after` is the before shot plus a "RECENT FOLDERS" list under the subtitle — Liked_3, Liked_2, Wallpapers, each with its redacted `D:\Photos\…` path and a ✕ — and nothing else moved. `header-menu-after` shows the ▾ beside "Change source folder" and the menu below it: Liked_3 marked current (dimmed), Liked_2 and Wallpapers enabled, the first focused. No `C:\Users\…` text in either. Any layout defect is a finding: fix it in the owning task's files, re-capture, and log it.
+- [x] **Step 2: Look at them** (Read tool) beside `g4-drop-zone-before.png`. Acceptance: `drop-zone-after` is the before shot plus a "RECENT FOLDERS" list under the subtitle — Liked_3, Liked_2, Wallpapers, each with its redacted `D:\Photos\…` path and a ✕ — and nothing else moved. `header-menu-after` shows the ▾ beside "Change source folder" and the menu below it: Liked_3 marked current (dimmed), Liked_2 and Wallpapers enabled, the first focused. No `C:\Users\…` text in either. Any layout defect is a finding: fix it in the owning task's files, re-capture, and log it.
 
-- [ ] **Step 3: README**
+- [x] **Step 3: README**
 
 § Features, after "Media Browsing":
 
@@ -2615,7 +2615,7 @@ Expected: 1 passed; both PNGs exist.
 - **Recent Folders** — Reopen a recently used folder from the start screen or the header's ▾ menu, without the folder picker
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/specs/assets/g4-drop-zone-after.png docs/superpowers/specs/assets/g4-header-menu-after.png README.md
@@ -2678,6 +2678,11 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 - **2026-10-16 — T2.** RED: the glue file fails to collect with `Could not find method: _setRecentFolders`. E2E: 5 failed, and `a first launch shows no list` passed, by construction as planned. GREEN: glue 10/10; recent-folders + app-launch E2E 11/11; full suite 1453 passed, 1 skipped; lint 0 errors. The brief's `loadCtx` needed no additions.
 - **2026-10-16 — T3.** RED: the glue file fails to collect with `Could not find method: _updateRecentFoldersButton`, and all 5 header-menu E2E tests fail. GREEN: glue 27/27; recent-folders E2E 11/11 (the 4 s header pin and the focused-row assertion included); full suite 1470 passed, 1 skipped; lint 0 errors. Ruling 1 applied: open and refresh focus the first enabled row; arrows cycle the rows; Tab cycles every enabled button. **Plan defect, corrected by the implementer.** The Review Focus 5 E2E seeded only `customLikeFolder`, but `moveCurrentFile` refuses a rating unless both like and dislike folders are set ("Configure like/dislike folders"). So "a rating key moves nothing while the menu is open" passed with or without the menu, and only the closing control press failed. The test now seeds `customDislikeFolder` too. Two mutation checks show it discriminates: removing the menu's `stopImmediatePropagation` fails it, and so does removing its wheel `stopPropagation`.
 - **2026-10-16 — T4.** RED matched Step 2: the glue file failed to collect (`switchToFolder`), and so did the two like-or-skip control tests and the three change-folder tests, as predicted. All 6 new E2E failed. GREEN: full suite 1492 passed, 1 skipped; recent-folders + app-launch + tournament-mode E2E 38 passed; lint 0 errors. **Mutation check (D3):** with the block removed, the unit test "…shows the leave prompt…" failed, and both D3 E2E failed because `#tournamentResumeModal`/`#tournamentResumeAccept` never became visible. The block was restored byte-identical (`cmp`) and the rerun was green. **Plan defect, corrected by the implementer:** the Save & leave E2E compared `JSON.stringify(engine.serialize())` strings, but `serialize()` stamps `lastUpdatedAt: Date.now()` (`tournament-engine.js:621`), so the flush's rewrite never equals the earlier snapshot. The test now compares the parsed objects without `lastUpdatedAt` and asserts `gamesPlayed === 1`. The mutation run fails that test at the missing prompt, which comes before the data assertion. So whether the data assertion separates the flush from the debounced write is not measured.
+- **2026-10-16 — T5.** The after capture passed (1 test), and the controller looked at both shots. The drop zone lists Liked_3, Liked_2 and Wallpapers, each with a `D:\Photos\…` path and a ✕. The menu sits below the ▾: Liked_3 is dimmed and tagged "current", Liked_2 and Wallpapers are enabled. No `C:\Users` text appears in either shot. Deviations from the acceptance, all left for the final review to triage:
+  - **The title moves.** The drop zone centres its content vertically, so the title and subtitle rise ~140 px once the list appears.
+  - **No visible focus ring after a mouse open.** Chromium's `:focus-visible` heuristic does not apply to programmatic focus after a pointer click.
+  - **The header shows through the menu.** The menu's `--glass-bg` is translucent, so a faint ghost of the header's second row shows behind it.
+  - **Possible clipping with 8 rows** on windows under ~800 px tall, at ~75 px per row. Estimated, not measured.
 
 ## Key Discoveries
 
