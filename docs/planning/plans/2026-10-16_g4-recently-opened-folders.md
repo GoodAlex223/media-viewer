@@ -1296,7 +1296,7 @@ git commit -m "feat(recent-folders): record loaded folders and list them on the 
   - `_hasOtherRecentFolders(): boolean`, `_updateRecentFoldersButton(): void`
   - `toggleRecentFoldersMenu()`, `openRecentFoldersMenu()`, `closeRecentFoldersMenu()` (idempotent; the one close path), `_renderRecentFoldersMenu()`, `_refreshRecentFoldersMenu()`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/recent-folders-glue.test.js`, update the `_setRecentFolders` describe's `ctx` and its first test (the method gains two calls in this task):
 
@@ -1648,14 +1648,14 @@ test.describe('G4 recent folders — the header menu', () => {
 
 (`hit` uses `!= null`: `elementFromPoint` or `closest` may return `null`, and the optional chain yields `undefined`; `eqeqeq` is configured `{ null: 'ignore' }`, so this passes lint. `elementFromPoint` skips `pointer-events: none` elements, which is what makes `hit` discriminate.)
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npx vitest run tests/recent-folders-glue.test.js`
 Expected: the file fails to collect — `Error: Could not find method: _updateRecentFoldersButton`.
 Run: `npx playwright test tests/e2e/recent-folders.test.js -g "header menu" --reporter=line`
 Expected: 5 failures — `#recentFoldersBtn` not found. Record in the Progress Log.
 
-- [ ] **Step 3: Markup and styles**
+- [x] **Step 3: Markup and styles**
 
 `index.html`, right after the `#changeFolderBtn` `</button>`:
 
@@ -1744,7 +1744,7 @@ Expected: 5 failures — `#recentFoldersBtn` not found. Record in the Progress L
 }
 ```
 
-- [ ] **Step 4: The glue**
+- [x] **Step 4: The glue**
 
 Constructor, after the `this.recentFolders = …` line:
 
@@ -1906,12 +1906,12 @@ New methods, after `renderRecentFolders()`:
     }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/recent-folders-glue.test.js` → all pass; `npx vitest run` → green.
 Run: `npx playwright test tests/e2e/recent-folders.test.js --reporter=line` → all pass.
 
-- [ ] **Step 6: CLAUDE.md**
+- [x] **Step 6: CLAUDE.md**
 
 § UI Components, append:
 
@@ -1919,7 +1919,7 @@ Run: `npx playwright test tests/e2e/recent-folders.test.js --reporter=line` → 
 Header recent-folders menu (G4): `#recentFoldersMenu`, a child of `.header` inside `#recentFoldersAnchor` (shown/hidden by `hideDropZone`/`showDropZone`) beside change-folder's `▾` (`#recentFoldersBtn`, disabled when nothing but the folder on screen is listed). While open it owns the keyboard (capture listeners; every key swallowed but Escape/arrows/Tab/Enter/Space; a held Enter chooses nothing; one close path `closeRecentFoldersMenu()`), stops `wheel` (the document handler would navigate behind it), and pins the header with `.header.menu-open` — the auto-hide timer re-arms only in the top band.
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js index.html styles.css tests/recent-folders-glue.test.js tests/e2e/recent-folders.test.js CLAUDE.md
@@ -2676,6 +2676,7 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 - **2026-10-16 — Controller pre-flight scan, Ruling 1 (T3).** The plan's T3 code focuses `menu.querySelector('button:not(:disabled)')`, which in the menu is the current row's ✕: the current item is disabled and its ✕ is not (spec § 7). That contradicts T3's own E2E (`items.nth(1)` focused) and T5's acceptance. Ruling: open and refresh focus the first enabled `.recent-folder-item`; ArrowUp/ArrowDown cycle the enabled items, which are the spec's "rows"; Tab/Shift+Tab cycle every enabled button, ✕ included.
 - **2026-10-16 — T1.** The before shot was taken on the unchanged renderer and shows the bare drop zone, with no folder icon because E2E stubs Lucide (Premise Correction 3). A plain run skips the G4 block. RED: `Cannot find module '../recent-folders.js'`, and 10 lint-guard `flags …` cases failed with `expected [] to have a length of 1`. GREEN: 127 tests in the two files; full suite 1443 passed, 1 skipped; lint 0 errors.
 - **2026-10-16 — T2.** RED: the glue file fails to collect with `Could not find method: _setRecentFolders`. E2E: 5 failed, and `a first launch shows no list` passed, by construction as planned. GREEN: glue 10/10; recent-folders + app-launch E2E 11/11; full suite 1453 passed, 1 skipped; lint 0 errors. The brief's `loadCtx` needed no additions.
+- **2026-10-16 — T3.** RED: the glue file fails to collect with `Could not find method: _updateRecentFoldersButton`, and all 5 header-menu E2E tests fail. GREEN: glue 27/27; recent-folders E2E 11/11 (the 4 s header pin and the focused-row assertion included); full suite 1470 passed, 1 skipped; lint 0 errors. Ruling 1 applied: open and refresh focus the first enabled row; arrows cycle the rows; Tab cycles every enabled button. **Plan defect, corrected by the implementer.** The Review Focus 5 E2E seeded only `customLikeFolder`, but `moveCurrentFile` refuses a rating unless both like and dislike folders are set ("Configure like/dislike folders"). So "a rating key moves nothing while the menu is open" passed with or without the menu, and only the closing control press failed. The test now seeds `customDislikeFolder` too. Two mutation checks show it discriminates: removing the menu's `stopImmediatePropagation` fails it, and so does removing its wheel `stopPropagation`.
 
 ## Key Discoveries
 

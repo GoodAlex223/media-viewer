@@ -298,6 +298,7 @@ class MediaViewer {
         // Recently opened folders (G4): validated and clamped like the prefs above; a corrupted value reads as an
         // empty list. Hygiene only — main's grant check on every folder IPC is the boundary (spec § 5).
         this.recentFolders = RecentFolders.parseRecentFolders(localStorage.getItem('recentFolders'));
+        this._recentMenuCleanup = null; // set exactly while #recentFoldersMenu is open: removes its listeners
         // G1 re-pick: which saved folders main has not granted ('like' | 'dislike' | 'special'),
         // filled by refreshFolderGrants(). A Browse or Clear bumps the generation so a query
         // already in flight cannot re-mark the folder the user just picked.
@@ -425,6 +426,9 @@ class MediaViewer {
         this.navNext = document.getElementById('navNext');
         this.changeFolderBtn = document.getElementById('changeFolderBtn');
         this.recentFoldersDrop = document.getElementById('recentFoldersDrop');
+        this.recentFoldersAnchor = document.getElementById('recentFoldersAnchor');
+        this.recentFoldersBtn = document.getElementById('recentFoldersBtn');
+        this.recentFoldersMenu = document.getElementById('recentFoldersMenu');
         this.helpBtn = document.getElementById('helpBtn');
 
         // Special folder button (single mode)
@@ -2208,6 +2212,14 @@ class MediaViewer {
             // a click on the drop zone (G4 spec F3).
             this.recentFoldersDrop.addEventListener('click', (e) => e.stopPropagation());
         }
+        if (this.recentFoldersBtn) {
+            this.recentFoldersBtn.addEventListener('click', () => this.toggleRecentFoldersMenu());
+        }
+        if (this.recentFoldersMenu) {
+            // The document wheel handler navigates: over the open menu it would change the file behind it (and on
+            // the AI order record a skip). The menu never scrolls — 8 rows at most.
+            this.recentFoldersMenu.addEventListener('wheel', (e) => e.stopPropagation());
+        }
 
         this.likeBtn.addEventListener('click', () => this.handleLike());
         this.dislikeBtn.addEventListener('click', () => this.handleDislike());
@@ -3213,6 +3225,10 @@ class MediaViewer {
         if (this.changeFolderBtn) {
             this.changeFolderBtn.style.display = 'inline-flex';
         }
+        if (this.recentFoldersAnchor) {
+            this.recentFoldersAnchor.style.display = 'inline-flex';
+            this._updateRecentFoldersButton();
+        }
         // Show the 3-way mode selector when media is shown
         // (legacy #viewModeBtn stays hidden — kept only for backward-compat code refs)
         const modeSelector = document.getElementById('modeSelector');
@@ -3255,6 +3271,10 @@ class MediaViewer {
         // Hide change folder button when drop zone is shown
         if (this.changeFolderBtn) {
             this.changeFolderBtn.style.display = 'none';
+        }
+        this.closeRecentFoldersMenu();
+        if (this.recentFoldersAnchor) {
+            this.recentFoldersAnchor.style.display = 'none';
         }
         // Hide sort similarity button when drop zone is shown
         if (this.sortSimilarityBtn) {
@@ -3315,6 +3335,8 @@ class MediaViewer {
             });
         }
         this.renderRecentFolders();
+        this._updateRecentFoldersButton();
+        this._refreshRecentFoldersMenu();
     }
 
     // One row per entry, for the drop-zone list ('drop') or the header menu ('menu'): the folder button (name;
@@ -3374,6 +3396,122 @@ class MediaViewer {
         }
         container.querySelector('.recent-folders-list').replaceChildren(...this._buildRecentFolderRows('drop'));
         container.style.display = this.recentFolders.length > 0 ? 'flex' : 'none';
+    }
+
+    // The ▾ button is enabled only when the menu would list a folder other than the one on screen.
+    _hasOtherRecentFolders() {
+        return this.recentFolders.some((entry) => entry.path !== this.baseFolderPath);
+    }
+
+    _updateRecentFoldersButton() {
+        if (!this.recentFoldersBtn) {
+            return;
+        }
+        const enabled = this._hasOtherRecentFolders();
+        this.recentFoldersBtn.disabled = !enabled;
+        this.recentFoldersBtn.title = enabled ? 'Recent folders' : 'No other recent folders';
+    }
+
+    toggleRecentFoldersMenu() {
+        if (this._recentMenuCleanup) {
+            this.closeRecentFoldersMenu();
+        } else {
+            this.openRecentFoldersMenu();
+        }
+    }
+
+    // The header menu (spec § 7). While open it owns the keyboard — capture-phase document listeners, the
+    // .bulk-dislike-modal pattern — so a rating key cannot move a file behind it; and it pins the header
+    // (.menu-open): the header's auto-hide timer re-arms only in the top band, so a pointer resting in the menu
+    // would otherwise fade both out after 3 s (planning amendment).
+    openRecentFoldersMenu() {
+        const menu = this.recentFoldersMenu;
+        if (!menu || this._recentMenuCleanup || !this._hasOtherRecentFolders()) {
+            return;
+        }
+        this._renderRecentFoldersMenu();
+        menu.style.display = 'flex';
+        this.recentFoldersBtn.setAttribute('aria-expanded', 'true');
+        this.header.classList.add('menu-open');
+
+        const swallow = (e) => {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        };
+        // Arrows move between the rows; Tab also reaches each row's ✕, so a ✕ stays keyboard-reachable while the
+        // native Tab is swallowed. Both wrap.
+        const cycle = (list, step) => {
+            const at = list.indexOf(document.activeElement);
+            const next = step > 0 ? (at + 1) % list.length : (at <= 0 ? list.length : at) - 1;
+            list[next]?.focus();
+        };
+        const onKeydown = (e) => {
+            swallow(e);
+            const rows = [...menu.querySelectorAll('.recent-folder-item:not(:disabled)')];
+            const buttons = [...menu.querySelectorAll('button:not(:disabled)')];
+            if (e.key === 'Escape') {
+                this.closeRecentFoldersMenu();
+            } else if (e.key === 'ArrowDown') {
+                cycle(rows, 1);
+            } else if (e.key === 'ArrowUp') {
+                cycle(rows, -1);
+            } else if (e.key === 'Tab') {
+                cycle(buttons, e.shiftKey ? -1 : 1);
+            } else if (e.repeat) {
+                // a held Enter (the one that opened the menu) chooses nothing
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                const at = buttons.indexOf(document.activeElement);
+                if (at !== -1) {
+                    buttons[at].click();
+                }
+            }
+        };
+        const onPointerDown = (e) => {
+            if (!menu.contains(e.target) && !this.recentFoldersBtn.contains(e.target)) {
+                this.closeRecentFoldersMenu();
+            }
+        };
+        document.addEventListener('keydown', onKeydown, true);
+        document.addEventListener('keyup', swallow, true);
+        document.addEventListener('pointerdown', onPointerDown, true);
+        this._recentMenuCleanup = () => {
+            document.removeEventListener('keydown', onKeydown, true);
+            document.removeEventListener('keyup', swallow, true);
+            document.removeEventListener('pointerdown', onPointerDown, true);
+        };
+        menu.querySelector('.recent-folder-item:not(:disabled)')?.focus();
+    }
+
+    // The one close path (spec § 11): every way out comes here, so the capture listeners never outlive the menu.
+    // Idempotent.
+    closeRecentFoldersMenu() {
+        if (!this._recentMenuCleanup) {
+            return;
+        }
+        this._recentMenuCleanup();
+        this._recentMenuCleanup = null;
+        this.recentFoldersMenu.style.display = 'none';
+        this.recentFoldersBtn.setAttribute('aria-expanded', 'false');
+        this.header.classList.remove('menu-open');
+    }
+
+    _renderRecentFoldersMenu() {
+        this.recentFoldersMenu
+            .querySelector('.recent-folders-list')
+            .replaceChildren(...this._buildRecentFolderRows('menu'));
+    }
+
+    // After the list changed (a ✕ in the menu): rebuild the open menu, or close it when nothing else is left.
+    _refreshRecentFoldersMenu() {
+        if (!this._recentMenuCleanup) {
+            return;
+        }
+        if (!this._hasOtherRecentFolders()) {
+            this.closeRecentFoldersMenu();
+            return;
+        }
+        this._renderRecentFoldersMenu();
+        this.recentFoldersMenu.querySelector('.recent-folder-item:not(:disabled)')?.focus();
     }
 
     showEmptyStateWithUndo() {

@@ -909,6 +909,65 @@ body {
     box-shadow: var(--shadow-glow-primary);
 }
 
+/* Recently opened folders (G4): the ▾ beside change-folder and its menu. */
+.recent-folders-anchor {
+    position: relative;
+    display: inline-flex;
+}
+
+.recent-folders-btn {
+    padding: var(--space-2) var(--space-3);
+}
+
+.recent-folders-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.recent-folders-btn:disabled:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--border-default);
+    color: var(--text-primary);
+    box-shadow: none;
+}
+
+.recent-folders-menu {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    width: 360px;
+    max-width: calc(100vw - 2 * var(--space-4));
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur-heavy);
+    -webkit-backdrop-filter: var(--glass-blur-heavy);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: var(--z-dropdown);
+}
+
+.recent-folder-item.current .recent-folder-name {
+    padding-right: 64px;
+}
+
+.recent-folder-current {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-3);
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+/* The open menu pins the header (G4 planning amendment): the auto-hide timer re-arms only in the top band,
+   so a pointer resting in the menu would otherwise fade both out after 3 s. */
+.header.menu-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
 /* Sort similarity button */
 .sort-similarity-btn {
     background: rgba(255, 255, 255, 0.08);
