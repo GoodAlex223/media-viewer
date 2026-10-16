@@ -1040,6 +1040,19 @@ Pointers added: G2 spec (Like-or-skip), G4 spec (Recently opened folders; the re
 
 Homes ledger: this section is the home for rows 1–4 (CLIP in main / npm in Workers; the `.claude/` allow-list; `clip-image.js` limits and decode order; the leave prompt) — all four kept complete.
 
+### T9 — Best Practices
+
+| # | Removed text (first words, quoted) | Label | Where it lives now |
+|---|---|---|---|
+| 1 | `preload.js`: ", 2026-10-05" (in "prompts measured in auto mode"), "measured 2026-10-05," | History (dates) | DONE.md G2 2026-10-05 entry; "measured" stays — a verification caveat (spec § 5 exception) |
+| 2 | `preload.js`: "2026-10-08: 18" and "— all read-only;" | History | BACKLOG 🟤 [2026-10-08]; G4 claude-security trial plan (archived) |
+| 3 | `preload.js`: ", BACKLOG 🟤 `[2026-10-08]`" | History (tracker state) | BACKLOG 🟤 [2026-10-08] |
+| 4 | Grep rule: "(root cause of the PR #56 follow-ups)" | History | DONE.md PR #56 |
+| 5 | Grep rule: "(PR #70)" | History | DONE.md PR #70 |
+| 6 | "Run `npm test` before committing (pre-commit hook enforces this);" | Duplicate (P1 A8) | § Build & Development Commands — the pre-commit hook runs `npx vitest run` |
+
+Kept, per Review Focus 1: the `Bash(*preload.js*)` rule missing `cd <dir> && … preload.js` (why the hook exists), the docs caveat on a hook's `ask` in `bypassPermissions`/`dontAsk`, and the not-covered list with its "not discriminated" caveat.
+
 ## Progress Log
 
 - **2026-10-16/17** — Branch `g5-claude-md-size-audit` from `506e041`. Brainstormed section by section: D1 mixed handling of non-rule text; D2 authoring rule + never-blocking warning; D3 approach A (in place, per section); D4 Backlog Intake Rules → a three-line pointer (the user asked for a recommendation and agreed); D5 migration recommended only; D6 the trim on Opus. While writing the spec, measuring its own claim ("each feature commit added 1–3 KB") showed 14 of 17 commits under 1 KB, and a 200-line trigger would have fired on every growing commit after a trim landing above 200 lines; user ruling: bytes only, 500-byte growth threshold, audit trigger moved to the byte trigger. A side agent raised the same line-trigger issue after the amendment; it was already resolved. Spec `1e934cb`, approved 2026-10-17.
@@ -1052,6 +1065,7 @@ Homes ledger: this section is the home for rows 1–4 (CLIP in main / npm in Wor
 - **2026-10-17 — T6 Backlog Intake Rules**: 1,466 → 403 B (−1,063), 27 → 6 lines; file 62,425 → 61,362 B, 236 → 215 lines. The approved three-line pointer; BACKLOG 📌 § Intake rules gains the entry-shape bullet.
 - **2026-10-17 — T7 Detected Patterns**: 29,691 → 28,188 B (−1,503), 60 → 60 lines; file 61,362 → 59,859 B. Six spec pointers added; homes ledger rows 4–6 applied; 32 disposition rows. **The cut is smaller than the spec's 38–44 KB landing estimate implies** (spec § 5, an estimate — § 1 sets no target): the plan's per-bullet keep lists (T7 notes) hold most of this section as contract — editor rules such as the `_onOrderChanged` kinds, the `_folderIntentGen` bump sites, the file-op guard's holders and refusers, and the tournament render owner's never-await rule. Cutting them to reach a number would trade the plan's first goal (no rule lost) for its estimate; the final size is reported against both in T11.
 - **2026-10-17 — T8 Git Insights**: 15,723 → 15,036 B (−687), 31 → 31 lines; file 59,859 → 59,172 B. The four home gotchas (homes ledger rows 1–4) kept whole; "pre-G2" in the `.claude/` gotcha kept (the release name the bisect warning depends on).
+- **2026-10-17 — T9 Best Practices**: 2,164 → 1,967 B (−197), 10 → 10 lines; file 59,172 → 58,975 B (−5,228 B, −8.1% since the baseline; 236 → 215 lines).
 
 ## Key Discoveries
 
