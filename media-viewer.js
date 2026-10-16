@@ -2701,8 +2701,9 @@ class MediaViewer {
                 if (helpOverlayEl && helpOverlayEl.classList.contains('show')) return;
 
                 // Nor while the recent-folders menu is open, wherever the pointer is (G4 final review F6): the menu
-                // owns the keyboard and nothing changes behind it (G4 spec § 7). Its own wheel listener covers only
-                // the pointer over it; elsewhere a wheel would change the file, and on the AI order record a skip.
+                // owns the keyboard, and no wheel navigates behind it (G4 spec § 7). Its own wheel listener covers
+                // only the pointer over it; elsewhere a wheel would change the file, and on the AI order record a
+                // skip. A wheel over media still zooms: handleWheelZoom stops propagation before this handler.
                 if (this._recentMenuCleanup) {
                     return;
                 }
