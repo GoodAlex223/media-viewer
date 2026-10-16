@@ -78,7 +78,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| _(none)_ | | |
+| [2026-10-16_g4-recently-opened-folders.md](2026-10-16_g4-recently-opened-folders.md) | G4 | Planned — awaiting the execution choice |
 
 <!-- 2026-10-12 (Group G2 closeout): 2026-10-12_g2-like-or-skip-flow.md left this table on
      archive. Merged `96467f7` via PR #79, moved to docs/archive/plans/ with `git mv`, and indexed in

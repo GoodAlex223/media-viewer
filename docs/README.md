@@ -29,7 +29,9 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_     | —                                      |
+| [G4 Recently Opened Folders Plan][] | Five tasks, RED first: the pure `recent-folders.js` + before screenshot; record, persist and list on the drop zone; the header ▾ menu that owns the keyboard and pins the header while open; the click-time open flow and `switchToFolder`; after screenshots. Carries the `typescript-lsp` trial pre-flight (Group G4, Oct 12–16) |
+
+[G4 Recently Opened Folders Plan]: planning/plans/2026-10-16_g4-recently-opened-folders.md
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md

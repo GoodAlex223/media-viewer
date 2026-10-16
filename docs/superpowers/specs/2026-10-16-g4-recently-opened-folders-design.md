@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 12–16 § G4 (🔵, 3 SP → **~4.5 SP**, see § 11) ← BACKLOG 🔵 [2026-07-01] "Add 'Recently opened folders' quick-access list" (manual testing)
 **Created**: 2026-10-16
-**Status**: Approved by the user 2026-10-16 (brainstormed section by section, decisions D0–D2, § 3). **Amended while writing, before the user's review of this file** (both flagged at hand-off): § 6 step 2 uses a per-row busy state instead of the loading spinner, because `showLoadingSpinner()` hides the drop zone; and § 6 routes each surface like the existing button on that surface (drop-zone list → `loadFolder`, header menu → `switchToFolder`), because `switchToFolder`'s same-folder no-op would swallow a drop-zone retry of a folder whose last load was empty.
+**Status**: Approved by the user 2026-10-16 (brainstormed section by section, decisions D0–D2, § 3). **Amended while writing, before the user's review of this file** (both flagged at hand-off): § 6 step 2 uses a per-row busy state instead of the loading spinner, because `showLoadingSpinner()` hides the drop zone; and § 6 routes each surface like the existing button on that surface (drop-zone list → `loadFolder`, header menu → `switchToFolder`), because `switchToFolder`'s same-folder no-op would swallow a drop-zone retry of a folder whose last load was empty. **Amended at planning, same day, before any code** (plan [2026-10-16_g4-recently-opened-folders.md](../../planning/plans/2026-10-16_g4-recently-opened-folders.md), Premise Corrections 1–6): the open menu pins the header instead of closing on its `mouseleave` (§ 7, E13); it stops `wheel` propagation (§ 7, E17); the ▾ and ✕ are text glyphs, not Lucide icons (§ 7); the ▾ sits in an anchor wrapper, which is what shows and hides (§ 7); `classifyRecentFolder` and `folderDisplayName` are pure functions in the module (§ 4); the evidence screenshots redact the temp root (§ 9.3).
 **Branch**: `g4-recently-opened-folders` (from `main` @ `dd05eed`; one PR)
 **Trial vehicle**: `typescript-lsp` (REVIEW-QUEUE § 5, WEEKLY G4) — see § 9.4; read-out at G6.
 
@@ -59,6 +59,7 @@ keyboard; ✕ removes a list entry and never revokes a grant; no auto-reopen at 
 recent-folders.js  (new, pure ESM — no DOM, no IPC, no localStorage)
     parseRecentFolders(raw) · recordRecentFolder(entries, path, now)
     removeRecentFolder(entries, path) · serializeRecentFolders(entries) · MAX_RECENT_FOLDERS = 8
+    folderDisplayName(path, basename) · classifyRecentFolder(status, exists)   (amended at planning: § 6's table, pure)
         ▲ import * as RecentFolders from './recent-folders.js'
 media-viewer.js  (glue)
     constructor: this.recentFolders = RecentFolders.parseRecentFolders(localStorage.getItem('recentFolders'))
@@ -148,13 +149,15 @@ state reset (G2 final review F1) → reset → `hideDropZone()` → `await loadF
 - **`display:none` when the list is empty**, so a first launch looks exactly as today.
 - The container stops click propagation (F3) and sets `cursor: default`; the rest of the drop zone still opens
   the dialog.
-- `createElement` + `textContent` only — the `htmlSinkGuard` lint rule enforces it. Icons via
-  `lucide.createIcons({ root })`, guarded by `typeof lucide !== 'undefined'`.
+- `createElement` + `textContent` only — the `htmlSinkGuard` lint rule enforces it. No icons: the ▾ and ✕
+  are text glyphs (amended at planning — the E2E harness stubs Lucide, so icon-only buttons would be blank in
+  the committed evidence, and glyphs need no `createIcons` call).
 - `renderRecentFolders()` runs at init (after `initializeElements()`), from `showDropZone()`, and after every
   record or remove.
 
 **Header menu** — `#recentFoldersBtn` (▾, `aria-haspopup="menu"`, `aria-expanded`), right after
-`#changeFolderBtn`, shown and hidden in the same two places (`hideDropZone` / `showDropZone`):
+`#changeFolderBtn`, inside `#recentFoldersAnchor` (the menu's positioning wrapper), which is what is shown and
+hidden in the same two places (`hideDropZone` / `showDropZone`) — amended at planning:
 - **Disabled**, title *No other recent folders*, when the list holds nothing but the current folder.
 - `#recentFoldersMenu` (`role="menu"`) is a **child of `.header`** (F8), built fresh on each open from
   `_buildRecentFolderRows`. The current folder is marked *current* and disabled; ✕ works on every row.
@@ -162,8 +165,12 @@ state reset (G2 final review F1) → reset → `hideDropZone()` → `await loadF
   removed on every close path. Escape closes it and stops there (no fullscreen exit, no tournament leave);
   ArrowUp/ArrowDown move focus between rows, Tab/Enter/Space act natively on the focused button; **every other
   key is swallowed** (`preventDefault` + `stopPropagation`), so a Like/Dislike key cannot move a file behind it.
-- Closes on: choosing a row (once § 6's checks decide, step 2), Escape, a pointerdown outside it, and the
-  header's `mouseleave`.
+- Closes on: choosing a row (once § 6's checks decide, step 2), Escape and a pointerdown outside it.
+  **While open it pins the header** (`.header.menu-open`: opacity 1, pointer-events auto) — amended at
+  planning: `_setupAutoHide` re-arms its 3 s hide only on `mouseenter` and in the top 50 px band, so a pointer
+  resting in the menu below the band faded both out, and crossing the gap under the header fired its
+  `mouseleave`. It also **stops `wheel` propagation**: the document wheel handler would change the file behind
+  it (and on the AI order record a skip).
 
 **Styling**: existing tokens — `--glass-bg`, `--border-strong`, `--radius-lg`, `--z-dropdown`. List ≤ ~480 px wide,
 menu ~360 px.
@@ -186,10 +193,11 @@ menu ~360 px.
 | E10 | More than 8 folders | The oldest drops off |
 | E11 | Folder renamed outside the app | The old entry reads as missing (E4) and is removed; the new name is recorded when next opened |
 | E12 | Pick from the menu mid-tournament or mid-sort | Exactly what change-folder does: `loadFolder` exits tournament mode and aborts in-flight sorts |
-| E13 | Header auto-hides with the menu open | `mouseleave` closes the menu |
+| E13 | The header's auto-hide fires, or the pointer crosses the gap under it, with the menu open | The header stays pinned (`.header.menu-open`) until the menu closes (amended at planning) |
 | E14 | A key pressed while the menu is open | Swallowed, except Escape (closes), arrows, Tab, Enter, Space |
 | E15 | ✕ on the current folder | Removed; re-recorded on its next successful load |
 | E16 | A folder name with `&`, `'`, `;` | Rendered as text (Windows forbids `<>`; see § 9.2 case 5) |
+| E17 | Mouse wheel over the open menu | Stopped at the menu: nothing navigates behind it (amended at planning) |
 
 ---
 
@@ -228,7 +236,9 @@ gains a call counter so "no dialog" is asserted directly.
 ### 9.3 Visual evidence (plan-level acceptance check)
 
 Committed to `docs/superpowers/specs/assets/`, as G2 did: `g4-drop-zone-before.png` (no list — today's look),
-`g4-drop-zone-after.png` (with the list), `g4-header-menu-after.png`.
+`g4-drop-zone-after.png` (with the list), `g4-header-menu-after.png`. Paths are redacted in the shots (amended
+at planning): E2E folders live under `%TEMP%`, inside the Windows profile, so the path text is swapped for
+`D:\Photos` before each shot — text only, layout unchanged.
 
 ### 9.4 `typescript-lsp` trial
 
