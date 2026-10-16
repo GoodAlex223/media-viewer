@@ -2645,7 +2645,16 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 
 - **`.notification.warning` has no style** — G1's re-confirm notice and G4's missing/unreachable notices render as the neutral default. → BACKLOG 🟤.
 - **`tests/lint-guard.test.js`'s `RENDERER_FILES` omits `like-or-skip.js` and `tournament-engine.js`**, so the HTML-sink guard is not proven for them (G4 adds `recent-folders.js` only). → BACKLOG 🟤.
-- **Keys still reach the dispatcher while the tournament leave prompt is open** (`#tournamentResumeModal` blocks clicks only): picks, undo and a special move (which holds `_fileOpInFlight`) can run behind it, for Escape's and the mode buttons' prompt as for D3's. `_applyModeSwitch` does not re-check the file-op guard after the user chooses; `_switchToFolderNow` does. Pre-existing; found while designing D3. → BACKLOG 🟤.
+- **Keys still reach the dispatcher while the tournament leave prompt is open** (`#tournamentResumeModal` blocks clicks only): picks, undo and a special move (which holds `_fileOpInFlight`) can run behind it, for Escape's and the mode buttons' prompt as for D3's. `_applyModeSwitch` does not re-check the file-op guard after the user chooses; `_switchToFolderNow` does. Pre-existing; found while designing D3. → BACKLOG 🟤. Two consequences surfaced at the final review:
+  - **Escape while D3's prompt is open.** It calls `switchMode('single')`, which re-binds the shared modal's Save and Discard to a mode switch. The folder switch is lost, and the user who meant Cancel ends up in single mode in the same folder. This is the same rebinding as Escape versus the mode buttons; `handleAppCloseRequest` guards against it with its title check, and the other paths have no such guard.
+  - **A refused D3 continuation strands the tournament.** It leaves `isTournamentMode` true and `tournament.engine` null, so the tournament UI is inert until Escape, a mode button, or a re-pick. Nothing is corrupted.
+
+  Both go in this same entry.
+- **`loadFolder` has no load-generation guard.** Two overlapping loads (change-folder during a slow load, which predates G4) can interleave `loadBulkRatedFile`'s read with the other load's file list. They can then prune one folder's bulk-rated records against another folder's files and write the result into the wrong `.bulk_rated.json`. G4's own route into this (a stale click-time decision) is closed by the final fix wave's intent generation, F1. The root guard is not. → BACKLOG 🟤.
+- **The header menu's ARIA structure.** `role="menu"` directly owns a heading, a `ul`/`li` list and ✕ buttons, with no `none` roles and no `aria-labelledby`. Screen readers will announce it poorly. → BACKLOG 🟤.
+- **Recent-folders focus polish.** A ✕ on the drop zone re-renders the list, which drops keyboard focus to `body`. Closing the menu does not return focus to ▾. An arrow key pressed while a ✕ has focus jumps to the first or last row. → BACKLOG 🟤 (one entry).
+- **The header menu shows through.** `.header` has a `backdrop-filter`, which makes it the menu's backdrop root, so the menu's `--glass-bg` blur sees only the header and its second row ghosts through. Below the header, the page shows through unblurred. An opaque menu background would fix it; the committed `g4-header-menu-after.png` would then need re-capturing. → BACKLOG 🟤.
+- **`check-folder-exists` maps every `fs.access` error to `false`** (`main.js`). A transient share error therefore reads as "no longer exists", and the recent entry is dropped. The harm is a lost shortcut. → BACKLOG 🟤 (main-process change; it needs a security review of the channel).
 - **A mouse wheel over the header itself navigates** (unverified at runtime): the document wheel handler excludes only media and the help overlay, so a wheel over the auto-shown header changes the file. Pre-existing; the menu stops it for itself only. → BACKLOG 🟤 after a probe.
 
 ## Closeout (after the merge, on `main`)
@@ -2683,6 +2692,31 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
   - **No visible focus ring after a mouse open.** Chromium's `:focus-visible` heuristic does not apply to programmatic focus after a pointer click.
   - **The header shows through the menu.** The menu's `--glass-bg` is translucent, so a faint ghost of the header's second row shows behind it.
   - **Possible clipping with 8 rows** on windows under ~800 px tall, at ~75 px per row. Estimated, not measured.
+- **2026-10-16 — Finish checks at `1c604aa`.**
+  - **Static checks.** Lint shows 0 errors and 2 pre-existing `no-shadow` warnings. Every file the branch changed passes Prettier. `format:check` flags 6 files, all in the git-ignored `CLAUDE-SECURITY-*` scan folders.
+  - **E2E.** recent-folders passed 17/17 in three runs in a row. The full suite: 157 passed, 6 skipped (the opt-in evidence tests).
+  - **Grep sweep.** Every hit in code, tests, comments and CLAUDE.md is still true.
+  - **regression-checker.** No regression at ≥80 % confidence. It flagged two low-confidence items:
+    - a wheel off the open menu navigates behind it — ruled into the fix wave as F6;
+    - Escape during D3's prompt re-targets the shared modal — recorded under Residuals.
+- **2026-10-16 — Final whole-branch review (Opus): "with fixes".** One Important finding: a slow click-time check acts after the user has moved on. Before the fix, from the drop zone, it replaces folder B with no reset and no D3 prompt, wiping B's undo history. It also adds a non-modal route into overlapping `loadFolder` calls. The controller ruled six fixes into one fix wave:
+  - **F1:** an intent generation guards the open flow, plus a re-check of the file-op guard before the regrant dialog and a busy-row test.
+  - **F2:** the drop-zone handler guards list clicks itself, so the G2 F5 click-blur rule sees them.
+  - **F3:** the Save & leave E2E proves the flush deterministically.
+  - **F4:** the comment names the state a refused continuation leaves.
+  - **F5:** the drop list scrolls instead of clipping. Measured: the 8th row is unreachable at the 600 px minimum window.
+  - **F6:** the wheel is ignored while the menu is open.
+
+  The rest went to Residuals, or are cosmetic or plan wording (ledger Ruling 5).
+- **2026-10-16 — Fix wave (one fixer, Opus, two rounds).** Each fix was RED against the unfixed code, then GREEN.
+  - **F1:** `_folderIntentGen` is bumped in `openFolderDialog` and change-folder before their dialogs, and in `loadFolder` after its refusal. `openRecentFolder` abandons a stale `'open'`/`'regrant'` decision. The new E2E failed at HEAD, with A replacing the B the user had just opened.
+  - **F3:** the Save & leave E2E now clears the pending debounce and asserts the disk still reads `gamesPlayed` 0 before Save. Mutation: with `await this.tournament.flush()` deleted, it fails at the data assertion (1 vs 0); the code was restored byte-identical.
+  - **F4:** comment, plus an `engine: null` guard test (it fails when the condition is mutated).
+  - **F5:** the list is bounded at `calc(100vh - 260px)` and scrolls. At 800×600 the inner height measured 546 px, and the list bottom measured 602 before the fix.
+  - **F6:** the wheel is ignored while the menu is open. It failed RED: `currentIndex` became 1.
+  - **F2:** the briefed `contains(e.target)` guard was wrong. The ✕ re-render detaches the target before the click bubbles, so every ✕ opened the dialog (measured). Ruling 6 replaced it with `e.composedPath()`. Two tests pin it: a ✕ opens no dialog (fails under `contains()`), and a row clicked during a slow check keeps no focus (fails under the old `stopPropagation`).
+  - **M7:** four guard tests for `_markRecentFolderBusy`.
+  - **Totals:** unit 1505 passed, 1 skipped; recent-folders E2E 19/19 (three runs in round 1); lint 0 errors.
 
 ## Key Discoveries
 

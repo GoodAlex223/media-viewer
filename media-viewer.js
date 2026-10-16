@@ -301,6 +301,7 @@ class MediaViewer {
         this.recentFolders = RecentFolders.parseRecentFolders(localStorage.getItem('recentFolders'));
         this._recentMenuCleanup = null; // set exactly while #recentFoldersMenu is open: removes its listeners
         this._recentOpenInFlight = false; // openRecentFolder is resolving a click: further clicks are ignored
+        this._folderIntentGen = 0; // +1 as a folder is chosen or loaded; openRecentFolder compares it across awaits
         // G1 re-pick: which saved folders main has not granted ('like' | 'dislike' | 'special'),
         // filled by refreshFolderGrants(). A Browse or Clear bumps the generation so a query
         // already in flight cannot re-mark the folder the user just picked.
@@ -2192,7 +2193,18 @@ class MediaViewer {
             }
         });
 
-        this.dropZone.addEventListener('click', () => this.openFolderDialog());
+        // The recent-folders list sits inside the drop zone, whose click opens the dialog: a click on the list is not
+        // a click on the drop zone (G4 spec F3). Skipped here rather than stopped at the list, so document click
+        // listeners (the button blur above) still see list clicks (G4 final review F2). composedPath(), NOT
+        // contains(e.target): a ✕ re-renders the list (replaceChildren) before its click bubbles here, so the target
+        // is already detached and contains() is false — the dialog opened on every ✕. The path is fixed at
+        // dispatch, so it still holds the list.
+        this.dropZone.addEventListener('click', (e) => {
+            if (this.recentFoldersDrop && e.composedPath().includes(this.recentFoldersDrop)) {
+                return;
+            }
+            this.openFolderDialog();
+        });
 
         this.dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -2209,17 +2221,13 @@ class MediaViewer {
             this.handleFolderDrop(e);
         });
 
-        if (this.recentFoldersDrop) {
-            // The list sits inside the drop zone, whose click opens the dialog: a click on the list is not
-            // a click on the drop zone (G4 spec F3).
-            this.recentFoldersDrop.addEventListener('click', (e) => e.stopPropagation());
-        }
         if (this.recentFoldersBtn) {
             this.recentFoldersBtn.addEventListener('click', () => this.toggleRecentFoldersMenu());
         }
         if (this.recentFoldersMenu) {
             // The document wheel handler navigates: over the open menu it would change the file behind it (and on
-            // the AI order record a skip). The menu never scrolls — 8 rows at most.
+            // the AI order record a skip). Since G4 final review F6 that handler also returns while the menu is open,
+            // wherever the pointer is, so this is defence in depth. The menu never scrolls — 8 rows at most.
             this.recentFoldersMenu.addEventListener('wheel', (e) => e.stopPropagation());
         }
 
@@ -2243,6 +2251,7 @@ class MediaViewer {
         this.navNext.addEventListener('click', () => this.nextMedia());
         if (this.changeFolderBtn) {
             this.changeFolderBtn.addEventListener('click', async () => {
+                this._folderIntentGen += 1; // a recent-folder check in flight drops its decision (G4 final review F1)
                 const folderPath = await window.electronAPI.openFolderDialog();
                 if (folderPath) {
                     await this.switchToFolder(folderPath);
@@ -2691,6 +2700,13 @@ class MediaViewer {
                 const helpOverlayEl = document.getElementById('helpOverlay');
                 if (helpOverlayEl && helpOverlayEl.classList.contains('show')) return;
 
+                // Nor while the recent-folders menu is open, wherever the pointer is (G4 final review F6): the menu
+                // owns the keyboard and nothing changes behind it (G4 spec § 7). Its own wheel listener covers only
+                // the pointer over it; elsewhere a wheel would change the file, and on the AI order record a skip.
+                if (this._recentMenuCleanup) {
+                    return;
+                }
+
                 // Tournament mode drives pair progression through the Swiss engine — wheel
                 // navigation would advance currentIndex and desync the display from the
                 // engine's chosen pair. Return before preventDefault, matching the help-overlay
@@ -3050,6 +3066,7 @@ class MediaViewer {
 
         try {
             console.log('Opening folder dialog...');
+            this._folderIntentGen += 1; // a recent-folder check in flight drops its decision (G4 final review F1)
             const folderPath = await window.electronAPI.openFolderDialog();
             console.log('Selected folder:', folderPath);
 
@@ -3086,6 +3103,9 @@ class MediaViewer {
         if (this._refuseIfFileOpInFlight()) {
             return;
         }
+        // A load that starts is a change of folder: a recent-folder check still in flight drops its decision
+        // (G4 final review F1). After the refusal (a refused load changes nothing), before any await.
+        this._folderIntentGen += 1;
         if (!window.electronAPI) {
             this.showError('Electron API not available');
             return;
@@ -3513,8 +3533,10 @@ class MediaViewer {
 
     // The switch itself: change-folder's reset, then the load. Also the leave prompt's continuation, which runs
     // after the user chose — the prompt blocks clicks but not keys, so a special move can have started behind it.
-    // If this refuses after Save & leave, the tournament is on disk and the engine dropped, so the next pick of
-    // this folder switches without a second prompt.
+    // A refusal there leaves isTournamentMode true with tournament.engine null, so the tournament UI is inert: picks,
+    // draws and undo no-op until Escape, a mode button, or a re-pick of that folder, which then switches with no
+    // second prompt (switchToFolder asks only while an engine is live). Nothing is lost: after Save & leave the
+    // state is on disk; after Discard it was deleted, as the user asked.
     async _switchToFolderNow(folderPath) {
         // Before the reset below, not only in loadFolder (G2 final review F1): a pick during a
         // file action would otherwise wipe the list and the history, then be refused, and the
@@ -3553,6 +3575,7 @@ class MediaViewer {
             return;
         }
         this._recentOpenInFlight = true;
+        const intentGen = this._folderIntentGen;
         try {
             const name = RecentFolders.folderDisplayName(folderPath, window.electronAPI?.path?.basename);
             this._markRecentFolderBusy(folderPath, surface);
@@ -3569,12 +3592,23 @@ class MediaViewer {
             const outcome = RecentFolders.classifyRecentFolder(status, exists);
             // Decided: the menu closes before the dialog, the open or a notice (spec § 6 step 2).
             this.closeRecentFoldersMenu();
+            // The check can take seconds (an offline share ~21 s) and the UI stays live meanwhile: a folder the user
+            // chose since (the drop zone's dialog, change-folder, any load) must not be replaced by this stale
+            // decision, so 'open' and 'regrant' are dropped silently (G4 final review F1). 'missing' and
+            // 'unreachable' stay: still true, and they change no folder.
+            const superseded = this._folderIntentGen !== intentGen;
             if (outcome === 'open') {
-                await this._openRecentFolderOn(surface, folderPath);
+                if (!superseded) {
+                    await this._openRecentFolderOn(surface, folderPath);
+                }
             } else if (outcome === 'missing') {
                 this._removeRecentFolder(folderPath);
                 this.showNotification(`"${name}" no longer exists — removed from recent folders`, 'warning');
             } else if (outcome === 'regrant') {
+                // A file action can have started during the status query: the dialog would lead only to a refusal.
+                if (superseded || this._refuseIfFileOpInFlight()) {
+                    return;
+                }
                 this.showNotification(`Confirm "${name}" — press Select Folder (security update)`, 'info');
                 const picked = await window.electronAPI.openFolderDialog(folderPath);
                 if (picked) {

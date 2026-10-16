@@ -1184,6 +1184,7 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
     function folderCtx(overrides = {}) {
         globalThis.window = { electronAPI: { openFolderDialog: vi.fn(async () => '/other') } };
         return {
+            _folderIntentGen: 0,
             _fileOpInFlight: true,
             mediaFiles: media('a', 'b'),
             currentIndex: 1,
@@ -1226,11 +1227,19 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
 
     it('with nothing in flight, it resets and loads the picked folder as before', async () => {
         const ctx = folderCtx({ _fileOpInFlight: false });
+        let genAtDialog;
+        globalThis.window.electronAPI.openFolderDialog = vi.fn(async () => {
+            genAtDialog = ctx._folderIntentGen;
+            return '/other';
+        });
         await changeFolder.call(ctx);
         expect(ctx.mediaFiles).toEqual([]);
         expect(ctx.moveHistory).toEqual([]);
         expect(ctx.loadFolder).toHaveBeenCalledWith('/other');
         expect(ctx.showNotification).not.toHaveBeenCalled();
+        // G4 final review F1: choosing a folder starts before the dialog answers, so a recent-folder check still
+        // in flight abandons its decision.
+        expect(genAtDialog).toBe(1);
     });
 
     it('a cancelled dialog refuses nothing and changes nothing', async () => {

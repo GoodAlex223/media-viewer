@@ -594,6 +594,16 @@ body {
     gap: var(--space-1);
 }
 
+/* The drop-zone list scrolls past a bound (G4 final review F5): the drop zone centres its content and the body
+   hides overflow, so 8 rows (~53 px each) under the 64 px icon, the title, the subtitle and the heading (~203 px
+   together) overflowed both ends at the 600 px minimum window (546 px inner) and the 8th row could be neither
+   opened nor removed. Bounded by the viewport, not a fixed height: ~5 rows at the minimum, all 8 unscrolled at
+   the default 800 px. The header menu's list keeps no bound: it holds 8 rows at most below the header. */
+.recent-folders .recent-folders-list {
+    max-height: calc(100vh - 260px);
+    overflow-y: auto;
+}
+
 .recent-folder-row {
     display: flex;
     align-items: stretch;

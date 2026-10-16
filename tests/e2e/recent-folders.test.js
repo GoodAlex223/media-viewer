@@ -130,15 +130,142 @@ test.describe('G4 recent folders — the drop-zone list', () => {
 
     test('clicking the list is not a click on the drop zone', async () => {
         const a = await makeFolder('Wallpapers');
-        await openFolders(a);
+        const b = await makeFolder('Liked_3');
+        const c = await makeFolder('Clips');
+        await openFolders(a, b, c);
         await restart();
         await mockFolderDialog(electronApp, a);
         await page.locator('#recentFoldersDrop .recent-folders-heading').click();
+        await page.waitForTimeout(300); // a dialog the click asked for would have been counted by now
+        expect(await dialogCalls()).toBe(0);
+        await expect(page.locator('#dropZone')).toBeVisible();
+
+        // A ✕ re-renders the list before its click reaches the drop zone, so the click's target is already
+        // detached there: still not a click on the drop zone (G4 final review F2).
+        await page
+            .locator('#recentFoldersDrop .recent-folder-row')
+            .filter({ hasText: 'Clips' })
+            .locator('.recent-folder-remove')
+            .click();
+        await expect(dropRows()).toHaveCount(2);
+        await page.waitForTimeout(300);
+        expect(await dialogCalls()).toBe(0);
+
+        // Document click listeners see list clicks: G2 F5's blur leaves no clicked button holding keyboard focus,
+        // even while a row's check runs (seconds on a slow share). Main answers slowly and 'unreachable', so the
+        // drop zone stays.
+        await electronApp.evaluate(({ ipcMain }) => {
+            ipcMain.removeHandler('get-grant-status');
+            ipcMain.handle('get-grant-status', async (_e, paths) => {
+                await new Promise((r) => setTimeout(r, 1500));
+                return paths.map(() => 'unreachable');
+            });
+        });
+        await dropRows().filter({ hasText: 'Liked_3' }).click();
+        const during = await page.evaluate(() => ({
+            checking: window.mediaViewer._recentOpenInFlight,
+            focusedListButton:
+                document.activeElement?.tagName === 'BUTTON' &&
+                document.getElementById('recentFoldersDrop').contains(document.activeElement),
+        }));
+        expect(during).toEqual({ checking: true, focusedListButton: false });
+        await waitForNotification(page, '"Liked_3" is on a drive that isn\'t connected');
         expect(await dialogCalls()).toBe(0);
         await expect(page.locator('#dropZone')).toBeVisible();
         // Control: the drop zone outside the list still opens the dialog.
         await page.locator('#dropZone .drop-title').click();
         await expect.poll(dialogCalls).toBe(1);
+    });
+
+    test('at the minimum window size all 8 rows stay reachable: the list scrolls inside its bound', async () => {
+        // G4 final review F5. Rendering asks main nothing, so these folders need not exist.
+        const entries = Array.from({ length: 8 }, (_, i) => ({
+            path: join(root, `Folder ${i + 1}`),
+            openedAt: 8 - i,
+        }));
+        await page.evaluate(
+            (list) => localStorage.setItem('recentFolders', JSON.stringify({ version: 1, entries: list })),
+            entries
+        );
+        const minimum = await electronApp.evaluate(({ BrowserWindow }) => {
+            const win = BrowserWindow.getAllWindows()[0];
+            const [w, h] = win.getMinimumSize();
+            win.setSize(w, h);
+            return [w, h];
+        });
+        expect(minimum).toEqual([800, 600]); // main.js: minWidth 800, minHeight 600
+        await restart();
+        await page.waitForFunction(() => window.innerHeight < 600);
+        // E2E stubs Lucide, so the drop zone has no folder icon: stand in the production 64 px svg
+        // (styles.css .drop-icon svg), or the overflow would be hidden.
+        await page.evaluate(() => {
+            const icon = document.querySelector('#dropZone .drop-icon');
+            icon.replaceChildren(document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
+        });
+        expect(await dropRows().count()).toBe(8);
+        const geo = await page.evaluate(() => {
+            const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+            return {
+                innerHeight: window.innerHeight,
+                icon: r('#dropZone .drop-icon'),
+                title: r('#dropZone .drop-title'),
+                list: r('#recentFoldersDrop .recent-folders-list'),
+                row: r('#recentFoldersDrop .recent-folder-row'),
+            };
+        });
+        expect(geo.icon.height).toBeGreaterThanOrEqual(64);
+        expect(geo.icon.top).toBeGreaterThanOrEqual(0); // the overflow cut the icon first, then the title
+        expect(geo.title.top).toBeGreaterThanOrEqual(0);
+        expect(geo.list.bottom).toBeLessThanOrEqual(geo.innerHeight);
+        // The 8th row's ✕ is reachable by the list's own scroll — the page itself never scrolls.
+        const hit = await page.evaluate(() => {
+            const rows = document.querySelectorAll('#recentFoldersDrop .recent-folder-row');
+            const remove = rows[7].querySelector('.recent-folder-remove');
+            remove.scrollIntoView({ block: 'nearest' });
+            const box = remove.getBoundingClientRect();
+            return {
+                hit: document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === remove,
+                pageScroll: document.scrollingElement.scrollTop,
+                listScroll: document.querySelector('#recentFoldersDrop .recent-folders-list').scrollTop,
+            };
+        });
+        expect(hit.hit).toBe(true);
+        expect(hit.pageScroll).toBe(0);
+        expect(hit.listScroll).toBeGreaterThan(0);
+
+        const listScroll = () =>
+            page.evaluate(() => document.querySelector('#recentFoldersDrop .recent-folders-list').scrollTop);
+        const scrollListToTop = () =>
+            page.evaluate(() => {
+                document.querySelector('#recentFoldersDrop .recent-folders-list').scrollTop = 0;
+            });
+        // A mouse wheel over the list scrolls it natively: with no folder open, the document wheel handler
+        // returns before its preventDefault.
+        await scrollListToTop();
+        const listBox = await page.locator('#recentFoldersDrop .recent-folders-list').boundingBox();
+        await page.mouse.move(listBox.x + listBox.width / 2, listBox.y + listBox.height / 2);
+        await page.mouse.wheel(0, 200);
+        await expect.poll(listScroll).toBeGreaterThan(0);
+        // Tab reaches the 8th row and the browser scrolls it into view: nothing prevents Tab with no folder open.
+        await scrollListToTop();
+        await dropRows().first().focus();
+        for (let i = 0; i < 14; i++) {
+            await page.keyboard.press('Tab'); // each row: its folder button, then its ✕
+        }
+        await expect(dropRows().nth(7)).toBeFocused();
+        const seen = await page.evaluate(() => {
+            const item = document.querySelectorAll('#recentFoldersDrop .recent-folder-item')[7];
+            const box = item.getBoundingClientRect();
+            return {
+                hit:
+                    document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest('button') ===
+                    item,
+                pageScroll: document.scrollingElement.scrollTop,
+            };
+        });
+        expect(seen.hit).toBe(true);
+        expect(seen.pageScroll).toBe(0);
+        expect(await listScroll()).toBeGreaterThan(0);
     });
 });
 
@@ -206,6 +333,24 @@ test.describe('G4 recent folders — the header menu', () => {
         expect(await page.evaluate(() => window.mediaViewer.currentIndex)).toBe(0);
         expect(await page.evaluate(() => window.mediaViewer.mediaFiles.length)).toBe(3);
         expect(await readdir(likeDir)).toEqual([]);
+
+        // A wheel with the pointer off the menu, over the page margin — not over media, where the wheel zooms
+        // (G4 final review F6). Moving there is no pointerdown, so the menu stays open.
+        const margin = await page.evaluate(() => {
+            const p = { x: 8, y: window.innerHeight - 8 };
+            const el = document.elementFromPoint(p.x, p.y);
+            return {
+                ...p,
+                offMenu: !document.getElementById('recentFoldersMenu').contains(el),
+                offMedia: !el.classList.contains('media-display') && !el.closest('.media-wrapper'),
+            };
+        });
+        expect(margin).toMatchObject({ offMenu: true, offMedia: true });
+        await page.mouse.move(margin.x, margin.y);
+        await page.mouse.wheel(0, 300);
+        await page.waitForTimeout(500); // past the wheel debounce
+        await expect(page.locator('#recentFoldersMenu')).toBeVisible();
+        expect(await page.evaluate(() => window.mediaViewer.currentIndex)).toBe(0);
 
         await page.keyboard.press('Escape');
         await expect(page.locator('#recentFoldersMenu')).toBeHidden();
@@ -287,6 +432,37 @@ test.describe('G4 recent folders — opening one', () => {
         expect(await dialogCalls()).toBe(0);
     });
 
+    test('a folder chosen while a slow check runs is not replaced when the check answers', async () => {
+        const a = await makeFolder('Wallpapers');
+        const b = await makeFolder('Liked_3');
+        await openFolders(a, b);
+        await restart();
+        // Main answers the click-time status query slowly, as an offline share (~21 s) or a waking NAS would
+        // (G4 final review F1). The replaced handler lives only for this launch.
+        await electronApp.evaluate(({ ipcMain }) => {
+            ipcMain.removeHandler('get-grant-status');
+            ipcMain.handle('get-grant-status', async (_e, paths) => {
+                await new Promise((r) => setTimeout(r, 1500));
+                return paths.map(() => true);
+            });
+        });
+        await mockFolderDialog(electronApp, b);
+        await dropRows().filter({ hasText: 'Wallpapers' }).click();
+        // The check is in flight: the row says so, and the rest of the drop zone stays live.
+        await expect(dropRows().filter({ hasText: 'Wallpapers' }).locator('.recent-folder-path')).toHaveText(
+            'Checking…'
+        );
+        await page.locator('#dropZone .drop-title').click();
+        await page.waitForFunction((dir) => window.mediaViewer.baseFolderPath === dir, b);
+        await waitForMedia(page);
+        expect(await dialogCalls()).toBe(1);
+        // Past the slow answer: the check has finished, and its stale 'open' did nothing.
+        await page.waitForTimeout(2000);
+        expect(await page.evaluate(() => window.mediaViewer._recentOpenInFlight)).toBe(false);
+        expect(await page.evaluate(() => window.mediaViewer.baseFolderPath)).toBe(b);
+        expect(await page.evaluate(() => JSON.parse(localStorage.getItem('recentFolders')).entries[0].path)).toBe(b);
+    });
+
     test('a folder main has not granted reopens through the dialog, opened at that folder', async () => {
         const c = await makeFolder('Liked_1'); // never granted: each launch starts with an empty grant store
         await page.evaluate(
@@ -359,13 +535,28 @@ test.describe('G4 recent folders — leaving an unfinished tournament (D3)', () 
         await openFolders(other, here);
         await startTournament();
         await pickOnce();
-        // Taken at once, inside the 500 ms debounce: before D3 this pick was never written on a fast switch.
-        // serialize() stamps lastUpdatedAt with the time of the call, so the flush on Save & leave rewrites it:
-        // compare everything but that stamp. The pick itself (gamesPlayed, playedPairs, winCounts) must match.
-        const expected = await page.evaluate(() => {
-            const { lastUpdatedAt: _stamp, ...rest } = window.mediaViewer.tournament.engine.serialize();
-            return rest;
+        // Before D3 this pick was never written on a fast switch: loadFolder dropped the engine, and the debounced
+        // write skips itself once the engine is gone. The pick's 500 ms write is still queued here; cancelling its
+        // timer leaves Save & leave's flush as the only thing that can write it, however long the clicks below take.
+        // flush() marks the state dirty itself (tournament.js), so it still writes. serialize() stamps lastUpdatedAt
+        // with the time of the call and the flush rewrites it: compare everything but that stamp. The pick itself
+        // (gamesPlayed, playedPairs, winCounts) must match.
+        const snap = await page.evaluate(() => {
+            const t = window.mediaViewer.tournament;
+            const pending = t._persistTimer !== null;
+            clearTimeout(t._persistTimer);
+            t._persistTimer = null;
+            const { lastUpdatedAt: _stamp, ...rest } = t.engine.serialize();
+            return { expected: rest, pending };
         });
+        const readOnDisk = () =>
+            page.evaluate(async (dir) => {
+                const { lastUpdatedAt: _stamp, ...rest } = (await window.electronAPI.readTournamentState(dir)).state;
+                return rest;
+            }, here);
+        expect(snap.pending).toBe(true); // the pick's write had not been drained
+        expect(snap.expected.gamesPlayed).toBe(1);
+        expect((await readOnDisk()).gamesPlayed).toBe(0); // the start's flush wrote the initial state; nothing since
         await chooseFromMenu('Wallpapers');
         await page.locator('#tournamentResumeAccept').click();
         await page.waitForFunction(
@@ -373,11 +564,6 @@ test.describe('G4 recent folders — leaving an unfinished tournament (D3)', () 
             other
         );
         await waitForMedia(page);
-        const onDisk = await page.evaluate(async (dir) => {
-            const { lastUpdatedAt: _stamp, ...rest } = (await window.electronAPI.readTournamentState(dir)).state;
-            return rest;
-        }, here);
-        expect(expected.gamesPlayed).toBe(1);
-        expect(onDisk).toEqual(expected);
+        expect(await readOnDisk()).toEqual(snap.expected);
     });
 });

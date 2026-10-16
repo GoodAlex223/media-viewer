@@ -135,6 +135,7 @@ describe('loadFolder records only a folder that showed media (spec § 5)', () =>
 
     function loadCtx(overrides = {}) {
         return {
+            _folderIntentGen: 0,
             _fileOpInFlight: false,
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             customLikeFolder: '',
@@ -203,6 +204,53 @@ describe('loadFolder records only a folder that showed media (spec § 5)', () =>
         await loadFolder.call(c, 'C:\\pics\\Liked_3');
         expect(c._recordRecentFolder).not.toHaveBeenCalled();
         expect(c.showError).toHaveBeenCalledWith('Failed to load folder: boom');
+    });
+
+    // G4 final review F1: a load is a change of folder intent, so a recent-folder check still in flight
+    // must not act on its answer afterwards.
+    it('a load that starts bumps the folder-intent generation exactly once (G4 final review F1)', async () => {
+        withReply({ success: true, files: [file] });
+        const c = loadCtx();
+        await loadFolder.call(c, 'C:\\pics\\Liked_3');
+        expect(c._folderIntentGen).toBe(1);
+    });
+
+    // Guard — passes before the fix by construction (nothing bumped then): it pins the bump AFTER the refusal.
+    it('a load refused during a file action does not bump it — a refusal is not a change of intent', async () => {
+        withReply({ success: true, files: [file] });
+        const c = loadCtx({ _fileOpInFlight: true });
+        await loadFolder.call(c, 'C:\\pics\\Liked_3');
+        expect(c.showNotification).toHaveBeenCalledWith('Wait for the move to finish', 'info');
+        expect(c._folderIntentGen).toBe(0);
+    });
+});
+
+describe('openFolderDialog — the drop zone click (G4 final review F1)', () => {
+    const openFolderDialog = extract('openFolderDialog');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+        vi.restoreAllMocks();
+    });
+
+    it('bumps the folder-intent generation before the dialog answers', async () => {
+        const c = { _folderIntentGen: 0, loadFolder: vi.fn(async () => {}), showError: vi.fn() };
+        let atDialog;
+        globalThis.window = {
+            electronAPI: {
+                openFolderDialog: vi.fn(async () => {
+                    atDialog = c._folderIntentGen;
+                    return 'C:\\pics\\Picked';
+                }),
+            },
+        };
+        await openFolderDialog.call(c);
+        expect(atDialog).toBe(1);
+        expect(c.loadFolder).toHaveBeenCalledWith('C:\\pics\\Picked');
     });
 });
 
@@ -475,6 +523,16 @@ describe('switchToFolder — change-folder, moved; asks first in an unfinished t
         expect(c._switchToFolderNow).toHaveBeenCalledWith('C:\\there');
     });
 
+    // Guard — passes by construction (G4 final review F4): it pins the recovery the comment above
+    // _switchToFolderNow promises. A continuation refused after Save & leave or Discard leaves tournament mode on
+    // with the engine dropped; a re-pick of the folder then switches without a second prompt.
+    it('in tournament mode with the engine dropped it switches at once, without the prompt', async () => {
+        const c = tournamentCtx({ tournament: { engine: null } });
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showTournamentLeavePrompt).not.toHaveBeenCalled();
+        expect(c._switchToFolderNow).toHaveBeenCalledWith('C:\\there');
+    });
+
     it('refuses during a file action before it asks', async () => {
         const c = tournamentCtx({ _fileOpInFlight: true });
         await switchToFolder.call(c, 'C:\\there');
@@ -519,6 +577,79 @@ describe('switchToFolder — change-folder, moved; asks first in an unfinished t
     });
 });
 
+// Guard — passes by construction against the existing code (G4 final review M7: the method had no test). It pins
+// the busy row: the chosen surface's matching row only, and nothing when no row matches or the root is missing.
+describe('_markRecentFolderBusy — the chosen row reads "Checking…" while main answers (spec § 6 step 2)', () => {
+    const markBusy = extract('_markRecentFolderBusy');
+
+    function row(folderPath) {
+        const pathEl = { textContent: folderPath };
+        const attrs = {};
+        return {
+            dataset: { path: folderPath },
+            attrs,
+            pathEl,
+            setAttribute: vi.fn((name, value) => {
+                attrs[name] = value;
+            }),
+            querySelector: (sel) => (sel === '.recent-folder-path' ? pathEl : null),
+        };
+    }
+    const surfaceRoot = (rows) => ({ querySelectorAll: (sel) => (sel === '.recent-folder-item' ? rows : []) });
+    const untouched = (r, folderPath) => {
+        expect(r.attrs).toEqual({});
+        expect(r.pathEl.textContent).toBe(folderPath);
+    };
+
+    const A = 'C:\\pics\\Liked_3';
+    const B = 'C:\\pics\\Wallpapers';
+    function busyCtx() {
+        const drop = [row(A), row(B)];
+        const menu = [row(A), row(B)];
+        return { drop, menu, c: { recentFoldersDrop: surfaceRoot(drop), recentFoldersMenu: surfaceRoot(menu) } };
+    }
+
+    it('from the drop zone it marks the matching drop row, and only that row', () => {
+        const { drop, menu, c } = busyCtx();
+        markBusy.call(c, A, 'drop');
+        expect(drop[0].attrs).toEqual({ 'aria-busy': 'true' });
+        expect(drop[0].pathEl.textContent).toBe('Checking…');
+        untouched(drop[1], B);
+        untouched(menu[0], A);
+        untouched(menu[1], B);
+    });
+
+    it('from the header menu it marks the matching menu row, and leaves the drop zone alone', () => {
+        const { drop, menu, c } = busyCtx();
+        markBusy.call(c, B, 'menu');
+        expect(menu[1].attrs).toEqual({ 'aria-busy': 'true' });
+        expect(menu[1].pathEl.textContent).toBe('Checking…');
+        untouched(menu[0], A);
+        untouched(drop[0], A);
+        untouched(drop[1], B);
+    });
+
+    it('does nothing when no row matches', () => {
+        const { drop, menu, c } = busyCtx();
+        markBusy.call(c, 'C:\\pics\\Other', 'drop');
+        for (const [r, p] of [
+            [drop[0], A],
+            [drop[1], B],
+            [menu[0], A],
+            [menu[1], B],
+        ]) {
+            untouched(r, p);
+        }
+    });
+
+    it('does nothing, and does not throw, when the surface has no root', () => {
+        const { drop, c } = busyCtx();
+        c.recentFoldersMenu = null;
+        expect(() => markBusy.call(c, A, 'menu')).not.toThrow();
+        untouched(drop[0], A);
+    });
+});
+
 describe('openRecentFolder — validate on click (spec § 6)', () => {
     const openRecentFolder = extract('openRecentFolder');
     let origWindow;
@@ -556,6 +687,7 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
     function openCtx(overrides = {}) {
         return {
             _recentOpenInFlight: false,
+            _folderIntentGen: 0,
             _fileOpInFlight: false,
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             _openRecentFolderOn: extract('_openRecentFolderOn'),
@@ -704,6 +836,76 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
         const c = openCtx({ loadFolder: vi.fn(async () => Promise.reject(new Error('boom'))) });
         await openRecentFolder.call(c, DIR, 'drop');
         expect(c.showError).toHaveBeenCalledWith('Failed to open folder: boom');
+        expect(c._recentOpenInFlight).toBe(false);
+        expect(c.renderRecentFolders).toHaveBeenCalled();
+    });
+
+    // G4 final review F1: the check can take seconds and the UI stays live, so the user can choose another
+    // folder meanwhile (the dialog, change-folder, a load). That choice moves _folderIntentGen; the stale
+    // decision must then do nothing.
+    describe('a folder chosen while the check runs wins (G4 final review F1)', () => {
+        it.each(['drop', 'menu'])('from the %s surface, a stale "open" opens nothing', async (surface) => {
+            const e = api();
+            const c = openCtx();
+            e.getGrantStatus.mockImplementation(async () => {
+                c._folderIntentGen += 1;
+                return [true];
+            });
+            await openRecentFolder.call(c, DIR, surface);
+            expect(c.loadFolder).not.toHaveBeenCalled();
+            expect(c.switchToFolder).not.toHaveBeenCalled();
+            expect(e.openFolderDialog).not.toHaveBeenCalled();
+            expect(c.showNotification).not.toHaveBeenCalled();
+            expect(c._recentOpenInFlight).toBe(false);
+            expect(c.closeRecentFoldersMenu).toHaveBeenCalled();
+            expect(c.renderRecentFolders).toHaveBeenCalled();
+        });
+
+        it('a stale "regrant" opens no dialog and shows no notice', async () => {
+            const e = api({ status: [false], picked: 'C:\\pics\\Picked' });
+            const c = openCtx();
+            e.getGrantStatus.mockImplementation(async () => {
+                c._folderIntentGen += 1;
+                return [false];
+            });
+            await openRecentFolder.call(c, DIR, 'drop');
+            expect(e.openFolderDialog).not.toHaveBeenCalled();
+            expect(c.showNotification).not.toHaveBeenCalled();
+            expect(c.loadFolder).not.toHaveBeenCalled();
+            expect(c._recentOpenInFlight).toBe(false);
+        });
+
+        // Guard — passes before the fix by construction (the old code ignored the generation): it pins that the
+        // fix abandons only 'open' and 'regrant'. A missing folder is still gone, whatever the user chose since.
+        it('a stale "missing" still removes the entry, with its notice', async () => {
+            const e = api();
+            const c = openCtx();
+            e.checkFolderExists.mockImplementation(async () => {
+                c._folderIntentGen += 1;
+                return false;
+            });
+            await openRecentFolder.call(c, DIR, 'drop');
+            expect(c._removeRecentFolder).toHaveBeenCalledWith(DIR);
+            expect(c.showNotification).toHaveBeenCalledWith(
+                '"Liked_3" no longer exists — removed from recent folders',
+                'warning'
+            );
+        });
+    });
+
+    it('a file action started during the status query refuses the re-confirm dialog, with the notice', async () => {
+        const e = api({ picked: 'C:\\pics\\Picked' });
+        const c = openCtx();
+        e.getGrantStatus.mockImplementation(async () => {
+            c._fileOpInFlight = true;
+            return [false];
+        });
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(e.openFolderDialog).not.toHaveBeenCalled();
+        // Refused before the "Confirm …" notice too: a prompt to press Select Folder for a dialog that never opens
+        // would contradict the refusal beside it.
+        expect(c.showNotification.mock.calls).toEqual([['Wait for the move to finish', 'info']]);
+        expect(c.loadFolder).not.toHaveBeenCalled();
         expect(c._recentOpenInFlight).toBe(false);
         expect(c.renderRecentFolders).toHaveBeenCalled();
     });
