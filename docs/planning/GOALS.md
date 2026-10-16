@@ -2,7 +2,7 @@
 
 Project objectives and success metrics.
 
-**Last Updated**: 2026-08-27 <!-- 2026-10-09: status flip only (G5 Weekly Reviews ride-along, per README § Strategic Review) — the MLManager KR row. Not a refresh; the 2-month clock still runs from 2026-08-27. -->
+**Last Updated**: 2026-08-27 <!-- 2026-10-09: status flip only (G5 Weekly Reviews ride-along, per README § Strategic Review) — the MLManager KR row. Not a refresh; the 2-month clock still runs from 2026-08-27. 2026-10-17: pre-commit chain corrected (G5 sweep). Not a refresh. -->
 **Review Cycle**: Continuous — planning-session staleness check (see [README.md](README.md) § Strategic Review)
 
 ---
@@ -71,7 +71,7 @@ Things we explicitly are NOT trying to do:
 | Constraint                         | Description                                                                                                                                          | Impact                                                                        |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | No TypeScript                      | Plain JavaScript; `typescript-lsp` provides code navigation, but no type checking                                                                    | Type errors are caught by tests and review, not a compiler                    |
-| No CI service                      | All gates are local Husky hooks: pre-commit (secret scan → lint-staged → the full unit suite; count in PROJECT.md) + pre-push (conditional E2E — skipped for docs-only pushes) | A bypassed hook has no server-side backstop; verification discipline is local |
+| No CI service                      | All gates are local Husky hooks: pre-commit (secret scan → docs-index guard → lint-staged → the full unit suite; count in PROJECT.md) + pre-push (conditional E2E — skipped for docs-only pushes) | A bypassed hook has no server-side backstop; verification discipline is local |
 | Large renderer file                | ~9,400-line `media-viewer.js`, being modularized under v2.0                                                                                          | Search before adding code; conflicts likely until extraction completes        |
 | Real-24k verification is user-side | Playwright fixtures top out at a handful of files; 24k-folder behavior cannot be E2E-fixtured                                                        | Performance work gates on manual user smokes (async, may trail the PR)        |
 

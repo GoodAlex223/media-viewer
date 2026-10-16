@@ -100,7 +100,7 @@ T1 (passes, sweep fixes) first: its findings are applied during the trims. T2–
 **Interfaces:**
 - Produces: § Pass Results (prompt-audit findings, improver report, stale references, sweep table, `.mcp.json` result), which T2–T9 apply.
 
-- [ ] **Step 1: Baseline.** Run:
+- [x] **Step 1: Baseline.** Run:
 
 ```bash
 wc -lc CLAUDE.md
@@ -109,11 +109,11 @@ awk '/^## /{if(name)printf "%-36s %4d lines %6d bytes\n",name,l,b; name=$0; l=0;
 
 Expected: `236 64203 CLAUDE.md` and the per-section table in spec § 2.2. A different number means `CLAUDE.md` changed after `506e041`: stop and re-baseline the spec's § 2 first.
 
-- [ ] **Step 2: `/claude-api prompt-audit`.** Invoke the `claude-api` skill with args `prompt-audit`. If the skill does not offer that subcommand, ask the user to run `/doctor prompt-audit` and paste its findings. Record each finding in § Pass Results with the section it applies to and the intended fix. Make no edit yet.
+- [x] **Step 2: `/claude-api prompt-audit`.** Invoke the `claude-api` skill with args `prompt-audit`. If the skill does not offer that subcommand, ask the user to run `/doctor prompt-audit` and paste its findings. Record each finding in § Pass Results with the section it applies to and the intended fix. Make no edit yet.
 
-- [ ] **Step 3: `/claude-md-improver`, report only.** Invoke `claude-md-management:claude-md-improver` on this repository. Take its quality report; decline its edits (spec D3 — a whole-file rewrite is the rejected approach B). Record its findings in § Pass Results.
+- [x] **Step 3: `/claude-md-improver`, report only.** Invoke `claude-md-management:claude-md-improver` on this repository. Take its quality report; decline its edits (spec D3 — a whole-file rewrite is the rejected approach B). Record its findings in § Pass Results.
 
-- [ ] **Step 4: Stale-reference probe.** Write this file with the Write tool (memory: the Bash tool halves backslashes) to `<scratchpad>/stale-refs.js`:
+- [x] **Step 4: Stale-reference probe.** Write this file with the Write tool (memory: the Bash tool halves backslashes) to `<scratchpad>/stale-refs.js`:
 
 ```js
 // Throwaway: G5 T1 stale-reference probe. Not committed.
@@ -179,7 +179,7 @@ for (const p of missingPaths) {
 
 Run: `node <scratchpad>/stale-refs.js "$(pwd)"`. Expected: first line `SENTINEL OK` (if not, the probe is broken; fix it before reading anything else). Triage each hit in § Pass Results as one of: **deleted code named only as history** (removed in its section task), **runtime-only name** (no action), **wrong name** (fixed in its section task). Keep the probe: T11 re-runs it.
 
-- [ ] **Step 5: Concept-vocabulary sweep.** Complete the concept list from `git log --since=2026-06-16 --format='%h %s' -- CLAUDE.md` and DONE.md entries since 2026-06-16: add every convention renamed or retired. Seed list and patterns:
+- [x] **Step 5: Concept-vocabulary sweep.** Complete the concept list from `git log --since=2026-06-16 --format='%h %s' -- CLAUDE.md` and DONE.md entries since 2026-06-16: add every convention renamed or retired. Seed list and patterns:
 
 | Concept | Phrasing families (pattern) |
 |---|---|
@@ -199,11 +199,11 @@ git grep -n -iE '<pattern>' -- CLAUDE.md PROJECT.md README.md docs/README.md doc
 
 Record each row with its pattern **and** its result (a hit list or "0 hits") in § Pass Results — a result without its filter cannot be told apart from an all-clear (runbook step 3). A hit in `CLAUDE.md` is applied in its section task. A wrong statement elsewhere is fixed in Step 7. A stale derived number elsewhere (e.g. `PROJECT.md`'s "~9,400 lines", "2 of 6 managers extracted") is listed under 🟤 [2026-09-02] "Sweep the repo's existing restated derived counts", not fixed.
 
-- [ ] **Step 6: `.mcp.json`.** Run: `git ls-files .mcp.json; grep -c "server-memory\|modelcontextprotocol/server-memory" .mcp.json`. Expected: no tracked file, count `0`. Record it. The Context7 key is not a finding (user ruling 2026-06-16).
+- [x] **Step 6: `.mcp.json`.** Run: `git ls-files .mcp.json; grep -c "server-memory\|modelcontextprotocol/server-memory" .mcp.json`. Expected: no tracked file, count `0`. Record it. The Context7 key is not a finding (user ruling 2026-06-16).
 
-- [ ] **Step 7: Fix wrong statements in other live docs.** At least `docs/planning/GOALS.md` (Premise Correction 1). Replace L74's chain text `pre-commit (secret scan → lint-staged → the full unit suite; count in PROJECT.md)` with `pre-commit (secret scan → docs-index guard → lint-staged → the full unit suite; count in PROJECT.md)`, and append to L5's existing HTML comment, inside the `-->`: ` 2026-10-17: pre-commit chain corrected (G5 sweep). Not a refresh.` Apply any other Step 5 fix the same way.
+- [x] **Step 7: Fix wrong statements in other live docs.** At least `docs/planning/GOALS.md` (Premise Correction 1). Replace L74's chain text `pre-commit (secret scan → lint-staged → the full unit suite; count in PROJECT.md)` with `pre-commit (secret scan → docs-index guard → lint-staged → the full unit suite; count in PROJECT.md)`, and append to L5's existing HTML comment, inside the `-->`: ` 2026-10-17: pre-commit chain corrected (G5 sweep). Not a refresh.` Apply any other Step 5 fix the same way.
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
 
 ```bash
 git add docs/planning/GOALS.md docs/planning/plans/2026-10-17_g5-claude-md-size-audit.md   # plus any other Step 7 file
@@ -826,7 +826,9 @@ git commit -m "docs: G5 verification - rule-loss check, links, citations, size t
 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
-- **`PROJECT.md` restates derived numbers that have gone stale** — "~9,400 lines" (`media-viewer.js` is ~10k) and "2 of 6 managers extracted" (three are). Already owned by 🟤 [2026-09-02] "Sweep the repo's existing restated derived counts"; at closeout, annotate that entry with these two instances instead of filing a new one.
+- **`PROJECT.md` and `GOALS.md` restate derived numbers that have gone stale** — `PROJECT.md` "~9,400 lines" (`media-viewer.js` is 11,451, measured 2026-10-17) and "2 of 6 managers extracted" (three are); `GOALS.md:76` "~9,400-line `media-viewer.js`" (T1 sweep). Already owned by 🟤 [2026-09-02] "Sweep the repo's existing restated derived counts"; at closeout, annotate that entry with these three instances instead of filing a new one.
+- **`.claude/agents/regression-checker.md` contradicts `CLAUDE.md`** (T1 prompt-audit, Group 2): "~7400 line" renderer; "Extracted today: `FullscreenManager`" (three managers are); `removeFileFromList()` "must clear" three caches (CLAUDE.md § Cache Management lists the full set); "the 7 systems above" under eight headings. An agent briefed by it checks a stale contract. 🟤 candidate.
+- **`.claude/skills/new-e2e-test/SKILL.md` is stale against `CLAUDE.md` § Testing (E2E)** (T1 prompt-audit, Group 2): "`tiny.mp4` currently fails to load … see WEEKLY G3" (it is a 32-byte unplayable stub by design); the fixture list omits `playable-64x64.mp4`; `seedLocalStorage` lacks the `{ grant }` option and call order. 🟤 candidate.
 
 ## Closeout (after the merge, on `main`)
 
@@ -850,7 +852,66 @@ git commit -m "docs: G5 verification - rule-loss check, links, citations, size t
 
 ## Pass Results
 
-_Filled by T1._
+**Baseline (T1 Step 1)**: `236 64203 CLAUDE.md` at `2a598c2` — matches spec § 2.2 section by section (Overview 472, Build 1,521, Architecture 5,460, Code Conventions 7,250, Backlog Intake 1,466, Detected Patterns 29,691, Git Insights 15,723, Best Practices 2,164, Maintenance 339).
+
+### P1 — `/claude-api prompt-audit` (T1 Step 2)
+
+**Assumptions** (stated, per the guide's Step 0): scope = the project `CLAUDE.md` (the request named it). Also inventoried, for the Group 2 conflict check only: `.claude/agents/regression-checker.md`, `.claude/skills/new-e2e-test/SKILL.md` (no other `CLAUDE.md`/`AGENTS.md`; `.claude/rules/` is empty). Not read: `.claude/settings*.json`, `.mcp.json` (the guide's secret rule). Target model: Claude Opus 5.5 — the model running the audit, which reads the file. Deliverable 2 (the proposed diff) **is T2–T9**: each finding below names its section task, and that task's commit is its hunk (D3 — one commit per section).
+
+**Summary.** The file's main problem is history and patch accretion, not pressure language. About 30 lines carry G-tags, PR numbers, review IDs, dates or a commit SHA. About 15 lines use migration-relative phrasing ("since G1", "before G3", "now live ONLY", "no longer exist") and describe a diff against a file the reader never saw. Two derived counts are contradicted by the repository. Counts: Group 1 — 4 findings; Group 2 — 5; Group 3 not applicable (no tool descriptions); Group 4 not applicable (no Claude API request code; the one subagent has no redundant twin).
+
+| # | Location | Evidence (quoted / summarised) | Pattern | Why obsolete | Confidence | Action → task |
+|---|---|---|---|---|---|---|
+| A1 | `CLAUDE.md:39` | "`media-viewer.js` … (~9400 lines…)" | G2 Volatile specifics | `wc -l media-viewer.js` = 11,451; the repo contradicts it | High | remove the count (keep the purpose) → T4 |
+| A2 | `CLAUDE.md:85` | "twelve file-group blocks (main, preload, …)" | G2 Volatile specifics | `eslint.config.mjs` has 15 entries, 13 with `files`; contradicted | High | rewrite to "one block per file group" → T5 |
+| A3 | L34–36, 51–52, 137, 140, 142–144, 154, 157, 159, 161, 168, 170, 174, 190–191, 204, 213–215, 218, 221, 228, 231, 236 | G-tags, `PR #N`, "review #1", "F1/F5/F6", dates, `` `4ea65c3` ``, "Phase 0" | G2 History narratives | A rule's authority is the behaviour it prescribes, not the incident; incident IDs rot | High | remove the archaeology, keep the rule; keep a release name a rule depends on (Global Constraints) → T4, T5, T7, T8, T9, T10 |
+| A4 | L38, 85, 102, 103, 135, 137, 159, 172, 190, 191, 204, 214, 215, 219 | "since G1", "Since G1 (… deleted)", "no longer exist", "before G3, every string logged as `undefined`", "now live ONLY", "now `version: 2`", "used to", "four months later", "Until G3", "that peek was the G2 bug" | G1d Migration-relative phrasing | Relative phrasing implies phantom alternatives; write current rules as the only rules. Exceptions kept: L100 "like one saved before G1" and L184 "folders saved before G1 are re-confirmed once" (a release name the rule depends on) | High | rewrite to current tense → T4, T5, T7, T8 |
+| A5 | L76, 137, 168, 185, 209, 214, 228 | "Planned next: ZoomManager…", "tracked in BACKLOG", "(BACKLOG 🟤 [2026-08-31] … not built)", "Tracked as TODO 🔴", "(BACKLOG 🟤)", "(BACKLOG)" | G2 Time-sensitive content | Tracker state rots: it is true until the entry closes, and nothing updates `CLAUDE.md` then | High | remove the pointer, keep any fact an agent acts on (e.g. tournament handlers deliberately outside the guard; I1 itself) → T5, T7, T8, T9 |
+| A6 | Detected Patterns: file-op guard (L168), recently opened folders (L143), tournament persistence (L159), UI Components (L161) | Bullets of 2–4 KB; narrow conditionals each traceable to one review finding (G4 final review F1/F5/F6, PR #81 review #1) | G1d Patch accretion | The reader navigates special cases instead of the contract | Medium | rewrite to the contract + `Design:` spec pointer (spec D1) → T7 |
+| A7 | CLIP-in-main ×4 (L37 ×2, L170, L203); `.claude/` allow-list ×2 (L60, L212); file-op guard (L105, L168); leave prompt (L143, L213); folder grants (L168, L176–181) | The same fact stated in several sections | G1c Padding (repetition) | The copies agree, so the guide's keep-list item 8 would leave them; G5 removes them for size under spec D1, keeping one full home each (homes ledger) | Medium | dedupe to the home → T4, T5, T7 |
+| A8 | L227 (Best Practices) | "Run `npm test` before committing (pre-commit hook enforces this)" | G1d Unenforced/enforced-in-code | The hook already runs the suite (§ Build); the live half of the bullet is the worker-export CJS rule | Medium | rewrite to the worker-export rule → T9 |
+| A9 | ~30 in-sentence bold runs (Detected Patterns, Git Insights) | e.g. "**not**", "**never await**", "**No guarded method may call another**" | G1a Pressure language (emphasis) | Caps density is low (7 caps words, all contrastive "NOT"/"ONLY"); bold that marks a gotcha's lead rule is a scoped fix. Not a documented harm here | Low | flag — drop mid-sentence bold only where a sentence is rewritten anyway |
+
+Zero-hit groups (filters recorded): 1b scaffolds `think step by step|take a deep breath|<scratchpad>|<thinking>|think (harder|less)|every N (tool calls|messages)|at most N (words|sentences)` → 0; 1a hedges `try to|if possible|ideally|you (tend to|often|sometimes)` → 1 grep hit (L155), a false positive (no hedge).
+
+**Flags outside scope (Group 2 conflicts in other instruction files; not edited by G5 → Residuals)**:
+- `.claude/agents/regression-checker.md` contradicts `CLAUDE.md`: "~7400 line" renderer (11,451); "Extracted today: `FullscreenManager`" (three managers are extracted); `removeFileFromList()` "must clear" three caches (CLAUDE.md § Cache Management lists nine stores plus pair keys and `likeOrSkip.forget`); its report template says "the 7 systems above" under eight headings.
+- `.claude/skills/new-e2e-test/SKILL.md`: "`tiny.mp4` currently fails to load in the Playwright runs — see WEEKLY G3" (CLAUDE.md: a 32-byte unplayable stub by design, with `playable-64x64.mp4` as the real clip, which the skill's fixture list omits); `seedLocalStorage` is described without the `{ grant }` option or the call order CLAUDE.md § Testing (E2E) requires.
+
+### P2 — `claude-md-improver`, report only (T1 Step 3)
+
+Files found: 1 (`./CLAUDE.md`). **Score 82/100 (B)**: Commands 20/20 (all seven npm scripts exist; the hook chain and `SKIP=` are documented); Architecture 18/20 (every path in the tree exists; the renderer line count is stale); Non-obvious patterns 15/15; Conciseness 4/15 (64 KB; history, walk-throughs, duplicates); Currency 12/15 (two derived counts wrong — P1 A1, A2); Actionability 13/15. Recommended additions: none beyond T10's own. Its edits declined (D3).
+
+### P3 — Stale-reference probe (T1 Step 4)
+
+`SENTINEL OK`. 3 identifiers + 12 paths flagged; all **runtime-only or external** (no action): `MANUAL` (the retired marker's name, in § Maintenance), `bypassPermissions`/`dontAsk` (Claude Code permission modes); `.bulk_rated.json`, `.feature_cache.json`, `.sort_cache.json`, `.tournament_state.json`, `userData/ml-model-cache.json` (written at run time); `agents/`, `hooks/`, `rules/`, `skills/`, `settings.local.json`, `worktrees/` (relative names in the `.claude/` row; `rules/` is allow-listed and empty, the last two per-machine); `loader.js` (playwright-core's file). No deleted-code or wrong-name hit.
+
+### P4 — Concept-vocabulary sweep (T1 Step 5)
+
+Concept list completed from `git log --since=2026-06-16 -- CLAUDE.md` (61 commits): added the generic IPC calls (G1 security), the old preload/`.env` guard (replaced 2026-10-05), the single session log, `ml-worker.js`'s abort protocol (G4), tournament state v1, the "isLoading-only" guard claim, and the old `next` binding. Surfaces: `CLAUDE.md PROJECT.md README.md docs/README.md docs/PROJECT_CONTEXT.md docs/planning/GOALS.md docs/planning/ROADMAP.md docs/planning/MILESTONES.md`.
+
+| Concept | Pattern | Result |
+|---|---|---|
+| Section markers | `AUTO-MANAGED\|<!-- MANUAL\|Custom Notes` | 1 — `CLAUDE.md:236` (states the markers are absent; correct; its PR #52 tag goes in T10) |
+| Old `.claude/` commit rule | `never commit.{0,40}\.claude\|\.claude/\*\|only \.claude/agents` | 0 hits |
+| Deferred compare refresh | `deferred (compare )?refresh\|_beginDeferredCompareRefresh\|re-scoring window\|reverseUpdate\|type: ?'update'` | 2 — `CLAUDE.md:102`, `:103` (both say it is gone: history clauses → T5) |
+| Online per-rating updates | `online (per-rating )?update\|previousScores` | 2 — `docs/README.md:103`, `:243` (index rows describing archived work: records, no action) |
+| Renderer sorting copies | `sortMediaBySimilarity\|renderer'?s? own cop` | 3 — `CLAUDE.md:42` (worker export list; exports exist; the list goes as readable-from-code → T4), `:137` (PR #54 history → T7); `docs/README.md:52` (archived-plan row: record) |
+| Retired memory mechanisms | `Memory Protocol\|knowledge graph\|server-memory\|mcp__memory__` | 0 hits |
+| `dead-rules-audit` | `dead-rules-audit` | 1 — `docs/README.md:236` (run-card index row: record) |
+| Generic IPC calls (removed G1) | `generic (invoke\|readFile\|writeFile)\|electronAPI\.(invoke\|readFile\|writeFile)\b` | 1 — `CLAUDE.md:38` (a correct negative rule; drop "since G1" → T4) |
+| Old preload/`.env` guard | `permissions\.deny\|deny rules?\|preload guard` | 0 hits |
+| Single session log | `media-viewer\.log\b\|Session ended` | 1 — `CLAUDE.md:37` (describes the current per-launch log and the footer rule: correct) |
+| `ml-worker.js` abort protocol | `ml-worker.{0,60}abort` | 1 — `docs/README.md:104` (archived-plan row: record) |
+| Tournament state v1 | `version: ?1\b\|history-full\|persist(s\|ed)? (the )?(undo )?history` | 3 — `CLAUDE.md:143`, `:157` (other formats' `version:1`: correct), `:159` ("now `version: 2`" → drop "now", keep the legacy-resume rule → T7) |
+| "isLoading-only" guard | `isLoading-only\|guard(s\|ed)? on isLoading` | 0 hits |
+| Old `next` binding | `\bKeyD\b` | 1 — `CLAUDE.md:208` (the v1→v2 history; keep "the migration is at v2" → T8) |
+
+No wrong statement outside `CLAUDE.md` except the planned `GOALS.md` chain (Step 7). One more stale derived number found: `GOALS.md:76` "~9,400-line `media-viewer.js`" (11,451) → Residuals (owned by 🟤 [2026-09-02]).
+
+### P5 — `.mcp.json` (T1 Step 6)
+
+`git ls-files .mcp.json` → empty (untracked); `server-memory` count → `0`. Nothing to do (the Context7 key is not a finding, user ruling 2026-06-16).
 
 ## Disposition Tables
 
@@ -861,6 +922,7 @@ _One `### T<N> — <section>` table per section task, written before its commit.
 - **2026-10-16/17** — Branch `g5-claude-md-size-audit` from `506e041`. Brainstormed section by section: D1 mixed handling of non-rule text; D2 authoring rule + never-blocking warning; D3 approach A (in place, per section); D4 Backlog Intake Rules → a three-line pointer (the user asked for a recommendation and agreed); D5 migration recommended only; D6 the trim on Opus. While writing the spec, measuring its own claim ("each feature commit added 1–3 KB") showed 14 of 17 commits under 1 KB, and a 200-line trigger would have fired on every growing commit after a trim landing above 200 lines; user ruling: bytes only, 500-byte growth threshold, audit trigger moved to the byte trigger. A side agent raised the same line-trigger issue after the amendment; it was already resolved. Spec `1e934cb`, approved 2026-10-17.
 - **2026-10-17 — Planning.** Measured: the chain is described in `CLAUDE.md`, `PROJECT.md`, `GOALS.md` (stale — no docs-index) and the hook header; `GOALS.md`'s non-refresh edit convention (dated comment beside `Last Updated`); the `check-secrets.test.js` temp-repo pattern and its env stripping; `extractLinks` is exported. Premise Corrections 1–5. **Plan code smoke-tested** before hand-off, extracted from this file into the scratchpad (not committed): `measure('→🔵\n')` = 1 line / 8 bytes; `evaluate` 9800→10400 = `['growth','trigger']`; the CLI warns on an unborn-HEAD first commit (+601 bytes, exit 0), is silent with nothing staged and on a staged deletion (exit 0), and outside a repository prints `could not measure CLAUDE.md` (exit 0). The vitest file itself first runs in T10 Step 2.
 - **2026-10-17 — Plan review.** Approved. A side-agent note (10% headroom ≈ 4 KB, crossed within days at last week's pace) → user ruling: 25% headroom (Premise Correction 6, spec § 6.2 amended, Improvement 4 to measure the real rate). Execution: Native, after a `/compact`.
+- **2026-10-17 — T1 (passes).** Baseline `236 64203` matches spec § 2.2. Prompt-audit: 9 findings (A1–A9; 2 High contradicted counts, history/migration-relative/tracker rows High, patch accretion and duplicates Medium, bold Low/flag) + 2 out-of-scope Group 2 conflicts (regression-checker agent, new-e2e-test skill) → Residuals. Improver: 82/100 (B), edits declined. Stale-ref probe: `SENTINEL OK`, 15 hits, all runtime-only/external. Sweep: 14 concepts, no wrong statement outside `CLAUDE.md` but the planned `GOALS.md` chain; `GOALS.md:76` "~9,400-line" → Residuals. `.mcp.json` untracked, 0 server-memory. `GOALS.md` L74 chain corrected, dated comment at L5.
 
 ## Key Discoveries
 
