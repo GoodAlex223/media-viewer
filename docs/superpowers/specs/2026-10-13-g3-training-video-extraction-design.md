@@ -2,8 +2,14 @@
 
 **Task Reference**: WEEKLY.md Oct 12–16 § G3 (🔵), **re-scoped 2026-10-13** by the user after the measure-first before run. Its first spec, [2026-10-13-g3-source-clip-reuse-design.md](2026-10-13-g3-source-clip-reuse-design.md), is redirected here (§ 2.1). Origin: BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app".
 **Created**: 2026-10-13
-**Status**: Approved by the user 2026-10-13 in brainstorming: approach "fix the loaders" (§ 3), design sections 1 and 2. Awaiting the user's review of this written spec.
+**Status**: Approved by the user 2026-10-13 in brainstorming: approach "fix the loaders" (§ 3), design sections 1 and 2. Written spec approved 2026-10-13 (§ 11 on 2026-10-14). **Implemented — PR #80, merge `bf6fcad`** (post-implementation note below).
 **Branch**: `g3-source-vector-reuse` (kept; from `main` @ `c2673c4`). It already carries the instrumentation, `713af35` (§ 2.1).
+
+> **Post-implementation note (2026-10-16, PR #80, merge `bf6fcad`).** Implemented as specified in §§ 1–11, with § 11's amendments to D4, D6 and D8. The sections below are frozen as approved. The [archived plan](../../archive/plans/2026-10-13_g3-training-video-extraction.md) has the evidence. Review-time changes:
+> - **D6, buffer input.** The lenient decode reads the file into a buffer before sharp sees it. With a path input, libvips' cache kept GIF/WebP files open, so moving them on Windows failed with `EBUSY` (final review, measured).
+> - **D7, the size limit on JXL.** § 11.2 keeps the batch and buffer handlers strict, on the grounds that they decode PNGs our own tools write. That covers the strict decoder's *warning* rejections. It does not cover its 268-megapixel limit: a JXL frame reaches `RawImage.fromBlob` at full resolution, so a JXL over 268 MP still gets no CLIP vector (PR #80 review close-out). Video keyframes come out at video resolution and are not affected. It was left as is: a training-folder JXL that large would show as `noClip=1` with a named log line.
+> - **Acceptance (§ 7, § 11.4): met** on the user's folders. The same session's re-sort took 5.9 s (`session`), and a sort after a restart 33.3 s (`model-cache`). Before, every sort retrained, ~86–120 s.
+> - **§ 8 follow-ups** went to BACKLOG 🟤 `[2026-10-16] From: G3 closeout`, with R8 extended to `computePerceptualHash`'s timeout (PR #80 review) and R9 confirmed by it. R3 annotates the existing 🟤 [2026-09-10] training-cache load entry.
 
 ---
 

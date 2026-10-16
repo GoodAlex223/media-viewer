@@ -2,6 +2,7 @@ import { FullscreenManager } from './fullscreen.js';
 import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
 import * as LikeOrSkip from './like-or-skip.js';
+import * as RecentFolders from './recent-folders.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -112,9 +113,10 @@ class MediaViewer {
         // Held by every file-acting method (moveCurrentFile, moveToSpecialFolder, handleCancel — and
         // moveComparePair, applyBulkRating, dislikeSkippedFiles) from before its first await until its
         // finally. Any other file action that arrives meanwhile is refused (G1), and so are the header
-        // actions (switchMode, both sort handlers except the similarity sort's Cancel, loadFolder, the
-        // change-folder button), the tournament summary's Apply/Discard and the load-error Remove — G2,
-        // through _refuseIfFileOpInFlight().
+        // actions (switchMode, both sort handlers except the similarity sort's Cancel, loadFolder,
+        // switchToFolder — the change-folder button and the header recent-folders menu — and a recent-folder
+        // open), the tournament summary's Apply/Discard and the load-error Remove — G2/G4, through
+        // _refuseIfFileOpInFlight().
         // Not isLoading: render handlers clear that at first paint, and showMedia() itself returns early on it.
         this._fileOpInFlight = false;
         // Like-or-skip (G2): the files passed with Next while the AI order is on screen, and that token
@@ -294,6 +296,13 @@ class MediaViewer {
         this.customLikeFolder = localStorage.getItem('customLikeFolder') || '';
         this.customDislikeFolder = localStorage.getItem('customDislikeFolder') || '';
         this.customSpecialFolder = localStorage.getItem('customSpecialFolder') || '';
+        // Recently opened folders (G4): validated and clamped like the prefs above; a corrupted value reads as an
+        // empty list. Hygiene only — main's grant check on every folder IPC is the boundary (spec § 5).
+        this.recentFolders = RecentFolders.parseRecentFolders(localStorage.getItem('recentFolders'));
+        this._recentMenuCleanup = null; // set exactly while #recentFoldersMenu is open: removes its listeners
+        this._recentOpenInFlight = null; // the path whose click openRecentFolder is resolving: other clicks are ignored
+        this._folderIntentGen = 0; // +1 as a folder is chosen or loaded; openRecentFolder compares it across awaits
+        this._folderLoadInFlight = false; // loadFolder is running: another folder change is refused (PR #81 review #1)
         // G1 re-pick: which saved folders main has not granted ('like' | 'dislike' | 'special'),
         // filled by refreshFolderGrants(). A Browse or Clear bumps the generation so a query
         // already in flight cannot re-mark the folder the user just picked.
@@ -357,6 +366,8 @@ class MediaViewer {
         this.setupControlsVisibility();
         this.updateRatingButtonsState();
         this.updateSpecialButtonsState();
+        // The drop zone is visible at startup (index.html), so its recent-folders list renders now (G4).
+        this.renderRecentFolders();
         // After initializeElements(): loadShortcuts runs far earlier in this constructor, before
         // the notification container exists, so the report is deferred to here.
         this._reportShortcutCollisions();
@@ -418,6 +429,10 @@ class MediaViewer {
         this.navPrev = document.getElementById('navPrev');
         this.navNext = document.getElementById('navNext');
         this.changeFolderBtn = document.getElementById('changeFolderBtn');
+        this.recentFoldersDrop = document.getElementById('recentFoldersDrop');
+        this.recentFoldersAnchor = document.getElementById('recentFoldersAnchor');
+        this.recentFoldersBtn = document.getElementById('recentFoldersBtn');
+        this.recentFoldersMenu = document.getElementById('recentFoldersMenu');
         this.helpBtn = document.getElementById('helpBtn');
 
         // Special folder button (single mode)
@@ -699,6 +714,17 @@ class MediaViewer {
             return false;
         }
         this.showNotification('Wait for the move to finish', 'info');
+        return true;
+    }
+
+    // A folder load is running (PR #81 review #1): a second one beside it interleaves with it — the older load's
+    // ratings read resolves against the newer folder's files and saves into that folder. Refuses only, like the
+    // helper above, so only loadFolder holds the flag.
+    _refuseIfFolderLoadInFlight() {
+        if (!this._folderLoadInFlight) {
+            return false;
+        }
+        this.showNotification('Wait for the folder to finish loading', 'info');
         return true;
     }
 
@@ -2179,7 +2205,18 @@ class MediaViewer {
             }
         });
 
-        this.dropZone.addEventListener('click', () => this.openFolderDialog());
+        // The recent-folders list sits inside the drop zone, whose click opens the dialog: a click on the list is not
+        // a click on the drop zone (G4 spec F3). Skipped here rather than stopped at the list, so document click
+        // listeners (the button blur above) still see list clicks (G4 final review F2). composedPath(), NOT
+        // contains(e.target): a ✕ re-renders the list (replaceChildren) before its click bubbles here, so the target
+        // is already detached and contains() is false — the dialog opened on every ✕. The path is fixed at
+        // dispatch, so it still holds the list.
+        this.dropZone.addEventListener('click', (e) => {
+            if (this.recentFoldersDrop && e.composedPath().includes(this.recentFoldersDrop)) {
+                return;
+            }
+            this.openFolderDialog();
+        });
 
         this.dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -2195,6 +2232,16 @@ class MediaViewer {
             this.dropZone.classList.remove('dragover');
             this.handleFolderDrop(e);
         });
+
+        if (this.recentFoldersBtn) {
+            this.recentFoldersBtn.addEventListener('click', () => this.toggleRecentFoldersMenu());
+        }
+        if (this.recentFoldersMenu) {
+            // The document wheel handler navigates: over the open menu it would change the file behind it (and on
+            // the AI order record a skip). Since G4 final review F6 that handler also returns while the menu is open,
+            // wherever the pointer is, so this is defence in depth. The menu never scrolls — 8 rows at most.
+            this.recentFoldersMenu.addEventListener('wheel', (e) => e.stopPropagation());
+        }
 
         this.likeBtn.addEventListener('click', () => this.handleLike());
         this.dislikeBtn.addEventListener('click', () => this.handleDislike());
@@ -2216,35 +2263,16 @@ class MediaViewer {
         this.navNext.addEventListener('click', () => this.nextMedia());
         if (this.changeFolderBtn) {
             this.changeFolderBtn.addEventListener('click', async () => {
+                // switchToFolder would refuse the pick; refuse before the dialog instead (PR #81 review #1).
+                if (this._refuseIfFolderLoadInFlight()) {
+                    return;
+                }
+                // Before the dialog, not on a pick: a check answering while the dialog is open must not open a
+                // folder or a second dialog behind it. A Cancel does not revive that click (PR #81 review #4).
+                this._folderIntentGen += 1; // a recent-folder check in flight drops its decision (G4 final review F1)
                 const folderPath = await window.electronAPI.openFolderDialog();
-                if (folderPath && folderPath !== this.baseFolderPath) {
-                    // Before the reset below, not only in loadFolder (G2 final review F1): a pick during a
-                    // file action would otherwise wipe the list and the history, then be refused, and the
-                    // action would push onto the wiped history with an undo that targets ''.
-                    if (this._refuseIfFileOpInFlight()) {
-                        return;
-                    }
-                    await this.cleanupCurrentMedia();
-                    this.mediaFiles = [];
-                    this.currentIndex = 0;
-                    this.currentMedia = null;
-                    this.currentFolderPath = '';
-                    this.baseFolderPath = '';
-                    this.moveHistory = [];
-                    this.isLoading = false;
-                    this.isVideoLoading = false;
-                    this.videoEventListeners = [];
-                    this.mediaNavigationInProgress = false;
-                    this.isBeingCleaned = false;
-                    // Reset sorting state
-                    this.isSortedBySimilarity = false;
-                    this.originalMediaFiles = [];
-                    this.perceptualHashes.clear();
-                    if (this.sortSimilarityBtn) {
-                        this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
-                    }
-                    this.hideDropZone();
-                    await this.loadFolder(folderPath);
+                if (folderPath) {
+                    await this.switchToFolder(folderPath);
                 }
             });
         }
@@ -2690,6 +2718,14 @@ class MediaViewer {
                 const helpOverlayEl = document.getElementById('helpOverlay');
                 if (helpOverlayEl && helpOverlayEl.classList.contains('show')) return;
 
+                // Nor while the recent-folders menu is open, wherever the pointer is (G4 final review F6): the menu
+                // owns the keyboard, and no wheel navigates behind it (G4 spec § 7). Its own wheel listener covers
+                // only the pointer over it; elsewhere a wheel would change the file, and on the AI order record a
+                // skip. A wheel over media still zooms: handleWheelZoom stops propagation before this handler.
+                if (this._recentMenuCleanup) {
+                    return;
+                }
+
                 // Tournament mode drives pair progression through the Swiss engine — wheel
                 // navigation would advance currentIndex and desync the display from the
                 // engine's chosen pair. Return before preventDefault, matching the help-overlay
@@ -3049,6 +3085,8 @@ class MediaViewer {
 
         try {
             console.log('Opening folder dialog...');
+            // Before the dialog, not on a pick, as in change-folder's handler (PR #81 review #4).
+            this._folderIntentGen += 1; // a recent-folder check in flight drops its decision (G4 final review F1)
             const folderPath = await window.electronAPI.openFolderDialog();
             console.log('Selected folder:', folderPath);
 
@@ -3080,17 +3118,26 @@ class MediaViewer {
     async loadFolder(folderPath) {
         // A file action (G1 guard) is moving files: a folder change now would leave the screen and the
         // cursor on different files when it finishes, and push the old folder's history entry into the new
-        // folder's moveHistory (G2 review). The change-folder button refuses before its own reset (G2 final
-        // review); this stays as defence in depth for the other callers.
-        if (this._refuseIfFileOpInFlight()) {
+        // folder's moveHistory (G2 review). switchToFolder (change-folder, the header recent-folders menu) refuses
+        // before its own reset (G2 final review); this stays as defence in depth for the other callers.
+        // One load at a time (PR #81 review #1): switchToFolder and openRecentFolder refuse first too, and ▾ is
+        // disabled while one runs; this covers a folder dropped on the window.
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
             return;
         }
+        // A load that starts is a change of folder: a recent-folder check still in flight drops its decision
+        // (G4 final review F1). After the refusal (a refused load changes nothing), before any await.
+        this._folderIntentGen += 1;
         if (!window.electronAPI) {
             this.showError('Electron API not available');
             return;
         }
 
+        // Held until this load settles, on every path. Two loads used to interleave: the older one's ratings read
+        // resolved against the newer folder's files and saved into that folder's .bulk_rated.json.
+        this._folderLoadInFlight = true;
         try {
+            this._updateRecentFoldersButton(); // inside the try: the finally must release the flag whatever throws
             console.log('Loading folder:', folderPath);
             this.showLoadingSpinner();
 
@@ -3098,6 +3145,12 @@ class MediaViewer {
             console.log('Load result:', result);
 
             this.hideLoadingSpinner();
+
+            // Folder switches always exit tournament mode (mode is folder-scoped, mirrors the compare-mode reset
+            // pattern from 2fbe174). Before every branch, a failed load included: after a header switch's Save &
+            // leave or Discard the engine is already gone, and a failure that returned first left tournament mode
+            // on with no engine (PR #81 review #2).
+            if (this.isTournamentMode) this.exitTournamentMode();
 
             if (!result.success) {
                 this.showDropZone();
@@ -3113,11 +3166,6 @@ class MediaViewer {
                 this._grantRefreshGen++;
                 this.refreshFolderGrants();
             }
-
-            // Folder switches always exit tournament mode (mode is folder-scoped, mirrors the
-            // compare-mode reset pattern from 2fbe174). Must run BEFORE both branches diverge
-            // so the empty-folder path also clears tournament UI state.
-            if (this.isTournamentMode) this.exitTournamentMode();
 
             // Same reasoning as exitTournamentMode above: must also run BEFORE both branches
             // diverge, or switching to an EMPTY folder would skip all three — leaving an
@@ -3173,6 +3221,8 @@ class MediaViewer {
             this.hideDropZone();
             await this.showMedia();
             this.updateFolderInfo();
+            // G4: only a folder that showed media is worth reopening (spec § 5).
+            this._recordRecentFolder(folderPath);
 
             // Lazy extraction (Group P3): feature/CLIP vectors are produced on first use of an
             // AI feature (CLIP sort / Sort by Prediction), not on folder open — keeps large
@@ -3183,9 +3233,13 @@ class MediaViewer {
             this.updateSortPredictionButton();
         } catch (error) {
             this.hideLoadingSpinner();
+            if (this.isTournamentMode) this.exitTournamentMode(); // a listing that threw (PR #81 review #2)
             this.showDropZone();
             console.error('Error loading folder:', error);
             this.showError(`Failed to load folder: ${error.message}`);
+        } finally {
+            this._folderLoadInFlight = false;
+            this._updateRecentFoldersButton();
         }
     }
 
@@ -3197,6 +3251,10 @@ class MediaViewer {
         // Show change folder button when media is shown
         if (this.changeFolderBtn) {
             this.changeFolderBtn.style.display = 'inline-flex';
+        }
+        if (this.recentFoldersAnchor) {
+            this.recentFoldersAnchor.style.display = 'inline-flex';
+            this._updateRecentFoldersButton();
         }
         // Show the 3-way mode selector when media is shown
         // (legacy #viewModeBtn stays hidden — kept only for backward-compat code refs)
@@ -3232,6 +3290,7 @@ class MediaViewer {
             emptyState.remove();
         }
         this.dropZone.style.display = 'flex';
+        this.renderRecentFolders();
         this.controls.style.display = 'none';
         this.fileInfo.style.display = 'none';
         this.navInfo.style.display = 'none';
@@ -3239,6 +3298,10 @@ class MediaViewer {
         // Hide change folder button when drop zone is shown
         if (this.changeFolderBtn) {
             this.changeFolderBtn.style.display = 'none';
+        }
+        this.closeRecentFoldersMenu();
+        if (this.recentFoldersAnchor) {
+            this.recentFoldersAnchor.style.display = 'none';
         }
         // Hide sort similarity button when drop zone is shown
         if (this.sortSimilarityBtn) {
@@ -3274,6 +3337,379 @@ class MediaViewer {
             this.rightMediaWrapper.remove();
             this.rightMediaWrapper = null;
             this.rightMedia = null;
+        }
+    }
+
+    // G4 (spec § 5): the list changes only through these three. A write that throws (quota, a blocked
+    // accessor) is logged; the session list still updates.
+    _recordRecentFolder(folderPath) {
+        this._setRecentFolders(RecentFolders.recordRecentFolder(this.recentFolders, folderPath, Date.now()));
+    }
+
+    _removeRecentFolder(folderPath) {
+        this._setRecentFolders(RecentFolders.removeRecentFolder(this.recentFolders, folderPath));
+    }
+
+    _setRecentFolders(entries) {
+        this.recentFolders = entries;
+        try {
+            localStorage.setItem('recentFolders', RecentFolders.serializeRecentFolders(entries));
+        } catch (err) {
+            window.electronAPI?.logError?.({
+                level: 'warn',
+                message: `Could not save recent folders: ${err.message}`,
+                source: 'renderer',
+            });
+        }
+        this.renderRecentFolders();
+        this._updateRecentFoldersButton();
+        this._refreshRecentFoldersMenu();
+    }
+
+    // One row per entry, for the drop-zone list ('drop') or the header menu ('menu'): the folder button (name;
+    // full path, ellipsized, title = full path) and a sibling ✕ button. Text only — no markup is ever built
+    // from a path (spec § 7). In the menu the folder on screen is marked current and disabled.
+    _buildRecentFolderRows(surface) {
+        return this.recentFolders.map(({ path: folderPath }) => {
+            const name = RecentFolders.folderDisplayName(folderPath, window.electronAPI?.path?.basename);
+            const isCurrent = surface === 'menu' && folderPath === this.baseFolderPath;
+
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'recent-folder-item';
+            item.title = folderPath;
+            item.dataset.path = folderPath;
+            if (surface === 'menu') {
+                item.setAttribute('role', 'menuitem');
+            }
+            const nameEl = document.createElement('span');
+            nameEl.className = 'recent-folder-name';
+            nameEl.textContent = name;
+            const pathEl = document.createElement('span');
+            pathEl.className = 'recent-folder-path';
+            pathEl.textContent = folderPath;
+            item.append(nameEl, pathEl);
+            // The row being checked keeps its "Checking…" across a re-render (a ✕ on another row, say): its
+            // clicks, and every other row's, are still ignored until main answers (PR #81 review #5).
+            if (folderPath === this._recentOpenInFlight) {
+                item.setAttribute('aria-busy', 'true');
+                pathEl.textContent = 'Checking…';
+            }
+            if (isCurrent) {
+                item.disabled = true;
+                item.classList.add('current');
+                const tag = document.createElement('span');
+                tag.className = 'recent-folder-current';
+                tag.textContent = 'current';
+                item.append(tag);
+            } else {
+                item.addEventListener('click', () => this.openRecentFolder(folderPath, surface));
+            }
+
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'recent-folder-remove';
+            remove.textContent = '✕';
+            remove.title = 'Remove from recent folders';
+            remove.setAttribute('aria-label', `Remove "${name}" from recent folders`);
+            remove.addEventListener('click', () => this._removeRecentFolder(folderPath));
+
+            const row = document.createElement('li');
+            row.className = 'recent-folder-row';
+            row.append(item, remove);
+            return row;
+        });
+    }
+
+    // The drop-zone list (spec § 7): hidden when empty, so a first launch looks as before. Runs at init, from
+    // showDropZone() and after every change. It asks main nothing: a folder is checked when it is chosen,
+    // never when it is listed — one status query on an offline share holds main ~21 s (spec F7).
+    renderRecentFolders() {
+        const container = this.recentFoldersDrop;
+        if (!container) {
+            return;
+        }
+        container.querySelector('.recent-folders-list').replaceChildren(...this._buildRecentFolderRows('drop'));
+        container.style.display = this.recentFolders.length > 0 ? 'flex' : 'none';
+    }
+
+    // The ▾ button is enabled only when the menu would list a folder other than the one on screen.
+    _hasOtherRecentFolders() {
+        return this.recentFolders.some((entry) => entry.path !== this.baseFolderPath);
+    }
+
+    // Also disabled while a folder loads (PR #81 review #1): change-folder's reset empties baseFolderPath before
+    // the load, so every listed folder reads as "other" and the ▾ would otherwise offer a second, overlapping load.
+    // loadFolder refreshes it when the load starts and when it settles.
+    _updateRecentFoldersButton() {
+        if (!this.recentFoldersBtn) {
+            return;
+        }
+        const enabled = !this._folderLoadInFlight && this._hasOtherRecentFolders();
+        this.recentFoldersBtn.disabled = !enabled;
+        if (enabled) {
+            this.recentFoldersBtn.title = 'Recent folders';
+        } else if (this._folderLoadInFlight) {
+            this.recentFoldersBtn.title = 'Wait for the folder to finish loading';
+        } else {
+            this.recentFoldersBtn.title = 'No other recent folders';
+        }
+    }
+
+    toggleRecentFoldersMenu() {
+        if (this._recentMenuCleanup) {
+            this.closeRecentFoldersMenu();
+        } else {
+            this.openRecentFoldersMenu();
+        }
+    }
+
+    // The header menu (spec § 7). While open it owns the keyboard — capture-phase document listeners, the
+    // .bulk-dislike-modal pattern — so a rating key cannot move a file behind it; and it pins the header
+    // (.menu-open): the header's auto-hide timer re-arms only in the top band, so a pointer resting in the menu
+    // would otherwise fade both out after 3 s (planning amendment).
+    openRecentFoldersMenu() {
+        const menu = this.recentFoldersMenu;
+        if (!menu || this._recentMenuCleanup || this._folderLoadInFlight || !this._hasOtherRecentFolders()) {
+            return;
+        }
+        this._renderRecentFoldersMenu();
+        menu.style.display = 'flex';
+        this.recentFoldersBtn.setAttribute('aria-expanded', 'true');
+        this.header.classList.add('menu-open');
+
+        const swallow = (e) => {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        };
+        // Arrows move between the rows; Tab also reaches each row's ✕, so a ✕ stays keyboard-reachable while the
+        // native Tab is swallowed. Both wrap.
+        const cycle = (list, step) => {
+            const at = list.indexOf(document.activeElement);
+            const next = step > 0 ? (at + 1) % list.length : (at <= 0 ? list.length : at) - 1;
+            list[next]?.focus();
+        };
+        const onKeydown = (e) => {
+            swallow(e);
+            const rows = [...menu.querySelectorAll('.recent-folder-item:not(:disabled)')];
+            const buttons = [...menu.querySelectorAll('button:not(:disabled)')];
+            if (e.key === 'Escape') {
+                this.closeRecentFoldersMenu();
+            } else if (e.key === 'ArrowDown') {
+                cycle(rows, 1);
+            } else if (e.key === 'ArrowUp') {
+                cycle(rows, -1);
+            } else if (e.key === 'Tab') {
+                cycle(buttons, e.shiftKey ? -1 : 1);
+            } else if (e.repeat) {
+                // a held Enter (the one that opened the menu) chooses nothing
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                const at = buttons.indexOf(document.activeElement);
+                if (at !== -1) {
+                    buttons[at].click();
+                }
+            }
+        };
+        const onPointerDown = (e) => {
+            if (!menu.contains(e.target) && !this.recentFoldersBtn.contains(e.target)) {
+                this.closeRecentFoldersMenu();
+            }
+        };
+        document.addEventListener('keydown', onKeydown, true);
+        document.addEventListener('keyup', swallow, true);
+        document.addEventListener('pointerdown', onPointerDown, true);
+        this._recentMenuCleanup = () => {
+            document.removeEventListener('keydown', onKeydown, true);
+            document.removeEventListener('keyup', swallow, true);
+            document.removeEventListener('pointerdown', onPointerDown, true);
+        };
+        menu.querySelector('.recent-folder-item:not(:disabled)')?.focus();
+    }
+
+    // The one close path (spec § 11): every way out comes here, so the capture listeners never outlive the menu.
+    // Idempotent.
+    closeRecentFoldersMenu() {
+        if (!this._recentMenuCleanup) {
+            return;
+        }
+        this._recentMenuCleanup();
+        this._recentMenuCleanup = null;
+        this.recentFoldersMenu.style.display = 'none';
+        this.recentFoldersBtn.setAttribute('aria-expanded', 'false');
+        this.header.classList.remove('menu-open');
+    }
+
+    _renderRecentFoldersMenu() {
+        this.recentFoldersMenu
+            .querySelector('.recent-folders-list')
+            .replaceChildren(...this._buildRecentFolderRows('menu'));
+    }
+
+    // After the list changed (a ✕ in the menu): rebuild the open menu, or close it when nothing else is left.
+    _refreshRecentFoldersMenu() {
+        if (!this._recentMenuCleanup) {
+            return;
+        }
+        if (!this._hasOtherRecentFolders()) {
+            this.closeRecentFoldersMenu();
+            return;
+        }
+        this._renderRecentFoldersMenu();
+        this.recentFoldersMenu.querySelector('.recent-folder-item:not(:disabled)')?.focus();
+    }
+
+    // #changeFolderBtn's handler body, moved here (G4 spec § 6) so the header's recent-folders menu opens a folder
+    // exactly the way change-folder does, reset included. During an unfinished tournament both ask first, as Escape
+    // and the mode buttons do (spec D3): loadFolder leaves the tournament without asking, and a pick made in the
+    // last 500 ms was never written — the debounced write skips itself once the engine is gone. Save & leave
+    // flushes it first.
+    async switchToFolder(folderPath) {
+        if (!folderPath || folderPath === this.baseFolderPath) {
+            return;
+        }
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
+            return;
+        }
+        if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
+            this.showTournamentLeavePrompt(() => this._switchToFolderNow(folderPath));
+            return;
+        }
+        await this._switchToFolderNow(folderPath);
+    }
+
+    // The switch itself: change-folder's reset, then the load. Also the leave prompt's continuation, which runs
+    // after the user chose — the prompt blocks clicks but not keys, so a special move can have started behind it.
+    // A load that then fails leaves tournament mode (loadFolder exits it on every branch, PR #81 review #2).
+    // A refusal there leaves isTournamentMode true with tournament.engine null, so the tournament UI is inert: picks,
+    // draws and undo no-op until Escape, a mode button, or a re-pick of that folder, which then switches with no
+    // second prompt (switchToFolder asks only while an engine is live). Nothing is lost: after Save & leave the
+    // state is on disk; after Discard it was deleted, as the user asked.
+    async _switchToFolderNow(folderPath) {
+        // Before the reset below, not only in loadFolder (G2 final review F1): a pick during a
+        // file action would otherwise wipe the list and the history, then be refused, and the
+        // action would push onto the wiped history with an undo that targets ''. The same holds
+        // for a pick during another folder's load (PR #81 review #1).
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
+            return;
+        }
+        await this.cleanupCurrentMedia();
+        this.mediaFiles = [];
+        this.currentIndex = 0;
+        this.currentMedia = null;
+        this.currentFolderPath = '';
+        this.baseFolderPath = '';
+        this.moveHistory = [];
+        this.isLoading = false;
+        this.isVideoLoading = false;
+        this.videoEventListeners = [];
+        this.mediaNavigationInProgress = false;
+        this.isBeingCleaned = false;
+        // Reset sorting state
+        this.isSortedBySimilarity = false;
+        this.originalMediaFiles = [];
+        this.perceptualHashes.clear();
+        if (this.sortSimilarityBtn) {
+            this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Sort by Similarity';
+        }
+        this.hideDropZone();
+        await this.loadFolder(folderPath);
+    }
+
+    // G4 spec § 6: a listed folder is checked when it is chosen, never when it is listed (one status query on an
+    // offline share holds main ~21 s). Main's answers decide (RecentFolders.classifyRecentFolder): open it, drop
+    // it as gone, re-confirm it through the dialog, or say its drive is absent.
+    async openRecentFolder(folderPath, surface) {
+        if (this._recentOpenInFlight || this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
+            return;
+        }
+        this._recentOpenInFlight = folderPath;
+        const intentGen = this._folderIntentGen;
+        try {
+            const name = RecentFolders.folderDisplayName(folderPath, window.electronAPI?.path?.basename);
+            this._markRecentFolderBusy(folderPath, surface);
+            let status;
+            let exists;
+            try {
+                status = (await window.electronAPI.getGrantStatus([folderPath]))?.[0];
+                if (status === true) {
+                    exists = await window.electronAPI.checkFolderExists(folderPath);
+                }
+            } catch (_err) {
+                // an IPC failure leaves status or exists undefined: classified as 'error' below
+            }
+            const outcome = RecentFolders.classifyRecentFolder(status, exists);
+            // Decided: the menu closes before the dialog, the open or a notice (spec § 6 step 2).
+            this.closeRecentFoldersMenu();
+            // A ✕ on this row during the check (PR #81 review #3): the user asked to forget the folder, so nothing
+            // decided for it applies — no open that would list it again, no dialog, no notice.
+            if (!this.recentFolders.some((entry) => entry.path === folderPath)) {
+                return;
+            }
+            // The check can take seconds (an offline share ~21 s) and the UI stays live meanwhile: a folder the user
+            // chose since (the drop zone's dialog, change-folder, any load) must not be replaced by this stale
+            // decision, so 'open' and 'regrant' are dropped silently (G4 final review F1). 'missing' and
+            // 'unreachable' stay: still true, and they change no folder.
+            const superseded = this._folderIntentGen !== intentGen;
+            if (outcome === 'open') {
+                if (!superseded) {
+                    await this._openRecentFolderOn(surface, folderPath);
+                }
+            } else if (outcome === 'missing') {
+                this._removeRecentFolder(folderPath);
+                this.showNotification(`"${name}" no longer exists — removed from recent folders`, 'warning');
+            } else if (outcome === 'regrant') {
+                // A file action can have started during the status query: the dialog would lead only to a refusal.
+                if (superseded || this._refuseIfFileOpInFlight()) {
+                    return;
+                }
+                this.showNotification(`Confirm "${name}" — press Select Folder (security update)`, 'info');
+                const picked = await window.electronAPI.openFolderDialog(folderPath);
+                if (picked) {
+                    await this._openRecentFolderOn(surface, picked);
+                }
+            } else if (outcome === 'unreachable') {
+                // Main fails closed on EACCES/EPERM, so a granted folder that now denies access reads 'unreachable'
+                // too, its drive mounted (PR #81 review #6).
+                this.showNotification(
+                    `"${name}" isn't reachable — its drive may be disconnected, or access denied`,
+                    'warning'
+                );
+            } else {
+                window.electronAPI.logError?.({
+                    level: 'warn',
+                    message: `Recent folder check failed (status ${String(status)}, exists ${String(exists)})`,
+                    source: 'renderer',
+                });
+                this.showError("Couldn't open that folder");
+            }
+        } catch (error) {
+            console.error('Error opening a recent folder:', error);
+            this.showError(`Failed to open folder: ${error.message}`);
+        } finally {
+            this._recentOpenInFlight = null; // before the re-render, which then drops the row's "Checking…"
+            this.closeRecentFoldersMenu();
+            this.renderRecentFolders();
+        }
+    }
+
+    // Each surface opens like the existing button on it (spec § 6 step 4): the drop zone like its own click
+    // (loadFolder), the header menu like change-folder (switchToFolder, reset included). switchToFolder's
+    // same-folder no-op would swallow a drop-zone retry of a folder whose last load was empty.
+    _openRecentFolderOn(surface, folderPath) {
+        return surface === 'menu' ? this.switchToFolder(folderPath) : this.loadFolder(folderPath);
+    }
+
+    // The chosen row reads "Checking…" while main answers (spec § 6 step 2) — not the loading spinner, which
+    // hides the drop zone (spec F9). Marked in place, so the clicked button keeps focus. A re-render while the check
+    // runs keeps the mark (_buildRecentFolderRows); the one in openRecentFolder's finally clears it.
+    _markRecentFolderBusy(folderPath, surface) {
+        const root = surface === 'menu' ? this.recentFoldersMenu : this.recentFoldersDrop;
+        const item = [...(root?.querySelectorAll('.recent-folder-item') ?? [])].find(
+            (el) => el.dataset.path === folderPath
+        );
+        if (item) {
+            item.setAttribute('aria-busy', 'true');
+            item.querySelector('.recent-folder-path').textContent = 'Checking…';
         }
     }
 

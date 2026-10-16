@@ -2,12 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵), re-scoped 2026-10-13. It supersedes [2026-10-13_g3-source-clip-reuse.md](2026-10-13_g3-source-clip-reuse.md), whose Task 1 (`713af35`) stays on this branch. Origin: BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app".
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G3 (🔵), re-scoped 2026-10-13. It supersedes [2026-10-13_g3-source-clip-reuse.md](2026-10-13_g3-source-clip-reuse.md), whose Task 1 (`713af35`) stays on this branch. Origin: BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app".
 **Spec**: [2026-10-13-g3-training-video-extraction-design.md](../../superpowers/specs/2026-10-13-g3-training-video-extraction-design.md) (committed `5d9b9e6`, user-approved 2026-10-13)
 **Created**: 2026-10-13
-**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 ✅ 2026-10-14 (acceptance met — § After run 2). Task 3 ✅. Final review ✅ with one fix round (`41792b9`). Pushed with the user's approval 2026-10-14 (pre-push E2E: 140 passed, 5 skipped, 5.1 min); **PR #80** open. Reviewed 2026-10-16 in a separate chat: no code change needed, and two follow-ups were recorded (R8, R9). Closeout runs after the merge.
+**Status**: ✅ **Complete — MERGED 2026-10-16 via PR #80 (merge `bf6fcad`)**, then closed out on `main` the same day: BACKLOG 🟤 [2026-10-16] G3 closeout, DONE, WEEKLY, both plans archived. History: plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 ✅ 2026-10-14 (acceptance met — § After run 2). Task 3 ✅. Final review ✅ with one fix round (`41792b9`). Pushed with the user's approval 2026-10-14 (pre-push E2E: 140 passed, 5 skipped, 5.1 min); **PR #80** open. Reviewed 2026-10-16 in a separate chat: no code change needed, and two follow-ups were recorded (R8, R9). Closeout runs after the merge.
 **Last Updated**: 2026-10-16
-**Branch**: `g3-source-vector-reuse` @ `5d9b9e6` (from `main` @ `c2673c4`)
+**Branch**: `g3-source-vector-reuse` (from `main` @ `c2673c4`; head `a106d18` at merge; deleted remote and local after the merge)
 
 **Goal:** Every training-folder video gets its 64-dim features again, so a training set with videos produces a cacheable model and the AI sort stops retraining when nothing changed. This is proven by the user's after run against the before run already recorded.
 
@@ -1449,6 +1449,8 @@ Propagation check: any late measurement or review fix that changes what `CLAUDE.
 
     None of them needs a change.
   - Docs-only commit; no code changed.
+  - The reviewer's close-out ([comment](https://github.com/GoodAlex223/media-viewer/pull/80#issuecomment-6205563107)) accepted all 9 responses and left no open items. It qualified the D7 pushback: a JXL frame reaches `RawImage.fromBlob` as a full-resolution PNG, so a JXL over 268 MP would still get no CLIP vector. The reply had answered only the warning half. Not re-raised, because the folder's `noClip=1` and its log line would name such a file; it is recorded in the spec's post-implementation note.
+- **2026-10-16 — Merged, PR #80 (merge `bf6fcad`)**, with `--merge`; the branch was deleted remote and local, and `g3-departed-clips-parked` is kept (R6). Closeout on `main`: the Improvements and the `.prettierignore` residual → BACKLOG 🟤 [2026-10-16] G3 closeout (10 entries); R3 annotated on the 🟤 [2026-09-10] training-cache load entry; 🔵 [2026-10-04] checked off with the user's agreement; DONE entry; WEEKLY G3 → `✅ bf6fcad (PR #80)`; both plans archived; post-implementation notes on both specs.
 
 ### Before run
 

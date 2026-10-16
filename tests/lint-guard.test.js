@@ -16,7 +16,14 @@ async function restricted(code, asFile) {
     return result.messages.filter((m) => m.ruleId === 'no-restricted-syntax');
 }
 
-const RENDERER_FILES = ['media-viewer.js', 'tournament.js', 'fullscreen.js', 'ml-training.js', 'face-detector.js'];
+const RENDERER_FILES = [
+    'media-viewer.js',
+    'tournament.js',
+    'fullscreen.js',
+    'ml-training.js',
+    'face-detector.js',
+    'recent-folders.js',
+];
 
 describe.each(RENDERER_FILES)('HTML sink guard in %s', (asFile) => {
     const pre = 'const el = document.body;\nconst name = String(Date.now());\n';
