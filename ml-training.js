@@ -97,6 +97,10 @@ const hasClip = (clip) => !!clip && clip.length === CLIP_DIM;
 
 const CHUNK_SIZE = 500;
 
+// How many CLIP-less training files one folder names in the log per call. With CLIP on but unavailable every
+// row is CLIP-less, and a line each is ~28k main-thread writes per sort; `noClip=N` carries the full count.
+const NO_CLIP_LOG_LIMIT = 20;
+
 // Round before serializing: full-precision floats stringify to ~17 chars each, and 6 decimals
 // is well below the noise floor for unit-normalized cosine similarity. Mirrors the source
 // folder's cache writer (media-viewer.js _saveFeatureCacheLocked).
@@ -107,6 +111,31 @@ const round6 = (arr) => {
     }
     return out;
 };
+
+const ms = (v) => `${Math.round(Number(v) || 0)}ms`;
+
+/**
+ * The perf-log line for one ensureTrainedModel call (G3 spec § 7), read back after a real run to see
+ * where a rebuild's time went. Segments for phases that did not run are left out, so a session hit
+ * reads `source=session total=…ms | scan=…ms`.
+ */
+export function formatTrainingPerfLine(perf) {
+    const parts = [];
+    if (perf.scanMs !== undefined) parts.push(`scan=${ms(perf.scanMs)}`);
+    for (const label of ['likes', 'dislikes']) {
+        const f = perf[label];
+        if (!f) continue;
+        parts.push(
+            `${label}: load=${ms(f.loadMs)} (disk ${f.diskCount}) misses=${f.misses} failed=${f.failed} noClip=${f.noClip} ` +
+                `features=${ms(f.featuresMs)} clip=${ms(f.clipMs)} save=${ms(f.saveMs)}`
+        );
+    }
+    if (perf.bulkMs !== undefined) parts.push(`bulk=${ms(perf.bulkMs)}`);
+    if (perf.trainMs !== undefined) parts.push(`train=${ms(perf.trainMs)}`);
+    if (perf.modelCacheWriteMs !== undefined) parts.push(`modelCacheWrite=${ms(perf.modelCacheWriteMs)}`);
+    const head = `ML training: source=${perf.source} total=${ms(perf.totalMs)}`;
+    return parts.length > 0 ? `${head} | ${parts.join(' | ')}` : head;
+}
 
 export class MlTrainingManager {
     /**
@@ -130,6 +159,10 @@ export class MlTrainingManager {
      * @param {(p: Object) => void} o.onProgress
      * @param {(msg: string) => void} o.logError
      * @param {(msg: string, level: string) => void} o.notify
+     * @param {(line: string) => void} [o.logPerf] Perf-log sink (`media-viewer-perf.log`) for the one line per
+     *        ensureTrainedModel call (G3 spec § 7). Diagnostics only — a throwing sink is swallowed.
+     * @param {() => number} [o.now] Millisecond clock for those timings; defaults to `performance.now`.
+     *        Injectable so tests get fixed times. A throwing clock reads as 0.
      */
     constructor(o) {
         this.loadFolder = o.loadFolder;
@@ -144,6 +177,8 @@ export class MlTrainingManager {
         this.onProgress = o.onProgress || (() => {});
         this.logError = o.logError || (() => {});
         this.notify = o.notify || (() => {});
+        this.logPerf = o.logPerf || (() => {});
+        this.now = o.now || (() => performance.now());
 
         // Fingerprint the live worker was last trained on. Null until the first train or a
         // model-cache hit. This is what makes a repeat sort in one session free.
@@ -443,6 +478,25 @@ export class MlTrainingManager {
         return Array.from(merged);
     }
 
+    // The injected clock, or 0 if it throws — diagnostics must never fail the rebuild they time.
+    _now() {
+        try {
+            return this.now();
+        } catch (_err) {
+            return 0;
+        }
+    }
+
+    // Writes the one perf line for an ensureTrainedModel call. Swallows every failure, sink included.
+    _writeTrainingPerf(perf) {
+        try {
+            perf.totalMs = this._now() - perf.start;
+            this.logPerf(formatTrainingPerfLine(perf));
+        } catch (_err) {
+            // Diagnostics only.
+        }
+    }
+
     /**
      * Load one training folder's cached vectors, extract whatever is missing or stale, persist
      * the result, and return the 576-dim rows. Only files absent from the cache cost CLIP
@@ -459,15 +513,20 @@ export class MlTrainingManager {
      * `_saveVectorCache`.
      */
     async _collectFolderVectors(folderPath, files, phase, loadPhase, enableClipFeatures, signal) {
+        // Per-folder timings and counts for the perf line (G3 spec § 7), returned on every path.
+        const stats = { loadMs: 0, diskCount: 0, misses: 0, failed: 0, noClip: 0, featuresMs: 0, clipMs: 0, saveMs: 0 };
+        const tLoad = this._now();
         const { entries, diskCount, aborted } = await this._loadVectorCache(folderPath, files, signal, loadPhase);
+        stats.loadMs = this._now() - tLoad;
+        stats.diskCount = diskCount;
         const rows = [];
         let clipMissing = 0;
         let failed = 0;
         let extracted = 0;
-        if (aborted) return { rows, clipMissing, failed, aborted: true };
+        if (aborted) return { rows, clipMissing, failed, aborted: true, stats };
 
         for (let i = 0; i < files.length; i++) {
-            if (signal?.aborted) return { rows, clipMissing, failed, aborted: true };
+            if (signal?.aborted) return { rows, clipMissing, failed, aborted: true, stats };
             const file = files[i];
             let hit = entries.get(file.name);
             const hadHit = !!hit;
@@ -476,9 +535,24 @@ export class MlTrainingManager {
             // the self-healing filter that keeps a degraded run from becoming permanent.
             const needsClip = enableClipFeatures && hadHit && !hasClip(hit.clip);
             if (!hadHit || needsClip) {
+                stats.misses++;
                 try {
-                    const feature = hadHit ? hit.feature : await this.computeFeatures(file.path, file);
-                    const clip = await this.extractClipEmbedding(file.path);
+                    // Timed in `finally`, so a call that throws is counted too (G3 re-scope: the before run's
+                    // `features=0ms` hid 66 failed calls).
+                    let feature;
+                    const tFeatures = this._now();
+                    try {
+                        feature = hadHit ? hit.feature : await this.computeFeatures(file.path, file);
+                    } finally {
+                        if (!hadHit) stats.featuresMs += this._now() - tFeatures;
+                    }
+                    let clip;
+                    const tClip = this._now();
+                    try {
+                        clip = await this.extractClipEmbedding(file.path);
+                    } finally {
+                        stats.clipMs += this._now() - tClip;
+                    }
                     const gainedClip = needsClip && hasClip(clip);
                     hit = { feature, clip: hasClip(clip) ? clip : null, size: file.size, mtimeMs: file.mtimeMs };
                     entries.set(file.name, hit);
@@ -488,6 +562,7 @@ export class MlTrainingManager {
                     if (!hadHit || gainedClip) extracted++;
                 } catch (err) {
                     failed++;
+                    stats.failed++;
                     // review round 1, Important 6: this is the only diagnostic for a file the
                     // fingerprint still counts but the trained model never saw (Important 2) --
                     // console output is not persisted, so this MUST go through the injected
@@ -497,9 +572,27 @@ export class MlTrainingManager {
                 }
             }
 
-            if (!hasClip(hit.clip)) clipMissing++;
+            if (!hasClip(hit.clip)) {
+                clipMissing++;
+                if (enableClipFeatures) {
+                    // Names the file that keeps the model out of the cache (G3 addendum): before, only an
+                    // unnamed toast and a console.warn did.
+                    stats.noClip++;
+                    if (stats.noClip <= NO_CLIP_LOG_LIMIT) {
+                        this.logError(
+                            `No CLIP vector for ${file.name} in ${folderPath} — the model will not be cached`
+                        );
+                    }
+                }
+            }
             rows.push(this._combine(hit.feature, hit.clip));
             this.onProgress({ phase, current: i + 1, total: files.length });
+        }
+
+        if (stats.noClip > NO_CLIP_LOG_LIMIT) {
+            this.logError(
+                `No CLIP vector for ${stats.noClip - NO_CLIP_LOG_LIMIT} more file(s) in ${folderPath} — the model will not be cached`
+            );
         }
 
         // scanCount = files.length: the third shrink-guard conjunct that tells a genuine folder
@@ -508,9 +601,11 @@ export class MlTrainingManager {
         // entries.size, which undercounts (entries whose stat could not be resolved are skipped on
         // save, so entries.size is only an upper bound on what was actually written).
         if (extracted > 0 && !signal?.aborted) {
+            const tSave = this._now();
             await this._saveVectorCache(folderPath, entries, diskCount, files.length);
+            stats.saveMs = this._now() - tSave;
         }
-        return { rows, clipMissing, failed, aborted: false };
+        return { rows, clipMissing, failed, aborted: false, stats };
     }
 
     /**
@@ -661,16 +756,32 @@ export class MlTrainingManager {
      * retrains every call; that is the accepted, honest cost (matches what the message says).
      */
     async ensureTrainedModel({ signal } = {}) {
+        // G3 spec § 7: one perf-log line per call, on every return path. A throw still propagates; its
+        // line reads source=failed.
+        const perf = { source: 'failed', start: this._now() };
+        try {
+            const result = await this._ensureTrainedModelImpl({ signal }, perf);
+            perf.source = result.source === 'skipped' && signal?.aborted ? 'aborted' : result.source;
+            return result;
+        } finally {
+            this._writeTrainingPerf(perf);
+        }
+    }
+
+    // The body of ensureTrainedModel (its JSDoc above). `perf` collects the phase timings the wrapper logs.
+    async _ensureTrainedModelImpl({ signal } = {}, perf = {}) {
         const miss = { source: 'skipped', stats: null, fingerprint: null, descriptor: null };
         const config = this.getConfig();
         if (!config.customLikeFolder || !config.customDislikeFolder) return miss;
         if (signal?.aborted) return miss;
 
         this.onProgress({ phase: 'Checking training set…' });
+        const tScan = this._now();
         const [likedResult, dislikedResult] = await Promise.all([
             this.loadFolder(config.customLikeFolder),
             this.loadFolder(config.customDislikeFolder),
         ]);
+        perf.scanMs = this._now() - tScan;
         if (signal?.aborted) return miss;
 
         // Important 5: a failed scan must never read as a silent "this folder is empty" -- that
@@ -807,6 +918,7 @@ export class MlTrainingManager {
             config.enableClipFeatures,
             signal
         );
+        perf.likes = likes.stats;
         if (likes.aborted || signal?.aborted) return miss;
         const dislikes = await this._collectFolderVectors(
             config.customDislikeFolder,
@@ -816,11 +928,14 @@ export class MlTrainingManager {
             config.enableClipFeatures,
             signal
         );
+        perf.dislikes = dislikes.stats;
         if (dislikes.aborted || signal?.aborted) return miss;
 
         // Only reached once both cache checks have missed -- the expensive half of the bulk-rated
         // contribution (Important 4).
+        const tBulk = this._now();
         const bulk = await this._collectBulkRatedVectors(resolvedBulk, config.enableClipFeatures, signal);
+        perf.bulkMs = this._now() - tBulk;
         if (bulk.aborted || signal?.aborted) return miss;
 
         const likedFeatures = [...likes.rows, ...bulk.liked];
@@ -829,7 +944,9 @@ export class MlTrainingManager {
 
         this.onProgress({ phase: 'Training model…' });
         const seed = seedFromFingerprint(fingerprint);
+        const tTrain = this._now();
         const { stats, modelState } = await this.trainModel(likedFeatures, dislikedFeatures, seed);
+        perf.trainMs = this._now() - tTrain;
 
         // A model trained with a zero CLIP half while CLIP is ON is a degraded model wearing a
         // CLIP-enabled fingerprint. Degraded operation stays supported; caching it does not, or
@@ -849,6 +966,7 @@ export class MlTrainingManager {
         if (cacheable) {
             this.sessionFingerprint = fingerprint;
             this.sessionStats = stats;
+            const tWrite = this._now();
             await this._writeCachedModel(fingerprint, modelState, stats, {
                 likeFolder: config.customLikeFolder,
                 likeCount: likeFiles.length,
@@ -858,6 +976,7 @@ export class MlTrainingManager {
                 enableClipFeatures: config.enableClipFeatures,
                 versions: config.versions,
             });
+            perf.modelCacheWriteMs = this._now() - tWrite;
         } else {
             if (config.enableClipFeatures && clipMissing > 0) {
                 this.notify(

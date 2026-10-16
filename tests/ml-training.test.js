@@ -4,6 +4,7 @@ import {
     buildDescriptor,
     fingerprintDescriptor,
     seedFromFingerprint,
+    formatTrainingPerfLine,
     MlTrainingManager,
 } from '../ml-training.js';
 import { createRequire } from 'module';
@@ -211,6 +212,36 @@ describe('seedFromFingerprint', () => {
         expect(seed).toBeGreaterThanOrEqual(0);
         expect(seed).toBeLessThanOrEqual(0xffffffff);
         expect(seedFromFingerprint(fp)).toBe(seed);
+    });
+});
+
+// G3 spec § 7: the perf-log line for one ensureTrainedModel call.
+describe('formatTrainingPerfLine (G3)', () => {
+    it('rounds to whole milliseconds and leaves out phases that did not run', () => {
+        expect(
+            formatTrainingPerfLine({
+                source: 'trained',
+                totalMs: 1234.6,
+                scanMs: 4.4,
+                likes: {
+                    loadMs: 40.5,
+                    diskCount: 1200,
+                    misses: 5,
+                    failed: 2,
+                    noClip: 1,
+                    featuresMs: 300.2,
+                    clipMs: 912.7,
+                    saveMs: 80,
+                },
+                trainMs: 150.49,
+            })
+        ).toBe(
+            'ML training: source=trained total=1235ms | scan=4ms | likes: load=41ms (disk 1200) misses=5 failed=2 noClip=1 features=300ms clip=913ms save=80ms | train=150ms'
+        );
+    });
+
+    it('is just the head when nothing ran', () => {
+        expect(formatTrainingPerfLine({ source: 'skipped', totalMs: 0 })).toBe('ML training: source=skipped total=0ms');
     });
 });
 
@@ -1935,5 +1966,156 @@ describe('ensureTrainedModel', () => {
         const res = await m.ensureTrainedModel({});
         const [, , seed] = m.trainModel.mock.calls[0];
         expect(seed).toBe(seedFromFingerprint(res.fingerprint));
+    });
+
+    // G3 spec § 7: one perf-log line per call, on every return path, written from a finally.
+    describe('perf line (G3)', () => {
+        const perfOverrides = () => ({ logPerf: vi.fn(), now: () => 0 });
+
+        it('writes one line for a rebuild, with every phase', async () => {
+            const { m } = scenario({ managerOverrides: perfOverrides() });
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls).toEqual([
+                [
+                    'ML training: source=trained total=0ms | scan=0ms | likes: load=0ms (disk 0) misses=3 failed=0 noClip=0 features=0ms clip=0ms save=0ms | dislikes: load=0ms (disk 0) misses=3 failed=0 noClip=0 features=0ms clip=0ms save=0ms | bulk=0ms | train=0ms | modelCacheWrite=0ms',
+                ],
+            ]);
+        });
+
+        it('writes a short line for a session hit', async () => {
+            const { m } = scenario({ managerOverrides: perfOverrides() });
+            await m.ensureTrainedModel({});
+            m.logPerf.mockClear();
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls).toEqual([['ML training: source=session total=0ms | scan=0ms']]);
+        });
+
+        it('writes source=skipped when no training folders are configured', async () => {
+            const { m } = scenario({
+                managerOverrides: { ...perfOverrides(), getConfig: vi.fn(() => ({ versions })) },
+            });
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls).toEqual([['ML training: source=skipped total=0ms']]);
+        });
+
+        it('writes source=aborted when the sort was cancelled', async () => {
+            const { m } = scenario({ managerOverrides: perfOverrides() });
+            const controller = new AbortController();
+            controller.abort();
+            await m.ensureTrainedModel({ signal: controller.signal });
+            expect(m.logPerf.mock.calls).toEqual([['ML training: source=aborted total=0ms']]);
+        });
+
+        it('writes source=failed and still rejects when training throws (Review Focus 3)', async () => {
+            const { m } = scenario({
+                managerOverrides: {
+                    ...perfOverrides(),
+                    trainModel: vi.fn(async () => {
+                        throw new Error('worker gone');
+                    }),
+                },
+            });
+            await expect(m.ensureTrainedModel({})).rejects.toThrow('worker gone');
+            expect(m.logPerf).toHaveBeenCalledTimes(1);
+            expect(m.logPerf.mock.calls[0][0]).toMatch(
+                /^ML training: source=failed total=0ms \| scan=0ms \| likes: .* \| dislikes: .* \| bulk=0ms$/
+            );
+        });
+
+        it('never fails a rebuild when the sink or the clock throws', async () => {
+            const { m } = scenario({
+                managerOverrides: {
+                    logPerf: vi.fn(() => {
+                        throw new Error('sink');
+                    }),
+                    now: () => {
+                        throw new Error('clock');
+                    },
+                },
+            });
+            const res = await m.ensureTrainedModel({});
+            expect(res.source).toBe('trained');
+        });
+
+        it('counts the time of a call that throws, and shows failed=N (G3 re-scope, Review Focus 4)', async () => {
+            // Before: a throwing computeFeatures' time was dropped, so the before run's `dislikes: features=0ms`
+            // hid 66 failed calls, and nothing in the line said why the model was not cached.
+            let t = 0;
+            const { m } = scenario({
+                managerOverrides: {
+                    logPerf: vi.fn(),
+                    now: () => t,
+                    computeFeatures: vi.fn(async (p) => {
+                        t += 100;
+                        if (p === '/likes/l1.jpg') throw new Error('Video load error');
+                        return new Float32Array(64).fill(0.5);
+                    }),
+                },
+            });
+            await m.ensureTrainedModel({});
+            const line = m.logPerf.mock.calls[0][0];
+            expect(line).toContain(
+                'likes: load=0ms (disk 0) misses=3 failed=1 noClip=0 features=300ms clip=0ms save=0ms'
+            );
+            expect(line).toContain('dislikes: load=0ms (disk 0) misses=3 failed=0 noClip=0 features=300ms');
+            expect(line).not.toContain('modelCacheWrite='); // a failed file still blocks the model cache (D1)
+        });
+
+        it('counts and names a training file left without a CLIP vector, which keeps the model out of the cache (G3 addendum)', async () => {
+            // Before: the perf line had no count for it and nothing logged its name, so a model that never cached
+            // looked unexplained (the first after run: failed=0, no modelCacheWrite, and no clue why).
+            const { m } = scenario({
+                extractClipEmbedding: vi.fn(async (p) =>
+                    p === '/dislikes/d2.jpg' ? null : new Float32Array(512).fill(0.25)
+                ),
+                managerOverrides: { logPerf: vi.fn(), now: () => 0 },
+            });
+            await m.ensureTrainedModel({});
+            const line = m.logPerf.mock.calls[0][0];
+            expect(line).toContain('likes: load=0ms (disk 0) misses=3 failed=0 noClip=0 features=0ms');
+            expect(line).toContain('dislikes: load=0ms (disk 0) misses=3 failed=0 noClip=1 features=0ms');
+            expect(line).not.toContain('modelCacheWrite='); // a CLIP-less row still blocks the cache (D1)
+            expect(m.logError).toHaveBeenCalledWith(
+                'No CLIP vector for d2.jpg in /dislikes — the model will not be cached'
+            );
+        });
+
+        it('names at most 20 CLIP-less files per folder, then one line for the rest (G3 addendum, review)', async () => {
+            // With CLIP enabled but unavailable (offline first run), every one of ~28k training rows would log a
+            // line, and a main-thread write, per sort. noClip=N still carries the full count.
+            const likeFiles = Array.from({ length: 25 }, (_, i) => ({
+                name: `l${i + 1}.jpg`,
+                path: `/likes/l${i + 1}.jpg`,
+                size: 10 + i,
+                mtimeMs: 1 + i,
+            }));
+            const { m } = scenario({
+                likeFiles,
+                extractClipEmbedding: vi.fn(async (p) =>
+                    p.startsWith('/likes/') ? null : new Float32Array(512).fill(0.25)
+                ),
+                managerOverrides: { logPerf: vi.fn(), now: () => 0 },
+            });
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls[0][0]).toContain(
+                'likes: load=0ms (disk 0) misses=25 failed=0 noClip=25 features=0ms'
+            );
+            const messages = m.logError.mock.calls.map((c) => c[0]);
+            expect(messages.filter((x) => x.startsWith('No CLIP vector for l'))).toHaveLength(20);
+            expect(messages).toContain('No CLIP vector for 5 more file(s) in /likes — the model will not be cached');
+        });
+
+        // A guard against over-counting. Mutation-check: drop the
+        // `if (enableClipFeatures)` guard in _collectFolderVectors, keeping its body → this fails.
+        it('does not count or log CLIP-less rows while CLIP is off', async () => {
+            const { m } = scenario({
+                enableClipFeatures: false,
+                extractClipEmbedding: vi.fn(async () => null),
+                managerOverrides: { logPerf: vi.fn(), now: () => 0 },
+            });
+            await m.ensureTrainedModel({});
+            expect(m.logPerf.mock.calls[0][0]).toContain('misses=3 failed=0 noClip=0 features=0ms');
+            expect(m.logError).not.toHaveBeenCalledWith(expect.stringMatching(/^No CLIP vector/));
+        });
     });
 });

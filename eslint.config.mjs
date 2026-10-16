@@ -65,7 +65,7 @@ export default [
 
     // 1. Node / Electron main process
     {
-        files: ['main.js', 'logger.js', 'path-grants.js', 'ipc-guard.js'],
+        files: ['main.js', 'logger.js', 'path-grants.js', 'ipc-guard.js', 'clip-image.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',
