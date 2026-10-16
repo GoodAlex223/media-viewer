@@ -980,6 +980,45 @@ Tightened, no row: "whole-tree `docs/README.md` index guard:" folded into the cl
 
 The three `###` subheadings went with their bodies (removed, not renamed): nothing live cites them (`git grep`, archive excluded — hits are frozen records only); `tests/backlog-structure.test.js` checks BACKLOG's headers, not `CLAUDE.md`.
 
+### T7 — Detected Patterns
+
+| # | Removed text (first words, quoted) | Label | Where it lives now |
+|---|---|---|---|
+| 1 | Error Handling: "(before G3, every string logged as `undefined`)" | History | DONE.md G3 (2026-10-07) entry; `logger.normalizeRendererLogEntry` |
+| 2 | Data Structures: "now live ONLY … — the renderer's own copies + the `sortMediaBySimilarity*` renderer methods were deleted in PR #54/PR1, so" | History (migration-relative — P1 A4) | DONE.md PR #54 entry; the rule "live only in `sorting-worker.js`; sorting is worker-only" stays |
+| 3 | Data Structures: "Shared-utility extraction tracked in BACKLOG." | History (tracker state — P1 A5) | BACKLOG |
+| 4 | Empty state: ", so the `moveHistory`-only form let `#tournamentUndoBtn` read enabled while Ctrl+A silently no-opped" | Walk-through (symptom) | G2 tournament-undo-hardening spec; the reason ("writes nothing to `moveHistory`") stays |
+| 5 | Like-or-skip: "(G2)", "(`'other'` notices the discarded count)", "(`_updateResortChip()`, refreshed from `showMedia()` and `updateSortPredictionButton()`)" → owner only | History; Walk-through; Readable from the code | Design pointer → G2 spec; `_updateResortChip` callers |
+| 6 | Recently opened folders: "(G4)", "(G4 final review F1)", "(PR #81 review #1)" | History | G4 spec; DONE.md G4 entry |
+| 7 | Recently opened folders: ", change-folder's extracted body" | Walk-through | Design pointer → G4 spec |
+| 8 | Recently opened folders: "The clicked row reads "Checking…" (not the spinner, which hides the drop zone)." and "`_recentOpenInFlight` holds that row's path, so a re-render keeps its "Checking…"." | Walk-through | Design pointer → G4 spec § 6 |
+| 9 | Recently opened folders: "("Wait for the folder to finish loading")" | Readable from the code | `_refuseIfFolderLoadInFlight` |
+| 10 | Compare-pair undo: "(G2 bulk dislike)" | History | G2 spec |
+| 11 | `resetMlModel()`: "not tidiness", and the symptom chain "(ready-looking stats → … repeating for the rest of the session)" → one clause | Walk-through (symptom chain) | ML pipeline spec; the clause "the next sort reuses an empty model — `scores: null` for the rest of the session" stays |
+| 12 | Training-vector cache: "The module-local Map alone was **not** sufficient and this shipped violated for most of the branch:" → "The Map alone is not enough:" | History | DONE.md G1 ML pipeline entry; the mechanism (why the flag exists) stays, in the present tense |
+| 13 | Training-vector cache: "(G3)" | History | G3 training-video spec |
+| 14 | Bulk-rated cache: "(G1)" | History | G1 security spec |
+| 15 | Tournament persistence: "now" (before `version: 2`), "(G3)" | History (migration-relative) | DONE.md; render re-entry spec |
+| 16 | UI Components: "at `bottom:30px`, `96px` in tournament mode" → "raised in tournament mode"; "Buttons are ghosted (`opacity:.35`) at rest, opaque on hover."; "three square icon-only overlay buttons (… green, … neutral, … red)" → the IDs | Readable from the code | `styles.css` |
+| 17 | UI Components: "(`.overlay-bar-slot[data-side='left']`→1, …)" → "left slot → 1, … right slot → 3" | Readable from the code (selectors) | `styles.css` |
+| 18 | UI Components: "and landed at ~50% of the bar width instead of ~75% (caught by the committed visual evidence, not the E2E suite, and now covered by its own regression test)" | History; Walk-through | Overlay spec; the reason (auto-placement skips a `display:none` item) stays |
+| 19 | UI Components: "Tournament `.tournament-header` uses `margin-top:56px` to clear the fixed `.header`; `.tournament-controls .control-btn` + `.btn-label` override base styles for white-on-glass legibility." | Readable from the code | `styles.css` |
+| 20 | UI Components, menu: "(G4)", "— arrows move between the folder rows, Tab also reaches each ✕", "G4 final review F6; the menu's own `stopPropagation` is now defence in depth", "— the auto-hide timer re-arms only in the top band", "(`max-height: calc(100vh - 260px)`, G4 final review F5)" | History; Walk-through; Readable from the code | Design pointer → G4 spec; `styles.css` |
+| 21 | Async Patterns, CLIP extraction: "(npm packages can't resolve in Electron Web Workers)" | Duplicate | § Active gotchas "`@huggingface/transformers` … cannot resolve in Electron Web Workers" (home) |
+| 22 | File-op guard: "(G1)", "G2 — ", "(G2, one helper …)" → "(one helper …)" | History | Rating-safety spec; G2 spec |
+| 23 | File-op guard: "(BACKLOG 🟤 [2026-08-31] "Re-entrancy guard for the tournament handler family" — unblocked by G3's render owner, not built)" | History (tracker state — P1 A5) | BACKLOG 🟤 [2026-08-31]; the fact "deliberately outside it" stays |
+| 24 | File-op guard: "(the held-Like dead-controls state, reproduced in G1's Phase 0)" | History | Rating-safety spec; the reason (clobbers the next render's element, strands `isLoading`) stays, present tense |
+| 25 | File-op guard: "Since the security G1 (PR #78)," | History | G1 security spec; the move-order rule stays (homes ledger row 6) |
+| 26 | Compare Mode Validation: "(G3)" | History | Render re-entry spec |
+| 27 | Key Dependencies: "direct since G3:" | History | G3 training-video spec |
+| 28 | Security: "G1, PR #78;" (the spec link stays) | History | G1 security spec |
+| 29 | Security: "Tracked as TODO 🔴." | History (tracker state) | TODO.md 🔴; the I1 caveat itself stays |
+| 30 | Keyboard, auto-repeat: "used to move files … (G1)" → "would otherwise move files" | History (migration-relative) | Rating-safety spec; the reason stays |
+| 31 | Keyboard, form fields: "(PR #74 review)", "to "Simple"", "— E2E `after picking a sort algorithm, S still navigates and the algorithm is unchanged`" | History | PR #74; the E2E file |
+| 32 | Keyboard, form fields: "Load-bearing since G1 bound single-mode `Digit1`:", "— found by G1's final review, E2E `typing 10 into the tournament Rounds box moves no file`" | History | Rating-safety spec; the reason (the config modal opens while the mode is still `'single'`; `Digit1` is bound) stays |
+
+Pointers added: G2 spec (Like-or-skip), G4 spec (Recently opened folders; the recent-folders menu), ML pipeline spec (Training-vector cache), render re-entry spec (Tournament persistence), overlay spec (UI Components), rating-safety spec (File-op guard). Homes ledger rows 4 (leave prompt — not restated in Recently opened folders), 5 and 6 applied.
+
 ## Progress Log
 
 - **2026-10-16/17** — Branch `g5-claude-md-size-audit` from `506e041`. Brainstormed section by section: D1 mixed handling of non-rule text; D2 authoring rule + never-blocking warning; D3 approach A (in place, per section); D4 Backlog Intake Rules → a three-line pointer (the user asked for a recommendation and agreed); D5 migration recommended only; D6 the trim on Opus. While writing the spec, measuring its own claim ("each feature commit added 1–3 KB") showed 14 of 17 commits under 1 KB, and a 200-line trigger would have fired on every growing commit after a trim landing above 200 lines; user ruling: bytes only, 500-byte growth threshold, audit trigger moved to the byte trigger. A side agent raised the same line-trigger issue after the amendment; it was already resolved. Spec `1e934cb`, approved 2026-10-17.
@@ -990,6 +1029,7 @@ The three `###` subheadings went with their bodies (removed, not renamed): nothi
 - **2026-10-17 — T4 Architecture**: 5,460 → 4,378 B (−1,082), 42 → 42 lines; file 64,088 → 63,006 B. Homes ledger rows 1–3 applied (CLIP reason, `.claude/` allow-list, `clip-image.js` limits now only in their § Active gotchas homes). Deviation logged under the T4 table: the `scripts/` row lost its function lists, so T10's entry follows that shape.
 - **2026-10-17 — T5 Code Conventions**: 7,250 → 6,669 B (−581), 35 → 35 lines; file 63,006 → 62,425 B. Homes ledger row 5 applied (the file-op guard contract lives only in Async Patterns; the E2E bullet keeps the test-side rule).
 - **2026-10-17 — T6 Backlog Intake Rules**: 1,466 → 403 B (−1,063), 27 → 6 lines; file 62,425 → 61,362 B, 236 → 215 lines. The approved three-line pointer; BACKLOG 📌 § Intake rules gains the entry-shape bullet.
+- **2026-10-17 — T7 Detected Patterns**: 29,691 → 28,188 B (−1,503), 60 → 60 lines; file 61,362 → 59,859 B. Six spec pointers added; homes ledger rows 4–6 applied; 32 disposition rows. **The cut is smaller than the spec's 38–44 KB landing estimate implies** (spec § 5, an estimate — § 1 sets no target): the plan's per-bullet keep lists (T7 notes) hold most of this section as contract — editor rules such as the `_onOrderChanged` kinds, the `_folderIntentGen` bump sites, the file-op guard's holders and refusers, and the tournament render owner's never-await rule. Cutting them to reach a number would trade the plan's first goal (no rule lost) for its estimate; the final size is reported against both in T11.
 
 ## Key Discoveries
 
