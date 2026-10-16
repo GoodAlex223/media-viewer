@@ -953,6 +953,19 @@ Tightened, no row: "whole-tree `docs/README.md` index guard:" folded into the cl
 
 **Deviation (T10 consequence)**: the `scripts/` row drops its per-script function lists, so T10's new entry follows the trimmed shape — `check-claude-md-size.js (pre-commit \`CLAUDE.md\` size warning, never blocks)` — not the plan's "measure/evaluate/formatWarning + a never-blocking CLI".
 
+### T5 — Code Conventions
+
+| # | Removed text (first words, quoted) | Label | Where it lives now |
+|---|---|---|---|
+| 1 | Patterns: "Planned next: ZoomManager, CompareManager, SortingManager, the rest of MLManager (sort orchestration)." | History (roadmap state) | `docs/planning/MILESTONES.md` v2.0 modularization |
+| 2 | ESLint: "twelve file-group blocks (main, preload, renderer module/script, …)" → "one block per file group" | Readable from the code (a stale derived count — P1 A2) | `eslint.config.mjs` |
+| 3 | ESLint: "Since G1 (security):" | History | G1 security spec; DONE.md 2026-10-11 |
+| 4 | Unit, worker abort: "G4 deleted a protocol with no sender, and" | History | G4 ML pipeline integrity plan (archived); DONE.md |
+| 5 | E2E, `isLoading` wait: "— not, since G1, by any deferred re-scoring window." | History | G1 bulk-rate follow-ups plan (archived) |
+| 6 | E2E, `mlWorker`: "Since G1 (`_beginDeferredCompareRefresh` and friends are deleted)," | History | same |
+| 7 | E2E, `mlWorker`: "(no more `update`/`reverseUpdate` — those message types no longer exist)" and ", with no deferred re-scoring window" | History (migration-relative — P1 A4) | same; the rule "posts nothing to the worker for the rating itself" stays |
+| 8 | E2E, file actions: "A file action started while another holds `_fileOpInFlight` is refused (undo shows a notice)." | Duplicate | § Detected Patterns → Async Patterns "File-op guard" (home) |
+
 ## Progress Log
 
 - **2026-10-16/17** — Branch `g5-claude-md-size-audit` from `506e041`. Brainstormed section by section: D1 mixed handling of non-rule text; D2 authoring rule + never-blocking warning; D3 approach A (in place, per section); D4 Backlog Intake Rules → a three-line pointer (the user asked for a recommendation and agreed); D5 migration recommended only; D6 the trim on Opus. While writing the spec, measuring its own claim ("each feature commit added 1–3 KB") showed 14 of 17 commits under 1 KB, and a 200-line trigger would have fired on every growing commit after a trim landing above 200 lines; user ruling: bytes only, 500-byte growth threshold, audit trigger moved to the byte trigger. A side agent raised the same line-trigger issue after the amendment; it was already resolved. Spec `1e934cb`, approved 2026-10-17.
@@ -961,6 +974,7 @@ Tightened, no row: "whole-tree `docs/README.md` index guard:" folded into the cl
 - **2026-10-17 — T1 (passes).** Baseline `236 64203` matches spec § 2.2. Prompt-audit: 9 findings (A1–A9; 2 High contradicted counts, history/migration-relative/tracker rows High, patch accretion and duplicates Medium, bold Low/flag) + 2 out-of-scope Group 2 conflicts (regression-checker agent, new-e2e-test skill) → Residuals. Improver: 82/100 (B), edits declined. Stale-ref probe: `SENTINEL OK`, 15 hits, all runtime-only/external. Sweep: 14 concepts, no wrong statement outside `CLAUDE.md` but the planned `GOALS.md` chain; `GOALS.md:76` "~9,400-line" → Residuals. `.mcp.json` untracked, 0 server-memory. `GOALS.md` L74 chain corrected, dated comment at L5.
 - **2026-10-17 — T2 Overview: no change** (472 B, 11 lines). **T3 Build & Development Commands**: 1,521 → 1,406 B (−115), 13 → 13 lines; file 64,203 → 64,088 B.
 - **2026-10-17 — T4 Architecture**: 5,460 → 4,378 B (−1,082), 42 → 42 lines; file 64,088 → 63,006 B. Homes ledger rows 1–3 applied (CLIP reason, `.claude/` allow-list, `clip-image.js` limits now only in their § Active gotchas homes). Deviation logged under the T4 table: the `scripts/` row lost its function lists, so T10's entry follows that shape.
+- **2026-10-17 — T5 Code Conventions**: 7,250 → 6,669 B (−581), 35 → 35 lines; file 63,006 → 62,425 B. Homes ledger row 5 applied (the file-op guard contract lives only in Async Patterns; the E2E bullet keeps the test-side rule).
 
 ## Key Discoveries
 
