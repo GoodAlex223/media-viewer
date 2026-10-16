@@ -49,6 +49,7 @@ media_viewer/
 ├── tournament.js        # TournamentManager ES module (v2.0 pattern); IPC glue for tournament state persistence + apply
 ├── ml-training.js       # MlTrainingManager ES module (v2.0 pattern): training-set fingerprint, per-training-folder vector caches, fingerprint-keyed model cache
 ├── like-or-skip.js      # Pure ESM (G2 like-or-skip): SkipTracker, batch cursor + undo re-insertion plans, re-sort parking, out-of-date count; imported as a namespace (LikeOrSkip)
+├── recent-folders.js    # Pure ESM (G4 recent folders): parse/record/remove/serialize the localStorage list (cap 8, exact-path identity), folderDisplayName, classifyRecentFolder (grant status × exists → open/missing/regrant/unreachable/error); imported as a namespace (RecentFolders)
 ├── media-formats.js     # Shared CJS: isMediaFile(ext), getMimeType(ext); .jxl → image/jxl (ESLint block 3b)
 ├── jxl-decode-worker.js # Module Web Worker (type:'module'): decodes JXL via jxl-oxide-wasm; streaming meta/frame/done protocol over transferable ArrayBuffers
 ├── face-detector.js     # Face detection (@vladmandic/face-api)

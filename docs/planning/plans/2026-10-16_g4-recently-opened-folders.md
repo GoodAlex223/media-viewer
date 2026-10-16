@@ -104,8 +104,8 @@ T1 (pure module + "before" evidence) first — the before screenshot must be tak
 
 ## Pre-flight: the `typescript-lsp` trial (before Task 1's first code edit)
 
-- [ ] **Ask the user** before the global install (WEEKLY G4: "ask first — a global install"): `npm i -g typescript-language-server typescript`. On "no", skip the trial, log it, and continue — it is not a gate.
-- [ ] Install and enable `typescript-lsp@claude-plugins-official` at **project** scope (through `/plugin`; the user may need to run it). Expected: `.claude/settings.json` `enabledPlugins` gains `"typescript-lsp@claude-plugins-official": true` beside the three existing entries. `.claude/` is a protected path — the write prompts.
+- [x] **Ask the user** before the global install (WEEKLY G4: "ask first — a global install"): `npm i -g typescript-language-server typescript`. On "no", skip the trial, log it, and continue — it is not a gate.
+- [x] Install and enable `typescript-lsp@claude-plugins-official` at **project** scope (through `/plugin`; the user may need to run it). Expected: `.claude/settings.json` `enabledPlugins` gains `"typescript-lsp@claude-plugins-official": true` beside the three existing entries. `.claude/` is a protected path — the write prompts.
 - [ ] Start the execution session after enabling (a native run: a fresh session; subagent-driven: confirm in the first implementer's transcript). After the first `.js` edit, look for a `diagnostics` record in the session transcript (`~/.claude/projects/<project-slug>/<session-id>.jsonl` — grep `diagnostics`). If none appears, check the plugin's status in `/plugin` and the Claude Code plugins documentation before concluding it did not run (memory: hook edits take effect late — re-probe). Log the outcome either way.
 
 ---
@@ -127,7 +127,7 @@ T1 (pure module + "before" evidence) first — the before screenshot must be tak
   - `folderDisplayName(path: string, basename?: (p: string) => string): string`
   - `classifyRecentFolder(status: unknown, exists: unknown): 'open' | 'missing' | 'regrant' | 'unreachable' | 'error'`
 
-- [ ] **Step 1: Capture the "before" screenshot on the unchanged renderer**
+- [x] **Step 1: Capture the "before" screenshot on the unchanged renderer**
 
 Append to `tests/e2e/visual-evidence.test.js`. At the top of the file, add these imports after the existing two:
 
@@ -209,7 +209,7 @@ test.describe('G4 recent folders visual evidence', () => {
 Run (PowerShell): `$env:G4_EVIDENCE_STAGE='before'; npx playwright test tests/e2e/visual-evidence.test.js -g "recent folders"; $env:G4_EVIDENCE_STAGE=$null`
 Expected: 1 passed; `docs/superpowers/specs/assets/g4-drop-zone-before.png` exists. Look at it (Read tool): the bare drop zone — folder icon, "Select folder to view media files", the subtitle — and nothing else. A plain run (`npx playwright test tests/e2e/visual-evidence.test.js`) reports the G4 test skipped.
 
-- [ ] **Step 2: Write the failing module tests**
+- [x] **Step 2: Write the failing module tests**
 
 Create `tests/recent-folders.test.js`:
 
@@ -411,12 +411,12 @@ const RENDERER_FILES = [
 ];
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `npx vitest run tests/recent-folders.test.js tests/lint-guard.test.js`
 Expected: `recent-folders.test.js` fails to collect — `Error: Cannot find module '../recent-folders.js'`; `lint-guard.test.js` › "HTML sink guard in recent-folders.js" fails every `flags …` case (`expected [] to have a length of 1`): no ESLint block covers the file yet. Record both in the Progress Log.
 
-- [ ] **Step 4: Write the module**
+- [x] **Step 4: Write the module**
 
 Create `recent-folders.js`:
 
@@ -545,11 +545,11 @@ In `eslint.config.mjs` block 2c (line 160):
         ],
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/recent-folders.test.js tests/lint-guard.test.js` → all pass. Then `npm run lint` → 0 errors.
 
-- [ ] **Step 6: CLAUDE.md architecture tree**
+- [x] **Step 6: CLAUDE.md architecture tree**
 
 In `CLAUDE.md` § Architecture, after the `like-or-skip.js` line:
 
@@ -557,7 +557,7 @@ In `CLAUDE.md` § Architecture, after the `like-or-skip.js` line:
 ├── recent-folders.js    # Pure ESM (G4 recent folders): parse/record/remove/serialize the localStorage list (cap 8, exact-path identity), folderDisplayName, classifyRecentFolder (grant status × exists → open/missing/regrant/unreachable/error); imported as a namespace (RecentFolders)
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add recent-folders.js tests/recent-folders.test.js tests/lint-guard.test.js eslint.config.mjs tests/e2e/visual-evidence.test.js docs/superpowers/specs/assets/g4-drop-zone-before.png CLAUDE.md
@@ -2672,6 +2672,9 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 
 - **2026-10-16** — Branch `g4-recently-opened-folders` from `dd05eed`. User reordered G4 ahead of I1 (D0). Brainstormed section by section (D1 drop zone + header menu, D2 pure module + glue); spec `96c9c94`, approved. Planning-time measurements: the header auto-hide re-arm points (Premise Correction 1), the document wheel handler (2), the E2E Lucide stub (3), the tests the `switchToFolder` extraction reaches (7), `RENDERER_FILES` (8). Spec amended before any code (1–6). Plan `0fa22af`.
 - **2026-10-16** — A side-agent note ("a header-menu pick mid-tournament skips the Save/Discard prompt; the last picks might not be written") verified against the code before acting: the missing prompt is real, and so is the lost tail (`PERSIST_DEBOUNCE_MS = 500`, `_drain` returns on `!this.engine` after `loadFolder` nulls it); "one misclick" was overstated (▾ then a row), and nothing older than 500 ms is lost. User ruling **D3**: the prompt goes in `switchToFolder`, for change-folder and the menu alike (Premise Correction 9). Task 4 grew to ~1.5 SP (total ~5). The user chose **subagent-driven** execution, after a `/compact`.
+- **2026-10-16 — Pre-flight.** The user approved the global install: `typescript-language-server` 5.3.0 (+ `typescript`). The user enabled `typescript-lsp@claude-plugins-official` through `/plugin` (`95dd933`; `/plugin` rewrote `.claude/settings.json` at 2-space indent, and lint-staged restored 4 spaces, leaving a one-line diff). The controller session gained the `LSP` tool mid-turn. Diagnostics are checked at Finish.
+- **2026-10-16 — Controller pre-flight scan, Ruling 1 (T3).** The plan's T3 code focuses `menu.querySelector('button:not(:disabled)')`, which in the menu is the current row's ✕: the current item is disabled and its ✕ is not (spec § 7). That contradicts T3's own E2E (`items.nth(1)` focused) and T5's acceptance. Ruling: open and refresh focus the first enabled `.recent-folder-item`; ArrowUp/ArrowDown cycle the enabled items, which are the spec's "rows"; Tab/Shift+Tab cycle every enabled button, ✕ included.
+- **2026-10-16 — T1.** The before shot was taken on the unchanged renderer and shows the bare drop zone, with no folder icon because E2E stubs Lucide (Premise Correction 3). A plain run skips the G4 block. RED: `Cannot find module '../recent-folders.js'`, and 10 lint-guard `flags …` cases failed with `expected [] to have a length of 1`. GREEN: 127 tests in the two files; full suite 1443 passed, 1 skipped; lint 0 errors.
 
 ## Key Discoveries
 

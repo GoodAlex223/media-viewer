@@ -8,6 +8,10 @@ import {
     waitForMedia,
     captureScreenshot,
 } from './helpers/electron-app.js';
+import { cp, mkdir, mkdtemp, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { dirname, join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 
 // Capture-only: no assertions. These produce the committed visual evidence WEEKLY G2 requires.
 // The stem is passed in so the same file can run on `main` (before) and on the branch (after).
@@ -216,6 +220,70 @@ test.describe('G2 like-or-skip visual evidence', () => {
             await page.locator('.bulk-dislike-modal').waitFor();
             await page.waitForTimeout(300);
             await captureScreenshot(page, 'g2-like-or-skip-dialog-after');
+            await page.keyboard.press('Escape');
+        }
+    });
+});
+
+// G4 recently opened folders (2026-10-16, spec docs/superpowers/specs/2026-10-16-g4-recently-opened-folders-design.md
+// § 9.3): the same scenario on both runs — three folders opened one after another, then a restart (a page
+// reload; main keeps its grants) — so the before/after drop-zone pair differs only by the feature. Opt-in, like
+// the blocks above. Paths are redacted before each shot: the temp root lives inside the Windows profile, so it
+// is replaced by D:\Photos in the path text (text only; layout unchanged). Capture:
+// G4_EVIDENCE_STAGE=before|after npx playwright test tests/e2e/visual-evidence.test.js -g "recent folders"
+const G4_STAGE = process.env.G4_EVIDENCE_STAGE;
+const G4_FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures');
+
+test.describe('G4 recent folders visual evidence', () => {
+    test.skip(!G4_STAGE, 'Opt-in only — set G4_EVIDENCE_STAGE=before|after to (re)capture');
+
+    let electronApp, page, root;
+
+    test.afterEach(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (root) {
+            await rm(root, { recursive: true, force: true });
+            root = null;
+        }
+    });
+
+    async function redactPaths(prefix) {
+        await page.evaluate((p) => {
+            for (const el of document.querySelectorAll('.recent-folder-path')) {
+                if (el.textContent.startsWith(p)) {
+                    el.textContent = 'D:\\Photos' + el.textContent.slice(p.length);
+                }
+            }
+        }, prefix);
+    }
+
+    test('recent folders: the drop zone after a restart, and the header menu', async () => {
+        root = await mkdtemp(join(tmpdir(), 'mv-e2e-g4ev-'));
+        ({ electronApp, page } = await launchApp());
+        for (const name of ['Wallpapers', 'Liked_2', 'Liked_3']) {
+            const dir = join(root, name);
+            await mkdir(dir);
+            await cp(join(G4_FIXTURES, 'normal-320x240.png'), join(dir, 'normal-320x240.png'));
+            await loadFolder(page, dir);
+            await waitForMedia(page);
+        }
+        await page.reload();
+        await page.waitForFunction(() => typeof window.mediaViewer !== 'undefined');
+        await redactPaths(root);
+        await page.waitForTimeout(300);
+        await captureScreenshot(page, `g4-drop-zone-${G4_STAGE}`);
+
+        if (G4_STAGE === 'after') {
+            await loadFolder(page, join(root, 'Liked_3'));
+            await waitForMedia(page);
+            await page.evaluate(() => document.querySelector('.header').classList.add('show'));
+            await page.locator('#recentFoldersBtn').click();
+            await page.locator('#recentFoldersMenu').waitFor();
+            await redactPaths(root);
+            await page.waitForTimeout(300);
+            await captureScreenshot(page, 'g4-header-menu-after');
             await page.keyboard.press('Escape');
         }
     });
