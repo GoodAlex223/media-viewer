@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G5 (🟡, 3 SP → ~4.5 SP); BACKLOG 🟡 [2026-09-21] "`CLAUDE.md` is at 212 lines, past the ~200 threshold…" and its 🟤 twin [2026-07-03] "CLAUDE.md is over its own ~200-line soft cap"
 **Spec**: [2026-10-17-g5-claude-md-size-audit-design.md](../../superpowers/specs/2026-10-17-g5-claude-md-size-audit-design.md) (committed `1e934cb`; written spec approved by the user 2026-10-17)
 **Created**: 2026-10-17
-**Status**: Draft — awaiting the user's review and choice of execution method
+**Status**: Approved by the user 2026-10-17 (with the 25% headroom ruling, Premise Correction 6); execution: **Native**
 **Last Updated**: 2026-10-17
 **Branch**: `g5-claude-md-size-audit` (from `main` @ `506e041`)
 **Runbook**: `docs/prompts/claude-md-audit.md` in `claude-code-universal-config`
@@ -24,7 +24,7 @@
 - **Every removed sentence gets a disposition row before its commit** (spec § 1, § 5). Labels: `History`, `Walk-through`, `Duplicate`, `Readable from the code`. Tightened rules and kept "why" clauses need no row.
 - **History exceptions** (spec § 5): keep a release name a rule depends on (e.g. "folders saved before G1 are re-confirmed once"); keep a verification caveat that changes what an agent would do (e.g. the docs not saying how a hook's `ask` behaves in `dontAsk`).
 - **Spec pointer format**: `Design: [<short name> spec](docs/superpowers/specs/<file>.md)` — a repo-root-relative link, which resolves from `CLAUDE.md` at the root. Point at the spec that designed the contract; every pointer is checked in T11.
-- **Warning figures** (spec § 6.2): `GROWTH_WARN_BYTES = 500`; `BYTE_TRIGGER` = the final `CLAUDE.md` size after T10's own edits, plus 10%, rounded up to the next 1,000 bytes. Both thresholds are exclusive. Lines are reported, never judged. The figures live only in the script; `CLAUDE.md` states none.
+- **Warning figures** (spec § 6.2): `GROWTH_WARN_BYTES = 500`; `BYTE_TRIGGER` = the final `CLAUDE.md` size after T10's own edits, plus 25%, rounded up to the next 1,000 bytes. Both thresholds are exclusive. Lines are reported, never judged. The figures live only in the script; `CLAUDE.md` states none.
 - **The script never blocks**: the CLI always exits 0; the hook line ends in `|| true`; a failure to measure prints `could not measure CLAUDE.md` to stderr.
 - **Prettier** (`scripts/`, `tests/`): `tabWidth=4`, `useTabs=false`, `singleQuote`, `semi`, `trailingComma=es5`, `printWidth=120`, `arrowParens=always`, `endOfLine="lf"`. `docs/` and `*.md` are Prettier-ignored.
 - **ESLint**: `curly: ['error', 'all']` (braces on every `if` body, single-line included), `eqeqeq`, `prefer-const`, `no-var`; `scripts/**/*.js` is the Node-CJS block 6.
@@ -73,6 +73,7 @@
 3. **T10's own commit runs the new hook**, because Husky runs `.husky/pre-commit` from the working tree. If T10 grows `CLAUDE.md` by more than 500 bytes, its own commit prints the warning. Expected, and logged as a free live run.
 4. **The CLI tests strip `GIT_DIR`, `GIT_INDEX_FILE` and `GIT_WORK_TREE`** from the spawned process's environment. Vitest runs inside the pre-commit hook, where git can export them, and the script's `git diff --cached` would read the real commit's index instead of the temp repo's (`tests/check-secrets.test.js` precedent). The no-repository test also sets `GIT_CEILING_DIRECTORIES`, so git cannot discover a repository above the temp dir.
 5. **T11's link check reuses `extractLinks` from `scripts/check-docs-index.js`** (exported, pure, strips code spans and external URLs). No new code is committed for it.
+6. **`BYTE_TRIGGER` headroom is 25%, not 10%** (user ruling at plan review, spec § 6.2 amended). A side-agent note: at a ~40 KB landing, 10% leaves ~4 KB, which last week's pace would cross within days, after which every growing commit warns. 25% leaves about one Cleanup-Week cycle at a guessed rule-only rate. Improvement 4 measures the real rate.
 
 ## Task Ordering
 
@@ -84,7 +85,7 @@ T1 (passes, sweep fixes) first: its findings are applied during the trims. T2–
 |---|---|---|
 | SP | 3 → ~4.5 | T1 0.75 (four passes, sweep fixes), T2–T9 2.0 (Detected Patterns 0.75, Git Insights 0.5, the other six 0.75), T10 1.0 (script, tests, hook, docs), T11 0.5, Finish 0.25. 1.5× — inside the 2× stop line. |
 | Execution | **Opus 5.5 · `medium`** for T1–T9 and T11 (the trim decides "why" versus history sentence by sentence — where a rule gets lost; spec D6). **Sonnet 5.5 · `medium`** for T10 (the plan holds its complete code). | The WEEKLY's first guess put the trims on Sonnet; they are judgment, not mechanics. |
-| Switch | None for a native run on Opus · `medium`. Subagent-driven: name Sonnet for the T10 implementer. The rule-loss agent (T11) stays at the session's tier — verification never runs cheaper (WORKFLOW § 1.0 Subagents). | |
+| Switch | **Native chosen** (user, 2026-10-17): run on Opus · `medium` after the user's `/compact`; T10 may go to a Sonnet subagent. None for a native run on Opus · `medium`. Subagent-driven: name Sonnet for the T10 implementer. The rule-loss agent (T11) stays at the session's tier — verification never runs cheaper (WORKFLOW § 1.0 Subagents). | |
 | Final review | Standard (`high`): `/code-review high` on the PR **in a separate chat** (memory `feedback_ask_before_in_chat_code_review` — ask first) | WEEKLY's first guess, confirmed: one never-blocking script and a docs trim. |
 
 ---
@@ -531,7 +532,7 @@ describe('CLI: never blocks a commit', () => {
 
 - [ ] **Step 2: Run it to verify it fails.** Run: `npx vitest run tests/check-claude-md-size.test.js`. Expected: the file fails to collect — `Cannot find module '…/scripts/check-claude-md-size.js'` (from `require.resolve`). Log the message.
 
-- [ ] **Step 3: Write the script** — `scripts/check-claude-md-size.js` (`BYTE_TRIGGER` starts at the provisional `46000`; Step 6 sets the real value):
+- [ ] **Step 3: Write the script** — `scripts/check-claude-md-size.js` (`BYTE_TRIGGER` starts at the provisional `52000`; Step 6 sets the real value):
 
 ```js
 // Pre-commit CLAUDE.md size warning: says so when a commit grows CLAUDE.md past its limits.
@@ -555,9 +556,9 @@ describe('CLI: never blocks a commit', () => {
 // `measure`, `evaluate` and `formatWarning` are pure and unit-tested. No runtime dependencies.
 
 const GROWTH_WARN_BYTES = 500;
-// The size after the G5 audit plus 10%, rounded up to the next 1,000. Change it only at an
+// The size after the G5 audit plus 25%, rounded up to the next 1,000. Change it only at an
 // audit (CLAUDE.md § Maintenance).
-const BYTE_TRIGGER = 46000;
+const BYTE_TRIGGER = 52000;
 
 /**
  * Size a text the way `wc -lc` would: lines are newline characters, bytes are UTF-8.
@@ -714,7 +715,7 @@ Audit quarterly, when the pre-commit size warning reports its byte trigger cross
 Then compute the trigger from the edited working-tree file (Premise Correction 2):
 
 ```bash
-node -e "const b=require('fs').statSync('CLAUDE.md').size; console.log(b, Math.ceil(b*1.1/1000)*1000)"
+node -e "const b=require('fs').statSync('CLAUDE.md').size; console.log(b, Math.ceil(b*1.25/1000)*1000)"
 ```
 
 Set `BYTE_TRIGGER` in the script to the second number and log both in the Progress Log. Re-run `npx vitest run tests/check-claude-md-size.test.js` → all pass.
@@ -821,6 +822,7 @@ git commit -m "docs: G5 verification - rule-loss check, links, citations, size t
 1. **One canonical description of the pre-commit chain.** It is written out in four places (`CLAUDE.md` § Build, `PROJECT.md` § Code Quality, `GOALS.md` Constraints, the `.husky/pre-commit` header), and `GOALS.md` had already drifted (Premise Correction 1). The others could point at `CLAUDE.md` § Build. 🟤 candidate.
 2. **Extend the size warning to `.claude/rules/*.md`** once the path-scoped migration creates them: a rule file loads with every matching Read, so its growth costs context too. 🟤 candidate, tagged to the 🟤 [2026-08-27] migration entry.
 3. **Add the rule-loss check with a positive control to the sibling audit runbook** (`claude-md-audit.md` step 6 verifies size and references, not that no rule was lost). Cross-project: G6's propagation pass, beside D2's byte trigger. 🟤 candidate if G6 does not carry it.
+4. **Measure `CLAUDE.md`'s growth rate under the authoring rule at Cleanup Week #5, and re-set `BYTE_TRIGGER` at that audit** — the 25% headroom (Premise Correction 6) rests on a guessed rate; `git log` byte deltas per commit since the G5 merge give the real one. 🟤 candidate (spec § 6.2 promises it).
 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
@@ -858,6 +860,7 @@ _One `### T<N> — <section>` table per section task, written before its commit.
 
 - **2026-10-16/17** — Branch `g5-claude-md-size-audit` from `506e041`. Brainstormed section by section: D1 mixed handling of non-rule text; D2 authoring rule + never-blocking warning; D3 approach A (in place, per section); D4 Backlog Intake Rules → a three-line pointer (the user asked for a recommendation and agreed); D5 migration recommended only; D6 the trim on Opus. While writing the spec, measuring its own claim ("each feature commit added 1–3 KB") showed 14 of 17 commits under 1 KB, and a 200-line trigger would have fired on every growing commit after a trim landing above 200 lines; user ruling: bytes only, 500-byte growth threshold, audit trigger moved to the byte trigger. A side agent raised the same line-trigger issue after the amendment; it was already resolved. Spec `1e934cb`, approved 2026-10-17.
 - **2026-10-17 — Planning.** Measured: the chain is described in `CLAUDE.md`, `PROJECT.md`, `GOALS.md` (stale — no docs-index) and the hook header; `GOALS.md`'s non-refresh edit convention (dated comment beside `Last Updated`); the `check-secrets.test.js` temp-repo pattern and its env stripping; `extractLinks` is exported. Premise Corrections 1–5. **Plan code smoke-tested** before hand-off, extracted from this file into the scratchpad (not committed): `measure('→🔵\n')` = 1 line / 8 bytes; `evaluate` 9800→10400 = `['growth','trigger']`; the CLI warns on an unborn-HEAD first commit (+601 bytes, exit 0), is silent with nothing staged and on a staged deletion (exit 0), and outside a repository prints `could not measure CLAUDE.md` (exit 0). The vitest file itself first runs in T10 Step 2.
+- **2026-10-17 — Plan review.** Approved. A side-agent note (10% headroom ≈ 4 KB, crossed within days at last week's pace) → user ruling: 25% headroom (Premise Correction 6, spec § 6.2 amended, Improvement 4 to measure the real rate). Execution: Native, after a `/compact`.
 
 ## Key Discoveries
 
