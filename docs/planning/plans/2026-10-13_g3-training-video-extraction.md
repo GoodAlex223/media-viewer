@@ -5,8 +5,8 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G3 (🔵), re-scoped 2026-10-13. It supersedes [2026-10-13_g3-source-clip-reuse.md](2026-10-13_g3-source-clip-reuse.md), whose Task 1 (`713af35`) stays on this branch. Origin: BACKLOG 🔵 [2026-10-04] "Explain and trim the retrain that runs after files are moved into the like folder outside the app".
 **Spec**: [2026-10-13-g3-training-video-extraction-design.md](../../superpowers/specs/2026-10-13-g3-training-video-extraction-design.md) (committed `5d9b9e6`, user-approved 2026-10-13)
 **Created**: 2026-10-13
-**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 ✅ 2026-10-14 (acceptance met — § After run 2). Task 3 ✅. Final review ✅ with one fix round (`41792b9`). Pushed with the user's approval 2026-10-14 (pre-push E2E: 140 passed, 5 skipped, 5.1 min); **PR #80** open — review in a separate chat, then closeout after the merge.
-**Last Updated**: 2026-10-13
+**Status**: In progress — plan approved 2026-10-13, executing subagent-driven (Sonnet · `high`, the controller commits). Task 1 ✅ `4c37cbd`; Task 2 ✅ `341026c`; Checkpoint B done 2026-10-13. The video fix worked but nothing was cached, so Task 2b was added (spec § 11, approved 2026-10-14) and is ✅ `2cd6186` + `a19aef5`. Checkpoint B2 ✅ 2026-10-14 (acceptance met — § After run 2). Task 3 ✅. Final review ✅ with one fix round (`41792b9`). Pushed with the user's approval 2026-10-14 (pre-push E2E: 140 passed, 5 skipped, 5.1 min); **PR #80** open. Reviewed 2026-10-16 in a separate chat: no code change needed, and two follow-ups were recorded (R8, R9). Closeout runs after the merge.
+**Last Updated**: 2026-10-16
 **Branch**: `g3-source-vector-reuse` @ `5d9b9e6` (from `main` @ `c2673c4`)
 
 **Goal:** Every training-folder video gets its 64-dim features again, so a training set with videos produces a cacheable model and the AI sort stops retraining when nothing changed. This is proven by the user's after run against the before run already recorded.
@@ -34,7 +34,7 @@
   - Every fallback, and every double failure, is a `warn` in the session log; every CLIP-less training row is named via `logError`.
 - **Out of scope:**
   - `loadMediaAsImageData` stays unchanged (spec § 4.4, follow-up R7);
-  - so do the image and JXL branches of both loaders, and `computePerceptualHash`'s timeout.
+  - so do the image and JXL branches of both loaders, and `computePerceptualHash`'s timeout (follow-up R8, added by the PR #80 review).
 - **Prettier**: `tabWidth=4`, `useTabs=false`, `singleQuote`, `semi`, `trailingComma=es5`, `printWidth=120`, `arrowParens=always`, `endOfLine="lf"`. Code below may wrap differently after formatting — expected.
 - **ESLint**: `eqeqeq`, `prefer-const`, `no-var`, `no-shadow` (warn), `no-unused-vars` (warn; `_` prefix for unused). One-line `if (…) return;` bodies are fine (`curly` is switched off by `eslint-config-prettier`).
 - **Extracted-method tests run in the global scope.** Every `this.*` a method touches must be on the mock ctx. Free identifiers such as `document`, `window` and `extractFeatures` (a global from `feature-extractor.js`) resolve through `globalThis`, so the test installs and restores them.
@@ -1330,12 +1330,13 @@ From spec § 8, each routed 🟤 at closeout with the before-run numbers:
 - 🟤 **R5 — F1 train/score skew:** source-folder 64-dim vectors are extracted without file metadata, so dims 42–47 and 54–61 differ between training and scoring. **G3 widened its reach (final review, M6):** the fixed loaders put 71 training videos into training (66 dislikes, 5 likes) with non-zero video dims (isVideo, animated, duration, fps, audio, bitrate). Source vectors score every video with those dims at 0, so the learned weights never apply, and video ranking may shift in a way no acceptance run measured. Eyeball where videos land in the next real sort.
 - 🟤 **R6 — The parked source-CLIP reuse** (`g3-departed-clips-parked` @ `e11b36e`, with F2/F3). Revisit only if a measurement shows CLIP on moved or rated files matters.
 - 🟤 **R7 — `loadMediaAsImageData` still empties `src`** (one stray `error` per video, no loop). Move it to `_releaseVideo`.
-- 🟤 **R9 — Bulk-rated rows are invisible in the perf line and the log.** Extended by the final review (M4): `bulk.failed` and `bulk.clipMissing` both gate `cacheable`, but the `bulk=` segment carries no counts. The line can read `failed=0 noClip=0` in both folders with no `modelCacheWrite`, and the toast's N can exceed the folders' `noClip` sum. Make it `bulk=Nms failed=N noClip=N`, and name the rows. Original note: `_collectBulkRatedVectors` (~L666) counts them into `clipMissing`, so they block the model cache, but neither the perf line nor the ML log names them. Main's `CLIP: cannot decode …` warn names image files only. Surfaced by Task 2b's review.
+- 🟤 **R9 — Bulk-rated rows are invisible in the perf line and the log.** Extended by the final review (M4): `bulk.failed` and `bulk.clipMissing` both gate `cacheable`, but the `bulk=` segment carries no counts. The line can read `failed=0 noClip=0` in both folders with no `modelCacheWrite`, and the toast's N can exceed the folders' `noClip` sum. Make it `bulk=Nms failed=N noClip=N`, and name the rows. Original note: `_collectBulkRatedVectors` (~L666) counts them into `clipMissing`, so they block the model cache, but neither the perf line nor the ML log names them. Main's `CLIP: cannot decode …` warn names image files only. Surfaced by Task 2b's review. **Confirmed by the PR #80 review** (scored 85), and bulk is the last conjunct of `cacheable` with no trace. A scan failure and unsettled versions are already logged (`ml-training.js` ~L794 and ~L1001), and a missing `modelCacheWrite=` shows the model was not cached.
 - 🟤 **R10 — Perf-line precision (low).**
   - (a) `misses` also counts CLIP-only re-extractions, so a healing retry reads like a new file once. Fix: a `clipOnly=M` sub-count.
   - (b) A throwing `ensureTrainedModel` leaves no `training` phase in the `AI sort:` line. The same call's `ML training: source=failed total=…` line does record the time.
   - From the superseded plan's Task 1 review; the final review routed both here.
 - 🟤 **R8 — Three other video teardown sites** (`media-viewer.js` ~L2143, ~L3350-3351, ~L6667) already release with `removeAttribute('src')` + `load()` by hand. Route them through `_releaseVideo` so the rule has one owner. Surfaced by Task 1's review.
+  - **Plus `computePerceptualHash`'s timeout** (~L7036). It rejects without releasing its `<video>`, so a load that stalls without ever firing `error` keeps its element and decoder. `computeFeatures` now releases on timeout (`releaseOnTimeout`); give the hash loader the same. The gap predates G3 and was out of scope on purpose (Global Constraints), but it had no R-line. Surfaced by the PR #80 review.
 
 ## Residuals for Extract
 
@@ -1431,6 +1432,23 @@ Propagation check: any late measurement or review fix that changes what `CLAUDE.
   - Suite: 1393 passed, 1 skipped.
 
 - **2026-10-14 — Pushed; PR #80.** The user approved the push. The pre-push E2E suite: 140 passed, 5 skipped (opt-in visual evidence), including both new `video-feature-extraction` tests. Both SDD workspaces were deleted after the clean final review. Next: the code review in a separate chat, then the closeout on `main`.
+
+- **2026-10-16 — PR #80 review** ([comment](https://github.com/GoodAlex223/media-viewer/pull/80#issuecomment-6205129517)). The reviewer found nothing new at the 80 cutoff and posted two items, both checked against the code here.
+  - **(1, scored 85) Bulk-rated rows gate `cacheable` but are invisible.** This is R9. It was already tracked with the same remedy, and now carries the review's confirmation.
+  - **(2, scored 45) `computePerceptualHash`'s timeout does not release its `<video>`.** Confirmed at ~L7036. It was out of scope by design, but it was listed only under Global Constraints › Out of scope, which Extract does not read. It is now folded into R8.
+  - **Near-misses:**
+    - The scan-failure and versions log lines: checked at ~L794 and ~L1001.
+    - The keyframe and JXL CLIP paths: they decode PNGs that our own tools write (ffmpeg `frame-%03d.png` in `main.js`, and `RawImage.fromBlob` on jxl-oxide output). D7 applies.
+    - `loadMediaAsImageData`: R7.
+    - The ERROR level: D8.
+    - The three cleanups:
+      - The local `failed` feeds the cache gate, and `stats.failed` feeds only the perf line.
+      - `clipMissing` counts whether CLIP is on or off; `noClip` counts only while it is on.
+      - The two `ms` helpers live in separate modules.
+      - `_now()`'s catch is documented as intended.
+
+    None of them needs a change.
+  - Docs-only commit; no code changed.
 
 ### Before run
 
