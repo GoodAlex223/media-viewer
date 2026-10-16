@@ -106,7 +106,7 @@ T1 (pure module + "before" evidence) first — the before screenshot must be tak
 
 - [x] **Ask the user** before the global install (WEEKLY G4: "ask first — a global install"): `npm i -g typescript-language-server typescript`. On "no", skip the trial, log it, and continue — it is not a gate.
 - [x] Install and enable `typescript-lsp@claude-plugins-official` at **project** scope (through `/plugin`; the user may need to run it). Expected: `.claude/settings.json` `enabledPlugins` gains `"typescript-lsp@claude-plugins-official": true` beside the three existing entries. `.claude/` is a protected path — the write prompts.
-- [ ] Start the execution session after enabling (a native run: a fresh session; subagent-driven: confirm in the first implementer's transcript). After the first `.js` edit, look for a `diagnostics` record in the session transcript (`~/.claude/projects/<project-slug>/<session-id>.jsonl` — grep `diagnostics`). If none appears, check the plugin's status in `/plugin` and the Claude Code plugins documentation before concluding it did not run (memory: hook edits take effect late — re-probe). Log the outcome either way.
+- [x] Start the execution session after enabling (a native run: a fresh session; subagent-driven: confirm in the first implementer's transcript). After the first `.js` edit, look for a `diagnostics` record in the session transcript (`~/.claude/projects/<project-slug>/<session-id>.jsonl` — grep `diagnostics`). If none appears, check the plugin's status in `/plugin` and the Claude Code plugins documentation before concluding it did not run (memory: hook edits take effect late — re-probe). Log the outcome either way.
 
 ---
 
@@ -2626,12 +2626,12 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 
 ## Finish (after Task 5)
 
-- [ ] `npx vitest run`, `npm run lint`, `npm run format:check` green; `git status --short` clean.
-- [ ] `for i in 1 2 3; do npx playwright test tests/e2e/recent-folders.test.js --reporter=line || break; done` — three runs in a row.
-- [ ] `npx playwright test` — the full suite once. An existing E2E that now fails because the drop zone or the header changed something it relied on is a finding; fix the test only if its premise was wrong, and log it.
-- [ ] Grep sweep: `recentFolders`, `RecentFolders`, `switchToFolder`, `openRecentFolder`, `menu-open`, `__mvDialogCalls` across code, tests **and comments**; re-read every comment attached to changed code.
-- [ ] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
-- [ ] `typescript-lsp`: record in the Progress Log whether a `diagnostics` record appeared, and what each diagnostic was.
+- [x] `npx vitest run`, `npm run lint`, `npm run format:check` green; `git status --short` clean.
+- [x] `for i in 1 2 3; do npx playwright test tests/e2e/recent-folders.test.js --reporter=line || break; done` — three runs in a row.
+- [x] `npx playwright test` — the full suite once. An existing E2E that now fails because the drop zone or the header changed something it relied on is a finding; fix the test only if its premise was wrong, and log it.
+- [x] Grep sweep: `recentFolders`, `RecentFolders`, `switchToFolder`, `openRecentFolder`, `menu-open`, `__mvDialogCalls` across code, tests **and comments**; re-read every comment attached to changed code.
+- [x] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
+- [x] `typescript-lsp`: record in the Progress Log whether a `diagnostics` record appeared, and what each diagnostic was.
 - [ ] Push (`git push -u origin g4-recently-opened-folders`; pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
 - [ ] Open the PR: spec + plan links, D0–D2, the planning amendments (Premise Corrections 1–6), RED→GREEN evidence per task, the before/after screenshots inline, test deltas, the Residuals, the `typescript-lsp` notes. **Ask the user** before running `/code-review` in this chat (memory `feedback_ask_before_in_chat_code_review`; the default is a separate chat). Merge only on the user's go-ahead.
 
@@ -2717,6 +2717,8 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
   - **F2:** the briefed `contains(e.target)` guard was wrong. The ✕ re-render detaches the target before the click bubbles, so every ✕ opened the dialog (measured). Ruling 6 replaced it with `e.composedPath()`. Two tests pin it: a ✕ opens no dialog (fails under `contains()`), and a row clicked during a slow check keeps no focus (fails under the old `stopPropagation`).
   - **M7:** four guard tests for `_markRecentFolderBusy`.
   - **Totals:** unit 1505 passed, 1 skipped; recent-folders E2E 19/19 (three runs in round 1); lint 0 errors.
+- **2026-10-16 — Fix-wave re-review (Opus): every finding ADDRESSED, no new Critical or Important breakage.** It checked F1's three bump sites against every folder-choice path: no legitimate open is abandoned by its own code, and no stale decision slips through the regrant pick or the D3 continuation. It found two Minor wording overclaims. CLAUDE.md said the open menu ignores the wheel everywhere, but a wheel over media still zooms, because `handleWheelZoom` stops propagation first. The Residual said Escape left the user in single mode, but it re-binds the prompt without closing it. Both were fixed in `4d0bfb3`, and the Residual records the third re-binding trigger the re-review found. Full E2E at `eac6ee0`: 159 passed, 6 skipped.
+- **2026-10-16 — `typescript-lsp` trial (for G6, REVIEW-QUEUE § 5).** No LSP `diagnostics` record appears in any implementer, reviewer or fixer transcript. The only `"diagnostics"` keys are the API response's own `diagnostics: null`. A direct probe from the controller (`LSP documentSymbol` on `recent-folders.js`) returned: *"Request initialize failed … Could not find a valid TypeScript installation. Please ensure that the "typescript" dependency is installed in the workspace or that a valid `tsserver.path` is specified."* So the plugin's server starts, but the globally installed `typescript` is not enough: it needs `typescript` in the project's `node_modules`, or a `tsserver.path`. The trial produced no diagnostics. Making it work means adding a devDependency, which is a user decision for G6, not taken here.
 
 ## Key Discoveries
 
