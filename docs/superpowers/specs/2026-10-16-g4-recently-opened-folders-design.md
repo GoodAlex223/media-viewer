@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 12–16 § G4 (🔵, 3 SP → **~4.5 SP**, see § 11) ← BACKLOG 🔵 [2026-07-01] "Add 'Recently opened folders' quick-access list" (manual testing)
 **Created**: 2026-10-16
-**Status**: Approved by the user 2026-10-16 (brainstormed section by section, decisions D0–D2, § 3). **Amended while writing, before the user's review of this file** (both flagged at hand-off): § 6 step 2 uses a per-row busy state instead of the loading spinner, because `showLoadingSpinner()` hides the drop zone; and § 6 routes each surface like the existing button on that surface (drop-zone list → `loadFolder`, header menu → `switchToFolder`), because `switchToFolder`'s same-folder no-op would swallow a drop-zone retry of a folder whose last load was empty. **Amended at planning, same day, before any code** (plan [2026-10-16_g4-recently-opened-folders.md](../../planning/plans/2026-10-16_g4-recently-opened-folders.md), Premise Corrections 1–6): the open menu pins the header instead of closing on its `mouseleave` (§ 7, E13); it stops `wheel` propagation (§ 7, E17); the ▾ and ✕ are text glyphs, not Lucide icons (§ 7); the ▾ sits in an anchor wrapper, which is what shows and hides (§ 7); `classifyRecentFolder` and `folderDisplayName` are pure functions in the module (§ 4); the evidence screenshots redact the temp root (§ 9.3).
+**Status**: Approved by the user 2026-10-16 (brainstormed section by section, decisions D0–D2, § 3). **Amended while writing, before the user's review of this file** (both flagged at hand-off): § 6 step 2 uses a per-row busy state instead of the loading spinner, because `showLoadingSpinner()` hides the drop zone; and § 6 routes each surface like the existing button on that surface (drop-zone list → `loadFolder`, header menu → `switchToFolder`), because `switchToFolder`'s same-folder no-op would swallow a drop-zone retry of a folder whose last load was empty. **Amended at planning, same day, before any code** (plan [2026-10-16_g4-recently-opened-folders.md](../../planning/plans/2026-10-16_g4-recently-opened-folders.md), Premise Corrections 1–6): the open menu pins the header instead of closing on its `mouseleave` (§ 7, E13); it stops `wheel` propagation (§ 7, E17); the ▾ and ✕ are text glyphs, not Lucide icons (§ 7); the ▾ sits in an anchor wrapper, which is what shows and hides (§ 7); `classifyRecentFolder` and `folderDisplayName` are pure functions in the module (§ 4); the evidence screenshots redact the temp root (§ 9.3). **Amended again the same day, by user ruling (D3)**, after a side-agent note verified against the code: a header folder switch during an unfinished tournament asks Save / Discard / Cancel first (§ 6, E12).
 **Branch**: `g4-recently-opened-folders` (from `main` @ `dd05eed`; one PR)
 **Trial vehicle**: `typescript-lsp` (REVIEW-QUEUE § 5, WEEKLY G4) — see § 9.4; read-out at G6.
 
@@ -44,6 +44,7 @@ the list with a notice; nothing in this feature widens what the main process wil
 | D0 | G4 is scheduled after I1 (TODO 🔴, user decision 2026-10-11). Order? | **G4 now, I1 next.** G4 uses only existing guarded IPC (F5) and adds no page-side file load — names only, no thumbnails — so it does not depend on I1 or widen it. I1 stays 🔴 and goes next; the reorder is recorded in WEEKLY.md and TODO.md. |
 | D1 | Where is the list reachable?               | **Drop zone + a header menu**: a ▾ button beside change-folder opens the same list; change-folder still opens the dialog in one click. |
 | D2 | Architecture                               | **A pure module + glue** (Approach A): pure `recent-folders.js`; `MediaViewer` keeps the DOM and IPC. Not B (all in the 11,015-line renderer the active milestone shrinks) and not C (main-process store: a `preload.js` change, and the grant store would double as UI history — the planned grant eviction would silently shrink the list). |
+| D3 | A header folder switch during an unfinished tournament? (added 2026-10-16, after approval) | **Ask first, in `switchToFolder`** — the same Save & leave / Discard / Cancel prompt as Escape and the mode buttons, for change-folder and the ▾ menu alike. Measured on `main`: `loadFolder` leaves tournament mode and nulls the engine without asking, and a pick's write is debounced 500 ms (`PERSIST_DEBOUNCE_MS`) and skips itself once the engine is gone (`_drain`), so a pick made just before the switch was never written. Change-folder's OS dialog outlasted the debounce; two clicks on the menu need not. Save & leave flushes first. Not chosen: disabling ▾ in tournaments, or leaving it as change-folder does. |
 
 Also approved with the sections (no separate question): cap 8; exact-path dedupe, no case folding; record only
 loads that show media; validate on click; a missing folder is removed with a notice; an unreachable one is kept
@@ -138,6 +139,13 @@ into a method, **no behaviour change**, same order: same-folder no-op → `_refu
 state reset (G2 final review F1) → reset → `hideDropZone()` → `await loadFolder(folderPath)`. The button calls
 `switchToFolder(await openFolderDialog())`.
 
+**During an unfinished tournament (D3)** `switchToFolder` shows `showTournamentLeavePrompt` before the reset and
+returns; the reset and load run as the prompt's continuation (`_switchToFolderNow`) after Save & leave (which
+flushes the debounced write first) or Discard. Cancel changes nothing. The continuation checks the file-op guard
+again before its reset: the prompt blocks clicks but not keys, so a special move can start behind it. If that
+refuses after Save, the tournament is already on disk and the engine dropped, so the next pick of the same folder
+switches without a second prompt.
+
 ---
 
 ## 7. UI and keyboard
@@ -192,7 +200,7 @@ menu ~360 px.
 | E9  | `localStorage` write throws | `warn` logged; the session list still updates |
 | E10 | More than 8 folders | The oldest drops off |
 | E11 | Folder renamed outside the app | The old entry reads as missing (E4) and is removed; the new name is recorded when next opened |
-| E12 | Pick from the menu mid-tournament or mid-sort | Exactly what change-folder does: `loadFolder` exits tournament mode and aborts in-flight sorts |
+| E12 | Pick from the menu (or change-folder) mid-tournament or mid-sort | An unfinished tournament asks Save & leave / Discard / Cancel first (D3); then, as before, `loadFolder` exits tournament mode and aborts in-flight sorts |
 | E13 | The header's auto-hide fires, or the pointer crosses the gap under it, with the menu open | The header stays pinned (`.header.menu-open`) until the menu closes (amended at planning) |
 | E14 | A key pressed while the menu is open | Swallowed, except Escape (closes), arrows, Tab, Enter, Space |
 | E15 | ✕ on the current folder | Removed; re-recorded on its next successful load |

@@ -3,9 +3,9 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G4 (🔵, 3 SP → ~4.5 SP); BACKLOG 🔵 [2026-07-01] "Add 'Recently opened folders' quick-access list"
-**Spec**: [2026-10-16-g4-recently-opened-folders-design.md](../../superpowers/specs/2026-10-16-g4-recently-opened-folders-design.md) (committed `96c9c94`, user-approved 2026-10-16; amended at planning — see Premise Corrections 1–6)
+**Spec**: [2026-10-16-g4-recently-opened-folders-design.md](../../superpowers/specs/2026-10-16-g4-recently-opened-folders-design.md) (committed `96c9c94`, user-approved 2026-10-16; amended at planning — see Premise Corrections 1–6 — and by user ruling D3, Premise Correction 9)
 **Created**: 2026-10-16
-**Status**: Planned
+**Status**: Planned — approved 2026-10-16 with D3 added; execution: subagent-driven
 **Last Updated**: 2026-10-16
 **Branch**: `g4-recently-opened-folders` (from `main` @ `dd05eed`)
 **Trial vehicle**: `typescript-lsp` (REVIEW-QUEUE § 5) — see **Pre-flight**. Note every LSP diagnostic it raises in the Progress Log, with what happened to it; G6 reads it out.
@@ -54,14 +54,14 @@
 | File | Action | Responsibility after this change |
 | --- | --- | --- |
 | `recent-folders.js` | Create | Pure: `MAX_RECENT_FOLDERS`, `MAX_PATH_LENGTH`, `parseRecentFolders`, `recordRecentFolder`, `removeRecentFolder`, `serializeRecentFolders`, `folderDisplayName`, `classifyRecentFolder` (T1) |
-| `media-viewer.js` | Modify | Namespace import, `recentFolders`, `_recordRecentFolder`/`_removeRecentFolder`/`_setRecentFolders`, `_buildRecentFolderRows`, `renderRecentFolders`, record in `loadFolder`, render in the constructor and `showDropZone` (T2); the menu: `_hasOtherRecentFolders`, `_updateRecentFoldersButton`, `toggle/open/closeRecentFoldersMenu`, `_renderRecentFoldersMenu`, `_refreshRecentFoldersMenu`, anchor show/hide (T3); `switchToFolder`, `openRecentFolder`, `_openRecentFolderOn`, `_markRecentFolderBusy`, the row click (T4) |
+| `media-viewer.js` | Modify | Namespace import, `recentFolders`, `_recordRecentFolder`/`_removeRecentFolder`/`_setRecentFolders`, `_buildRecentFolderRows`, `renderRecentFolders`, record in `loadFolder`, render in the constructor and `showDropZone` (T2); the menu: `_hasOtherRecentFolders`, `_updateRecentFoldersButton`, `toggle/open/closeRecentFoldersMenu`, `_renderRecentFoldersMenu`, `_refreshRecentFoldersMenu`, anchor show/hide (T3); `switchToFolder` (with the tournament leave prompt, D3) + `_switchToFolderNow`, `openRecentFolder`, `_openRecentFolderOn`, `_markRecentFolderBusy`, the row click (T4) |
 | `index.html` | Modify | `#recentFoldersDrop` in `#dropZone` (T2); `#recentFoldersAnchor` after `#changeFolderBtn` (T3) |
 | `styles.css` | Modify | List and row styles (T2); anchor, ▾ button, menu, `.header.menu-open`, current tag (T3) |
 | `eslint.config.mjs` | Modify | `recent-folders.js` in block 2c (browser ES modules) (T1) |
 | `tests/recent-folders.test.js` | Create | Pure-module tests (T1) |
 | `tests/recent-folders-glue.test.js` | Create | Glue tests: persistence, recording, the render source scan (T2); menu keyboard ownership, button state, refresh (T3); the open flow table, `switchToFolder` (T4) |
 | `tests/lint-guard.test.js` | Modify | `recent-folders.js` in `RENDERER_FILES` (T1) |
-| `tests/like-or-skip-glue.test.js` | Modify | Control test: `switchToFolder` replaces `setupEventListeners` in `EXEMPT`; change-folder tests' `folderCtx` gains `switchToFolder` (T4) |
+| `tests/like-or-skip-glue.test.js` | Modify | Control test: `_switchToFolderNow` replaces `setupEventListeners` in `EXEMPT`; change-folder tests' `folderCtx` gains `switchToFolder` and `_switchToFolderNow` (T4) |
 | `tests/e2e/recent-folders.test.js` | Create | Drop-zone list (T2); header menu (T3); opening (T4) |
 | `tests/e2e/helpers/electron-app.js` | Modify | `closeApp` and `launchApp` clear `recentFolders`; `mockFolderDialog` counts opens in `global.__mvDialogCalls` (T2) |
 | `tests/e2e/visual-evidence.test.js` | Modify | Opt-in G4 evidence block (T1 before, T5 after) |
@@ -71,7 +71,7 @@
 | `docs/superpowers/specs/2026-10-16-g4-recently-opened-folders-design.md` | Modify | Planning amendments (committed with this plan) |
 | `docs/README.md`, `docs/planning/plans/README.md` | Modify | This plan under Active Plans / Current Plans (committed with this plan) |
 
-**Live-surface preflight** (plans README step 4) — every live surface asserting a claim G4 changes, diffed against the table above: `CLAUDE.md` § Architecture tree (no `recent-folders.js`) ✅ T1; § E2E helpers bullet (`closeApp`, `mockFolderDialog`) ✅ T2; § Async Patterns "`loadFolder` and the change-folder button (before its reset)" ✅ T4; § UI Components (header controls) ✅ T3; `media-viewer.js` constructor comment on `_fileOpInFlight` ("the change-folder button") ✅ T4; `loadFolder`'s opening comment ("The change-folder button refuses before its own reset") ✅ T4; `tests/like-or-skip-glue.test.js` `EXEMPT.setupEventListeners` reason text ✅ T4; `tests/e2e/helpers/electron-app.js` `closeApp` comment ("Don't leak saved folders…") ✅ T2; `README.md` § Features ✅ T5. **Checked, no claim to change**: `PROJECT.md` (no folder-open claims), `docs/ARCHITECTURE.md` § Media Loading Flow ("User clicks 'Select Folder'" — still true; the module tree there omits every extracted module, a known residual from G2), the F1 help overlay (no new shortcut). **Not changed, deliberately**: BACKLOG / WEEKLY / TODO (checked off at closeout).
+**Live-surface preflight** (plans README step 4) — every live surface asserting a claim G4 changes, diffed against the table above: `CLAUDE.md` § Architecture tree (no `recent-folders.js`) ✅ T1; § E2E helpers bullet (`closeApp`, `mockFolderDialog`) ✅ T2; § Async Patterns "`loadFolder` and the change-folder button (before its reset)" ✅ T4; § UI Components (header controls) ✅ T3; § Git Insights "Tournament Escape + mode-selector clicks both route through `switchMode('single')` → `showTournamentLeavePrompt`" (now also a header folder switch, D3) ✅ T4; `media-viewer.js` constructor comment on `_fileOpInFlight` ("the change-folder button") ✅ T4; `loadFolder`'s opening comment ("The change-folder button refuses before its own reset") ✅ T4; `tests/like-or-skip-glue.test.js` `EXEMPT.setupEventListeners` reason text ✅ T4; `tests/e2e/helpers/electron-app.js` `closeApp` comment ("Don't leak saved folders…") ✅ T2; `README.md` § Features ✅ T5. **Checked, no claim to change**: `PROJECT.md` (no folder-open claims), `docs/ARCHITECTURE.md` § Media Loading Flow ("User clicks 'Select Folder'" — still true; the module tree there omits every extracted module, a known residual from G2), the F1 help overlay (no new shortcut). **Not changed, deliberately**: BACKLOG / WEEKLY / TODO (checked off at closeout).
 
 ---
 
@@ -85,6 +85,7 @@
 6. **The evidence screenshots redact the temp root** (spec amended, § 9.3): E2E folders live under `%TEMP%`, inside the Windows profile, so the shots would commit the profile name; the path text is swapped for `D:\Photos` before each shot (text only, layout unchanged).
 7. **Existing tests that the extraction of `switchToFolder` reaches** (measured on `dd05eed`): `tests/like-or-skip-glue.test.js` — the § 4 control test lists `setupEventListeners` in `EXEMPT` for the change-folder handler's `this.mediaFiles = []` (~L261), and "the change-folder button refuses before it wipes anything" runs the handler through `extractHandler("this.changeFolderBtn.addEventListener('click', async () => {")` (~L1175). After the move, the handler holds no assignment and calls `this.switchToFolder`. Both are updated in Task 4 so they keep pinning the same behaviour through the new method. No existing unit test drives `loadFolder`'s non-empty branch or a real `showDropZone`/`hideDropZone` (grep: every context mocks them), so T2–T3's new calls there break none.
 8. **`tests/lint-guard.test.js`'s `RENDERER_FILES` omits the browser ES modules** (`like-or-skip.js` included). Task 1 adds `recent-folders.js` to it — that is the RED test for the ESLint block entry. `like-or-skip.js`'s absence is a Residual, not fixed here.
+9. **A header folder switch during an unfinished tournament asks first (spec D3, user ruling after a side-agent note, verified on `dd05eed`).** `loadFolder` calls `exitTournamentMode()` and nulls `tournament.engine` without the Save/Discard/Cancel prompt that Escape, the mode buttons and the window close show (`switchMode` → `showTournamentLeavePrompt`). A pick's write is debounced 500 ms (`tournament.js` `PERSIST_DEBOUNCE_MS`, `_schedulePersist`), and `_drain` returns early once `!this.engine`, so a pick made within 500 ms of the switch was never written. Change-folder's OS dialog outlasted the debounce; two clicks on the ▾ menu need not. `switchToFolder` now shows the prompt before its reset and continues through `_switchToFolderNow` (Save & leave flushes first). The note's "one misclick" was overstated (▾ then a row), and the tournament was never lost — the state older than 500 ms stays on disk and resumes.
 
 ## Task Ordering
 
@@ -94,7 +95,7 @@ T1 (pure module + "before" evidence) first — the before screenshot must be tak
 
 | | Choice | Why |
 |---|---|---|
-| SP | 3 → ~4.5 | T1 0.75 (module, tests, before shot), T2 1 (record, persist, drop-zone list, helpers), T3 1.25 (menu + keyboard ownership), T4 1 (open flow, `switchToFolder`), T5 0.5 (after shots, README, checks). 1.5× — inside the 2× abort line. |
+| SP | 3 → ~5 | T1 0.75 (module, tests, before shot), T2 1 (record, persist, drop-zone list, helpers), T3 1.25 (menu + keyboard ownership), T4 1.5 (open flow, `switchToFolder`, the D3 leave prompt), T5 0.5 (after shots, README, checks). 1.7× — inside the 2× abort line. |
 | Execution | **Sonnet 5.5 · `medium`** for T1, T2, T5 (fully spelled out); **Sonnet 5.5 · `high`** for T3 and T4 (the keyboard ownership's close paths, the open flow's guard order and its surface routing — easy to get subtly wrong) | Between the 3–4 and 5–7 SP rows: the plan carries the design, so Sonnet; `high` where verification matters. Escalate to Opus · `medium` for any RED test that unexpectedly passes. |
 | Switch | The design ran on Opus; execution needs neither its model nor a high session effort. Subagent-driven picks the model per task; a native run should start a fresh session on Sonnet (it also loads the `typescript-lsp` plugin, see Pre-flight). | |
 | Final review | Standard (`high`): the `regression-checker` agent on `media-viewer.js`, then `/code-review high` on the PR **in a separate chat** (memory `feedback_ask_before_in_chat_code_review` — ask first) | WEEKLY's first guess, confirmed: no new IPC, no `preload.js`, and the grant boundary is unchanged. |
@@ -1935,7 +1936,8 @@ git commit -m "feat(recent-folders): header menu beside change-folder that owns 
 **Interfaces:**
 - Consumes: `RecentFolders.classifyRecentFolder`, `folderDisplayName` (T1); `_removeRecentFolder`, `renderRecentFolders`, `_buildRecentFolderRows` (T2); `closeRecentFoldersMenu`, `this.recentFoldersMenu`, `this.recentFoldersDrop` (T3); existing `_refuseIfFileOpInFlight()`, `loadFolder(path)`.
 - Produces:
-  - `switchToFolder(folderPath: string): Promise<void>` — change-folder's body, unchanged
+  - `switchToFolder(folderPath: string): Promise<void>` — change-folder's entry: no-op checks, the file-op refusal, then **during an unfinished tournament** `showTournamentLeavePrompt(() => this._switchToFolderNow(folderPath))` and return (D3); otherwise `_switchToFolderNow`
+  - `_switchToFolderNow(folderPath: string): Promise<void>` — change-folder's reset + load, unchanged, behind a second file-op refusal (it is also the prompt's continuation)
   - `openRecentFolder(folderPath: string, surface: 'drop'|'menu'): Promise<void>`
   - `_openRecentFolderOn(surface, folderPath): Promise<void>` — drop → `loadFolder`, menu → `switchToFolder`
   - `_markRecentFolderBusy(folderPath, surface): void`; field `_recentOpenInFlight: boolean`
@@ -1945,23 +1947,88 @@ git commit -m "feat(recent-folders): header menu beside change-folder that owns 
 `tests/like-or-skip-glue.test.js` — the § 4 control test's `EXEMPT` (~L259): replace the `setupEventListeners` key with
 
 ```js
-        switchToFolder:
-            "change-folder's body (G4): empties the list once its file-op refusal passed, then loadFolder announces the folder",
+        _switchToFolderNow:
+            "change-folder's reset (G4): empties the list once its file-op refusal passed, then loadFolder announces the folder",
 ```
 
 and in "the change-folder button refuses before it wipes anything", add to `folderCtx`'s returned object (beside `_refuseIfFileOpInFlight`):
 
 ```js
             switchToFolder: extract('switchToFolder'),
+            _switchToFolderNow: extract('_switchToFolderNow'),
 ```
 
-Its three tests stay as they are: they now pin the same behaviour through the handler → `switchToFolder`.
+Its three tests stay as they are: they now pin the same behaviour through the handler → `switchToFolder` → `_switchToFolderNow` (`isTournamentMode` is absent from the context, so no prompt).
 
 `tests/recent-folders-glue.test.js` — append:
 
 ```js
-describe('switchToFolder — change-folder, moved unchanged (spec § 6)', () => {
+describe('switchToFolder — change-folder, moved; asks first in an unfinished tournament (spec § 6, D3)', () => {
     const switchToFolder = extract('switchToFolder');
+    const switchToFolderNow = extract('_switchToFolderNow');
+
+    function tournamentCtx({ complete = false, ...overrides } = {}) {
+        return {
+            baseFolderPath: 'C:\\here',
+            isTournamentMode: true,
+            tournament: { engine: { isComplete: () => complete } },
+            _fileOpInFlight: false,
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            showNotification: vi.fn(),
+            showTournamentLeavePrompt: vi.fn(),
+            _switchToFolderNow: vi.fn(async () => {}),
+            ...overrides,
+        };
+    }
+
+    it('during an unfinished tournament it shows the leave prompt and changes nothing until the user chooses', async () => {
+        const c = tournamentCtx();
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showTournamentLeavePrompt).toHaveBeenCalledTimes(1);
+        expect(c._switchToFolderNow).not.toHaveBeenCalled();
+        // Save & leave or Discard runs the continuation: the switch itself.
+        await c.showTournamentLeavePrompt.mock.calls[0][0]();
+        expect(c._switchToFolderNow).toHaveBeenCalledWith('C:\\there');
+    });
+
+    it('a finished tournament switches at once, without the prompt', async () => {
+        const c = tournamentCtx({ complete: true });
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showTournamentLeavePrompt).not.toHaveBeenCalled();
+        expect(c._switchToFolderNow).toHaveBeenCalledWith('C:\\there');
+    });
+
+    it('outside tournament mode it switches at once', async () => {
+        const c = tournamentCtx({ isTournamentMode: false });
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showTournamentLeavePrompt).not.toHaveBeenCalled();
+        expect(c._switchToFolderNow).toHaveBeenCalledWith('C:\\there');
+    });
+
+    it('refuses during a file action before it asks', async () => {
+        const c = tournamentCtx({ _fileOpInFlight: true });
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showNotification).toHaveBeenCalledWith('Wait for the move to finish', 'info');
+        expect(c.showTournamentLeavePrompt).not.toHaveBeenCalled();
+    });
+
+    it('the switch itself refuses before its reset when a file action started behind the prompt', async () => {
+        const c = {
+            _fileOpInFlight: true,
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            showNotification: vi.fn(),
+            mediaFiles: [{ path: 'C:\\here\\a.png' }],
+            baseFolderPath: 'C:\\here',
+            cleanupCurrentMedia: vi.fn(async () => {}),
+            loadFolder: vi.fn(async () => {}),
+        };
+        await switchToFolderNow.call(c, 'C:\\there');
+        expect(c.showNotification).toHaveBeenCalledWith('Wait for the move to finish', 'info');
+        expect(c.cleanupCurrentMedia).not.toHaveBeenCalled();
+        expect(c.loadFolder).not.toHaveBeenCalled();
+        expect(c.mediaFiles).toHaveLength(1);
+        expect(c.baseFolderPath).toBe('C:\\here');
+    });
 
     it.each([
         ['no folder', null],
@@ -2242,6 +2309,74 @@ test.describe('G4 recent folders — opening one', () => {
         expect(await page.evaluate(() => window.mediaViewer.baseFolderPath)).toBe(c);
     });
 });
+
+// D3: the same Save & leave / Discard / Cancel prompt as Escape. Started the way tournament-mode.test.js does.
+async function startTournament() {
+    await page.evaluate(() => window.mediaViewer.switchMode('tournament'));
+    await expect(page.locator('#tournamentConfigModal')).toBeVisible();
+    await page.locator('#tournamentRoundsSelect').fill('2');
+    await page.locator('#tournamentConfigStart').click();
+    await page.waitForFunction(() => window.mediaViewer.isTournamentMode && window.mediaViewer.tournament.engine);
+    await page.waitForFunction(() => !window.mediaViewer._tournamentRenderLoop && !window.mediaViewer.isLoading);
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+}
+
+async function pickOnce() {
+    await page.keyboard.press('q');
+    await page.waitForFunction(
+        () => window.mediaViewer.tournament.engine.history.filter((e) => (e.kind ?? 'pick') !== 'prune').length === 1
+    );
+}
+
+async function chooseFromMenu(name) {
+    await revealHeader();
+    await page.locator('#recentFoldersBtn').click();
+    await page.locator('#recentFoldersMenu .recent-folder-item').filter({ hasText: name }).click();
+}
+
+test.describe('G4 recent folders — leaving an unfinished tournament (D3)', () => {
+    test('a switch from the menu asks first; Cancel stays in the tournament, in this folder', async () => {
+        const other = await makeFolder('Wallpapers');
+        const here = await makeFolder('Liked_3', ['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
+        await openFolders(other, here);
+        await startTournament();
+        await pickOnce();
+        await chooseFromMenu('Wallpapers');
+        await expect(page.locator('#tournamentResumeModal')).toBeVisible();
+        await expect(page.locator('#tournamentResumeTitle')).toHaveText('Leave tournament?');
+        await page.locator('#tournamentResumeCancel').click();
+        await expect(page.locator('#tournamentResumeModal')).toBeHidden();
+        expect(
+            await page.evaluate(() => ({
+                tournament: window.mediaViewer.isTournamentMode,
+                engine: window.mediaViewer.tournament.engine !== null,
+                folder: window.mediaViewer.baseFolderPath,
+            }))
+        ).toEqual({ tournament: true, engine: true, folder: here });
+    });
+
+    test('Save & leave writes the last pick, then switches', async () => {
+        const other = await makeFolder('Wallpapers');
+        const here = await makeFolder('Liked_3', ['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
+        await openFolders(other, here);
+        await startTournament();
+        await pickOnce();
+        // Taken at once, inside the 500 ms debounce: before D3 this pick was never written on a fast switch.
+        const expected = await page.evaluate(() => JSON.stringify(window.mediaViewer.tournament.engine.serialize()));
+        await chooseFromMenu('Wallpapers');
+        await page.locator('#tournamentResumeAccept').click();
+        await page.waitForFunction(
+            (dir) => window.mediaViewer.baseFolderPath === dir && !window.mediaViewer.isTournamentMode,
+            other
+        );
+        await waitForMedia(page);
+        const onDisk = await page.evaluate(
+            async (dir) => JSON.stringify((await window.electronAPI.readTournamentState(dir)).state),
+            here
+        );
+        expect(onDisk).toBe(expected);
+    });
+});
 ```
 
 (An unreachable drive cannot be simulated here; the `'unreachable'` row is covered by the unit test.)
@@ -2249,9 +2384,9 @@ test.describe('G4 recent folders — opening one', () => {
 - [ ] **Step 2: Run them to verify they fail**
 
 Run: `npx vitest run tests/recent-folders-glue.test.js tests/like-or-skip-glue.test.js`
-Expected: `recent-folders-glue.test.js` fails to collect — `Error: Could not find method: switchToFolder`. In `like-or-skip-glue.test.js`: "every method that assigns this.mediaFiles is a known order-changer or a reviewed exemption" fails with `expected [ 'setupEventListeners' ] to deeply equal []` (the handler still assigns, and is no longer exempt); "every listed method still assigns this.mediaFiles (no stale entries)" fails with `expected [ 'switchToFolder' ] to deeply equal []`; and the three change-folder tests fail at `Could not find method: switchToFolder` (from `folderCtx`).
-Run: `npx playwright test tests/e2e/recent-folders.test.js -g "opening one" --reporter=line`
-Expected: 4 failures — a row click opens nothing (`waitForMedia` / `waitForNotification` time out). Record in the Progress Log.
+Expected: `recent-folders-glue.test.js` fails to collect — `Error: Could not find method: switchToFolder`. In `like-or-skip-glue.test.js`: "every method that assigns this.mediaFiles is a known order-changer or a reviewed exemption" fails with `expected [ 'setupEventListeners' ] to deeply equal []` (the handler still assigns, and is no longer exempt); "every listed method still assigns this.mediaFiles (no stale entries)" fails with `expected [ '_switchToFolderNow' ] to deeply equal []`; and the three change-folder tests fail at `Could not find method: switchToFolder` (from `folderCtx`).
+Run: `npx playwright test tests/e2e/recent-folders.test.js -g "opening one|unfinished tournament" --reporter=line`
+Expected: 6 failures — a row click opens nothing (`waitForMedia` / `waitForNotification` time out), and in a tournament a menu pick shows no leave prompt (`#tournamentResumeModal` never visible). Record in the Progress Log.
 
 - [ ] **Step 3: The glue**
 
@@ -2304,12 +2439,30 @@ Constructor comment on `_fileOpInFlight` (~L114-117) — replace its last four l
 New methods, after `_refreshRecentFoldersMenu()`:
 
 ```js
-    // #changeFolderBtn's handler body, moved here unchanged (G4 spec § 6) so the header's recent-folders menu
-    // opens a folder exactly the way change-folder does, reset included.
+    // #changeFolderBtn's handler body, moved here (G4 spec § 6) so the header's recent-folders menu opens a folder
+    // exactly the way change-folder does, reset included. During an unfinished tournament both ask first, as Escape
+    // and the mode buttons do (spec D3): loadFolder leaves the tournament without asking, and a pick made in the
+    // last 500 ms was never written — the debounced write skips itself once the engine is gone. Save & leave
+    // flushes it first.
     async switchToFolder(folderPath) {
         if (!folderPath || folderPath === this.baseFolderPath) {
             return;
         }
+        if (this._refuseIfFileOpInFlight()) {
+            return;
+        }
+        if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
+            this.showTournamentLeavePrompt(() => this._switchToFolderNow(folderPath));
+            return;
+        }
+        await this._switchToFolderNow(folderPath);
+    }
+
+    // The switch itself: change-folder's reset, then the load. Also the leave prompt's continuation, which runs
+    // after the user chose — the prompt blocks clicks but not keys, so a special move can have started behind it.
+    // If this refuses after Save & leave, the tournament is on disk and the engine dropped, so the next pick of
+    // this folder switches without a second prompt.
+    async _switchToFolderNow(folderPath) {
         // Before the reset below, not only in loadFolder (G2 final review F1): a pick during a
         // file action would otherwise wipe the list and the history, then be refused, and the
         // action would push onto the wiped history with an undo that targets ''.
@@ -2418,13 +2571,17 @@ New methods, after `_refreshRecentFoldersMenu()`:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/recent-folders-glue.test.js tests/like-or-skip-glue.test.js` → all pass; `npx vitest run` → green.
-Run: `npx playwright test tests/e2e/recent-folders.test.js tests/e2e/app-launch.test.js --reporter=line` → all pass.
+Run: `npx playwright test tests/e2e/recent-folders.test.js tests/e2e/app-launch.test.js tests/e2e/tournament-mode.test.js --reporter=line` → all pass.
 
-- [ ] **Step 5: Grep sweep** (Global Constraints): `changeFolderBtn`, `change-folder`, `switchToFolder`, `setupEventListeners` across code, tests **and comments** — every hit still true. In particular the CLAUDE.md G2 note quoted in `tests/like-or-skip-glue.test.js`'s comments and the "the change-folder button refuses before it wipes anything" describe title (still true via `switchToFolder`).
+**Mutation check (D3).** Step 2's tournament E2E failed before any open flow existed, which does not prove they catch a missing prompt. Temporarily delete the `if (this.isTournamentMode && …) { … return; }` block in `switchToFolder`, rerun `npx vitest run tests/recent-folders-glue.test.js` and `npx playwright test tests/e2e/recent-folders.test.js -g "unfinished tournament" --reporter=line`: expect the unit test "…shows the leave prompt…" and both D3 E2E to fail (`#tournamentResumeModal` never visible). Restore the block; rerun green. Log both runs.
+
+- [ ] **Step 5: Grep sweep** (Global Constraints): `changeFolderBtn`, `change-folder`, `switchToFolder`, `setupEventListeners`, `showTournamentLeavePrompt`, `exitTournamentMode` across code, tests **and comments** — every hit still true (e.g. comments that list where the leave prompt is shown: Escape, the mode buttons, the window close — now also a header folder switch). In particular the CLAUDE.md G2 note quoted in `tests/like-or-skip-glue.test.js`'s comments and the "the change-folder button refuses before it wipes anything" describe title (still true via `switchToFolder`).
 
 - [ ] **Step 6: CLAUDE.md**
 
 § Async Patterns, the File-op guard bullet: "`loadFolder` and the change-folder button (before its reset)" → "`loadFolder` and `switchToFolder` (the change-folder button and the header recent-folders menu, before its reset), and `openRecentFolder` (before any IPC)".
+
+§ Git Insights, the "Tournament Escape + mode-selector clicks both route through `switchMode('single')` → `showTournamentLeavePrompt`" bullet — add after its first sentence: "A header folder switch (`switchToFolder`: change-folder and the ▾ menu) asks the same prompt first (G4 D3); the reset and load run as its continuation, `_switchToFolderNow`, and Save & leave flushes the 500 ms-debounced pick write, which `_drain` would otherwise skip once `loadFolder` nulls the engine."
 
 § State Management, the G4 bullet from T2 — append: "A click goes through `openRecentFolder(path, surface)`: single-flight, refused during a file action, then grant status → exists (`classifyRecentFolder`): open (drop zone → `loadFolder`; menu → `switchToFolder`, change-folder's extracted body), missing → removed with a notice, not granted → the dialog at that path, unreachable → kept. The clicked row reads "Checking…" (not the spinner, which hides the drop zone)."
 
@@ -2432,7 +2589,7 @@ Run: `npx playwright test tests/e2e/recent-folders.test.js tests/e2e/app-launch.
 
 ```bash
 git add media-viewer.js tests/recent-folders-glue.test.js tests/like-or-skip-glue.test.js tests/e2e/recent-folders.test.js CLAUDE.md
-git commit -m "feat(recent-folders): open a listed folder, validated on click; change-folder body becomes switchToFolder (G4 T4)"
+git commit -m "feat(recent-folders): open a listed folder, validated on click; switchToFolder asks first in a tournament (G4 T4)"
 ```
 
 ---
@@ -2488,6 +2645,7 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 
 - **`.notification.warning` has no style** — G1's re-confirm notice and G4's missing/unreachable notices render as the neutral default. → BACKLOG 🟤.
 - **`tests/lint-guard.test.js`'s `RENDERER_FILES` omits `like-or-skip.js` and `tournament-engine.js`**, so the HTML-sink guard is not proven for them (G4 adds `recent-folders.js` only). → BACKLOG 🟤.
+- **Keys still reach the dispatcher while the tournament leave prompt is open** (`#tournamentResumeModal` blocks clicks only): picks, undo and a special move (which holds `_fileOpInFlight`) can run behind it, for Escape's and the mode buttons' prompt as for D3's. `_applyModeSwitch` does not re-check the file-op guard after the user chooses; `_switchToFolderNow` does. Pre-existing; found while designing D3. → BACKLOG 🟤.
 - **A mouse wheel over the header itself navigates** (unverified at runtime): the document wheel handler excludes only media and the help overlay, so a wheel over the auto-shown header changes the file. Pre-existing; the menu stops it for itself only. → BACKLOG 🟤 after a probe.
 
 ## Closeout (after the merge, on `main`)
@@ -2512,7 +2670,8 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 
 ## Progress Log
 
-- **2026-10-16** — Branch `g4-recently-opened-folders` from `dd05eed`. User reordered G4 ahead of I1 (D0). Brainstormed section by section (D1 drop zone + header menu, D2 pure module + glue); spec `96c9c94`, approved. Planning-time measurements: the header auto-hide re-arm points (Premise Correction 1), the document wheel handler (2), the E2E Lucide stub (3), the tests the `switchToFolder` extraction reaches (7), `RENDERER_FILES` (8). Spec amended before any code (1–6).
+- **2026-10-16** — Branch `g4-recently-opened-folders` from `dd05eed`. User reordered G4 ahead of I1 (D0). Brainstormed section by section (D1 drop zone + header menu, D2 pure module + glue); spec `96c9c94`, approved. Planning-time measurements: the header auto-hide re-arm points (Premise Correction 1), the document wheel handler (2), the E2E Lucide stub (3), the tests the `switchToFolder` extraction reaches (7), `RENDERER_FILES` (8). Spec amended before any code (1–6). Plan `0fa22af`.
+- **2026-10-16** — A side-agent note ("a header-menu pick mid-tournament skips the Save/Discard prompt; the last picks might not be written") verified against the code before acting: the missing prompt is real, and so is the lost tail (`PERSIST_DEBOUNCE_MS = 500`, `_drain` returns on `!this.engine` after `loadFolder` nulls it); "one misclick" was overstated (▾ then a row), and nothing older than 500 ms is lost. User ruling **D3**: the prompt goes in `switchToFolder`, for change-folder and the menu alike (Premise Correction 9). Task 4 grew to ~1.5 SP (total ~5). The user chose **subagent-driven** execution, after a `/compact`.
 
 ## Key Discoveries
 
