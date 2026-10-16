@@ -24,7 +24,7 @@ npm run lint           # Lint all JS (lint:fix to auto-fix)
 npm run format         # Prettier (format:check to verify only)
 ```
 
-Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret scan) → `node scripts/check-docs-index.js` (every file under `docs/archive/plans/` and `docs/superpowers/specs/` must be linked from `docs/README.md`, and every link must resolve) → lint-staged (ESLint --fix + Prettier on staged files) → `npx vitest run`. E2E is NOT run by the pre-commit hook. Pre-push hook (Husky): `node scripts/check-e2e-needed.js` decides RUN or SKIP for the outgoing range (SKIP only when EVERY changed path is `*.md` or under `docs/`; any failure falls back to RUN); on RUN the hook runs the full Playwright E2E suite. **Per-check bypass**: `SKIP=<check>[,<check>…]` waives the named checks for one command and warns on every skip — pre-commit tokens `secrets`, `docs-index`, `lint-staged`, `vitest`; pre-push `e2e` (shared helper `.husky/skip.sh`; PowerShell: `$env:SKIP='docs-index'; git commit …; $env:SKIP=$null`). `--no-verify` is the last resort: it disables every check, the secret scan included.
+Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret scan) → `node scripts/check-docs-index.js` (every file under `docs/archive/plans/` and `docs/superpowers/specs/` must be linked from `docs/README.md`, and every link must resolve) → `node scripts/check-claude-md-size.js` (warns, never blocks, when the staged `CLAUDE.md` grows past its limits) → lint-staged (ESLint --fix + Prettier on staged files) → `npx vitest run`. E2E is NOT run by the pre-commit hook. Pre-push hook (Husky): `node scripts/check-e2e-needed.js` decides RUN or SKIP for the outgoing range (SKIP only when EVERY changed path is `*.md` or under `docs/`; any failure falls back to RUN); on RUN the hook runs the full Playwright E2E suite. **Per-check bypass**: `SKIP=<check>[,<check>…]` waives the named checks for one command and warns on every skip — pre-commit tokens `secrets`, `docs-index`, `lint-staged`, `vitest`; pre-push `e2e` (shared helper `.husky/skip.sh`; PowerShell: `$env:SKIP='docs-index'; git commit …; $env:SKIP=$null`). `--no-verify` is the last resort: it disables every check, the secret scan included.
 
 ## Architecture
 
@@ -55,7 +55,7 @@ media_viewer/
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
-├── scripts/             # Maintenance scripts (Node CJS, each pure exported functions + a CLI): check-secrets.js (pre-commit secret guard); check-e2e-needed.js (pre-push E2E gate decision, fails safe to RUN); check-docs-index.js (pre-commit docs-index guard)
+├── scripts/             # Maintenance scripts (Node CJS, each pure exported functions + a CLI): check-secrets.js (pre-commit secret guard); check-e2e-needed.js (pre-push E2E gate decision, fails safe to RUN); check-docs-index.js (pre-commit docs-index guard); check-claude-md-size.js (pre-commit `CLAUDE.md` size warning, never blocks)
 ├── tests/               # Unit (Vitest, tests/*.test.js) + E2E (Playwright, tests/e2e/)
 │   └── e2e/             # fixtures/ (1x1 PNGs, tiny.mp4 — a 32-byte unplayable stub, playable-64x64.mp4 — a real 1 s H.264 clip, static.jxl) + helpers/ (electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs)
 ├── .claude/             # Committed: agents/, hooks/, rules/, settings.json, skills/ (§ Active gotchas)
@@ -212,4 +212,5 @@ When modifying this codebase:
 
 ## Maintenance
 
-Manual-only. This file carries no `AUTO-MANAGED` / `MANUAL` section markers (deliberately stripped in PR #52) — `revise-claude-md` / `claude-md-improver` edit the prose directly rather than keying on markers. Keep it durable-rules-only; audit quarterly or whenever it crosses ~200 lines / its tooling materially changes.
+Manual-only, with no `AUTO-MANAGED` / `MANUAL` section markers: `revise-claude-md` and `claude-md-improver` edit the prose directly. Keep it durable-rules-only. A new rule is one sentence plus at most one "why"; history goes to DONE.md or the spec; extend an existing bullet rather than add a near-duplicate.
+Audit quarterly, when the pre-commit size warning reports its byte trigger crossed, or when its tooling materially changes. Lines are not the trigger here: each rule is one line, so the line count barely moves while bytes grow. The warning's figures live in `scripts/check-claude-md-size.js`.
