@@ -2,10 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G4 (🔵, 3 SP → ~4.5 SP); BACKLOG 🔵 [2026-07-01] "Add 'Recently opened folders' quick-access list"
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G4 (🔵, 3 SP → ~4.5 SP); BACKLOG 🔵 [2026-07-01] "Add 'Recently opened folders' quick-access list"
 **Spec**: [2026-10-16-g4-recently-opened-folders-design.md](../../superpowers/specs/2026-10-16-g4-recently-opened-folders-design.md) (committed `96c9c94`, user-approved 2026-10-16; amended at planning — see Premise Corrections 1–6 — and by user ruling D3, Premise Correction 9)
 **Created**: 2026-10-16
-**Status**: Planned — approved 2026-10-16 with D3 added; execution: subagent-driven
+**Status**: ✅ Complete — merged 2026-10-16 via PR #81 (merge `51af1ab`) after a review round (`f16601c`) and a re-review with no issues; archived at closeout. Approved 2026-10-16 with D3 added; executed subagent-driven
 **Last Updated**: 2026-10-16
 **Branch**: `g4-recently-opened-folders` (from `main` @ `dd05eed`)
 **Trial vehicle**: `typescript-lsp` (REVIEW-QUEUE § 5) — see **Pre-flight**. Note every LSP diagnostic it raises in the Progress Log, with what happened to it; G6 reads it out.
@@ -2632,8 +2632,8 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 - [x] Grep sweep: `recentFolders`, `RecentFolders`, `switchToFolder`, `openRecentFolder`, `menu-open`, `__mvDialogCalls` across code, tests **and comments**; re-read every comment attached to changed code.
 - [x] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js`; triage every finding against the spec.
 - [x] `typescript-lsp`: record in the Progress Log whether a `diagnostics` record appeared, and what each diagnostic was.
-- [ ] Push (`git push -u origin g4-recently-opened-folders`; pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
-- [ ] Open the PR: spec + plan links, D0–D2, the planning amendments (Premise Corrections 1–6), RED→GREEN evidence per task, the before/after screenshots inline, test deltas, the Residuals, the `typescript-lsp` notes. **Ask the user** before running `/code-review` in this chat (memory `feedback_ask_before_in_chat_code_review`; the default is a separate chat). Merge only on the user's go-ahead.
+- [x] Push (`git push -u origin g4-recently-opened-folders`; pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
+- [x] Open the PR (#81): spec + plan links, D0–D2, the planning amendments (Premise Corrections 1–6), RED→GREEN evidence per task, the before/after screenshots inline, test deltas, the Residuals, the `typescript-lsp` notes. **Ask the user** before running `/code-review` in this chat (memory `feedback_ask_before_in_chat_code_review`; the default is a separate chat). Merge only on the user's go-ahead.
 
 ## Improvements (minimum 2 required before Extract)
 
@@ -2661,23 +2661,23 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 
 ## Closeout (after the merge, on `main`)
 
-- [ ] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G4 closeout`), archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans), DONE.md entry, WEEKLY Summary-Table Status → `✅ PR #N` + the Thursday G4 Daily-Schedule row, check off the BACKLOG 🔵 [2026-07-01] "Add 'Recently opened folders'" entry — **in the closeout commit**.
-- [ ] Remove this plan's row from [README.md](README.md) § Current Plans and from `docs/README.md` § Active Plans.
-- [ ] Spec: a post-implementation note for anything the code departed from.
-- [ ] Propagation check: re-read every live surface this plan touched (`CLAUDE.md`, `README.md`, the code comments, `index.html`) for a late correction that did not reach it.
-- [ ] REVIEW-QUEUE § 5: hand the `typescript-lsp` evidence to G6.
-- [ ] Memory: session file + MEMORY.md line; durable lessons only.
+- [x] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G4 closeout`), archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans), DONE.md entry, WEEKLY Summary-Table Status → `✅ PR #N` + the Thursday G4 Daily-Schedule row, check off the BACKLOG 🔵 [2026-07-01] "Add 'Recently opened folders'" entry — **in the closeout commit**.
+- [x] Remove this plan's row from [README.md](../../planning/plans/README.md) § Current Plans and from `docs/README.md` § Active Plans.
+- [x] Spec: a post-implementation note for anything the code departed from.
+- [x] Propagation check: re-read every live surface this plan touched (`CLAUDE.md`, `README.md`, the code comments, `index.html`) for a late correction that did not reach it.
+- [x] REVIEW-QUEUE § 5: hand the `typescript-lsp` evidence to G6.
+- [x] Memory: session file + MEMORY.md line; durable lessons only.
 
 **Closeout artifacts** (fill at closeout):
 
 | Artifact | Done / N/A + reason |
 | --- | --- |
-| `BACKLOG.md` — improvements extracted (min 2, routed by source) | |
-| `TODO.md` — actionable items, § Spawned Tasks rows | |
-| `DONE.md` — entry with plan link, summary, key changes | |
-| `WEEKLY.md` — Summary-Table Status **and** the Daily-Schedule entry, each an identifier | |
-| `docs/README.md` — plan under Archived Plans, spec under Design Specs | |
-| `docs/archive/plans/` — plan moved here, original deleted | |
+| `BACKLOG.md` — improvements extracted (min 2, routed by source) | Done. 14 🟤 entries under `### [2026-10-16] From: G4 closeout`: Improvements 1–4 and every Residual, plus the T5 focus-ring deviation folded into the focus-polish entry. Two are tagged `possible-dup-of` the G2 reusable-dialog entry. 🔵 [2026-07-01] checked off. |
+| `TODO.md` — actionable items, § Spawned Tasks rows | N/A. No actionable item or spawned task; the `Last Updated` stamp records it. The 🔴 I1 item is next. |
+| `DONE.md` — entry with plan link, summary, key changes | Done. 2026-10-16 G4 entry. |
+| `WEEKLY.md` — Summary-Table Status **and** the Daily-Schedule entry, each an identifier | Done. The Status reads ✅ `51af1ab` (PR #81); the G4 item box and the Thursday row both name the merge. |
+| `docs/README.md` — plan under Archived Plans, spec under Design Specs | Done. The Active Plans table reads "None currently active"; the spec row records the implementation. |
+| `docs/archive/plans/` — plan moved here, original deleted | Done (`git mv`). Its two relative links are repointed. |
 
 ## Progress Log
 
@@ -2736,6 +2736,18 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
   - Two controls pass by construction: a ✕ on another row still opens, and with no check in flight every row shows its path.
 - **Mutation check.** With the ▾ refresh at load start removed, the #1 E2E fails at `menuButtonDisabled`, after its disk assertion passes, because `openRecentFolder`'s refusal still protects the data. The unit test "holds the load flag … refreshing the ▾ both times" fails too. The file was restored from a copy.
 - **GREEN.** Unit: 1530 passed, 1 skipped (+25). recent-folders E2E: 23/23. Lint: 0 errors (1 pre-existing `no-shadow` warning in a file the fix touched).
+- **2026-10-16 — Push, re-review, merge.**
+  - **Push.** The full E2E suite ran on `f16601c` (163 passed, 6 skipped), and again in the pre-push hook with the same result. A per-finding reply was posted on the PR, and the PR body was corrected and PATCHed through REST.
+  - **The re-review (separate chat): no issues.** It re-ran its original probe on `f16601c` in two phases, with ▾ disabled and every route refused in both, and Local_B's ratings unchanged. It ruled on every response bullet and accepted the decline of #4 and the deferral of #7.
+  - **Merge.** On the user's go-ahead: merge commit `51af1ab`, the same style as #78–#80.
+  - **A side-agent note arrived after the push.** It said folder switching waits during slow loads. That is accurate, except that it listed drag-and-drop, dead since Electron 32. The trade-off was already recorded as a Residual, so it changed nothing.
+- **2026-10-16 — Closeout on `main`.**
+  - **Extract:** 14 🟤 entries.
+  - **Archive:** this plan.
+  - **Transitions:** DONE, WEEKLY and TODO updated; 🔵 [2026-07-01] checked off.
+  - **Spec:** a post-implementation note covering Tab emulation, the focus target, the `finally`, F1, the fix wave's three behaviours and the LSP result.
+  - **REVIEW-QUEUE § 5:** a `typescript-lsp` evidence row, plus a *You should know* row. This session's two *Heads up* notes show the mod's notes do reach the chat in the VS Code host, which answers G2's open question.
+  - **Propagation check:** README, CLAUDE.md, `index.html` and the code comments all hold.
 
 ## Key Discoveries
 

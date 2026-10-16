@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-16 <!-- Group G3: Stop the retrain on every AI sort (🔵, Oct 12–16; re-scoped from source-folder vector reuse after the measure-first before run). MERGED 2026-10-16 via PR #80 (merge bf6fcad), after per-task reviews, a whole-branch final review with one fix round, and a PR review in a separate chat (no open items). --> <!-- Prior (2026-10-12): Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
+**Last Updated**: 2026-10-16 <!-- Group G4: Recently opened folders (🔵, Oct 12–16; reordered ahead of I1 by the user). MERGED 2026-10-16 via PR #81 (merge 51af1ab), after per-task reviews, a whole-branch final review with one fix wave, and a PR review in a separate chat (7 findings: 5 fixed, 1 declined, 1 deferred; re-review found no issues). --> <!-- Prior (2026-10-16): Group G3: Stop the retrain on every AI sort (🔵, Oct 12–16; re-scoped from source-folder vector reuse after the measure-first before run). MERGED 2026-10-16 via PR #80 (merge bf6fcad), after per-task reviews, a whole-branch final review with one fix round, and a PR review in a separate chat (no open items). --> <!-- Prior (2026-10-12): Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
 <!-- Previous: Group G5: Weekly Reviews (2026-10-09 run, ⚪ Overhead) — 5/5, MERGED 2026-10-09 via PR #77 (merge 0e298b4) after one review round and two close-outs. -->
 <!-- Previous: Group G4: Cleanup Week trial batch (🟤, Cleanup Week #4) — 2/2, MERGED 2026-10-08 via PR #76 (merge 44c282b) after one review round and a close-out. -->
 <!-- Previous: Group G3: Tournament render re-entry (🟤, Cleanup Week #4) — 1/1, MERGED 2026-10-07 via PR #75 (merge 482a3c8) after a pre-PR final review + fix pass, one review round and a close-out (no issues). -->
@@ -22,6 +22,68 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-16 — Group G4: Recently opened folders 🔵 (Oct 12–16) — **MERGED `51af1ab`** (PR #81)
+
+**Spec**: [2026-10-16-g4-recently-opened-folders-design.md](../superpowers/specs/2026-10-16-g4-recently-opened-folders-design.md). Approved 2026-10-16 and amended at planning: Premise Corrections 1–6, and D3 added after approval. It also carries the PR-review amendments in § 6 and a post-implementation note.
+**Plan**: [2026-10-16_g4-recently-opened-folders.md](../archive/plans/2026-10-16_g4-recently-opened-folders.md). Its Progress Log holds the RED→GREEN and mutation evidence for every task, the fix wave and the review round, Rulings 1–8, and the `typescript-lsp` trial result.
+**Branch**: `g4-recently-opened-folders`, cut from `main` at `dd05eed`.
+
+✅ **Status: MERGED 2026-10-16 via PR #81** (merge `51af1ab`). The user reordered G4 ahead of I1 (D0), since G4 adds no IPC and no page-side file load.
+
+**How it was built and reviewed:**
+- **Execution.** Subagent-driven, with a fresh implementer and task reviewer for each of the five tasks; the controller committed. Opus reviewed T4 (guard and async risk) and the whole branch.
+- **Two plan tests could not catch what they targeted as written; the implementers fixed both** (Rulings 2–3):
+  - T3's "a rating key moves nothing" seeded one rating folder, but a like refuses without both, so it passed with or without the menu.
+  - T4's Save & leave check compared `serialize()` strings that carry a `Date.now()` stamp.
+- **The final review** found that a slow click-time check acted after the user had moved on: from the drop zone, it replaced the folder they had just opened and wiped its undo. Fixed with an intent generation (`_folderIntentGen`) in a fix wave of six, re-reviewed clean.
+- **The PR review** (`/code-review high`, separate chat) found 7 issues; 5 were fixed in `f16601c`, 1 declined with reasons and 1 deferred. The worst: a ▾ pick during a load ran a second load beside it, and the older load's ratings read saved into the newer folder's `.bulk_rated.json`. The reviewer reproduced it, and an E2E now pins it. The re-review ruled on each response and found no issues.
+
+**Summary**:
+- **Where the list appears.** A folder that showed media is listed on the drop zone at the next start (cap 8, newest first, exact-path identity). While another folder is open, it is listed in a ▾ menu beside change-folder.
+- **Choosing one** opens it with no folder dialog. It is checked on click, never on listing, because a status query on an offline share holds main ~21 s:
+  - a folder that is gone is dropped, with a notice;
+  - a folder from before G1 re-opens through the dialog, opened at that folder;
+  - a folder on an absent drive (or one that now denies access) is kept, with a notice.
+- **D3.** A header folder switch during an unfinished tournament first asks Save & leave / Discard / Cancel, as Escape does. Save & leave flushes the last pick, which the 500 ms debounced write used to drop.
+- **No security surface added.** No `main.js` or `preload.js` change, and no new IPC: every check goes through G1's guarded channels.
+
+**Key changes**:
+- **`recent-folders.js` (new, pure ESM):** parse, clamp, record, remove and serialize the stored list; `folderDisplayName`; `classifyRecentFolder` (grant status × exists → open / missing / regrant / unreachable / error). It is HTML-sink-guarded by lint (`eslint.config.mjs` block 2c, `RENDERER_FILES`).
+- **`media-viewer.js`:**
+  - **The list.** `_setRecentFolders` is the only writer. `_buildRecentFolderRows` builds rows with `createElement` and `textContent` only.
+  - **The ▾ menu** owns the keyboard while open (capture listeners, one close path), pins the auto-hiding header, and keeps the wheel from navigating.
+  - **Opening a folder.** `openRecentFolder` is single-flight and drops a stale decision. Change-folder's handler body moved into `switchToFolder` / `_switchToFolderNow`.
+  - **`loadFolder`** is single-flight (`_folderLoadInFlight`) and exits tournament mode on every branch.
+- **`index.html` / `styles.css`:** the drop-zone list, which scrolls within a viewport bound at the 600 px minimum window; the ▾ anchor and menu; `.header.menu-open`.
+- **Docs.** `CLAUDE.md` (Architecture, State Management, UI Components, Async Patterns, E2E helpers, the tournament gotchas); `README.md` feature line. Before/after screenshots under `docs/superpowers/specs/assets/`, with paths redacted to `D:\Photos`.
+- **Tests:**
+  - Unit 1393 → **1530** (1 skipped). New: `recent-folders.test.js` (36), `recent-folders-glue.test.js` (86).
+  - E2E 140 → **163** passed (6 skipped; the new opt-in G4 evidence block is the sixth). New: `recent-folders.test.js` (23). The E2E helpers clear `recentFolders` and count dialog opens.
+
+**Follow-ups**:
+- **BACKLOG:** 14 new 🟤 entries under `### [2026-10-16] From: G4 closeout`:
+  - A load that cannot be cancelled by picking another folder (the cost of the single-flight fix).
+  - Keys reaching the dispatcher behind the tournament leave prompt, with its two consequences.
+  - A shared keyboard-ownership helper.
+  - G1's unreachable notice, which has the same access-denied ambiguity.
+  - `check-folder-exists` error mapping.
+  - `.notification.warning` styling.
+  - `RENDERER_FILES` gaps.
+  - Menu ARIA, focus polish, and an opaque menu background.
+  - The header wheel probe.
+  - Three UX improvements: the dialog opening next to the current folder, the "Supports:" line, and renaming the drop zone.
+- **BACKLOG check-off:** 🔵 [2026-07-01] "Add 'Recently opened folders' quick-access list".
+- **TODO:** none. The 🔴 I1 item is next.
+- **`typescript-lsp` trial (REVIEW-QUEUE § 5, for G6):** no diagnostics. The plugin's server fails to initialize without `typescript` in the workspace; the global install is not enough. Adding it as a devDependency is G6's call.
+
+**SP**: 3 planned → ~4.5 at the spec (the ▾ menu) → ~5 with D3 and the two review rounds. Under the 2× line.
+
+**Learnings**:
+- A plan's own RED step does not prove that a test can tell the states apart. Two plan-specified tests could not catch what they targeted, and the implementers caught both (the control press; the timestamp).
+- A slow click-time check is a long in-flight window. Every entry point that changes the folder during it is a race (the intent generation, then the load flag).
+- A test can pass for a reason the test itself created. The first draft of the overlapping-load E2E passed against the unfixed code, because its own later click moved `baseFolderPath` back before the stale save.
+- A review's "Residual: closed by F1" line was a claim nobody had checked. F1 fenced stale decisions, not fresh picks, and the PR review measured the gap.
 
 ### 2026-10-16 — Group G3: Stop the retrain on every AI sort 🔵 (Oct 12–16; re-scoped from "Source-folder vector reuse") — **MERGED `bf6fcad`** (PR #80)
 

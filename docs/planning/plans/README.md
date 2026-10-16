@@ -78,7 +78,12 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| [2026-10-16_g4-recently-opened-folders.md](2026-10-16_g4-recently-opened-folders.md) | G4 | Planned — subagent-driven execution next |
+| _None currently active_ | — | — |
+
+<!-- 2026-10-16 (Group G4 closeout): 2026-10-16_g4-recently-opened-folders.md left this table on
+     archive. Merged `51af1ab` via PR #81, moved to docs/archive/plans/ with `git mv`, and indexed in
+     docs/README.md as "G4 Recently Opened Folders Plan" in the same commit. Its spec row under Design
+     Specs now records the implementation, the PR-review amendments and the post-implementation note. -->
 
 <!-- 2026-10-12 (Group G2 closeout): 2026-10-12_g2-like-or-skip-flow.md left this table on
      archive. Merged `96467f7` via PR #79, moved to docs/archive/plans/ with `git mv`, and indexed in

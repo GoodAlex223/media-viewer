@@ -48,7 +48,7 @@
 > **Update 2026-10-11 (G1 closeout):** G1 merged with one open residual, I1: page-side file loads are not yet confined to the granted folders. **The user decided to fix it before G4**, so G4 waits for the TODO 🔴 item "Confine page-side file loads to the granted folders (G1 residual I1)" (~1.5–2.5 SP).
 > **Update 2026-10-16 (G4 brainstorm):** **reordered by the user — G4 now, I1 next.** G4 uses only existing guarded IPC (`load-folder`, `get-grant-status`, `check-folder-exists`, `open-folder-dialog`) and adds no page-side file load (names only, no thumbnails), so it neither depends on I1 nor widens it. Branch `g4-recently-opened-folders`; spec [2026-10-16-g4-recently-opened-folders-design.md](../superpowers/specs/2026-10-16-g4-recently-opened-folders-design.md) (re-estimated ~4.5 SP, the ▾ header menu being most of the growth).
 
-- [ ] **Add a "Recently opened folders" quick-access list** — record each successfully loaded folder (path, name, timestamp) in `localStorage` (the constructor-prefs pattern: validate, clamp), list a few in the drop zone / empty state, reopen without the folder picker, and drop entries whose folder no longer exists. `media-viewer.js` (`loadFolder`, the drop zone), `index.html`, `styles.css`, `main.js`/`preload.js` only if G1's authorization needs a reopen path, `tests/` (3) — 🔵 [2026-07-01] manual testing
+- [x] ✅ **MERGED 2026-10-16 via PR #81 (merge `51af1ab`)**, at ~5 SP against 3 planned (the ▾ header menu and D3); see [DONE.md](DONE.md). The drop zone lists up to 8 folders that showed media, and a ▾ menu beside change-folder lists them while a folder is open. A pick reopens the folder without the dialog, checked on click: a folder that is gone is dropped with a notice, one from before G1 re-opens through the dialog, and one on an absent drive is kept. A header folder switch during an unfinished tournament asks Save/Discard first (D3). The PR review found that two overlapping loads could save one folder's ratings into another's `.bulk_rated.json`; `loadFolder` is now single-flight. The `typescript-lsp` trial produced no diagnostics, because it needs `typescript` in the workspace (for G6). _Planned:_ **Add a "Recently opened folders" quick-access list** — record each successfully loaded folder (path, name, timestamp) in `localStorage` (the constructor-prefs pattern: validate, clamp), list a few in the drop zone / empty state, reopen without the folder picker, and drop entries whose folder no longer exists. `media-viewer.js` (`loadFolder`, the drop zone), `index.html`, `styles.css`, `main.js`/`preload.js` only if G1's authorization needs a reopen path, `tests/` (3) — 🔵 [2026-07-01] manual testing
 
 ### G5. `CLAUDE.md` size audit `[solo]` 🟡 — project instructions — 3 SP
 
@@ -96,7 +96,7 @@
 ### Thursday, October 15 — Like-or-skip lands; recent folders
 
 - ✅ **[G2](#g2-like-or-skip-flow-batch----single-mode-ai-sort-workflow--8-sp)** 🔵 🏆 — stale-order hint; screenshots; review; merge (part 3 of 3). Merged `96467f7` (PR #79) on 2026-10-12, ahead of the week. Scope ~13 SP after the review fix waves; nothing dropped, so the stale-order hint shipped and the delivered 🟤 share is unchanged.
-- **[G4](#g4-recently-opened-folders-solo---folder-open--empty-state--3-sp)** 🔵 — recent folders; screenshots; review; merge
+- ✅ **[G4](#g4-recently-opened-folders-solo---folder-open--empty-state--3-sp)** 🔵 — recent folders; screenshots; review; merge. Merged `51af1ab` (PR #81) on 2026-10-16, a day late (Friday), after the user's G4-before-I1 reorder. ~5 SP after the ▾ menu and D3; nothing dropped.
 
 **Daily total**: ~6 SP
 
@@ -117,7 +117,7 @@
 | G1  | High security findings fix `[solo]`          | Main-process file IPC + renderer encoding   | 🟤 Auto     | 1      | 5        | Mon–Tue | ✅ `e5cd3a8` (PR #78) |
 | G2  | Like-or-skip flow `[batch]` 🏆               | Single-mode AI-sort workflow                | 🔵 User     | 2      | 8        | Tue–Thu | ✅ `96467f7` (PR #79) |
 | G3  | Stop the retrain on every AI sort `[solo]` (re-scoped from source-folder vector reuse) | ML training pipeline | 🔵 User     | 1      | 3        | Wed     | ✅ `bf6fcad` (PR #80) |
-| G4  | Recently opened folders `[solo]`             | Folder open + empty state                   | 🔵 User     | 1      | 3        | Thu     | ☐ Planned  |
+| G4  | Recently opened folders `[solo]`             | Folder open + empty state                   | 🔵 User     | 1      | 3        | Thu     | ✅ `51af1ab` (PR #81) |
 | G5  | `CLAUDE.md` size audit `[solo]`              | Project instructions                        | 🟡 Ops      | 1      | 3        | Fri     | ☐ Planned  |
 | G6  | Weekly Reviews `[batch]`                     | Research / process                          | ⚪ Overhead | 4      | 5        | Fri     | ☐ Planned  |
 |     | **Total (quota-counted)**                    |                                             |             | **6**  | **22**   |         |            |
