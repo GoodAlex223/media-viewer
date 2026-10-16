@@ -13,6 +13,7 @@ import {
     waitForMedia,
     mockFolderDialog,
     seedLocalStorage,
+    waitForNotification,
 } from './helpers/electron-app.js';
 
 const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -237,5 +238,146 @@ test.describe('G4 recent folders — the header menu', () => {
             pt
         );
         expect(state).toEqual({ opacity: '1', hit: true });
+    });
+});
+
+test.describe('G4 recent folders — opening one', () => {
+    test('from the drop zone: it opens without the dialog, and moves to the front', async () => {
+        const a = await makeFolder('Wallpapers');
+        const b = await makeFolder('Liked_3');
+        await openFolders(a, b);
+        await restart();
+        await mockFolderDialog(electronApp, b);
+        await dropRows().filter({ hasText: 'Wallpapers' }).click();
+        await waitForMedia(page);
+        expect(await page.evaluate(() => window.mediaViewer.baseFolderPath)).toBe(a);
+        expect(await dialogCalls()).toBe(0);
+        expect(await page.evaluate(() => JSON.parse(localStorage.getItem('recentFolders')).entries[0].path)).toBe(a);
+    });
+
+    test('from the header menu: it switches folders without the dialog, even from a playing video (Review Focus 4)', async () => {
+        const a = await makeFolder('Wallpapers');
+        const b = await makeFolder('Clips', ['playable-64x64.mp4']);
+        await openFolders(a, b);
+        await mockFolderDialog(electronApp, a);
+        expect(await page.evaluate(() => window.mediaViewer.currentMedia?.tagName)).toBe('VIDEO');
+        await revealHeader();
+        await page.locator('#recentFoldersBtn').click();
+        await page.locator('#recentFoldersMenu .recent-folder-item').filter({ hasText: 'Wallpapers' }).click();
+        await expect(page.locator('#recentFoldersMenu')).toBeHidden();
+        await page.waitForFunction((dir) => window.mediaViewer.baseFolderPath === dir, a);
+        await waitForMedia(page);
+        await waitForIdle();
+        expect(await page.evaluate(() => window.mediaViewer.currentMedia?.tagName)).toBe('IMG');
+        expect(await dialogCalls()).toBe(0);
+        await expect(page.locator('.notification.error')).toHaveCount(0);
+    });
+
+    test('a folder that no longer exists is removed with a notice, and no dialog opens', async () => {
+        const a = await makeFolder('Wallpapers');
+        const b = await makeFolder('Liked_3');
+        await openFolders(a, b);
+        await restart();
+        await rm(b, { recursive: true, force: true });
+        await mockFolderDialog(electronApp, a);
+        await dropRows().filter({ hasText: 'Liked_3' }).click();
+        await waitForNotification(page, '"Liked_3" no longer exists — removed from recent folders');
+        expect(await dropNames()).toEqual(['Wallpapers']);
+        await expect(page.locator('#dropZone')).toBeVisible();
+        expect(await dialogCalls()).toBe(0);
+    });
+
+    test('a folder main has not granted reopens through the dialog, opened at that folder', async () => {
+        const c = await makeFolder('Liked_1'); // never granted: each launch starts with an empty grant store
+        await page.evaluate(
+            (dir) =>
+                localStorage.setItem(
+                    'recentFolders',
+                    JSON.stringify({ version: 1, entries: [{ path: dir, openedAt: Date.now() }] })
+                ),
+            c
+        );
+        await restart();
+        await mockFolderDialog(electronApp, c);
+        await dropRows().first().click();
+        await waitForNotification(page, 'Confirm "Liked_1" — press Select Folder (security update)');
+        await waitForMedia(page);
+        expect(await electronApp.evaluate(() => global.__mvLastDialogDefaultPath)).toBe(c);
+        expect(await dialogCalls()).toBe(1);
+        expect(await page.evaluate(() => window.mediaViewer.baseFolderPath)).toBe(c);
+    });
+});
+
+// D3: the same Save & leave / Discard / Cancel prompt as Escape. Started the way tournament-mode.test.js does.
+async function startTournament() {
+    await page.evaluate(() => window.mediaViewer.switchMode('tournament'));
+    await expect(page.locator('#tournamentConfigModal')).toBeVisible();
+    await page.locator('#tournamentRoundsSelect').fill('2');
+    await page.locator('#tournamentConfigStart').click();
+    await page.waitForFunction(() => window.mediaViewer.isTournamentMode && window.mediaViewer.tournament.engine);
+    await page.waitForFunction(() => !window.mediaViewer._tournamentRenderLoop && !window.mediaViewer.isLoading);
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+}
+
+async function pickOnce() {
+    await page.keyboard.press('q');
+    await page.waitForFunction(
+        () => window.mediaViewer.tournament.engine.history.filter((e) => (e.kind ?? 'pick') !== 'prune').length === 1
+    );
+}
+
+async function chooseFromMenu(name) {
+    await revealHeader();
+    await page.locator('#recentFoldersBtn').click();
+    await page.locator('#recentFoldersMenu .recent-folder-item').filter({ hasText: name }).click();
+}
+
+test.describe('G4 recent folders — leaving an unfinished tournament (D3)', () => {
+    test('a switch from the menu asks first; Cancel stays in the tournament, in this folder', async () => {
+        const other = await makeFolder('Wallpapers');
+        const here = await makeFolder('Liked_3', ['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
+        await openFolders(other, here);
+        await startTournament();
+        await pickOnce();
+        await chooseFromMenu('Wallpapers');
+        await expect(page.locator('#tournamentResumeModal')).toBeVisible();
+        await expect(page.locator('#tournamentResumeTitle')).toHaveText('Leave tournament?');
+        await page.locator('#tournamentResumeCancel').click();
+        await expect(page.locator('#tournamentResumeModal')).toBeHidden();
+        expect(
+            await page.evaluate(() => ({
+                tournament: window.mediaViewer.isTournamentMode,
+                engine: window.mediaViewer.tournament.engine !== null,
+                folder: window.mediaViewer.baseFolderPath,
+            }))
+        ).toEqual({ tournament: true, engine: true, folder: here });
+    });
+
+    test('Save & leave writes the last pick, then switches', async () => {
+        const other = await makeFolder('Wallpapers');
+        const here = await makeFolder('Liked_3', ['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
+        await openFolders(other, here);
+        await startTournament();
+        await pickOnce();
+        // Taken at once, inside the 500 ms debounce: before D3 this pick was never written on a fast switch.
+        // serialize() stamps lastUpdatedAt with the time of the call, so the flush on Save & leave rewrites it:
+        // compare everything but that stamp. The pick itself (gamesPlayed, playedPairs, winCounts) must match.
+        const expected = await page.evaluate(() => {
+            const { lastUpdatedAt: _stamp, ...rest } = window.mediaViewer.tournament.engine.serialize();
+            return rest;
+        });
+        await chooseFromMenu('Wallpapers');
+        await page.locator('#tournamentResumeAccept').click();
+        await page.waitForFunction(
+            (dir) => window.mediaViewer.baseFolderPath === dir && !window.mediaViewer.isTournamentMode,
+            other
+        );
+        await waitForMedia(page);
+        const onDisk = await page.evaluate(async (dir) => {
+            const { lastUpdatedAt: _stamp, ...rest } = (await window.electronAPI.readTournamentState(dir)).state;
+            return rest;
+        }, here);
+        expect(expected.gamesPlayed).toBe(1);
+        expect(onDisk).toEqual(expected);
     });
 });

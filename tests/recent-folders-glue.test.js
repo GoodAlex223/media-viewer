@@ -432,3 +432,279 @@ describe('_refreshRecentFoldersMenu — after the list changed', () => {
         expect(c._renderRecentFoldersMenu).not.toHaveBeenCalled();
     });
 });
+
+describe('switchToFolder — change-folder, moved; asks first in an unfinished tournament (spec § 6, D3)', () => {
+    const switchToFolder = extract('switchToFolder');
+    const switchToFolderNow = extract('_switchToFolderNow');
+
+    function tournamentCtx({ complete = false, ...overrides } = {}) {
+        return {
+            baseFolderPath: 'C:\\here',
+            isTournamentMode: true,
+            tournament: { engine: { isComplete: () => complete } },
+            _fileOpInFlight: false,
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            showNotification: vi.fn(),
+            showTournamentLeavePrompt: vi.fn(),
+            _switchToFolderNow: vi.fn(async () => {}),
+            ...overrides,
+        };
+    }
+
+    it('during an unfinished tournament it shows the leave prompt and changes nothing until the user chooses', async () => {
+        const c = tournamentCtx();
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showTournamentLeavePrompt).toHaveBeenCalledTimes(1);
+        expect(c._switchToFolderNow).not.toHaveBeenCalled();
+        // Save & leave or Discard runs the continuation: the switch itself.
+        await c.showTournamentLeavePrompt.mock.calls[0][0]();
+        expect(c._switchToFolderNow).toHaveBeenCalledWith('C:\\there');
+    });
+
+    it('a finished tournament switches at once, without the prompt', async () => {
+        const c = tournamentCtx({ complete: true });
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showTournamentLeavePrompt).not.toHaveBeenCalled();
+        expect(c._switchToFolderNow).toHaveBeenCalledWith('C:\\there');
+    });
+
+    it('outside tournament mode it switches at once', async () => {
+        const c = tournamentCtx({ isTournamentMode: false });
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showTournamentLeavePrompt).not.toHaveBeenCalled();
+        expect(c._switchToFolderNow).toHaveBeenCalledWith('C:\\there');
+    });
+
+    it('refuses during a file action before it asks', async () => {
+        const c = tournamentCtx({ _fileOpInFlight: true });
+        await switchToFolder.call(c, 'C:\\there');
+        expect(c.showNotification).toHaveBeenCalledWith('Wait for the move to finish', 'info');
+        expect(c.showTournamentLeavePrompt).not.toHaveBeenCalled();
+    });
+
+    it('the switch itself refuses before its reset when a file action started behind the prompt', async () => {
+        const c = {
+            _fileOpInFlight: true,
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            showNotification: vi.fn(),
+            mediaFiles: [{ path: 'C:\\here\\a.png' }],
+            baseFolderPath: 'C:\\here',
+            cleanupCurrentMedia: vi.fn(async () => {}),
+            loadFolder: vi.fn(async () => {}),
+        };
+        await switchToFolderNow.call(c, 'C:\\there');
+        expect(c.showNotification).toHaveBeenCalledWith('Wait for the move to finish', 'info');
+        expect(c.cleanupCurrentMedia).not.toHaveBeenCalled();
+        expect(c.loadFolder).not.toHaveBeenCalled();
+        expect(c.mediaFiles).toHaveLength(1);
+        expect(c.baseFolderPath).toBe('C:\\here');
+    });
+
+    it.each([
+        ['no folder', null],
+        ['the folder already open', 'C:\\a'],
+    ])('does nothing for %s — and refuses nothing, even during a file action', async (_label, folderPath) => {
+        const c = {
+            baseFolderPath: 'C:\\a',
+            _fileOpInFlight: true,
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            showNotification: vi.fn(),
+            cleanupCurrentMedia: vi.fn(async () => {}),
+            loadFolder: vi.fn(async () => {}),
+        };
+        await switchToFolder.call(c, folderPath);
+        expect(c.showNotification).not.toHaveBeenCalled();
+        expect(c.cleanupCurrentMedia).not.toHaveBeenCalled();
+        expect(c.loadFolder).not.toHaveBeenCalled();
+    });
+});
+
+describe('openRecentFolder — validate on click (spec § 6)', () => {
+    const openRecentFolder = extract('openRecentFolder');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    /** Main's answers: `status` is getGrantStatus's whole reply (an array, null when refused, or an Error to throw). */
+    function api({ status = [true], exists = true, picked = null } = {}) {
+        globalThis.window = {
+            electronAPI: {
+                path: { basename: (p) => p.split('\\').pop() },
+                getGrantStatus: vi.fn(async () => {
+                    if (status instanceof Error) {
+                        throw status;
+                    }
+                    return status;
+                }),
+                checkFolderExists: vi.fn(async () => {
+                    if (exists instanceof Error) {
+                        throw exists;
+                    }
+                    return exists;
+                }),
+                openFolderDialog: vi.fn(async () => picked),
+                logError: vi.fn(),
+            },
+        };
+        return globalThis.window.electronAPI;
+    }
+
+    function openCtx(overrides = {}) {
+        return {
+            _recentOpenInFlight: false,
+            _fileOpInFlight: false,
+            _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            _openRecentFolderOn: extract('_openRecentFolderOn'),
+            _markRecentFolderBusy: vi.fn(),
+            closeRecentFoldersMenu: vi.fn(),
+            renderRecentFolders: vi.fn(),
+            _removeRecentFolder: vi.fn(),
+            switchToFolder: vi.fn(async () => {}),
+            loadFolder: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+            showError: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    const DIR = 'C:\\pics\\Liked_3';
+
+    it('a granted folder that exists opens from the drop zone through loadFolder, with no dialog', async () => {
+        const e = api();
+        // E7: the folder's last load was empty, which left baseFolderPath naming it — a retry still loads it.
+        const c = openCtx({ baseFolderPath: DIR });
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(c.loadFolder).toHaveBeenCalledWith(DIR);
+        expect(c.switchToFolder).not.toHaveBeenCalled();
+        expect(e.openFolderDialog).not.toHaveBeenCalled();
+        expect(c.showNotification).not.toHaveBeenCalled();
+        expect(c._markRecentFolderBusy).toHaveBeenCalledWith(DIR, 'drop');
+    });
+
+    it('from the header menu it opens through switchToFolder', async () => {
+        api();
+        const c = openCtx();
+        await openRecentFolder.call(c, DIR, 'menu');
+        expect(c.switchToFolder).toHaveBeenCalledWith(DIR);
+        expect(c.loadFolder).not.toHaveBeenCalled();
+    });
+
+    it('the menu closes before anything opens', async () => {
+        api();
+        const c = openCtx();
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(c.closeRecentFoldersMenu.mock.invocationCallOrder[0]).toBeLessThan(
+            c.loadFolder.mock.invocationCallOrder[0]
+        );
+    });
+
+    it('a folder that no longer exists is removed with a notice, and nothing opens', async () => {
+        const e = api({ exists: false });
+        const c = openCtx();
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(c._removeRecentFolder).toHaveBeenCalledWith(DIR);
+        expect(c.showNotification).toHaveBeenCalledWith(
+            '"Liked_3" no longer exists — removed from recent folders',
+            'warning'
+        );
+        expect(c.loadFolder).not.toHaveBeenCalled();
+        expect(e.openFolderDialog).not.toHaveBeenCalled();
+    });
+
+    it('a folder main has not granted opens the dialog at that folder, then opens the pick', async () => {
+        const e = api({ status: [false], picked: 'C:\\pics\\Picked' });
+        const c = openCtx();
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(e.checkFolderExists).not.toHaveBeenCalled();
+        expect(c.showNotification).toHaveBeenCalledWith(
+            'Confirm "Liked_3" — press Select Folder (security update)',
+            'info'
+        );
+        expect(e.openFolderDialog).toHaveBeenCalledWith(DIR);
+        expect(c.loadFolder).toHaveBeenCalledWith('C:\\pics\\Picked');
+    });
+
+    it('from the menu, the pick opens through switchToFolder', async () => {
+        api({ status: [false], picked: 'C:\\pics\\Picked' });
+        const c = openCtx();
+        await openRecentFolder.call(c, DIR, 'menu');
+        expect(c.switchToFolder).toHaveBeenCalledWith('C:\\pics\\Picked');
+    });
+
+    it('a refused existence check (null) is treated as not granted', async () => {
+        const e = api({ exists: null, picked: null });
+        const c = openCtx();
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(e.openFolderDialog).toHaveBeenCalledWith(DIR);
+        expect(c._removeRecentFolder).not.toHaveBeenCalled();
+    });
+
+    it('a cancelled re-confirm dialog opens nothing', async () => {
+        api({ status: [false], picked: null });
+        const c = openCtx();
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(c.loadFolder).not.toHaveBeenCalled();
+        expect(c.switchToFolder).not.toHaveBeenCalled();
+    });
+
+    it('an unreachable folder is kept, with a notice', async () => {
+        const e = api({ status: ['unreachable'] });
+        const c = openCtx();
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(c.showNotification).toHaveBeenCalledWith('"Liked_3" is on a drive that isn\'t connected', 'warning');
+        expect(c._removeRecentFolder).not.toHaveBeenCalled();
+        expect(e.checkFolderExists).not.toHaveBeenCalled();
+        expect(e.openFolderDialog).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['a refused status query (null)', { status: null }, 'status undefined, exists undefined'],
+        ['a status query that throws', { status: new Error('ipc') }, 'status undefined, exists undefined'],
+        ['an existence check that throws', { exists: new Error('ipc') }, 'status true, exists undefined'],
+    ])('%s is an error: logged, shown, entry kept', async (_label, answers, detail) => {
+        const e = api(answers);
+        const c = openCtx();
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(e.logError).toHaveBeenCalledWith({
+            level: 'warn',
+            message: `Recent folder check failed (${detail})`,
+            source: 'renderer',
+        });
+        expect(c.showError).toHaveBeenCalledWith("Couldn't open that folder");
+        expect(c._removeRecentFolder).not.toHaveBeenCalled();
+        expect(c.loadFolder).not.toHaveBeenCalled();
+    });
+
+    it('a second click while one is resolving is ignored', async () => {
+        const e = api();
+        const c = openCtx();
+        const first = openRecentFolder.call(c, DIR, 'drop');
+        await openRecentFolder.call(c, 'C:\\pics\\Other', 'drop');
+        await first;
+        expect(e.getGrantStatus).toHaveBeenCalledTimes(1);
+        expect(c.loadFolder).toHaveBeenCalledTimes(1);
+        expect(c.loadFolder).toHaveBeenCalledWith(DIR);
+    });
+
+    it('refused during a file action, with the notice, before any IPC', async () => {
+        const e = api();
+        const c = openCtx({ _fileOpInFlight: true });
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(c.showNotification).toHaveBeenCalledWith('Wait for the move to finish', 'info');
+        expect(e.getGrantStatus).not.toHaveBeenCalled();
+        expect(c._recentOpenInFlight).toBe(false);
+    });
+
+    it('releases the flag and re-renders the list on every path — even when the open throws', async () => {
+        api();
+        const c = openCtx({ loadFolder: vi.fn(async () => Promise.reject(new Error('boom'))) });
+        await openRecentFolder.call(c, DIR, 'drop');
+        expect(c.showError).toHaveBeenCalledWith('Failed to open folder: boom');
+        expect(c._recentOpenInFlight).toBe(false);
+        expect(c.renderRecentFolders).toHaveBeenCalled();
+    });
+});

@@ -1942,7 +1942,7 @@ git commit -m "feat(recent-folders): header menu beside change-folder that owns 
   - `_openRecentFolderOn(surface, folderPath): Promise<void>` — drop → `loadFolder`, menu → `switchToFolder`
   - `_markRecentFolderBusy(folderPath, surface): void`; field `_recentOpenInFlight: boolean`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/like-or-skip-glue.test.js` — the § 4 control test's `EXEMPT` (~L259): replace the `setupEventListeners` key with
 
@@ -2381,14 +2381,14 @@ test.describe('G4 recent folders — leaving an unfinished tournament (D3)', () 
 
 (An unreachable drive cannot be simulated here; the `'unreachable'` row is covered by the unit test.)
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npx vitest run tests/recent-folders-glue.test.js tests/like-or-skip-glue.test.js`
 Expected: `recent-folders-glue.test.js` fails to collect — `Error: Could not find method: switchToFolder`. In `like-or-skip-glue.test.js`: "every method that assigns this.mediaFiles is a known order-changer or a reviewed exemption" fails with `expected [ 'setupEventListeners' ] to deeply equal []` (the handler still assigns, and is no longer exempt); "every listed method still assigns this.mediaFiles (no stale entries)" fails with `expected [ '_switchToFolderNow' ] to deeply equal []`; and the three change-folder tests fail at `Could not find method: switchToFolder` (from `folderCtx`).
 Run: `npx playwright test tests/e2e/recent-folders.test.js -g "opening one|unfinished tournament" --reporter=line`
 Expected: 6 failures — a row click opens nothing (`waitForMedia` / `waitForNotification` time out), and in a tournament a menu pick shows no leave prompt (`#tournamentResumeModal` never visible). Record in the Progress Log.
 
-- [ ] **Step 3: The glue**
+- [x] **Step 3: The glue**
 
 Constructor, after `this._recentMenuCleanup = null;`:
 
@@ -2568,16 +2568,16 @@ New methods, after `_refreshRecentFoldersMenu()`:
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/recent-folders-glue.test.js tests/like-or-skip-glue.test.js` → all pass; `npx vitest run` → green.
 Run: `npx playwright test tests/e2e/recent-folders.test.js tests/e2e/app-launch.test.js tests/e2e/tournament-mode.test.js --reporter=line` → all pass.
 
 **Mutation check (D3).** Step 2's tournament E2E failed before any open flow existed, which does not prove they catch a missing prompt. Temporarily delete the `if (this.isTournamentMode && …) { … return; }` block in `switchToFolder`, rerun `npx vitest run tests/recent-folders-glue.test.js` and `npx playwright test tests/e2e/recent-folders.test.js -g "unfinished tournament" --reporter=line`: expect the unit test "…shows the leave prompt…" and both D3 E2E to fail (`#tournamentResumeModal` never visible). Restore the block; rerun green. Log both runs.
 
-- [ ] **Step 5: Grep sweep** (Global Constraints): `changeFolderBtn`, `change-folder`, `switchToFolder`, `setupEventListeners`, `showTournamentLeavePrompt`, `exitTournamentMode` across code, tests **and comments** — every hit still true (e.g. comments that list where the leave prompt is shown: Escape, the mode buttons, the window close — now also a header folder switch). In particular the CLAUDE.md G2 note quoted in `tests/like-or-skip-glue.test.js`'s comments and the "the change-folder button refuses before it wipes anything" describe title (still true via `switchToFolder`).
+- [x] **Step 5: Grep sweep** (Global Constraints): `changeFolderBtn`, `change-folder`, `switchToFolder`, `setupEventListeners`, `showTournamentLeavePrompt`, `exitTournamentMode` across code, tests **and comments** — every hit still true (e.g. comments that list where the leave prompt is shown: Escape, the mode buttons, the window close — now also a header folder switch). In particular the CLAUDE.md G2 note quoted in `tests/like-or-skip-glue.test.js`'s comments and the "the change-folder button refuses before it wipes anything" describe title (still true via `switchToFolder`).
 
-- [ ] **Step 6: CLAUDE.md**
+- [x] **Step 6: CLAUDE.md**
 
 § Async Patterns, the File-op guard bullet: "`loadFolder` and the change-folder button (before its reset)" → "`loadFolder` and `switchToFolder` (the change-folder button and the header recent-folders menu, before its reset), and `openRecentFolder` (before any IPC)".
 
@@ -2585,7 +2585,7 @@ Run: `npx playwright test tests/e2e/recent-folders.test.js tests/e2e/app-launch.
 
 § State Management, the G4 bullet from T2 — append: "A click goes through `openRecentFolder(path, surface)`: single-flight, refused during a file action, then grant status → exists (`classifyRecentFolder`): open (drop zone → `loadFolder`; menu → `switchToFolder`, change-folder's extracted body), missing → removed with a notice, not granted → the dialog at that path, unreachable → kept. The clicked row reads "Checking…" (not the spinner, which hides the drop zone)."
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add media-viewer.js tests/recent-folders-glue.test.js tests/like-or-skip-glue.test.js tests/e2e/recent-folders.test.js CLAUDE.md
@@ -2677,6 +2677,7 @@ git commit -m "docs(recent-folders): after screenshots; README feature line (G4 
 - **2026-10-16 — T1.** The before shot was taken on the unchanged renderer and shows the bare drop zone, with no folder icon because E2E stubs Lucide (Premise Correction 3). A plain run skips the G4 block. RED: `Cannot find module '../recent-folders.js'`, and 10 lint-guard `flags …` cases failed with `expected [] to have a length of 1`. GREEN: 127 tests in the two files; full suite 1443 passed, 1 skipped; lint 0 errors.
 - **2026-10-16 — T2.** RED: the glue file fails to collect with `Could not find method: _setRecentFolders`. E2E: 5 failed, and `a first launch shows no list` passed, by construction as planned. GREEN: glue 10/10; recent-folders + app-launch E2E 11/11; full suite 1453 passed, 1 skipped; lint 0 errors. The brief's `loadCtx` needed no additions.
 - **2026-10-16 — T3.** RED: the glue file fails to collect with `Could not find method: _updateRecentFoldersButton`, and all 5 header-menu E2E tests fail. GREEN: glue 27/27; recent-folders E2E 11/11 (the 4 s header pin and the focused-row assertion included); full suite 1470 passed, 1 skipped; lint 0 errors. Ruling 1 applied: open and refresh focus the first enabled row; arrows cycle the rows; Tab cycles every enabled button. **Plan defect, corrected by the implementer.** The Review Focus 5 E2E seeded only `customLikeFolder`, but `moveCurrentFile` refuses a rating unless both like and dislike folders are set ("Configure like/dislike folders"). So "a rating key moves nothing while the menu is open" passed with or without the menu, and only the closing control press failed. The test now seeds `customDislikeFolder` too. Two mutation checks show it discriminates: removing the menu's `stopImmediatePropagation` fails it, and so does removing its wheel `stopPropagation`.
+- **2026-10-16 — T4.** RED matched Step 2: the glue file failed to collect (`switchToFolder`), and so did the two like-or-skip control tests and the three change-folder tests, as predicted. All 6 new E2E failed. GREEN: full suite 1492 passed, 1 skipped; recent-folders + app-launch + tournament-mode E2E 38 passed; lint 0 errors. **Mutation check (D3):** with the block removed, the unit test "…shows the leave prompt…" failed, and both D3 E2E failed because `#tournamentResumeModal`/`#tournamentResumeAccept` never became visible. The block was restored byte-identical (`cmp`) and the rerun was green. **Plan defect, corrected by the implementer:** the Save & leave E2E compared `JSON.stringify(engine.serialize())` strings, but `serialize()` stamps `lastUpdatedAt: Date.now()` (`tournament-engine.js:621`), so the flush's rewrite never equals the earlier snapshot. The test now compares the parsed objects without `lastUpdatedAt` and asserts `gamesPlayed === 1`. The mutation run fails that test at the missing prompt, which comes before the data assertion. So whether the data assertion separates the flush from the debounced write is not measured.
 
 ## Key Discoveries
 

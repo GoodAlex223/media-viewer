@@ -258,8 +258,8 @@ describe('every method that reassigns mediaFiles announces it through _onOrderCh
     // Reviewed exemptions: assignments that are not a new order on screen, and why.
     const EXEMPT = {
         constructor: 'the initial empty list',
-        setupEventListeners:
-            'the change-folder handler empties the list once its file-op refusal passed, then loadFolder announces the folder',
+        _switchToFolderNow:
+            "change-folder's reset (G4): empties the list once its file-op refusal passed, then loadFolder announces the folder",
         applyCachedSortOrder: "runs inside handleSortBySimilarity's cache path, which announces on success",
         insertNewFilesInSortedOrder: 'runs inside applyCachedSortOrder (same)',
         _undoSkipBatch: 'a batch undo re-inserts files; the others keep their order',
@@ -1201,6 +1201,8 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
             loadFolder: vi.fn(async () => {}),
             showNotification: vi.fn(),
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            switchToFolder: extract('switchToFolder'),
+            _switchToFolderNow: extract('_switchToFolderNow'),
             ...overrides,
         };
     }
