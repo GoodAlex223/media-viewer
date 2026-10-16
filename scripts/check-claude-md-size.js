@@ -21,7 +21,7 @@
 const GROWTH_WARN_BYTES = 500;
 // The size after the G5 audit plus 25%, rounded up to the next 1,000. Change it only at an
 // audit (CLAUDE.md § Maintenance).
-const BYTE_TRIGGER = 73000;
+const BYTE_TRIGGER = 74000;
 
 /**
  * Size a text the way `wc -lc` would: lines are newline characters, bytes are UTF-8.

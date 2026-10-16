@@ -1074,6 +1074,46 @@ Why a second commit: after T9 the file stood at 58,975 B against the spec's 38�
 | 13 | UI Components: "every key swallowed but Escape/arrows/Tab/Enter/Space; a held Enter chooses nothing;" | Walk-through | Design pointer → G4 spec |
 | 14 | UI Components: "The drop-zone list (`#recentFoldersDrop`) scrolls inside a viewport bound, so all 8 rows stay reachable at the 600 px minimum window." | Walk-through | Design pointer → G4 spec; `styles.css` |
 
+### T11 — Rule-loss check triage
+
+**The control fired**: the planted deletion — the UI Components sentence "`removeZoomPopover` must **not** remove the toggle button's parent — …" (deleted mid-paragraph from the agent's copy only) — came back as **M9**, quoted exactly. The agent (general-purpose, session model, two files only) checked ~570 rule clauses and reported 10 MISSING and 22 WEAKENED; one MISSING is the plant.
+
+| Item | What the agent found gone | Disposition row | Decision |
+|---|---|---|---|
+| M1–M4 | Backlog Intake: date grouping; one entry per item + `[possible-dup-of]`; per-PR review section, no spread; ~20 SP Cleanup Week trigger | T6 #3, #4, #6, #7 (Duplicate) | Accept — each verified present in BACKLOG 📌 (§ Intake rules L42–43, L49–50; § Quotas L34–36) |
+| W6 | Backlog Intake: default-to-🔵 / default-to-🟤 when unsure | T6 #2 (Duplicate) | Accept — BACKLOG 📌 § Intake rules L45 states both defaults |
+| M5 | Recently opened folders: the click-outcome mapping | T7b #3 (Walk-through) | Accept — the G4 spec holds it (7 hits for "unreachable") |
+| M6 | "The clicked row reads "Checking…" (not the spinner, which hides the drop zone)" | T7 #8 (Walk-through) | **Restored** — a "must not" with its reason, not UI detail |
+| M7, M8 | ✕ on the row being checked drops every outcome; `_recentOpenInFlight` keeps "Checking…" across a re-render | T7 #8, T7b #4 (Walk-through) | Accept — in the G4 spec (12 / 3 hits) |
+| M9 | the plant | — | The control — `CLAUDE.md` itself still has the sentence |
+| M10 + W4 | "Run `npm test` before committing" and "(unit tests must pass)" | T9 #6 (Duplicate), T3 #3 (Readable) | **Restored** "(unit tests must pass)" in § Build: the two cuts together left the rule only implicit |
+| W1 | "fail-fast" | T3 #1 (Readable) | Accept — the hook's order shows it |
+| W2 | the docs-index guard's whole-tree scope | tightened, no row (wrong: it carried a scope) | **Restored** — an unindexed file the commit never touched still blocks it |
+| W3 | lint-staged's file-type scope | T3 #2 (Readable) | **Restored** — "staged files" read as ESLint on everything |
+| W5 | `update`/`reverseUpdate` no longer exist | T5 #7 (History) | Accept |
+| W7, W8 | `'other'` notices the discarded count; chip internals (`_pendingStaleMark`, refresh sites, weighted symmetric difference) | T7 #5, T7b #1 | Accept — G2 spec holds them (1 / 2 / 1 hits) |
+| W9 | the list's schema and parse; and NEW's "The validation is hygiene" was left with no subject | T7b #2 (Readable) | **Restored** the parse/clamp as the subject ("The list's parse and clamp (`RecentFolders.parseRecentFolders`) are hygiene") and "(persist in try/catch → re-render)"; the schema stays out |
+| W10 | stale check still applies 'missing' and 'unreachable' | T7b #4 (Walk-through) | **Restored** — an exception to the stale rule |
+| W11 | training caches share the staleness rule, streaming IO and atomic write | T7b #6 (Readable — wrong: "format" dropped three contracts) | **Restored** |
+| W12 | why `clipCache` needs no `useHostCache` equivalent | T7b #7 (Readable) | **Restored** — answers the question an editor would ask before touching the flag |
+| W13 | `No CLIP vector` names stop at 20 per folder | T7b #8 (Readable) | Accept |
+| W14 | which structural writes are debounced; "by design" | T7b #10 (Readable) | Accept |
+| W15 | the three states the render owner's promise resolves in | T7b #11 (Walk-through — wrong: awaiters rely on it) | **Restored** |
+| W16 | `_skipFailedTournamentFile`'s effects (tracked `'prune'`, one toast, next pair, flags) | T7b #11 | **Restored** — callers rely on it not to toast or request again |
+| W17 | what load validation checks | T7b #11 (Readable) | **Restored** "shape plus membership"; the two helper names stay out |
+| W18 | `#dislikeSkippedBtn`'s owner | T7b #12 (Readable) | **Restored** "(owner `updateDislikeSkippedButton()`)" — a sole-owner rule; the refresh site stays out |
+| W19 | ▾ disabled when only the on-screen folder is listed; the anchor's show/hide owners | T7b #12 | **Restored** the ▾ rule (not in the G4 spec: 0 hits); the show/hide owners stay out |
+| W20 | which keys the menu swallows; a held Enter chooses nothing | T7b #13 (Walk-through) | **Restored** — the keyboard-ownership contract and an auto-repeat rule |
+| W21 | menu `stopPropagation` is defence in depth; the auto-hide timer re-arm | T7 #20 | Accept |
+| W22 | the ~200-line audit trigger | — | Accept — intended (spec D2); the figures live in the script (Global Constraints); the global file's ~200 lines is G6's propagation (spec § 10) |
+| Borderline | `.claude/hooks/format-edited-file.js` named nowhere in NEW | T4 #14 claimed the gotcha holds it — **wrong**, the gotcha names only `hooks/` | **Restored** in the `.claude/` row, with `guard-preload-bash.js` |
+
+Other borderline items the agent judged not rules (decode settings, ESLint block list, roadmap, export lists, tracker pointers, CSS values, the CLIP await sites named by the PR #34 history): agreed.
+
+**History rows re-read for an embedded rule (Review Focus 1)**: T4 #2/#6/#10/#11, T5 #3–#7, T7 #1–3/#6/#10/#12–15/#22–32, T8 #1–14, T9 #1–5. None carried a rule the kept text lacks; T7 #12, #24, #30, #32 and T8 #10, #12, #13, #14 each kept their reason in the present tense. T8 #1's PR #34 sentence also named the two `initClipModel()` await sites — readable from the code, and the rule it serves (never fire it un-awaited) stays.
+
+Restorations: 57,661 → 58,579 B (+918). **`BYTE_TRIGGER` re-set 73000 → 74000** (58,579 × 1.25 = 73,224 → next 1,000): the plan defines it from the final size, and T11 moved the final size.
+
 ## Progress Log
 
 - **2026-10-16/17** — Branch `g5-claude-md-size-audit` from `506e041`. Brainstormed section by section: D1 mixed handling of non-rule text; D2 authoring rule + never-blocking warning; D3 approach A (in place, per section); D4 Backlog Intake Rules → a three-line pointer (the user asked for a recommendation and agreed); D5 migration recommended only; D6 the trim on Opus. While writing the spec, measuring its own claim ("each feature commit added 1–3 KB") showed 14 of 17 commits under 1 KB, and a 200-line trigger would have fired on every growing commit after a trim landing above 200 lines; user ruling: bytes only, 500-byte growth threshold, audit trigger moved to the byte trigger. A side agent raised the same line-trigger issue after the amendment; it was already resolved. Spec `1e934cb`, approved 2026-10-17.
@@ -1089,6 +1129,9 @@ Why a second commit: after T9 the file stood at 58,975 B against the spec's 38�
 - **2026-10-17 — T9 Best Practices**: 2,164 → 1,967 B (−197), 10 → 10 lines; file 59,172 → 58,975 B (−5,228 B, −8.1% since the baseline; 236 → 215 lines).
 - **2026-10-17 — T7b Detected Patterns, second pass (deviation)**: 28,188 → 26,402 B (−1,786); file 58,975 → 57,189 B. Found by measuring after T9 against the spec's 38–44 KB estimate: the first T7 pass kept more than the plan's per-bullet keep lists name in six bullets; this pass applies them as written (14 disposition rows, T7b table). Out of file order (after T9) by necessity; T11's rule-loss check covers it like every other cut. Side-agent note on the regression-checker agent's stale cache list: already a Residual (T1); its silent-miss consequence added there.
 - **2026-10-17 — T10 (native, not a Sonnet subagent: the plan holds the complete code).** RED: `Cannot find module '../scripts/check-claude-md-size.js'` (from `require.resolve`). GREEN: 25/25; ESLint 0 problems; Prettier clean. Mutations, each red on exactly the named test and green again after restore: (1) `>=` in growth → "does not warn at exactly the growth limit"; (2) outer catch ends `process.exit(1)` → "says it could not measure outside a git repository, and still exits 0"; (3) no `--diff-filter=AMR` → "is silent when CLAUDE.md is staged for deletion". Docs: § Build chain clause, § Architecture `scripts/` row (trimmed shape — T4 deviation), § Maintenance authoring rule + byte trigger, `PROJECT.md:64`, `.husky/pre-commit`. T10's own `CLAUDE.md` edits: 57,189 → 57,661 B (+472, under 500 — so its own commit prints no warning; Premise Correction 3 expected one only past 500). **`BYTE_TRIGGER` = 73000** (57,661 × 1.25 = 72,076 → next 1,000); tests re-run 25/25.
+- **2026-10-17 — T10 Step 8 (live runs, real repo)**: growth of 1,501 B → the warning (`+1501 bytes (+1 lines) … now 217 lines / 59162 bytes`, `more than 500 bytes in one commit`, no trigger line), `exit=0`; shrink (last line deleted) → silent, `exit=0`; restored, `git status --short` empty.
+- **2026-10-17 — T11 Steps 2–6.** Links: `PLANT FLAGGED`; 8 links, 0 broken; all 7 distinct spec targets tracked. Citations: 10 labels cited outside the archive (Active gotchas, Architecture, Async Patterns, Best Practices, Cache Management, Code Conventions, Git Insights, Maintenance, Testing, UI Components; Task Completion is the global file's) — all found. Stale refs: `SENTINEL OK`, the same 15 runtime-only hits as T1, none new. **Size**: 236 → 216 lines, 64,203 → 57,661 B (−6,542 B, −10.2%; ~16.0k → ~14.4k tokens per turn at bytes ÷ 4). Per section: Overview 472 → 472; Build 1,521 → 1,522; Architecture 5,460 → 4,455 (−18%); Code Conventions 7,250 → 6,669 (−8%); Backlog Intake 1,466 → 403 (−73%); Detected Patterns 29,691 → 26,402 (−11%); Git Insights 15,723 → 15,036 (−4%); Best Practices 2,164 → 1,967 (−9%); Maintenance 339 → 618 (+82%, the authoring rule and trigger). Migration recommendation appended to BACKLOG 🟤 [2026-08-27] (5 blocks, ~8.8 KB; table rendered through `gh api markdown`: 6 rows × 5 columns). Finish gates so far: `npm run lint` 0 errors (2 pre-existing `no-shadow` warnings in untouched tests); tracked files Prettier-clean — `npm run format:check` fails only on three untracked, git-ignored `CLAUDE-SECURITY-*` scan folders from 2026-10-08/10/11 sessions (local artifacts, not G5's).
+- **2026-10-17 — T11 Step 1 (rule-loss check)**: the control fired — the planted mid-paragraph deletion came back as M9, quoted exactly. ~570 clauses checked; 10 MISSING (one the plant), 22 WEAKENED. Triage (T11 table): 15 restored, 16 accepted against their disposition rows, with homes verified (BACKLOG 📌 lines; G2/G4 spec hits); 3 disposition rows were wrong (T3 "whole-tree" tightening carried a scope; T7b #6 "format" dropped three contracts; T4 #14 claimed the gotcha names `format-edited-file.js`). **Final size: 236 → 216 lines, 64,203 → 58,579 B (−5,624 B, −8.8%)**; per section: Build 1,625, Architecture 4,527, Detected Patterns 27,145, others as in the Steps 2–6 row. **`BYTE_TRIGGER` re-set 73000 → 74000** (58,579 × 1.25 = 73,224). Links re-checked (8, 0 broken); size tests 25/25; BACKLOG recommendation's file size corrected (block sizes unchanged — no restoration touched those blocks).
 
 ## Key Discoveries
 
