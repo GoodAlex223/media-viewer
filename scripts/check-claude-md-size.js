@@ -19,9 +19,10 @@
 // `measure`, `evaluate` and `formatWarning` are pure and unit-tested. No runtime dependencies.
 
 const GROWTH_WARN_BYTES = 500;
-// The size after the G5 audit plus 25%, rounded up to the next 1,000. Change it only at an
-// audit (CLAUDE.md § Maintenance).
-const BYTE_TRIGGER = 74000;
+// The size after the G5 audit (58,588 bytes) plus ~10 KB, rounded up to the next 1,000: the
+// room a 25% margin gave at the ~40 KB landing the audit expected. Change it only at an audit
+// (CLAUDE.md § Maintenance).
+const BYTE_TRIGGER = 69000;
 
 /**
  * Size a text the way `wc -lc` would: lines are newline characters, bytes are UTF-8.

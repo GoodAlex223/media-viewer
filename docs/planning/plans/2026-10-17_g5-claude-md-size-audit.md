@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G5 (🟡, 3 SP → ~4.5 SP); BACKLOG 🟡 [2026-09-21] "`CLAUDE.md` is at 212 lines, past the ~200 threshold…" and its 🟤 twin [2026-07-03] "CLAUDE.md is over its own ~200-line soft cap"
 **Spec**: [2026-10-17-g5-claude-md-size-audit-design.md](../../superpowers/specs/2026-10-17-g5-claude-md-size-audit-design.md) (committed `1e934cb`; written spec approved by the user 2026-10-17)
 **Created**: 2026-10-17
-**Status**: Approved by the user 2026-10-17 (with the 25% headroom ruling, Premise Correction 6); execution: **Native**
+**Status**: Approved by the user 2026-10-17 (with the 25% headroom ruling, Premise Correction 6, later replaced by the 69,000-byte trigger, Premise Correction 7); execution: **Native**; PR #82
 **Last Updated**: 2026-10-17
 **Branch**: `g5-claude-md-size-audit` (from `main` @ `506e041`)
 **Runbook**: `docs/prompts/claude-md-audit.md` in `claude-code-universal-config`
@@ -24,7 +24,7 @@
 - **Every removed sentence gets a disposition row before its commit** (spec § 1, § 5). Labels: `History`, `Walk-through`, `Duplicate`, `Readable from the code`. Tightened rules and kept "why" clauses need no row.
 - **History exceptions** (spec § 5): keep a release name a rule depends on (e.g. "folders saved before G1 are re-confirmed once"); keep a verification caveat that changes what an agent would do (e.g. the docs not saying how a hook's `ask` behaves in `dontAsk`).
 - **Spec pointer format**: `Design: [<short name> spec](docs/superpowers/specs/<file>.md)` — a repo-root-relative link, which resolves from `CLAUDE.md` at the root. Point at the spec that designed the contract; every pointer is checked in T11.
-- **Warning figures** (spec § 6.2): `GROWTH_WARN_BYTES = 500`; `BYTE_TRIGGER` = the final `CLAUDE.md` size after T10's own edits, plus 25%, rounded up to the next 1,000 bytes. Both thresholds are exclusive. Lines are reported, never judged. The figures live only in the script; `CLAUDE.md` states none.
+- **Warning figures** (spec § 6.2): `GROWTH_WARN_BYTES = 500`; `BYTE_TRIGGER` = the final `CLAUDE.md` size after T10's own edits, plus 25%, rounded up to the next 1,000 bytes — **superseded by Premise Correction 7: the final size plus ~10 KB, rounded up = 69,000**. Both thresholds are exclusive. Lines are reported, never judged. The figures live only in the script; `CLAUDE.md` states none.
 - **The script never blocks**: the CLI always exits 0; the hook line ends in `|| true`; a failure to measure prints `could not measure CLAUDE.md` to stderr.
 - **Prettier** (`scripts/`, `tests/`): `tabWidth=4`, `useTabs=false`, `singleQuote`, `semi`, `trailingComma=es5`, `printWidth=120`, `arrowParens=always`, `endOfLine="lf"`. `docs/` and `*.md` are Prettier-ignored.
 - **ESLint**: `curly: ['error', 'all']` (braces on every `if` body, single-line included), `eqeqeq`, `prefer-const`, `no-var`; `scripts/**/*.js` is the Node-CJS block 6.
@@ -74,6 +74,7 @@
 4. **The CLI tests strip `GIT_DIR`, `GIT_INDEX_FILE` and `GIT_WORK_TREE`** from the spawned process's environment. Vitest runs inside the pre-commit hook, where git can export them, and the script's `git diff --cached` would read the real commit's index instead of the temp repo's (`tests/check-secrets.test.js` precedent). The no-repository test also sets `GIT_CEILING_DIRECTORIES`, so git cannot discover a repository above the temp dir.
 5. **T11's link check reuses `extractLinks` from `scripts/check-docs-index.js`** (exported, pure, strips code spans and external URLs). No new code is committed for it.
 6. **`BYTE_TRIGGER` headroom is 25%, not 10%** (user ruling at plan review, spec § 6.2 amended). A side-agent note: at a ~40 KB landing, 10% leaves ~4 KB, which last week's pace would cross within days, after which every growing commit warns. 25% leaves about one Cleanup-Week cycle at a guessed rule-only rate. Improvement 4 measures the real rate.
+7. **`BYTE_TRIGGER` is 69,000, not 25% of the landing** (user ruling after T11, on a side-agent note; spec § 6.2 amended). The trim landed at 58,588 bytes, not ~40 KB: 25% gave 74,000, above the 64,203-byte file that started this audit, and ~15 KB of room where the 25% ruling had sized ~10 KB (one Cleanup-Week cycle at the guessed rate). The trigger keeps the ~10 KB: 58,588 + ~10 KB, rounded up. Improvement 4 still re-sets it from the measured rate at Cleanup Week #5.
 
 ## Task Ordering
 
@@ -822,7 +823,7 @@ git commit -m "docs: G5 verification - rule-loss check, links, citations, size t
 1. **One canonical description of the pre-commit chain.** It is written out in four places (`CLAUDE.md` § Build, `PROJECT.md` § Code Quality, `GOALS.md` Constraints, the `.husky/pre-commit` header), and `GOALS.md` had already drifted (Premise Correction 1). The others could point at `CLAUDE.md` § Build. 🟤 candidate.
 2. **Extend the size warning to `.claude/rules/*.md`** once the path-scoped migration creates them: a rule file loads with every matching Read, so its growth costs context too. 🟤 candidate, tagged to the 🟤 [2026-08-27] migration entry.
 3. **Add the rule-loss check with a positive control to the sibling audit runbook** (`claude-md-audit.md` step 6 verifies size and references, not that no rule was lost). Cross-project: G6's propagation pass, beside D2's byte trigger. 🟤 candidate if G6 does not carry it.
-4. **Measure `CLAUDE.md`'s growth rate under the authoring rule at Cleanup Week #5, and re-set `BYTE_TRIGGER` at that audit** — the 25% headroom (Premise Correction 6) rests on a guessed rate; `git log` byte deltas per commit since the G5 merge give the real one. 🟤 candidate (spec § 6.2 promises it).
+4. **Measure `CLAUDE.md`'s growth rate under the authoring rule at Cleanup Week #5, and re-set `BYTE_TRIGGER` at that audit** — the 69,000-byte trigger (~10 KB above the 58,588-byte landing; Premise Corrections 6–7) rests on a guessed rate; `git log` byte deltas per commit since the G5 merge give the real one. 🟤 candidate (spec § 6.2 promises it).
 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
@@ -1134,6 +1135,7 @@ Restorations: 57,661 → 58,579 B (+918). **`BYTE_TRIGGER` re-set 73000 → 7400
 - **2026-10-17 — T11 Step 1 (rule-loss check)**: the control fired — the planted mid-paragraph deletion came back as M9, quoted exactly. ~570 clauses checked; 10 MISSING (one the plant), 22 WEAKENED. Triage (T11 table): 15 restored, 16 accepted against their disposition rows, with homes verified (BACKLOG 📌 lines; G2/G4 spec hits); 3 disposition rows were wrong (T3 "whole-tree" tightening carried a scope; T7b #6 "format" dropped three contracts; T4 #14 claimed the gotcha names `format-edited-file.js`). **Final size: 236 → 216 lines, 64,203 → 58,579 B (−5,624 B, −8.8%)**; per section: Build 1,625, Architecture 4,527, Detected Patterns 27,145, others as in the Steps 2–6 row. **`BYTE_TRIGGER` re-set 73000 → 74000** (58,579 × 1.25 = 73,224). Links re-checked (8, 0 broken); size tests 25/25; BACKLOG recommendation's file size corrected (block sizes unchanged — no restoration touched those blocks).
 - **2026-10-17 — Finish.** T11's commit printed the new warning on itself (`+918 bytes (+0 lines)` — the line-vs-byte gap in one line) and went ahead: a real-commit live run. Whole-file re-read as a new session: one dangling reference fixed (Code Conventions E2E bullet: "the flag" lost its antecedent with T5's duplicate removal → `_fileOpInFlight`); final 58,588 B, trigger unchanged at 74000. Full unit suite green in every commit's hook; lint 0 errors; tracked files Prettier-clean.
 - **2026-10-17 — Pushed; PR #82 opened.** Pre-push E2E: 163 passed, 6 skipped (the opt-in visual-evidence specs), 7.4 min. Review: standard (`high`) in a separate chat — not run here (memory `feedback_ask_before_in_chat_code_review`). Merge on the user's go-ahead; closeout after the merge, on `main`.
+- **2026-10-17 — Trigger re-set (user ruling, on a side-agent note).** 74,000 sat above the 64,203-byte file that started this audit, because 25% of a 58.6 KB landing gives ~15 KB of room where the ruling had sized ~10 KB at a ~40 KB landing. User chose **`BYTE_TRIGGER` = 69,000** (landing + ~10 KB, rounded up) over 64,000 (the pre-audit size: ~5.4 KB of room, the rejected-10% problem) and keeping 74,000. Premise Correction 7; spec § 6.2 amended; script comment states the rule. The 500-byte growth warning is unchanged.
 
 ## Key Discoveries
 
