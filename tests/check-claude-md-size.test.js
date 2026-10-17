@@ -79,12 +79,13 @@ describe('formatWarning', () => {
         expect(formatWarning(size(1000), size(1100), [], LIMITS)).toBe('');
     });
 
-    it('names the growth, the totals and the authoring rule', () => {
+    it('names the growth and the totals, and points to the authoring rule without restating it', () => {
         const msg = formatWarning(size(1000, 10), size(1501, 12), ['growth'], LIMITS);
         expect(msg).toContain('+501 bytes (+2 lines)');
         expect(msg).toContain('now 12 lines / 1501 bytes');
         expect(msg).toContain('more than 500 bytes in one commit');
-        expect(msg).toContain('one sentence plus at most one "why"');
+        expect(msg).toContain('the authoring rule in CLAUDE.md § Maintenance');
+        expect(msg).not.toContain('one sentence plus'); // one home: a copy here would drift from § Maintenance
         expect(msg).toContain('A warning only');
         expect(msg).not.toContain('audit trigger');
     });
@@ -121,18 +122,27 @@ describe('CLI: never blocks a commit', () => {
     delete env.GIT_DIR;
     delete env.GIT_INDEX_FILE;
     delete env.GIT_WORK_TREE;
+    // Identity and config through the environment, not four `git config` processes per test: this
+    // suite runs in every pre-commit, and process spawns are nearly all of its time.
+    Object.assign(env, {
+        GIT_AUTHOR_NAME: 'G5 Test',
+        GIT_AUTHOR_EMAIL: 'test@example.com',
+        GIT_COMMITTER_NAME: 'G5 Test',
+        GIT_COMMITTER_EMAIL: 'test@example.com',
+        GIT_CONFIG_COUNT: '2',
+        GIT_CONFIG_KEY_0: 'core.autocrlf',
+        GIT_CONFIG_VALUE_0: 'false',
+        GIT_CONFIG_KEY_1: 'commit.gpgsign',
+        GIT_CONFIG_VALUE_1: 'false',
+    });
     const git = (args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', env });
-    const run = (extraEnv = {}) =>
-        spawnSync(process.execPath, [SCRIPT], { cwd: dir, encoding: 'utf8', env: { ...env, ...extraEnv } });
+    const run = (extraEnv = {}, cwd = dir) =>
+        spawnSync(process.execPath, [SCRIPT], { cwd, encoding: 'utf8', env: { ...env, ...extraEnv } });
     const write = (text) => fs.writeFileSync(path.join(dir, 'CLAUDE.md'), text);
 
     const initRepo = () => {
         dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cmd-size-'));
         git(['init', '--quiet']);
-        git(['config', 'user.email', 'test@example.com']);
-        git(['config', 'user.name', 'G5 Test']);
-        git(['config', 'core.autocrlf', 'false']);
-        git(['config', 'commit.gpgsign', 'false']);
     };
 
     const commitBase = () => {
@@ -152,12 +162,16 @@ describe('CLI: never blocks a commit', () => {
         }
     });
 
-    it('warns on a staged growth past 500 bytes, and exits 0', () => {
+    // Run from a subdirectory: a cwd-relative pathspec found nothing there and printed nothing,
+    // which reads as a pass (PR #82 review #3). The first-commit test below runs from the root.
+    it('warns on a staged growth past 500 bytes when run from a subdirectory, and exits 0', () => {
         initRepo();
         commitBase();
         write('# Rules\n' + 'x'.repeat(600) + '\n');
         git(['add', 'CLAUDE.md']);
-        const r = run();
+        const sub = path.join(dir, 'docs');
+        fs.mkdirSync(sub);
+        const r = run({}, sub);
         expect(r.status).toBe(0);
         expect(r.stderr).toContain('more than 500 bytes in one commit');
     });

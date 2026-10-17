@@ -14,12 +14,16 @@
 // `|| true`. When it cannot measure, it says so on stderr: silence would read as a pass.
 //
 // SCOPE: it reads the git index and HEAD, not the working tree, because `git commit` commits
-// the index (as check-docs-index.js does). Not staged, or staged for deletion: silent.
+// the index (as check-docs-index.js does). Not staged, or staged for deletion: silent. Every
+// path is root-relative (`:/CLAUDE.md`), so a run from a subdirectory measures the same file.
+// Growth is per commit, against HEAD: during `git commit --amend` HEAD is the commit being
+// amended, so growth spread over amends, like growth spread over several small commits, is
+// never summed. The trigger is the backstop for both.
 //
 // `measure`, `evaluate` and `formatWarning` are pure and unit-tested. No runtime dependencies.
 
 const GROWTH_WARN_BYTES = 500;
-// The size after the G5 audit (58,588 bytes) plus ~10 KB, rounded up to the next 1,000: the
+// The size after the G5 audit (58,582 bytes) plus ~10 KB, rounded up to the next 1,000: the
 // room a 25% margin gave at the ~40 KB landing the audit expected. Change it only at an audit
 // (CLAUDE.md § Maintenance).
 const BYTE_TRIGGER = 69000;
@@ -79,8 +83,8 @@ function formatWarning(before, after, kinds, limits) {
             `   • past its ${limits.byteTrigger}-byte audit trigger: the file is due for an audit (CLAUDE.md § Maintenance)`
         );
     }
-    out.push('   A new rule is one sentence plus at most one "why"; history goes to DONE.md or the spec;');
-    out.push('   extend an existing bullet rather than add a near-duplicate.');
+    // A pointer, not a copy: the rule has one home, and a copy here would drift from it.
+    out.push('   Keep to the authoring rule in CLAUDE.md § Maintenance.');
     out.push('   (A warning only — the commit goes ahead.)');
     return out.join('\n');
 }
@@ -99,7 +103,7 @@ if (require.main === module) {
         });
 
     try {
-        const staged = git(['diff', '--cached', '--name-only', '--diff-filter=AMR', '--', 'CLAUDE.md']).trim();
+        const staged = git(['diff', '--cached', '--name-only', '--diff-filter=AMR', '--', ':/CLAUDE.md']).trim();
         if (staged !== '') {
             const after = measure(git(['show', ':CLAUDE.md']));
             let headText = '';
