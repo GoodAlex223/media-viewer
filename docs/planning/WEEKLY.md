@@ -55,7 +55,7 @@
 > **Friday, after G1–G4 merge** — each of them may edit `CLAUDE.md`, and an audit diff on top of theirs would bury them (the reason it stayed out on 2026-09-21 and 2026-10-05). Baseline: 216 lines / 49,544 bytes (2026-10-09). Run it with the sibling repo's runbook (`docs/prompts/claude-md-audit.md` in `claude-code-universal-config`), and run `/claude-api prompt-audit` as one pass of it (reached through `/doctor prompt-audit`; the user may need to start it) — both inbound cross-references are on the 🟡 entry. **Out of scope**: the path-scoped-rules migration (🟤 `[2026-08-27]`), a natural Cleanup Week #5 item — G5 may recommend what moves, not move it.
 > **Model:** start Opus · `medium` — **stepped up** from the 3–4 SP row's Sonnet: deciding what is a durable rule is judgment work → execute Sonnet · `medium` for the mechanical trims; review standard (`high`) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **Audit `CLAUDE.md` — past its own ~200-line trigger, and the quarterly clock has run out** — durable-rules-only, per its § Maintenance. Also closes its 🟤 twin "CLAUDE.md is over its own ~200-line soft cap" (🟤 [2026-07-03] CW-D closeout) — check both off at closeout. `CLAUDE.md` (3) — 🟡 [2026-09-21]
+- [x] ✅ **MERGED 2026-10-17 via PR #82 (merge `3fb797e`)**, at ~5 SP against 3 planned (a second Detected Patterns pass, the rule-loss restorations and two review rounds); see [DONE.md](DONE.md). `CLAUDE.md` went from 236 to 216 lines and 64,203 to 58,582 bytes, with no rule lost: a rule-loss check with a planted control restored 15. A never-blocking pre-commit warning in bytes (`scripts/check-claude-md-size.js`, trigger 69,000) replaces the ~200-line trigger. Both BACKLOG entries are checked off. _Item:_ **Audit `CLAUDE.md` — past its own ~200-line trigger, and the quarterly clock has run out** — durable-rules-only, per its § Maintenance. Also closes its 🟤 twin "CLAUDE.md is over its own ~200-line soft cap" (🟤 [2026-07-03] CW-D closeout) — check both off at closeout. `CLAUDE.md` (3) — 🟡 [2026-09-21]
 
 ### G6. Weekly Reviews `[batch]` ⚪ Overhead — research / process — 5 SP
 
@@ -66,6 +66,9 @@
 - [ ] **Claude best-practices (1 SP)** — fresh check vs. the parked list.
 - [ ] **Non-Claude AI best-practices (1 SP)**
 - [ ] **Cross-project propagation (1 SP)** — outbound: this week's shipped work (G1–G5) and memory files changed since 2026-10-09, at the high bar; inbound: any new sibling rows naming this repo.
+  - **From G5 (PR #82), two outbound items, each a [TODO.md](TODO.md) § Spawned Tasks row:**
+    - an exception in the global `CLAUDE.md` audit trigger (and the sibling repo's synced copy, content policy and runbook) for a project with a byte trigger (G5 D2, review #6);
+    - the rule-loss check with a positive control in the sibling `claude-md-audit.md` runbook (G5 Improvement 3).
 
 ---
 
@@ -102,7 +105,7 @@
 
 ### Friday, October 16 — Audit, Reviews, buffer
 
-- **[G5](#g5-claudemd-size-audit-solo---project-instructions--3-sp)** 🟡 — after G1–G4 merge
+- ✅ **[G5](#g5-claudemd-size-audit-solo---project-instructions--3-sp)** 🟡 — after G1–G4 merge. Merged `3fb797e` (PR #82) on 2026-10-17, a day late (Saturday). ~5 SP after the second Detected Patterns pass and two review rounds; nothing dropped.
 - **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — trial read-outs first, then §§1–4
 - Buffer for review rounds. Closeout per group, **after its merge**: Summary-Table Status → `✅ PR #N`, the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — in the closeout commit.
 
@@ -118,7 +121,7 @@
 | G2  | Like-or-skip flow `[batch]` 🏆               | Single-mode AI-sort workflow                | 🔵 User     | 2      | 8        | Tue–Thu | ✅ `96467f7` (PR #79) |
 | G3  | Stop the retrain on every AI sort `[solo]` (re-scoped from source-folder vector reuse) | ML training pipeline | 🔵 User     | 1      | 3        | Wed     | ✅ `bf6fcad` (PR #80) |
 | G4  | Recently opened folders `[solo]`             | Folder open + empty state                   | 🔵 User     | 1      | 3        | Thu     | ✅ `51af1ab` (PR #81) |
-| G5  | `CLAUDE.md` size audit `[solo]`              | Project instructions                        | 🟡 Ops      | 1      | 3        | Fri     | ☐ Planned  |
+| G5  | `CLAUDE.md` size audit `[solo]`              | Project instructions                        | 🟡 Ops      | 1      | 3        | Fri     | ✅ `3fb797e` (PR #82) |
 | G6  | Weekly Reviews `[batch]`                     | Research / process                          | ⚪ Overhead | 4      | 5        | Fri     | ☐ Planned  |
 |     | **Total (quota-counted)**                    |                                             |             | **6**  | **22**   |         |            |
 |     | **Total (incl. ⚪ overhead)**                |                                             |             | **10** | **27**   |         |            |

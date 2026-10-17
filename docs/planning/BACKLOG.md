@@ -239,12 +239,18 @@ two tasks because they have different shapes (architectural vs. visual).
 
 ## 🟡 Operational & Observation Items
 
+### [2026-10-17] From: G5 closeout (PR #82 — `CLAUDE.md` byte-trigger watch)
+
+**Origin**: [archive/plans/2026-10-17_g5-claude-md-size-audit.md](../archive/plans/2026-10-17_g5-claude-md-size-audit.md) Improvement 4. A threshold watch, so 🟡, like the [2026-09-21] audit entry below it.
+
+- [ ] **Measure `CLAUDE.md`'s growth under the authoring rule at Cleanup Week #5, and re-set `BYTE_TRIGGER` there** — `BYTE_TRIGGER` = 69,000 (the G5 landing plus ~10 KB, by user ruling) rests on a guessed growth rate. At Cleanup Week #5 (due ~Oct 26–30), take the per-commit byte deltas to `CLAUDE.md` since the G5 merge (`git log -p 3fb797e.. -- CLAUDE.md`). Then set the trigger to the size at that audit plus about one Cleanup-Week cycle of measured growth, rounded up to the next 1,000. Spec § 6.2 promises this. Effort: XS. Affected: [scripts/check-claude-md-size.js](../../scripts/check-claude-md-size.js) (`BYTE_TRIGGER` and its comment).
+
 ### [2026-09-21] CLAUDE.md size audit trigger re-fired (1 item)
 
 **Origin**: Observed at G3 closeout (PR #71). Periodic-maintenance / threshold watch in nature → 🟡,
 not 🟤. Raised by both the author and PR #71 round 3 independently.
 
-- [ ] **`CLAUDE.md` is at 212 lines, past the ~200 threshold its own § Maintenance section names as an audit trigger** — measured `wc -l` = 212 at merge `4b650aa`. The rule reads "audit quarterly or whenever it crosses ~200 lines / its tooling materially changes"; the last durable-rules audit was 2026-06-16 (380 → 226 lines), so the quarterly clock is also close to due. Noted honestly: **PR #71 widened the overage rather than holding it** — it grew L186 substantially, because the misleading additive-key claim was the root cause of that PR's defect and correcting it properly cost prose. Deliberately not folded into G3, so the review fix would not be buried under an audit diff. Natural Cleanup-Week slot (the ~3-week cadence puts #4 at ~2026-09-21–25, i.e. now). Effort: M. Affected: `CLAUDE.md`.
+- [x] **`CLAUDE.md` is at 212 lines, past the ~200 threshold its own § Maintenance section names as an audit trigger** — ✅ **Resolved 2026-10-17 (Group G5, PR #82, merge `3fb797e`)**. It was audited with the sibling runbook, with `/claude-api prompt-audit` as one pass, and trimmed to durable rules from 236 to 216 lines and 64,203 to 58,582 bytes. No rule was lost: a rule-loss check with a planted control restored 15. The ~200-line trigger is replaced by a byte trigger and a never-blocking pre-commit warning (`scripts/check-claude-md-size.js`); see `CLAUDE.md` § Maintenance. _Original:_ measured `wc -l` = 212 at merge `4b650aa`. The rule reads "audit quarterly or whenever it crosses ~200 lines / its tooling materially changes"; the last durable-rules audit was 2026-06-16 (380 → 226 lines), so the quarterly clock is also close to due. Noted honestly: **PR #71 widened the overage rather than holding it** — it grew L186 substantially, because the misleading additive-key claim was the root cause of that PR's defect and correcting it properly cost prose. Deliberately not folded into G3, so the review fix would not be buried under an audit diff. Natural Cleanup-Week slot (the ~3-week cadence puts #4 at ~2026-09-21–25, i.e. now). Effort: M. Affected: `CLAUDE.md`.
   ↳ **Inbound cross-reference (2026-09-24, Weekly Reviews §4)**: `claude-code-universal-config` routed its quarterly cross-project `CLAUDE.md` audit here as a § Spawned Tasks row (the per-project half), with a runbook: `docs/prompts/claude-md-audit.md` in that repo, which carries a concept-vocabulary sweep added 2026-09-12. Consumed by this entry; run the audit with that runbook. The `claude-md-management` plugin was kept installed in the 2026-09-24 context-cost audit because this audit is its next use.
   ↳ **Inbound cross-reference (2026-10-09, Weekly Reviews §4)**: the origin's 09-24 row "run `/claude-api prompt-audit` over the project's Claude instructions" is consumed here too (user ruling 2026-10-09). Run it as one pass of this audit. The subcommand is verified to exist: the Claude Code 2.1.289 bundle has `prompt-audit` as a subcommand of the bundled `claude-api` skill, reached through `/doctor prompt-audit` and scoped to the Claude Code configuration that loads in this project. It flags text written for older models. Current size, for the audit's baseline: `CLAUDE.md` **216 lines / 49,544 bytes** (`wc -lc`, 2026-10-09), and `.claude/rules/` still does not exist. See also REVIEW-QUEUE §3's 2026-10-09 row.
 
@@ -333,6 +339,35 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-10-17] From: G5 closeout (PR #82 — `CLAUDE.md` size audit)
+
+**Origin**: [archive/plans/2026-10-17_g5-claude-md-size-audit.md](../archive/plans/2026-10-17_g5-claude-md-size-audit.md), from its Improvements and Residuals. The sources:
+- the audit's read-only passes (`/claude-api prompt-audit`, the concept-vocabulary sweep);
+- the PR #82 review (`/code-review high`, two rounds: 6 findings fixed in `8d3f389`, 1 documented, 1 declined, 1 carried to G6 in `e8af202`).
+
+Claude-surfaced → 🟤. Routed elsewhere:
+- Improvement 3 and the user-level ~200-line conflict (review #6) target another repo or `~/.claude`, so they are TODO § Spawned Tasks rows, with a sub-bullet under WEEKLY G6 "Cross-project propagation".
+- Improvement 4 is a threshold watch, so it is 🟡 [2026-10-17].
+- The stale `PROJECT.md` / `GOALS.md` counts annotate 🟤 [2026-09-02] "Sweep the repo's existing restated derived counts".
+
+The first entry matters most: the agent it covers lets the regression it exists for pass silently.
+
+- [ ] **`.claude/agents/regression-checker.md` checks a stale contract, so a forgotten cache passes it without comment** — Its brief predates two of the three managers and most of the caches:
+  - it calls the renderer "~7400 line" (`media-viewer.js` was 11,451 on 2026-10-17);
+  - it names `FullscreenManager` as the only extracted manager;
+  - it says `removeFileFromList()` "must clear" three caches, where `CLAUDE.md` § Cache Management lists the full set (`clipCache`, `jxlFrameCache`, `bulkRated` and its save, the `bulkRatedPairs` keys, `likeOrSkip.forget`);
+  - it counts "the 7 systems above" under eight headings.
+
+  It reports only findings above 80% confidence, so a change that drops one of the newer caches from `removeFileFromList()` passes without comment, which is the regression the agent exists to catch. Found by G5's prompt-audit (Group 2); a side-agent note confirmed it (2026-10-17). Fix: point the agent at `CLAUDE.md` § Cache Management instead of restating the list (one home), refresh the rest, and prove it with a planted regression: drop `clipCache` from `removeFileFromList()` in a scratch copy, and the agent must flag it. Effort: S. Affected: [.claude/agents/regression-checker.md](../../.claude/agents/regression-checker.md).
+- [ ] **`.claude/skills/new-e2e-test/SKILL.md` is stale against `CLAUDE.md` § Testing (E2E)** — It is wrong or incomplete in three places:
+  - its note "`tiny.mp4` currently fails to load … see WEEKLY G3" is wrong: `tiny.mp4` is a 32-byte unplayable stub by design;
+  - its fixture list omits `playable-64x64.mp4`, a real 1 s H.264 clip;
+  - it describes `seedLocalStorage` without the `{ grant }` option or the call order (after `launchApp()`, before `loadFolder()`).
+
+  A test written from it can't express a folder saved before G1, can seed too late, or can reach for a fixture that cannot play. Found by G5's prompt-audit (Group 2). Fix: point the skill at `CLAUDE.md` § Testing (E2E) for helpers and fixtures rather than restating them. Effort: XS. Affected: [.claude/skills/new-e2e-test/SKILL.md](../../.claude/skills/new-e2e-test/SKILL.md).
+- [ ] **Keep one canonical description of the pre-commit chain** — The chain is written out in `CLAUDE.md` § Build, `PROJECT.md` § Code Quality and `GOALS.md` Constraints, and it drifted twice in one week. First `GOALS.md` lacked the docs-index guard (fixed in G5's sweep). Then G5's own T10 added the size warning to the other two and not to `GOALS.md` (PR #82 review #1). Fix: keep the full chain in `CLAUDE.md` § Build, the launch-loaded copy, and have the other two point at it. Effort: XS. Affected: [PROJECT.md](../../PROJECT.md), [GOALS.md](GOALS.md). From G5 Improvement 1.
+- [ ] **Extend the size warning to `.claude/rules/*.md` once the path-scoped migration creates them** — A path-scoped rule file loads with every Read of a matching file, so its growth costs context the way `CLAUDE.md`'s does, and `scripts/check-claude-md-size.js` watches only `CLAUDE.md`. Do it with the migration, not before: `.claude/rules/` is still empty. Effort: S. Affected: [scripts/check-claude-md-size.js](../../scripts/check-claude-md-size.js) and its tests. Tied to 🟤 [2026-08-27] "Migrate path-conditional CLAUDE.md content to path-scoped rules". From G5 Improvement 2.
 
 ### [2026-10-16] From: G4 closeout (PR #81 — recently opened folders)
 
@@ -743,6 +778,11 @@ shipped in `0f2d89c`). Claude/review-surfaced → 🟤.
   ↳ **2026-10-05 (G2, PR #73)**: the per-check bypass this entry was paired with has landed (`SKIP=docs-index`), removing the stated reason for not making the parser stricter.
 - [x] **`.husky/pre-commit` has no per-check bypass, so one false positive forces skipping the secret scan** — ✅ **Resolved 2026-10-05 (Group G2, PR #73, merge `83c6df0`)**: `SKIP=<check>` via `.husky/skip.sh` (tokens `secrets`, `docs-index`, `lint-staged`, `vitest`, `e2e`), warning on every skip and every unknown token. [original:] the file is four unconditional lines (`check-secrets.js` → `check-docs-index.js` → `lint-staged` → `vitest`), and the only escape is `git commit --no-verify`, which skips **all** of them including the security gate deliberately placed first. G3's review caught the docs-index guard actively *advertising* `--no-verify` in its own remedy text (fixed in `0f2d89c`), but the structural problem is the hook, not the message: any check that can false-positive is one bad day away from training the habit of routing around `check-secrets.js`. Proposal: a `SKIP=<check-name>` environment convention (husky ships the idiom) so a specific check can be waived without disarming the others, plus a line in each script's remedy text naming its own skip token instead of `--no-verify`. This also removes the main argument against making the docs-index parser stricter (item above). Effort: S. Affected: `.husky/pre-commit`, `scripts/check-secrets.js`, `scripts/check-docs-index.js`, `scripts/check-e2e-needed.js`, CLAUDE.md hook prose, PROJECT.md.
 - [ ] **Sweep the repo's existing restated derived counts — the convention landed, the sweep did not** — G3 added the "do not restate a count or range derived from a list elsewhere" convention to [docs/planning/README.md](README.md) (the in-tree half of 🟤 [2026-08-27] G4 closeout), but the sweep that entry also proposed was never run, and G3 hit **two live instances in its own scope**: this file's "failed **7 times**" enumerated 8 (and [G4's own spec](../superpowers/specs/2026-07-12-g4-strategic-docs-refresh-design.md) already said "the 8th"), and `PROJECT.md`'s `Vitest (529 unit)` was stale across three groups by the time G3's propagation check caught it at 597 — both fixed, both found by accident rather than by looking. Remaining known carriers: `(N items)` in this file's own group headers, "2 of 6 managers" in the v2.0 milestone framing, Health-Summary tallies, and any surviving test-count restatement. Prefer **deleting** each value in favour of an open-ended reference (what actually worked in G4 and in `PROJECT.md`), not refreshing it — refreshing only resets the clock. Effort: M. Affected: [BACKLOG.md](BACKLOG.md) group headers, `PROJECT.md`, [MILESTONES.md](MILESTONES.md), [WEEKLY.md](WEEKLY.md).
+  ↳ **G5 closeout (2026-10-17)**: G5's sweep found four more live instances and left them for this entry rather than refreshing them (`media-viewer.js` was 11,451 lines on 2026-10-17):
+  - `PROJECT.md` § Known Limitations: "~9,400 lines";
+  - the same line: "2 of 6 managers extracted", where three are (`FullscreenManager`, `TournamentManager`, `MlTrainingManager`);
+  - `GOALS.md` Constraints: "~9,400-line `media-viewer.js`";
+  - `GOALS.md`'s renderer key-result row: "~9,400 (up from ~7,900 in July)".
 
 ### [2026-08-31] From: G2 merge + session close
 
@@ -937,7 +977,7 @@ Claude/automation-surfaced.
 
 **Origin**: Closeout of Group CW-D (docs-only consolidation pass — PR #60, cleared 5 deferred `revise-claude-md` / doc-drift items). Both Claude-surfaced doc-hygiene observations. No `/code-review` (docs-only per the [2026-06-29] convention).
 
-- [ ] **CLAUDE.md is over its own ~200-line soft cap** — CW-D added 4 verified content bullets (3 tournament gotchas + a persistence note) + a `## Maintenance` footer, pushing the file past the ~200-line soft cap that the same footer sets as an audit trigger. _Line count deliberately not restated here (per [README.md](README.md) L58–66): this entry said "now 204", and by the G6 closeout on 2026-09-03 it was **210** — the overshoot has been growing while the entry recorded a fixed number. Run `wc -l CLAUDE.md` at fix time._ **No longer marginal**, which was this entry’s stated reason for deprioritising it. Next hygiene / `revise-claude-md` pass: trim lower-value gotchas or split a section to a linked doc under `docs/`. Not urgent (marginal overshoot). Effort: S. Affected: [CLAUDE.md](../../CLAUDE.md).
+- [x] **CLAUDE.md is over its own ~200-line soft cap** — ✅ **Resolved 2026-10-17 (Group G5, PR #82, merge `3fb797e`)**, together with its 🟡 twin [2026-09-21]: a trim in place to durable rules, and the line cap replaced by a byte trigger (`CLAUDE.md` § Maintenance). The relocate half stays open as 🟤 [2026-08-27] (path-scoped rules), which now carries G5's recommendation. _Original:_ CW-D added 4 verified content bullets (3 tournament gotchas + a persistence note) + a `## Maintenance` footer, pushing the file past the ~200-line soft cap that the same footer sets as an audit trigger. _Line count deliberately not restated here (per [README.md](README.md) L58–66): this entry said "now 204", and by the G6 closeout on 2026-09-03 it was **210** — the overshoot has been growing while the entry recorded a fixed number. Run `wc -l CLAUDE.md` at fix time._ **No longer marginal**, which was this entry’s stated reason for deprioritising it. Next hygiene / `revise-claude-md` pass: trim lower-value gotchas or split a section to a linked doc under `docs/`. Not urgent (marginal overshoot). Effort: S. Affected: [CLAUDE.md](../../CLAUDE.md).
 
 ### [2026-07-03] PR #59 post-merge review (2 items)
 

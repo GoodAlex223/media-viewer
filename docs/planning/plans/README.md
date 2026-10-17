@@ -78,7 +78,12 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| [2026-10-17_g5-claude-md-size-audit.md](2026-10-17_g5-claude-md-size-audit.md) | G5 (Oct 12–16) | Approved 2026-10-17; T1–T11 done, PR open |
+| _None currently active_ | — | — |
+
+<!-- 2026-10-17 (Group G5 closeout): 2026-10-17_g5-claude-md-size-audit.md left this table on
+     archive. Merged `3fb797e` via PR #82, moved to docs/archive/plans/ with `git mv`, and indexed in
+     docs/README.md as "G5 CLAUDE.md Size Audit Plan" in the same commit. Its spec row under Design
+     Specs now records the implementation, the § 6.2 amendments and the post-implementation note. -->
 
 <!-- 2026-10-16 (Group G4 closeout): 2026-10-16_g4-recently-opened-folders.md left this table on
      archive. Merged `51af1ab` via PR #81, moved to docs/archive/plans/ with `git mv`, and indexed in

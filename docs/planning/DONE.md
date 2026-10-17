@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-16 <!-- Group G4: Recently opened folders (🔵, Oct 12–16; reordered ahead of I1 by the user). MERGED 2026-10-16 via PR #81 (merge 51af1ab), after per-task reviews, a whole-branch final review with one fix wave, and a PR review in a separate chat (7 findings: 5 fixed, 1 declined, 1 deferred; re-review found no issues). --> <!-- Prior (2026-10-16): Group G3: Stop the retrain on every AI sort (🔵, Oct 12–16; re-scoped from source-folder vector reuse after the measure-first before run). MERGED 2026-10-16 via PR #80 (merge bf6fcad), after per-task reviews, a whole-branch final review with one fix round, and a PR review in a separate chat (no open items). --> <!-- Prior (2026-10-12): Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
+**Last Updated**: 2026-10-17 <!-- Group G5: CLAUDE.md size audit (🟡, Oct 12–16). MERGED 2026-10-17 via PR #82 (merge 3fb797e) after three review rounds: 9 findings, of which 6 were fixed, 1 documented, 1 declined and 1 carried to G6. -->
+<!-- Previous: Group G4: Recently opened folders (🔵, Oct 12–16; reordered ahead of I1 by the user). MERGED 2026-10-16 via PR #81 (merge 51af1ab), after per-task reviews, a whole-branch final review with one fix wave, and a PR review in a separate chat (7 findings: 5 fixed, 1 declined, 1 deferred; re-review found no issues). --> <!-- Prior (2026-10-16): Group G3: Stop the retrain on every AI sort (🔵, Oct 12–16; re-scoped from source-folder vector reuse after the measure-first before run). MERGED 2026-10-16 via PR #80 (merge bf6fcad), after per-task reviews, a whole-branch final review with one fix round, and a PR review in a separate chat (no open items). --> <!-- Prior (2026-10-12): Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
 <!-- Previous: Group G5: Weekly Reviews (2026-10-09 run, ⚪ Overhead) — 5/5, MERGED 2026-10-09 via PR #77 (merge 0e298b4) after one review round and two close-outs. -->
 <!-- Previous: Group G4: Cleanup Week trial batch (🟤, Cleanup Week #4) — 2/2, MERGED 2026-10-08 via PR #76 (merge 44c282b) after one review round and a close-out. -->
 <!-- Previous: Group G3: Tournament render re-entry (🟤, Cleanup Week #4) — 1/1, MERGED 2026-10-07 via PR #75 (merge 482a3c8) after a pre-PR final review + fix pass, one review round and a close-out (no issues). -->
@@ -22,6 +23,61 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-17 — Group G5: `CLAUDE.md` size audit 🟡 (Oct 12–16) — **MERGED `3fb797e`** (PR #82)
+
+**Spec**: [2026-10-17-g5-claude-md-size-audit-design.md](../superpowers/specs/2026-10-17-g5-claude-md-size-audit-design.md). Approved 2026-10-17, then amended four times: while writing (bytes-only triggers), at plan review (25% headroom), after implementation (the 69,000-byte trigger, by user ruling) and at review (§ 6.2). It carries a post-implementation note.
+**Plan**: [2026-10-17_g5-claude-md-size-audit.md](../archive/plans/2026-10-17_g5-claude-md-size-audit.md). It holds the pass results, a disposition table per section, the rule-loss triage, the PR #82 review rulings and the Progress Log.
+**Branch**: `g5-claude-md-size-audit`, cut from `main` at `506e041`.
+
+✅ **Status: MERGED 2026-10-17 via PR #82** (merge `3fb797e`), a day after the week's Friday slot.
+
+**How it was done and reviewed:**
+- **Execution.** Native, on Opus · medium (D6). Read-only passes came first. Then a trim in place, one commit per `##` section in file order, with every removed sentence labelled in a disposition table: History, Walk-through, Duplicate, or Readable from the code.
+- **The estimate missed.** After T9 the file was ~59 KB, against the spec's 38–44 KB. A second pass on Detected Patterns (T7b, logged as a deviation) applied the plan's keep-lists as written. What remains is contract an editor needs (Key Discovery 1). No rule was cut to get closer to the number.
+- **The rule-loss check** used a fresh agent that read only `main:CLAUDE.md` and the trimmed file, with one rule deleted from its copy beforehand. It reported the planted deletion, plus 9 more rules missing and 22 weakened. Triage restored 15 rules and showed that three disposition rows were wrong.
+- **The PR review** (`/code-review high`, separate chat, three rounds) found 9 issues:
+  - 6 fixed in `8d3f389`, 1 documented, 1 declined on code-site and test evidence;
+  - 1 carried to G6, given a destination and a fallback in `e8af202`.
+
+  The worst: the size check printed nothing when run from a subdirectory, which looks like a pass; and `GOALS.md`'s chain lacked the warning this same PR added.
+
+**Summary**:
+- **`CLAUDE.md` holds durable rules only.** It went from 236 to 216 lines and from 64,203 to 58,582 bytes (−8.8%, ~16.0k → ~14.6k tokens a turn).
+  - History moved to DONE and the specs.
+  - Feature walk-throughs became their contract plus a `Design:` spec pointer.
+  - Backlog Intake Rules became a three-line pointer to BACKLOG 📌 (D4).
+- **The audit trigger is in bytes now.** Each rule is one line, so lines barely move while bytes grow: the week before, lines rose 9% and bytes 30%. § Maintenance gains an authoring rule (one sentence plus at most one "why"), and the audit trigger is now the warning's `BYTE_TRIGGER` = 69,000.
+- **A pre-commit warning that never blocks**: it fires on more than 500 bytes net growth in one commit, or on any growth past 69,000. It always exits 0, and the hook line ends in `|| true`.
+
+**Key changes**:
+- **`scripts/check-claude-md-size.js` (new):** pure `measure`, `evaluate` and `formatWarning`, plus a CLI that reads the git index and HEAD (root-relative paths) and always exits 0. When it cannot measure, it says so.
+- **`tests/check-claude-md-size.test.js` (new, 25 tests):** written RED first; three mutations, each red on its named test. The CLI tests run in temp repos, with git config set through the environment.
+- **`.husky/pre-commit`:** the warning runs after the docs-index guard, with `|| true` and no SKIP token.
+- **`CLAUDE.md`:** the trim; the § Build chain; the § Architecture `scripts/` and `.claude/` rows; § Maintenance rewritten.
+- **Docs:** the chain in `PROJECT.md:64` and `GOALS.md` Constraints; the entry-shape bullet in BACKLOG 📌; the path-scoped migration recommendation on 🟤 [2026-08-27] (candidate blocks measured, the two Testing blocks first).
+- **Tests:** unit 1530 → **1555** (1 skipped); E2E unchanged at **163** passed (6 skipped).
+
+**Follow-ups**:
+- **BACKLOG 🟤** `[2026-10-17] From: G5 closeout`:
+  - the stale `regression-checker` agent, which lets a forgotten cache pass without comment;
+  - the stale `new-e2e-test` skill;
+  - one canonical description of the pre-commit chain;
+  - the size warning for `.claude/rules/`.
+- **BACKLOG 🟡** `[2026-10-17]`: measure the growth rate at Cleanup Week #5 and re-set `BYTE_TRIGGER`.
+- **BACKLOG annotation:** the 🟤 [2026-09-02] derived-counts sweep gains the four stale `PROJECT.md` / `GOALS.md` counts.
+- **BACKLOG check-offs:** 🟡 [2026-09-21] and 🟤 [2026-07-03].
+- **TODO § Spawned Tasks** (out-of-tree, routed to WEEKLY G6):
+  - an exception in the global audit trigger for a project with a byte trigger;
+  - the rule-loss check for the sibling runbook.
+
+**SP**: 3 planned → ~4.5 at the spec → ~5 with the second pass, the restorations, the trigger ruling and the review rounds. Under the 2× line.
+
+**Learnings**:
+- A spec's size estimate is a hypothesis. Measuring what each label actually removes, before planning around the number, would have shown that a 38–44 KB landing meant cutting rules.
+- A rule-loss check counts only with a positive control. The agent had to report its planted deletion before its 9 other missing rules could be trusted, and those showed three wrong disposition rows.
+- Trimming prose strands names. Twice, a removed clause left a later mention (`_fileOpInFlight`, `_drain`) with nothing explaining it. A sweep for names whose mention count fell to one finds them.
+- A late change re-opens every copy of what it changes. `GOALS.md` was corrected early; then the chain changed, and it was the one copy left behind.
 
 ### 2026-10-16 — Group G4: Recently opened folders 🔵 (Oct 12–16) — **MERGED `51af1ab`** (PR #81)
 

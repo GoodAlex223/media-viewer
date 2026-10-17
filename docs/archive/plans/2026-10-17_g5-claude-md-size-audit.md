@@ -2,10 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G5 (🟡, 3 SP → ~4.5 SP); BACKLOG 🟡 [2026-09-21] "`CLAUDE.md` is at 212 lines, past the ~200 threshold…" and its 🟤 twin [2026-07-03] "CLAUDE.md is over its own ~200-line soft cap"
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G5 (🟡, 3 SP → ~4.5 SP); BACKLOG 🟡 [2026-09-21] "`CLAUDE.md` is at 212 lines, past the ~200 threshold…" and its 🟤 twin [2026-07-03] "CLAUDE.md is over its own ~200-line soft cap"
 **Spec**: [2026-10-17-g5-claude-md-size-audit-design.md](../../superpowers/specs/2026-10-17-g5-claude-md-size-audit-design.md) (committed `1e934cb`; written spec approved by the user 2026-10-17)
 **Created**: 2026-10-17
-**Status**: Approved by the user 2026-10-17 (with the 25% headroom ruling, Premise Correction 6, later replaced by the 69,000-byte trigger, Premise Correction 7); execution: **Native**; PR #82, review round 1 ruled (§ PR #82 review rulings)
+**Status**: Complete — merged `3fb797e` (PR #82) on 2026-10-17 and closed out on `main`. Approved by the user 2026-10-17 (with the 25% headroom ruling, Premise Correction 6, later replaced by the 69,000-byte trigger, Premise Correction 7); execution: **Native**; PR #82, review round 1 ruled (§ PR #82 review rulings)
 **Last Updated**: 2026-10-17
 **Branch**: `g5-claude-md-size-audit` (from `main` @ `506e041`)
 **Runbook**: `docs/prompts/claude-md-audit.md` in `claude-code-universal-config`
@@ -230,8 +230,8 @@ Each of T2–T9 follows the same five steps; the section notes below say what is
 
 **The five steps, for each section task:**
 
-- [ ] **Step 1: Read the section and its pass findings.** Read the section in `CLAUDE.md`, the § Pass Results rows that name it, and the homes ledger.
-- [ ] **Step 2: Label and write the disposition table.** Label every sentence (spec § 5). Under § Disposition Tables, add `### T<N> — <section>` with one row per removed sentence:
+- [x] **Step 1: Read the section and its pass findings.** Read the section in `CLAUDE.md`, the § Pass Results rows that name it, and the homes ledger.
+- [x] **Step 2: Label and write the disposition table.** Label every sentence (spec § 5). Under § Disposition Tables, add `### T<N> — <section>` with one row per removed sentence:
 
 ```markdown
 | # | Removed text (first words, quoted) | Label | Where it lives now |
@@ -241,9 +241,9 @@ Each of T2–T9 follows the same five steps; the section notes below say what is
 | 3 | "npm packages can't resolve in Electron Web Workers" | Duplicate | § Git Insights gotcha (home) |
 ```
 
-- [ ] **Step 3: Edit.** Apply the labels, the pass findings for this section, and the pointer format (Global Constraints). Re-read every remaining sentence once: each must be a rule or the one reason that makes a rule followable.
-- [ ] **Step 4: Measure.** Run the Step 1 `awk` command from T1; log the section's bytes and lines before → after in the Progress Log.
-- [ ] **Step 5: Commit.**
+- [x] **Step 3: Edit.** Apply the labels, the pass findings for this section, and the pointer format (Global Constraints). Re-read every remaining sentence once: each must be a rule or the one reason that makes a rule followable.
+- [x] **Step 4: Measure.** Run the Step 1 `awk` command from T1; log the section's bytes and lines before → after in the Progress Log.
+- [x] **Step 5: Commit.**
 
 ```bash
 git add CLAUDE.md docs/planning/plans/2026-10-17_g5-claude-md-size-audit.md
@@ -328,7 +328,7 @@ The `preload.js` bullet (~1.2 KB) keeps: the rule; the enforcement (`permissions
   - `formatWarning(before, after, kinds, limits): string` — `''` when `kinds` is empty.
   - `GROWTH_WARN_BYTES: 500`, `BYTE_TRIGGER: number` (a positive multiple of 1,000).
 
-- [ ] **Step 1: Write the failing tests** — `tests/check-claude-md-size.test.js`:
+- [x] **Step 1: Write the failing tests** — `tests/check-claude-md-size.test.js`:
 
 ```js
 import { describe, it, expect, afterEach } from 'vitest';
@@ -531,9 +531,9 @@ describe('CLI: never blocks a commit', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails.** Run: `npx vitest run tests/check-claude-md-size.test.js`. Expected: the file fails to collect — `Cannot find module '…/scripts/check-claude-md-size.js'` (from `require.resolve`). Log the message.
+- [x] **Step 2: Run it to verify it fails.** Run: `npx vitest run tests/check-claude-md-size.test.js`. Expected: the file fails to collect — `Cannot find module '…/scripts/check-claude-md-size.js'` (from `require.resolve`). Log the message.
 
-- [ ] **Step 3: Write the script** — `scripts/check-claude-md-size.js` (`BYTE_TRIGGER` starts at the provisional `52000`; Step 6 sets the real value):
+- [x] **Step 3: Write the script** — `scripts/check-claude-md-size.js` (`BYTE_TRIGGER` starts at the provisional `52000`; Step 6 sets the real value):
 
 ```js
 // Pre-commit CLAUDE.md size warning: says so when a commit grows CLAUDE.md past its limits.
@@ -660,14 +660,14 @@ if (require.main === module) {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass.** Run: `npx vitest run tests/check-claude-md-size.test.js`. Expected: all pass (4 + 10 + 4 + 2 + 5 = 25). Then `npx eslint scripts/check-claude-md-size.js tests/check-claude-md-size.test.js` → 0 problems.
+- [x] **Step 4: Run the tests to verify they pass.** Run: `npx vitest run tests/check-claude-md-size.test.js`. Expected: all pass (4 + 10 + 4 + 2 + 5 = 25). Then `npx eslint scripts/check-claude-md-size.js tests/check-claude-md-size.test.js` → 0 problems.
 
-- [ ] **Step 5: Mutation runs.** Each must turn the named test red; restore and re-run green after each. Log both runs per mutation.
+- [x] **Step 5: Mutation runs.** Each must turn the named test red; restore and re-run green after each. Log both runs per mutation.
   1. In `evaluate`, change `delta > limits.growthWarnBytes` to `>=` → "does not warn at exactly the growth limit" fails.
   2. Make the CLI's outer `catch` block end with `process.exit(1);` (after its `console.error`) → "says it could not measure outside a git repository, and still exits 0" fails.
   3. Remove `--diff-filter=AMR` from the CLI's `git diff` → "is silent when CLAUDE.md is staged for deletion" fails (the script then tries `git show :CLAUDE.md` on a deleted path).
 
-- [ ] **Step 6: Edit the docs and the hook, then set `BYTE_TRIGGER`.**
+- [x] **Step 6: Edit the docs and the hook, then set `BYTE_TRIGGER`.**
 
 `.husky/pre-commit` — the whole file becomes:
 
@@ -721,14 +721,14 @@ node -e "const b=require('fs').statSync('CLAUDE.md').size; console.log(b, Math.c
 
 Set `BYTE_TRIGGER` in the script to the second number and log both in the Progress Log. Re-run `npx vitest run tests/check-claude-md-size.test.js` → all pass.
 
-- [ ] **Step 7: Commit.** Watch the hook's output: if T10 grows `CLAUDE.md` by more than 500 bytes, the new warning prints on this very commit (Premise Correction 3); log what it printed.
+- [x] **Step 7: Commit.** Watch the hook's output: if T10 grows `CLAUDE.md` by more than 500 bytes, the new warning prints on this very commit (Premise Correction 3); log what it printed.
 
 ```bash
 git add scripts/check-claude-md-size.js tests/check-claude-md-size.test.js .husky/pre-commit CLAUDE.md PROJECT.md docs/planning/plans/2026-10-17_g5-claude-md-size-audit.md
 git commit -m "feat(hooks): never-blocking CLAUDE.md size warning in bytes; Maintenance authoring rule and byte trigger (G5 T10)"
 ```
 
-- [ ] **Step 8: Live runs in the real repository.** Precondition: `git status --short` is empty. Each run ends with a restore to HEAD. (The commands avoid backslash escapes: the Bash tool can mangle them.)
+- [x] **Step 8: Live runs in the real repository.** Precondition: `git status --short` is empty. Each run ends with a restore to HEAD. (The commands avoid backslash escapes: the Bash tool can mangle them.)
   1. Growth: `node -e "require('fs').appendFileSync('CLAUDE.md','x'.repeat(1500)+String.fromCharCode(10))"`, `git add CLAUDE.md`, `node scripts/check-claude-md-size.js; echo "exit=$?"`. Expected: the warning with `more than 500 bytes in one commit` (and no trigger line, unless the trimmed size + 1.5 KB passes `BYTE_TRIGGER`), then `exit=0`.
   2. Shrink: restore (`git restore --source=HEAD --staged --worktree CLAUDE.md`), delete the file's last line (`sed -i '$ d' CLAUDE.md`), `git add CLAUDE.md`, `node scripts/check-claude-md-size.js; echo "exit=$?"`. Expected: no warning, `exit=0`.
   3. Restore: `git restore --source=HEAD --staged --worktree CLAUDE.md`; `git status --short` is empty again.
@@ -741,7 +741,7 @@ git commit -m "feat(hooks): never-blocking CLAUDE.md size warning in bytes; Main
 - Modify: `docs/planning/BACKLOG.md` (🟤 [2026-08-27] migration entry annotation); `CLAUDE.md` only to restore a rule or fix a link the checks flag
 - Log: this plan
 
-- [ ] **Step 1: Rule-loss check, with a positive control.**
+- [x] **Step 1: Rule-loss check, with a positive control.**
   1. `git show main:CLAUDE.md > <scratchpad>/claude-old.md`; `cp CLAUDE.md <scratchpad>/claude-new.md`.
   2. In `claude-new.md` only, delete one rule that survived the trim — a clause in the middle of a bullet, not a bullet's first sentence (e.g. "`removeZoomPopover` must **not** remove the toggle button's parent", if it survived). Note privately which one; do not write it into the plan until the agent returns.
   3. Dispatch a fresh `general-purpose` agent on the session's model (verification never runs cheaper), with this prompt:
@@ -772,7 +772,7 @@ Do not report PRESENT rules individually. Quote; do not paraphrase.
   4. Expected: the planted rule is in the MISSING list. If it is not, the check cannot fail: say so in the Progress Log, redo it (a smaller scope per agent — e.g. one run per `##` section), and do not trust any result until a run flags the plant.
   5. Triage every other MISSING or WEAKENED item: it must match a disposition-table row (`History`, `Walk-through` with a pointer, `Duplicate` with its home, `Readable from the code` with where), or the rule is restored to `CLAUDE.md`. Re-read every `History` row once for an embedded rule (Review Focus 1). Log the planted rule, the agent's counts and each triage decision.
 
-- [ ] **Step 2: Link check, with a planted broken link.** Run from the repo root:
+- [x] **Step 2: Link check, with a planted broken link.** Run from the repo root:
 
 ```bash
 node -e "
@@ -788,7 +788,7 @@ console.log(links.length-1,'links;',broken.filter(b=>b.target!=='no/such/file.md
 
 Expected: `PLANT FLAGGED` and an empty broken list. Fix any broken pointer in `CLAUDE.md`.
 
-- [ ] **Step 3: Citation check.** Run:
+- [x] **Step 3: Citation check.** Run:
 
 ```bash
 git grep -ohE "CLAUDE\.md(\]\([^)]*\))? ?§ ?[A-Z][A-Za-z&' -]{2,40}" -- . ':!docs/archive' | sed -E 's/.*§ ?//' | sort -u
@@ -796,13 +796,13 @@ git grep -ohE "CLAUDE\.md(\]\([^)]*\))? ?§ ?[A-Z][A-Za-z&' -]{2,40}" -- . ':!do
 
 For each label that names a section of **this** `CLAUDE.md` (not the global one's § Task Completion), confirm it still exists: `grep -n "^## <label>\|\*\*<label>" CLAUDE.md`. Expected: every one found. Fix the citation's target only by restoring a renamed label (Global Constraints: no renames).
 
-- [ ] **Step 4: Stale references, re-run.** `node <scratchpad>/stale-refs.js "$(pwd)"`. Expected: `SENTINEL OK`, and no hit that T1 triaged as "deleted code named only as history" or "wrong name".
+- [x] **Step 4: Stale references, re-run.** `node <scratchpad>/stale-refs.js "$(pwd)"`. Expected: `SENTINEL OK`, and no hit that T1 triaged as "deleted code named only as history" or "wrong name".
 
-- [ ] **Step 5: Size table.** Run the T1 Step 1 commands. Record in the Progress Log, and later in the PR: lines, bytes and per-section bytes, before (spec § 2) → after, with the percentage cut.
+- [x] **Step 5: Size table.** Run the T1 Step 1 commands. Record in the Progress Log, and later in the PR: lines, bytes and per-section bytes, before (spec § 2) → after, with the percentage cut.
 
-- [ ] **Step 6: Migration recommendation.** Append to the 🟤 [2026-08-27] "Migrate path-conditional CLAUDE.md content to path-scoped rules" entry in BACKLOG a line `↳ **G5 recommendation (2026-10-17)**: …` holding: a table of block → proposed `.claude/rules/<file>.md` → `paths:` globs → which sessions it would save context in, built from the trimmed file (candidates: the Vitest conventions → `tests/**`; the E2E rules → `tests/e2e/**`; the worker conventions → `*-worker.js`; the security block → `main.js`, `path-grants.js`, `ipc-guard.js`, `preload.js`; the JXL gotchas → `jxl-decode-worker.js`, `media-formats.js`); the measured size of each block; the two caveats — rules attach only on a Read of a matching file, so create-time guidance cannot move, and almost every pattern concerns `media-viewer.js`, read in nearly every code session, so the saving lands mainly in docs and planning sessions; and that Backlog Intake Rules is no longer a candidate (T6, the global rule already loads with planning docs). The entry stays open.
+- [x] **Step 6: Migration recommendation.** Append to the 🟤 [2026-08-27] "Migrate path-conditional CLAUDE.md content to path-scoped rules" entry in BACKLOG a line `↳ **G5 recommendation (2026-10-17)**: …` holding: a table of block → proposed `.claude/rules/<file>.md` → `paths:` globs → which sessions it would save context in, built from the trimmed file (candidates: the Vitest conventions → `tests/**`; the E2E rules → `tests/e2e/**`; the worker conventions → `*-worker.js`; the security block → `main.js`, `path-grants.js`, `ipc-guard.js`, `preload.js`; the JXL gotchas → `jxl-decode-worker.js`, `media-formats.js`); the measured size of each block; the two caveats — rules attach only on a Read of a matching file, so create-time guidance cannot move, and almost every pattern concerns `media-viewer.js`, read in nearly every code session, so the saving lands mainly in docs and planning sessions; and that Backlog Intake Rules is no longer a candidate (T6, the global rule already loads with planning docs). The entry stays open.
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add docs/planning/BACKLOG.md docs/planning/plans/2026-10-17_g5-claude-md-size-audit.md   # plus CLAUDE.md if a check restored anything
@@ -813,10 +813,10 @@ git commit -m "docs: G5 verification - rule-loss check, links, citations, size t
 
 ## Finish (after Task 11)
 
-- [ ] `npx vitest run`, `npm run lint`, `npm run format:check` green; `git status --short` clean.
-- [ ] Re-read the whole of `CLAUDE.md` once, top to bottom, as a new session would.
-- [ ] Push (`git push -u origin g5-claude-md-size-audit`; pre-push runs the full E2E suite, because `scripts/` changed). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
-- [ ] Open the PR: spec + plan links, D1–D6, the bytes-only amendment, the size table, the pass results, the rule-loss check (counts, the control, triage), the RED→GREEN and mutation log for T10, the Residuals. **Ask the user** before running `/code-review` in this chat (the default is a separate chat). Merge only on the user's go-ahead.
+- [x] `npx vitest run`, `npm run lint`, `npm run format:check` green; `git status --short` clean.
+- [x] Re-read the whole of `CLAUDE.md` once, top to bottom, as a new session would.
+- [x] Push (`git push -u origin g5-claude-md-size-audit`; pre-push runs the full E2E suite, because `scripts/` changed). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
+- [x] Open the PR: spec + plan links, D1–D6, the bytes-only amendment, the size table, the pass results, the rule-loss check (counts, the control, triage), the RED→GREEN and mutation log for T10, the Residuals. **Ask the user** before running `/code-review` in this chat (the default is a separate chat). Merge only on the user's go-ahead.
 
 ## Improvements (minimum 2 required before Extract)
 
@@ -834,23 +834,23 @@ git commit -m "docs: G5 verification - rule-loss check, links, citations, size t
 
 ## Closeout (after the merge, on `main`)
 
-- [ ] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G5 closeout`), archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans), DONE.md entry, WEEKLY Summary-Table Status → `✅ PR #N` + the Friday G5 Daily-Schedule row and the G5 item box, check off BACKLOG 🟡 [2026-09-21] and 🟤 [2026-07-03] — **in the closeout commit**.
-- [ ] Remove this plan's row from [README.md](README.md) § Current Plans and from `docs/README.md` § Active Plans.
-- [ ] Spec: a post-implementation note for anything the work departed from.
-- [ ] Propagation check: re-read every live surface this plan touched (`CLAUDE.md`, `PROJECT.md`, `GOALS.md`, `.husky/pre-commit`, BACKLOG 📌) for a late correction that did not reach it.
-- [ ] G6 hand-off, to [WEEKLY.md](../WEEKLY.md) § G6 "Cross-project propagation" (outbound; a sub-bullet there naming each item): D2 (bytes, not ~200 lines), Improvement 3, and the conflict PR #82 review #6 found. That conflict: the user-level `CLAUDE.md` rule (audit a project `CLAUDE.md` "whenever one crosses ~200 lines") and this project's § Maintenance ("Lines are not the trigger here", at 216 lines) answer "is an audit due?" oppositely. The fix belongs in the global rule (an exception for a project with a byte trigger), not in cutting rules to reach 200 lines (Key Discovery 1). Whatever G6's pass does not carry goes to BACKLOG 🟤 through Extract (Improvement 3; the last Residual).
-- [ ] Memory: session file + MEMORY.md line; durable lessons only.
+- [x] Extract (Improvements + Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G5 closeout`), archive this plan (`git mv` to `docs/archive/plans/`, indexed in `docs/README.md` Archived Plans), DONE.md entry, WEEKLY Summary-Table Status → `✅ PR #N` + the Friday G5 Daily-Schedule row and the G5 item box, check off BACKLOG 🟡 [2026-09-21] and 🟤 [2026-07-03] — **in the closeout commit**.
+- [x] Remove this plan's row from [README.md](../../planning/plans/README.md) § Current Plans and from `docs/README.md` § Active Plans.
+- [x] Spec: a post-implementation note for anything the work departed from.
+- [x] Propagation check: re-read every live surface this plan touched (`CLAUDE.md`, `PROJECT.md`, `GOALS.md`, `.husky/pre-commit`, BACKLOG 📌) for a late correction that did not reach it.
+- [x] G6 hand-off, to [WEEKLY.md](../../planning/WEEKLY.md) § G6 "Cross-project propagation" (outbound; a sub-bullet there naming each item): D2 (bytes, not ~200 lines), Improvement 3, and the conflict PR #82 review #6 found. That conflict: the user-level `CLAUDE.md` rule (audit a project `CLAUDE.md` "whenever one crosses ~200 lines") and this project's § Maintenance ("Lines are not the trigger here", at 216 lines) answer "is an audit due?" oppositely. The fix belongs in the global rule (an exception for a project with a byte trigger), not in cutting rules to reach 200 lines (Key Discovery 1). Whatever G6's pass does not carry goes to BACKLOG 🟤 through Extract (Improvement 3; the last Residual).
+- [x] Memory: session file + MEMORY.md line; durable lessons only.
 
 **Closeout artifacts** (fill at closeout):
 
 | Artifact | Done / N/A + reason |
 | --- | --- |
-| `BACKLOG.md` — improvements extracted (min 2, routed by source) | |
-| `TODO.md` — actionable items, § Spawned Tasks rows | |
-| `DONE.md` — entry with plan link, summary, key changes | |
-| `WEEKLY.md` — Summary-Table Status **and** the Daily-Schedule entry, each an identifier | |
-| `docs/README.md` — plan under Archived Plans, spec under Design Specs | |
-| `docs/archive/plans/` — plan moved here, original deleted | |
+| `BACKLOG.md` — improvements extracted (min 2, routed by source) | Done. 🟤 `[2026-10-17] From: G5 closeout` holds the regression-checker agent, the new-e2e-test skill, Improvement 1 and Improvement 2. 🟡 `[2026-10-17]` holds Improvement 4, a threshold watch, so 🟡 rather than the 🟤 the Improvement named (the rule 🟡 [2026-09-21] was filed under). An annotation on 🟤 [2026-09-02] lists the four stale counts. 🟡 [2026-09-21] and 🟤 [2026-07-03] are checked off. |
+| `TODO.md` — actionable items, § Spawned Tasks rows | Done. Two § Spawned Tasks rows: the global audit-trigger exception (D2, review #6) and Improvement 3. They target `~/.claude` and the sibling repo, which is what that section is for, so they went there instead of the 🟤 fallback the Closeout line named. Last Updated stamp. |
+| `DONE.md` — entry with plan link, summary, key changes | Done. A 2026-10-17 entry. |
+| `WEEKLY.md` — Summary-Table Status **and** the Daily-Schedule entry, each an identifier | Done. Summary Table ✅ `3fb797e` (PR #82); the Friday row; the G5 item box; the G6 "Cross-project propagation" sub-bullet, which is the G6 hand-off. |
+| `docs/README.md` — plan under Archived Plans, spec under Design Specs | Done. Active Plans now reads none; an Archived Plans row and link; the spec row records the implementation. |
+| `docs/archive/plans/` — plan moved here, original deleted | Done. `git mv`; the links to WEEKLY and plans/README repointed. |
 
 ## Pass Results
 
@@ -1155,6 +1155,8 @@ Round 1: `/code-review high` in a separate chat, at `ed5c768` (before `e422eb0`,
 - **2026-10-17 — Trigger re-set (user ruling, on a side-agent note).** 74,000 sat above the 64,203-byte file that started this audit, because 25% of a 58.6 KB landing gives ~15 KB of room where the ruling had sized ~10 KB at a ~40 KB landing. User chose **`BYTE_TRIGGER` = 69,000** (landing + ~10 KB, rounded up) over 64,000 (the pre-audit size: ~5.4 KB of room, the rejected-10% problem) and keeping 74,000. Premise Correction 7; spec § 6.2 amended; script comment states the rule. The 500-byte growth warning is unchanged. Pushed `e422eb0`: pre-push E2E 163 passed, 6 skipped, 7.4 min.
 - **2026-10-17 — PR #82 review round 1** (separate chat, at `ed5c768`): 9 findings, each ruled first-hand (§ PR #82 review rulings): six fixed (#1, #2, #3, #7 by another remedy, #8 extended, #9), #4 documented, #5 declined (code-site comments and tests pin all three rules), #6 carried to the G6 hand-off. `CLAUDE.md` 58,588 → 58,582 B, 216 lines; trigger unchanged at 69,000. Size tests 25/25, RED first on the two changed tests. Pushed `8d3f389`: pre-push E2E 163 passed, 6 skipped, 6.5 min.
 - **2026-10-17 — PR #82 review round 2** (at `8d3f389`, `e422eb0` included: no findings): 8 rulings accepted; #6 change requested, since the G6 hand-off had no destination and no fallback. The Closeout line now names WEEKLY § G6 "Cross-project propagation", and a new Residual carries the 🟤 fallback. The reviewer: ready to merge with that change.
+- **2026-10-17 — PR #82 review round 3** (at `e8af202`): no issues; all 9 findings resolved, including the four closed by something other than the proposed fix (#3, #4, #5, #7); ready to merge.
+- **2026-10-17 — Merged and closed out.** Merged `3fb797e` with `--merge` at the reviewed head `e8af202`, on the user's go-ahead; branch deleted on the remote and locally. Closeout on `main` (§ Closeout artifacts). Propagation check: `CLAUDE.md`, `PROJECT.md`, `GOALS.md`, `.husky/pre-commit` and BACKLOG 📌 agree. The chain reads the same in its three descriptions, no live doc restates the test counts, and no live doc gives the size or the trigger outside the script. The sibling repo was checked first-hand for the Spawned Tasks rows: its runbook (L7), content policy (L36, L58) and synced `home-claude/CLAUDE.md` (L98) still say ~200 lines, and the runbook's step 6 has no rule-loss check.
 
 ## Key Discoveries
 
