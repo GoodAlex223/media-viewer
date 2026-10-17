@@ -87,6 +87,11 @@ measurable from inside a session. The mod stays enabled at user scope (`~/.claud
   not find a valid TypeScript installation"). The catalog entry's `lspServers.typescript` passes only `--stdio`, with
   no `initializationOptions`, so no `tsserver.path` can be set and the global `typescript` can never satisfy it.
   `typescript` must be in this repo's `node_modules`.
+  *Corrected in PR #83's review (2026-10-18): the cause is the version, not the location. The server accepts a
+  TypeScript only if it ships `lib/tsserver.js`, and 7.0.2 (npm's `latest`, and the global install's version) ships
+  none. Measured with `initialize` against scratch workspaces: `typescript@7.0.2` in `node_modules` fails like G4,
+  and `typescript@6.0.3` starts. So the devDependency is `typescript@6`. By the server's code a global 6.x would
+  also have worked (read, not run). The ruling is unchanged.*
 - **New vehicle**: the first group after this run that edits `media-viewer.js` or a `*-worker.js`. That group adds
   `typescript` as a devDependency **in its own session**, since a `package.json` and lockfile change does not belong
   in a docs-only run. Before the trial counts, it confirms that the server initializes: an `LSP documentSymbol`
@@ -154,7 +159,7 @@ installed here.
 | --- | --------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | 1a  | Plugins — official catalog  | `sonarqube` (unreviewed) · `code-modernization` · `commit-commands` · `serena` (behind `typescript-lsp`, D3) | No catalog additions (note 3) → the development / security / testing categories |
 | 1b  | Plugins — wider internet    | `bugbash` · TestDino skill pack · `playwright-cli-agents` / Dev Browser (Electron gap)              | The community marketplace roster (`anthropics/claude-plugins-community`) and an 8-day web check |
-| 2   | Claude best-practice        | `/skill-doctor` + `/plugin` Stats tab · `onFailure: "block"` (unmet: still 2.1.289, note 7)          | The changelog since 2.1.295 and current Anthropic / Claude Code guidance                |
+| 2   | Claude best-practice        | `/skill-doctor` + `/plugin` Stats tab · `onFailure: "block"` (met: the host is 2.1.301, note 7 as corrected) | The changelog since 2.1.295 and current Anthropic / Claude Code guidance                |
 | 3   | Non-Claude AI best-practice | `/sandbox` (Windows-gated) · harness observability (needs a validation proposal) · Spec Kit         | Top current cross-tool AI-coding practice                                               |
 | 4   | Cross-project propagation   | outbound: D6 · inbound: D5                                                                           | Local only — **no web**                                                                  |
 
@@ -229,7 +234,7 @@ fetch followed. Catalog snapshots, plugin sources and the upstream `CHANGELOG.md
 | § | Item | Verdict | Deciding evidence |
 | --- | --- | --- | --- |
 | 5 | *You should know* | **keep**, closed | G4's *Heads up* note became user ruling D3; G2 saw none. Token cost unmeasured, carried as a caveat. |
-| 5 | `typescript-lsp` | **inconclusive**, re-vehicled once | User ruling. The catalog entry passes only `--stdio`, so the server needs `typescript` in this repo's `node_modules`. Stop rule: no third vehicle. |
+| 5 | `typescript-lsp` | **inconclusive**, re-vehicled once | User ruling. The server needs a TypeScript that ships `lib/tsserver.js`, which 7.x does not, so the devDependency is `typescript@6` (corrected in PR #83's review; D3). Stop rule: no third vehicle. |
 | 1a | `sonarqube` (official catalog) | pass | The catalog diff was 315 → 315 (rename only). At `5a9356d`, the plugin's one hook only reports; the analysis needs `sonarqube-cli` and a SonarQube Cloud or Server login, and the rest overlaps tools already here. |
 | 1b | `bugbash` (community) | pass | The community roster had no additions (2,284 → 2,283; the removal is the method's control). At `085be49`: 0★, Markdown only, duplicating practice already here. |
 | 2 | `"onFailure": "block"` on the guard hook | **adopt** (trial) | The extension host is 2.1.301, not 2.1.289. The hooks reference documents the field. `node` starts in 64 ms against a 10 s timeout. Precondition: the terminal CLI updated past 2.1.295. Queue 1 → 2. |
@@ -274,6 +279,31 @@ inside a single command, and `git status --short` was empty before and after.
    the user ruled to file the 🔵 entry on that evidence.
 3. **§3's Next-up is unchanged.** Nothing new was worth parking there, although the Outputs list says each
    Next-up is refreshed.
+4. **BACKLOG got two sections, not one.** The Outputs name one `### [2026-10-17] From: Weekly Reviews` section,
+   but the trial `adopt` routes 🟤 and D5's entry 🔵, so each route got its own. Their headings were identical
+   until PR #83's review, which suffixed them `§ 4 inbound` and `§ 2 adopt`.
+
+### PR #83 review, round 1 (2026-10-18)
+
+Eight findings, all checked against the files and the hooks reference before fixing, and all fixed:
+
+1. The `onFailure` probe's missing script blocks every shell call, the restoring rename included. The §5 row and
+   the 🟤 entry now restore with Read and Write, which the `Bash|PowerShell` matcher does not cover.
+2. The `onFailure` and `typescript-lsp` vehicles could fall in one session. Both now say they must not share one,
+   and `onFailure` yields.
+3. Without `checkJs`, TypeScript reports no type errors in a `.js` file (measured with `tsc` 6.0.3 and 7.0.2,
+   with a syntax-error control). The trial now judges navigation plus syntax diagnostics.
+4. A `Stop` hook's input carries no edited-file list, per the hooks reference. The 🔵 entry now prices it with a
+   recorder (M), and weighs the narrower matcher (S).
+5. The §2 starting-point cell still said "unmet: still 2.1.289". Corrected.
+6. Two identical BACKLOG headings. Suffixed, and recorded as deviation 4.
+7. Remedy (1) copied part of `.prettierignore`. It now reads the file.
+8. "Now measured" covered a warm start only. The §2 row and the 🟤 entry now say so; a cold start is left to
+   the trial.
+
+Checking finding 3 turned up a defect the review had not raised. The `typescript-lsp` re-vehicle as written would
+have failed like G4, since npm's `latest` TypeScript (7.0.2) ships no `lib/tsserver.js`. D3's note, the §5 row,
+the BACKLOG entry and Appendix A item 4 now say `typescript@6`.
 
 ## Improvements (extracted at closeout)
 
@@ -290,6 +320,9 @@ inside a single command, and `git status --short` was empty before and after.
 ---
 
 ## Appendix A — hand-off note for `claude-code-universal-config` (final; approved at the checkpoint)
+
+Item 4 was rewritten in PR #83's review (2026-10-18): its cause was wrong (round 1 above). Items 1–3 and 5 are as
+approved.
 
 > From media_viewer's Weekly Reviews, 2026-10-17. For issue-intake. Measured at your `main` `ae2c2a4`.
 >
@@ -324,12 +357,16 @@ inside a single command, and `git status --short` was empty before and after.
 >
 >    `handed-over … not applied yet` reads as pending work at this end, and none of it is. A status meaning "ruled
 >    at the target" would let your next sweep skip these 14.
-> 4. **`typescript-lsp` procedure correction.** A host install of `typescript-language-server` and `typescript`
->    is not enough. The server fails with "Could not find a valid TypeScript installation", because it needs
->    `typescript` in the workspace's `node_modules`. The catalog entry passes only `--stdio`, so no `tsserver.path`
->    can be set. Measured in media_viewer G4 (PR #81). It will fail the same way in any workspace without a local
->    `typescript`, so check goodalex223's part of the row; dropshipping's part is parked. media_viewer re-vehicles the
->    trial once, with `typescript` as a devDependency, and drops it if that run shows nothing.
+> 4. **`typescript-lsp` procedure correction: pin TypeScript 6.** `typescript-language-server` (5.3.0 on this
+>    host) accepts a TypeScript only if it ships `lib/tsserver.js`. It looks in the workspace's `node_modules`, then
+>    falls back to the `typescript` its own install resolves (the global one). TypeScript 7.0.2, npm's `latest`,
+>    ships no `lib/tsserver.js`, so a host or workspace install of plain `typescript` now fails with "Could not
+>    find a valid TypeScript installation". The catalog entry passes only `--stdio`, so no `tsserver.path` can be
+>    set. Measured 2026-10-18 by sending `initialize` to the server against scratch workspaces: no local
+>    `typescript` and `typescript@7.0.2` both failed; `typescript@6.0.3` started and answered `documentSymbol`. Seen
+>    first in media_viewer G4 (PR #81), which blamed the install location. Install `typescript@6`, and check
+>    goodalex223's part of the row; dropshipping's part is parked. media_viewer re-vehicles the trial once, with
+>    `typescript@6` as a devDependency, and drops it if that run shows nothing.
 > 5. **Formatter hook re-time** (your row spawned 2026-10-16, `5c74a03`). Re-timed 2026-10-17 by piping hook input
 >    into `node .claude/hooks/format-edited-file.js`, 10 runs per file, wall clock, median / max: `media-viewer.js`
 >    (546 KB) 1,104 / 1,150 ms; `path-grants.js` (12.7 KB) 344 / 367 ms; a Prettier-ignored `docs/` `.md` file
