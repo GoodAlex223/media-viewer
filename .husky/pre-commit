@@ -7,5 +7,8 @@ check_skip_tokens "secrets docs-index lint-staged vitest"
 # check-docs-index.js print their own.
 skipped secrets || node scripts/check-secrets.js
 skipped docs-index || node scripts/check-docs-index.js
+# The CLAUDE.md size check only warns, so it has no SKIP token; `|| true` keeps even a crash
+# from failing the commit.
+node scripts/check-claude-md-size.js || true
 skipped lint-staged || npx lint-staged || check_failed lint-staged
 skipped vitest || npx vitest run || check_failed vitest
