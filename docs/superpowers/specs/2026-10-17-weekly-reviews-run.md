@@ -64,6 +64,8 @@ Every figure names its probe; none is carried forward from an earlier run.
    commit time (`6688eb0`), since `-newermt 2026-10-09` also counts that morning.
 7. **Claude Code is still 2.1.289** (`claude --version`). The parked §2 `onFailure: "block"` item's revisit
    condition ("after upgrading past 2.1.295") is unmet.
+   **Corrected during the run (Outcome, deviation 1):** `claude --version` reads the terminal CLI on `PATH`. These
+   sessions run in the VS Code extension, whose own binary reports **2.1.301**, so the condition is met here.
 
 ## Decisions
 
@@ -217,7 +219,77 @@ Docs only. Verification means **evidence for each written claim**, not a test ru
 
 ---
 
-## Appendix A — hand-off note for `claude-code-universal-config` (draft; finalized at the checkpoint)
+## Outcome (2026-10-17 run)
+
+Run in D1 order, with the checkpoint held once (rulings below). The session crossed midnight into 2026-10-18; rows
+keep the run's date. Web: **8 calls** (4 `WebSearch`, 4 `WebFetch`), inside the 8–12 guard; one fetch returned
+only a redirect (`developers.openai.com/codex/changelog` → `learn.chatgpt.com/docs/changelog`), which the next
+fetch followed. Catalog snapshots, plugin sources and the upstream `CHANGELOG.md` came through `gh`.
+
+| § | Item | Verdict | Deciding evidence |
+| --- | --- | --- | --- |
+| 5 | *You should know* | **keep**, closed | G4's *Heads up* note became user ruling D3; G2 saw none. Token cost unmeasured, carried as a caveat. |
+| 5 | `typescript-lsp` | **inconclusive**, re-vehicled once | User ruling. The catalog entry passes only `--stdio`, so the server needs `typescript` in this repo's `node_modules`. Stop rule: no third vehicle. |
+| 1a | `sonarqube` (official catalog) | pass | The catalog diff was 315 → 315 (rename only). At `5a9356d`, the plugin's one hook only reports; the analysis needs `sonarqube-cli` and a SonarQube Cloud or Server login, and the rest overlaps tools already here. |
+| 1b | `bugbash` (community) | pass | The community roster had no additions (2,284 → 2,283; the removal is the method's control). At `085be49`: 0★, Markdown only, duplicating practice already here. |
+| 2 | `"onFailure": "block"` on the guard hook | **adopt** (trial) | The extension host is 2.1.301, not 2.1.289. The hooks reference documents the field. `node` starts in 64 ms against a 10 s timeout. Precondition: the terminal CLI updated past 2.1.295. Queue 1 → 2. |
+| 3 | "Rules are prompts; hooks enforce" (Cursor) | pass | Already practised here; all sources secondary. Codex's Oct 8–15 changelog had nothing applicable. |
+| 4 out | the window's shipped work and 35 memory files | pass, none promoted | User ruling D6. Matched-scope sweep with controls 25/25, 9/9, 5/5, 9/9; three new candidates parked. The two G5 rows read `unapplied — handed over`. |
+| 4 in | 15 handed-over rows | 1 ruled, 14 returned | The formatter re-time: `media-viewer.js` 1,104 ms median → 🔵 filed (user ruling). The 14 rulings go back in Appendix A item 3. |
+
+**Checkpoint rulings (user, at the checkpoint)**: D5 → file the 🔵 entry. Everything else approved as presented:
+the four verdicts, including §2's trial adopt and its precondition; D2's `keep`; no new propagation; Appendix A.
+
+### Out-of-repo change log
+
+None. No plugin was installed, enabled or disabled, and no file under `~/.claude` or in the sibling repo was
+touched. D5's timing ran the hook on in-repo files only. Its one planted control file was created and deleted
+inside a single command, and `git status --short` was empty before and after.
+
+### Key discoveries
+
+1. **A version gate must read the host that runs the session, not the CLI on `PATH`.** These sessions run in the VS
+   Code extension (`CLAUDE_CODE_ENTRYPOINT=claude-vscode`), at 2.1.301 since 2026-10-16, while `claude --version`
+   reads the terminal CLI at 2.1.289. Note 7 measured the wrong one. So did the 2026-10-09 parked note's
+   "this machine runs 2.1.289", for at least the last two days of its life. Correcting it turned §2 from a
+   parked item into this run's adopt.
+2. **The catalog's commit log no longer names additions**, so the baseline is now a name diff between two pinned
+   SHAs, for both rosters. The community roster's one removal matched its commit message, which gave the method
+   a positive control for free.
+3. **A successful `PostToolUse` hook leaves no duration in a transcript**, so the inbound row could only be ruled
+   by timing the hook directly. The hook is far cheaper than the audit's figures, which mostly predate
+   `a0008ad`. Two costs remain: the renderer still crosses 1 s per edit, and an ignored `.md` pays 214 ms for
+   nothing.
+4. **The inbound count growth (14 → 35 lines) was an echo, not new work.** The origin marked 15 rows
+   handed over without having read this repo's rulings on 14 of them: a one-way channel cannot see the far end's
+   verdicts. Appendix A item 3 returns them.
+5. **The positive controls caught a probe of my own.** The first § 4 sweep grepped all of `home-claude/` on the
+   sibling side against five paths live. `Extract` read 27 against 25, and the matched re-run reads 25/25.
+
+### Deviations from this run-card
+
+1. **Note 7 was wrong** (corrected inline above), so §2 reviewed the parked `onFailure` item rather than leaving
+   it parked.
+2. **D5 timed a third file**, `media-viewer.js`, beyond the two the card named. Only it crosses the 1 s bar, and
+   the user ruled to file the 🔵 entry on that evidence.
+3. **§3's Next-up is unchanged.** Nothing new was worth parking there, although the Outputs list says each
+   Next-up is refreshed.
+
+## Improvements (extracted at closeout)
+
+1. **A version-gated check reads the session's host, not the `PATH` CLI.** Add a convention line to REVIEW-QUEUE
+   §2, where changelog-gated items get parked: report `CLAUDE_CODE_ENTRYPOINT` and the running binary's
+   `--version` (for the VS Code extension, `resources/native-binary/claude.exe` under its extension folder), and
+   name which host a revisit condition refers to. Evidence: deviation 1 and discovery 1. 🟤, effort XS. Affected:
+   `docs/planning/REVIEW-QUEUE.md`.
+2. **§ 4 sweeps grep the same paths on both sides, and their controls must agree.** Add a line to REVIEW-QUEUE
+   § 4's Conventions: a live-versus-sibling count compares only when the probe's scope is identical on both sides,
+   and positive controls that differ between the trees mean the scopes differ, so re-run before reading any
+   candidate's count. Evidence: discovery 5. 🟤, effort XS. Affected: `docs/planning/REVIEW-QUEUE.md`.
+
+---
+
+## Appendix A — hand-off note for `claude-code-universal-config` (final; approved at the checkpoint)
 
 > From media_viewer's Weekly Reviews, 2026-10-17. For issue-intake. Measured at your `main` `ae2c2a4`.
 >
@@ -234,11 +306,35 @@ Docs only. Verification means **evidence for each written claim**, not a test ru
 >    Step 6 verifies size and references, not that no rule was lost. In G5 this check found three wrong disposition
 >    rows and restored 15 rules. Method: a fresh agent compares the old and the trimmed file, reading only those two.
 >    One rule is deleted from its copy beforehand, so its findings count only if it reports that one.
-> 3. **Status correction: 14 of the 15 rows you handed over on 2026-10-16 were already ruled here.** The rulings are
->    in media_viewer's `docs/planning/REVIEW-QUEUE.md` § 4, inbound rows of 2026-09-24 and 2026-10-09: <per-row
->    list, filled at the checkpoint>.
+> 3. **Status correction: 14 of the 15 rows you marked `handed-over` on 2026-10-16 had already been ruled here, and
+>    two of them are done.** The rulings are in media_viewer's `docs/planning/REVIEW-QUEUE.md` § 4, inbound rows of
+>    2026-09-24 and 2026-10-09:
+>    - **Applied** (G5, PR #82, merge `3fb797e`, 2026-10-17): the quarterly per-project `CLAUDE.md` audit, run with
+>      your runbook; and `/claude-api prompt-audit`, run as one pass of it.
+>    - **Consumed**: `dead-rules-audit` (adopted 2026-08-27, trial `drop` 2026-09-02, uninstalled 2026-09-24);
+>      `dead-end-registry` (§1b `pass`, 2026-09-24); the path-scoped rules pattern (folded into media_viewer's own
+>      🟤 `[2026-08-27]` path-scoped-rules entry, still open); `typescript-lsp` (the § 5 trial; see item 4).
+>    - **Dropped**: `/wayfinder` (folded into `mattpocock/skills`, its superset); Jenkins (a self-hosted CI server
+>      for a solo, local, Windows Electron app whose E2E suite needs this machine's desktop session; the pre-push
+>      E2E gate covers the no-CI gap); Firecrawl (no web-data need); indiehackers.com (no audience or monetization
+>      track).
+>    - **N/A**: the `github` MCP credential form (no `github` MCP server at any scope here).
+>    - **Parked, event-driven**: `mattpocock/skills`, the design-video sub-batch and `mdiSnFLzQaI`. media_viewer
+>      re-checks them only when your `REVIEW-QUEUE.md` logs a verdict on them (0 mentions at `ae2c2a4`).
+>
+>    `handed-over … not applied yet` reads as pending work at this end, and none of it is. A status meaning "ruled
+>    at the target" would let your next sweep skip these 14.
 > 4. **`typescript-lsp` procedure correction.** A host install of `typescript-language-server` and `typescript`
 >    is not enough. The server fails with "Could not find a valid TypeScript installation", because it needs
->    `typescript` in the workspace's `node_modules`. The catalog entry passes no `tsserver.path`. Measured in
->    media_viewer G4 (PR #81). The same applies to goodalex223 and dropshipping.
-> 5. **Formatter hook re-time** (your row spawned 2026-10-16): <D5's figures and ruling, filled at the checkpoint>.
+>    `typescript` in the workspace's `node_modules`. The catalog entry passes only `--stdio`, so no `tsserver.path`
+>    can be set. Measured in media_viewer G4 (PR #81). It will fail the same way in any workspace without a local
+>    `typescript`, so check goodalex223's part of the row; dropshipping's part is parked. media_viewer re-vehicles the
+>    trial once, with `typescript` as a devDependency, and drops it if that run shows nothing.
+> 5. **Formatter hook re-time** (your row spawned 2026-10-16, `5c74a03`). Re-timed 2026-10-17 by piping hook input
+>    into `node .claude/hooks/format-edited-file.js`, 10 runs per file, wall clock, median / max: `media-viewer.js`
+>    (546 KB) 1,104 / 1,150 ms; `path-grants.js` (12.7 KB) 344 / 367 ms; a Prettier-ignored `docs/` `.md` file
+>    214 / 239 ms; `node` alone 64 / 74 ms. A planted unformatted file came back formatted. That is well under the
+>    audit's "8.0 s typically", most of which predates `a0008ad`, but the renderer still crosses 1 s per edit, and
+>    an ignored `.md` pays 214 ms for nothing. Filed in media_viewer as 🔵 `[2026-10-17]`: skip ignored paths before
+>    spawning Prettier, and move the renderer's cost to a `Stop` hook or `async`. Your row can close as "re-timed;
+>    follow-up filed at the target".

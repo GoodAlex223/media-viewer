@@ -62,13 +62,16 @@
 > Read [REVIEW-QUEUE.md](REVIEW-QUEUE.md) first. **Window ≈ 7 days** (last run 2026-10-09). **D4 order**: read out the trials whose vehicles have merged first — G2's _You should know_, G4's `typescript-lsp` — then source §§1–3. § 5 stands at **2** outstanding trials after the evidence-gating `drop` (2026-10-10), so one new trial `adopt` may be filed before the cap. §1a diffs the catalog from the upstream `marketplace.json` commit log since 2026-10-09 (the method 🟤 [2026-10-09] G5 closeout proposes; the local `.bak` snapshot is gone). Docs-only: merge or dated-defer in-session.
 > **Model:** Opus · `medium`, named directly because ⚪ overhead fits no row of the § 1.0 table: research and verdicts, with each claim checked against its primary source; Sonnet · `medium` is enough for the routine sourcing searches.
 
-- [ ] **Plugins (2 SP)** — two independent tops: official catalog + wider internet, each with `source:`.
-- [ ] **Claude best-practices (1 SP)** — fresh check vs. the parked list.
-- [ ] **Non-Claude AI best-practices (1 SP)**
-- [ ] **Cross-project propagation (1 SP)** — outbound: this week's shipped work (G1–G5) and memory files changed since 2026-10-09, at the high bar; inbound: any new sibling rows naming this repo.
+_Ran 2026-10-17 (Saturday), on branch `g6-weekly-reviews`; run-card [`2026-10-17-weekly-reviews-run.md`](../superpowers/specs/2026-10-17-weekly-reviews-run.md). § 5 first: *You should know* → `keep` (closed); `typescript-lsp` → `inconclusive`, re-vehicled once with a stop rule (user ruling). Queue 2 → 1 → 2 after §2's adopt. **1 adopt / 3 pass.**_
+
+- [x] **Plugins (2 SP)** — two independent tops: official catalog + wider internet, each with `source:`. ✅ §1a `sonarqube` **pass**: it needs a SonarQube Cloud or Server login. The catalog diff gave 315 → 315, a rename only. The commit-log method no longer names additions, so the diff is now by plugin name between two pinned SHAs, and REVIEW-QUEUE §1 records both baselines (🟤 [2026-10-09] checked off). §1b `bugbash` **pass**: 0★ and Markdown-only, duplicating practice already here; the community roster went 2,284 → 2,283 with no additions.
+- [x] **Claude best-practices (1 SP)** — fresh check vs. the parked list. ✅ **adopt** (trial): `"onFailure": "block"` on the `preload.js` guard hook. Its parked "2.1.289" measured the terminal CLI; the VS Code extension these sessions run in is 2.1.301. Vehicle: the first dev session after this merges, once the terminal CLI is updated past 2.1.295. 🟤 [2026-10-17] filed.
+- [x] **Non-Claude AI best-practices (1 SP)** ✅ **pass**: "rules are prompts, hooks enforce" (Cursor sources, all secondary) is already practised here. Codex's changelog for Oct 8–15 had nothing applicable to this host.
+- [x] **Cross-project propagation (1 SP)** — outbound: this week's shipped work (G1–G5) and memory files changed since 2026-10-09, at the high bar; inbound: any new sibling rows naming this repo. ✅ Outbound **pass**, nothing promoted (user ruling: no out-of-repo write). A matched-scope sweep, with controls, parks three new candidates, all absent at both targets. The recorded-promise carrier is now the strongest. Inbound: 1 new row, the formatter hook, re-timed (1.10 s per `media-viewer.js` edit) → 🔵 [2026-10-17] filed (user ruling). The other 14 handed-over rows were already ruled here; their rulings go back to the sibling in the hand-off note.
   - **From G5 (PR #82), two outbound items, each a [TODO.md](TODO.md) § Spawned Tasks row:**
     - an exception in the global `CLAUDE.md` audit trigger (and the sibling repo's synced copy, content policy and runbook) for a project with a byte trigger (G5 D2, review #6);
     - the rule-loss check with a positive control in the sibling `claude-md-audit.md` runbook (G5 Improvement 3).
+  - ✅ Both handed over 2026-10-17, not applied: the run-card's Appendix A is the hand-off note, and each TODO row carries a dated status line. § 4's outcome log reads `unapplied — handed over 2026-10-17`.
 
 ---
 
@@ -106,7 +109,7 @@
 ### Friday, October 16 — Audit, Reviews, buffer
 
 - ✅ **[G5](#g5-claudemd-size-audit-solo---project-instructions--3-sp)** 🟡 — after G1–G4 merge. Merged `3fb797e` (PR #82) on 2026-10-17, a day late (Saturday). ~5 SP after the second Detected Patterns pass and two review rounds; nothing dropped.
-- **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — trial read-outs first, then §§1–4
+- ◐ **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — trial read-outs first, then §§1–4. Ran 2026-10-17 (Saturday), a day late, on `g6-weekly-reviews`; branch complete, unmerged.
 - Buffer for review rounds. Closeout per group, **after its merge**: Summary-Table Status → `✅ PR #N`, the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — in the closeout commit.
 
 **Daily total**: ~3 SP + 5 overhead + buffer
@@ -122,7 +125,7 @@
 | G3  | Stop the retrain on every AI sort `[solo]` (re-scoped from source-folder vector reuse) | ML training pipeline | 🔵 User     | 1      | 3        | Wed     | ✅ `bf6fcad` (PR #80) |
 | G4  | Recently opened folders `[solo]`             | Folder open + empty state                   | 🔵 User     | 1      | 3        | Thu     | ✅ `51af1ab` (PR #81) |
 | G5  | `CLAUDE.md` size audit `[solo]`              | Project instructions                        | 🟡 Ops      | 1      | 3        | Fri     | ✅ `3fb797e` (PR #82) |
-| G6  | Weekly Reviews `[batch]`                     | Research / process                          | ⚪ Overhead | 4      | 5        | Fri     | ☐ Planned  |
+| G6  | Weekly Reviews `[batch]`                     | Research / process                          | ⚪ Overhead | 4      | 5        | Fri     | ◐ Branch complete, unmerged |
 |     | **Total (quota-counted)**                    |                                             |             | **6**  | **22**   |         |            |
 |     | **Total (incl. ⚪ overhead)**                |                                             |             | **10** | **27**   |         |            |
 
