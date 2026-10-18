@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G1 (🟤, ~5 SP → ~7 SP at planning); [TODO.md](../TODO.md) 🔴 [2026-10-11] "Confine page-side file loads to the granted folders (G1 residual I1)"; origin: the [G1 security fix](../../archive/plans/2026-10-10_g1-security-findings-fix.md)'s closeout residual I1
 **Created**: 2026-10-18
-**Status**: Planned. The design is approved; execution is Native (the user's choice, 2026-10-18).
+**Status**: In progress (Native execution, started 2026-10-18).
 **Branch**: `g1-confine-page-file-loads` (from `main` @ `c50c087`)
 
 > **Disclosure.** This repo is public and the residual is open, so this plan stays at stub level: component, class, severity. The design spec and the detailed implementation plan are kept **local** until merge, in the self-ignored scan report folder (WEEKLY ruling; G1 precedent). At the post-merge closeout the spec moves to `docs/superpowers/specs/` and is indexed in `docs/README.md`.
@@ -28,7 +28,7 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
 
 ## Tasks
 
-- [ ] **1. RED end-to-end tests** for the page-load classes, committed under `test.fail` markers.
+- [x] **1. RED end-to-end tests** for the page-load classes, committed under `test.fail` markers.
 - [ ] **2. One media-read rule** shared by main's file IPC and the page (main process, unit-tested).
 - [ ] **3. App scheme handler** (new main-process module, unit-tested).
 - [ ] **4. One-time settings migration** (new main-process module, unit-tested).
@@ -61,6 +61,8 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
   - **Amendment (side-agent note, user-approved):** the pre-merge manual session runs on a copy of the profile.
     - **Why:** on the real profile, the one-time settings move would happen at test time. Builds run afterwards on older branches keep writing only the old store, so the merged version would show test-time settings.
     - **Effect:** the real profile moves at its first launch after the merge.
+  - **Execution started (Native).**
+    - **Task 1:** the RED end-to-end suite is committed. Every RED test was shown failing on the unfixed code first, with the outcomes recorded locally. One test is kept as a guard instead of a RED test, for a platform reason recorded locally; its rule keeps a RED test on the main-process side.
 
 ## Key Discoveries
 
