@@ -249,6 +249,11 @@ media_viewer/
 ├── feature-worker.js    # Web Worker (feature extraction)
 ├── face-detector.js     # Face detection features
 ├── index.html           # Main HTML template
+├── app-protocol.js      # App scheme handler (app files + granted media)
+├── media-url.js         # Media URLs for the renderer
+├── storage-migration.js # One-time settings move to the app origin
+├── migrate.html         # Static page the settings move loads
+├── vendor/lucide/       # Vendored icon library
 ├── styles.css           # UI styles
 ├── package.json         # Dependencies and scripts
 ├── docs/                # Documentation
@@ -276,9 +281,10 @@ media_viewer/
 - **Node Integration**: Disabled
 - **Sandbox**: Disabled (required for file operations)
 - **Preload Script**: named, folder-scoped calls only
-- **IPC guard** (`ipc-guard.js`): each call must come from the app's own top-level `index.html` frame, and each argument must pass its channel's declared kind. A refusal returns the channel's usual failure value and is logged.
-- **Content-Security-Policy** (meta tag in `index.html`): no inline script; each directive was measured by an end-to-end walk; violations are logged to the session log.
-- **Navigation lock**: the window cannot navigate away from `index.html` or open new windows.
+- **IPC guard** (`ipc-guard.js`): each call must come from the app's own top-level page, exactly `app://media-viewer/index.html`, and each argument must pass its channel's declared kind. A refusal returns the channel's usual failure value and is logged.
+- **Content-Security-Policy** (a response header on every app file, `APP_CSP` in `main.js`): no inline script; each directive was measured by an end-to-end walk; violations are logged to the session log.
+- **Navigation lock**: the window cannot navigate away from the app page (another page on the app origin included) or open new windows.
+- **App scheme** (`app-protocol.js`): the window is served from `app://media-viewer/`; app files come from an allowlist, and media from granted folders under `/@fs/`, through the same read rule as the IPC guard.
 - **Renderer HTML**: values are inserted as text, never parsed as HTML. An ESLint rule enforces this.
 
 ### File Access
@@ -288,8 +294,7 @@ media_viewer/
   - Moves are authorized by the folder holding the entry; content reads accept media files only.
 - **Saved data**: per-folder caches and saved tournament state are treated as untrusted folder content and validated before use. Tournament apply is confined to the folder.
 - **Media tools**: `ffmpeg`/`ffprobe` are restricted to local files (`-protocol_whitelist file`).
-- **Network**: none required; no external API calls (the Lucide icons CDN script is pinned by SRI and CSP).
-- **Known residual**: the `file://` page itself can still load local files outside the grants, because CSP `'self'` covers every `file:` URL. A follow-up is tracked in TODO.md.
+- **Network**: none required; no external API calls; Lucide is vendored, and renderer network requests are cancelled (the main process's CLIP model download is unaffected).
 - Design: [G1 security findings fix spec](superpowers/specs/2026-10-10-g1-security-findings-fix-design.md).
 
 ---
