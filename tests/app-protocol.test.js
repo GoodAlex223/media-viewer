@@ -13,6 +13,7 @@ const {
     decodeMediaPath,
     isServedAppPath,
     parseRange,
+    isBlockedEgress,
     APP_HOST,
 } = require('../app-protocol.js');
 const { createGrantStore, createMediaReadRule } = require('../path-grants.js');
@@ -339,4 +340,16 @@ describe('pure helpers', () => {
         expect(parseRange('bytes=0-', 0)).toEqual({ status: 416 });
         expect(parseRange('bytes=-5', 0)).toEqual({ status: 416 });
     });
+});
+
+describe('isBlockedEgress', () => {
+    it.each(['http://x/', 'https://x/', 'ws://x/', 'wss://x/', 'HTTPS://x/'])('blocks %s', (u) => {
+        expect(isBlockedEgress(u)).toBe(true);
+    });
+    it.each(['app://media-viewer/index.html', 'blob:app://media-viewer/x', 'data:,x', 'devtools://devtools/x'])(
+        'lets %s through',
+        (u) => {
+            expect(isBlockedEgress(u)).toBe(false);
+        }
+    );
 });

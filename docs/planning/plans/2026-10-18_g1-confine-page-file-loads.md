@@ -34,7 +34,7 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
 - [x] **4. One-time settings migration** (new main-process module, unit-tested).
 - [x] **5. Serve the window from the app scheme:** main process, the IPC sender check, the navigation lock, and renderer media URLs.
 - [x] **6. Policy header; vendored icons.**
-- [ ] **7. Renderer network restrictions.**
+- [x] **7. Renderer network restrictions.**
 - [ ] **8. Behaviour tests:** video seeking, encoded folder names, reload, settings migration.
 - [ ] **9. Architecture notes,** at stub level until merge.
 - [ ] **10. Verification:**
@@ -68,6 +68,7 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
     - **Task 4:** the one-time settings migration module and its static page, unit-tested. One small change from the detailed plan, which the end-to-end migration test in Task 8 checks.
     - **Task 5:** the window is served from the app scheme. The IPC sender check, the navigation lock and the renderer's media URLs moved with it, and the old file-URL helper was deleted. The read tests from Task 1 now pass.
     - **Task 6:** the content policy is now a response header, and the icon library is vendored. Its hash was checked against the release's published integrity value before commit, and again on the committed bytes.
+    - **Task 7:** the renderer network restrictions are in. Every RED test from Task 1 now passes with its marker removed, and the main-process network control still passes.
 
 ## Key Discoveries
 

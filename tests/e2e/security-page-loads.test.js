@@ -15,7 +15,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(HERE, 'fixtures');
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const MARK = 'OUTSIDE-7f3a';
-const RED_NETWORK = 'RED until Task 7 restricts the renderer network';
 
 const appUrl = (rel) => `app://media-viewer/${rel}`;
 const appMediaUrl = (p) => `app://media-viewer/@fs/${encodeURIComponent(p)}`;
@@ -364,7 +363,6 @@ test.describe('G1 I1 — nothing leaves the renderer', () => {
     });
 
     test('a WebRTC TURN connection to a local listener opens nothing', async () => {
-        test.fail(true, RED_NETWORK);
         await page.evaluate(async (port) => {
             const pc = new RTCPeerConnection({
                 iceServers: [{ urls: `turn:127.0.0.1:${port}?transport=tcp`, username: 'probe', credential: 'probe' }],

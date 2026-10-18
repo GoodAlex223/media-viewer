@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, globalShortcut, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, globalShortcut, protocol, session } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs'); // createReadStream/createWriteStream for streaming the feature cache
@@ -9,7 +9,7 @@ const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
 const { createGrantStore, createTempDirRegistry, isInsideDir, createMediaReadRule } = require('./path-grants');
 const { createIpcGuard, tierAssignmentsKind, tierDirMatches } = require('./ipc-guard');
-const { createAppProtocol, APP_SCHEME, APP_HOST } = require('./app-protocol');
+const { createAppProtocol, isBlockedEgress, APP_SCHEME, APP_HOST } = require('./app-protocol');
 const { migrateStorage } = require('./storage-migration');
 const { readClipImage } = require('./clip-image');
 
@@ -176,10 +176,12 @@ async function createWindow() {
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
             sandbox: false, // Changed from true to false
+            spellcheck: false, // no dictionary download (G1 I1: the renderer makes no network requests)
         },
         title: 'Media Viewer',
     });
     const win = mainWindow;
+    win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp'); // with the dead proxy: no WebRTC path out
 
     // Navigation lock (G1 § 6.2): the window only ever shows INDEX_URL, the page the IPC guard
     // trusts, so another page on the app's own origin is refused too. A page-initiated navigation
@@ -313,6 +315,19 @@ app.whenReady().then(async () => {
         logger,
     });
     protocol.handle(APP_SCHEME, (request) => appProtocol.handle(request));
+
+    // The renderer's network (G1 I1, spec § 7): every http(s) and ws(s) request is cancelled and
+    // logged, and the session's proxy is a dead one with no loopback exemption, so nothing outside
+    // webRequest's view reaches a host either. Main-process network (Node's fetch) is untouched.
+    session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+        if (isBlockedEgress(details.url)) {
+            logger.warn('egress', `Cancelled ${details.resourceType} ${String(details.url).slice(0, 200)}`);
+            callback({ cancel: true });
+            return;
+        }
+        callback({});
+    });
+    await session.defaultSession.setProxy({ proxyRules: '127.0.0.1:9', proxyBypassRules: '<-loopback>' });
     if (process.env.MV_E2E_GRANTS_FILE) {
         global.__mvGrants = grants;
         global.__mvAppProtocol = appProtocol; // E2E only: its open-stream count (handle release)

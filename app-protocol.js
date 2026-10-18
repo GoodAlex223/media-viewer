@@ -114,6 +114,13 @@ function parseRange(header, size) {
     return { status: 206, start, end };
 }
 
+// The renderer has no network use: its files come from this scheme, and CLIP downloads run in the
+// main process on Node's own fetch, which the session does not govern. main.js cancels every
+// request this matches (G1 I1, spec D11).
+function isBlockedEgress(url) {
+    return /^(?:https?|wss?):/i.test(String(url));
+}
+
 function createAppProtocol({ appRoot, resolveMediaRead, getMimeType, csp = null, logger }) {
     let openStreams = 0;
 
@@ -244,6 +251,7 @@ module.exports = {
     decodeMediaPath,
     isServedAppPath,
     parseRange,
+    isBlockedEgress,
     APP_SCHEME,
     APP_HOST,
     MEDIA_PREFIX,
