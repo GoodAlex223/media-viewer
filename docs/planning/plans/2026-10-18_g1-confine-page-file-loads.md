@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G1 (🟤, ~5 SP → ~7 SP at planning); [TODO.md](../TODO.md) 🔴 [2026-10-11] "Confine page-side file loads to the granted folders (G1 residual I1)"; origin: the [G1 security fix](../../archive/plans/2026-10-10_g1-security-findings-fix.md)'s closeout residual I1
 **Created**: 2026-10-18
-**Status**: In progress (Native execution, started 2026-10-18).
+**Status**: In review. The PR is open; the user's deep code review runs in a separate chat.
 **Branch**: `g1-confine-page-file-loads` (from `main` @ `c50c087`)
 
 > **Disclosure.** This repo is public and the residual is open, so this plan stays at stub level: component, class, severity. The design spec and the detailed implementation plan are kept **local** until merge, in the self-ignored scan report folder (WEEKLY ruling; G1 precedent). At the post-merge closeout the spec moves to `docs/superpowers/specs/` and is indexed in `docs/README.md`.
@@ -79,6 +79,10 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
     - **Manual session (user), on the profile copy:** the copy holds the marker and the real profile does not. The session log shows no cancelled requests and no settings-move warnings; its only refusals are the deferred source-map minor.
       - Video folders displayed, apart from a type the app has never supported.
       - Animated images, linked media inside a granted folder and the DevTools shortcut couldn't be checked by hand, so each now has an end-to-end test that a mutation check showed can fail.
+    - **Task 10, verification done:**
+      - In the manual session, the user confirmed the settings came across (the copy's marker counts 11 keys, all written) and that compare, tournament and AI sort behaved normally.
+      - The user's _Scan changes_ came back with no findings. That is a clean pass, not a clearance.
+      - The branch was pushed and the PR opened with a stub-level body. The deep code review runs in a separate chat.
 
 ## Key Discoveries
 
