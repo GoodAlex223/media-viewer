@@ -1,7 +1,8 @@
 // ESLint flat configuration for Electron media_viewer project.
 //
 // Twelve file-group blocks, plus one rule-only object (1c):
-//   1.  Node/Electron main           — main.js, logger.js, path-grants.js, ipc-guard.js, app-protocol.js
+//   1.  Node/Electron main           — main.js, logger.js, path-grants.js, ipc-guard.js, app-protocol.js,
+//                                      storage-migration.js
 //   1c. main.js IPC guard            — no ipcMain registration outside ipc-guard (G1)
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
@@ -65,7 +66,15 @@ export default [
 
     // 1. Node / Electron main process
     {
-        files: ['main.js', 'logger.js', 'path-grants.js', 'ipc-guard.js', 'clip-image.js', 'app-protocol.js'],
+        files: [
+            'main.js',
+            'logger.js',
+            'path-grants.js',
+            'ipc-guard.js',
+            'clip-image.js',
+            'app-protocol.js',
+            'storage-migration.js',
+        ],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',
