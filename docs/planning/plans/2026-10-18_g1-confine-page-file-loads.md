@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G1 (🟤, ~5 SP → ~7 SP at planning); [TODO.md](../TODO.md) 🔴 [2026-10-11] "Confine page-side file loads to the granted folders (G1 residual I1)"; origin: the [G1 security fix](../../archive/plans/2026-10-10_g1-security-findings-fix.md)'s closeout residual I1
 **Created**: 2026-10-18
-**Status**: Planned. The design is approved; the user chooses the execution method.
+**Status**: Planned. The design is approved; execution is Native (the user's choice, 2026-10-18).
 **Branch**: `g1-confine-page-file-loads` (from `main` @ `c50c087`)
 
 > **Disclosure.** This repo is public and the residual is open, so this plan stays at stub level: component, class, severity. The design spec and the detailed implementation plan are kept **local** until merge, in the self-ignored scan report folder (WEEKLY ruling; G1 precedent). At the post-merge closeout the spec moves to `docs/superpowers/specs/` and is indexed in `docs/README.md`.
@@ -39,10 +39,11 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
 - [ ] **9. Architecture notes,** at stub level until merge.
 - [ ] **10. Verification:**
   - unit, E2E and lint suites
-  - manual real-folder session (user)
+  - manual real-folder session (user), on a **copy** of the user's profile (`MV_USER_DATA_DIR`), so the one-time settings move happens on the copy; the real profile's marker is checked absent afterwards
   - _Scan changes_ (user)
   - whole-branch review
   - PR with a stub-level body
+- [ ] **After the merge (closeout box, user):** the first launch on the real profile moves the settings the user has at that point. Check once that the folders, shortcuts and recent folders are current, then delete the profile copy.
 
 ## Also on this branch
 
@@ -57,6 +58,9 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
   - The design was brainstormed with a measured spike and approved section by section (spec kept local).
   - The detailed implementation plan was written (local).
   - **Estimate:** ~7 SP against ~5 planned. That's inside the 2× abort line, and the WEEKLY drop order absorbs it.
+  - **Amendment (side-agent note, user-approved):** the pre-merge manual session runs on a copy of the profile.
+    - **Why:** on the real profile, the one-time settings move would happen at test time. Builds run afterwards on older branches keep writing only the old store, so the merged version would show test-time settings.
+    - **Effect:** the real profile moves at its first launch after the merge.
 
 ## Key Discoveries
 
