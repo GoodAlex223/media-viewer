@@ -237,7 +237,7 @@ fetch followed. Catalog snapshots, plugin sources and the upstream `CHANGELOG.md
 | 5 | `typescript-lsp` | **inconclusive**, re-vehicled once | User ruling. The server needs a TypeScript that ships `lib/tsserver.js`, which 7.x does not, so the devDependency is `typescript@6` (corrected in PR #83's review; D3). Stop rule: no third vehicle. |
 | 1a | `sonarqube` (official catalog) | pass | The catalog diff was 315 → 315 (rename only). At `5a9356d`, the plugin's one hook only reports; the analysis needs `sonarqube-cli` and a SonarQube Cloud or Server login, and the rest overlaps tools already here. |
 | 1b | `bugbash` (community) | pass | The community roster had no additions (2,284 → 2,283; the removal is the method's control). At `085be49`: 0★, Markdown only, duplicating practice already here. |
-| 2 | `"onFailure": "block"` on the guard hook | **adopt** (trial) | The extension host is 2.1.301, not 2.1.289. The hooks reference documents the field. `node` starts in 64 ms against a 10 s timeout. Precondition: the terminal CLI updated past 2.1.295. Queue 1 → 2. |
+| 2 | `"onFailure": "block"` on the guard hook | **adopt** (trial) | The extension host is 2.1.301, not 2.1.289. The hooks reference documents the field. A warm `node` start took 64 ms against a 10 s timeout; a cold start is unmeasured and left to the trial. Precondition: the terminal CLI updated past 2.1.295. Queue 1 → 2. |
 | 3 | "Rules are prompts; hooks enforce" (Cursor) | pass | Already practised here; all sources secondary. Codex's Oct 8–15 changelog had nothing applicable. |
 | 4 out | the window's shipped work and 35 memory files | pass, none promoted | User ruling D6. Matched-scope sweep with controls 25/25, 9/9, 5/5, 9/9; three new candidates parked. The two G5 rows read `unapplied — handed over`. |
 | 4 in | 15 handed-over rows | 1 ruled, 14 returned | The formatter re-time: `media-viewer.js` 1,104 ms median → 🔵 filed (user ruling). The 14 rulings go back in Appendix A item 3. |
@@ -300,6 +300,10 @@ Eight findings, all checked against the files and the hooks reference before fix
 7. Remedy (1) copied part of `.prettierignore`. It now reads the file.
 8. "Now measured" covered a warm start only. The §2 row and the 🟤 entry now say so; a cold start is left to
    the trial.
+
+Round 2 (at `37d8b88`) accepted all eight and found two leftovers, both fixed: the Outcome table's §2 row still
+gave the 64 ms start without "warm", and the restore step's last sentence said the next session must wait for the
+user, though it can restore the script with Read and Write itself.
 
 Checking finding 3 turned up a defect the review had not raised. The `typescript-lsp` re-vehicle as written would
 have failed like G4, since npm's `latest` TypeScript (7.0.2) ships no `lib/tsserver.js`. D3's note, the §5 row,
