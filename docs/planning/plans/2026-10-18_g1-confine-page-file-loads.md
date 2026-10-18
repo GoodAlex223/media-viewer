@@ -76,6 +76,9 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
       - two defense-in-depth controls gained tests that fail when the control is removed
 
       Six minor findings are deferred (listed locally; they reach BACKLOG at closeout).
+    - **Manual session (user), on the profile copy:** the copy holds the marker and the real profile does not. The session log shows no cancelled requests and no settings-move warnings; its only refusals are the deferred source-map minor.
+      - Video folders displayed, apart from a type the app has never supported.
+      - Animated images, linked media inside a granted folder and the DevTools shortcut couldn't be checked by hand, so each now has an end-to-end test that a mutation check showed can fail.
 
 ## Key Discoveries
 
@@ -88,4 +91,5 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
 - **JXL decoder bytes:** now that the page is served from the app scheme, the decoder's wasm could load with a same-origin fetch instead of the IPC hop. At the least, the stated reason in CLAUDE.md and main.js should be reworded.
 - **A deny-by-default permission handler for the window** (geolocation and similar), as one more defense-in-depth layer.
 - **Move kinds:** classify the extension with `asciiFold` rather than `toLowerCase()`, for consistency with the shared read rule. Harmless today.
+- **Content-read hardening** in the folder-grant code: two narrowing steps from a background review finding (pre-existing, accepted residual class; detail local until merge).
 - **The deferred minor review findings**, listed in the local plan: window close during the settings move, the move's history entries, the icon library's source-map line, `MV_USER_DATA_DIR` validation, and three stale comments.

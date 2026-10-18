@@ -1,6 +1,6 @@
 // G1 I1 — behaviour of the app scheme: what must keep working once the window is served from it.
 import { test, expect } from '@playwright/test';
-import { access, cp, mkdtemp, readFile, rm, stat } from 'fs/promises';
+import { access, cp, mkdtemp, readFile, rm, stat, symlink } from 'fs/promises';
 import { execFileSync } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
 import { tmpdir } from 'os';
@@ -165,6 +165,50 @@ test('media in a folder whose name needs encoding displays', async () => {
         }
         await rm(dir, { recursive: true, force: true });
     }
+});
+
+// A link in a granted folder to media elsewhere is read through, as main's own reads always did
+// (review M-a): the media door serves the link's target.
+test('a symlinked media file inside a granted folder displays', async () => {
+    tmpFixtures = await createTempFixtureDir([]);
+    const elsewhere = await mkdtemp(join(tmpdir(), 'mv-e2e-elsewhere-'));
+    try {
+        await cp(join(FIXTURES, 'normal-320x240.png'), join(elsewhere, 'real.png'));
+        try {
+            await symlink(join(elsewhere, 'real.png'), join(tmpFixtures.dir, 'linked.png'), 'file');
+        } catch (err) {
+            test.skip(err.code === 'EPERM', 'file symlinks need Developer Mode on Windows');
+            throw err;
+        }
+        ({ electronApp, page } = await launchApp());
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForMedia(page);
+        await expect
+            .poll(() => page.evaluate(() => document.querySelector('img.media-display')?.naturalWidth ?? 0))
+            .toBe(320);
+    } finally {
+        await rm(elsewhere, { recursive: true, force: true });
+    }
+});
+
+// Review Focus 4: F12 opens DevTools on the app page (main's before-input-event toggle).
+test('F12 opens DevTools', async () => {
+    ({ electronApp, page } = await launchApp());
+    const opened = () =>
+        electronApp.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows().some((w) => w.webContents.isDevToolsOpened())
+        );
+    expect(await opened()).toBe(false);
+    // Through Electron's own input path: Playwright's key events never reach before-input-event (measured).
+    await electronApp.evaluate(({ BrowserWindow }) => {
+        const wc = BrowserWindow.getAllWindows()[0].webContents;
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'F12' });
+        wc.sendInputEvent({ type: 'keyUp', keyCode: 'F12' });
+    });
+    await expect.poll(opened).toBe(true);
+    await electronApp.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().forEach((w) => w.webContents.closeDevTools())
+    );
 });
 
 // Review Focus 4.

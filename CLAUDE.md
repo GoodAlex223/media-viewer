@@ -63,7 +63,7 @@ media_viewer/
 ├── vendor/              # Vendored builds: jxl-oxide-wasm/ (JXL decoder), lucide/ (icons 1.14.0; Prettier and ESLint ignore it)
 ├── scripts/             # Maintenance scripts (Node CJS, each pure exported functions + a CLI): check-secrets.js (pre-commit secret guard); check-e2e-needed.js (pre-push E2E gate decision, fails safe to RUN); check-docs-index.js (pre-commit docs-index guard); check-claude-md-size.js (pre-commit `CLAUDE.md` size warning, never blocks)
 ├── tests/               # Unit (Vitest, tests/*.test.js) + E2E (Playwright, tests/e2e/)
-│   └── e2e/             # fixtures/ (1x1 PNGs, tiny.mp4 — a 32-byte unplayable stub, playable-64x64.mp4 — a real 1 s H.264 clip, static.jxl) + helpers/ (electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs)
+│   └── e2e/             # fixtures/ (1x1 PNGs, tiny.mp4 — a 32-byte unplayable stub, playable-64x64.mp4 — a real 1 s H.264 clip, static.jxl, animated-64x64.jxl — 4 frames) + helpers/ (electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs)
 ├── .claude/             # Committed: agents/, hooks/ (format-edited-file.js formats each edited file; guard-preload-bash.js), rules/, settings.json, skills/ (§ Active gotchas)
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
 ```
