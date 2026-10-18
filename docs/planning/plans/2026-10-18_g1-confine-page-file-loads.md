@@ -32,7 +32,7 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
 - [x] **2. One media-read rule** shared by main's file IPC and the page (main process, unit-tested).
 - [x] **3. App scheme handler** (new main-process module, unit-tested).
 - [x] **4. One-time settings migration** (new main-process module, unit-tested).
-- [ ] **5. Serve the window from the app scheme:** main process, the IPC sender check, the navigation lock, and renderer media URLs.
+- [x] **5. Serve the window from the app scheme:** main process, the IPC sender check, the navigation lock, and renderer media URLs.
 - [ ] **6. Policy header; vendored icons.**
 - [ ] **7. Renderer network restrictions.**
 - [ ] **8. Behaviour tests:** video seeking, encoded folder names, reload, settings migration.
@@ -66,6 +66,7 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
     - **Task 2:** one media-read rule, now shared by main's file IPC; it also checks the file a path resolves to. Its RED tests failed first and pass now.
     - **Task 3:** the app scheme handler module and its unit tests. A mutation check showed its two key controls are each caught by a test.
     - **Task 4:** the one-time settings migration module and its static page, unit-tested. One small change from the detailed plan, which the end-to-end migration test in Task 8 checks.
+    - **Task 5:** the window is served from the app scheme. The IPC sender check, the navigation lock and the renderer's media URLs moved with it, and the old file-URL helper was deleted. The read tests from Task 1 now pass.
 
 ## Key Discoveries
 

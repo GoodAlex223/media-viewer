@@ -3,6 +3,9 @@
 // src. Run against a fake element that follows the two HTML rules the fix rests on.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
+import * as MediaUrl from '../media-url.js';
+// The extracted methods reach the namespace import through globalThis (like LikeOrSkip).
+globalThis.MediaUrl = MediaUrl;
 
 const require = createRequire(import.meta.url);
 const fs = require('fs');

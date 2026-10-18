@@ -9,37 +9,21 @@
 
 const path = require('path');
 const { isCleanAbsolute, asciiFold, createMediaReadRule } = require('./path-grants');
+const { APP_SCHEME } = require('./app-protocol');
 
 const DEFAULT_REJECT = Object.freeze({ success: false, error: 'Not permitted' });
 
-// Percent-decode only well-formed %XX runs: Chromium leaves a lone `%` raw, which a whole-string
-// decodeURIComponent would reject.
-const decodeEscapes = (s) =>
-    s.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
-        try {
-            return decodeURIComponent(run);
-        } catch (_err) {
-            return run;
-        }
-    });
-
-// A file: URL reduced to what identifies the document, compared as a DECODED path (deep review
-// #2): Chromium's frame URL keeps `~ [ ] %` raw where Node's pathToFileURL escapes them, so from
-// an app path such as the checkout's 8.3 alias (MEDIA_~1) every sender was refused. No query or
-// fragment; ASCII case folded on Windows (Chromium and Node can disagree on the drive letter) and
-// only ASCII, so a Unicode look-alike path stays a different document.
-function normalizeFileUrl(raw, platform = process.platform) {
+// The page a sender frame shows: scheme, host and path of its URL, without query or fragment
+// (G1 I1). The app page is served from its own scheme, where a URL has one spelling, so it is
+// compared as text. A file: URL has no host and identifies nothing.
+function pageId(raw) {
     let u;
     try {
         u = new URL(raw);
     } catch (_err) {
         return null;
     }
-    if (u.protocol !== 'file:') {
-        return null;
-    }
-    const id = (u.host ? '//' + u.host : '') + decodeEscapes(u.pathname);
-    return platform === 'win32' ? asciiFold(id) : id;
+    return u.host ? `${u.protocol}//${u.host}${u.pathname}` : null;
 }
 
 function isPlainBasename(v, platform = process.platform) {
@@ -60,9 +44,9 @@ function describe(v) {
 }
 
 function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMediaFile, platform = process.platform }) {
-    const expected = normalizeFileUrl(expectedUrl, platform);
-    if (!expected) {
-        throw new Error('ipc-guard: expectedUrl must be a file: URL');
+    const expected = pageId(expectedUrl);
+    if (!expected || !expected.startsWith(`${APP_SCHEME}://`)) {
+        throw new Error('ipc-guard: expectedUrl must be an app: URL');
     }
 
     const isTrustedSender = (event) => {
@@ -70,7 +54,7 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMedi
         if (!frame || frame.parent) {
             return false;
         }
-        return normalizeFileUrl(frame.url, platform) === expected;
+        return pageId(frame.url) === expected;
     };
 
     const isString = (v) => typeof v === 'string';
@@ -223,7 +207,6 @@ function tierDirMatches(realTier, realRoot, tierName) {
 
 module.exports = {
     createIpcGuard,
-    normalizeFileUrl,
     isPlainBasename,
     tierAssignmentsKind,
     tierDirMatches,

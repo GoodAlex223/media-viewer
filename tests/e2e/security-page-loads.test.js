@@ -15,7 +15,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(HERE, 'fixtures');
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const MARK = 'OUTSIDE-7f3a';
-const RED_SWITCH = 'RED until Task 5 serves the app from its own scheme';
 const RED_POLICY = 'RED until Task 6 sends the policy header';
 const RED_NETWORK = 'RED until Task 7 restricts the renderer network';
 
@@ -187,13 +186,11 @@ test.describe('G1 I1 — page loads', () => {
         ['import', 'probe-module.mjs'],
     ]) {
         test(`page ${kind}: a file outside every grant does not load`, async () => {
-            test.fail(true, RED_SWITCH);
             expect(await outcomesFor(kind, fileForms(join(outside, name)))).toEqual(['blocked', 'blocked', 'blocked']);
         });
     }
 
     test('the app folder serves only the app files', async () => {
-        test.fail(true, RED_SWITCH);
         const outcomes = [];
         for (const [rel, mark] of [
             ['package.json', '"devDependencies"'],
@@ -214,7 +211,6 @@ test.describe('G1 I1 — worker loads', () => {
     });
 
     test('worker fetch: a file outside every grant does not load', async () => {
-        test.fail(true, RED_SWITCH);
         const worker = await spawnAppWorker();
         const probe = ({ url, mark }) =>
             fetch(url)
@@ -233,7 +229,6 @@ test.describe('G1 I1 — worker loads', () => {
     });
 
     test('worker importScripts: a script outside every grant does not run', async () => {
-        test.fail(true, RED_SWITCH);
         const worker = await spawnAppWorker();
         const outcomes = [];
         for (const url of fileForms(join(outside, 'probe-script.js'))) {
@@ -253,7 +248,6 @@ test.describe('G1 I1 — worker loads', () => {
     });
 
     test('a worker whose own script is outside every grant does not run', async () => {
-        test.fail(true, RED_SWITCH);
         const outcomes = [];
         for (const url of fileForms(join(outside, 'probe-worker.js'))) {
             outcomes.push(
@@ -287,7 +281,6 @@ test.describe('G1 I1 — the media door', () => {
     });
 
     test('a non-media file inside a granted folder does not load', async () => {
-        test.fail(true, RED_SWITCH);
         await writeFile(join(tmpFixtures.dir, 'notes.txt'), MARK);
         expect(await outcomesFor('fetch', fileForms(join(tmpFixtures.dir, 'notes.txt')))).toEqual([
             'blocked',
