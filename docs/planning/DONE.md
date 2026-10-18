@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-17 <!-- Group G5: CLAUDE.md size audit (🟡, Oct 12–16). MERGED 2026-10-17 via PR #82 (merge 3fb797e) after three review rounds: 9 findings, of which 6 were fixed, 1 documented, 1 declined and 1 carried to G6. -->
+**Last Updated**: 2026-10-18 <!-- Group G6: Weekly Reviews (2026-10-17 run, ⚪ Overhead). MERGED 2026-10-18 via PR #83 (merge 1954109) after three review rounds: 8 findings, then 2 leftovers, then none. -->
+<!-- Previous: Group G5: CLAUDE.md size audit (🟡, Oct 12–16). MERGED 2026-10-17 via PR #82 (merge 3fb797e) after three review rounds: 9 findings, of which 6 were fixed, 1 documented, 1 declined and 1 carried to G6. -->
 <!-- Previous: Group G4: Recently opened folders (🔵, Oct 12–16; reordered ahead of I1 by the user). MERGED 2026-10-16 via PR #81 (merge 51af1ab), after per-task reviews, a whole-branch final review with one fix wave, and a PR review in a separate chat (7 findings: 5 fixed, 1 declined, 1 deferred; re-review found no issues). --> <!-- Prior (2026-10-16): Group G3: Stop the retrain on every AI sort (🔵, Oct 12–16; re-scoped from source-folder vector reuse after the measure-first before run). MERGED 2026-10-16 via PR #80 (merge bf6fcad), after per-task reviews, a whole-branch final review with one fix round, and a PR review in a separate chat (no open items). --> <!-- Prior (2026-10-12): Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
 <!-- Previous: Group G5: Weekly Reviews (2026-10-09 run, ⚪ Overhead) — 5/5, MERGED 2026-10-09 via PR #77 (merge 0e298b4) after one review round and two close-outs. -->
 <!-- Previous: Group G4: Cleanup Week trial batch (🟤, Cleanup Week #4) — 2/2, MERGED 2026-10-08 via PR #76 (merge 44c282b) after one review round and a close-out. -->
@@ -23,6 +24,35 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-18 — Group G6: Weekly Reviews ⚪ (2026-10-17 run, Oct 12–16) — **4/4, MERGED `1954109`** (PR #83)
+
+**Run-card**: [2026-10-17-weekly-reviews-run.md](../superpowers/specs/2026-10-17-weekly-reviews-run.md) (codified-repeat ⚪ overhead: brainstorm → run-card → execute, no plan file; archive: none). Its Outcome section holds the verdicts, the checkpoint rulings, the discoveries, four deviations and the review rounds; Appendix A is the hand-off note for the sibling.
+**Branch**: `g6-weekly-reviews`, cut from `main` at `e85abc5`; deleted remote and local after the merge.
+
+✅ **Status: 4/4 categories. MERGED 2026-10-18 via PR #83** (merge `1954109`). Ran 2026-10-17, a day after the Friday slot. Three review rounds in a separate chat: 8 findings, all verified (against the files, the hooks reference and probes) and fixed in `37d8b88`; 2 leftovers, fixed in `604f8e6`; then none, with every pushback and recorded-not-fixed item accepted.
+
+**Summary**: The 7th Weekly Reviews run. **§ 5 first (D4):** *You should know* read out **`keep`** and closed; `typescript-lsp` read out **`inconclusive`** and was re-vehicled once, with a stop rule (user ruling). **1 adopt / 3 pass:**
+- §1a `sonarqube` pass (catalog 315 → 315, a rename only; it needs a SonarQube login);
+- §1b `bugbash` pass (0★, Markdown only);
+- §2 `"onFailure": "block"` on the `preload.js` guard hook adopted as a trial, because the VS Code host is 2.1.301, not the 2.1.289 the parked note measured on the terminal CLI;
+- §3 "rules are prompts, hooks enforce" pass (already practised).
+
+§ 4: nothing promoted (user ruling D6: no out-of-repo write). A matched-scope sweep parked three candidates. The two G5 outbound rows went to the sibling in a hand-off note. Of 15 inbound rows, 1 was ruled (the formatter re-time, 1,104 ms per `media-viewer.js` edit → 🔵) and 14 had already been ruled here.
+
+**Key changes**:
+- REVIEW-QUEUE: the §1 catalog-baseline convention (a name diff between pinned SHAs; official `ea10b21` 315, community `06ec7b6` 2,283); verdict rows for §§1–3; § 4 outbound, outcome-log and inbound rows; the § 5 stocktake and three trial rows (queue 2 → 1 → 2).
+- BACKLOG: 🔵 `[2026-10-17]` § 4 inbound (the formatter hook's per-edit cost); 🟤 `[2026-10-17]` § 2 adopt (the `onFailure` trial); the catalog-baseline and *You should know* entries checked off; the `typescript-lsp` entry annotated. Closeout extract: 🟤 `[2026-10-18]` (a host-naming convention for version gates; matched-scope § 4 sweeps).
+- TODO § Spawned Tasks: both G5 rows read "handed over 2026-10-17, not applied" and stay open.
+- Out of repo: none. The hand-off note went to the user to pass on.
+
+**The review's best catch led to a bigger one.** Finding 3 said the `typescript-lsp` trial's diagnostics would be near-empty without `checkJs`, and `tsc` 6.0.3 and 7.0.2 confirmed it. Checking that showed the re-vehicle would have failed outright. `typescript-language-server` 5.3.0 accepts only a TypeScript that ships `lib/tsserver.js`, and 7.0.2, npm's `latest` and the host's global install, ships none. An `initialize` probe: no local `typescript` and `typescript@7.0.2` failed with G4's error; `typescript@6.0.3` started and answered `documentSymbol`. So G4's diagnosis ("needs a workspace install") was wrong. The re-vehicle now pins `typescript@6`, and the hand-off note's item 4 was rewritten before it was passed on. The reviewer confirmed it independently with `npm pack --dry-run`.
+
+**Learnings**:
+- A version gate must read the host that runs the session, not the CLI on `PATH`. Two runs in a row read the wrong binary.
+- A setup failure's stated cause was a hypothesis: G4 read "install it in the workspace" from the error text without a probe that separated location from version.
+- A check that compares two strings passes vacuously when both are empty: an inline regex mangled by the Bash tool's backslash halving printed OK on nothing. The fix is a script file plus an empty-string guard.
+- A row count needs its file set beside it. The round-2 reply's "10" REVIEW-QUEUE rows counted a planted control row as real, and the reviewer's recount was 9. The PR body's original "16" could not be reproduced, because nothing recorded which files it covered. The body now gives recounted figures with their scope: 9 dated REVIEW-QUEUE rows, 13 run-card rows and the docs-index row.
 
 ### 2026-10-17 — Group G5: `CLAUDE.md` size audit 🟡 (Oct 12–16) — **MERGED `3fb797e`** (PR #82)
 

@@ -303,13 +303,16 @@ Eight findings, all checked against the files and the hooks reference before fix
 
 Round 2 (at `37d8b88`) accepted all eight and found two leftovers, both fixed: the Outcome table's §2 row still
 gave the 64 ms start without "warm", and the restore step's last sentence said the next session must wait for the
-user, though it can restore the script with Read and Write itself.
+user, though it can restore the script with Read and Write itself. Round 3 (at `604f8e6`) found no issues and
+accepted every pushback and recorded-not-fixed item from all rounds. Merged `1954109` on 2026-10-18.
 
 Checking finding 3 turned up a defect the review had not raised. The `typescript-lsp` re-vehicle as written would
 have failed like G4, since npm's `latest` TypeScript (7.0.2) ships no `lib/tsserver.js`. D3's note, the §5 row,
 the BACKLOG entry and Appendix A item 4 now say `typescript@6`.
 
 ## Improvements (extracted at closeout)
+
+Extracted 2026-10-18 to BACKLOG 🟤 `[2026-10-18] From: G6 closeout (PR #83 — Weekly Reviews 2026-10-17 run)`.
 
 1. **A version-gated check reads the session's host, not the `PATH` CLI.** Add a convention line to REVIEW-QUEUE
    §2, where changelog-gated items get parked: report `CLAUDE_CODE_ENTRYPOINT` and the running binary's

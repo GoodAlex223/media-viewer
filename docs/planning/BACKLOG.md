@@ -349,6 +349,13 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 
 ## 🟤 Auto-Generated Tech Debt
 
+### [2026-10-18] From: G6 closeout (PR #83 — Weekly Reviews 2026-10-17 run)
+
+**Origin**: run-card [`2026-10-17-weekly-reviews-run.md`](../superpowers/specs/2026-10-17-weekly-reviews-run.md) § Improvements, from its discoveries 1 and 5 and deviation 1. Merged `1954109` after three review rounds (8 findings, then 2, then none). Claude-surfaced → 🟤. A run-card is a spec, not a plan, so nothing is archived (the 2026-10-09 precedent).
+
+- [ ] **A version-gated check names the host it reads: a convention line in REVIEW-QUEUE §2** — REVIEW-QUEUE §2 is where changelog-gated items get parked ("revisit once past 2.1.295"). Add a convention line: report `CLAUDE_CODE_ENTRYPOINT` and the running binary's `--version` (for the VS Code extension, `resources/native-binary/claude.exe` under its extension folder), and name which host a revisit condition refers to. Evidence: the 2026-10-09 parked note and this run's note 7 both measured `claude --version`, the terminal CLI on `PATH` (2.1.289). These sessions run in the VS Code extension (`CLAUDE_CODE_ENTRYPOINT=claude-vscode`), at 2.1.301 since 2026-10-16. Correcting it turned a parked item into the run's one adopt (run-card discovery 1, deviation 1). Effort XS. Affected: `docs/planning/REVIEW-QUEUE.md`.
+- [ ] **§ 4 sweeps grep the same paths on both sides, and their controls must agree: a line in REVIEW-QUEUE § 4 Conventions** — a live-versus-sibling count compares only when the probe's scope is identical on both sides. Positive controls that differ between the two trees mean the scopes differ, so re-run before reading any candidate's count. Evidence: this run's first § 4 sweep grepped all of the sibling's `home-claude/` against five live paths, and its `Extract` control read 27 against 25; the matched re-run read 25/25 (run-card discovery 5). Effort XS. Affected: `docs/planning/REVIEW-QUEUE.md`.
+
 ### [2026-10-17] From: Weekly Reviews (2026-10-17 run), § 2 adopt
 
 **Origin**: Group G6 Weekly Reviews, 7th run: run-card

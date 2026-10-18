@@ -64,6 +64,8 @@
 
 _Ran 2026-10-17 (Saturday), on branch `g6-weekly-reviews`; run-card [`2026-10-17-weekly-reviews-run.md`](../superpowers/specs/2026-10-17-weekly-reviews-run.md). § 5 first: *You should know* → `keep` (closed); `typescript-lsp` → `inconclusive`, re-vehicled once with a stop rule (user ruling). Queue 2 → 1 → 2 after §2's adopt. **1 adopt / 3 pass.**_
 
+- [x] ✅ **MERGED 2026-10-18 via PR #83 (merge `1954109`)**, at the 5 SP planned; see [DONE.md](DONE.md). Three review rounds: 8 findings, all fixed; 2 leftovers, fixed; then none. Checking review finding 3 found that the `typescript-lsp` re-vehicle as first written would have failed like G4: npm's `latest` TypeScript (7.0.2) ships no `lib/tsserver.js`, so the devDependency is now `typescript@6`, and the hand-off note's item 4 was rewritten.
+
 - [x] **Plugins (2 SP)** — two independent tops: official catalog + wider internet, each with `source:`. ✅ §1a `sonarqube` **pass**: it needs a SonarQube Cloud or Server login. The catalog diff gave 315 → 315, a rename only. The commit-log method no longer names additions, so the diff is now by plugin name between two pinned SHAs, and REVIEW-QUEUE §1 records both baselines (🟤 [2026-10-09] checked off). §1b `bugbash` **pass**: 0★ and Markdown-only, duplicating practice already here; the community roster went 2,284 → 2,283 with no additions.
 - [x] **Claude best-practices (1 SP)** — fresh check vs. the parked list. ✅ **adopt** (trial): `"onFailure": "block"` on the `preload.js` guard hook. Its parked "2.1.289" measured the terminal CLI; the VS Code extension these sessions run in is 2.1.301. Vehicle: the first dev session after this merges that is not `typescript-lsp`'s, once the terminal CLI is updated past 2.1.295. 🟤 [2026-10-17] filed.
 - [x] **Non-Claude AI best-practices (1 SP)** ✅ **pass**: "rules are prompts, hooks enforce" (Cursor sources, all secondary) is already practised here. Codex's changelog for Oct 8–15 had nothing applicable to this host.
@@ -109,7 +111,7 @@ _Ran 2026-10-17 (Saturday), on branch `g6-weekly-reviews`; run-card [`2026-10-17
 ### Friday, October 16 — Audit, Reviews, buffer
 
 - ✅ **[G5](#g5-claudemd-size-audit-solo---project-instructions--3-sp)** 🟡 — after G1–G4 merge. Merged `3fb797e` (PR #82) on 2026-10-17, a day late (Saturday). ~5 SP after the second Detected Patterns pass and two review rounds; nothing dropped.
-- ◐ **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — trial read-outs first, then §§1–4. Ran 2026-10-17 (Saturday), a day late, on `g6-weekly-reviews`; branch complete, unmerged.
+- ✅ **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — trial read-outs first, then §§1–4. Ran 2026-10-17 (Saturday), a day late. Merged `1954109` (PR #83) on 2026-10-18 after three review rounds: 8 findings, then 2 leftovers, then none.
 - Buffer for review rounds. Closeout per group, **after its merge**: Summary-Table Status → `✅ PR #N`, the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — in the closeout commit.
 
 **Daily total**: ~3 SP + 5 overhead + buffer
@@ -125,7 +127,7 @@ _Ran 2026-10-17 (Saturday), on branch `g6-weekly-reviews`; run-card [`2026-10-17
 | G3  | Stop the retrain on every AI sort `[solo]` (re-scoped from source-folder vector reuse) | ML training pipeline | 🔵 User     | 1      | 3        | Wed     | ✅ `bf6fcad` (PR #80) |
 | G4  | Recently opened folders `[solo]`             | Folder open + empty state                   | 🔵 User     | 1      | 3        | Thu     | ✅ `51af1ab` (PR #81) |
 | G5  | `CLAUDE.md` size audit `[solo]`              | Project instructions                        | 🟡 Ops      | 1      | 3        | Fri     | ✅ `3fb797e` (PR #82) |
-| G6  | Weekly Reviews `[batch]`                     | Research / process                          | ⚪ Overhead | 4      | 5        | Fri     | ◐ Branch complete, unmerged |
+| G6  | Weekly Reviews `[batch]`                     | Research / process                          | ⚪ Overhead | 4      | 5        | Fri     | ✅ `1954109` (PR #83) |
 |     | **Total (quota-counted)**                    |                                             |             | **6**  | **22**   |         |            |
 |     | **Total (incl. ⚪ overhead)**                |                                             |             | **10** | **27**   |         |            |
 
