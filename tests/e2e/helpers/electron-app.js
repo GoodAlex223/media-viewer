@@ -77,18 +77,6 @@ export async function launchApp({ migrationMarker } = {}) {
     });
     grantsDirByApp.set(electronApp, grantsDir);
 
-    // Stub lucide CDN before firstWindow() — the synchronous <script src> in <head>
-    // fires during page load, so the route must be registered before the page exists.
-    electronApp.once('window', async (page) => {
-        await page.route('**/unpkg.com/**', (route) =>
-            route.fulfill({
-                status: 200,
-                contentType: 'application/javascript',
-                body: 'window.lucide = { createIcons: function() {} };',
-            })
-        );
-    });
-
     const page = await electronApp.firstWindow();
     appByPage.set(page, electronApp);
 

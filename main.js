@@ -31,6 +31,26 @@ const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
 const INDEX_URL = `${APP_ORIGIN}/index.html`;
 const MIGRATE_URL = `${APP_ORIGIN}/migrate.html`;
 
+// The page's Content-Security-Policy, sent as a response header on every app file (G1 I1, spec
+// D8): a worker takes its policy from its own script's response, so a <meta> tag never reached
+// workers. 'wasm-unsafe-eval' and inline styles are needed (measured by the E2E walk, G1 § 6.1);
+// frame-ancestors works only as a header.
+const APP_CSP = [
+    "default-src 'none'",
+    "script-src 'self' 'wasm-unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' blob: data:",
+    "media-src 'self' blob:",
+    "font-src 'self' data:",
+    "worker-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+].join('; ');
+
 // Must run before 'ready'. Not bypassCSP, corsEnabled or allowServiceWorkers.
 protocol.registerSchemesAsPrivileged([
     {
@@ -289,7 +309,7 @@ app.whenReady().then(async () => {
         appRoot: APP_ROOT,
         resolveMediaRead: createMediaReadRule({ grants, isMediaFile }),
         getMimeType,
-        csp: null, // Task 6 sends APP_CSP here
+        csp: APP_CSP,
         logger,
     });
     protocol.handle(APP_SCHEME, (request) => appProtocol.handle(request));

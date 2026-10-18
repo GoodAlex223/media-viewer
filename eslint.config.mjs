@@ -61,7 +61,7 @@ const htmlSinkGuard = [
 export default [
     // Global ignores
     {
-        ignores: ['node_modules/**', 'docs/**'],
+        ignores: ['node_modules/**', 'docs/**', 'vendor/lucide/**'],
     },
 
     // 1. Node / Electron main process

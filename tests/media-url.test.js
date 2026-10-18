@@ -40,6 +40,7 @@ describe('renderer media URLs (G1 I1)', () => {
         'ml-worker.js',
         'feature-worker.js',
         'jxl-decode-worker.js',
+        'index.html',
     ];
     const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
     // Code only: full-line and block comments removed, so prose that quotes an assignment is not one.
@@ -63,6 +64,8 @@ describe('renderer media URLs (G1 I1)', () => {
             expect(read(f), f).not.toContain('file://');
             expect(read(f), f).not.toContain('pathToFileURL');
         }
+        expect(read('index.html')).not.toMatch(/http-equiv="Content-Security-Policy"/);
+        expect(read('index.html')).not.toContain('unpkg.com');
     });
 
     it('every src the renderer assigns is a media URL, a blob URL, an app file or empty', () => {

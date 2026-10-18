@@ -15,7 +15,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(HERE, 'fixtures');
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const MARK = 'OUTSIDE-7f3a';
-const RED_POLICY = 'RED until Task 6 sends the policy header';
 const RED_NETWORK = 'RED until Task 7 restricts the renderer network';
 
 const appUrl = (rel) => `app://media-viewer/${rel}`;
@@ -350,7 +349,6 @@ test.describe('G1 I1 — nothing leaves the renderer', () => {
     });
 
     test('worker fetch and WebSocket to a local listener send nothing', async () => {
-        test.fail(true, RED_POLICY);
         const worker = await spawnAppWorker();
         await worker.evaluate((port) => {
             fetch(`http://127.0.0.1:${port}/worker-fetch`).catch(() => {});
