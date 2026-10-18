@@ -29,7 +29,7 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
 ## Tasks
 
 - [x] **1. RED end-to-end tests** for the page-load classes, committed under `test.fail` markers.
-- [ ] **2. One media-read rule** shared by main's file IPC and the page (main process, unit-tested).
+- [x] **2. One media-read rule** shared by main's file IPC and the page (main process, unit-tested).
 - [ ] **3. App scheme handler** (new main-process module, unit-tested).
 - [ ] **4. One-time settings migration** (new main-process module, unit-tested).
 - [ ] **5. Serve the window from the app scheme:** main process, the IPC sender check, the navigation lock, and renderer media URLs.
@@ -63,6 +63,7 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
     - **Effect:** the real profile moves at its first launch after the merge.
   - **Execution started (Native).**
     - **Task 1:** the RED end-to-end suite is committed. Every RED test was shown failing on the unfixed code first, with the outcomes recorded locally. One test is kept as a guard instead of a RED test, for a platform reason recorded locally; its rule keeps a RED test on the main-process side.
+    - **Task 2:** one media-read rule, now shared by main's file IPC; it also checks the file a path resolves to. Its RED tests failed first and pass now.
 
 ## Key Discoveries
 

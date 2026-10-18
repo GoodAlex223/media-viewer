@@ -18,7 +18,6 @@ const MARK = 'OUTSIDE-7f3a';
 const RED_SWITCH = 'RED until Task 5 serves the app from its own scheme';
 const RED_POLICY = 'RED until Task 6 sends the policy header';
 const RED_NETWORK = 'RED until Task 7 restricts the renderer network';
-const RED_RULE = 'RED until Task 2 checks the resolved target';
 
 const appUrl = (rel) => `app://media-viewer/${rel}`;
 const appMediaUrl = (p) => `app://media-viewer/@fs/${encodeURIComponent(p)}`;
@@ -308,7 +307,6 @@ test.describe('G1 I1 — the media door', () => {
     });
 
     test('main refuses to read a media-named link to a non-media file inside a granted folder', async () => {
-        test.fail(true, RED_RULE);
         await writeFile(join(tmpFixtures.dir, 'notes.txt'), MARK);
         const link = await plantLink(join(tmpFixtures.dir, 'notes.txt'), 'notes-link.png');
         expect(await page.evaluate((p) => window.electronAPI.readFileBuffer(p), link)).toBeNull();

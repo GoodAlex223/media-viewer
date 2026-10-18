@@ -348,6 +348,33 @@ describe('entry and linked-media kinds (review M-a)', () => {
         expect(await h(trusted(), join(tmpDir, 'frame-001.png'))).toBe('ok');
         expect(await h(trusted(), LINK)).toBe('ok');
     });
+
+    // G1 I1 (spec D12): the in-grant branch checked only the REQUESTED name. A link named pic.png in a
+    // granted folder that resolves to a document in the same folder passed as media. The rule now
+    // also checks the file the path resolves to.
+    it('grantedMediaRead refuses a media-named path whose resolved target is not media', async () => {
+        const grants = {
+            resolveAllowed: vi.fn(async () => join(GRANTED, 'notes.txt')), // inside the grant, not media
+            resolveEntry: vi.fn(async (x) => x),
+            canonicalize: vi.fn(async () => join(GRANTED, 'notes.txt')),
+        };
+        const { guard, ipcMain } = makeGuard({ grants, isMediaFile });
+        expect(await verdict(guard, ipcMain, guard.kinds.grantedMediaRead, join(GRANTED, 'pic.png'))).toEqual(
+            DEFAULT_REJECT
+        );
+    });
+
+    it('grantedOrTempMediaRead refuses the same path', async () => {
+        const grants = {
+            resolveAllowed: vi.fn(async () => join(GRANTED, 'notes.txt')),
+            resolveEntry: vi.fn(async (x) => x),
+            canonicalize: vi.fn(async () => join(GRANTED, 'notes.txt')),
+        };
+        const { guard, ipcMain } = makeGuard({ grants, isMediaFile });
+        expect(await verdict(guard, ipcMain, guard.kinds.grantedOrTempMediaRead, join(GRANTED, 'pic.png'))).toEqual(
+            DEFAULT_REJECT
+        );
+    });
 });
 
 // Commit security review (2026-10-11): the direct-child check folded with JS toLowerCase(), which

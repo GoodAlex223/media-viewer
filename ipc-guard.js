@@ -8,7 +8,7 @@
 // is logged; it never throws. Pure CommonJS with no Electron import, so Vitest can load it.
 
 const path = require('path');
-const { isCleanAbsolute, asciiFold } = require('./path-grants');
+const { isCleanAbsolute, asciiFold, createMediaReadRule } = require('./path-grants');
 
 const DEFAULT_REJECT = Object.freeze({ success: false, error: 'Not permitted' });
 
@@ -74,17 +74,10 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMedi
     };
 
     const isString = (v) => typeof v === 'string';
-    const allowed = async (v) => (await grants.resolveAllowed(v)) !== null;
-    // Review M-a. A link in a granted folder may be READ only when its real target is a media
-    // file: symlinked media keeps working (CLIP, JXL decode, video probe), while a planted link to
-    // a key file or a document is still refused. Without isMediaFile, content reads stay strict.
-    const linkedMedia = async (v) => {
-        if (typeof isMediaFile !== 'function' || (await grants.resolveEntry(v)) === null) {
-            return false;
-        }
-        const target = await grants.canonicalize(v);
-        return target !== null && isMediaFile(path.extname(target).toLowerCase());
-    };
+    // Content reads (JXL decode, video probe, keyframes, CLIP) go through the one media-read rule
+    // the app scheme's media door also uses (path-grants.js). Without isMediaFile it refuses all.
+    const resolveMediaRead = createMediaReadRule({ grants, isMediaFile });
+    const mediaRead = async (v) => isString(v) && (await resolveMediaRead(v)) !== null;
     const isMediaName = (v) => typeof isMediaFile === 'function' && isMediaFile(path.extname(v).toLowerCase());
     const grantedEntry = async (v) => isString(v) && (await grants.resolveEntry(v)) !== null;
     const kinds = {
@@ -102,14 +95,9 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMedi
         // A move could otherwise rename a cache file of chosen text to any name under a grant.
         mediaEntry: async (v) => isString(v) && isMediaName(v) && (await grantedEntry(v)),
         mediaBasename: (v) => isPlainBasename(v, platform) && isMediaName(v),
-        // A read of a media file's content: a media file inside a grant, or a link from a granted
-        // folder to media. Every caller (JXL decode, video probe, keyframes, CLIP) reads media; the
-        // in-grant branch read ANY file until PR #78's close-out (B). Without isMediaFile, both refuse.
-        grantedMediaRead: async (v) =>
-            isString(v) && ((isMediaName(v) && (await allowed(v))) || (await linkedMedia(v))),
-        grantedOrTempMediaRead: async (v) =>
-            isString(v) &&
-            (tempDirs.isChildFile(v) || (isMediaName(v) && (await allowed(v))) || (await linkedMedia(v))),
+        // A read of a media file's content: see mediaRead above.
+        grantedMediaRead: mediaRead,
+        grantedOrTempMediaRead: async (v) => isString(v) && (tempDirs.isChildFile(v) || (await mediaRead(v))),
         binary: (v) => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
     };
     const int = (min, max) => (v) => Number.isSafeInteger(v) && v >= min && v <= max;
