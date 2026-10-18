@@ -11,7 +11,8 @@
                         "type": "command",
                         "command": "node",
                         "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-preload-bash.js"],
-                        "timeout": 10
+                        "timeout": 10,
+                        "onFailure": "block"
                     }
                 ]
             }
