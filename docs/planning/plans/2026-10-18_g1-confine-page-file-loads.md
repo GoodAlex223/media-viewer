@@ -36,7 +36,7 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
 - [x] **6. Policy header; vendored icons.**
 - [x] **7. Renderer network restrictions.**
 - [x] **8. Behaviour tests:** video seeking, encoded folder names, reload, settings migration.
-- [ ] **9. Architecture notes,** at stub level until merge.
+- [x] **9. Architecture notes,** at stub level until merge.
 - [ ] **10. Verification:**
   - unit, E2E and lint suites
   - manual real-folder session (user), on a **copy** of the user's profile (`MV_USER_DATA_DIR`), so the one-time settings move happens on the copy; the real profile's marker is checked absent afterwards
@@ -70,11 +70,22 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
     - **Task 6:** the content policy is now a response header, and the icon library is vendored. Its hash was checked against the release's published integrity value before commit, and again on the committed bytes.
     - **Task 7:** the renderer network restrictions are in. Every RED test from Task 1 now passes with its marker removed, and the main-process network control still passes.
     - **Task 8:** behaviour tests for video seeking, encoded folder names, reload and the settings migration. A mutation check showed each can fail. The video test needed a much larger clip: a small one passed even with seeking support removed.
+    - **Task 9:** CLAUDE.md and ARCHITECTURE.md describe the app scheme at stub level. The CLAUDE.md size warning fired: +1334 bytes, now 223 lines / 59,916 bytes (recorded for the size audit).
+    - **Task 10, so far:** unit, E2E and lint suites are green. A fresh whole-branch review found no confinement break and two Important findings, both fixed with tests that failed first:
+      - the one-time settings move now makes sure the settings are on disk before it records completion
+      - two defense-in-depth controls gained tests that fail when the control is removed
+
+      Six minor findings are deferred (listed locally; they reach BACKLOG at closeout).
 
 ## Key Discoveries
 
-_Filled in during execution._
+- **A small video can't test byte-range serving.** The player buffers a clip of a few hundred KB whole, so seeking works even with ranges ignored. The behaviour test uses a clip of tens of MB, and a mutation check proved it now fails without ranges.
+- **Chromium keeps localStorage writes in memory for a few seconds.** A completion marker written straight after a write can outlive the data it records. An explicit storage flush comes first.
+- **A test of existing code needs its own positive control.** The first probe for one of the controls passed with every control removed, so it was replaced by a check that a mutation can fail.
 
 ## Future Improvements
 
-_At least two, by closeout._
+- **JXL decoder bytes:** now that the page is served from the app scheme, the decoder's wasm could load with a same-origin fetch instead of the IPC hop. At the least, the stated reason in CLAUDE.md and main.js should be reworded.
+- **A deny-by-default permission handler for the window** (geolocation and similar), as one more defense-in-depth layer.
+- **Move kinds:** classify the extension with `asciiFold` rather than `toLowerCase()`, for consistency with the shared read rule. Harmless today.
+- **The deferred minor review findings**, listed in the local plan: window close during the settings move, the move's history entries, the icon library's source-map line, `MV_USER_DATA_DIR` validation, and three stale comments.

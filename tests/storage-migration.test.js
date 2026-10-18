@@ -109,6 +109,7 @@ describe('migrateStorage', () => {
             fs,
             loadOldOrigin: step('old'),
             loadNewOrigin: step('new'),
+            flush: step('flush'),
             executeJavaScript: vi.fn(async (code) => {
                 calls.push([code === READ_SCRIPT ? 'read' : 'write']);
                 if (failAt === 'read' && code === READ_SCRIPT) {
@@ -128,10 +129,10 @@ describe('migrateStorage', () => {
         expect(calls).toEqual([]);
     });
 
-    it('reads the old origin, writes the new one, then writes the marker, in that order', async () => {
+    it('reads the old origin, writes the new one, flushes it to disk, then writes the marker, in that order', async () => {
         const { deps, calls } = harness();
         expect(await migrateStorage(deps)).toEqual({ ran: true, keys: 1, written: 1 });
-        expect(calls.map((c) => c[0])).toEqual(['old', 'read', 'new', 'write', 'marker']);
+        expect(calls.map((c) => c[0])).toEqual(['old', 'read', 'new', 'write', 'flush', 'marker']);
         const marker = JSON.parse(calls.at(-1)[2]);
         expect(marker).toEqual({ version: 1, migratedAt: '2026-10-19T00:00:00.000Z', keys: 1, written: 1 });
     });
@@ -142,7 +143,7 @@ describe('migrateStorage', () => {
         expect(calls.map((c) => c[0])).toEqual(['old', 'read', 'new', 'marker']);
     });
 
-    it.each(['old', 'read', 'new', 'marker'])(
+    it.each(['old', 'read', 'new', 'flush', 'marker'])(
         'on a failure at %s: warns, writes no marker, never throws',
         async (failAt) => {
             const { deps, calls } = harness({ failAt });

@@ -19,6 +19,18 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(HERE, 'fixtures');
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 
+// Ends the app the way a crash would: no graceful quit, so storage Chromium still holds only in
+// memory never reaches disk. closeApp then only cleans up after it.
+async function killApp(app) {
+    const proc = app.process();
+    if (process.platform === 'win32') {
+        execFileSync('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore' });
+    } else {
+        proc.kill('SIGKILL');
+    }
+    await closeApp(app);
+}
+
 let electronApp;
 let page;
 let tmpFixtures;
@@ -211,21 +223,28 @@ test('settings under the old page origin are carried over once and never overwri
         await electronApp.evaluate(({ session }) => session.defaultSession.flushStorageData());
         await closeApp(electronApp);
 
-        // Launch 2, fresh marker path: the migration runs.
+        // Launch 2, fresh marker path: the migration runs. It ends in a hard kill, as a crash would:
+        // the marker must not be on disk unless the settings it records are too.
+        const readSeeded = () =>
+            page.evaluate(
+                (keys) => Object.fromEntries(keys.map((k) => [k, localStorage.getItem(k)])),
+                Object.keys(seeded)
+            );
         ({ electronApp, page } = await launchApp({ migrationMarker: marker }));
-        const got = await page.evaluate(
-            (keys) => Object.fromEntries(keys.map((k) => [k, localStorage.getItem(k)])),
-            Object.keys(seeded)
-        );
-        expect(got).toEqual({ ...seeded, 'mv-e2e-migration-preset': 'new' });
+        expect(await readSeeded()).toEqual({ ...seeded, 'mv-e2e-migration-preset': 'new' });
         const written = JSON.parse(await readFile(marker, 'utf-8'));
         expect(written.version).toBe(1);
         expect(written.keys).toBeGreaterThanOrEqual(Object.keys(seeded).length);
-        // A key the old origin gains after the migration…
+        await killApp(electronApp);
+
+        // Launch 3, same marker: the copied settings survived the kill. A key the old origin gains
+        // after the migration…
+        ({ electronApp, page } = await launchApp({ migrationMarker: marker }));
+        expect(await readSeeded()).toEqual({ ...seeded, 'mv-e2e-migration-preset': 'new' });
         await inOldOrigin(electronApp, setScript([['mv-e2e-migration-late', 'x']]));
         await closeApp(electronApp);
 
-        // Launch 3, same marker: …is never copied, because nothing runs again.
+        // Launch 4, same marker: …is never copied, because nothing runs again.
         ({ electronApp, page } = await launchApp({ migrationMarker: marker }));
         expect(await page.evaluate(() => localStorage.getItem('mv-e2e-migration-late'))).toBeNull();
         expect(JSON.parse(await readFile(marker, 'utf-8'))).toEqual(written);

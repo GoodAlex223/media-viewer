@@ -32,8 +32,8 @@ const INDEX_URL = `${APP_ORIGIN}/index.html`;
 const MIGRATE_URL = `${APP_ORIGIN}/migrate.html`;
 
 // The page's Content-Security-Policy, sent as a response header on every app file (G1 I1, spec
-// D8): a worker takes its policy from its own script's response, so a <meta> tag never reached
-// workers. 'wasm-unsafe-eval' and inline styles are needed (measured by the E2E walk, G1 § 6.1);
+// D8), so it also governs each worker, which takes its policy from its own script's response.
+// 'wasm-unsafe-eval' and inline styles are needed (measured by the E2E walk, G1 § 6.1);
 // frame-ancestors works only as a header.
 const APP_CSP = [
     "default-src 'none'",
@@ -228,6 +228,11 @@ async function createWindow() {
         fs,
         loadOldOrigin: () => win.loadFile(path.join(APP_ROOT, 'migrate.html')),
         loadNewOrigin: () => win.loadURL(MIGRATE_URL),
+        // flushStorageData() returns nothing to await; the pause lets the write reach disk.
+        flush: async () => {
+            win.webContents.session.flushStorageData();
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        },
         executeJavaScript: (code) => win.webContents.executeJavaScript(code),
         logger,
     });

@@ -4,7 +4,7 @@
 // (folders, shortcuts, recent folders) would seem to vanish. main.js drives it in the main window
 // before the app page loads: a static page under the old origin is read, the same page under the
 // new origin is written (only keys still absent, so it never overwrites a newer value and a re-run
-// adds nothing), then a marker records completion. Any failure is logged and retried next launch;
+// adds nothing) and flushed to disk, then a marker records completion. Any failure is logged and retried next launch;
 // it never blocks startup. The old store is left as it is. Pure CommonJS, no Electron import.
 
 const path = require('path');
@@ -63,6 +63,7 @@ async function migrateStorage({
     fs,
     loadOldOrigin,
     loadNewOrigin,
+    flush,
     executeJavaScript,
     logger,
     now = Date.now,
@@ -80,7 +81,13 @@ async function migrateStorage({
             throw new Error('the old store did not validate');
         }
         await loadNewOrigin();
-        const written = pairs.length > 0 ? await executeJavaScript(buildWriteScript(pairs)) : 0;
+        let written = 0;
+        if (pairs.length > 0) {
+            written = await executeJavaScript(buildWriteScript(pairs));
+            // Chromium holds localStorage writes in memory for a few seconds (measured: a kill 2 s
+            // after the write lost them). The marker stops every retry, so it must not reach disk first.
+            await flush();
+        }
         await fs.mkdir(path.dirname(markerPath), { recursive: true });
         const marker = {
             version: MIGRATION_VERSION,

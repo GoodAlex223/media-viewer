@@ -353,3 +353,24 @@ describe('isBlockedEgress', () => {
         }
     );
 });
+
+// Source-text wiring check (main.js needs Electron, so it is not unit-loadable): the renderer
+// network restrictions and the policy header are installed, in the shape the spec gives (§ 7).
+describe('main.js wiring of the renderer restrictions', () => {
+    const src = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
+
+    it.each([
+        ['the request filter', 'session.defaultSession.webRequest.onBeforeRequest((details, callback) => {'],
+        ['its cancel', 'if (isBlockedEgress(details.url)) {'],
+        ['the cancel itself', 'callback({ cancel: true });'],
+        [
+            'the session proxy',
+            "await session.defaultSession.setProxy({ proxyRules: '127.0.0.1:9', proxyBypassRules: '<-loopback>' });",
+        ],
+        ['the WebRTC policy', "win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');"],
+        ['spellcheck off', 'spellcheck: false,'],
+        ['the policy header', 'csp: APP_CSP,'],
+    ])('installs %s', (_label, line) => {
+        expect(src).toContain(line);
+    });
+});

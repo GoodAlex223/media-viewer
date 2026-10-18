@@ -362,6 +362,26 @@ test.describe('G1 I1 — nothing leaves the renderer', () => {
         expect(arrived.http).toEqual([]);
     });
 
+    // The WebRTC policy leaves WebRTC no UDP socket to send from, so no STUN request can go out
+    // (spec § 3.4: a UDP host candidate is what a STUN request is sent from).
+    test('WebRTC gathers no UDP candidate', async () => {
+        const udpCandidates = await page.evaluate(async () => {
+            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:127.0.0.1:9' }] });
+            const found = [];
+            pc.onicecandidate = (e) => {
+                if (e.candidate && e.candidate.protocol === 'udp') {
+                    found.push(e.candidate.type);
+                }
+            };
+            pc.createDataChannel('probe');
+            await pc.setLocalDescription(await pc.createOffer());
+            await new Promise((r) => setTimeout(r, 3000));
+            pc.close();
+            return found;
+        });
+        expect(udpCandidates).toEqual([]);
+    });
+
     test('a WebRTC TURN connection to a local listener opens nothing', async () => {
         await page.evaluate(async (port) => {
             const pc = new RTCPeerConnection({
