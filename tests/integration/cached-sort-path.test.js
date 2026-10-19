@@ -18,7 +18,8 @@ const source = fs.readFileSync(path.join(__dirname, '..', '..', 'media-viewer.js
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
 function extractAsyncMethod(methodName) {
-    const regex = new RegExp(`^\\s{4}async\\s+${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
+    // The parameter list may hold one level of parentheses (a default like `isLive = () => true`).
+    const regex = new RegExp(`^\\s{4}async\\s+${methodName}\\(((?:[^()]|\\([^()]*\\))*)\\)\\s*\\{`, 'm');
     const match = source.match(regex);
     if (!match) {
         throw new Error(`Could not find async method: ${methodName}`);
@@ -112,10 +113,12 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
             sortedPaths: ['a.png', 'c.png'], // b.png missing → treated as new
         };
 
-        const stats = await applyCachedSortOrder.call(ctx, cachedData, 'clip');
+        const listBefore = ctx.mediaFiles;
+        const { order, stats } = await applyCachedSortOrder.call(ctx, cachedData, 'clip');
 
         expect(stats).toEqual({ cached: 2, removed: 0, added: 1 });
-        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(order.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
         // Hash branch must NOT have been taken — no on-demand hash computation
         expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
     });
@@ -141,10 +144,12 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
             sortedPaths: ['a.png', 'c.png'],
         };
 
-        const stats = await applyCachedSortOrder.call(ctx, cachedData, 'vptree');
+        const listBefore = ctx.mediaFiles;
+        const { order, stats } = await applyCachedSortOrder.call(ctx, cachedData, 'vptree');
 
         expect(stats).toEqual({ cached: 2, removed: 0, added: 1 });
-        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(order.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
         // Hash already cached, no on-demand extraction expected
         expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
     });
@@ -171,11 +176,13 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
             sortedPaths: ['a.png', 'c.png'],
         };
 
-        const stats = await applyCachedSortOrder.call(ctx, cachedData, undefined);
+        const listBefore = ctx.mediaFiles;
+        const { order, stats } = await applyCachedSortOrder.call(ctx, cachedData, undefined);
 
         expect(stats).toEqual({ cached: 2, removed: 0, added: 1 });
         // Hash branch reached safely — b inserted at index 0 by Hamming distance
-        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(order.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
         expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
     });
 });

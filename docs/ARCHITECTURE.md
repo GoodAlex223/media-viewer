@@ -142,9 +142,10 @@ User clicks "Sort by Similarity"
          ▼
 ┌─────────────────────┐
 │ Renderer: compute   │
-│ hashes for all      │
+│ hashes for snapshot │
 │ images (or load     │
-│ from IndexedDB)     │
+│ from                │
+│ .hash_cache.json)   │
 └──────────┬──────────┘
            │ postMessage(hashes)
            ▼
@@ -156,9 +157,10 @@ User clicks "Sort by Similarity"
            │ postMessage(sorted paths)
            ▼
 ┌─────────────────────┐
-│ Renderer: reorder   │
-│ file list, refresh  │
-│ display             │
+│ Renderer: apply     │
+│ now, or offer Show  │
+│ if the user acted   │
+│ (one apply function)│
 └─────────────────────┘
 ```
 

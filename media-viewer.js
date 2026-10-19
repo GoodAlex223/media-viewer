@@ -152,6 +152,7 @@ class MediaViewer {
         this.isComputingHashes = false;
         this.sortAbortController = null;
         this._similarityRunGen = 0; // Bumped per similarity run and by every folder load: a run that sees it move is stale
+        this._similarityOffer = null; // { entry, element }: a computed similarity order waiting on its sticky "Show"
         this.progressNotification = null; // Reusable progress notification
         this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
         this.sortingWorker = null; // Web Worker for sorting to prevent UI freeze
@@ -1289,9 +1290,13 @@ class MediaViewer {
         return `~${this.formatElapsed(totalSeconds)}`;
     }
 
+    // Returns the notification element. `options.sticky` (G2 PR 1, the similarity offer): the notification stays
+    // until closed by × or by its owner, is neither counted nor removed by the two prunes below, and its action
+    // button leaves the closing to the caller.
     showNotification(message, type = 'success', options = {}) {
+        const sticky = options.sticky === true;
         // Limit total notifications to 5, remove oldest when exceeded
-        const allNotifications = Array.from(this.notificationContainer.querySelectorAll('.notification'));
+        const allNotifications = Array.from(this.notificationContainer.querySelectorAll('.notification:not(.sticky)'));
         while (allNotifications.length >= 5) {
             allNotifications.shift().remove();
         }
@@ -1299,7 +1304,9 @@ class MediaViewer {
         // Limit info notifications to prevent UI freezing
         if (type === 'info') {
             // Remove old info notifications if more than 2 exist
-            const infoNotifications = Array.from(this.notificationContainer.querySelectorAll('.notification.info'));
+            const infoNotifications = Array.from(
+                this.notificationContainer.querySelectorAll('.notification.info:not(.sticky)')
+            );
             if (infoNotifications.length >= 2) {
                 // Remove oldest info notifications
                 infoNotifications.slice(0, infoNotifications.length - 1).forEach((n) => n.remove());
@@ -1307,7 +1314,7 @@ class MediaViewer {
         }
 
         const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
+        notification.className = sticky ? `notification ${type} sticky` : `notification ${type}`;
 
         // Create message text container
         const messageSpan = document.createElement('span');
@@ -1368,7 +1375,9 @@ class MediaViewer {
             actionBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 options.actionCallback();
-                closeNotification();
+                if (!sticky) {
+                    closeNotification();
+                }
             });
         }
 
@@ -1376,10 +1385,11 @@ class MediaViewer {
 
         // Auto-close: info/success - 2s, warning - 5s, error - 8s if enabled or keep visible
         const displayTime = type === 'error' ? (this.autoCloseErrors ? 8000 : 0) : type === 'warning' ? 5000 : 2000;
-        if (displayTime > 0) {
+        if (displayTime > 0 && !sticky) {
             const autoCloseTimeout = setTimeout(closeNotification, displayTime);
             closeBtn.addEventListener('click', () => clearTimeout(autoCloseTimeout), { once: true });
         }
+        return notification;
     }
 
     showError(message, options = {}) {
@@ -5709,6 +5719,7 @@ class MediaViewer {
     // so the config modal's AI-seeding option still works — that's the in-tournament equivalent
     // of sorting first.
     restoreOriginalOrderForTournament() {
+        this._dismissSimilarityOffer(); // a pending similarity order is not for Tournament mode (G2 PR 1)
         if ((this.isSortedBySimilarity || this.isSortedByPrediction) && this.originalMediaFiles.length > 0) {
             this.mediaFiles = SimilaritySort.alignToLive(
                 this.originalMediaFiles.map((f) => f.path),
@@ -7137,9 +7148,11 @@ class MediaViewer {
     }
 
     // A folder load or switch makes any similarity run stale. A run still computing is also aborted, so its
-    // worker stops, and its progress card is cleared here: the stale run's own ending touches nothing.
+    // worker stops, and its progress card is cleared here: the stale run's own ending touches nothing. A pending
+    // "Show" offer belongs to the folder being left, so it is dismissed.
     _invalidateSimilarityRun() {
         this._similarityRunGen++;
+        this._dismissSimilarityOffer();
         if (this.isComputingHashes) {
             this.sortAbortController?.abort();
             this.clearProgressNotification();
@@ -7192,6 +7205,10 @@ class MediaViewer {
             }
         }
 
+        // The press passed every refusal and the confirm: a Restore Order press and a new run both replace a
+        // pending "Show" offer (G2 PR 1). A refused press keeps it.
+        this._dismissSimilarityOffer();
+
         // Toggle sorting (skip restore when force re-sorting)
         if (this.isSortedBySimilarity && !forceResort) {
             // Restore original order: the snapshot's order over the files still listed, then any file
@@ -7234,7 +7251,13 @@ class MediaViewer {
         let newHashes = 0;
         let skipped = 0;
         let newSinceSave = 0; // hashes computed since the last hash-cache save
-        let committed = false;
+        // Past a commit, a Cancel press has nothing left to undo, so only staleness ends the run there. The catch
+        // classifies by state, stale first.
+        const endIfStale = () => {
+            if (this._isStaleSimilarityRun(run)) {
+                throw new Error('Sorting cancelled by user');
+            }
+        };
 
         try {
             this.isComputingHashes = true;
@@ -7269,7 +7292,6 @@ class MediaViewer {
                 this._assertSimilarityRunLive(run);
             }
             if (cachedSortData && cachedSortData.sortedPaths.length > 0) {
-                // Interim cache-hit path (T4 rewires it): applyCachedSortOrder still writes this.mediaFiles.
                 this.updateSortProgress({ phase: 'Loading cached sort order…' });
 
                 // Load hash cache for inserting new files
@@ -7278,57 +7300,57 @@ class MediaViewer {
                 addPhase('load', loadStart);
                 this._assertSimilarityRunLive(run);
 
-                // Restore Order's snapshot, taken right before the apply. A force re-sort from the sorted state
-                // keeps the existing one, so Restore Order still returns to the true disk order.
-                if (!this.isSortedBySimilarity) {
-                    this.originalMediaFiles = [...this.mediaFiles];
-                }
-                // Apply cached order — pass the captured algorithm explicitly so it threads through to
-                // insertNewFilesInSortedOrder even if the cached entry was written before the algorithm field
-                // existed (older caches).
+                // A cache hit is near-instant, so it applies directly (spec my call 3), through the one apply
+                // function. The captured algorithm is passed explicitly so it threads through to the placement
+                // even if the cached entry was written before the algorithm field existed (older caches).
+                const restoredLine = `✅ Restored cached ${algorithmName} order`;
+                const cachedAgo =
+                    typeof cachedSortData.timestamp === 'number'
+                        ? ` — cached ${this.formatTimeAgo(cachedSortData.timestamp)}`
+                        : '';
+                const entry = {
+                    ...cachedSortData,
+                    algorithm: run.algorithm,
+                    gen: run.gen,
+                    folder: run.folder,
+                    doneMessage: `${restoredLine}${cachedAgo}`,
+                };
                 const applyStart = performance.now();
-                const stats = await this.applyCachedSortOrder(cachedSortData, run.algorithm);
+                const result = await this._applySimilarityOrder(entry);
                 addPhase('apply', applyStart);
-                this._assertSimilarityRunLive(run);
 
-                // Save updated hash cache if new files were processed
-                if (stats.added > 0) {
-                    const saveStart = performance.now();
-                    await this.saveHashCache(run.folder);
-                    this._assertSimilarityRunLive(run);
-                    // Update sort cache with new files included
-                    const currentFile = this.mediaFiles[0];
-                    await this.saveSortCache(
-                        run.algorithm,
-                        this.mediaFiles.map((f) => f.path),
-                        currentFile ? currentFile.path : null,
-                        run.folder
-                    );
-                    addPhase('save', saveStart);
-                    this._assertSimilarityRunLive(run);
+                if (result.applied) {
+                    const { stats, committedPaths } = result;
+                    endIfStale();
+                    // Save the hashes and the order the placement added to, from the committed order
+                    if (stats.added > 0) {
+                        const saveStart = performance.now();
+                        await this.saveHashCache(run.folder);
+                        endIfStale();
+                        await this.saveSortCache(run.algorithm, committedPaths, committedPaths[0] ?? null, run.folder);
+                        addPhase('save', saveStart);
+                        endIfStale();
+                    }
+
+                    // Show success notification with cache stats
+                    const details = [];
+                    if (stats.cached > 0) details.push(`${stats.cached} cached`);
+                    if (stats.added > 0) details.push(`${stats.added} new`);
+                    if (stats.removed > 0) details.push(`${stats.removed} removed`);
+                    const detailText = details.length > 0 ? ` (${details.join(', ')})` : '';
+                    this.showNotification(`${restoredLine}${detailText}${cachedAgo}`, 'success');
+                    perf.outcome = 'done';
+                } else if (result.reason === 'busy') {
+                    // A file action holds the guard: the order waits on "Show" instead.
+                    this._offerSimilarityOrder(entry);
+                    perf.outcome = 'offered';
+                } else if (result.reason === 'stale') {
+                    throw new Error('Sorting cancelled by user'); // the catch classifies it as stale, by state
+                } else {
+                    perf.outcome = 'done'; // Tournament mode or an emptied list: nothing written
                 }
-
-                // Sorting completed from cache!
-                this.isSortedBySimilarity = true;
-                this._onOrderChanged('other');
-                this.currentIndex = 0;
+                // After the apply, never before: its placement re-creates the card.
                 this.clearProgressNotification();
-
-                // Show success notification with cache stats
-                let message = `✅ Restored cached ${algorithmName} order`;
-                const details = [];
-                if (stats.cached > 0) details.push(`${stats.cached} cached`);
-                if (stats.added > 0) details.push(`${stats.added} new`);
-                if (stats.removed > 0) details.push(`${stats.removed} removed`);
-                if (details.length > 0) message += ` (${details.join(', ')})`;
-                if (typeof cachedSortData.timestamp === 'number') {
-                    message += ` — cached ${this.formatTimeAgo(cachedSortData.timestamp)}`;
-                }
-                this.showNotification(message, 'success');
-
-                this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
-                committed = true;
-                perf.outcome = 'done';
             } else {
                 // No cache - perform full sorting
                 let sortedPaths;
@@ -7508,29 +7530,50 @@ class MediaViewer {
                 addPhase('save', saveStart);
                 this._assertSimilarityRunLive(run);
 
-                // Interim commit (T4 replaces it). Synchronous from reading the live list to assigning the new
-                // one: no await may fall in between, or a file moved meanwhile would come back.
-                const applyStart = performance.now();
-                // Restore Order's snapshot is taken here, at the commit, not at the press. A force re-sort from
-                // the sorted state keeps the existing one, so Restore Order still returns to the true disk order.
-                if (!this.isSortedBySimilarity) {
-                    this.originalMediaFiles = [...this.mediaFiles];
+                // The entry: the computed order in the .sort_cache.json shape (basenames, the conversion
+                // saveSortCache does), so a computed order and a cached one reach the screen the same way.
+                const sortedNames = [];
+                for (const p of sortedPaths) {
+                    sortedNames.push(await window.electronAPI.path.basename(p));
+                    this._assertSimilarityRunLive(run);
                 }
-                // The computed order over the live list: a file moved during the run is dropped, a file restored
-                // during it is kept (appended).
-                this.mediaFiles = SimilaritySort.alignToLive(sortedPaths, this.mediaFiles);
-                this.isSortedBySimilarity = true;
-                this._onOrderChanged('other');
-                this.currentIndex = 0;
+                const startFile = run.startPath ? await window.electronAPI.path.basename(run.startPath) : null;
+                this._assertSimilarityRunLive(run);
+                const entry = {
+                    gen: run.gen,
+                    folder: run.folder,
+                    algorithm: run.algorithm,
+                    sortedPaths: sortedNames,
+                    startFile,
+                    doneMessage: `✅ Sorted ${sortedCount} files with ${algorithmName}!`,
+                };
+
+                // A user who acted since the press (navigated, rated, switched mode) is not moved to a new order
+                // under their hands: the order waits on a sticky "Show" (spec D3, my call 2).
+                if (SimilaritySort.userActedSince(run.mark, SimilaritySort.takeUserMark(this))) {
+                    this._offerSimilarityOrder(entry);
+                    perf.outcome = 'offered';
+                } else {
+                    const applyStart = performance.now();
+                    const result = await this._applySimilarityOrder(entry);
+                    addPhase('apply', applyStart);
+                    if (result.applied) {
+                        endIfStale();
+                        this.showNotification(entry.doneMessage, 'success');
+                        perf.outcome = 'done';
+                    } else if (result.reason === 'busy') {
+                        // A file action holds the guard: the order waits on "Show" instead.
+                        this._offerSimilarityOrder(entry);
+                        perf.outcome = 'offered';
+                    } else if (result.reason === 'stale') {
+                        // Cannot happen right after the assert above; ends the run as stale if it does.
+                        throw new Error('Sorting cancelled by user');
+                    } else {
+                        perf.outcome = 'done'; // Tournament mode or an emptied list: nothing written
+                    }
+                }
+                // After the apply or the offer, never before: the apply's placement re-creates the card.
                 this.clearProgressNotification();
-
-                // Show success notification
-                this.showNotification(`✅ Sorted ${sortedCount} files with ${algorithmName}!`, 'success');
-
-                this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Restore Order';
-                committed = true;
-                perf.outcome = 'done';
-                addPhase('apply', applyStart);
             }
         } catch (error) {
             // Classified by state, never by the message (spec § 6.6): stale first, then cancelled, else failed.
@@ -7582,15 +7625,122 @@ class MediaViewer {
                 );
             this._logSortPerf(perf);
         }
+    }
 
-        // Show first media after sorting (separate error handling)
-        if (committed) {
-            try {
-                await this.showMedia();
-            } catch (mediaError) {
-                console.error('Error showing media after sort:', mediaError);
-                // Don't undo the sort - media loading is separate concern
-                this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
+    // The one way a similarity order reaches the screen (G2 PR 1, spec § 8, A4): a computed run, a cache hit and
+    // "Show" all come here. It computes the order over the files listed now, waits for an in-flight render, then
+    // commits synchronously, or declines and writes nothing. `entry`: { gen, folder, algorithm, sortedPaths
+    // (basenames, the .sort_cache.json shape), startFile, doneMessage }.
+    async _applySimilarityOrder(entry) {
+        const { order, stats } = await this.applyCachedSortOrder(
+            entry,
+            entry.algorithm,
+            () => !this._isStaleSimilarityRun(entry)
+        );
+        await this._waitForRenderIdle();
+
+        // No await from here to the end of the commit: a file moved during one would come back.
+        if (this._isStaleSimilarityRun(entry)) {
+            return { applied: false, reason: 'stale' };
+        }
+        if (this.isTournamentMode) {
+            return { applied: false, reason: 'tournament' };
+        }
+        if (this._fileOpInFlight) {
+            // A file action is moving files: a reorder now would leave the screen and the cursor on different
+            // files when it finishes. The caller offers "Show" instead.
+            return { applied: false, reason: 'busy' };
+        }
+        if (this.mediaFiles.length === 0) {
+            return { applied: false, reason: 'empty' };
+        }
+        // Restore Order's snapshot is taken here, at the commit. A force re-sort from the sorted state keeps the
+        // existing one, so Restore Order still returns to the true disk order.
+        if (!this.isSortedBySimilarity) {
+            this.originalMediaFiles = [...this.mediaFiles];
+        }
+        // The computed order over the live list: a file moved since is dropped, a file restored after the
+        // placement ran is kept (appended).
+        this.mediaFiles = SimilaritySort.alignToLive(
+            order.map((f) => f.path),
+            this.mediaFiles
+        );
+        this.isSortedBySimilarity = true;
+        this._onOrderChanged('other');
+        this.currentIndex = 0;
+        const label = this.sortSimilarityBtn?.querySelector('.btn-label');
+        if (label) {
+            label.textContent = 'Restore Order';
+        }
+        const committedPaths = this.mediaFiles.map((f) => f.path);
+
+        try {
+            await this.showMedia();
+        } catch (mediaError) {
+            console.error('Error showing media after sort:', mediaError);
+            // Don't undo the sort - media loading is separate concern
+            this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
+        }
+        return { applied: true, stats, committedPaths };
+    }
+
+    // A computed order the user did not ask to see yet: a sticky "Similarity order ready — Show". One offer at a
+    // time; a new one replaces the earlier one.
+    _offerSimilarityOrder(entry) {
+        this._dismissSimilarityOffer();
+        this._similarityOffer = {
+            entry,
+            element: this.showNotification('Similarity order ready', 'success', {
+                sticky: true,
+                actionButton: 'Show',
+                actionCallback: () => this._onSimilarityShow(),
+            }),
+        };
+    }
+
+    // Dismissed by a folder switch, a new similarity press, Tournament entry and an AI sort, and by Show itself.
+    _dismissSimilarityOffer() {
+        this._similarityOffer?.element?.remove();
+        this._similarityOffer = null;
+    }
+
+    // The offer's "Show". It runs outside any run, so it holds no sort flag; a refusal keeps the offer.
+    async _onSimilarityShow() {
+        const offer = this._similarityOffer;
+        if (!offer || this.isTournamentMode) {
+            return;
+        }
+        const { entry } = offer;
+        if (this._isStaleSimilarityRun(entry)) {
+            this._dismissSimilarityOffer();
+            return;
+        }
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
+            return;
+        }
+        if (this.isComputingHashes || this.isPredictionSorting) {
+            this.showNotification('Wait for the sort to finish', 'info');
+            return;
+        }
+        this._dismissSimilarityOffer();
+        try {
+            const result = await this._applySimilarityOrder(entry);
+            if (result.applied) {
+                this.showNotification(entry.doneMessage, 'success');
+            } else if (result.reason === 'busy') {
+                this._offerSimilarityOrder(entry);
+            }
+        } catch (error) {
+            // A folder switch during the apply made the entry stale: its placement stopped, and says nothing.
+            if (!this._isStaleSimilarityRun(entry)) {
+                console.error('Error applying the similarity order:', error);
+                this.showNotification(`❌ Error: ${error.message}`, 'error');
+            }
+        } finally {
+            // The placement may have drawn the progress card. Cleared unless a sort started meanwhile: that card
+            // is the newer sort's.
+            if (!this.isComputingHashes && !this.isPredictionSorting) {
+                this.clearProgressNotification();
             }
         }
     }
@@ -8017,12 +8167,21 @@ class MediaViewer {
         }
     }
 
-    async applyCachedSortOrder(cachedData, algorithm) {
-        // Get current file names in folder
+    // Computes a cached order over the files listed now and returns it with its stats; it never writes
+    // this.mediaFiles (G2 PR 1: _applySimilarityOrder commits). `isLive` is the caller's staleness check: after
+    // every await, a cancelled or stale placement throws before it stores a hash, reports progress or returns.
+    async applyCachedSortOrder(cachedData, algorithm, isLive = () => true) {
+        const assertLive = () => {
+            if (this.sortAbortController?.signal.aborted || !isLive()) {
+                throw new Error('Sorting cancelled by user');
+            }
+        };
+        // Get current file names in folder. A copy: a file action may splice the live list during the awaits.
         const currentFileNames = new Set();
         const fileNameToFile = new Map();
-        for (const file of this.mediaFiles) {
+        for (const file of [...this.mediaFiles]) {
             const fileName = await window.electronAPI.path.basename(file.path);
+            assertLive();
             currentFileNames.add(fileName);
             fileNameToFile.set(fileName, file);
         }
@@ -8046,25 +8205,43 @@ class MediaViewer {
         }
 
         // If we have new files, find best positions for them
+        let order;
         if (newFiles.length > 0 && cachedOrder.length > 0) {
             this.updateSortProgress({ phase: `Inserting ${newFiles.length} new files…` });
             // Prefer explicit algorithm from caller; fall back to the cache entry's algorithm
             // field (added in feature/clip-sort-followups). Old caches without either route
             // safely through the Hamming else-branch.
-            await this.insertNewFilesInSortedOrder(cachedOrder, newFiles, algorithm ?? cachedData.algorithm);
+            order = await this.insertNewFilesInSortedOrder(
+                cachedOrder,
+                newFiles,
+                algorithm ?? cachedData.algorithm,
+                isLive
+            );
+            assertLive();
         } else {
             // Just use cached order (new files at end if any)
-            this.mediaFiles = [...cachedOrder, ...newFiles];
+            order = [...cachedOrder, ...newFiles];
         }
 
         return {
-            cached: cachedOrder.length,
-            removed: removedFiles.length,
-            added: newFiles.length,
+            order,
+            stats: {
+                cached: cachedOrder.length,
+                removed: removedFiles.length,
+                added: newFiles.length,
+            },
         };
     }
 
-    async insertNewFilesInSortedOrder(sortedFiles, newFiles, algorithm) {
+    // Returns sortedFiles with newFiles placed by similarity; never writes this.mediaFiles. Throws
+    // 'Sorting cancelled by user' at the top of each iteration and after every await once the sort is aborted or
+    // `isLive()` turns false (G2 PR 1 R-T4a): the last await must not resolve into a hash write or a progress call.
+    async insertNewFilesInSortedOrder(sortedFiles, newFiles, algorithm, isLive = () => true) {
+        const assertLive = () => {
+            if (this.sortAbortController?.signal.aborted || !isLive()) {
+                throw new Error('Sorting cancelled by user');
+            }
+        };
         const insertions = [];
 
         if (algorithm === 'clip') {
@@ -8124,6 +8301,7 @@ class MediaViewer {
                 }
                 if ((i + 1) % 25 === 0) {
                     await new Promise((resolve) => setTimeout(resolve, 0));
+                    assertLive();
                 }
             }
         } else {
@@ -8135,14 +8313,22 @@ class MediaViewer {
                 const newFile = newFiles[i];
 
                 if (!this.perceptualHashes.has(newFile.path)) {
+                    let hash;
+                    let hashFailed = false;
                     try {
-                        const hash = await this.computePerceptualHash(newFile.path);
-                        this.perceptualHashes.set(newFile.path, hash);
+                        hash = await this.computePerceptualHash(newFile.path);
                     } catch (error) {
+                        hashFailed = true;
                         console.warn(`Failed to compute hash for ${newFile.path}:`, error);
+                    }
+                    // Before the hash is stored: a stale placement must not put a folder's hashes into the map
+                    // of the folder open now (spec A6).
+                    assertLive();
+                    if (hashFailed) {
                         insertions.push({ file: newFile, index: sortedFiles.length, distance: Infinity });
                         continue;
                     }
+                    this.perceptualHashes.set(newFile.path, hash);
                 }
 
                 const newHash = this.perceptualHashes.get(newFile.path);
@@ -8190,6 +8376,7 @@ class MediaViewer {
                 }
                 if ((i + 1) % 25 === 0) {
                     await new Promise((resolve) => setTimeout(resolve, 0));
+                    assertLive();
                 }
             }
         }
@@ -8202,7 +8389,7 @@ class MediaViewer {
             result.splice(index, 0, file);
         }
 
-        this.mediaFiles = result;
+        return result;
     }
 
     // ==================== ZOOM METHODS ====================
@@ -9761,6 +9948,7 @@ class MediaViewer {
         if (this._refuseIfNeedsRegrant(['like', 'dislike'], 'sort')) return;
 
         this.isPredictionSorting = true;
+        this._dismissSimilarityOffer(); // the AI order replaces a pending similarity order (G2 PR 1, A9)
         this.updateSortPredictionButton(); // the re-sort chip hides while a sort runs
         this.sortAbortController = new AbortController();
         const runId = ++this.sortRunId;

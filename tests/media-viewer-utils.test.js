@@ -57,7 +57,8 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
 function extractAsyncMethod(methodName) {
     // Match "async methodName(params) {" pattern for async class methods
-    const regex = new RegExp(`^\\s{4}async\\s+${methodName}\\(([^)]*)\\)\\s*\\{`, 'm');
+    // The parameter list may hold one level of parentheses (a default like `isLive = () => true`).
+    const regex = new RegExp(`^\\s{4}async\\s+${methodName}\\(((?:[^()]|\\([^()]*\\))*)\\)\\s*\\{`, 'm');
     const match = source.match(regex);
     if (!match) {
         throw new Error(`Could not find async method: ${methodName}`);
@@ -490,10 +491,12 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             ]),
         });
 
-        await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'clip');
+        const listBefore = ctx.mediaFiles;
+        const out = await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'clip');
 
         // b ends up at index 0 (adjacent to a, prepended)
-        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(out.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
     });
 
     it('CLIP path: appends new file at end when no CLIP vector', async () => {
@@ -509,9 +512,11 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             ]),
         });
 
-        await insertNewFilesInSortedOrder.call(ctx, [a, c], [noVec], 'clip');
+        const listBefore = ctx.mediaFiles;
+        const out = await insertNewFilesInSortedOrder.call(ctx, [a, c], [noVec], 'clip');
 
-        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png', '/no-vec.png']);
+        expect(out.map((f) => f.path)).toEqual(['/a.png', '/c.png', '/no-vec.png']);
+        expect(ctx.mediaFiles).toBe(listBefore);
     });
 
     it('hash path: regression guard — algorithm !== "clip" still uses Hamming', async () => {
@@ -533,9 +538,11 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             // computePerceptualHash should not be called when hash already cached
         });
 
-        await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree');
+        const listBefore = ctx.mediaFiles;
+        const out = await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree');
 
-        expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(out.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(ctx.mediaFiles).toBe(listBefore);
     });
 
     it('CLIP path: throws "Sorting cancelled by user" when sortAbortController.signal.aborted before first iteration', async () => {
@@ -557,8 +564,8 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             'Sorting cancelled by user'
         );
 
-        // mediaFiles must remain untouched (insertNewFilesInSortedOrder only assigns
-        // this.mediaFiles after the loop completes, so throwing mid-loop preserves the original)
+        // mediaFiles must remain untouched (insertNewFilesInSortedOrder never assigns this.mediaFiles: it
+        // returns the order, and _applySimilarityOrder commits it)
         expect(ctx.mediaFiles).toBe(originalMediaFiles);
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/a.png', '/c.png']);
     });
@@ -604,16 +611,60 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             hashes.set(p, ((i % 16) + 16).toString(2).slice(1));
         }
         const ctx = makeCtx({ mediaFiles: [anchorA, anchorZ], perceptualHashes: hashes });
+        const listBefore = ctx.mediaFiles;
 
-        await insertNewFilesInSortedOrder.call(ctx, [anchorA, anchorZ], newFiles, 'vptree');
+        const out = await insertNewFilesInSortedOrder.call(ctx, [anchorA, anchorZ], newFiles, 'vptree');
 
-        const paths = ctx.mediaFiles.map((f) => f.path);
+        expect(ctx.mediaFiles).toBe(listBefore);
+        const paths = out.map((f) => f.path);
         expect(paths).toHaveLength(32);
         expect(new Set(paths).size).toBe(32); // no duplicates
         expect(paths).toContain('/a.png');
         expect(paths).toContain('/z.png');
         for (let i = 0; i < 30; i++) expect(paths).toContain(`/n${i}.png`);
     });
+
+    // G2 PR 1 T4 (R-T4a): the top-of-iteration check alone let the last iteration's await resolve into a
+    // hash write and a progress call that revives a cleared card. A stale apply would put the old folder's
+    // hashes into the new folder's map (spec A6).
+    it.each([
+        ['made stale', (_ctx, live) => live.stale()],
+        ['cancelled', (ctx) => ctx.sortAbortController.abort()],
+    ])(
+        'hash path: a placement %s mid-hash stores no hash and reports no progress after that point',
+        async (_l, end) => {
+            const a = { path: '/a.png' };
+            const c = { path: '/c.png' };
+            const b = { path: '/b.png' };
+            let isLiveNow = true;
+            const live = { stale: () => (isLiveNow = false) };
+            let progressAtEnd = null;
+            const ctx = makeCtx({
+                mediaFiles: [a, b, c],
+                perceptualHashes: new Map([
+                    ['/a.png', '0000'],
+                    ['/c.png', '1111'],
+                ]),
+                sortAbortController: new AbortController(),
+                updateSortProgress: vi.fn(),
+                computePerceptualHash: vi.fn(async () => {
+                    end(ctx, live);
+                    progressAtEnd = ctx.updateSortProgress.mock.calls.length;
+                    return '0001';
+                }),
+            });
+            const listBefore = ctx.mediaFiles;
+
+            await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree', () => isLiveNow)).rejects.toThrow(
+                'Sorting cancelled by user'
+            );
+
+            expect(ctx.computePerceptualHash).toHaveBeenCalledOnce();
+            expect(ctx.perceptualHashes.has('/b.png')).toBe(false);
+            expect(ctx.updateSortProgress.mock.calls.length).toBe(progressAtEnd);
+            expect(ctx.mediaFiles).toBe(listBefore);
+        }
+    );
 });
 
 describe('applyCachedSortOrder (algorithm threading)', () => {
@@ -630,8 +681,9 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
             // (real impl is async; just mirror the contract)
             updateProgressNotification() {},
             updateSortProgress() {},
-            async insertNewFilesInSortedOrder(_sortedFiles, _newFiles, algorithm) {
+            async insertNewFilesInSortedOrder(sortedFiles, newFiles, algorithm) {
                 captured.algorithm = algorithm;
+                return [...sortedFiles, ...newFiles];
             },
         };
     }
@@ -658,7 +710,12 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
         // mediaFiles has /a.png and /b.png; cachedData has only /a.png so /b.png is "new"
         const cachedData = { sortedPaths: ['a.png'] };
 
-        await applyCachedSortOrder.call(ctx, cachedData, 'clip');
+        const listBefore = ctx.mediaFiles;
+        const result = await applyCachedSortOrder.call(ctx, cachedData, 'clip');
+
+        expect(result.order.map((f) => f.path)).toEqual(['/a.png', '/b.png']);
+        expect(result.stats).toEqual({ cached: 1, removed: 0, added: 1 });
+        expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
 
         expect(captured.algorithm).toBe('clip');
     });
@@ -668,7 +725,12 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
         const ctx = makeCtx(captured);
         const cachedData = { sortedPaths: ['a.png'], algorithm: 'mst' };
 
-        await applyCachedSortOrder.call(ctx, cachedData, undefined);
+        const listBefore = ctx.mediaFiles;
+        const result = await applyCachedSortOrder.call(ctx, cachedData, undefined);
+
+        expect(result.order.map((f) => f.path)).toEqual(['/a.png', '/b.png']);
+        expect(result.stats).toEqual({ cached: 1, removed: 0, added: 1 });
+        expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
 
         expect(captured.algorithm).toBe('mst');
     });
@@ -679,7 +741,12 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
         // Cache entry says 'mst', but caller is now on 'clip' — caller wins
         const cachedData = { sortedPaths: ['a.png'], algorithm: 'mst' };
 
-        await applyCachedSortOrder.call(ctx, cachedData, 'clip');
+        const listBefore = ctx.mediaFiles;
+        const result = await applyCachedSortOrder.call(ctx, cachedData, 'clip');
+
+        expect(result.order.map((f) => f.path)).toEqual(['/a.png', '/b.png']);
+        expect(result.stats).toEqual({ cached: 1, removed: 0, added: 1 });
+        expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
 
         expect(captured.algorithm).toBe('clip');
     });
@@ -690,10 +757,61 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
         // Old cache file with no algorithm field, caller also passes nothing
         const cachedData = { sortedPaths: ['a.png'] };
 
-        await applyCachedSortOrder.call(ctx, cachedData, undefined);
+        const listBefore = ctx.mediaFiles;
+        const result = await applyCachedSortOrder.call(ctx, cachedData, undefined);
+
+        expect(result.order.map((f) => f.path)).toEqual(['/a.png', '/b.png']);
+        expect(result.stats).toEqual({ cached: 1, removed: 0, added: 1 });
+        expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
 
         // undefined → routes through Hamming else-branch in insertNewFilesInSortedOrder (safe default)
         expect(captured.algorithm).toBeUndefined();
+    });
+
+    it('with no new files it returns the cached order and writes nothing (G2 PR 1 T4)', async () => {
+        const captured = {};
+        const ctx = makeCtx(captured);
+        const listBefore = ctx.mediaFiles;
+
+        const result = await applyCachedSortOrder.call(ctx, { sortedPaths: ['b.png', 'gone.png', 'a.png'] }, 'vptree');
+
+        expect(result.order.map((f) => f.path)).toEqual(['/b.png', '/a.png']);
+        expect(result.stats).toEqual({ cached: 2, removed: 1, added: 0 });
+        expect(captured.algorithm).toBeUndefined(); // no placement ran
+        expect(ctx.mediaFiles).toBe(listBefore);
+    });
+
+    // G2 PR 1 T4 (R-T4a): the per-file basename IPC is an await too; a stale apply stops right after it.
+    it('a placement made stale during the basename IPC stops there: no placement, no progress', async () => {
+        const captured = {};
+        const ctx = makeCtx(captured);
+        ctx.updateSortProgress = vi.fn();
+        let isLiveNow = true;
+        globalThis.window.electronAPI.path.basename = async (p) => {
+            isLiveNow = false;
+            return p.split('/').pop();
+        };
+        const listBefore = ctx.mediaFiles;
+
+        await expect(
+            applyCachedSortOrder.call(ctx, { sortedPaths: ['a.png'] }, 'vptree', () => isLiveNow)
+        ).rejects.toThrow('Sorting cancelled by user');
+
+        expect(captured.algorithm).toBeUndefined(); // insertNewFilesInSortedOrder never ran
+        expect(ctx.updateSortProgress).not.toHaveBeenCalled();
+        expect(ctx.mediaFiles).toBe(listBefore);
+    });
+
+    it('passes isLive through to insertNewFilesInSortedOrder', async () => {
+        const ctx = makeCtx({});
+        let seen = null;
+        ctx.insertNewFilesInSortedOrder = async (sortedFiles, newFiles, _algorithm, isLive) => {
+            seen = isLive;
+            return [...sortedFiles, ...newFiles];
+        };
+        const isLive = () => true;
+        await applyCachedSortOrder.call(ctx, { sortedPaths: ['a.png'] }, 'vptree', isLive);
+        expect(seen).toBe(isLive);
     });
 });
 
@@ -1439,6 +1557,7 @@ describe('handleSortByPrediction lifecycle', () => {
             _pendingStaleMark: null,
             _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
             _waitForRenderIdle: extractAsyncMethod('_waitForRenderIdle'),
+            _dismissSimilarityOffer: vi.fn(),
             ...overrides,
         };
         ctx._phases = phases;
@@ -1458,6 +1577,8 @@ describe('handleSortByPrediction lifecycle', () => {
         // dependency at all) — handleSortByPrediction's finally is the single owner, on the
         // success path too, not just on cancel.
         expect(ctx.clearProgressNotification).toHaveBeenCalled();
+        // G2 PR 1 (A9): an AI sort replaces any pending similarity offer.
+        expect(ctx._dismissSimilarityOffer).toHaveBeenCalledOnce();
     });
 
     it('takes the out-of-date mark before training reads the folders, and clears the pending mark on exit (G2)', async () => {

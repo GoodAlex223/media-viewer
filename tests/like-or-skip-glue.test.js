@@ -16,12 +16,13 @@ globalThis.LikeOrSkip = LikeOrSkip;
 globalThis.SimilaritySort = SimilaritySort;
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const METHOD_HEADER = /^ {4}(async\s+)?([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{\s*$/;
+// The parameter list may hold one level of parentheses (a default like `isLive = () => true`).
+const METHOD_HEADER = /^ {4}(async\s+)?([A-Za-z_$][\w$]*)\s*\(((?:[^()]|\([^()]*\))*)\)\s*\{\s*$/;
 const NOT_METHODS = new Set(['if', 'for', 'while', 'switch', 'catch', 'function']);
 
 /** A MediaViewer method as a callable (the technique of media-viewer-utils.test.js, sync or async). */
 function extract(name) {
-    const match = source.match(new RegExp(`^ {4}(async\\s+)?${name}\\(([^)]*)\\)\\s*\\{`, 'm'));
+    const match = source.match(new RegExp(`^ {4}(async\\s+)?${name}\\(((?:[^()]|\\([^()]*\\))*)\\)\\s*\\{`, 'm'));
     if (!match) {
         throw new Error(`Could not find method: ${name}`);
     }
@@ -233,6 +234,7 @@ describe('a failed similarity sort leaves the list and the skips as they are (sp
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             _isStaleSimilarityRun: extract('_isStaleSimilarityRun'),
             _assertSimilarityRunLive: extract('_assertSimilarityRunLive'),
+            _dismissSimilarityOffer: vi.fn(),
             _logSortPerf: vi.fn(),
             saveHashCache: vi.fn(),
             showNotification: vi.fn(),
@@ -273,14 +275,13 @@ describe('every method that reassigns mediaFiles announces it through _onOrderCh
         'handleSortBySimilarity',
         'applyPredictionSortResult',
         'handleSortByPrediction',
+        '_applySimilarityOrder',
     ];
     // Reviewed exemptions: assignments that are not a new order on screen, and why.
     const EXEMPT = {
         constructor: 'the initial empty list',
         _switchToFolderNow:
             "change-folder's reset (G4): empties the list once its file-op refusal passed, then loadFolder announces the folder",
-        applyCachedSortOrder: "runs inside handleSortBySimilarity's cache path, which announces on success",
-        insertNewFilesInSortedOrder: 'runs inside applyCachedSortOrder (same)',
         _undoSkipBatch: 'a batch undo re-inserts files; the others keep their order',
     };
 
@@ -1080,8 +1081,7 @@ describe('header actions refuse while a file action is in flight (G2 review R6)'
                 loadSortCache: vi.fn(async () => ({ sortedPaths: ['/f/d', '/f/c', '/f/b', '/f/a'], timestamp: null })),
                 loadHashCache: vi.fn(async () => 0),
                 applyCachedSortOrder: vi.fn(async function () {
-                    this.mediaFiles = [...this.mediaFiles].reverse();
-                    return { cached: 4, added: 0, removed: 0 };
+                    return { order: [...this.mediaFiles].reverse(), stats: { cached: 4, added: 0, removed: 0 } };
                 }),
                 saveHashCache: vi.fn(async () => {}),
                 saveSortCache: vi.fn(async () => {}),
