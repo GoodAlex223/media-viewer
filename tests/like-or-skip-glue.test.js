@@ -3,15 +3,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as LikeOrSkip from '../like-or-skip.js';
+import * as SimilaritySort from '../similarity-sort.js';
 
 const require = createRequire(import.meta.url);
 const fs = require('fs');
 const path = require('path');
 const source = fs.readFileSync(path.join(__dirname, '..', 'media-viewer.js'), 'utf-8');
 
-// media-viewer.js imports the module as a namespace. An extracted method runs in the global scope, so
-// it resolves `LikeOrSkip` through the global object.
+// media-viewer.js imports each module as a namespace. An extracted method runs in the global scope, so
+// it resolves `LikeOrSkip` and `SimilaritySort` through the global object.
 globalThis.LikeOrSkip = LikeOrSkip;
+globalThis.SimilaritySort = SimilaritySort;
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const METHOD_HEADER = /^ {4}(async\s+)?([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{\s*$/;
@@ -198,11 +200,20 @@ describe('removeFileFromList forgets the skip and can defer the bulk-rated save'
     });
 });
 
-describe('a failed similarity sort keeps the skips (spec D1)', () => {
+describe('a failed similarity sort leaves the list and the skips as they are (spec D1; G2 PR 1, T3)', () => {
     const handleSortBySimilarity = extract('handleSortBySimilarity');
+    let origStorage;
+    beforeEach(() => {
+        origStorage = globalThis.localStorage;
+        globalThis.localStorage = { getItem: () => null };
+    });
+    afterEach(() => {
+        globalThis.localStorage = origStorage;
+    });
 
-    it('puts back the order it started from without announcing a reorder, and bumps the generation', async () => {
+    it('writes nothing to the list, announces no reorder and leaves the generation alone', async () => {
         const files = media('a', 'b', 'c');
+        const list = [...files];
         const ctx = {
             isTournamentMode: false,
             isPredictionSorting: false,
@@ -211,19 +222,25 @@ describe('a failed similarity sort keeps the skips (spec D1)', () => {
             sortAbortController: null,
             sortAlgorithm: 'vptree',
             baseFolderPath: '/f',
-            mediaFiles: [...files],
+            mediaFiles: list,
             originalMediaFiles: [],
             currentIndex: 0,
+            moveHistory: [],
             likeOrSkip: activeTracker('/f/a', '/f/b'),
             _orderGeneration: 0,
+            _similarityRunGen: 0,
             _onOrderChanged: vi.fn(),
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            _isStaleSimilarityRun: extract('_isStaleSimilarityRun'),
+            _assertSimilarityRunLive: extract('_assertSimilarityRunLive'),
+            _logSortPerf: vi.fn(),
+            saveHashCache: vi.fn(),
             showNotification: vi.fn(),
             clearProgressNotification: vi.fn(),
             showMedia: vi.fn(),
             sortSimilarityBtn: { disabled: false, querySelector: () => ({ textContent: '' }) },
-            // loadSortCache is the first collaborator called after the originalMediaFiles snapshot
-            // (forceResort is false, so deleteSortCache is skipped): its throw drives the catch.
+            // loadSortCache is the run's first collaborator (forceResort is false, so deleteSortCache is
+            // skipped): its throw drives the catch.
             loadSortCache: vi.fn(() => {
                 throw new Error('boom');
             }),
@@ -237,10 +254,12 @@ describe('a failed similarity sort keeps the skips (spec D1)', () => {
 
         expect(ctx.loadSortCache).toHaveBeenCalledOnce();
         expect(ctx._onOrderChanged).not.toHaveBeenCalled();
-        expect(ctx._orderGeneration).toBe(1);
+        expect(ctx._orderGeneration).toBe(0);
         expect(ctx.likeOrSkip.active).toBe(true);
         expect([...ctx.likeOrSkip.skipped]).toEqual(['/f/a', '/f/b']);
+        expect(ctx.mediaFiles).toBe(list);
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/f/a', '/f/b', '/f/c']);
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('failed');
         const messages = ctx.showNotification.mock.calls.map((c) => String(c[0]));
         expect(messages.filter((m) => m.includes('Skipped list cleared'))).toEqual([]);
     });
@@ -1096,12 +1115,13 @@ describe('header actions refuse while a file action is in flight (G2 review R6)'
             expect(untouched(ctx)).toEqual(before);
         });
 
+        // The press only aborts (G2 PR 1, A3): the run's end shows "❌ Sorting cancelled" once it unwinds.
         it('Cancel stays live: a running similarity sort still aborts', async () => {
             const controller = new AbortController();
             const ctx = similarityCtx({ isComputingHashes: true, sortAbortController: controller });
             await handleSortBySimilarity.call(ctx);
             expect(controller.signal.aborted).toBe(true);
-            expect(ctx.showNotification.mock.calls).toEqual([['❌ Sorting cancelled', 'info']]);
+            expect(ctx.showNotification).not.toHaveBeenCalled();
         });
     });
 
@@ -1201,6 +1221,7 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
             hideDropZone: vi.fn(),
             loadFolder: vi.fn(async () => {}),
             showNotification: vi.fn(),
+            _invalidateSimilarityRun: vi.fn(),
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             _folderLoadInFlight: false,
             _refuseIfFolderLoadInFlight() {

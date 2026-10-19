@@ -2040,6 +2040,27 @@ describe('_logSortPerf (G3)', () => {
         ]);
     });
 
+    // G2 PR 1 (A2): the similarity sort writes through the same method under its own label, and counts
+    // the snapshot it worked on, not the live list.
+    it('writes the label and file count it is given', () => {
+        const logPerf = vi.fn();
+        globalThis.window = { electronAPI: { logPerf } };
+        nowSpy = vi.spyOn(performance, 'now').mockReturnValue(1000);
+        logSortPerf.call(
+            { mediaFiles: [{}, {}, {}, {}, {}] },
+            {
+                label: 'Similarity sort',
+                files: 2,
+                start: 0,
+                outcome: 'offered',
+                phases: [['hash', 10, 'new 2, skipped 0']],
+            }
+        );
+        expect(logPerf.mock.calls).toEqual([
+            ['Similarity sort: outcome=offered total=1000ms | hash=10ms (new 2, skipped 0) | files=2'],
+        ]);
+    });
+
     // Ruling R1: `window = {}` (no electronAPI at all) makes `window.electronAPI.logPerf` throw a
     // TypeError, so only the method's try/catch can absorb it. `{ electronAPI: {} }` could not fail
     // under any single mutation (`logPerf?.()` on `{}` never throws).
@@ -4409,6 +4430,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             showError: vi.fn(),
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
+            _invalidateSimilarityRun: vi.fn(),
             _abortInFlightPredictionSort: vi.fn(abortInFlightPredictionSortImpl),
             _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
             _folderLoadInFlight: false,
@@ -6945,6 +6967,72 @@ describe('loadHashCache keeps only well-formed hashes (G1)', () => {
         const count = await loadHashCache.call(ctx);
         expect([...ctx.perceptualHashes.entries()]).toEqual([['/f/a.jpg', good]]);
         expect(count).toBe(1);
+    });
+});
+
+// G2 PR 1 (spec § 6.4): the hash and sort cache I/O names its folder, so a run that outlives its folder
+// can never read one folder's cache into another or write one folder's entries into another's file.
+describe('folder-explicit cache I/O (G2 PR 1, T3)', () => {
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    it('loadHashCache loads nothing when the folder changed during the read', async () => {
+        const loadHashCache = extractAsyncMethod('loadHashCache');
+        const before = new Map([['/g/x.jpg', '0101']]);
+        const ctx = { baseFolderPath: '/f', perceptualHashes: before };
+        globalThis.window = {
+            electronAPI: {
+                readFolderCache: vi.fn(async () => {
+                    ctx.baseFolderPath = '/g';
+                    return JSON.stringify({ 'a.jpg': '0101' });
+                }),
+                path: { join: (a, b) => `${a}/${b}` },
+            },
+        };
+        const count = await loadHashCache.call(ctx, '/f');
+        expect(ctx.perceptualHashes).toBe(before);
+        expect([...ctx.perceptualHashes.entries()]).toEqual([['/g/x.jpg', '0101']]);
+        expect(count).toBe(0);
+    });
+
+    it('saveHashCache writes nothing for a folder that is no longer open', async () => {
+        const saveHashCache = extractAsyncMethod('saveHashCache');
+        const writeFolderCache = vi.fn(async () => ({ success: true }));
+        globalThis.window = {
+            electronAPI: {
+                writeFolderCache,
+                path: { join: (a, b) => `${a}/${b}`, basename: (p) => p.split('/').pop() },
+            },
+        };
+        const ctx = {
+            baseFolderPath: '/f',
+            perceptualHashes: new Map([['/f/a.jpg', '0101']]),
+            showNotification: vi.fn(),
+        };
+        await saveHashCache.call(ctx, '/old');
+        expect(writeFolderCache).not.toHaveBeenCalled();
+    });
+
+    it('saveSortCache reads and writes the folder it was given', async () => {
+        const saveSortCache = extractAsyncMethod('saveSortCache');
+        const ctx = { baseFolderPath: '/f', showNotification: vi.fn() };
+        const readFolderCache = vi.fn(async () => {
+            ctx.baseFolderPath = '/g';
+            return null;
+        });
+        const writeFolderCache = vi.fn(async () => ({ success: true }));
+        globalThis.window = {
+            electronAPI: { readFolderCache, writeFolderCache, path: { basename: (p) => p.split('/').pop() } },
+        };
+        await saveSortCache.call(ctx, 'vptree', ['/f/a.jpg', '/f/b.jpg'], '/f/a.jpg', '/f');
+        expect(readFolderCache).toHaveBeenCalledWith('/f', 'sort');
+        expect(writeFolderCache).toHaveBeenCalledOnce();
+        expect(writeFolderCache.mock.calls[0][0]).toBe('/f');
     });
 });
 

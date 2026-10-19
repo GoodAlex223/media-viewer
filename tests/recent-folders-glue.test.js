@@ -182,6 +182,7 @@ describe('loadFolder records only a folder that showed media (spec § 5)', () =>
             showNotification: vi.fn(),
             exitTournamentMode: vi.fn(),
             cancelBackgroundExtraction: vi.fn(),
+            _invalidateSimilarityRun: vi.fn(),
             _abortInFlightPredictionSort: vi.fn(),
             _onOrderChanged: vi.fn(),
             loadBulkRatedFile: vi.fn(async () => {}),
