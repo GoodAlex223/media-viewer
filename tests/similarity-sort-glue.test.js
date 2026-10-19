@@ -624,6 +624,53 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
         expect(ctx.showMedia).not.toHaveBeenCalled();
     });
 
+    it('declines (sorting) when an AI sort started during the wait, writing nothing (R-T4b)', async () => {
+        const ctx = applyCtx();
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            ctx.isPredictionSorting = true;
+        });
+        const listBefore = ctx.mediaFiles;
+        expect(await apply.call(ctx, sortEntry())).toEqual({ applied: false, reason: 'sorting' });
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+    });
+
+    it('with no signal (Show), an aborted shared sortAbortController is ignored (R-T4b)', async () => {
+        const foreign = new AbortController();
+        foreign.abort(); // e.g. an AI sort's Cancel
+        const ctx = applyCtx({
+            sortAbortController: foreign,
+            // d needs a hash: the placement runs its loop, every check included
+            perceptualHashes: new Map([
+                ['/f/c', '1111'],
+                ['/f/a', '0000'],
+                ['/f/e', '0011'],
+            ]),
+        });
+        const r = await apply.call(ctx, sortEntry());
+        expect(r).toMatchObject({ applied: true, committedPaths: ['/f/c', '/f/a', '/f/d', '/f/e'] });
+        expect(ctx.computePerceptualHash).toHaveBeenCalledOnce();
+    });
+
+    it('an aborted own signal stops the placement (R-T4b)', async () => {
+        const controller = new AbortController();
+        const ctx = applyCtx({
+            perceptualHashes: new Map([
+                ['/f/c', '1111'],
+                ['/f/a', '0000'],
+                ['/f/e', '0011'],
+            ]),
+        });
+        ctx.computePerceptualHash = vi.fn(async () => {
+            controller.abort();
+            return '0001';
+        });
+        const listBefore = ctx.mediaFiles;
+        await expect(apply.call(ctx, sortEntry(), controller.signal)).rejects.toThrow('Sorting cancelled by user');
+        expect(ctx.perceptualHashes.has('/f/d')).toBe(false);
+        expect(ctx.mediaFiles).toBe(listBefore);
+    });
+
     it('an emptied list is left alone', async () => {
         // every file moved away during the run
         const ctx = applyCtx({ mediaFiles: [] });
@@ -752,6 +799,27 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
         expect(ctx.showNotification).not.toHaveBeenCalled();
     });
 
+    it('Show whose apply meets a new AI sort writes nothing and does not re-offer (R-T4b, A9)', async () => {
+        const { ctx, entry } = showCtx({
+            _applySimilarityOrder: extract('_applySimilarityOrder'),
+            applyCachedSortOrder: vi.fn(async function () {
+                return { order: [...this.mediaFiles].reverse(), stats: { cached: 3, added: 0, removed: 0 } };
+            }),
+            mediaFiles: media('a', 'b', 'c'),
+            isTournamentMode: false,
+        });
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            ctx.isPredictionSorting = true; // an AI sort pressed while Show applies
+        });
+        const listBefore = ctx.mediaFiles;
+        await onShow.call(ctx);
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx._offerSimilarityOrder).not.toHaveBeenCalled();
+        expect(ctx._similarityOffer).toBeNull();
+        expect(ctx.showNotification).not.toHaveBeenCalledWith(entry.doneMessage, 'success');
+    });
+
     it('Show applies the offered order and reports it', async () => {
         const { ctx, entry } = showCtx();
         await onShow.call(ctx);
@@ -844,7 +912,9 @@ describe('how a run ends (my call 3)', () => {
     it('a computed run applies directly when the user did nothing', async () => {
         const ctx = runCtx();
         const seq = [];
-        ctx._applySimilarityOrder.mockImplementation(async () => {
+        let signalIsRuns = null;
+        ctx._applySimilarityOrder.mockImplementation(async (_entry, signal) => {
+            signalIsRuns = signal instanceof AbortSignal && signal === ctx.sortAbortController?.signal;
             seq.push('apply');
             return { applied: true, stats: { cached: 3, added: 0, removed: 0 }, committedPaths: [] };
         });
@@ -857,13 +927,38 @@ describe('how a run ends (my call 3)', () => {
                 startFile: 'a',
                 gen: ctx._similarityRunGen,
                 folder: '/f',
-            })
+            }),
+            expect.any(AbortSignal)
         );
         expect(ctx._offerSimilarityOrder).not.toHaveBeenCalled();
         expect(ctx.showNotification).toHaveBeenCalledWith('✅ Sorted 3 files with VP-Tree (fastest)!', 'success');
         expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('done');
         // P1: the card is cleared after the apply (whose placement may re-create it), never before.
         expect(seq).toEqual(['apply', 'clear']);
+        expect(signalIsRuns).toBe(true); // R-T4b: the run passes its own controller's signal
+    });
+
+    // R-T4b: the run's own signal is checked after the render-idle wait, so a Cancel pressed during it commits
+    // nothing.
+    it('a Cancel during the render-idle wait commits nothing and ends the run cancelled', async () => {
+        const ctx = runCtx({
+            _applySimilarityOrder: extract('_applySimilarityOrder'),
+            _fileOpInFlight: false,
+            applyCachedSortOrder: vi.fn(async function () {
+                return { order: [...this.mediaFiles].reverse(), stats: { cached: 3, added: 0, removed: 0 } };
+            }),
+        });
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            ctx.sortAbortController.abort(); // the Sort button's Cancel press
+        });
+        const listBefore = ctx.mediaFiles;
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx._waitForRenderIdle).toHaveBeenCalledOnce();
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx.isSortedBySimilarity).toBe(false);
+        expect(ctx.showNotification).toHaveBeenCalledWith('❌ Sorting cancelled', 'info');
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
     });
 
     it.each([

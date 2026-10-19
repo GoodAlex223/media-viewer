@@ -7316,7 +7316,7 @@ class MediaViewer {
                     doneMessage: `${restoredLine}${cachedAgo}`,
                 };
                 const applyStart = performance.now();
-                const result = await this._applySimilarityOrder(entry);
+                const result = await this._applySimilarityOrder(entry, run.controller.signal);
                 addPhase('apply', applyStart);
 
                 if (result.applied) {
@@ -7347,7 +7347,7 @@ class MediaViewer {
                 } else if (result.reason === 'stale') {
                     throw new Error('Sorting cancelled by user'); // the catch classifies it as stale, by state
                 } else {
-                    perf.outcome = 'done'; // Tournament mode or an emptied list: nothing written
+                    perf.outcome = 'done'; // Tournament mode, an emptied list or ('sorting', unreachable here): nothing written
                 }
                 // After the apply, never before: its placement re-creates the card.
                 this.clearProgressNotification();
@@ -7555,7 +7555,7 @@ class MediaViewer {
                     perf.outcome = 'offered';
                 } else {
                     const applyStart = performance.now();
-                    const result = await this._applySimilarityOrder(entry);
+                    const result = await this._applySimilarityOrder(entry, run.controller.signal);
                     addPhase('apply', applyStart);
                     if (result.applied) {
                         endIfStale();
@@ -7569,7 +7569,7 @@ class MediaViewer {
                         // Cannot happen right after the assert above; ends the run as stale if it does.
                         throw new Error('Sorting cancelled by user');
                     } else {
-                        perf.outcome = 'done'; // Tournament mode or an emptied list: nothing written
+                        perf.outcome = 'done'; // Tournament mode, an emptied list or ('sorting', unreachable here): nothing written
                     }
                 }
                 // After the apply or the offer, never before: the apply's placement re-creates the card.
@@ -7630,18 +7630,21 @@ class MediaViewer {
     // The one way a similarity order reaches the screen (G2 PR 1, spec § 8, A4): a computed run, a cache hit and
     // "Show" all come here. It computes the order over the files listed now, waits for an in-flight render, then
     // commits synchronously, or declines and writes nothing. `entry`: { gen, folder, algorithm, sortedPaths
-    // (basenames, the .sort_cache.json shape), startFile, doneMessage }.
-    async _applySimilarityOrder(entry) {
-        const { order, stats } = await this.applyCachedSortOrder(
-            entry,
-            entry.algorithm,
-            () => !this._isStaleSimilarityRun(entry)
-        );
+    // (basenames, the .sort_cache.json shape), startFile, doneMessage }. Liveness belongs to the entry (R-T4b):
+    // stale, or its own `signal` aborted (a run passes its controller's; Show passes none). The shared
+    // sortAbortController is never read here, so an AI sort's Cancel cannot end a Show.
+    async _applySimilarityOrder(entry, signal = null) {
+        const isLive = () => !this._isStaleSimilarityRun(entry) && !signal?.aborted;
+        const { order, stats } = await this.applyCachedSortOrder(entry, entry.algorithm, isLive);
         await this._waitForRenderIdle();
 
         // No await from here to the end of the commit: a file moved during one would come back.
         if (this._isStaleSimilarityRun(entry)) {
             return { applied: false, reason: 'stale' };
+        }
+        if (signal?.aborted) {
+            // Cancel pressed during the render-idle wait: the run's catch classifies it as cancelled.
+            throw new Error('Sorting cancelled by user');
         }
         if (this.isTournamentMode) {
             return { applied: false, reason: 'tournament' };
@@ -7650,6 +7653,10 @@ class MediaViewer {
             // A file action is moving files: a reorder now would leave the screen and the cursor on different
             // files when it finishes. The caller offers "Show" instead.
             return { applied: false, reason: 'busy' };
+        }
+        if (this.isPredictionSorting) {
+            // An AI sort started during Show's apply: its order wins, and the offer stays dismissed (A9).
+            return { applied: false, reason: 'sorting' };
         }
         if (this.mediaFiles.length === 0) {
             return { applied: false, reason: 'empty' };
@@ -7730,6 +7737,7 @@ class MediaViewer {
             } else if (result.reason === 'busy') {
                 this._offerSimilarityOrder(entry);
             }
+            // 'sorting': an AI sort started meanwhile and replaces the order; the offer stays dismissed (A9).
         } catch (error) {
             // A folder switch during the apply made the entry stale: its placement stopped, and says nothing.
             if (!this._isStaleSimilarityRun(entry)) {
@@ -8168,11 +8176,14 @@ class MediaViewer {
     }
 
     // Computes a cached order over the files listed now and returns it with its stats; it never writes
-    // this.mediaFiles (G2 PR 1: _applySimilarityOrder commits). `isLive` is the caller's staleness check: after
-    // every await, a cancelled or stale placement throws before it stores a hash, reports progress or returns.
-    async applyCachedSortOrder(cachedData, algorithm, isLive = () => true) {
+    // this.mediaFiles (G2 PR 1: _applySimilarityOrder commits). `isLive` is the only liveness check (R-T4b): the
+    // apply function passes its entry's (not stale, its own signal not aborted). After every await, a placement
+    // no longer live throws before it stores a hash, reports progress or returns. Passed through to the placement.
+    async applyCachedSortOrder(cachedData, algorithm, isLive = null) {
+        // The default (null) is the shared sortAbortController, for a direct caller.
+        const live = isLive ?? (() => !this.sortAbortController?.signal.aborted);
         const assertLive = () => {
-            if (this.sortAbortController?.signal.aborted || !isLive()) {
+            if (!live()) {
                 throw new Error('Sorting cancelled by user');
             }
         };
@@ -8234,11 +8245,15 @@ class MediaViewer {
     }
 
     // Returns sortedFiles with newFiles placed by similarity; never writes this.mediaFiles. Throws
-    // 'Sorting cancelled by user' at the top of each iteration and after every await once the sort is aborted or
-    // `isLive()` turns false (G2 PR 1 R-T4a): the last await must not resolve into a hash write or a progress call.
-    async insertNewFilesInSortedOrder(sortedFiles, newFiles, algorithm, isLive = () => true) {
+    // 'Sorting cancelled by user' at the top of each iteration and after every await once `isLive()` turns false
+    // (G2 PR 1 R-T4a/R-T4b): the last await must not resolve into a hash write or a progress call. `isLive` is the
+    // only check; the default (for a direct caller) is the shared sortAbortController, the apply function's is
+    // its entry's. The header stays on one line (no arrow default) so the tests' method-header scan can read it.
+    async insertNewFilesInSortedOrder(sortedFiles, newFiles, algorithm, isLive = null) {
+        // The default (null) is the shared sortAbortController, for a direct caller.
+        const live = isLive ?? (() => !this.sortAbortController?.signal.aborted);
         const assertLive = () => {
-            if (this.sortAbortController?.signal.aborted || !isLive()) {
+            if (!live()) {
                 throw new Error('Sorting cancelled by user');
             }
         };
@@ -8251,9 +8266,7 @@ class MediaViewer {
             // path is expected to be near-instant; firing main-process inference would
             // add ~100-200ms per missing file via IPC.
             for (let i = 0; i < newFiles.length; i++) {
-                if (this.sortAbortController?.signal.aborted) {
-                    throw new Error('Sorting cancelled by user');
-                }
+                assertLive();
                 const newFile = newFiles[i];
                 const newVec = this.clipCache.get(newFile.path);
 
@@ -8307,9 +8320,7 @@ class MediaViewer {
         } else {
             // Hash path (vptree, mst, simple, or undefined): unchanged behavior.
             for (let i = 0; i < newFiles.length; i++) {
-                if (this.sortAbortController?.signal.aborted) {
-                    throw new Error('Sorting cancelled by user');
-                }
+                assertLive();
                 const newFile = newFiles[i];
 
                 if (!this.perceptualHashes.has(newFile.path)) {

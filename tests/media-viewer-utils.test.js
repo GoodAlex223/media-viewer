@@ -626,13 +626,14 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
 
     // G2 PR 1 T4 (R-T4a): the top-of-iteration check alone let the last iteration's await resolve into a
     // hash write and a progress call that revives a cleared card. A stale apply would put the old folder's
-    // hashes into the new folder's map (spec A6).
+    // hashes into the new folder's map (spec A6). R-T4b: an explicit isLive is the only check; with none, the
+    // default reads the shared sortAbortController.
     it.each([
-        ['made stale', (_ctx, live) => live.stale()],
-        ['cancelled', (ctx) => ctx.sortAbortController.abort()],
+        ['made stale (explicit isLive)', (_ctx, live) => live.stale(), true],
+        ['cancelled (default isLive)', (ctx) => ctx.sortAbortController.abort(), false],
     ])(
         'hash path: a placement %s mid-hash stores no hash and reports no progress after that point',
-        async (_l, end) => {
+        async (_l, end, passIsLive) => {
             const a = { path: '/a.png' };
             const c = { path: '/c.png' };
             const b = { path: '/b.png' };
@@ -655,7 +656,8 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             });
             const listBefore = ctx.mediaFiles;
 
-            await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree', () => isLiveNow)).rejects.toThrow(
+            const args = passIsLive ? [() => isLiveNow] : [];
+            await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree', ...args)).rejects.toThrow(
                 'Sorting cancelled by user'
             );
 
@@ -665,6 +667,25 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             expect(ctx.mediaFiles).toBe(listBefore);
         }
     );
+
+    it('an explicit isLive ignores an aborted shared sortAbortController (R-T4b)', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        const foreign = new AbortController();
+        foreign.abort(); // an AI sort's Cancel, unrelated to this placement
+        const ctx = makeCtx({
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/c.png', '1111'],
+            ]),
+            sortAbortController: foreign,
+            computePerceptualHash: vi.fn(async () => '0001'),
+        });
+        const out = await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree', () => true);
+        expect(out.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
+        expect(ctx.perceptualHashes.get('/b.png')).toBe('0001');
+    });
 });
 
 describe('applyCachedSortOrder (algorithm threading)', () => {
