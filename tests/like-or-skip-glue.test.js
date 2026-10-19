@@ -272,10 +272,10 @@ describe('every method that reassigns mediaFiles announces it through _onOrderCh
     const ORDER_CHANGERS = [
         'loadFolder',
         'restoreOriginalOrderForTournament',
-        'handleSortBySimilarity',
         'applyPredictionSortResult',
-        'handleSortByPrediction',
         '_applySimilarityOrder',
+        // Restore Order, for both handleSortBySimilarity and the AI toggle-off in handleSortByPrediction (PR #85 #21)
+        '_restoreOriginalOrder',
     ];
     // Reviewed exemptions: assignments that are not a new order on screen, and why.
     const EXEMPT = {

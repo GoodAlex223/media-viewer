@@ -54,7 +54,12 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
         origWindow = globalThis.window;
         globalThis.window = {
             electronAPI: {
-                path: { basename: async (p) => p.split('/').pop() },
+                // The names come from each file's `name` (PR #85 #22): a basename call is a regression.
+                path: {
+                    basename: () => {
+                        throw new Error('applyCachedSortOrder must read file.name');
+                    },
+                },
             },
         };
     });
@@ -96,9 +101,9 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
     it('CLIP cache entry routes through CLIP branch and uses cosine distance', async () => {
         // Setup: cached order [a, c] + 1 new file b; all three have CLIP vectors.
         // Expected: b inserted at index 0 (closest cosine to a).
-        const a = { path: '/a.png' };
-        const b = { path: '/b.png' };
-        const c = { path: '/c.png' };
+        const a = { name: 'a.png', path: '/a.png' };
+        const b = { name: 'b.png', path: '/b.png' };
+        const c = { name: 'c.png', path: '/c.png' };
         const ctx = makeCtx({
             mediaFiles: [a, b, c], // includes new file b
             clipCache: new Map([
@@ -126,9 +131,9 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
     it('VPTree cache entry routes through hash branch and uses Hamming distance', async () => {
         // Setup: cached order [a, c] + 1 new file b; all three have perceptual hashes.
         // Expected: b inserted at index 0 (closest Hamming to a).
-        const a = { path: '/a.png' };
-        const b = { path: '/b.png' };
-        const c = { path: '/c.png' };
+        const a = { name: 'a.png', path: '/a.png' };
+        const b = { name: 'b.png', path: '/b.png' };
+        const c = { name: 'c.png', path: '/c.png' };
         const ctx = makeCtx({
             mediaFiles: [a, b, c],
             perceptualHashes: new Map([
@@ -159,9 +164,9 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
         // resolve algorithm = explicit-param ?? cachedData.algorithm and route safely.
         // Here we call with algorithm=undefined to force fallback to cachedData.algorithm,
         // which is ALSO undefined — must route to Hamming, not crash.
-        const a = { path: '/a.png' };
-        const b = { path: '/b.png' };
-        const c = { path: '/c.png' };
+        const a = { name: 'a.png', path: '/a.png' };
+        const b = { name: 'b.png', path: '/b.png' };
+        const c = { name: 'c.png', path: '/c.png' };
         const ctx = makeCtx({
             mediaFiles: [a, b, c],
             perceptualHashes: new Map([
