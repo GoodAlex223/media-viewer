@@ -77,11 +77,12 @@ test.describe('<Feature Name>', () => {
 
 ### DOM Interaction Gotchas
 - **Overlay interception**: `.media-container` overlay blocks pointer events on nav/rating buttons. Use `{ force: true }` on clicks or call methods via `page.evaluate()`.
-- **Keyboard shortcuts**: Use `page.keyboard.press('Key')` — works without overlay issues.
+- **Keyboard shortcuts**: Use `page.keyboard.press('Key')` — works without overlay issues. A main-process shortcut (`before-input-event`, e.g. F12 for DevTools) never sees it: send the key with `webContents.sendInputEvent` from `electronApp.evaluate` instead.
 - **Settings panel**: Open with `page.keyboard.press('F1')`, wait for `#helpOverlay.show`.
 - **Folder dialogs**: Mock with `mockFolderDialog(electronApp, path)` before clicking browse buttons.
 - **localStorage sync**: Use `seedLocalStorage(page, kvMap)` — it syncs both localStorage AND live MediaViewer instance properties.
-- **Lucide CDN**: Already stubbed by `launchApp()` — no action needed.
+- **Lucide**: vendored in `vendor/lucide/` and served same-origin — no stub needed.
+- **Settings move**: `launchApp()` skips the one-time `localStorage` move by default; pass `{ migrationMarker }` only in a test of the move itself.
 
 ### Waits and Timing
 - `waitForMedia(page)` — wait for `.media-display` to be visible after loading.

@@ -284,7 +284,7 @@ media_viewer/
 - **IPC guard** (`ipc-guard.js`): each call must come from the app's own top-level page, exactly `app://media-viewer/index.html`, and each argument must pass its channel's declared kind. A refusal returns the channel's usual failure value and is logged.
 - **Content-Security-Policy** (a response header on every app file, `APP_CSP` in `main.js`): no inline script; each directive was measured by an end-to-end walk; violations are logged to the session log.
 - **Navigation lock**: the window cannot navigate away from the app page (another page on the app origin included) or open new windows.
-- **App scheme** (`app-protocol.js`): the window is served from `app://media-viewer/`; app files come from an allowlist, and media from granted folders under `/@fs/`, through the same read rule as the IPC guard.
+- **App scheme** (`app-protocol.js`): the window is served from `app://media-viewer/`; app files come from an allowlist, and media from granted folders under `/@fs/`, through the same read rule as the IPC guard. Design: [I1 spec](superpowers/specs/2026-10-18-g1-i1-page-load-confinement-design.md).
 - **Renderer HTML**: values are inserted as text, never parsed as HTML. An ESLint rule enforces this.
 
 ### File Access

@@ -5,7 +5,7 @@
 **Scheduled**: [WEEKLY.md](../../planning/WEEKLY.md) G1 (Oct 12–16) ← TODO 🔴 [2026-10-08] ← BACKLOG 🟤 `[2026-10-08] From: G4 trial batch`
 **Findings**: F1–F7 of the 2026-10-08 `claude-security` scan. Each one is summarized in the [post-merge write-up on PR #78](https://github.com/GoodAlex223/media-viewer/pull/78#issuecomment-6111546302). The scan report itself stays local and self-ignored.
 
-> **Disclosure**: this spec was kept local until the merge (user decision D1), and was published at the closeout on 2026-10-11. The one open residual, §10 I1 (page-side loads not confined to granted folders), is described here as a design gap, not as an exploit recipe.
+> **Disclosure**: this spec was kept local until the merge (user decision D1), and was published at the closeout on 2026-10-11. The one open residual, §10 I1 (page-side loads not confined to granted folders), is described here as a design gap, not as an exploit recipe. It was closed on 2026-10-19 by PR #84 (merge `4548269`); see the [I1 spec](2026-10-18-g1-i1-page-load-confinement-design.md).
 
 ---
 
@@ -320,10 +320,11 @@ Docs to update at closeout: the `CLAUDE.md` Security and Architecture tree (`pat
 - **§12 TODO done.** ffmpeg/ffprobe run through one wrapper that passes `-protocol_whitelist file` (measured on the bundled builds; the build's nested default is already `file,crypto`).
 - **§4.2 trace result.** No cache reaches an HTML sink or a path. Hash-cache values reached a loop bound and are now validated at load.
 - **§10 residual (whole-branch review I1, measured 2026-10-11).** The app runs from a `file://` page, where CSP `'self'` matches every `file:` URL. So the page's own loads are not confined to the granted folders. The measured detail stays in the git-ignored local copy of this spec until the fix merges. The IPC guard confines what MAIN does (reads, writes, moves, creates, deletes). It does not confine what the PAGE loads. Not a regression; the sink fixes close the entry point. Closing it needs a protocol-level design: serve the app from a custom scheme, or `protocol.handle('file', …)` limited to the app directory, granted roots and tracked temp dirs, with video range requests in scope. This is a follow-up, to be scheduled before G4 builds on the grant model. The docs must not claim that grants confine renderer reads.
+  - **Closed 2026-10-19 by PR #84 (merge `4548269`)**, designed in the [I1 spec](2026-10-18-g1-i1-page-load-confinement-design.md). The window is served from `app://media-viewer/`, which serves only allowlisted app files and granted media. The CSP is a response header, so workers get one too, and renderer network requests (WebRTC included) are cut off. Main's keyframe temp folders were dropped from scope: the page never loads them (I1 spec D4).
 - **§3.1/§3.4 amendment (review M-a, user: fix before merge).**
   - **Entry operations** (move source, existence) are authorized by the folder that holds the entry. The entry itself may be a link to anywhere.
   - **Content reads** follow a link out of a granted folder only to a media file. This keeps symlinked media fully working, including CLIP, JXL decoding and video probing, while a planted link to a non-media file is refused.
-  - **For the I1 follow-up:** its protocol design must decide the same question for page-side loads.
+  - **For the I1 follow-up:** its protocol design must decide the same question for page-side loads. **Decided (I1 spec D12):** page-side loads go through the same read rule, `createMediaReadRule`, which also checks the resolved target's extension. So a link to media displays, and a link to a non-media file is refused.
 - **§4.3 amendment (review M-b, user: fix before merge).**
   - Grant status is three-state. A granted folder whose drive is absent reads as `unreachable`, not as needing re-confirmation.
   - Moves and the AI sort refuse it with "check that its drive is connected", then re-check in the background so the next press works once the drive is back.

@@ -78,7 +78,12 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| [2026-10-18_g1-confine-page-file-loads.md](2026-10-18_g1-confine-page-file-loads.md) (public stub; spec and detailed plan local until merge) | G1 (Oct 19–23) | In progress |
+| _None currently active_ | — | — |
+
+<!-- 2026-10-19 (Group G1 I1 closeout): 2026-10-18_g1-confine-page-file-loads.md left this table on
+     archive. Merged `4548269` via PR #84, moved to docs/archive/plans/ with `git mv`, and indexed in
+     docs/README.md as "G1 Page-Load Confinement Plan" in the same commit. Its spec, local until the
+     merge, was published to docs/superpowers/specs/ and indexed as "G1 I1 Page-Load Confinement". -->
 
 <!-- 2026-10-17 (Group G5 closeout): 2026-10-17_g5-claude-md-size-audit.md left this table on
      archive. Merged `3fb797e` via PR #82, moved to docs/archive/plans/ with `git mv`, and indexed in

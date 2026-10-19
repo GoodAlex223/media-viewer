@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-18 <!-- Group G6: Weekly Reviews (2026-10-17 run, ⚪ Overhead). MERGED 2026-10-18 via PR #83 (merge 1954109) after three review rounds: 8 findings, then 2 leftovers, then none. -->
+**Last Updated**: 2026-10-19 <!-- Group G1: Confine page-side file loads to the granted folders (residual I1, 🟤, Oct 19–23). MERGED 2026-10-19 via PR #84 (merge 4548269) after one PR review round: 1 finding, fixed, with its open trade-off accepted. -->
+<!-- Previous: Group G6: Weekly Reviews (2026-10-17 run, ⚪ Overhead). MERGED 2026-10-18 via PR #83 (merge 1954109) after three review rounds: 8 findings, then 2 leftovers, then none. -->
 <!-- Previous: Group G5: CLAUDE.md size audit (🟡, Oct 12–16). MERGED 2026-10-17 via PR #82 (merge 3fb797e) after three review rounds: 9 findings, of which 6 were fixed, 1 documented, 1 declined and 1 carried to G6. -->
 <!-- Previous: Group G4: Recently opened folders (🔵, Oct 12–16; reordered ahead of I1 by the user). MERGED 2026-10-16 via PR #81 (merge 51af1ab), after per-task reviews, a whole-branch final review with one fix wave, and a PR review in a separate chat (7 findings: 5 fixed, 1 declined, 1 deferred; re-review found no issues). --> <!-- Prior (2026-10-16): Group G3: Stop the retrain on every AI sort (🔵, Oct 12–16; re-scoped from source-folder vector reuse after the measure-first before run). MERGED 2026-10-16 via PR #80 (merge bf6fcad), after per-task reviews, a whole-branch final review with one fix round, and a PR review in a separate chat (no open items). --> <!-- Prior (2026-10-12): Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
 <!-- Previous: Group G5: Weekly Reviews (2026-10-09 run, ⚪ Overhead) — 5/5, MERGED 2026-10-09 via PR #77 (merge 0e298b4) after one review round and two close-outs. -->
@@ -24,6 +25,62 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-19 — Group G1: Confine page-side file loads to the granted folders (residual I1) 🟤 (Oct 19–23) — **MERGED `4548269`** (PR #84)
+
+**Spec**: [2026-10-18-g1-i1-page-load-confinement-design.md](../superpowers/specs/2026-10-18-g1-i1-page-load-confinement-design.md), kept local until the merge and published at the closeout, with § 6 amendments and a post-implementation note (§ 15).
+**Plan**: [2026-10-18_g1-confine-page-file-loads.md](../archive/plans/2026-10-18_g1-confine-page-file-loads.md), stub level until the merge. The execution rulings and deferred minors were published after it; the detailed implementation plan stays local.
+**Branch**: `g1-confine-page-file-loads`, cut from `main` at `c50c087`; deleted remote and local after the merge.
+
+✅ **Status: MERGED 2026-10-19 via PR #84** (merge `4548269`, 15 commits), a day ahead of its Tuesday slot. ~7 SP against 5 planned, inside the 2× line.
+
+**Pre-PR:**
+- Native execution of the local plan, 10 tasks. Every confined load class had an E2E test that failed on `main` first, and each behaviour or control test passed a mutation check.
+- A fresh whole-branch review found no confinement break and two Important issues, both fixed with failing-first tests (`664c975`): the settings move now flushes storage before its marker, and the two network controls gained tests that fail without them. Six minors were deferred.
+- The user's _Scan changes_: no findings (a clean pass, not a clearance).
+- A background per-commit review raised the check-then-read race. It is the spec's accepted § 11 residual, narrowed here, and was ruled on its full text; two hardening follow-ups went to BACKLOG.
+- A manual session on a **copy** of the user's profile (`MV_USER_DATA_DIR`): settings came across (11 keys, all written); images, video, compare, tournament and AI sort behaved normally. Animated JXL, linked media and the DevTools shortcut couldn't be checked by hand, so each got a mutation-checked E2E test (`f704f48`).
+
+**PR review** (the user's `/code-review`, separate chat):
+- Round 1: one finding, plausible and not reproduced by the reviewer. A retried settings move, after a completed write whose marker failed, wrote back any carried setting the user had removed since. Reproduced by a fifth E2E launch, then fixed in `5b8393a`: the write sets a merge mark last, and a retry that finds it writes nothing. The reviewer's open trade-off (a failure *before* the write) is accepted and filed. One nit, fixed. Every claim in the description was confirmed or accepted.
+- Merged by the user's instruction after the fix.
+
+**Summary**:
+- **Closed:** G1's residual I1 (Important, access control, CWE-284; not a regression). The `file://` page could load any `file:` URL, because CSP `'self'` matches them all, and dedicated workers had no policy at all.
+- **How:**
+  - The window is served from `app://media-viewer/`. It serves an allowlist of app files and, under `/@fs/`, media from granted folders through the same read rule main's file IPC uses. That rule now also checks the resolved target's extension.
+  - One `INDEX_URL` drives the window's load, the IPC sender check and the navigation lock.
+  - The CSP is a response header, so every worker gets one. The meta tag is gone.
+  - Renderer network requests are cancelled; a dead session proxy and the WebRTC IP policy close what the CSP doesn't govern. The main process's CLIP download is unaffected.
+  - Lucide is vendored, so the renderer makes no network request.
+  - Existing settings move once from the old origin to the new one, with only absent keys written, a flush before the marker, and a merge mark against a retry restoring removed keys. The old copy is left untouched.
+
+**Key changes**:
+- **New `app-protocol.js`:** the scheme handler: allowlist, dot-segment refusal, realpath check, `Range` (206/416) with stream accounting, `nosniff` and the CSP header, 404 and a log line on every refusal; `isBlockedEgress`.
+- **New `storage-migration.js` + `migrate.html`:** the one-time settings move, validated (200 keys, 5M characters), retried on failure, never blocking startup.
+- **New `media-url.js`:** `toMediaUrl`, the only way the renderer names a media file (10 sites; the old file-URL helper was deleted).
+- **`path-grants.js`:** `createMediaReadRule`, shared by `ipc-guard.js` and the handler.
+- **`ipc-guard.js`:** the sender must be exactly `INDEX_URL`; the file-URL normalisation was deleted.
+- **`main.js`:** scheme registration, the handler, `APP_CSP`, the egress controls, the migration in `createWindow`, `MV_USER_DATA_DIR` for testing on a profile copy, `spellcheck: false`.
+- **`vendor/lucide/`** (1.14.0, ISC), hash-checked against the release's SRI before the commit and on the committed blob.
+- **Tests:**
+  - Unit 1555 → **1666** (1 skipped).
+  - E2E 163 → **194** passed (6 skipped).
+  - New files: `security-page-loads` and `app-protocol` (E2E); `app-protocol`, `storage-migration` and `media-url` (unit). New fixture: `animated-64x64.jxl`.
+- **Docs:** CLAUDE.md and ARCHITECTURE.md describe the app scheme. The G1 spec's residual I1 carries a "closed by" note.
+- **Also on the branch:** `"onFailure": "block"` on the `preload.js` guard hook, the REVIEW-QUEUE § 5 trial vehicle. The probe passed; the session showed no spurious block (evidence for G6's read-out).
+
+**Spawned**:
+- BACKLOG 🟤 `[2026-10-19] From: G1 I1 closeout`: 14 items. Among them: two content-read hardening steps, the JXL wasm fetch, the before-write trade-off, a DNS-prefetch measurement, video timing under load, and the six deferred minors.
+- TODO 🔴: the real-profile check after the merge (user). TODO 🟠: the tournament E2E flake, promoted from BACKLOG after it blocked the gate a second time.
+- BACKLOG check-off: "Migrate Lucide from CDN to bundled npm dependency". Annotated: the permission handler, the head-CSP log, the git-test timeouts, the 🟡 `CLAUDE.md` byte watch.
+
+**Learnings**:
+- In a `file://` page, a dedicated worker's requests go through neither `protocol.handle('file')` nor a `webRequest` gate, and a meta-tag CSP never reaches the worker. A custom scheme with a header CSP closes both.
+- A video small enough to be buffered whole can't test byte-range serving: seeking worked with ranges forced off. The test needed a ~43 MB clip, and a size precondition.
+- Chromium holds `localStorage` writes in memory for a few seconds; a completion marker written straight after them can outlive the data it records.
+- An "absent keys only" merge is idempotent but not retry-safe: it can't tell a key never set from one the user removed between runs. The review caught that; the claim "a re-run adds nothing" assumed nothing happens between runs.
+- A probe of existing code needs its own positive control: the first WebRTC probe passed with every control removed.
 
 ### 2026-10-18 — Group G6: Weekly Reviews ⚪ (2026-10-17 run, Oct 12–16) — **4/4, MERGED `1954109`** (PR #83)
 
