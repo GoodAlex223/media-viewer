@@ -976,7 +976,23 @@ The final review found this as a pre-existing race. The user chose to fix it on 
 - **2026-10-19** — First push blocked by pre-push E2E: 203 passed, 6 skipped, **1 failed**. `sort-progress.test.js` "Cancel button aborts the active sort controller" drew the card with a controller but no sort flag. Under M7, Cancel is hidden when no sort owns the card, so the test's premise no longer matched a real sort, which sets its flag before drawing the card. The test now sets `isComputingHashes = true` (a premise fix, per Finish). Both tests in that file pass.
 - **2026-10-19** — Second push: full E2E **204 passed, 6 skipped**. **PR #85** opened. Waiting on the user for: a `/code-review` (default: a separate chat at `max`), the Restore-Order-during-render question (fix on this branch or BACKLOG), and the merge.
 - **2026-10-19** — **T6** (user: "Agree, fix it now") `8928825` + review fix `08cdb55`. Both Restore Order paths wait for an in-flight render. They then re-check that the order did not change during the wait (`_orderGeneration`), and then the path flag, Tournament, a running sort, a file action and a folder load; after that they restore and render with no await between. RED→GREEN: 17 unit tests + 1 E2E. Removing the wait fails 7 unit tests and the E2E. The task review added the order-generation check: a cached similarity sort committing during the AI toggle-off's wait would otherwise make the restore land on the AI order. The scoped re-review found nothing open. Unit tests: 1,817 passed, 1 skipped; the E2E file 11/11 ×3. Step 7 found that keys reach file actions under the Tournament modals; this is pre-existing, and recorded in Residuals → the BACKLOG.md:641 entry.
-- **2026-10-19/20** — **PR #85 code review.** The user ran `/code-review` in a separate chat. It posted 15 findings, then a follow-up with #16–#24. The user ruled on scope:  - **fixed** #2–#4, #6–#8, #10, #11, #13–#15 (`de04008`, `69b925e`, `bb12981`) and #17–#24 (`732936b`, `e3d3b2d`), with a scoped re-review for each wave;  - #12 became a spec note (§ 16);  - #1 and #16 (feature-cache data loss) → a separate PR next;  - #5 → PR 2;  - #9 → BACKLOG.  Highlights:  - the apply re-checks "did the user act" at the commit, and declines on the render-wait cap;  - a rate followed by its undo keeps the hash;  - Tournament Start/Continue are guarded;  - the hash cache merges once into memory;  - one Restore Order helper;  - dead code removed;  - CLAUDE.md trimmed to 62,571 bytes (+2,494 vs `main`).  Unit tests: 1,870 passed, 1 skipped. Full E2E at `60802db`: 205 passed, 6 skipped. Both review responses are posted on the PR. `media-viewer.js`: 12,175 lines (+736 vs `bfc4cbf`).
+- **2026-10-19/20** — **PR #85 code review.** The user ran `/code-review` in a separate chat. It posted 15 findings, then a follow-up with #16–#24. The user ruled on scope:
+  - **fixed** #2–#4, #6–#8, #10, #11, #13–#15 (`de04008`, `69b925e`, `bb12981`) and #17–#24 (`732936b`, `e3d3b2d`), with a scoped re-review for each wave;
+  - #12 became a spec note (§ 16);
+  - #1 and #16 (feature-cache data loss) → a separate PR next;
+  - #5 → PR 2;
+  - #9 → BACKLOG.
+
+  Highlights:
+  - the apply re-checks "did the user act" at the commit, and declines on the render-wait cap;
+  - a rate followed by its undo keeps the hash;
+  - Tournament Start/Continue are guarded;
+  - the hash cache merges once into memory;
+  - one Restore Order helper;
+  - dead code removed;
+  - CLAUDE.md trimmed to 62,571 bytes (+2,494 vs `main`).
+
+  Unit tests: 1,870 passed, 1 skipped. Full E2E at `60802db`: 205 passed, 6 skipped. Both review responses are posted on the PR. `media-viewer.js`: 12,175 lines (+736 vs `bfc4cbf`).
 
 ## Key Discoveries
 
