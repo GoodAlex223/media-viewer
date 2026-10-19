@@ -149,12 +149,28 @@ test.describe('Similarity sort: Show, Cancel and folder switch', () => {
     });
 
     test('Show after switching to compare mode renders the first pair from the start file', async () => {
+        // A fourth file, so compare-mode Next can leave the first pair: with three, Next by 2 wraps back to 0.
+        // Entering compare mode resets the cursor to 0 (toggleViewMode), so the move happens in compare mode.
+        await tmpFixtures.addFile('yellow-1x1.png');
+        await loadFolder(page, tmpFixtures.dir);
         await gateHashing(page);
         const startPath = await page.evaluate(() => window.mediaViewer.mediaFiles[0].path);
         await startSort(page);
         await waitForHashCalls(page, 2);
+        await waitForIdle(page);
         await page.evaluate(() => window.mediaViewer.switchMode('compare'));
         await waitForIdle(page);
+        await page.evaluate(() => window.mediaViewer.nextMedia());
+        await waitForIdle(page);
+        // The pair on screen no longer starts at the start file, so only Show's own render can put it back.
+        await expect
+            .poll(() =>
+                page.evaluate((start) => {
+                    const left = window.mediaViewer.compareLeftFile?.path ?? null;
+                    return left !== null && left !== start;
+                }, startPath)
+            )
+            .toBe(true);
         await finishSort(page);
 
         const offer = offerLocator();
@@ -215,13 +231,39 @@ test.describe('Similarity sort: Show, Cancel and folder switch', () => {
         await offer.locator('.notification-close').click({ force: true });
         await expect(offer).toHaveCount(0);
 
+        // The order was saved when the run ended, before the offer: the second press can take the cache hit.
+        // A full re-sort would also hash nothing (both paths reload .hash_cache.json), so the hash count alone
+        // cannot tell the two apart; the worker count and the cache-hit notice can.
+        const algorithm = await page.evaluate(() => window.mediaViewer.sortAlgorithm);
+        const sortCacheFile = join(tmpFixtures.dir, '.sort_cache.json');
+        expect(existsSync(sortCacheFile)).toBe(true);
+        const sortCache = JSON.parse(await readFile(sortCacheFile, 'utf8'));
+        expect(Object.keys(sortCache)).toContain(algorithm);
+
         await page.evaluate(() => {
             window.__hashCalls = 0;
+            const viewer = window.mediaViewer;
+            window.__workerCalls = 0;
+            const runSortingWorker = viewer.runSortingWorker.bind(viewer);
+            viewer.runSortingWorker = (...args) => {
+                window.__workerCalls++;
+                return runSortingWorker(...args);
+            };
+            window.__notices = [];
+            const showNotification = viewer.showNotification.bind(viewer);
+            viewer.showNotification = (message, ...rest) => {
+                window.__notices.push(String(message));
+                return showNotification(message, ...rest);
+            };
         });
         await page.evaluate(() => window.mediaViewer.handleSortBySimilarity());
 
         expect(await page.evaluate(() => window.mediaViewer.isSortedBySimilarity)).toBe(true);
         expect(await page.evaluate(() => window.__hashCalls)).toBe(0);
+        expect(await page.evaluate(() => window.__workerCalls)).toBe(0);
+        expect((await page.evaluate(() => window.__notices)).filter((m) => m.includes('Restored cached'))).toHaveLength(
+            1
+        );
         await expect(page.locator('.notification.sticky')).toHaveCount(0);
     });
 

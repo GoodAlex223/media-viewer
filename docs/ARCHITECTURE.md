@@ -233,7 +233,7 @@ User clicks Like/Dislike
 | Data | Storage | Purpose |
 |------|---------|---------|
 | Settings | localStorage | User preferences |
-| Image Hashes | IndexedDB | Sorting cache, survives restarts |
+| Image Hashes | `.hash_cache.json` in the media folder (filename → hash) | Sorting cache, survives restarts; a save merges into the file's existing entries |
 
 ---
 

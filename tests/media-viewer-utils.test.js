@@ -1578,7 +1578,7 @@ describe('handleSortByPrediction lifecycle', () => {
             _pendingStaleMark: null,
             _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
             _waitForRenderIdle: extractAsyncMethod('_waitForRenderIdle'),
-            _dismissSimilarityOffer: vi.fn(),
+            _invalidateSimilarityRun: vi.fn(),
             ...overrides,
         };
         ctx._phases = phases;
@@ -1598,8 +1598,8 @@ describe('handleSortByPrediction lifecycle', () => {
         // dependency at all) — handleSortByPrediction's finally is the single owner, on the
         // success path too, not just on cancel.
         expect(ctx.clearProgressNotification).toHaveBeenCalled();
-        // G2 PR 1 (A9): an AI sort replaces any pending similarity offer.
-        expect(ctx._dismissSimilarityOffer).toHaveBeenCalledOnce();
+        // G2 PR 1 (A9, F2): an AI sort replaces any pending similarity offer and makes an in-flight Show stale.
+        expect(ctx._invalidateSimilarityRun).toHaveBeenCalledOnce();
     });
 
     it('takes the out-of-date mark before training reads the folders, and clears the pending mark on exit (G2)', async () => {
@@ -7175,6 +7175,86 @@ describe('folder-explicit cache I/O (G2 PR 1, T3)', () => {
         expect(readFolderCache).toHaveBeenCalledWith('/f', 'sort');
         expect(writeFolderCache).toHaveBeenCalledOnce();
         expect(writeFolderCache.mock.calls[0][0]).toBe('/f');
+    });
+
+    // M4: loadSortCache names its folder like the others, and returns nothing once that folder is no longer open.
+    it('loadSortCache reads the folder it was given and returns nothing when the folder changed during the read', async () => {
+        const loadSortCache = extractAsyncMethod('loadSortCache');
+        const entry = { algorithm: 'vptree', sortedPaths: ['a.jpg'] };
+        const ctx = { baseFolderPath: '/f' };
+        const readFolderCache = vi.fn(async () => JSON.stringify({ vptree: entry }));
+        globalThis.window = { electronAPI: { readFolderCache } };
+
+        expect(await loadSortCache.call(ctx, 'vptree', '/f')).toEqual(entry);
+        expect(readFolderCache).toHaveBeenCalledWith('/f', 'sort');
+
+        readFolderCache.mockImplementationOnce(async () => {
+            ctx.baseFolderPath = '/g';
+            return JSON.stringify({ vptree: entry });
+        });
+        expect(await loadSortCache.call(ctx, 'vptree', '/f')).toBeNull();
+    });
+});
+
+// F5: read-folder-cache returns null for ANY read error, so an unreadable .hash_cache.json looks missing. A save
+// that wrote only the in-memory hashes would then overwrite the whole file with a partial set. saveHashCache
+// merges into what the file holds (memory wins), keeping only the well-formed values loadHashCache would keep.
+describe('saveHashCache merges into the file it writes (G2 PR 1, F5)', () => {
+    const saveHashCache = extractAsyncMethod('saveHashCache');
+    let origWindow;
+    beforeEach(() => {
+        origWindow = globalThis.window;
+    });
+    afterEach(() => {
+        globalThis.window = origWindow;
+    });
+
+    async function save(existing, memory) {
+        const readFolderCache = vi.fn(async () => existing);
+        const writeFolderCache = vi.fn(async () => ({ success: true }));
+        globalThis.window = {
+            electronAPI: {
+                readFolderCache,
+                writeFolderCache,
+                path: { join: (a, b) => `${a}/${b}`, basename: (p) => p.split('/').pop() },
+            },
+        };
+        const ctx = { baseFolderPath: '/f', perceptualHashes: new Map(memory), showNotification: vi.fn() };
+        await saveHashCache.call(ctx, '/f');
+        expect(readFolderCache).toHaveBeenCalledWith('/f', 'hash');
+        expect(writeFolderCache).toHaveBeenCalledOnce();
+        expect(writeFolderCache.mock.calls[0].slice(0, 2)).toEqual(['/f', 'hash']);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        return JSON.parse(writeFolderCache.mock.calls[0][2]);
+    }
+
+    it('keeps the entries on disk, overlaid by memory', async () => {
+        const written = await save(JSON.stringify({ 'x.jpg': '0001', 'y.jpg': '0010' }), [
+            ['/f/y.jpg', '1110'],
+            ['/f/z.jpg', '0100'],
+        ]);
+        expect(written).toEqual({ 'x.jpg': '0001', 'y.jpg': '1110', 'z.jpg': '0100' });
+    });
+
+    it.each([
+        ['the read returns null', null],
+        ['the file is not valid JSON', '{"x.jpg": "00'],
+        ['the file is not an object', '["0001"]'],
+    ])('writes memory only when %s', async (_l, existing) => {
+        const written = await save(existing, [['/f/z.jpg', '0100']]);
+        expect(written).toEqual({ 'z.jpg': '0100' });
+    });
+
+    it('drops an existing value loadHashCache would reject', async () => {
+        const existing = {
+            'ok.jpg': '0101',
+            'two.jpg': '2',
+            'long.jpg': '0'.repeat(5000),
+            'obj.jpg': { length: 1e300 },
+            'empty.jpg': '',
+        };
+        const written = await save(JSON.stringify(existing), [['/f/z.jpg', '0100']]);
+        expect(written).toEqual({ 'ok.jpg': '0101', 'z.jpg': '0100' });
     });
 });
 

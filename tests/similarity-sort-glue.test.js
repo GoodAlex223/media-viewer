@@ -87,6 +87,7 @@ function similarityCtx(overrides = {}) {
         _refuseIfFileOpInFlight: vi.fn(() => false),
         _onOrderChanged: vi.fn(),
         _dismissSimilarityOffer: vi.fn(),
+        _invalidateSimilarityRun: vi.fn(),
         showMedia: vi.fn(async () => {}),
         showNotification: vi.fn(),
         updateSortPredictionButton: vi.fn(),
@@ -114,6 +115,8 @@ describe('Restore Order keeps every listed file (spec § 7, A1)', () => {
         await extract('handleSortByPrediction').call(ctx);
         expect(names(ctx.mediaFiles)).toEqual(['a', 'c', 'd']);
         expect(ctx._onOrderChanged).toHaveBeenCalledWith('other');
+        // F2: an order change makes a similarity order in flight (Show's apply) stale.
+        expect(ctx._invalidateSimilarityRun).toHaveBeenCalledOnce();
     });
 
     it('Tournament entry: the same rule', () => {
@@ -572,8 +575,9 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
         expect(ctx.currentIndex).toBe(0);
         expect(ctx._onOrderChanged).toHaveBeenCalledWith('other');
         expect(ctx.isSortedBySimilarity).toBe(true);
-        expect(ctx.sortSimilarityBtn.querySelector('.btn-label').textContent).toBe('Restore Order');
-        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        // M6: the caller renders and sets the label where its flags are released, never the apply.
+        expect(ctx.sortSimilarityBtn.querySelector('.btn-label').textContent).toBe('');
+        expect(ctx.showMedia).not.toHaveBeenCalled();
     });
 
     it('computes, waits for an in-flight render, then commits', async () => {
@@ -622,6 +626,19 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
         expect(ctx.isSortedBySimilarity).toBe(false);
         expect(ctx.currentIndex).toBe(2);
         expect(ctx.showMedia).not.toHaveBeenCalled();
+    });
+
+    // M2: loadFolder bumps the run counter only after its listing await, so a commit could land during a load.
+    it('declines (busy) while a folder load is in flight, writing nothing', async () => {
+        const ctx = applyCtx();
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            ctx._folderLoadInFlight = true;
+        });
+        const listBefore = ctx.mediaFiles;
+        expect(await apply.call(ctx, sortEntry())).toEqual({ applied: false, reason: 'busy' });
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx.originalMediaFiles).toEqual([]);
     });
 
     it('declines (sorting) when an AI sort started during the wait, writing nothing (R-T4b)', async () => {
@@ -826,6 +843,27 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
         expect(ctx._applySimilarityOrder).toHaveBeenCalledWith(entry);
         expect(ctx.showNotification).toHaveBeenCalledWith(entry.doneMessage, 'success');
         expect(ctx._similarityOffer).toBeNull();
+        // M6: Show renders and sets the label itself, right after its apply succeeds.
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        expect(ctx.sortSimilarityBtn.querySelector('.btn-label').textContent).toBe('Restore Order');
+    });
+
+    it('a render failure after Show applied is a warning', async () => {
+        const { ctx, entry } = showCtx({
+            showMedia: vi.fn(async () => {
+                throw new Error('decode');
+            }),
+        });
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await onShow.call(ctx);
+        } finally {
+            errorSpy.mockRestore();
+        }
+        expect(ctx.showNotification.mock.calls).toEqual([
+            ['⚠️ Sorted successfully but failed to load media', 'warning'],
+            [entry.doneMessage, 'success'],
+        ]);
     });
 
     it('a busy commit puts the offer back', async () => {
@@ -902,6 +940,133 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
             errorSpy.mockRestore();
         }
         expect(seq).toEqual(clears ? ['apply', 'clear'] : ['apply']);
+    });
+
+    // M8: a card on screen before Show (another owner's) is not Show's to clear.
+    it('a card that existed before Show survives it', async () => {
+        const { ctx } = showCtx({ progressNotification: { parentNode: {} } });
+        await onShow.call(ctx);
+        expect(ctx._applySimilarityOrder).toHaveBeenCalledOnce();
+        expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
+    });
+
+    // M2: a folder switch during Show's render makes the entry stale: no success notice for an order that is gone.
+    it('Show reports nothing when its entry went stale during the render', async () => {
+        const { ctx, entry } = showCtx({
+            _applySimilarityOrder: extract('_applySimilarityOrder'),
+            _waitForRenderIdle: vi.fn(async () => {}),
+            applyCachedSortOrder: vi.fn(async function () {
+                return { order: [...this.mediaFiles].reverse(), stats: { cached: 3, added: 0, removed: 0 } };
+            }),
+            mediaFiles: media('a', 'b', 'c'),
+        });
+        ctx.showMedia = vi.fn(async () => {
+            ctx._similarityRunGen++; // loadFolder for another folder while the pair renders
+        });
+        await onShow.call(ctx);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        expect(ctx.showNotification).not.toHaveBeenCalledWith(entry.doneMessage, 'success');
+    });
+
+    // F2: Show holds no flag, so an order change during its apply must make its entry stale. Each case runs the
+    // real order-changing code inside Show's render-idle wait, with the real apply.
+    describe('a later order change cancels an in-flight Show (F2)', () => {
+        const realApply = extract('_applySimilarityOrder');
+        const handleSortBySimilarity = extract('handleSortBySimilarity');
+        const handleSortByPrediction = extract('handleSortByPrediction');
+        const restoreOriginalOrderForTournament = extract('restoreOriginalOrderForTournament');
+
+        function inFlightShow(during, overrides = {}) {
+            const { ctx, entry } = showCtx({
+                mediaFiles: media('a', 'b', 'c'),
+                applyCachedSortOrder: vi.fn(async function () {
+                    return { order: [...this.mediaFiles].reverse(), stats: { cached: 3, added: 0, removed: 0 } };
+                }),
+                _invalidateSimilarityRun: extract('_invalidateSimilarityRun'),
+                ...overrides,
+            });
+            const results = [];
+            ctx._applySimilarityOrder = vi.fn(async function (...args) {
+                const r = await realApply.apply(this, args);
+                results.push(r);
+                return r;
+            });
+            let ran = false;
+            ctx._waitForRenderIdle = vi.fn(async () => {
+                if (!ran) {
+                    ran = true; // the AI sort waits for render idle too: run the change once
+                    await during(ctx);
+                }
+            });
+            return { ctx, entry, results };
+        }
+
+        const expectStale = ({ ctx, entry, results }, originalBefore) => {
+            expect(results).toEqual([{ applied: false, reason: 'stale' }]);
+            expect(ctx.originalMediaFiles).toBe(originalBefore);
+            expect(ctx.showNotification).not.toHaveBeenCalledWith(entry.doneMessage, 'success');
+            expect(ctx.showNotification.mock.calls.filter((c) => /✅/.test(c[0]))).toEqual([]);
+        };
+
+        it('(a) a Restore Order press', async () => {
+            const original = media('a', 'b', 'c');
+            const show = inFlightShow((ctx) => handleSortBySimilarity.call(ctx, false), {
+                isSortedBySimilarity: true,
+                originalMediaFiles: original,
+            });
+            await onShow.call(show.ctx);
+            expect(show.ctx.isSortedBySimilarity).toBe(false); // the Restore Order press itself ran
+            expectStale(show, original);
+        });
+
+        it('(b) Tournament entry (the config modal opens before isTournamentMode is set)', async () => {
+            const original = [];
+            const show = inFlightShow((ctx) => restoreOriginalOrderForTournament.call(ctx), {
+                originalMediaFiles: original,
+            });
+            await onShow.call(show.ctx);
+            expectStale(show, original);
+        });
+
+        it('(c) an AI sort that starts and finishes during the apply', async () => {
+            let aiSnapshot = null;
+            const show = inFlightShow(
+                async (ctx) => {
+                    await handleSortByPrediction.call(ctx);
+                    aiSnapshot = ctx.originalMediaFiles; // the folder-order snapshot the AI sort took
+                },
+                {
+                    isMlEnabled: true,
+                    _refuseIfNeedsRegrant: () => false,
+                    sortRunId: 0,
+                    mlWorker: {},
+                    featureWorkers: [{}],
+                    enableClipFeatures: false,
+                    featureCache: new Map(['a', 'b', 'c'].map((n) => [`/f/${n}`, new Float32Array(64)])),
+                    moveHistory: [],
+                    mlStats: { isReady: true },
+                    mlTraining: { ensureTrainedModel: async () => ({ source: 'session', stats: { isReady: true } }) },
+                    showMlLearningIndicator: () => {},
+                    getCombinedFeatures: () => new Float32Array(576),
+                    runMlSort: async () => ({ sortedFilenames: ['b', 'c', 'a'], scores: {} }),
+                    applyPredictionSortResult: function (r) {
+                        this.mediaFiles = r.sortedFilenames.map((n) => this.mediaFiles.find((f) => f.name === n));
+                        this.isSortedByPrediction = true;
+                    },
+                    cancelBackgroundExtraction: () => {},
+                    loadFeatureCache: async () => {},
+                    startBackgroundFeatureExtraction: async () => {},
+                    updateSortProgress: vi.fn(),
+                    _acquireClipLease: () => {},
+                    _releaseClipLease: () => {},
+                    _logSortPerf: vi.fn(),
+                }
+            );
+            await onShow.call(show.ctx);
+            expect(show.ctx.isSortedByPrediction).toBe(true); // the AI sort ran and applied
+            expect(names(show.ctx.mediaFiles)).toEqual(['b', 'c', 'a']);
+            expectStale(show, aiSnapshot);
+        });
     });
 });
 
@@ -1008,12 +1173,93 @@ describe('how a run ends (my call 3)', () => {
         expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('offered');
     });
 
-    it.each(['empty', 'tournament'])('a direct apply declined (%s) ends done with nothing written', async (reason) => {
+    // M5: `done` means applied (spec A2); a run that ends with nothing applied or offered is `declined`.
+    it.each([
+        ['a direct apply', 'empty'],
+        ['a direct apply', 'tournament'],
+        ['a direct apply', 'sorting'],
+        ['a cache-hit apply', 'empty'],
+        ['a cache-hit apply', 'tournament'],
+    ])('%s declined (%s) ends declined with nothing written', async (route, reason) => {
         const ctx = runCtx();
+        if (route === 'a cache-hit apply') {
+            ctx.loadSortCache = vi.fn(async () => ({ algorithm: 'vptree', sortedPaths: ['c', 'a'], timestamp: 1 }));
+        }
         ctx._applySimilarityOrder.mockResolvedValue({ applied: false, reason });
         await handleSortBySimilarity.call(ctx, false);
         expect(ctx._offerSimilarityOrder).not.toHaveBeenCalled();
         expect(ctx.showNotification.mock.calls.filter((c) => /✅|❌/.test(c[0]))).toEqual([]);
+        expect(ctx.showMedia).not.toHaveBeenCalled();
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('declined');
+    });
+
+    // F1 (Review Focus #1 at the run level): moving every file away is itself a user action, so the run used to
+    // offer a sticky Show over the empty screen, or fail with "Only N files have valid hashes" once the moves
+    // purged the hashes. Either way the run now ends quietly.
+    const quietEnd = (ctx) => {
+        expect(ctx._applySimilarityOrder).not.toHaveBeenCalled();
+        expect(ctx._offerSimilarityOrder).not.toHaveBeenCalled();
+        expect(ctx.showNotification.mock.calls.filter((c) => /✅|❌/.test(c[0]))).toEqual([]);
+        expect(ctx.clearProgressNotification).toHaveBeenCalled();
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('declined');
+        expect([ctx.isComputingHashes, ctx.sortAbortController]).toEqual([false, null]);
+    };
+
+    it('a list emptied during the graph build ends quietly (F1)', async () => {
+        const ctx = runCtx();
+        ctx.runSortingWorker.mockImplementationOnce(async ({ mediaFiles }) => {
+            ctx.mediaFiles.splice(0); // every file moved away (removeFileFromList splices)
+            ctx.moveHistory.push({}, {}, {});
+            return mediaFiles.map((f) => f.path).reverse();
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        quietEnd(ctx);
+    });
+
+    it('a list emptied during hashing ends quietly and keeps what it hashed (F1)', async () => {
+        const ctx = runCtx();
+        ctx.computePerceptualHash.mockImplementation(async (p) => {
+            if (p === '/f/c') {
+                // While c is hashed, every file is moved away: removeFileFromList purges each one's hash.
+                for (const f of ctx.mediaFiles.splice(0)) {
+                    ctx.perceptualHashes.delete(f.path);
+                    ctx.moveHistory.push({});
+                }
+            }
+            return '0101';
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        quietEnd(ctx);
+        expect(ctx.runSortingWorker).not.toHaveBeenCalled();
+        expect(ctx.saveHashCache).toHaveBeenCalledWith('/f'); // as Cancel does
+    });
+
+    // M6: the apply no longer renders. The run renders after its finally (flags released, label set), so a
+    // click on "Restore Order" is never swallowed by isComputingHashes.
+    it('a run that applied renders after its flags are released and its label is set', async () => {
+        const ctx = runCtx();
+        const label = ctx.sortSimilarityBtn.querySelector('.btn-label');
+        ctx._applySimilarityOrder.mockImplementation(async function () {
+            this.isSortedBySimilarity = true;
+            return { applied: true, stats: { cached: 3, added: 0, removed: 0 }, committedPaths: [] };
+        });
+        const atRender = [];
+        ctx.showMedia = vi.fn(async () => {
+            atRender.push([ctx.isComputingHashes, ctx.sortAbortController, label.textContent]);
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(atRender).toEqual([[false, null, 'Restore Order']]);
+        expect(ctx._logSortPerf).toHaveBeenCalledOnce();
+    });
+
+    it('a render failure after the run applied is a warning, not an error', async () => {
+        const ctx = runCtx();
+        ctx.showMedia = vi.fn(async () => {
+            throw new Error('decode');
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        expect(ctx.showNotification).toHaveBeenCalledWith('⚠️ Sorted successfully but failed to load media', 'warning');
         expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('done');
     });
 
@@ -1027,6 +1273,7 @@ describe('how a run ends (my call 3)', () => {
             committedPaths: ['/f/c', '/f/b', '/f/a'],
         });
         await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.loadSortCache).toHaveBeenCalledWith('vptree', '/f'); // M4: the run's folder, named
         expect(ctx._applySimilarityOrder.mock.calls[0][0]).toMatchObject({
             algorithm: 'vptree',
             gen: ctx._similarityRunGen,
@@ -1094,10 +1341,13 @@ describe('how a run ends (my call 3)', () => {
         const passed = runCtx();
         await handleSortBySimilarity.call(passed, false);
         expect(passed._dismissSimilarityOffer).toHaveBeenCalledOnce();
+        expect(passed._invalidateSimilarityRun).not.toHaveBeenCalled(); // a new run bumps the gen itself
 
+        // F2: Restore Order changes the order, so it invalidates (which dismisses the offer and makes an
+        // in-flight Show stale).
         const restore = runCtx({ isSortedBySimilarity: true, originalMediaFiles: media('a', 'b', 'c') });
         await handleSortBySimilarity.call(restore, false);
-        expect(restore._dismissSimilarityOffer).toHaveBeenCalledOnce();
+        expect(restore._invalidateSimilarityRun).toHaveBeenCalledOnce();
 
         const refused = runCtx({ _refuseIfFileOpInFlight: vi.fn(() => true) });
         await handleSortBySimilarity.call(refused, false);
@@ -1110,9 +1360,10 @@ describe('how a run ends (my call 3)', () => {
     });
 
     it('Tournament entry and a folder switch dismiss the offer', () => {
+        // F2: Tournament entry invalidates, which dismisses the offer (and makes an in-flight Show stale).
         const tournament = similarityCtx();
         extract('restoreOriginalOrderForTournament').call(tournament);
-        expect(tournament._dismissSimilarityOffer).toHaveBeenCalledOnce();
+        expect(tournament._invalidateSimilarityRun).toHaveBeenCalledOnce();
 
         const folder = {
             _similarityRunGen: 0,
@@ -1243,5 +1494,63 @@ describe('showNotification: sticky (spec D3)', () => {
         const n = showNotification.call(ctx, 'hello', 'success');
         expect(n.className).toBe('notification success');
         expect(timers.map((t) => t.ms)).toEqual([2000]);
+    });
+});
+
+// M7: a card drawn by Show's placement (no sort flag set) has no abort to reach, so it shows no Cancel.
+describe('updateSortProgress: Cancel only while a sort can be cancelled (M7)', () => {
+    const updateSortProgress = extract('updateSortProgress');
+    let savedDocument;
+
+    // The few DOM pieces updateSortProgress touches: the card, its static markup's parts and the container.
+    function card() {
+        const parts = {};
+        const part = () => ({ textContent: '', style: {}, hidden: false, addEventListener() {} });
+        return {
+            className: '',
+            parentNode: null,
+            classList: { add() {}, remove() {} },
+            set innerHTML(_html) {
+                for (const cls of ['progress-phase', 'progress-fill', 'progress-counts', 'progress-cancel']) {
+                    parts[`.${cls}`] = part();
+                }
+            },
+            querySelector: (selector) => parts[selector] ?? null,
+        };
+    }
+
+    beforeEach(() => {
+        savedDocument = globalThis.document;
+        globalThis.document = { createElement: () => card() };
+    });
+    afterEach(() => {
+        globalThis.document = savedDocument;
+    });
+
+    it('hides Cancel on a card drawn with neither sort flag set, and shows it while a sort runs', () => {
+        const ctx = {
+            isComputingHashes: false,
+            isPredictionSorting: false,
+            progressNotification: null,
+            notificationContainer: {
+                appendChild(child) {
+                    child.parentNode = this;
+                },
+            },
+            computeSortProgressView: extract('computeSortProgressView'),
+        };
+        updateSortProgress.call(ctx, { phase: 'Placing new files', current: 1, total: 2 });
+        const cancel = ctx.progressNotification.querySelector('.progress-cancel');
+        expect(cancel.hidden).toBe(true);
+
+        ctx.isComputingHashes = true;
+        updateSortProgress.call(ctx, { phase: 'Computing hashes', current: 1, total: 2 });
+        expect(ctx.progressNotification.querySelector('.progress-cancel')).toBe(cancel); // the same card
+        expect(cancel.hidden).toBe(false);
+
+        ctx.isComputingHashes = false;
+        ctx.isPredictionSorting = true;
+        updateSortProgress.call(ctx, { phase: 'Sorting…' });
+        expect(cancel.hidden).toBe(false);
     });
 });
