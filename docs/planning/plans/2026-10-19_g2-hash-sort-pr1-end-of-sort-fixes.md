@@ -887,7 +887,7 @@ The final review found this as a pre-existing race. The user chose to fix it on 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
 - **"The similarity sort leaves `isSortedByPrediction` set"** stays open (spec § 12). PR 1 makes it visible in a new way: Show applied over an AI order in compare mode pairs from `mlComparePairIndex`/the score list, not from `mediaFiles[0]`. → BACKLOG 🟤, the same entry (append the observation).
-- **`_waitForRenderIdle` commits anyway after 2 s.** It is shared with the AI sort; a stranded `isLoading` lets an order land under a render. Pre-existing. → BACKLOG 🟤 if no entry covers it.
+- **The AI sort's apply still commits after `_waitForRenderIdle`'s 2 s cap.** After PR #85 review #2, the wait reports whether the render settled. The similarity apply now declines on the cap, and both Restore Order paths refuse. Only `handleSortByPrediction`'s own apply still ignores the result, so a render over 2 s lets the AI order land under it. Pre-existing. → BACKLOG 🟤.
 
 **From the PR #85 code review (2026-10-19). The user ruled on scope.**
 - **Review #1, next as its own PR (high priority: data loss).** A folder switch during feature extraction can replace the new folder's `.feature_cache.json` with an empty file. The steps:

@@ -7864,11 +7864,6 @@ class MediaViewer {
             // the offer.
             return { applied: false, reason: 'busy', stats };
         }
-        if (mark && SimilaritySort.userActedSince(mark, SimilaritySort.takeUserMark(this))) {
-            // The user acted since the run's press (navigated during the placement, which hashes new files on the
-            // main thread, or during the render wait): the order waits on "Show" (spec D3, PR #85 review #3).
-            return { applied: false, reason: 'acted', stats };
-        }
         if (this.isPredictionSorting) {
             // An AI sort is still running (one started during Show's apply): it owns the order, and the offer stays
             // dismissed (A9). One that started AND finished meanwhile is caught above instead, as stale: its start
@@ -7877,6 +7872,13 @@ class MediaViewer {
         }
         if (this.mediaFiles.length === 0) {
             return { applied: false, reason: 'empty' };
+        }
+        // After 'empty': moving every file away is itself a user action, and a Show over the empty screen would do
+        // nothing, so an emptied list ends quietly (F1) rather than as 'acted'.
+        if (mark && SimilaritySort.userActedSince(mark, SimilaritySort.takeUserMark(this))) {
+            // The user acted since the run's press (navigated during the placement, which hashes new files on the
+            // main thread, or during the render wait): the order waits on "Show" (spec D3, PR #85 review #3).
+            return { applied: false, reason: 'acted', stats };
         }
         if (!renderSettled) {
             // The render-idle wait hit its cap with a render still running (PR #85 review #2): showMedia() would
@@ -7990,6 +7992,11 @@ class MediaViewer {
                         await this.saveHashCache(entry.folder);
                     } catch (saveError) {
                         console.warn('Saving the hash cache after a declined Show failed:', saveError);
+                    }
+                    // The save awaited: a folder switch, Restore Order, an AI sort's start or Tournament entry
+                    // during it made the entry stale, and its offer must not reappear in the new state (§ 6.4, F2).
+                    if (this._isStaleSimilarityRun(entry)) {
+                        return;
                     }
                 }
                 this._offerSimilarityOrder(entry);

@@ -943,6 +943,21 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
         expect(ctx.currentIndex).toBe(3);
     });
 
+    // Re-review: moving every file away is itself a user action, so 'acted' must not outrank 'empty' (F1): an
+    // emptied list ends quietly instead of offering Show over the empty screen.
+    it("an emptied list declines 'empty' even though the user acted since the mark", async () => {
+        const ctx = applyCtx({ moveHistory: [], isCompareMode: false });
+        const mark = SimilaritySort.takeUserMark(ctx);
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            ctx.mediaFiles.splice(0); // every file moved away during the wait
+            ctx.moveHistory.push({}, {}, {}, {});
+            ctx.currentIndex = 0;
+            return true;
+        });
+        expect(await apply.call(ctx, sortEntry(), null, mark)).toEqual({ applied: false, reason: 'empty' });
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+    });
+
     it('an emptied list is left alone', async () => {
         // every file moved away during the run
         const ctx = applyCtx({ mediaFiles: [] });
@@ -1155,6 +1170,26 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
         expect(ctx.saveHashCache.mock.invocationCallOrder[0]).toBeLessThan(
             ctx._offerSimilarityOrder.mock.invocationCallOrder[0]
         );
+    });
+
+    // Re-review: the save awaits. A folder switch, Restore Order, an AI sort's start or Tournament entry during it
+    // makes the entry stale, and a re-offer would post a sticky Show into the new state (spec § 6.4, F2).
+    it('a busy Show whose entry goes stale during its hash save does not re-offer', async () => {
+        const { ctx } = showCtx({
+            _applySimilarityOrder: vi.fn(async () => ({
+                applied: false,
+                reason: 'busy',
+                stats: { cached: 2, added: 1, removed: 0 },
+            })),
+            saveSortCache: vi.fn(async () => {}),
+        });
+        ctx.saveHashCache = vi.fn(async () => {
+            ctx._similarityRunGen++; // _invalidateSimilarityRun, during the save
+        });
+        await onShow.call(ctx);
+        expect(ctx.saveHashCache).toHaveBeenCalledOnce();
+        expect(ctx._offerSimilarityOrder).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
     });
 
     it('a failed apply reports the error', async () => {
@@ -1836,6 +1871,23 @@ describe('how a run ends (my call 3)', () => {
         expect(ctx.saveHashCache).toHaveBeenCalledWith('/f');
         expect(ctx.saveSortCache).not.toHaveBeenCalled();
         expect(outcome(ctx)).toBe('offered');
+    });
+
+    // Re-review: the run's handling of an 'empty' apply with the real apply — every file moved away during the
+    // render wait (itself a user action) ends quietly: declined, no offer, nothing saved, no notice.
+    it("a list emptied during the apply's wait ends declined with no offer, though the user acted", async () => {
+        const ctx = runCtx(realApply());
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            ctx.mediaFiles.splice(0);
+            ctx.moveHistory.push({}, {}, {});
+            return true;
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx._offerSimilarityOrder).not.toHaveBeenCalled();
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx.saveHashCache).toHaveBeenCalledTimes(1); // only the hash phase's own end save
+        expect(ctx.showNotification.mock.calls.filter((c) => /✅|❌/.test(c[0]))).toEqual([]);
+        expect(outcome(ctx)).toBe('declined');
     });
 
     it("a computing run where the user acts during the apply's wait offers Show (#3)", async () => {
