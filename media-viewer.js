@@ -7291,7 +7291,8 @@ class MediaViewer {
         };
         // Set once an order was committed. The run renders it after its finally (M6), once its flags are released
         // and its button reads "Restore Order", so a click on that label is never swallowed by isComputingHashes.
-        let applied = false;
+        // A cache hit with new files renders before its saves instead, and clears it (R-F6).
+        let renderPending = false;
 
         try {
             this.isComputingHashes = true;
@@ -7354,11 +7355,24 @@ class MediaViewer {
                 addPhase('apply', applyStart);
 
                 if (result.applied) {
-                    applied = true; // first: whatever follows, a committed order gets its render
+                    renderPending = true; // first: whatever follows, a committed order gets its render
                     const { stats, committedPaths } = result;
                     endIfStale();
                     // Save the hashes and the order the placement added to, from the committed order
                     if (stats.added > 0) {
+                        // Rendered now, before the two saves (R-F6): they await, and the screen would otherwise
+                        // show the old file while the cursor points at the new order's first file, so a rating
+                        // key pressed meanwhile would move a file the user has not seen. Not again after the
+                        // finally.
+                        renderPending = false;
+                        try {
+                            await this.showMedia();
+                        } catch (mediaError) {
+                            console.error('Error showing media after sort:', mediaError);
+                            // Don't undo the sort - media loading is separate concern
+                            this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
+                        }
+                        endIfStale();
                         const saveStart = performance.now();
                         await this.saveHashCache(run.folder);
                         endIfStale();
@@ -7402,13 +7416,15 @@ class MediaViewer {
                     // Lazy extraction (Group P3): vectors are no longer pre-warmed on folder open.
                     // If any current file lacks an in-memory CLIP vector, extract now and wait —
                     // kickoff loads the cache + model and runs extraction to completion, reporting on
-                    // the background-extraction progress, not on this run's card. Nothing connects the
-                    // run's Cancel to it, so a press during the wait takes effect only once the
-                    // extraction has finished (G2 PR 1 final review F3, open). Gated so a repeat CLIP
-                    // sort (vectors already cached) skips the ~40s feature-cache reload.
+                    // the background-extraction progress, not on this run's card. It takes the run's
+                    // signal (R-F3b): a Cancel, or a folder load's abort of a stale run, stops the cache
+                    // load, starts nothing after it, and cancels a running extraction, so the run ends at
+                    // once. A cold-start model download cannot be interrupted; an abort during it takes
+                    // effect when it resolves. Gated so a repeat CLIP sort (vectors already cached) skips
+                    // the ~40s feature-cache reload.
                     if (this.clipVectorsNeedExtraction()) {
                         const t0 = performance.now();
-                        await this.kickoffBackgroundExtractionIfEnabled();
+                        await this.kickoffBackgroundExtractionIfEnabled({ signal: run.controller.signal });
                         addPhase('extract', t0);
                         this._assertSimilarityRunLive(run);
                     }
@@ -7610,7 +7626,7 @@ class MediaViewer {
                     const result = await this._applySimilarityOrder(entry, run.controller.signal);
                     addPhase('apply', applyStart);
                     if (result.applied) {
-                        applied = true; // first: whatever follows, a committed order gets its render
+                        renderPending = true; // first: whatever follows, a committed order gets its render
                         endIfStale();
                         this.showNotification(entry.doneMessage, 'success');
                         perf.outcome = 'done';
@@ -7684,9 +7700,10 @@ class MediaViewer {
         }
 
         // The committed order's first file, after the finally (M6): the flags are released and the label reads
-        // "Restore Order". No await between the finally and this call, so nothing can act in between. A run made
+        // "Restore Order". No await between the finally and this call, so nothing can act in between. (A cache hit
+        // with new files has already rendered, before its saves: R-F6.) A run made
         // stale since the commit leaves the screen to the folder load that made it so.
-        if (applied && !this._isStaleSimilarityRun(run)) {
+        if (renderPending && !this._isStaleSimilarityRun(run)) {
             try {
                 await this.showMedia();
             } catch (mediaError) {
@@ -10991,7 +11008,11 @@ class MediaViewer {
         });
     }
 
-    async kickoffBackgroundExtractionIfEnabled() {
+    // `signal` (G2 PR 1, R-F3b; the similarity sort's CLIP branch passes its run's) works as in handleSortByPrediction:
+    // the cache load takes it, an abort seen after an await starts nothing more, and an abort while the extraction
+    // runs cancels it. A cold-start model download cannot be interrupted (the IPC is in flight): an abort during it
+    // takes effect once it resolves. Without a signal the kickoff behaves as before.
+    async kickoffBackgroundExtractionIfEnabled({ signal } = {}) {
         if (!this.enableClipFeatures) return;
         // No folder loaded → nothing to extract. Defensive: the lazy CLIP-sort caller already
         // gates on clipVectorsNeedExtraction() (false for an empty folder), so this guards any
@@ -11007,15 +11028,24 @@ class MediaViewer {
             }
             // loadFolder() clears featureCache/clipCache/featureMetadata; rehydrate from
             // disk before extraction so cached entries are honored on every folder switch.
-            await this.loadFeatureCache();
+            await this.loadFeatureCache({ signal });
+            if (signal?.aborted) return;
             // Await CLIP model load so extraction sees clipWorkerReady === true. Without
             // this, on cold start (first 87 MB download) every extractClipEmbedding call
             // returns null while the IPC is in flight and the run silently completes
             // with zero CLIP vectors.
             if (!this.clipWorkerReady) {
                 await this.initClipModel();
+                if (signal?.aborted) return;
             }
-            await this.startBackgroundFeatureExtraction();
+            // Only while this extraction runs: removed once it settles, so a later abort cancels nothing unrelated.
+            const onAbort = () => this.cancelBackgroundExtraction();
+            signal?.addEventListener('abort', onAbort, { once: true });
+            try {
+                await this.startBackgroundFeatureExtraction();
+            } finally {
+                signal?.removeEventListener('abort', onAbort);
+            }
         } catch (err) {
             if (window.electronAPI?.logError) {
                 window.electronAPI.logError(`Background extraction failed: ${err?.message ?? err}`);

@@ -375,6 +375,73 @@ describe('the run (spec § 6–7, T3)', () => {
         expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe(how);
     });
 
+    // R-F3b: the run's Cancel reaches the kickoff, which runs for minutes on a folder without vectors. These run
+    // the real kickoff, with the run's own signal, against stubbed cache, model and extraction.
+    describe("Cancel reaches the CLIP branch's extraction (R-F3b)", () => {
+        const kickoff = extract('kickoffBackgroundExtractionIfEnabled');
+
+        function realKickoffCtx(overrides = {}) {
+            return clipCtx({
+                kickoffBackgroundExtractionIfEnabled: kickoff,
+                featureWorkers: [{}],
+                clipWorkerReady: true,
+                initClipModel: vi.fn(async () => {}),
+                loadFeatureCache: vi.fn(async () => {}),
+                startBackgroundFeatureExtraction: vi.fn(async () => {}),
+                cancelBackgroundExtraction: vi.fn(),
+                ...overrides,
+            });
+        }
+
+        it('(a) a Cancel during the cache load starts no extraction and ends the run cancelled', async () => {
+            const ctx = realKickoffCtx();
+            ctx.loadFeatureCache = vi.fn(async () => {
+                ctx.sortAbortController.abort(); // the Sort button's Cancel press
+            });
+            await handleSortBySimilarity.call(ctx, false);
+            expect(ctx.loadFeatureCache).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+            expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+            expect(ctx.runSortingWorker).not.toHaveBeenCalled();
+            expect(ctx.showNotification).toHaveBeenCalledWith('❌ Sorting cancelled', 'info');
+            expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+        });
+
+        it('(b) a Cancel during the extraction cancels it at once and ends the run cancelled', async () => {
+            const ctx = realKickoffCtx();
+            let finishExtraction;
+            ctx.startBackgroundFeatureExtraction = vi.fn(() => {
+                const extraction = new Promise((resolve) => {
+                    finishExtraction = resolve;
+                });
+                ctx.sortAbortController.abort();
+                return extraction;
+            });
+            // cancelBackgroundExtraction stops the loop: the extraction then settles.
+            ctx.cancelBackgroundExtraction = vi.fn(() => finishExtraction());
+            const done = handleSortBySimilarity.call(ctx, false);
+            const settled = await settledWithin(done, 200);
+            finishExtraction(); // lets an unfixed run finish, so a RED run does not leak
+            await done;
+            expect(settled).toBe('settled');
+            expect(ctx.cancelBackgroundExtraction).toHaveBeenCalledOnce();
+            expect(ctx.runSortingWorker).not.toHaveBeenCalled();
+            expect(ctx.showNotification).toHaveBeenCalledWith('❌ Sorting cancelled', 'info');
+            expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+        });
+
+        it('(c) a run made stale during the kickoff starts no extraction and says nothing', async () => {
+            const ctx = realKickoffCtx({ _invalidateSimilarityRun: extract('_invalidateSimilarityRun') });
+            ctx.loadFeatureCache = vi.fn(async () => {
+                ctx._invalidateSimilarityRun(); // loadFolder: bumps the gen and aborts the computing run
+            });
+            await handleSortBySimilarity.call(ctx, false);
+            expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+            expect(ctx.runSortingWorker).not.toHaveBeenCalled();
+            expect(ctx.showNotification.mock.calls.filter((c) => /cancelled|Error/.test(c[0]))).toEqual([]);
+            expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('stale');
+        });
+    });
+
     // Fix round 1: sorting-worker.js's loops are synchronous, so its abort flag is read only after the loop
     // ends and it keeps posting progress. A run made stale while the worker sorts must end at once, silently.
     it('a run made stale while the worker sorts ends at once and writes nothing more', async () => {
@@ -1303,6 +1370,27 @@ describe('how a run ends (my call 3)', () => {
         await handleSortBySimilarity.call(ctx, false);
         expect(ctx.saveHashCache).toHaveBeenCalledWith('/f');
         expect(ctx.saveSortCache).toHaveBeenCalledWith('vptree', committedPaths, '/f/c', '/f');
+    });
+
+    // R-F6: the two saves await. Rendered after them, the screen would show the old file while the cursor points
+    // at the new order's first file, and a rating key pressed meanwhile would move a file the user has not seen.
+    it('a cache hit with new files renders the committed order before its saves, and only once', async () => {
+        const ctx = runCtx({
+            loadSortCache: vi.fn(async () => ({ algorithm: 'vptree', sortedPaths: ['c', 'a'], timestamp: 1 })),
+        });
+        ctx._applySimilarityOrder.mockResolvedValue({
+            applied: true,
+            stats: { cached: 2, added: 1, removed: 0 },
+            committedPaths: ['/f/c', '/f/b', '/f/a'],
+        });
+        let renderedBeforeSave = null;
+        ctx.saveHashCache = vi.fn(async () => {
+            renderedBeforeSave = ctx.showMedia.mock.calls.length > 0;
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(renderedBeforeSave).toBe(true);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('done');
     });
 
     it('a busy cache-hit apply falls back to Show', async () => {

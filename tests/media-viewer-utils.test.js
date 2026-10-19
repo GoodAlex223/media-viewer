@@ -979,6 +979,73 @@ describe('kickoffBackgroundExtractionIfEnabled', () => {
         expect(ctx.showNotification.mock.calls[0][0]).toContain('Starting feature extraction');
     });
 
+    // R-F3b: the similarity sort's CLIP branch passes its run's signal.
+    describe('with a signal (R-F3b)', () => {
+        it('passes the signal to loadFeatureCache, and starts nothing once it was aborted there', async () => {
+            const controller = new AbortController();
+            const ctx = makeCtx({
+                loadFeatureCache: vi.fn(async () => controller.abort()),
+                cancelBackgroundExtraction: vi.fn(),
+            });
+            await kickoffBackgroundExtractionIfEnabled.call(ctx, { signal: controller.signal });
+            expect(ctx.loadFeatureCache).toHaveBeenCalledWith({ signal: controller.signal });
+            expect(ctx.initClipModel).not.toHaveBeenCalled();
+            expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+        });
+
+        it('starts no extraction once the signal was aborted during the model load', async () => {
+            const controller = new AbortController();
+            const ctx = makeCtx({
+                initClipModel: vi.fn(async () => controller.abort()),
+                cancelBackgroundExtraction: vi.fn(),
+            });
+            await kickoffBackgroundExtractionIfEnabled.call(ctx, { signal: controller.signal });
+            expect(ctx.initClipModel).toHaveBeenCalledOnce();
+            expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+        });
+
+        it('cancels the extraction on an abort while it runs, and not after it settled', async () => {
+            const controller = new AbortController();
+            const ctx = makeCtx({ cancelBackgroundExtraction: vi.fn() });
+            ctx.startBackgroundFeatureExtraction = vi.fn(async () => {
+                controller.abort();
+                expect(ctx.cancelBackgroundExtraction).toHaveBeenCalledOnce();
+            });
+            await kickoffBackgroundExtractionIfEnabled.call(ctx, { signal: controller.signal });
+            expect(ctx.cancelBackgroundExtraction).toHaveBeenCalledOnce();
+
+            // The listener is removed once the extraction settles: a later abort cancels nothing unrelated.
+            const later = new AbortController();
+            const ctx2 = makeCtx({ cancelBackgroundExtraction: vi.fn() });
+            await kickoffBackgroundExtractionIfEnabled.call(ctx2, { signal: later.signal });
+            later.abort();
+            expect(ctx2.cancelBackgroundExtraction).not.toHaveBeenCalled();
+        });
+    });
+
+    // R-F3b (d): with no signal the kickoff is unchanged. The F3 probe's shape: a cancelBackgroundExtraction from
+    // elsewhere (e.g. a folder load) during the cache load does not stop the kickoff from starting its extraction.
+    it('without a signal, a cancel during the cache load still lets the extraction start (unchanged)', async () => {
+        let releaseLoad;
+        const ctx = makeCtx({
+            clipWorkerReady: true,
+            loadFeatureCache: vi.fn(
+                () =>
+                    new Promise((resolve) => {
+                        releaseLoad = resolve;
+                    })
+            ),
+            cancelBackgroundExtraction: vi.fn(),
+        });
+        const kickoff = kickoffBackgroundExtractionIfEnabled.call(ctx);
+        await Promise.resolve();
+        ctx.cancelBackgroundExtraction();
+        releaseLoad();
+        await kickoff;
+        expect(ctx.loadFeatureCache).toHaveBeenCalledOnce();
+        expect(ctx.startBackgroundFeatureExtraction).toHaveBeenCalledOnce();
+    });
+
     it('no-ops (no toast, no init) when no folder is loaded', async () => {
         const ctx = makeCtx({ mediaFiles: [] });
         await kickoffBackgroundExtractionIfEnabled.call(ctx);
