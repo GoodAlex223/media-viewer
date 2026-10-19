@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| [G2 PR 1 End-of-Sort Fixes Plan](planning/plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md) | PR 1 of G2 (spec D7): the similarity sort works on a snapshot with captured settings, saves its hashes as it goes and on Cancel, restores nothing, writes nothing once stale, and ends through one apply function, or a sticky Show message if the user acted. Five tasks; hashing stays on today's route (Group G2, Oct 19–23) |
+| [G2 PR 1 End-of-Sort Fixes Plan](planning/plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md) | PR 1 of G2 (spec D7): the similarity sort works on a snapshot with captured settings, saves its hashes as it goes and on Cancel, restores nothing, writes nothing once stale, and ends through one apply function, or a sticky Show message if the user acted. Six tasks; hashing stays on today's route (Group G2, Oct 19–23) |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md

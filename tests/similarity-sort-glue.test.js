@@ -86,7 +86,7 @@ function similarityCtx(overrides = {}) {
         sortSimilarityBtn: { querySelector: () => label },
         _refuseIfFileOpInFlight: vi.fn(() => false),
         _refuseIfFolderLoadInFlight: vi.fn(() => false),
-        _waitForRenderIdle: vi.fn(async () => {}),
+        _waitForRenderIdle: vi.fn(async () => true),
         _onOrderChanged: vi.fn(),
         _dismissSimilarityOffer: vi.fn(),
         _invalidateSimilarityRun: vi.fn(),
@@ -158,6 +158,7 @@ describe('Restore Order keeps every listed file (spec § 7, A1)', () => {
             ctx._waitForRenderIdle = vi.fn(async () => {
                 seq.push('wait');
                 during(ctx);
+                return true;
             });
             ctx._onOrderChanged = vi.fn(() => seq.push('commit'));
             ctx.showMedia = vi.fn(async () => seq.push('render'));
@@ -179,6 +180,24 @@ describe('Restore Order keeps every listed file (spec § 7, A1)', () => {
                 expect(ctx._invalidateSimilarityRun.mock.invocationCallOrder[0]).toBeLessThan(
                     ctx._waitForRenderIdle.mock.invocationCallOrder[0]
                 );
+            }
+        );
+
+        // PR #85 review #2: the wait is capped. A render still running at the cap (a stranded isLoading, a long
+        // JXL decode) must not be restored under: showMedia() would return early, leaving the screen on one file
+        // and the cursor on another.
+        it.each(['similarity', 'AI'])(
+            '%s: a render still running at the cap refuses with a notice and restores nothing (#2)',
+            async (which) => {
+                const { ctx } = restoreCtx(which);
+                ctx._waitForRenderIdle = vi.fn(async () => false);
+                const before = ctx.mediaFiles;
+                await run(which, ctx);
+                expect(ctx.mediaFiles).toBe(before);
+                expect(ctx[restorePaths[which].flag]).toBe(true);
+                expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+                expect(ctx.showMedia).not.toHaveBeenCalled();
+                expect(ctx.showNotification.mock.calls).toEqual([['Wait for the file to finish loading', 'info']]);
             }
         );
 
@@ -561,8 +580,9 @@ describe('the run (spec § 6–7, T3)', () => {
         });
     });
 
-    // Fix round 1: sorting-worker.js's loops are synchronous, so its abort flag is read only after the loop
-    // ends and it keeps posting progress. A run made stale while the worker sorts must end at once, silently.
+    // Fix round 1: sorting-worker.js's loops are synchronous and keep posting progress until they end, so the
+    // renderer posts no abort and terminates the worker instead. A run made stale while the worker sorts must end
+    // at once, silently.
     it('a run made stale while the worker sorts ends at once and writes nothing more', async () => {
         const savedWorker = globalThis.Worker;
         globalThis.Worker = FakeWorker;
@@ -632,8 +652,9 @@ describe('_invalidateSimilarityRun', () => {
     });
 });
 
-// Fix round 1 (T3 review): the worker's sort loops are synchronous, so its abort flag is read only after the
-// loop ends. runSortingWorker itself must stop on abort: terminate, reject at once, ignore late messages.
+// Fix round 1 (T3 review): the worker's sort loops are synchronous, so an abort flag in the worker would be read
+// only after a loop ends. runSortingWorker itself stops on abort, posting no abort message: terminate, reject at
+// once, ignore late messages.
 describe('runSortingWorker stops on abort (T3 fix round 1)', () => {
     const runSortingWorker = extract('runSortingWorker');
     let savedWorker;
@@ -746,7 +767,7 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
             updateSortProgress: vi.fn(),
             applyCachedSortOrder: extract('applyCachedSortOrder'),
             insertNewFilesInSortedOrder: extract('insertNewFilesInSortedOrder'),
-            _waitForRenderIdle: vi.fn(async () => {}),
+            _waitForRenderIdle: vi.fn(async () => true),
             _isStaleSimilarityRun: extract('_isStaleSimilarityRun'),
             ...overrides,
         });
@@ -775,6 +796,7 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
             }),
             _waitForRenderIdle: vi.fn(async () => {
                 seq.push('wait');
+                return true;
             }),
             _onOrderChanged: vi.fn(() => seq.push('commit')),
         });
@@ -803,9 +825,16 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
         ],
     ])('declines (%s) when the state changed during the wait, writing nothing', async (reason, change) => {
         const ctx = applyCtx();
-        ctx._waitForRenderIdle = vi.fn(async () => change(ctx));
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            change(ctx);
+            return true;
+        });
         const listBefore = ctx.mediaFiles;
-        expect(await apply.call(ctx, sortEntry())).toEqual({ applied: false, reason });
+        // PR #85 review #6: a busy decline carries its stats, so the caller can save what the placement hashed.
+        const stats = { cached: 3, removed: 1, added: 1 };
+        expect(await apply.call(ctx, sortEntry())).toEqual(
+            reason === 'busy' ? { applied: false, reason, stats } : { applied: false, reason }
+        );
         expect(ctx.mediaFiles).toBe(listBefore);
         expect(ctx._onOrderChanged).not.toHaveBeenCalled();
         expect(ctx.originalMediaFiles).toEqual([]);
@@ -819,9 +848,14 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
         const ctx = applyCtx();
         ctx._waitForRenderIdle = vi.fn(async () => {
             ctx._folderLoadInFlight = true;
+            return true;
         });
         const listBefore = ctx.mediaFiles;
-        expect(await apply.call(ctx, sortEntry())).toEqual({ applied: false, reason: 'busy' });
+        expect(await apply.call(ctx, sortEntry())).toEqual({
+            applied: false,
+            reason: 'busy',
+            stats: { cached: 3, removed: 1, added: 1 },
+        });
         expect(ctx.mediaFiles).toBe(listBefore);
         expect(ctx._onOrderChanged).not.toHaveBeenCalled();
         expect(ctx.originalMediaFiles).toEqual([]);
@@ -831,6 +865,7 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
         const ctx = applyCtx();
         ctx._waitForRenderIdle = vi.fn(async () => {
             ctx.isPredictionSorting = true;
+            return true;
         });
         const listBefore = ctx.mediaFiles;
         expect(await apply.call(ctx, sortEntry())).toEqual({ applied: false, reason: 'sorting' });
@@ -874,6 +909,40 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
         expect(ctx.mediaFiles).toBe(listBefore);
     });
 
+    // PR #85 review #2: after the capped wait gives up, a commit would land under a render still running.
+    it('declines (busy) with its stats when the render did not settle within the cap (#2)', async () => {
+        const ctx = applyCtx({ _waitForRenderIdle: vi.fn(async () => false) });
+        const listBefore = ctx.mediaFiles;
+        expect(await apply.call(ctx, sortEntry())).toEqual({
+            applied: false,
+            reason: 'busy',
+            stats: { cached: 3, removed: 1, added: 1 },
+        });
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx.currentIndex).toBe(2);
+    });
+
+    // PR #85 review #3: the run's mark is checked at the commit, after the placement and the render wait, so a
+    // user who navigated meanwhile is not moved to index 0 under their hands. Show passes no mark.
+    it('declines (acted) with its stats when the user acted since the mark (#3)', async () => {
+        const ctx = applyCtx({ moveHistory: [], isCompareMode: false });
+        const mark = SimilaritySort.takeUserMark(ctx);
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            ctx.currentIndex = 3; // Next, during the wait
+            return true;
+        });
+        const listBefore = ctx.mediaFiles;
+        expect(await apply.call(ctx, sortEntry(), null, mark)).toEqual({
+            applied: false,
+            reason: 'acted',
+            stats: { cached: 3, removed: 1, added: 1 },
+        });
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx.currentIndex).toBe(3);
+    });
+
     it('an emptied list is left alone', async () => {
         // every file moved away during the run
         const ctx = applyCtx({ mediaFiles: [] });
@@ -891,6 +960,7 @@ describe('_applySimilarityOrder (spec § 8, A4)', () => {
         // A file is restored during the wait: the snapshot is the live list AT THE COMMIT.
         ctx._waitForRenderIdle = vi.fn(async () => {
             ctx.mediaFiles = [...ctx.mediaFiles, ...media('f')];
+            return true;
         });
         await apply.call(ctx, sortEntry());
         if (sorted) {
@@ -953,6 +1023,11 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
         return { ctx, entry };
     }
 
+    // The shared progress element in its two forms (#14): updateSortProgress's card carries
+    // `notification-progress`; updateProgressNotification's text form (ML scoring, extraction) never does.
+    const textCard = () => ({ parentNode: {}, classList: { contains: () => false } });
+    const sortCard = () => ({ parentNode: {}, classList: { contains: (c) => c === 'notification-progress' } });
+
     it('a new offer replaces an earlier one', () => {
         const first = { remove: vi.fn() };
         const second = { remove: vi.fn() };
@@ -1013,6 +1088,7 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
         });
         ctx._waitForRenderIdle = vi.fn(async () => {
             ctx.isPredictionSorting = true; // an AI sort pressed while Show applies
+            return true;
         });
         const listBefore = ctx.mediaFiles;
         await onShow.call(ctx);
@@ -1112,7 +1188,7 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
             false,
         ],
     ])('Show clears the card %s', async (_l, applyImpl, clears) => {
-        const { ctx } = showCtx();
+        const { ctx } = showCtx({ progressNotification: sortCard() }); // the card its placement drew
         const seq = [];
         ctx._applySimilarityOrder = vi.fn(async function (...args) {
             seq.push('apply');
@@ -1128,19 +1204,116 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
         expect(seq).toEqual(clears ? ['apply', 'clear'] : ['apply']);
     });
 
-    // M8: a card on screen before Show (another owner's) is not Show's to clear.
-    it('a card that existed before Show survives it', async () => {
-        const { ctx } = showCtx({ progressNotification: { parentNode: {} } });
+    // M8: a card on screen before Show (another owner's) is not Show's to clear. #14: owned by form, so a text-form
+    // card (ML scoring's, the extraction's) survives.
+    it('a text-form card that existed before Show survives it', async () => {
+        const { ctx } = showCtx({ progressNotification: textCard() });
         await onShow.call(ctx);
         expect(ctx._applySimilarityOrder).toHaveBeenCalledOnce();
         expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
+    });
+
+    // PR #85 review #14: a snapshot taken before Show's awaits misjudged this. Scoring's unconditional clear lands
+    // during the placement, the placement re-creates a sort card ("Placing new files…", Cancel hidden), and with
+    // no sort running nobody else will ever clear it.
+    it('a sort card its placement re-created after scoring cleared the text card is cleared by Show (#14)', async () => {
+        const { ctx } = showCtx({ progressNotification: textCard() });
+        ctx._applySimilarityOrder = vi.fn(async () => {
+            ctx.progressNotification = sortCard();
+            return { applied: true, stats: { cached: 4, added: 0, removed: 0 }, committedPaths: [] };
+        });
+        await onShow.call(ctx);
+        expect(ctx.clearProgressNotification).toHaveBeenCalledOnce();
+    });
+
+    // PR #85 review #13: a folder switch during the render throws in the old folder; its warning must not land in
+    // the new one (spec § 6.4: no message).
+    it('a render that throws after the entry went stale posts no warning (#13)', async () => {
+        const { ctx } = showCtx();
+        ctx.showMedia = vi.fn(async () => {
+            ctx._similarityRunGen++; // loadFolder for another folder during showSingleMedia's cleanup wait
+            throw new Error('cleanup wait');
+        });
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await onShow.call(ctx);
+        } finally {
+            errorSpy.mockRestore();
+        }
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+    });
+
+    // PR #85 review #6: Show's placement hashes files added since the order was computed. Saved after the render,
+    // to the entry's own folder, as the run's cache hit does; otherwise every later Sort hashes them again.
+    it('Show that placed new files saves both caches to its folder after its render (#6)', async () => {
+        const seq = [];
+        const committedPaths = ['/f/c', '/f/a', '/f/d'];
+        const { ctx } = showCtx({
+            _applySimilarityOrder: vi.fn(async () => ({
+                applied: true,
+                stats: { cached: 2, added: 1, removed: 0 },
+                committedPaths,
+            })),
+            showMedia: vi.fn(async () => seq.push('render')),
+            saveHashCache: vi.fn(async () => seq.push('hash')),
+            saveSortCache: vi.fn(async () => seq.push('sort')),
+        });
+        await onShow.call(ctx);
+        expect(seq).toEqual(['render', 'hash', 'sort']);
+        expect(ctx.saveHashCache).toHaveBeenCalledWith('/f');
+        expect(ctx.saveSortCache).toHaveBeenCalledWith('vptree', committedPaths, '/f/c', '/f');
+    });
+
+    it('a failed save after Show is a console warning, never a Show error (#6)', async () => {
+        const { ctx, entry } = showCtx({
+            _applySimilarityOrder: vi.fn(async () => ({
+                applied: true,
+                stats: { cached: 2, added: 1, removed: 0 },
+                committedPaths: ['/f/c'],
+            })),
+            saveHashCache: vi.fn(async () => {
+                throw new Error('disk full');
+            }),
+            saveSortCache: vi.fn(async () => {}),
+        });
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        let warned;
+        try {
+            await onShow.call(ctx);
+            warned = warnSpy.mock.calls.length;
+        } finally {
+            warnSpy.mockRestore();
+        }
+        expect(ctx.saveHashCache).toHaveBeenCalledOnce();
+        expect(warned).toBe(1);
+        expect(ctx.showNotification.mock.calls.filter((c) => /❌/.test(c[0]))).toEqual([]);
+        expect(ctx.showNotification).toHaveBeenCalledWith(entry.doneMessage, 'success');
+    });
+
+    // PR #85 review #2: a render still running at the cap is not committed under; the offer comes back.
+    it('Show re-offers when the render did not settle within the cap (#2)', async () => {
+        const { ctx, entry } = showCtx({
+            _applySimilarityOrder: extract('_applySimilarityOrder'),
+            _waitForRenderIdle: vi.fn(async () => false),
+            applyCachedSortOrder: vi.fn(async function () {
+                return { order: [...this.mediaFiles].reverse(), stats: { cached: 3, added: 0, removed: 0 } };
+            }),
+            mediaFiles: media('a', 'b', 'c'),
+        });
+        const listBefore = ctx.mediaFiles;
+        await onShow.call(ctx);
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx.showMedia).not.toHaveBeenCalled();
+        expect(ctx._offerSimilarityOrder).toHaveBeenCalledWith(entry);
     });
 
     // M2: a folder switch during Show's render makes the entry stale: no success notice for an order that is gone.
     it('Show reports nothing when its entry went stale during the render', async () => {
         const { ctx, entry } = showCtx({
             _applySimilarityOrder: extract('_applySimilarityOrder'),
-            _waitForRenderIdle: vi.fn(async () => {}),
+            _waitForRenderIdle: vi.fn(async () => true),
             applyCachedSortOrder: vi.fn(async function () {
                 return { order: [...this.mediaFiles].reverse(), stats: { cached: 3, added: 0, removed: 0 } };
             }),
@@ -1183,6 +1356,7 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
                     ran = true; // the AI sort waits for render idle too: run the change once
                     await during(ctx);
                 }
+                return true;
             });
             return { ctx, entry, results };
         }
@@ -1279,7 +1453,9 @@ describe('how a run ends (my call 3)', () => {
                 gen: ctx._similarityRunGen,
                 folder: '/f',
             }),
-            expect.any(AbortSignal)
+            expect.any(AbortSignal),
+            // #3: the run's mark, checked again at the commit
+            expect.objectContaining({ currentPath: '/f/a', currentIndex: 0, historyLength: 0 })
         );
         expect(ctx._offerSimilarityOrder).not.toHaveBeenCalled();
         expect(ctx.showNotification).toHaveBeenCalledWith('✅ Sorted 3 files with VP-Tree (fastest)!', 'success');
@@ -1301,6 +1477,7 @@ describe('how a run ends (my call 3)', () => {
         });
         ctx._waitForRenderIdle = vi.fn(async () => {
             ctx.sortAbortController.abort(); // the Sort button's Cancel press
+            return true;
         });
         const listBefore = ctx.mediaFiles;
         await handleSortBySimilarity.call(ctx, false);
@@ -1527,7 +1704,7 @@ describe('how a run ends (my call 3)', () => {
         const ctx = runCtx({
             loadSortCache: vi.fn(async () => ({ algorithm: 'vptree', sortedPaths: ['c', 'a'], timestamp: 1 })),
             _applySimilarityOrder: extract('_applySimilarityOrder'),
-            _waitForRenderIdle: vi.fn(async () => {}),
+            _waitForRenderIdle: vi.fn(async () => true),
             _fileOpInFlight: false,
         });
         ctx.applyCachedSortOrder = vi.fn(async () => {
@@ -1542,6 +1719,196 @@ describe('how a run ends (my call 3)', () => {
         expect(ctx.saveSortCache).not.toHaveBeenCalled();
         expect(ctx.showNotification).toHaveBeenCalledWith('❌ Sorting cancelled', 'info');
         expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+    });
+
+    // ---- PR #85 code review, fix wave (groups A and B) ----
+    const cacheHit = () => vi.fn(async () => ({ algorithm: 'vptree', sortedPaths: ['c', 'a'], timestamp: 1 }));
+    const outcome = (ctx) => ctx._logSortPerf.mock.calls[0][0].outcome;
+    /** The real apply, past its guards, with a stub placement that reverses the live list. */
+    const realApply = (overrides = {}) => ({
+        _applySimilarityOrder: extract('_applySimilarityOrder'),
+        _fileOpInFlight: false,
+        _folderLoadInFlight: false,
+        applyCachedSortOrder: vi.fn(async function () {
+            return { order: [...this.mediaFiles].reverse(), stats: { cached: 3, added: 0, removed: 0 } };
+        }),
+        ...overrides,
+    });
+
+    // #11: the hash branch ends quietly when every file was moved away; the CLIP branch failed instead.
+    it('a CLIP list emptied during the extraction wait ends quietly (#11)', async () => {
+        const ctx = runCtx({
+            sortAlgorithm: 'clip',
+            enableClipFeatures: true,
+            clipVectorsNeedExtraction: () => true,
+            clipCache: new Map(['a', 'b', 'c'].map((n) => [`/f/${n}`, new Float32Array([1, 0])])),
+        });
+        ctx.kickoffBackgroundExtractionIfEnabled = vi.fn(async () => {
+            // Every file moved away during the extraction: removeFileFromList purges each one's CLIP vector.
+            for (const f of ctx.mediaFiles.splice(0)) {
+                ctx.clipCache.delete(f.path);
+                ctx.moveHistory.push({});
+            }
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        quietEnd(ctx);
+        expect(ctx.runSortingWorker).not.toHaveBeenCalled();
+    });
+
+    // #13: a folder switch during a render throws in the old folder; its warning must not land in the new one.
+    it('a cache-hit render that throws after the run went stale posts no warning (#13, R-F6 site)', async () => {
+        const ctx = runCtx({ loadSortCache: cacheHit() });
+        ctx._applySimilarityOrder.mockResolvedValue({
+            applied: true,
+            stats: { cached: 2, added: 1, removed: 0 },
+            committedPaths: ['/f/c', '/f/b', '/f/a'],
+        });
+        ctx.showMedia = vi.fn(async () => {
+            ctx._similarityRunGen++; // loadFolder for another folder during showSingleMedia's cleanup wait
+            throw new Error('cleanup wait');
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        expect(ctx.showNotification.mock.calls.filter((c) => /⚠️/.test(c[0]))).toEqual([]);
+        expect(outcome(ctx)).toBe('stale');
+    });
+
+    it('a post-finally render that throws after the run went stale posts no warning (#13)', async () => {
+        const ctx = runCtx();
+        ctx.showMedia = vi.fn(async () => {
+            ctx._similarityRunGen++;
+            throw new Error('cleanup wait');
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.showMedia).toHaveBeenCalledOnce();
+        expect(ctx.showNotification.mock.calls.filter((c) => /⚠️/.test(c[0]))).toEqual([]);
+    });
+
+    // #6: the placement hashed the files added since the order was saved; a declined apply used to drop them.
+    it('a busy cache hit that placed new files saves its hashes, not the order, and offers Show (#6)', async () => {
+        const ctx = runCtx({ loadSortCache: cacheHit() });
+        ctx._applySimilarityOrder.mockResolvedValue({
+            applied: false,
+            reason: 'busy',
+            stats: { cached: 2, added: 1, removed: 0 },
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.saveHashCache).toHaveBeenCalledWith('/f');
+        expect(ctx.saveSortCache).not.toHaveBeenCalled();
+        expect(ctx._offerSimilarityOrder).toHaveBeenCalledOnce();
+        expect(outcome(ctx)).toBe('offered');
+    });
+
+    // #3: a far-behind cache hashes each new file on the main thread while navigation stays live.
+    it('a cache hit where the user navigates during the placement offers Show and saves the hashes (#3)', async () => {
+        const ctx = runCtx({ loadSortCache: cacheHit(), ...realApply() });
+        ctx.applyCachedSortOrder = vi.fn(async function () {
+            this.currentIndex = 1; // Next, while the placement hashes b
+            return { order: [...this.mediaFiles].reverse(), stats: { cached: 2, added: 1, removed: 0 } };
+        });
+        const listBefore = ctx.mediaFiles;
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx.currentIndex).toBe(1);
+        expect(ctx._offerSimilarityOrder).toHaveBeenCalledOnce();
+        expect(ctx.saveHashCache).toHaveBeenCalledWith('/f');
+        expect(ctx.saveSortCache).not.toHaveBeenCalled();
+        expect(outcome(ctx)).toBe('offered');
+    });
+
+    it("a computing run where the user acts during the apply's wait offers Show (#3)", async () => {
+        const ctx = runCtx(realApply());
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            ctx.currentIndex = 2; // Next, while a render settles
+            return true;
+        });
+        const listBefore = ctx.mediaFiles;
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx._offerSimilarityOrder).toHaveBeenCalledOnce();
+        expect(outcome(ctx)).toBe('offered');
+    });
+
+    // #2: after the capped wait gives up, the run must not commit under a render still running.
+    it('a run whose render did not settle within the cap offers Show (#2)', async () => {
+        const ctx = runCtx(realApply({ _waitForRenderIdle: vi.fn(async () => false) }));
+        const listBefore = ctx.mediaFiles;
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.mediaFiles).toBe(listBefore);
+        expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+        expect(ctx._offerSimilarityOrder).toHaveBeenCalledOnce();
+        expect(outcome(ctx)).toBe('offered');
+    });
+
+    // #8: the press only aborts (A3), so a press the abort cannot act on was swallowed without a word.
+    it('a press while the run unwinds from an abort says wait and aborts nothing more (#8)', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const abortSpy = vi.spyOn(controller, 'abort');
+        const ctx = runCtx({ isComputingHashes: true, sortAbortController: controller });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.showNotification.mock.calls).toEqual([['Wait for the sort to finish', 'info']]);
+        expect(abortSpy).not.toHaveBeenCalled();
+    });
+
+    it("a press during the cache hit's post-commit render says wait; the run still ends done with its saves (#8)", async () => {
+        const ctx = runCtx({ loadSortCache: cacheHit(), _similarityRunCommitted: false });
+        ctx._applySimilarityOrder.mockResolvedValue({
+            applied: true,
+            stats: { cached: 2, added: 1, removed: 0 },
+            committedPaths: ['/f/c', '/f/b', '/f/a'],
+        });
+        let runSignal = null;
+        ctx.showMedia = vi.fn(async () => {
+            runSignal = ctx.sortAbortController.signal;
+            await handleSortBySimilarity.call(ctx, false); // the Sort button, still reading "Cancel"
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.showNotification).toHaveBeenCalledWith('Wait for the sort to finish', 'info');
+        expect(runSignal.aborted).toBe(false);
+        expect(ctx.saveHashCache).toHaveBeenCalledWith('/f');
+        expect(ctx.saveSortCache).toHaveBeenCalledOnce();
+        expect(outcome(ctx)).toBe('done');
+        expect(ctx._similarityRunCommitted).toBe(false); // cleared by the finally
+    });
+
+    // #4: removeFileFromList drops the moved file's hash, and the undo did not put it back.
+    it("a rate and its undo during the run keep the file's hash for the sort (#4)", async () => {
+        const ctx = runCtx({
+            predictionScores: new Map(),
+            featureCache: new Map(),
+            jxlFrameCache: new Map(),
+            featureMetadata: new Map(),
+            bulkRated: new Map(),
+            bulkRatedPairs: new Set(),
+            _bulkPairKeysReferencing: () => [],
+            likeOrSkip: { forget: vi.fn() },
+            saveBulkRatedFile: vi.fn(),
+        });
+        const removeFileFromList = extract('removeFileFromList');
+        const restoreFeatureCachesFromHistory = extract('restoreFeatureCachesFromHistory');
+        ctx.computePerceptualHash.mockImplementation(async (p) => {
+            if (p === '/f/b') {
+                // a is hashed. The user rates a and undoes it: the move site stashes the hash (pinned in
+                // media-viewer-utils.test.js), removeFileFromList prunes it, the undo restores it.
+                const fileA = ctx.mediaFiles.find((f) => f.path === '/f/a');
+                const entry = {
+                    originalPath: '/f/a',
+                    mlFeatures: null,
+                    perceptualHash: ctx.perceptualHashes.get('/f/a'),
+                };
+                removeFileFromList.call(ctx, '/f/a');
+                ctx.mediaFiles.splice(0, 0, fileA);
+                restoreFeatureCachesFromHistory.call(ctx, entry);
+            }
+            return '0101';
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.perceptualHashes.get('/f/a')).toBe('0101');
+        expect(Object.keys(ctx.runSortingWorker.mock.calls[0][0].hashes)).toContain('/f/a');
+        expect(outcome(ctx)).toBe('done');
     });
 
     it('a sort press that passes the refusals dismisses a pending offer; a refused one keeps it', async () => {
@@ -1760,4 +2127,156 @@ describe('updateSortProgress: Cancel only while a sort can be cancelled (M7)', (
         updateSortProgress.call(ctx, { phase: 'Sorting…' });
         expect(cancel.hidden).toBe(false);
     });
+});
+
+// PR #85 review #10: the kickoff's early return after the model load skipped the extraction, whose tail holds
+// this path's only _scheduleClipUnload(). initClipModel had cleared any pending unload and the similarity run holds
+// no lease, so a Cancel or folder switch during the load pinned the model for the session.
+describe('kickoff: an abort during the model load re-arms the CLIP unload (#10)', () => {
+    const kickoff = extract('kickoffBackgroundExtractionIfEnabled');
+
+    function kickoffCtx(overrides = {}) {
+        return {
+            enableClipFeatures: true,
+            mediaFiles: media('a'),
+            featureWorkers: [{}],
+            clipWorkerReady: false,
+            showNotification: vi.fn(),
+            loadFeatureCache: vi.fn(async () => {}),
+            initClipModel: vi.fn(async () => {}),
+            startBackgroundFeatureExtraction: vi.fn(async () => {}),
+            cancelBackgroundExtraction: vi.fn(),
+            _scheduleClipUnload: vi.fn(),
+            ...overrides,
+        };
+    }
+
+    it('an abort during initClipModel schedules the unload and starts no extraction', async () => {
+        const controller = new AbortController();
+        const ctx = kickoffCtx({ initClipModel: vi.fn(async () => controller.abort()) });
+        await kickoff.call(ctx, { signal: controller.signal });
+        expect(ctx._scheduleClipUnload).toHaveBeenCalledOnce();
+        expect(ctx.startBackgroundFeatureExtraction).not.toHaveBeenCalled();
+
+        // Without an abort, unchanged: the extraction runs, and its own tail arms the unload.
+        const live = kickoffCtx();
+        await kickoff.call(live, { signal: new AbortController().signal });
+        expect(live.startBackgroundFeatureExtraction).toHaveBeenCalledOnce();
+        expect(live._scheduleClipUnload).not.toHaveBeenCalled();
+
+        // The return after the cache load cleared no timer: it schedules nothing.
+        const early = new AbortController();
+        const cacheAbort = kickoffCtx({ loadFeatureCache: vi.fn(async () => early.abort()) });
+        await kickoff.call(cacheAbort, { signal: early.signal });
+        expect(cacheAbort.initClipModel).not.toHaveBeenCalled();
+        expect(cacheAbort._scheduleClipUnload).not.toHaveBeenCalled();
+    });
+});
+
+// PR #85 review #7: switchMode refuses a running sort only before enterTournamentMode's state-read await. Start and
+// Continue re-check it, and restore the folder order again, since an order may have committed while the modal was
+// open (the engine would otherwise be built from a sorted list).
+describe('Tournament Start and Continue re-check the sort (#7)', () => {
+    const showConfig = extract('showTournamentConfigModal');
+    const showContinue = extract('showTournamentContinuePrompt');
+    const restoreForTournament = extract('restoreOriginalOrderForTournament');
+    let savedDocument;
+    let els;
+
+    beforeEach(() => {
+        savedDocument = globalThis.document;
+        const el = () => ({
+            style: {},
+            textContent: '',
+            value: '',
+            disabled: false,
+            onclick: null,
+            querySelector: () => null,
+            replaceChildren: vi.fn(),
+            append: vi.fn(),
+            focus: vi.fn(),
+            click: vi.fn(),
+        });
+        els = {};
+        globalThis.document = { getElementById: (id) => (els[id] ??= el()), createElement: () => el() };
+    });
+    afterEach(() => {
+        globalThis.document = savedDocument;
+    });
+
+    /** On screen: [c, a, d] sorted; the folder order restores to [a, c, d]. `seen` records the list at build. */
+    function tournamentCtx(overrides = {}) {
+        const seen = [];
+        const ctx = similarityCtx({
+            ...screenState(),
+            baseFolderPath: '/f',
+            predictionScores: new Map(),
+            restoreOriginalOrderForTournament: restoreForTournament,
+            mediaContainer: { classList: { add: vi.fn() } },
+            setSortControlsVisible: vi.fn(),
+            tournamentChrome: [],
+            showTournamentPair: vi.fn(async () => {}),
+            _enterResumedTournamentUI: vi.fn(async () => {}),
+            switchMode: vi.fn(),
+            _applyModeSwitch: vi.fn(async () => {}),
+            ...overrides,
+        });
+        ctx.tournament = {
+            handleStartClick: vi.fn(async () => {
+                seen.push(names(ctx.mediaFiles));
+                return true;
+            }),
+            handleResumeReconciled: vi.fn(async () => {
+                seen.push(names(ctx.mediaFiles));
+                return { ok: true, removedCount: 0 };
+            }),
+            validateStateFile: () => ({ valid: true, removed: [], added: [] }),
+            handleDiscard: vi.fn(async () => {}),
+        };
+        return { ctx, seen };
+    }
+
+    const state = { createdAt: Date.now(), gamesPlayed: 0, files: ['/f/a', '/f/c'], options: { rounds: 3 } };
+    const paths = {
+        Start: {
+            open: (ctx) => showConfig.call(ctx),
+            press: () => els.tournamentConfigStart.onclick(),
+            modal: 'tournamentConfigModal',
+            build: (ctx) => ctx.tournament.handleStartClick,
+        },
+        Continue: {
+            open: (ctx) => showContinue.call(ctx, state, state.files),
+            press: () => els.tournamentResumeAccept.onclick(),
+            modal: 'tournamentResumeModal',
+            build: (ctx) => ctx.tournament.handleResumeReconciled,
+        },
+    };
+
+    it.each([
+        ['Start', 'isComputingHashes'],
+        ['Start', 'isPredictionSorting'],
+        ['Continue', 'isComputingHashes'],
+        ['Continue', 'isPredictionSorting'],
+    ])('%s while a sort runs (%s) says wait, leaves the modal open and starts no tournament', async (which, flag) => {
+        const { ctx } = tournamentCtx();
+        paths[which].open(ctx);
+        ctx[flag] = true; // a sort started while the modal was open (Tab, Tab, Enter on the Sort button)
+        await paths[which].press();
+        expect(ctx.showNotification.mock.calls).toEqual([['Wait for the sort to finish', 'info']]);
+        expect(paths[which].build(ctx)).not.toHaveBeenCalled();
+        expect(els[paths[which].modal].style.display).toBe('flex');
+        expect(ctx.isTournamentMode).toBe(false);
+    });
+
+    it.each(['Start', 'Continue'])(
+        '%s after an order committed behind the modal builds the tournament from the folder order',
+        async (which) => {
+            const { ctx, seen } = tournamentCtx();
+            paths[which].open(ctx);
+            ctx.isSortedBySimilarity = true; // a similarity run committed while the modal was open
+            await paths[which].press();
+            expect(seen).toEqual([['a', 'c', 'd']]);
+            expect(ctx.isSortedBySimilarity).toBe(false);
+        }
+    );
 });

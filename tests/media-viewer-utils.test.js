@@ -2303,6 +2303,25 @@ describe('_waitForRenderIdle (G2 final review F4)', () => {
         await vi.advanceTimersByTimeAsync(100);
         expect(done).toBe(true);
     });
+
+    // PR #85 review #2: the callers must know whether the render settled, or they commit under it after the cap.
+    it('resolves true when the render settled and false when the cap was hit (#2)', async () => {
+        vi.useFakeTimers();
+        const idle = waitForRenderIdle.call({ isLoading: false, mediaNavigationInProgress: false });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(await idle).toBe(true);
+
+        const ctx = { isLoading: true, mediaNavigationInProgress: false };
+        const settles = waitForRenderIdle.call(ctx, 200);
+        await vi.advanceTimersByTimeAsync(50);
+        ctx.isLoading = false; // the render finishes before the cap
+        await vi.advanceTimersByTimeAsync(50);
+        expect(await settles).toBe(true);
+
+        const stranded = waitForRenderIdle.call({ isLoading: true, mediaNavigationInProgress: false }, 200);
+        await vi.advanceTimersByTimeAsync(250);
+        expect(await stranded).toBe(false);
+    });
 });
 
 describe('handleCancel feature restore', () => {
@@ -3187,6 +3206,50 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
         expect(ctx.moveHistory).toHaveLength(1);
         expect(ctx.moveHistory[0]).not.toHaveProperty('prunedPairKeys');
         expect(ctx.bulkRatedPairs.size).toBe(1); // unrelated key untouched
+    });
+
+    // PR #85 review #4: removeFileFromList drops the file's perceptual hash and no undo put it back, so a similarity
+    // sort running across a rate and its undo sorted the file last. Same pattern as prunedPairKeys.
+    it('moveCurrentFile stashes the perceptual hash on its history entry, omitted when absent (#4)', async () => {
+        const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+        const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, type: 'image/jpeg' };
+        const ctx = moveCtx([a], []);
+        ctx.perceptualHashes.set('/f/a.jpg', '0101');
+        await moveCurrentFile.call(ctx, 'like');
+        expect(ctx.moveHistory[0].perceptualHash).toBe('0101');
+        expect(ctx.perceptualHashes.has('/f/a.jpg')).toBe(false); // pruned after the stash
+
+        const none = moveCtx([{ ...a }], []);
+        await moveCurrentFile.call(none, 'like');
+        expect(none.moveHistory[0]).not.toHaveProperty('perceptualHash');
+    });
+
+    it('moveToSpecialFolder and moveComparePair stash the perceptual hash before they prune (#4, source order)', () => {
+        for (const [name, stashes] of [
+            ['moveToSpecialFolder', 1],
+            ['moveComparePair', 2],
+        ]) {
+            const body = methodSource(name);
+            const prune = body.indexOf('this.removeFileFromList(');
+            expect(prune, name).toBeGreaterThan(-1);
+            const hits = [...body.matchAll(/this\.perceptualHashes\.get\(/g)].map((m) => m.index);
+            expect(hits, name).toHaveLength(stashes);
+            for (const idx of hits) expect(idx, name).toBeLessThan(prune);
+            expect(body, name).toContain('perceptualHash');
+        }
+    });
+
+    it('restoreFeatureCachesFromHistory restores the perceptual hash at the restored path, even without mlFeatures (#4)', () => {
+        const ctx = {
+            featureCache: new Map(),
+            clipCache: new Map(),
+            featureMetadata: new Map(),
+            bulkRatedPairs: new Set(),
+            perceptualHashes: new Map(),
+        };
+        // An undo that landed at "a (1).jpg" re-pointed originalPath first (_followRestoredFile).
+        restore.call(ctx, { originalPath: '/f/a (1).jpg', mlFeatures: null, perceptualHash: '0101' });
+        expect([...ctx.perceptualHashes]).toEqual([['/f/a (1).jpg', '0101']]);
     });
 
     it('moveToSpecialFolder and moveComparePair capture before they prune (source order)', () => {
@@ -7710,6 +7773,7 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
             _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
+            perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
             }),
@@ -7888,6 +7952,7 @@ describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
             areFoldersConfigured: () => true,
             _refuseIfNeedsRegrant: () => false,
             _bulkPairKeysReferencing: () => [],
+            perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
             }),
@@ -8365,6 +8430,7 @@ describe('a refused folder check is not "missing" (deep review #7)', () => {
             _refuseUngrantedFolder: vi.fn(() => true),
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
+            perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
             }),

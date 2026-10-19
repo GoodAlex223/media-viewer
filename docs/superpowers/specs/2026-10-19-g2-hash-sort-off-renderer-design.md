@@ -447,3 +447,17 @@ none changes a user ruling.
 - **A7. Show also refuses while a folder load is in flight (§ 8).**
 - **A8. The end-of-run hash save is skipped when nothing new was hashed (§ 6.3).**
 - **A9. "A new sort" includes the AI sort (my call 2).** Its start dismisses a pending Show message.
+
+## 16. Execution notes (PR 1, 2026-10-19)
+
+The plan's Progress Log has the full record. These notes refine or depart from the sections above.
+
+- **§ 8.6, a dismissed forced re-sort.** § 8.6 assumed an unsorted screen. After a Shift+click forced re-sort from the sorted state ends in an offer and the offer is dismissed, the screen is still similarity-sorted, so the button reads **Restore Order**, the honest label. The next press restores; the one after it applies the saved re-sort as an instant cache hit. Raised in the PR #85 code review (#12) and ruled with no code change.
+- **§ 8.2, "apply directly or offer Show".** It is decided again at the commit, not only before the apply. `_applySimilarityOrder(entry, signal, mark)` declines `'acted'` when the user acted since the press. This covers a cache hit (my call 3 had assumed it is near-instant) and a computing run whose placement or render wait took long. Code review #3.
+- **§ 8.4, the render wait.** `_waitForRenderIdle` reports whether the render settled. On its 2 s cap the apply declines (`'busy'`, so Show is offered or re-offered), and both Restore Order paths refuse with `Wait for the file to finish loading`. They no longer commit under a render. The AI sort's own apply keeps the old behaviour. Code review #2.
+- **Restore Order.** On both Restore Order buttons it waits for an in-flight render, then re-checks that the order is unchanged (Task 6, user-approved).
+- **The perf outcome `declined`.** Added for a run that ends with nothing applied or offered (an emptied list, a Tournament or AI-sort decline). Final review M5.
+- **Out of PR 1 by user ruling (2026-10-19):**
+  - the feature-cache emptying on a mid-extraction folder switch (review #1) is a separate PR next;
+  - the non-atomic `write-folder-cache` (review #5) moves into PR 2;
+  - a degraded order saved as the sort cache (review #9) goes to BACKLOG.

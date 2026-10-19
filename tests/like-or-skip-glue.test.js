@@ -1835,6 +1835,18 @@ describe('a batch and its undo round-trip the per-file caches (G2 final review F
         expect(ctx.clipCache.has('/f/a')).toBe(false);
         expect(ctx.featureMetadata.get('/f/a')).toEqual({ size: 10, mtime: 0 });
     });
+
+    // PR #85 review #4: removeFileFromList drops the file's perceptual hash, so the batch stashes it per file and
+    // the undo restores it; otherwise a similarity sort running across the batch and its undo sorts the file last.
+    it('the perceptual hash is stashed per file and comes back with the undo (#4)', async () => {
+        const ctx = tripCtx(combined(true));
+        ctx.perceptualHashes.set('/f/a', '0101');
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.moveHistory[0].files[0].perceptualHash).toBe('0101');
+        expect(ctx.perceptualHashes.has('/f/a')).toBe(false);
+        await undoSkipBatch.call(ctx, ctx.moveHistory.pop());
+        expect(ctx.perceptualHashes.get('/f/a')).toBe('0101');
+    });
 });
 
 describe('the batch releases an on-screen video BEFORE the first rename (G2 final review F13)', () => {

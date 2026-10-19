@@ -889,6 +889,16 @@ The final review found this as a pre-existing race. The user chose to fix it on 
 - **"The similarity sort leaves `isSortedByPrediction` set"** stays open (spec § 12). PR 1 makes it visible in a new way: Show applied over an AI order in compare mode pairs from `mlComparePairIndex`/the score list, not from `mediaFiles[0]`. → BACKLOG 🟤, the same entry (append the observation).
 - **`_waitForRenderIdle` commits anyway after 2 s.** It is shared with the AI sort; a stranded `isLoading` lets an order land under a render. Pre-existing. → BACKLOG 🟤 if no entry covers it.
 
+**From the PR #85 code review (2026-10-19). The user ruled on scope.**
+- **Review #1, next as its own PR (high priority: data loss).** A folder switch during feature extraction can replace the new folder's `.feature_cache.json` with an empty file. The steps:
+  - a file load from the old folder that is still pending lands in the cleared map, because there is no abort re-check after `await loadMediaAsImageData`;
+  - the tail save or the 30 s autosave runs with the shrink guard off (`_featureCacheDiskCount` was reset to 0);
+  - main renames `{"features":{}}` over the file.
+
+  This hits the AI sort's Phase 2 extraction too, and it contradicts BACKLOG.md:1002 ("No longer destructive"). → TODO.md at closeout, scheduled next.
+- **Review #5, into PR 2's scope.** `write-folder-cache` writes with a truncating `fs.writeFile`, with no tmp + rename. PR 1's periodic hash saves multiply the exposure: a quit right after a write tears the file, and the next session loads 0 hashes. The base issue is BACKLOG.md:565. → PR 2's plan.
+- **Review #9, → BACKLOG 🟤.** A cache hit with `stats.added > 0` saves the committed order even when the placement placed none of the new files. That is common for CLIP, because the cache-hit path loads no vectors. The new files sit at the tail in reverse arrival order, and later cache hits keep them there. Pre-existing.
+
 **Deferred review findings (execution, 2026-10-19).** Task reviews, the final whole-branch review and the regression check found these and judged them safe to defer. Each one → BACKLOG 🟤 at closeout, one entry per line. Related lines may share an entry, tagged with each other.
 - **Test gaps, low risk:**
   - `takeUserMark`'s tournament branch of `mode` has no test, and nothing asserts its shape (for example, `currentPath` is `null` for an empty list). Tournament entry refuses while a run computes, so the run never sees that mode change.

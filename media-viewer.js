@@ -151,7 +151,11 @@ class MediaViewer {
         this.originalMediaFiles = []; // Backup of original order
         this.isComputingHashes = false;
         this.sortAbortController = null;
-        this._similarityRunGen = 0; // Bumped per similarity run and by every folder load: a run that sees it move is stale
+        // Bumped per similarity run and by _invalidateSimilarityRun (every folder load, both Restore Order paths,
+        // Tournament entry, the AI sort's start): a run, or a Show, that sees it move is stale
+        this._similarityRunGen = 0;
+        // True from a similarity run's commit until its finally: a Sort press then can no longer cancel anything (#8)
+        this._similarityRunCommitted = false;
         this._similarityOffer = null; // { entry, element }: a computed similarity order waiting on its sticky "Show"
         this.progressNotification = null; // Reusable progress notification
         this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
@@ -1550,6 +1554,12 @@ class MediaViewer {
         if (entry.prunedPairKeys) {
             for (const key of entry.prunedPairKeys) this.bulkRatedPairs.add(key);
         }
+        // The perceptual hash removeFileFromList dropped (stashed by the same move sites, PR #85 review #4), under
+        // the path the file actually came back to: the undo re-points originalPath first (_followRestoredFile).
+        // Before the features guard, for the same reason as the keys.
+        if (entry.perceptualHash !== undefined) {
+            this.perceptualHashes.set(entry.originalPath, entry.perceptualHash);
+        }
         if (!entry.mlFeatures) return;
         const features = entry.mlFeatures;
         const path = entry.originalPath;
@@ -1896,6 +1906,10 @@ class MediaViewer {
                 // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
                 const prunedPairKeys = this._bulkPairKeysReferencing(currentFile.name);
                 if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
+                // And the perceptual hash it drops: otherwise a similarity sort running across this move and its
+                // undo sorts the file last (PR #85 review #4).
+                const perceptualHash = this.perceptualHashes.get(currentFile.path);
+                if (perceptualHash !== undefined) historyEntry.perceptualHash = perceptualHash;
                 this.moveHistory.push(historyEntry);
 
                 // Show success notification (if enabled)
@@ -2053,6 +2067,9 @@ class MediaViewer {
                 // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
                 const prunedPairKeys = this._bulkPairKeysReferencing(fileToMove.name);
                 if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
+                // And the perceptual hash it drops (PR #85 review #4).
+                const perceptualHash = this.perceptualHashes.get(fileToMove.path);
+                if (perceptualHash !== undefined) historyEntry.perceptualHash = perceptualHash;
 
                 // In compare mode, store remaining file info for proper undo
                 if (side === 'left' || side === 'right') {
@@ -5126,6 +5143,7 @@ class MediaViewer {
                 const combined = this.getCombinedFeatures(file.path);
                 const raw = this.featureCache.get(file.path);
                 const prunedPairKeys = this._bulkPairKeysReferencing(file.name);
+                const perceptualHash = this.perceptualHashes.get(file.path); // PR #85 review #4
                 return {
                     file: { ...file },
                     originalIndex: filesBefore.indexOf(file),
@@ -5136,6 +5154,7 @@ class MediaViewer {
                     score: this.predictionScores.get(file.path),
                     bulkBucket: this.bulkRated.get(file.name),
                     ...(prunedPairKeys.length > 0 ? { prunedPairKeys } : {}),
+                    ...(perceptualHash !== undefined ? { perceptualHash } : {}),
                 };
             });
 
@@ -5941,6 +5960,14 @@ class MediaViewer {
         };
 
         acceptBtn.onclick = async () => {
+            // As the config modal's Start (PR #85 review #7): a sort may have started while this prompt was open
+            // (focus stays on the mode button, so Tab, Tab, Enter reaches the Sort button), and an order may have
+            // committed behind it.
+            if (this.isComputingHashes || this.isPredictionSorting) {
+                this.showNotification('Wait for the sort to finish', 'info');
+                return;
+            }
+            this.restoreOriginalOrderForTournament();
             const result = await this.tournament.handleResumeReconciled(state, currentFiles);
             cleanup();
             if (result?.ok) {
@@ -6097,6 +6124,15 @@ class MediaViewer {
         };
 
         startBtn.onclick = async () => {
+            // switchMode refused a running sort only before enterTournamentMode's state-read await; one can start
+            // while this modal is open (PR #85 review #7). Refused here with the modal left open, and the folder
+            // order restored again, since an order may have committed behind the modal. Idempotent when nothing is
+            // sorted.
+            if (this.isComputingHashes || this.isPredictionSorting) {
+                this.showNotification('Wait for the sort to finish', 'info');
+                return;
+            }
+            this.restoreOriginalOrderForTournament();
             const R = readRounds();
             const seedMode = seedingSelect?.value ?? 'random';
             const opts = {};
@@ -6991,6 +7027,9 @@ class MediaViewer {
                 // Capture the rated-pair keys removeFileFromList (below) is about to prune, so undo can reinstate them.
                 const primaryPrunedKeys = this._bulkPairKeysReferencing(primaryFile.name);
                 if (primaryPrunedKeys.length > 0) primaryEntry.prunedPairKeys = primaryPrunedKeys;
+                // And the perceptual hash it drops (PR #85 review #4).
+                const primaryHash = this.perceptualHashes.get(primaryFile.path);
+                if (primaryHash !== undefined) primaryEntry.perceptualHash = primaryHash;
                 this.moveHistory.push(primaryEntry);
 
                 // Move secondary file (the other one); its folder was checked above
@@ -7019,6 +7058,8 @@ class MediaViewer {
                 };
                 const secondaryPrunedKeys = this._bulkPairKeysReferencing(secondaryFile.name);
                 if (secondaryPrunedKeys.length > 0) secondaryEntry.prunedPairKeys = secondaryPrunedKeys;
+                const secondaryHash = this.perceptualHashes.get(secondaryFile.path);
+                if (secondaryHash !== undefined) secondaryEntry.perceptualHash = secondaryHash;
                 this.moveHistory.push(secondaryEntry);
 
                 // Show notifications (if enabled)
@@ -7158,8 +7199,9 @@ class MediaViewer {
     // - loadFolder and _switchToFolderNow: the folder being left owns the run and the offer.
     // - Restore Order (handleSortBySimilarity), and the AI sort's toggle-off and start (handleSortByPrediction):
     //   each changes the order on screen, so an order computed for the old one must not commit over it (F2).
-    // - restoreOriginalOrderForTournament: Tournament entry. isTournamentMode is set only at Start, after the config
-    //   modal, so the apply's tournament check alone would let Show commit behind the modal (F2).
+    // - restoreOriginalOrderForTournament: Tournament entry, and again at the modal's Start or Continue (PR #85 review
+    //   #7). isTournamentMode is set only at Start, after the config modal, so the apply's tournament check alone
+    //   would let Show commit behind the modal (F2).
     // None of the last four is reachable while a run computes (each refuses while isComputingHashes), so for them
     // this only bumps the gen and dismisses the offer.
     _invalidateSimilarityRun() {
@@ -7181,8 +7223,14 @@ class MediaViewer {
             return;
         }
         // If currently computing, cancel the operation. The press only aborts (G2 spec A3): the run's own
-        // ending says "❌ Sorting cancelled" once it has unwound and saved what it hashed.
+        // ending says "❌ Sorting cancelled" once it has unwound and saved what it hashed. A press the abort cannot
+        // act on says so instead of vanishing (PR #85 review #8): a run already aborted (or made stale) is still
+        // unwinding, and a run past its commit renders and saves an order that a Cancel no longer undoes.
         if (this.isComputingHashes && this.sortAbortController) {
+            if (this.sortAbortController.signal.aborted || this._similarityRunCommitted) {
+                this.showNotification('Wait for the sort to finish', 'info');
+                return;
+            }
             this.sortAbortController.abort();
             return;
         }
@@ -7228,7 +7276,12 @@ class MediaViewer {
             const orderGen = this._orderGeneration;
             // showMedia() returns early on isLoading: a restore committed mid-render would leave the screen on
             // another file than the cursor, and a rating key would then move a file the user has not seen (T6).
-            await this._waitForRenderIdle();
+            // The wait is capped: a render still running at the cap refuses the restore (PR #85 review #2). The
+            // trade-off: a stranded isLoading now keeps Restore Order refusing, instead of restoring under a render.
+            if (!(await this._waitForRenderIdle())) {
+                this.showNotification('Wait for the file to finish loading', 'info');
+                return;
+            }
             // The wait yielded: re-check, with no await from here to the commit. Another order committed during
             // the wait (its originalMediaFiles may no longer be the folder order, and its flags may all be clear
             // again), already restored (a second press, a folder load), a re-sort or an AI sort started, or
@@ -7314,6 +7367,20 @@ class MediaViewer {
             this.clearProgressNotification();
             perf.outcome = 'declined';
         };
+        // The apply declined 'busy' (a guard is held, or the render did not settle within the cap) or 'acted' (the
+        // user acted since the press): the order waits on "Show". Its placement may have hashed files added since the
+        // order was saved: kept now (PR #85 review #6), or every later Sort hashes them again. The order is not
+        // committed, so the sort cache is not saved here.
+        const offerAfterDecline = async (entry, stats) => {
+            if (stats?.added > 0) {
+                const saveStart = performance.now();
+                await this.saveHashCache(run.folder);
+                addPhase('save', saveStart);
+                this._assertSimilarityRunLive(run);
+            }
+            this._offerSimilarityOrder(entry);
+            perf.outcome = 'offered';
+        };
         // Set once an order was committed. The run renders it after its finally (M6), once its flags are released
         // and its button reads "Restore Order", so a click on that label is never swallowed by isComputingHashes.
         // A cache hit with new files renders before its saves instead, and clears it (R-F6).
@@ -7360,9 +7427,11 @@ class MediaViewer {
                 addPhase('load', loadStart);
                 this._assertSimilarityRunLive(run);
 
-                // A cache hit is near-instant, so it applies directly (spec my call 3), through the one apply
-                // function. The captured algorithm is passed explicitly so it threads through to the placement
-                // even if the cached entry was written before the algorithm field existed (older caches).
+                // A cache hit applies directly (spec my call 3), through the one apply function, unless the user
+                // acted since the press: the apply checks the run's mark at its commit (PR #85 review #3), since a
+                // far-behind cache hashes each new file on the main thread while navigation stays live. The
+                // captured algorithm is passed explicitly so it threads through to the placement even if the
+                // cached entry was written before the algorithm field existed (older caches).
                 const restoredLine = `✅ Restored cached ${algorithmName} order`;
                 const cachedAgo =
                     typeof cachedSortData.timestamp === 'number'
@@ -7376,11 +7445,12 @@ class MediaViewer {
                     doneMessage: `${restoredLine}${cachedAgo}`,
                 };
                 const applyStart = performance.now();
-                const result = await this._applySimilarityOrder(entry, run.controller.signal);
+                const result = await this._applySimilarityOrder(entry, run.controller.signal, run.mark);
                 addPhase('apply', applyStart);
 
                 if (result.applied) {
                     renderPending = true; // first: whatever follows, a committed order gets its render
+                    this._similarityRunCommitted = true; // a Sort press can no longer cancel (#8)
                     const { stats, committedPaths } = result;
                     endIfStale();
                     // Save the hashes and the order the placement added to, from the committed order
@@ -7394,8 +7464,11 @@ class MediaViewer {
                             await this.showMedia();
                         } catch (mediaError) {
                             console.error('Error showing media after sort:', mediaError);
-                            // Don't undo the sort - media loading is separate concern
-                            this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
+                            // Don't undo the sort - media loading is separate concern. A folder switch during
+                            // the render made it throw: no warning in the new folder (spec § 6.4, #13).
+                            if (!this._isStaleSimilarityRun(run)) {
+                                this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
+                            }
                         }
                         endIfStale();
                         const saveStart = performance.now();
@@ -7414,15 +7487,17 @@ class MediaViewer {
                     const detailText = details.length > 0 ? ` (${details.join(', ')})` : '';
                     this.showNotification(`${restoredLine}${detailText}${cachedAgo}`, 'success');
                     perf.outcome = 'done';
-                } else if (result.reason === 'busy') {
-                    // A file action or a folder load holds its guard: the order waits on "Show" instead.
-                    this._offerSimilarityOrder(entry);
-                    perf.outcome = 'offered';
+                } else if (result.reason === 'busy' || result.reason === 'acted') {
+                    // A file action or a folder load holds its guard, the render did not settle, or the user acted
+                    // since the press: the order waits on "Show" instead.
+                    await offerAfterDecline(entry, result.stats);
                 } else if (result.reason === 'stale') {
                     throw new Error('Sorting cancelled by user'); // the catch classifies it as stale, by state
                 } else {
-                    // An emptied list: nothing written. 'tournament' and 'sorting' are defensive here: Tournament
-                    // entry and the AI sort both refuse to start while this run computes.
+                    // An emptied list: nothing written. 'tournament' and 'sorting' are not expected while this run
+                    // computes: isTournamentMode is set only by the Tournament modal's Start or Continue, which refuse
+                    // while a sort runs (PR #85 review #7), and the AI sort refuses to start. Either still ends the
+                    // run with nothing written.
                     perf.outcome = 'declined';
                 }
                 // After the apply, never before: its placement re-creates the card.
@@ -7467,6 +7542,12 @@ class MediaViewer {
                     }
 
                     if (vectorCount < 2) {
+                        if (this.mediaFiles.length === 0) {
+                            // Every file was moved away during the extraction wait, and each move purged its
+                            // file's vector (removeFileFromList): not a failure, as in the hash branch (F1, #11).
+                            await endQuietly();
+                            return;
+                        }
                         throw new Error(
                             `Only ${vectorCount} files have CLIP embeddings. Wait for background extraction to complete, then retry.`
                         );
@@ -7642,31 +7723,35 @@ class MediaViewer {
                 }
 
                 // A user who acted since the press (navigated, rated, switched mode) is not moved to a new order
-                // under their hands: the order waits on a sticky "Show" (spec D3, my call 2).
+                // under their hands: the order waits on a sticky "Show" (spec D3, my call 2). Checked here, so a user
+                // who already acted is spared the placement, and again by the apply at its commit (PR #85 review #3),
+                // after its own placement and render wait.
                 if (SimilaritySort.userActedSince(run.mark, SimilaritySort.takeUserMark(this))) {
                     this._offerSimilarityOrder(entry);
                     perf.outcome = 'offered';
                 } else {
                     const applyStart = performance.now();
-                    const result = await this._applySimilarityOrder(entry, run.controller.signal);
+                    const result = await this._applySimilarityOrder(entry, run.controller.signal, run.mark);
                     addPhase('apply', applyStart);
                     if (result.applied) {
                         renderPending = true; // first: whatever follows, a committed order gets its render
+                        this._similarityRunCommitted = true; // a Sort press can no longer cancel (#8)
                         endIfStale();
                         this.showNotification(entry.doneMessage, 'success');
                         perf.outcome = 'done';
-                    } else if (result.reason === 'busy') {
-                        // A file action or a folder load holds its guard: the order waits on "Show" instead.
-                        this._offerSimilarityOrder(entry);
-                        perf.outcome = 'offered';
+                    } else if (result.reason === 'busy' || result.reason === 'acted') {
+                        // A file action or a folder load holds its guard, the render did not settle, or the user
+                        // acted during the apply: the order waits on "Show" instead.
+                        await offerAfterDecline(entry, result.stats);
                     } else if (result.reason === 'stale') {
                         // The apply's own placement and render-idle wait await, so a folder switch can make the
                         // run stale inside it: the catch classifies it as stale, by state.
                         throw new Error('Sorting cancelled by user');
                     } else {
                         // An emptied list (every file moved during the apply's awaits): nothing written.
-                        // 'tournament' and 'sorting' are defensive here: Tournament entry and the AI sort both
-                        // refuse to start while this run computes.
+                        // 'tournament' and 'sorting' are not expected while this run computes: isTournamentMode is
+                        // set only by the Tournament modal's Start or Continue, which refuse while a sort runs (PR #85
+                        // review #7), and the AI sort refuses to start. Either still ends the run with nothing written.
                         perf.outcome = 'declined';
                     }
                 }
@@ -7704,6 +7789,7 @@ class MediaViewer {
             }
         } finally {
             this.isComputingHashes = false;
+            this._similarityRunCommitted = false;
             if (this.sortAbortController === run.controller) {
                 this.sortAbortController = null;
             }
@@ -7733,8 +7819,11 @@ class MediaViewer {
                 await this.showMedia();
             } catch (mediaError) {
                 console.error('Error showing media after sort:', mediaError);
-                // Don't undo the sort - media loading is separate concern
-                this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
+                // Don't undo the sort - media loading is separate concern. A folder switch during the render made
+                // it throw: no warning in the new folder (spec § 6.4, #13).
+                if (!this._isStaleSimilarityRun(run)) {
+                    this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
+                }
             }
         }
     }
@@ -7745,11 +7834,13 @@ class MediaViewer {
     // (M6): each caller does both where its own flags are released. `entry`: { gen, folder, algorithm, sortedPaths
     // (basenames, the .sort_cache.json shape), startFile, doneMessage }. Liveness belongs to the entry (R-T4b):
     // stale, or its own `signal` aborted (a run passes its controller's; Show passes none). The shared
-    // sortAbortController is never read here, so an AI sort's Cancel cannot end a Show.
-    async _applySimilarityOrder(entry, signal = null) {
+    // sortAbortController is never read here, so an AI sort's Cancel cannot end a Show. `mark`: the run's user mark
+    // from its press (Show passes none); a user who acted since is not moved to the new order at the commit (PR #85
+    // review #3). A 'busy' or 'acted' decline carries `stats`, so the caller can save what the placement hashed (#6).
+    async _applySimilarityOrder(entry, signal = null, mark = null) {
         const isLive = () => !this._isStaleSimilarityRun(entry) && !signal?.aborted;
         const { order, stats } = await this.applyCachedSortOrder(entry, entry.algorithm, isLive);
-        await this._waitForRenderIdle();
+        const renderSettled = await this._waitForRenderIdle();
 
         // No await from here to the end of the commit: a file moved during one would come back.
         if (this._isStaleSimilarityRun(entry)) {
@@ -7765,13 +7856,18 @@ class MediaViewer {
         if (this._fileOpInFlight) {
             // A file action is moving files: a reorder now would leave the screen and the cursor on different
             // files when it finishes. The caller offers "Show" instead.
-            return { applied: false, reason: 'busy' };
+            return { applied: false, reason: 'busy', stats };
         }
         if (this._folderLoadInFlight) {
             // A folder load is listing its files (M2): it bumps the run counter only after that await, so the
             // stale check above cannot see it yet. Same reasoning as the file action; the load then dismisses
             // the offer.
-            return { applied: false, reason: 'busy' };
+            return { applied: false, reason: 'busy', stats };
+        }
+        if (mark && SimilaritySort.userActedSince(mark, SimilaritySort.takeUserMark(this))) {
+            // The user acted since the run's press (navigated during the placement, which hashes new files on the
+            // main thread, or during the render wait): the order waits on "Show" (spec D3, PR #85 review #3).
+            return { applied: false, reason: 'acted', stats };
         }
         if (this.isPredictionSorting) {
             // An AI sort is still running (one started during Show's apply): it owns the order, and the offer stays
@@ -7781,6 +7877,13 @@ class MediaViewer {
         }
         if (this.mediaFiles.length === 0) {
             return { applied: false, reason: 'empty' };
+        }
+        if (!renderSettled) {
+            // The render-idle wait hit its cap with a render still running (PR #85 review #2): showMedia() would
+            // return early on isLoading, leaving the screen on one file and the cursor on another. The caller turns
+            // 'busy' into an offer (the run) or a re-offer (Show). The trade-off: a stranded isLoading now keeps Show
+            // re-offering, instead of committing under a render.
+            return { applied: false, reason: 'busy', stats };
         }
         // Restore Order's snapshot is taken here, at the commit. A force re-sort from the sorted state keeps the
         // existing one, so Restore Order still returns to the true disk order.
@@ -7839,9 +7942,6 @@ class MediaViewer {
             this.showNotification('Wait for the sort to finish', 'info');
             return;
         }
-        // A card already on screen (M8) belongs to someone else, e.g. the background extraction's progress text,
-        // which shares the element: Show clears only a card its own placement drew.
-        const hadCard = Boolean(this.progressNotification?.parentNode);
         this._dismissSimilarityOffer();
         try {
             const result = await this._applySimilarityOrder(entry);
@@ -7855,12 +7955,31 @@ class MediaViewer {
                     await this.showMedia();
                 } catch (mediaError) {
                     console.error('Error showing media after sort:', mediaError);
-                    // Don't undo the sort - media loading is separate concern
-                    this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
+                    // Don't undo the sort - media loading is separate concern. A folder switch during the render
+                    // made it throw: no warning in the new folder (spec § 6.4, #13).
+                    if (!this._isStaleSimilarityRun(entry)) {
+                        this.showNotification('⚠️ Sorted successfully but failed to load media', 'warning');
+                    }
                 }
                 // A folder switch during the render made the order the old folder's: no success notice (M2).
                 if (!this._isStaleSimilarityRun(entry)) {
                     this.showNotification(entry.doneMessage, 'success');
+                    // The placement hashed files added since the order was computed: saved to the entry's own
+                    // folder, both caches, as the run's cache hit does (PR #85 review #6). A failed save is logged,
+                    // never a Show error: the order is already on screen.
+                    if (result.stats?.added > 0) {
+                        try {
+                            await this.saveHashCache(entry.folder);
+                            await this.saveSortCache(
+                                entry.algorithm,
+                                result.committedPaths,
+                                result.committedPaths[0] ?? null,
+                                entry.folder
+                            );
+                        } catch (saveError) {
+                            console.warn('Saving the similarity caches after Show failed:', saveError);
+                        }
+                    }
                 }
             } else if (result.reason === 'busy') {
                 this._offerSimilarityOrder(entry);
@@ -7874,10 +7993,17 @@ class MediaViewer {
                 this.showNotification(`❌ Error: ${error.message}`, 'error');
             }
         } finally {
-            // The placement may have drawn the progress card (with no Cancel: no abort reaches Show, M7). Cleared
-            // only if no card existed when Show started and no sort started meanwhile: that card is the newer
-            // sort's.
-            if (!hadCard && !this.isComputingHashes && !this.isPredictionSorting) {
+            // The placement may have drawn the progress card (with no Cancel: no abort reaches Show, M7). Owned by
+            // form, not by a snapshot taken before the awaits (PR #85 review #14): the shared element's co-owner is
+            // the ML scoring text, whose unconditional clear can land during the placement, after which the
+            // placement re-creates a sort card. updateProgressNotification rebuilds the element into text form,
+            // which never carries `notification-progress`, so a sort card with no sort running can only be Show's
+            // leftover. A card while a sort runs is that sort's.
+            if (
+                !this.isComputingHashes &&
+                !this.isPredictionSorting &&
+                this.progressNotification?.classList.contains('notification-progress')
+            ) {
                 this.clearProgressNotification();
             }
         }
@@ -8060,10 +8186,11 @@ class MediaViewer {
     }
 
     // Run sorting in Web Worker to prevent UI freeze when window is minimized
-    // An abort stops the sort here, not in the worker: sorting-worker.js's loops are synchronous, so its own
-    // abort flag is read only after a loop ends, and it keeps posting progress until then (T3 review). On abort
-    // this call terminates its worker, rejects at once, and ignores any message still queued, so a cancelled or
-    // stale similarity run neither waits out the sort nor re-creates the progress card it no longer owns.
+    // An abort stops the sort here, not in the worker: sorting-worker.js's loops are synchronous and keep posting
+    // progress until they end (T3 review), so no `{type:'abort'}` is posted (the worker's abort flag stays as its
+    // message contract, unused by the renderer). On abort this call terminates its worker, rejects at once, and
+    // ignores any message still queued, so a cancelled or stale similarity run neither waits out the sort nor
+    // re-creates the progress card it no longer owns.
     runSortingWorker(data) {
         const controller = this.sortAbortController;
         return new Promise((resolve, reject) => {
@@ -10056,11 +10183,15 @@ class MediaViewer {
     // Wait for an in-flight render to settle before applying a new order (G2 review): showMedia()
     // returns early on isLoading, so an order applied mid-render would paint the old file under the
     // new cursor. Capped — a stranded flag must not hold the sort (its card, its CLIP lease) forever.
+    // Resolves true once the render settled, false when the cap was hit with a render still running (PR #85 review
+    // #2). The similarity apply and both Restore Order paths decline on false rather than commit under the render;
+    // the AI sort's own apply ignores the result, as before.
     async _waitForRenderIdle(maxMs = 2000) {
         const start = Date.now();
         while ((this.isLoading || this.mediaNavigationInProgress) && Date.now() - start < maxMs) {
             await new Promise((resolve) => setTimeout(resolve, 25));
         }
+        return !(this.isLoading || this.mediaNavigationInProgress);
     }
 
     async handleSortByPrediction({ resort = false } = {}) {
@@ -10093,8 +10224,12 @@ class MediaViewer {
             this._invalidateSimilarityRun();
             // Any order committed during the wait (a folder load, a sort) bumps this; see the re-check below.
             const orderGen = this._orderGeneration;
-            // Wait for an in-flight render, as Restore Order does (T6): showMedia() returns early on isLoading.
-            await this._waitForRenderIdle();
+            // Wait for an in-flight render, as Restore Order does (T6): showMedia() returns early on isLoading. A
+            // render still running at the cap refuses the restore, as there (PR #85 review #2).
+            if (!(await this._waitForRenderIdle())) {
+                this.showNotification('Wait for the file to finish loading', 'info');
+                return;
+            }
             // The wait yielded: re-check, with no await from here to the commit. First, another order committed
             // during the wait: a cache-hit similarity sort snapshots the AI order as originalMediaFiles and its
             // finally releases isComputingHashes, so every flag below passes and restoring now would "restore" to
@@ -11083,7 +11218,14 @@ class MediaViewer {
             // with zero CLIP vectors.
             if (!this.clipWorkerReady) {
                 await this.initClipModel();
-                if (signal?.aborted) return;
+                if (signal?.aborted) {
+                    // initClipModel cleared any pending unload, and the extraction skipped here holds this path's
+                    // only re-arm (its tail). The similarity run holds no lease, so without this a Cancel or a folder
+                    // switch during the load would keep the model resident for the session (PR #85 review #10).
+                    // _scheduleClipUnload refuses while a lease is held.
+                    this._scheduleClipUnload();
+                    return;
+                }
             }
             // Only while this extraction runs: removed once it settles, so a later abort cancels nothing unrelated.
             const onAbort = () => this.cancelBackgroundExtraction();

@@ -287,7 +287,9 @@ function calculateCosineDistance(vec1, vec2) {
     return 1 - dot;
 }
 
-// Abort flag - set by main thread via message
+// Abort flag - set by an {type:'abort'} message. Part of this worker's message contract (and unit-tested), but the
+// renderer no longer posts it: runSortingWorker (media-viewer.js) terminates the worker on abort instead, since the
+// sort loops are synchronous and would read this flag only after they finish.
 let abortFlag = false;
 
 // Send progress update to main thread
@@ -755,6 +757,7 @@ self.onmessage = function (e) {
     const { type, data } = e.data;
 
     if (type === 'abort') {
+        // Not sent by the renderer today (it terminates the worker); kept as the worker's contract.
         abortFlag = true;
         return;
     }
