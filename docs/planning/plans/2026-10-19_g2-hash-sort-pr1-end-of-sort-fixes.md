@@ -902,6 +902,7 @@ test('a folder switch mid-run writes nothing to either folder and leaves the new
   The scoped re-review (Opus) found all addressed and nothing new broken. One incident: a fixer's mutation-restore step copied an old scratchpad backup over `media-viewer.js`. It rebuilt from `bdfc8e0`, and the controller and the re-reviewer both verified that nothing earlier was reverted. Unit suite: 1,800 passed, 1 skipped.
 - **2026-10-19** — **E2E on hold** at the user's request. The push waits too, because pre-push runs the full E2E suite.
 - **2026-10-19** — User go-ahead for E2E. The final-review E2E mutations both caught their targets (Review Focus #3 and #5), and the file passed 3 stability runs at 10/10. Pushing; pre-push runs the full E2E suite.
+- **2026-10-19** — First push blocked by pre-push E2E: 203 passed, 6 skipped, **1 failed**. `sort-progress.test.js` "Cancel button aborts the active sort controller" drew the card with a controller but no sort flag. Under M7, Cancel is hidden when no sort owns the card, so the test's premise no longer matched a real sort, which sets its flag before drawing the card. The test now sets `isComputingHashes = true` (a premise fix, per Finish). Both tests in that file pass.
 
 ## Key Discoveries
 

@@ -49,8 +49,10 @@ test.describe('Sort progress card', () => {
     test('Cancel button aborts the active sort controller', async () => {
         // Deterministic wiring check (no race with the real sort): install a fresh abort
         // controller, render the card, click Cancel, assert the controller was aborted.
+        // The card's Cancel shows only while a sort owns the card, so model a running similarity sort.
         await page.evaluate(() => {
             window.mediaViewer.sortAbortController = new AbortController();
+            window.mediaViewer.isComputingHashes = true;
             window.mediaViewer.updateSortProgress({ phase: 'Sorting…', current: 1, total: 4 });
         });
 
