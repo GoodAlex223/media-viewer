@@ -151,6 +151,7 @@ describe('Restore Order keeps every listed file (spec § 7, A1)', () => {
                 [restorePaths[which].flag]: true,
                 _fileOpInFlight: false,
                 _folderLoadInFlight: false,
+                _orderGeneration: 0,
                 _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
                 _refuseIfFolderLoadInFlight: extract('_refuseIfFolderLoadInFlight'),
             });
@@ -189,6 +190,19 @@ describe('Restore Order keeps every listed file (spec § 7, A1)', () => {
             'Tournament mode': [(ctx) => (ctx.isTournamentMode = true), null],
             'a file action': [(ctx) => (ctx._fileOpInFlight = true), 'Wait for the move to finish'],
             'a folder load': [(ctx) => (ctx._folderLoadInFlight = true), 'Wait for the folder to finish loading'],
+            // Fix round 1: an order committed during the wait, with every flag back to clear (a folder load that
+            // finished, a cache-hit similarity sort whose finally released isComputingHashes).
+            'an order change (every flag clear)': [(ctx) => ctx._orderGeneration++, null],
+            // The reviewer's scenario: during the AI toggle-off's wait, a cache-hit similarity sort commits over the
+            // AI order and snapshots it as originalMediaFiles. Restoring to that snapshot would restore the AI order.
+            'a similarity sort committed': [
+                (ctx) => {
+                    ctx._orderGeneration++;
+                    ctx.isSortedBySimilarity = true;
+                    ctx.originalMediaFiles = [...ctx.mediaFiles];
+                },
+                null,
+            ],
         };
         const cases = (which, keys) => keys.map((k) => [which, k]);
 
@@ -200,8 +214,19 @@ describe('Restore Order keeps every listed file (spec § 7, A1)', () => {
                 'Tournament mode',
                 'a file action',
                 'a folder load',
+                'an order change (every flag clear)',
             ]),
-            ...cases('AI', ['already restored (AI)', 'a forced re-sort started', 'a file action', 'a folder load']),
+            ...cases('AI', [
+                'already restored (AI)',
+                'a forced re-sort started',
+                // The re-sort chip (handleSortByPrediction({ resort: true })) can start during the wait.
+                'an AI sort started',
+                'Tournament mode',
+                'a file action',
+                'a folder load',
+                'an order change (every flag clear)',
+                'a similarity sort committed',
+            ]),
         ])('%s: %s during the wait restores nothing and renders nothing', async (which, key) => {
             const [change, notice] = changes[key];
             const { ctx } = restoreCtx(which, change);

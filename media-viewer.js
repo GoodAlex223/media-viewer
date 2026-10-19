@@ -7219,15 +7219,23 @@ class MediaViewer {
 
         // Toggle sorting (skip restore when force re-sorting)
         if (this.isSortedBySimilarity && !forceResort) {
-            // The press passed every refusal. Restore Order changes the order on screen, so it invalidates (G2 PR 1,
-            // F2): a pending "Show" offer is dismissed, and a Show whose apply is in flight goes stale and commits
-            // nothing over the restored order.
+            // The press passed every refusal so far. Restore Order changes the order on screen, so it invalidates
+            // (G2 PR 1, F2): a pending "Show" offer is dismissed, and a Show whose apply is in flight goes stale and
+            // commits nothing over the restored order. This must come before the wait below, so a press refused
+            // after the wait has already dismissed the offer, by design.
             this._invalidateSimilarityRun();
+            // Any order committed during the wait (a folder load, a sort) bumps this; see the re-check below.
+            const orderGen = this._orderGeneration;
             // showMedia() returns early on isLoading: a restore committed mid-render would leave the screen on
             // another file than the cursor, and a rating key would then move a file the user has not seen (T6).
             await this._waitForRenderIdle();
-            // The wait yielded: re-check, with no await from here to the commit. Already restored (a second
-            // press, a folder load), a re-sort or an AI sort started, or Tournament mode: nothing to do here.
+            // The wait yielded: re-check, with no await from here to the commit. Another order committed during
+            // the wait (its originalMediaFiles may no longer be the folder order, and its flags may all be clear
+            // again), already restored (a second press, a folder load), a re-sort or an AI sort started, or
+            // Tournament mode: nothing to do here.
+            if (this._orderGeneration !== orderGen) {
+                return;
+            }
             if (
                 !this.isSortedBySimilarity ||
                 this.isTournamentMode ||
@@ -7255,7 +7263,8 @@ class MediaViewer {
         }
 
         // The press passed every refusal and the confirm: a new run replaces a pending "Show" offer (G2 PR 1), and
-        // its gen bump below makes a Show whose apply is in flight stale. A refused press keeps the offer.
+        // its gen bump below makes a Show whose apply is in flight stale. A press refused above keeps the offer
+        // (Restore Order is the exception: it dismisses the offer before its render wait, then may refuse).
         this._dismissSimilarityOffer();
 
         // G2 spec § 6: everything the run works from is captured once, here, at the press. The run hashes and
@@ -10082,9 +10091,17 @@ class MediaViewer {
         if (this.isSortedByPrediction && !resort) {
             // The order on screen changes: a similarity Show whose apply is in flight must not commit over it (F2).
             this._invalidateSimilarityRun();
+            // Any order committed during the wait (a folder load, a sort) bumps this; see the re-check below.
+            const orderGen = this._orderGeneration;
             // Wait for an in-flight render, as Restore Order does (T6): showMedia() returns early on isLoading.
             await this._waitForRenderIdle();
-            // The wait yielded: re-check, with no await from here to the commit.
+            // The wait yielded: re-check, with no await from here to the commit. First, another order committed
+            // during the wait: a cache-hit similarity sort snapshots the AI order as originalMediaFiles and its
+            // finally releases isComputingHashes, so every flag below passes and restoring now would "restore" to
+            // the AI order (fix round 1).
+            if (this._orderGeneration !== orderGen) {
+                return;
+            }
             if (
                 !this.isSortedByPrediction ||
                 this.isTournamentMode ||
