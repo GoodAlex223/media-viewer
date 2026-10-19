@@ -54,6 +54,7 @@ media_viewer/
 ├── ml-training.js       # MlTrainingManager ES module (v2.0 pattern): training-set fingerprint, per-training-folder vector caches, fingerprint-keyed model cache
 ├── like-or-skip.js      # Pure ESM: skip tracking, batch cursor and undo re-insertion plans, the out-of-date count; imported as a namespace (LikeOrSkip)
 ├── recent-folders.js    # Pure ESM: the recently-opened-folders list and its click-time classifier; imported as a namespace (RecentFolders)
+├── similarity-sort.js   # Pure ESM: the similarity sort's list rule (alignToLive), the user-acted mark and the hash-save schedule; imported as a namespace (SimilaritySort)
 ├── media-url.js         # Pure ESM: toMediaUrl(path), the only way the renderer names a media file; imported as a namespace (MediaUrl)
 ├── media-formats.js     # Shared CJS: isMediaFile(ext), getMimeType(ext); .jxl → image/jxl
 ├── jxl-decode-worker.js # Module Web Worker (type:'module'): decodes JXL via jxl-oxide-wasm; streaming meta/frame/done protocol over transferable ArrayBuffers
