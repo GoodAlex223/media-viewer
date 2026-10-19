@@ -3,8 +3,10 @@ import { createRequire } from 'module';
 import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
 import { MlTrainingManager } from '../ml-training.js';
 import * as LikeOrSkip from '../like-or-skip.js';
+import * as SimilaritySort from '../similarity-sort.js';
 // Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
 globalThis.LikeOrSkip = LikeOrSkip;
+globalThis.SimilaritySort = SimilaritySort;
 const require = createRequire(import.meta.url);
 
 // MediaViewer methods are instance methods on an ES module class.

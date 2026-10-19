@@ -3,6 +3,7 @@ import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
 import * as LikeOrSkip from './like-or-skip.js';
 import * as RecentFolders from './recent-folders.js';
+import * as SimilaritySort from './similarity-sort.js';
 import * as MediaUrl from './media-url.js';
 
 const DEFAULT_SHORTCUTS = {
@@ -5701,8 +5702,10 @@ class MediaViewer {
     // of sorting first.
     restoreOriginalOrderForTournament() {
         if ((this.isSortedBySimilarity || this.isSortedByPrediction) && this.originalMediaFiles.length > 0) {
-            const currentPaths = new Set(this.mediaFiles.map((f) => f.path));
-            this.mediaFiles = this.originalMediaFiles.filter((f) => currentPaths.has(f.path));
+            this.mediaFiles = SimilaritySort.alignToLive(
+                this.originalMediaFiles.map((f) => f.path),
+                this.mediaFiles
+            );
         }
         this.isSortedBySimilarity = false;
         this.isSortedByPrediction = false;
@@ -7159,8 +7162,12 @@ class MediaViewer {
 
         // Toggle sorting (skip restore when force re-sorting)
         if (this.isSortedBySimilarity && !forceResort) {
-            // Restore original order
-            this.mediaFiles = [...this.originalMediaFiles];
+            // Restore original order: the snapshot's order over the files still listed, then any file
+            // restored since the sort (an undo) that the snapshot lacks; a moved file is not resurrected.
+            this.mediaFiles = SimilaritySort.alignToLive(
+                this.originalMediaFiles.map((f) => f.path),
+                this.mediaFiles
+            );
             this.isSortedBySimilarity = false;
             this._onOrderChanged('other');
             this.currentIndex = 0;
@@ -9580,10 +9587,11 @@ class MediaViewer {
 
         // Toggle off — restore original order. Not for the re-sort chip (G2), which re-sorts in place.
         if (this.isSortedByPrediction && !resort) {
-            if (this.originalMediaFiles.length > 0) {
-                const currentPaths = new Set(this.mediaFiles.map((f) => f.path));
-                this.mediaFiles = this.originalMediaFiles.filter((f) => currentPaths.has(f.path));
-            }
+            // An empty snapshot yields the live list unchanged.
+            this.mediaFiles = SimilaritySort.alignToLive(
+                this.originalMediaFiles.map((f) => f.path),
+                this.mediaFiles
+            );
             this.isSortedByPrediction = false;
             this._onOrderChanged('other');
             this.mlComparePairIndex = 0;
