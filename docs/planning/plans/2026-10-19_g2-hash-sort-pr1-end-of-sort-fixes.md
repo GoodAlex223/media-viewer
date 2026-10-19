@@ -806,7 +806,13 @@ test('a folder switch mid-run writes nothing to either folder and leaves the new
 
 - [x] `npx vitest run` (1,800 passed, 1 skipped at `cd1f24e`) and `npm run lint` (0 errors, 2 pre-existing warnings) are green. `npm run format:check` flags only the user's untracked `CLAUDE-SECURITY-2026*` folders; every changed file passes `prettier --check`. `git status --short` is clean apart from this plan.
 - [ ] `npx playwright test`: the full suite once. **On hold: the user asked for no E2E runs until they say so (2026-10-19).** A first run was stopped partway, with no result. An existing E2E that now fails is a finding: fix the test only if its premise was wrong, and log it.
-- [ ] **Final-review E2E mutations** (they need Playwright, so on hold too). With `tests/e2e/similarity-sort.test.js`:
+- [x] **Final-review E2E mutations**, run 2026-10-19 after the user's go-ahead.
+  - Baseline: 10/10.
+  - Skipping Show's render fails only Review Focus #3's test, at the `compareLeftFile` check (expected `blue-1x1.png`, got `red-1x1.png`).
+  - Skipping the computing path's `saveSortCache` fails only #5's test, at the `.sort_cache.json` check.
+  - Both changes were restored through `git checkout`, and three stability runs passed 10/10 each.
+
+  The steps as written:
   - make Show skip its render: Review Focus #3's test (`Show after switching to compare mode…`) must fail;
   - make the computing path skip `saveSortCache`: Review Focus #5's test (`× then Sort…`) must fail.
 
@@ -895,6 +901,7 @@ test('a folder switch mid-run writes nothing to either folder and leaves the new
 
   The scoped re-review (Opus) found all addressed and nothing new broken. One incident: a fixer's mutation-restore step copied an old scratchpad backup over `media-viewer.js`. It rebuilt from `bdfc8e0`, and the controller and the re-reviewer both verified that nothing earlier was reverted. Unit suite: 1,800 passed, 1 skipped.
 - **2026-10-19** — **E2E on hold** at the user's request. The push waits too, because pre-push runs the full E2E suite.
+- **2026-10-19** — User go-ahead for E2E. The final-review E2E mutations both caught their targets (Review Focus #3 and #5), and the file passed 3 stability runs at 10/10. Pushing; pre-push runs the full E2E suite.
 
 ## Key Discoveries
 
