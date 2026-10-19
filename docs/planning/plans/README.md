@@ -78,7 +78,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| _None currently active_ | — | — |
+| [2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md](2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md) | G2 (PR 1 of 2) | Approved — executing (subagent-driven) |
 
 <!-- 2026-10-19 (Group G1 I1 closeout): 2026-10-18_g1-confine-page-file-loads.md left this table on
      archive. Merged `4548269` via PR #84, moved to docs/archive/plans/ with `git mv`, and indexed in

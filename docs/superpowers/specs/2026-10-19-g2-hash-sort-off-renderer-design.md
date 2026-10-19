@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 19–23 § G2 (🔵 🏆, 8 SP → **~13 SP**, see § 13) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2 (manual testing; user priority "speed these up first")
 **Created**: 2026-10-19
-**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Next: the PR 1 plan.
+**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9).
 **Branch**: `g2-hash-sort-off-renderer` (from `main` @ `bfc4cbf`) for PR 1; PR 2 on a new branch after PR 1 merges (D7, § 13.1)
 
 Items marked **(my call)** were decided by Claude during the brainstorm. They were not put to the user, and are listed together at the end of § 3 for review.
@@ -425,3 +425,25 @@ plan-review flag may not apply.
 - How the parity flag travels (`?hashParity=1` or an equivalent that needs no `preload.js` change).
 - Whether large fixtures are generated at test time.
 - The canary images' exact content.
+
+---
+
+## 15. Planning amendments (PR 1, 2026-10-19)
+
+Measured on `bfc4cbf` while writing the PR 1 plan
+([plan](../../planning/plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md)). Each refines the approved design;
+none changes a user ruling.
+
+- **A1. Tournament entry restores through the same rule (§ 7).** `restoreOriginalOrderForTournament` (`:5702`) filters `originalMediaFiles` without appending, so it drops the same files Restore Order does. One helper (`alignToLive`) serves all three paths.
+- **A2. The perf line gains `outcome=offered` (§ 6.6)**, for a run whose order waits behind Show; `done` means it was applied. `_logSortPerf` takes a label and a file count, so both sorts share one formatter.
+- **A3. The cancel notice moves to the run's end (§ 7).** Today a press-cancel notifies `❌ Sorting cancelled`, while the card's Cancel shows an error-styled `❌ Error: Sorting cancelled by user` from the catch. The run's end now owns one notice for both.
+- **A4. The apply function computes before it commits (§ 8).** `applyCachedSortOrder` and `insertNewFilesInSortedOrder` return the order instead of writing `mediaFiles`. The placement loop yields every 25 files, so a write there could resurrect a file moved during a yield. The apply function waits for render idle, re-checks, then commits synchronously. At the commit:
+  - a held file-op guard declines it, and the caller offers Show instead (a direct apply) or puts the offer back (Show);
+  - an emptied list is left alone.
+- **A5. A stale run releases its own flags (§ 6.4).** It writes nothing that belongs to the folder now open, but still clears `isComputingHashes`, its own abort controller and the button, because nothing else would. The folder switch's invalidation aborts the run and clears its card.
+- **A6. Cache I/O is folder-explicit (§ 6.3–6.4).** The hash and sort cache reads and writes take the run's folder.
+  - The hash load and save also check that folder against the one open. A load that resolved after a switch would otherwise fill the new folder's map with the old folder's paths, and the next save would write them under the new folder's cache.
+  - `saveSortCache` reads and writes one folder, closing the same gap across its own read-before-write.
+- **A7. Show also refuses while a folder load is in flight (§ 8).**
+- **A8. The end-of-run hash save is skipped when nothing new was hashed (§ 6.3).**
+- **A9. "A new sort" includes the AI sort (my call 2).** Its start dismisses a pending Show message.
