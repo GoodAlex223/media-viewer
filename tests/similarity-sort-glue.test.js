@@ -34,6 +34,36 @@ function extract(name) {
     throw new Error(`Unbalanced braces in: ${name}`);
 }
 
+/** A stand-in for the sorting Web Worker: records what it is sent and whether it was terminated. */
+class FakeWorker {
+    static instances = [];
+    constructor(url) {
+        this.url = url;
+        this.posted = [];
+        this.terminated = false;
+        this.onmessage = null;
+        this.onerror = null;
+        FakeWorker.instances.push(this);
+    }
+    postMessage(message) {
+        this.posted.push(message);
+    }
+    terminate() {
+        this.terminated = true;
+    }
+}
+
+/** 'settled' if the promise settles (either way) within `ms`, else 'pending'. */
+function settledWithin(promise, ms) {
+    return Promise.race([
+        promise.then(
+            () => 'settled',
+            () => 'settled'
+        ),
+        new Promise((resolve) => setTimeout(() => resolve('pending'), ms)),
+    ]);
+}
+
 const media = (...names) => names.map((n) => ({ name: n, path: `/f/${n}`, size: 10, type: 'image/jpeg' }));
 const names = (files) => files.map((f) => f.name);
 
@@ -332,6 +362,43 @@ describe('the run (spec § 6–7, T3)', () => {
         expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe(how);
     });
 
+    // Fix round 1: sorting-worker.js's loops are synchronous, so its abort flag is read only after the loop
+    // ends and it keeps posting progress. A run made stale while the worker sorts must end at once, silently.
+    it('a run made stale while the worker sorts ends at once and writes nothing more', async () => {
+        const savedWorker = globalThis.Worker;
+        globalThis.Worker = FakeWorker;
+        FakeWorker.instances = [];
+        try {
+            const ctx = runCtx({
+                sortingWorker: null,
+                runSortingWorker: extract('runSortingWorker'),
+                _invalidateSimilarityRun: extract('_invalidateSimilarityRun'),
+            });
+            const done = handleSortBySimilarity.call(ctx, false);
+            await vi.waitFor(() => expect(FakeWorker.instances).toHaveLength(1));
+            const [worker] = FakeWorker.instances;
+
+            // loadFolder for another folder: it invalidates the run while the worker is still sorting.
+            ctx.baseFolderPath = '/g';
+            ctx._invalidateSimilarityRun();
+            const progressCalls = ctx.updateSortProgress.mock.calls.length;
+            const hashSaves = ctx.saveHashCache.mock.calls.length;
+            worker.onmessage?.({ data: { type: 'progress', message: 'Sorting…', current: 1, total: 3 } });
+
+            expect(await settledWithin(done, 50)).toBe('settled');
+            expect(worker.terminated).toBe(true);
+            expect(ctx.updateSortProgress.mock.calls.length).toBe(progressCalls);
+            expect(ctx.clearProgressNotification).toHaveBeenCalledOnce(); // the invalidate's own clear
+            expect(ctx.saveHashCache.mock.calls.length).toBe(hashSaves);
+            expect(ctx.saveSortCache).not.toHaveBeenCalled();
+            expect(ctx.showNotification.mock.calls.filter((c) => /cancelled|Error/.test(c[0]))).toEqual([]);
+            expect([ctx.isComputingHashes, ctx.sortAbortController]).toEqual([false, null]);
+            expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('stale');
+        } finally {
+            globalThis.Worker = savedWorker;
+        }
+    });
+
     it('writes one perf record per run', async () => {
         const ctx = runCtx();
         await handleSortBySimilarity.call(ctx, false);
@@ -362,5 +429,68 @@ describe('_invalidateSimilarityRun', () => {
         expect(ctx._similarityRunGen).toBe(5);
         expect(ctx.sortAbortController.signal.aborted).toBe(true);
         expect(ctx.clearProgressNotification).toHaveBeenCalledOnce();
+    });
+});
+
+// Fix round 1 (T3 review): the worker's sort loops are synchronous, so its abort flag is read only after the
+// loop ends. runSortingWorker itself must stop on abort: terminate, reject at once, ignore late messages.
+describe('runSortingWorker stops on abort (T3 fix round 1)', () => {
+    const runSortingWorker = extract('runSortingWorker');
+    let savedWorker;
+    beforeEach(() => {
+        savedWorker = globalThis.Worker;
+        globalThis.Worker = FakeWorker;
+        FakeWorker.instances = [];
+    });
+    afterEach(() => {
+        globalThis.Worker = savedWorker;
+    });
+
+    const progress = { data: { type: 'progress', message: 'Sorting…', current: 1, total: 3 } };
+
+    it('an abort mid-sort terminates the worker, rejects at once and ignores a later progress message', async () => {
+        const ctx = { sortingWorker: null, sortAbortController: new AbortController(), updateSortProgress: vi.fn() };
+        const sorting = runSortingWorker.call(ctx, { algorithm: 'vptree' });
+        const [worker] = FakeWorker.instances;
+        worker.onmessage(progress);
+        expect(ctx.updateSortProgress).toHaveBeenCalledOnce();
+
+        ctx.sortAbortController.abort();
+        expect(await settledWithin(sorting, 50)).toBe('settled');
+        await expect(sorting).rejects.toThrow('Sorting cancelled by user');
+        expect(worker.terminated).toBe(true);
+        expect(ctx.sortingWorker).toBeNull();
+
+        worker.onmessage(progress);
+        expect(ctx.updateSortProgress).toHaveBeenCalledOnce();
+    });
+
+    it('rejects without starting a worker when the controller is already aborted', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const ctx = { sortingWorker: null, sortAbortController: controller, updateSortProgress: vi.fn() };
+        const sorting = runSortingWorker.call(ctx, { algorithm: 'vptree' });
+        expect(await settledWithin(sorting, 50)).toBe('settled');
+        await expect(sorting).rejects.toThrow('Sorting cancelled by user');
+        expect(FakeWorker.instances).toHaveLength(0);
+    });
+
+    it('leaves the worker of a newer call in place when an older call is aborted', async () => {
+        const controller = new AbortController();
+        const ctx = { sortingWorker: null, sortAbortController: controller, updateSortProgress: vi.fn() };
+        const sorting = runSortingWorker.call(ctx, { algorithm: 'vptree' });
+        const newer = new FakeWorker('sorting-worker.js');
+        ctx.sortingWorker = newer;
+        controller.abort();
+        await expect(sorting).rejects.toThrow('Sorting cancelled by user');
+        expect(ctx.sortingWorker).toBe(newer);
+    });
+
+    it('without a controller it still resolves on complete', async () => {
+        const ctx = { sortingWorker: null, sortAbortController: null, updateSortProgress: vi.fn() };
+        const sorting = runSortingWorker.call(ctx, { algorithm: 'vptree' });
+        FakeWorker.instances[0].onmessage({ data: { type: 'complete', sortedPaths: ['/f/b', '/f/a'] } });
+        await expect(sorting).resolves.toEqual(['/f/b', '/f/a']);
+        expect(ctx.sortingWorker).toBeNull();
     });
 });

@@ -7772,15 +7772,27 @@ class MediaViewer {
     }
 
     // Run sorting in Web Worker to prevent UI freeze when window is minimized
+    // An abort stops the sort here, not in the worker: sorting-worker.js's loops are synchronous, so its own
+    // abort flag is read only after a loop ends, and it keeps posting progress until then (T3 review). On abort
+    // this call terminates its worker, rejects at once, and ignores any message still queued, so a cancelled or
+    // stale similarity run neither waits out the sort nor re-creates the progress card it no longer owns.
     runSortingWorker(data) {
+        const controller = this.sortAbortController;
         return new Promise((resolve, reject) => {
+            if (controller?.signal.aborted) {
+                reject(new Error('Sorting cancelled by user'));
+                return;
+            }
+
             // Terminate previous worker if exists
             if (this.sortingWorker) {
                 this.sortingWorker.terminate();
             }
 
+            let worker;
             try {
-                this.sortingWorker = new Worker('sorting-worker.js');
+                worker = new Worker('sorting-worker.js');
+                this.sortingWorker = worker;
             } catch (err) {
                 console.error('Failed to create sorting worker:', err);
                 // Fall back to main thread sorting
@@ -7789,6 +7801,9 @@ class MediaViewer {
             }
 
             this.sortingWorker.onmessage = (e) => {
+                if (controller?.signal.aborted) {
+                    return; // aborted: this call has already rejected and owns nothing any more
+                }
                 const { type, sortedPaths, message, current, total } = e.data;
 
                 switch (type) {
@@ -7815,13 +7830,19 @@ class MediaViewer {
                 reject(new Error('Sorting worker failed: ' + err.message));
             };
 
-            // Set up abort handling
-            if (this.sortAbortController) {
-                this.sortAbortController.signal.addEventListener('abort', () => {
-                    if (this.sortingWorker) {
-                        this.sortingWorker.postMessage({ type: 'abort' });
-                    }
-                });
+            // Set up abort handling: stop this call's worker and settle now, without waiting for the sort.
+            if (controller) {
+                controller.signal.addEventListener(
+                    'abort',
+                    () => {
+                        worker.terminate();
+                        if (this.sortingWorker === worker) {
+                            this.sortingWorker = null;
+                        }
+                        reject(new Error('Sorting cancelled by user'));
+                    },
+                    { once: true }
+                );
             }
 
             // Send sorting request to worker
