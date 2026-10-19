@@ -2,6 +2,7 @@
 import { test, expect } from '@playwright/test';
 import { access, cp, mkdtemp, readFile, rm, stat, symlink } from 'fs/promises';
 import { execFileSync } from 'child_process';
+import { createRequire } from 'module';
 import ffmpegPath from 'ffmpeg-static';
 import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
@@ -18,6 +19,7 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(HERE, 'fixtures');
 const PROJECT_ROOT = resolve(HERE, '..', '..');
+const { MERGED_KEY } = createRequire(import.meta.url)('../../storage-migration.js');
 
 // Ends the app the way a crash would: no graceful quit, so storage Chromium still holds only in
 // memory never reaches disk. closeApp then only cleans up after it.
@@ -226,7 +228,7 @@ test('the app page reloads and keeps its IPC', async () => {
 // Spec § 6. Test-only keys carry the shapes real settings have (a Windows path, JSON, non-ASCII
 // text): the migration copies keys without regard to their names, and real keys would leak into
 // later tests through the shared E2E profile.
-test('settings under the old page origin are carried over once and never overwrite', async () => {
+test('settings under the old page origin are carried over once, never overwrite, and a retry restores nothing', async () => {
     test.setTimeout(120_000);
     const markerDir = await mkdtemp(join(tmpdir(), 'mv-e2e-migration-'));
     const marker = join(markerDir, 'storage-migration.json');
@@ -259,10 +261,14 @@ test('settings under the old page origin are carried over once and never overwri
     const appKeys = () => page.evaluate(() => Object.keys(localStorage));
     let before = [];
     try {
-        // Launch 1, migration skipped: seed the old origin, and pre-set one key on the app origin.
+        // Launch 1, migration skipped: seed the old origin, and pre-set one key on the app origin. A
+        // merge mark left in the shared profile by an interrupted earlier run would skip the merge.
         ({ electronApp, page } = await launchApp());
         await inOldOrigin(electronApp, setScript(Object.entries(seeded)));
-        await page.evaluate(() => localStorage.setItem('mv-e2e-migration-preset', 'new'));
+        await page.evaluate((mark) => {
+            localStorage.removeItem(mark);
+            localStorage.setItem('mv-e2e-migration-preset', 'new');
+        }, MERGED_KEY);
         before = await appKeys();
         await electronApp.evaluate(({ session }) => session.defaultSession.flushStorageData());
         await closeApp(electronApp);
@@ -292,6 +298,22 @@ test('settings under the old page origin are carried over once and never overwri
         ({ electronApp, page } = await launchApp({ migrationMarker: marker }));
         expect(await page.evaluate(() => localStorage.getItem('mv-e2e-migration-late'))).toBeNull();
         expect(JSON.parse(await readFile(marker, 'utf-8'))).toEqual(written);
+
+        // Launch 5: as if the marker write had failed after the settings were written, and the user
+        // then removed a carried setting (the like folder's clear button does this). The retry must
+        // not bring it back.
+        await rm(marker);
+        await page.evaluate(() => localStorage.removeItem('mv-e2e-migration-path'));
+        await electronApp.evaluate(({ session }) => session.defaultSession.flushStorageData());
+        await closeApp(electronApp);
+        ({ electronApp, page } = await launchApp({ migrationMarker: marker }));
+        const { 'mv-e2e-migration-path': _removed, ...kept } = seeded;
+        expect(await readSeeded()).toEqual({
+            ...kept,
+            'mv-e2e-migration-path': null,
+            'mv-e2e-migration-preset': 'new',
+        });
+        expect(JSON.parse(await readFile(marker, 'utf-8')).written).toBe(0);
     } finally {
         // Leave the shared profile as it was: the seeded keys off both origins, and every key the
         // migration copied in removed from the app origin.

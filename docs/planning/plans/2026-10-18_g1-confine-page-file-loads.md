@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G1 (🟤, ~5 SP → ~7 SP at planning); [TODO.md](../TODO.md) 🔴 [2026-10-11] "Confine page-side file loads to the granted folders (G1 residual I1)"; origin: the [G1 security fix](../../archive/plans/2026-10-10_g1-security-findings-fix.md)'s closeout residual I1
 **Created**: 2026-10-18
-**Status**: In review. The PR is open; the user's deep code review runs in a separate chat.
+**Status**: In review. The user's code review (round 1) found one issue, fixed on the branch; awaiting the reviewer's ruling on the fix.
 **Branch**: `g1-confine-page-file-loads` (from `main` @ `c50c087`)
 
 > **Disclosure.** This repo is public and the residual is open, so this plan stays at stub level: component, class, severity. The design spec and the detailed implementation plan are kept **local** until merge, in the self-ignored scan report folder (WEEKLY ruling; G1 precedent). At the post-merge closeout the spec moves to `docs/superpowers/specs/` and is indexed in `docs/README.md`.
@@ -83,6 +83,10 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
       - In the manual session, the user confirmed the settings came across (the copy's marker counts 11 keys, all written) and that compare, tournament and AI sort behaved normally.
       - The user's _Scan changes_ came back with no findings. That is a clean pass, not a clearance.
       - The branch was pushed and the PR opened with a stub-level body. The deep code review runs in a separate chat.
+- **2026-10-19** — **Code review, round 1 (user, separate chat):** one issue, plausible and not reproduced by the reviewer; every claim in the description confirmed or accepted.
+  - **Fixed:** a retry of the settings move, after a completed write whose completion record failed, wrote back any carried setting the user had removed in between. The write now leaves a mark on the new store, set last, and a retry that finds it writes nothing. A unit test and a fifth launch in the end-to-end settings-move test both failed on the old code first.
+  - **Accepted, the reviewer's open trade-off:** a move that fails before its write leaves the session on an empty store; a setting set and then removed in that session comes back at the retry (Future Improvements).
+  - **Nit:** the deferred-minors bullet below now names all six.
 
 ## Key Discoveries
 
@@ -96,4 +100,5 @@ Close residual I1 of the G1 security fix: page-side file loads in the renderer a
 - **A deny-by-default permission handler for the window** (geolocation and similar), as one more defense-in-depth layer.
 - **Move kinds:** classify the extension with `asciiFold` rather than `toLowerCase()`, for consistency with the shared read rule. Harmless today.
 - **Content-read hardening** in the folder-grant code: two narrowing steps from a background review finding (pre-existing, accepted residual class; detail local until merge).
-- **The deferred minor review findings**, listed in the local plan: window close during the settings move, the move's history entries, the icon library's source-map line, `MV_USER_DATA_DIR` validation, and three stale comments.
+- **Settings move, a failure before its write** (review round 1, accepted trade-off): the session starts on an empty store, so a setting the user sets and then removes there (a folder's clear button, the shortcut reset) comes back when the retry succeeds. Skipping the merge whenever the new store holds keys would drop every carried setting for a user who changed any one of them. Remedy if it bites: the four removal sites leave a tombstone instead of removing the key.
+- **The deferred minor review findings**, listed in the local plan: window close during the settings move, the move's history entries, the icon library's source-map line, `MV_USER_DATA_DIR` validation, three stale comments, and the media-URL source test matching by variable name.

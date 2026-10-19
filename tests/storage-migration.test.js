@@ -10,6 +10,7 @@ const {
     READ_SCRIPT,
     MAX_KEYS,
     MAX_TOTAL_CHARS,
+    MERGED_KEY,
 } = require('../storage-migration.js');
 
 // A localStorage stand-in for running the generated scripts in a vm context.
@@ -76,6 +77,22 @@ describe('READ_SCRIPT and buildWriteScript', () => {
         expect(storage.getItem('text')).toBe('line\u2028sep\u2029end </script>');
         expect(storage.getItem('kept')).toBe('new');
         expect(run(buildWriteScript(pairs), storage)).toBe(0); // a re-run adds nothing
+    });
+
+    // A retry after a completed write (say the marker write failed) must not bring back a key the
+    // user removed in between: "absent" can't tell never-set from removed. The mark is set last, so a
+    // store that holds it holds every key written before it.
+    it('marks the store last when it writes, and a run that finds the mark writes nothing', () => {
+        const pairs = [
+            ['customLikeFolder', 'C:\\liked'],
+            ['customShortcuts', '{"version":2}'],
+        ];
+        const storage = fakeStorage();
+        expect(run(buildWriteScript(pairs), storage)).toBe(2);
+        expect([...storage.map.keys()].at(-1)).toBe(MERGED_KEY);
+        storage.map.delete('customLikeFolder'); // the user clears the like folder
+        expect(run(buildWriteScript(pairs), storage)).toBe(0);
+        expect(storage.getItem('customLikeFolder')).toBeNull();
     });
 });
 
