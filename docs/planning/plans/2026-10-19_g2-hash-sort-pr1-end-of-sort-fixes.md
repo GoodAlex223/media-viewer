@@ -149,7 +149,7 @@ One commit per task.
   - `HASH_SAVE_EVERY = 1000`, `HASH_SAVE_INTERVAL_MS = 60_000`.
   - `isHashSaveDue({ newSinceSave, lastSaveAt, now }) → boolean`: `newSinceSave >= HASH_SAVE_EVERY || (newSinceSave > 0 && now - lastSaveAt >= HASH_SAVE_INTERVAL_MS)`.
 
-- [ ] **Step 1: Write the failing tests** in `tests/similarity-sort.test.js`:
+- [x] **Step 1: Write the failing tests** in `tests/similarity-sort.test.js`:
 
 ```js
 import { describe, it, expect } from 'vitest';
@@ -227,12 +227,12 @@ describe('isHashSaveDue', () => {
 
 Add `'similarity-sort.js'` to `RENDERER_FILES` in `tests/lint-guard.test.js`. That is the RED test for the ESLint block entry, the pattern G4 used.
 
-- [ ] **Step 2: Run, expect failure**
+- [x] **Step 2: Run, expect failure**
 
 Run: `npx vitest run tests/similarity-sort.test.js tests/lint-guard.test.js`
 Expected: `Cannot find module '../similarity-sort.js'`, and the new `HTML sink guard in similarity-sort.js` cases fail.
 
-- [ ] **Step 3: Implement** `similarity-sort.js` with the Interfaces above. Header comment in the `like-or-skip.js` style: pure logic, no DOM, IPC or MediaViewer state; spec link; "imported as a namespace (`import * as SimilaritySort`), so an extracted-method test supplies it through `globalThis.SimilaritySort`". Add the file to ESLint block 2c.
+- [x] **Step 3: Implement** `similarity-sort.js` with the Interfaces above. Header comment in the `like-or-skip.js` style: pure logic, no DOM, IPC or MediaViewer state; spec link; "imported as a namespace (`import * as SimilaritySort`), so an extracted-method test supplies it through `globalThis.SimilaritySort`". Add the file to ESLint block 2c.
 
 `CLAUDE.md` § Architecture, after `recent-folders.js`:
 
@@ -240,9 +240,9 @@ Expected: `Cannot find module '../similarity-sort.js'`, and the new `HTML sink g
 ├── similarity-sort.js   # Pure ESM: the similarity sort's list rule (alignToLive), the user-acted mark and the hash-save schedule; imported as a namespace (SimilaritySort)
 ```
 
-- [ ] **Step 4: Run, expect pass**: `npx vitest run tests/similarity-sort.test.js tests/lint-guard.test.js`, then `npm run lint`.
+- [x] **Step 4: Run, expect pass**: `npx vitest run tests/similarity-sort.test.js tests/lint-guard.test.js`, then `npm run lint`.
 
-- [ ] **Step 5: Commit** — `feat(similarity-sort): pure list rule, user-acted mark and save schedule (G2 PR1 T1)`
+- [x] **Step 5: Commit** — `feat(similarity-sort): pure list rule, user-acted mark and save schedule (G2 PR1 T1)`
 
 ---
 
@@ -258,7 +258,7 @@ Closes BACKLOG 🟤 [2026-10-12] "Restore Order drops a file whose pre-sort move
 - Consumes: `SimilaritySort.alignToLive` (T1).
 - Produces: `tests/similarity-sort-glue.test.js`, which sets `globalThis.SimilaritySort`, holds the `extract(name)` helper copied from `like-or-skip-glue.test.js:21-37`, the `media(...names)` factory (`{ name, path: '/f/<name>', size: 10, type: 'image/jpeg' }`) and a `similarityCtx(overrides)` factory. T3 and T4 extend all three.
 
-- [ ] **Step 1: Write the failing tests.** For each path, the list on screen is `[c, a, d]`: `b` was moved since the sort, and `d` was restored by an undo and is absent from the snapshot. `originalMediaFiles` is `[a, b, c]`.
+- [x] **Step 1: Write the failing tests.** For each path, the list on screen is `[c, a, d]`: `b` was moved since the sort, and `d` was restored by an undo and is absent from the snapshot. `originalMediaFiles` is `[a, b, c]`.
 
 ```js
 describe('Restore Order keeps every listed file (spec § 7, A1)', () => {
@@ -282,18 +282,18 @@ describe('Restore Order keeps every listed file (spec § 7, A1)', () => {
 });
 ```
 
-- [ ] **Step 2: Run, expect failure** with `npx vitest run tests/similarity-sort-glue.test.js`. The similarity restore yields `['a','b','c']` (unfiltered, so `b` is resurrected and `d` lost); the AI and tournament paths yield `['a','c']`, losing `d`.
+- [x] **Step 2: Run, expect failure** with `npx vitest run tests/similarity-sort-glue.test.js`. The similarity restore yields `['a','b','c']` (unfiltered, so `b` is resurrected and `d` lost); the AI and tournament paths yield `['a','c']`, losing `d`.
 
-- [ ] **Step 3: Implement.** All three paths assign `SimilaritySort.alignToLive(this.originalMediaFiles.map((f) => f.path), this.mediaFiles)`.
+- [x] **Step 3: Implement.** All three paths assign `SimilaritySort.alignToLive(this.originalMediaFiles.map((f) => f.path), this.mediaFiles)`.
   - The AI toggle-off drops its `if (this.originalMediaFiles.length > 0)` guard, since an empty snapshot gives the live list.
   - `restoreOriginalOrderForTournament` keeps its `(isSortedBySimilarity || isSortedByPrediction) && originalMediaFiles.length > 0` condition.
   - Re-read the comment above each changed line.
 
-- [ ] **Step 4: Run, expect pass**: the glue file, then `npx vitest run` (the full suite: `like-or-skip-glue`'s control still sees the same three assigning methods).
+- [x] **Step 4: Run, expect pass**: the glue file, then `npx vitest run` (the full suite: `like-or-skip-glue`'s control still sees the same three assigning methods).
 
-- [ ] **Step 5: Mutation check.** Make `alignToLive` skip its append loop. Expect all three T2 tests and T1's `appends…` test to fail. Restore it and rerun green. Log both runs.
+- [x] **Step 5: Mutation check.** Make `alignToLive` skip its append loop. Expect all three T2 tests and T1's `appends…` test to fail. Restore it and rerun green. Log both runs.
 
-- [ ] **Step 6: Commit** — `fix(sort): Restore Order keeps files restored since the sort, on all three paths (G2 PR1 T2)`
+- [x] **Step 6: Commit** — `fix(sort): Restore Order keeps files restored since the sort, on all three paths (G2 PR1 T2)`
 
 ---
 
@@ -381,7 +381,7 @@ Closes BACKLOG 🟤 [2026-10-12] "The similarity sort's catch restores a stale s
 - `_switchToFolderNow` calls it right after its refusals, before `await this.cleanupCurrentMedia()`.
 - Update the comment block at `:3158-3165`.
 
-- [ ] **Step 1: Write the failing tests** in `tests/similarity-sort-glue.test.js`, extending `similarityCtx`.
+- [x] **Step 1: Write the failing tests** in `tests/similarity-sort-glue.test.js`, extending `similarityCtx`.
   - **Context.** Three images `a, b, c` in `/f`. `computePerceptualHash` is a `vi.fn` resolving `'0101'`, overridable per test.
   - **Stubs.** `runSortingWorker` resolves the reversed snapshot paths. Also stubbed: `loadSortCache` (→ `null`), `loadHashCache` (→ `0`), `saveHashCache`, `saveSortCache`, `deleteSortCache`, `updateSortProgress`, `clearProgressNotification`, `showNotification`, `showMedia`, `_onOrderChanged`, `_logSortPerf`, `kickoffBackgroundExtractionIfEnabled`.
   - **Real methods.** `_isStaleSimilarityRun` and `_assertSimilarityRunLive` are attached from `extract`.
@@ -482,19 +482,19 @@ And in `tests/like-or-skip-glue.test.js`:
 - Rename "a failed similarity sort keeps the skips" to `a failed similarity sort leaves the list and the skips as they are`. Its ctx gains `_similarityRunGen: 0`, real `_isStaleSimilarityRun`/`_assertSimilarityRunLive`, `_logSortPerf: vi.fn()` and `saveHashCache: vi.fn()`. Assert `mediaFiles` unchanged, `_orderGeneration` `0`, skips kept, and no `Skipped list cleared` notice.
 - "Cancel stays live": the press aborts and `showNotification` is not called.
 
-- [ ] **Step 2: Run, expect failure** with `npx vitest run tests/similarity-sort-glue.test.js tests/like-or-skip-glue.test.js tests/media-viewer-utils.test.js`. Expected: the run tests fail on today's code (the live list walked, the restore, no saves on cancel, the stale writes, no `label`); the two rewritten `like-or-skip-glue` tests fail; the four cache I/O tests fail.
+- [x] **Step 2: Run, expect failure** with `npx vitest run tests/similarity-sort-glue.test.js tests/like-or-skip-glue.test.js tests/media-viewer-utils.test.js`. Expected: the run tests fail on today's code (the live list walked, the restore, no saves on cancel, the stale writes, no `label`); the two rewritten `like-or-skip-glue` tests fail; the four cache I/O tests fail.
 
-- [ ] **Step 3: Implement** the behaviour above. Re-read and update the comments at `:7182` (the snapshot now moves to the commit) and the removed catch. Add `_invalidateSimilarityRun: vi.fn()` to the `loadFolder` context in `media-viewer-utils.test.js` (~L4365) and to `like-or-skip-glue.test.js`'s change-folder contexts (~L1209). Run `tests/recent-folders-glue.test.js` and stub it there too wherever a context now fails on it.
+- [x] **Step 3: Implement** the behaviour above. Re-read and update the comments at `:7182` (the snapshot now moves to the commit) and the removed catch. Add `_invalidateSimilarityRun: vi.fn()` to the `loadFolder` context in `media-viewer-utils.test.js` (~L4365) and to `like-or-skip-glue.test.js`'s change-folder contexts (~L1209). Run `tests/recent-folders-glue.test.js` and stub it there too wherever a context now fails on it.
 
-- [ ] **Step 4: Run, expect pass**: the three files, then `npx vitest run` and `npm run lint`.
+- [x] **Step 4: Run, expect pass**: the three files, then `npx vitest run` and `npm run lint`.
 
-- [ ] **Step 5: Mutation checks.** Log each run.
+- [x] **Step 5: Mutation checks.** Log each run.
   - Delete the `_assertSimilarityRunLive(run)` after `await this.computePerceptualHash(...)`: both stale cases and the cancel test fail.
   - Put back `this.mediaFiles = [...this.originalMediaFiles]` in the catch: the cancel and failure tests fail.
 
   Restore both and rerun green.
 
-- [ ] **Step 6: Commit** — `fix(sort): the similarity run works on a snapshot, saves as it goes, restores nothing and writes nothing once stale (G2 PR1 T3)`
+- [x] **Step 6: Commit** — `fix(sort): the similarity run works on a snapshot, saves as it goes, restores nothing and writes nothing once stale (G2 PR1 T3)`
 
 ---
 
@@ -568,7 +568,7 @@ Closes BACKLOG 🟤 [2026-10-12] "A similarity-sort result can land under an in-
 - `restoreOriginalOrderForTournament()` dismisses (Tournament entry).
 - `handleSortByPrediction` dismisses where it sets `isPredictionSorting = true` (A9).
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
 **T3's run tests from here on**:
 - Their `similarityCtx` stubs `_applySimilarityOrder` (`vi.fn` resolving `{ applied: true, stats: { cached: 0, added: 0, removed: 0 }, committedPaths: [] }`), `_offerSimilarityOrder` and `_dismissSimilarityOffer`. With the real apply function, the placement would hash files restored mid-run and change their call lists.
@@ -683,14 +683,14 @@ In `tests/media-viewer-utils.test.js`:
 - `EXEMPT` loses `applyCachedSortOrder` and `insertNewFilesInSortedOrder`;
 - `similarityCtx`'s `applyCachedSortOrder` mock returns `{ order: [...this.mediaFiles].reverse(), stats: { cached: 4, added: 0, removed: 0 } }`.
 
-- [ ] **Step 2: Run, expect failure**: `npx vitest run tests/similarity-sort-glue.test.js tests/media-viewer-utils.test.js tests/integration/cached-sort-path.test.js tests/like-or-skip-glue.test.js`. Expected:
+- [x] **Step 2: Run, expect failure**: `npx vitest run tests/similarity-sort-glue.test.js tests/media-viewer-utils.test.js tests/integration/cached-sort-path.test.js tests/like-or-skip-glue.test.js`. Expected:
   - `Could not find method: _applySimilarityOrder` (the glue file fails to collect);
   - the return-value assertions fail (today `undefined`);
   - the control's "no stale entries" test fails once `EXEMPT` loses the two methods while they still assign.
 
-- [ ] **Step 3: Implement** the Interfaces and the run's end above.
+- [x] **Step 3: Implement** the Interfaces and the run's end above.
 
-- [ ] **Step 4: Docs.**
+- [x] **Step 4: Docs.**
   - `CLAUDE.md`:
     - **§ Async Patterns**, a new bullet after the file-op bullet:
 
@@ -708,16 +708,16 @@ In `tests/media-viewer-utils.test.js`:
     - the first box: "compute hashes for snapshot images (or load from `.hash_cache.json`)";
     - the last box: "Renderer: apply now, or offer Show if the user acted (one apply function)".
 
-- [ ] **Step 5: Run, expect pass**: the four test files, then `npx vitest run`, `npm run lint`, `npm run format:check`.
+- [x] **Step 5: Run, expect pass**: the four test files, then `npx vitest run`, `npm run lint`, `npm run format:check`.
 
-- [ ] **Step 6: Mutation checks.** Log each run.
+- [x] **Step 6: Mutation checks.** Log each run.
   - Move `await this._waitForRenderIdle()` after the commit: `computes, waits … then commits` fails.
   - Delete the `_fileOpInFlight` decline: the `busy` case fails.
   - In `applyCachedSortOrder`, put back a `this.mediaFiles = …` write: the "writes nothing" assertions and the § 4 control fail.
 
   Restore each and rerun green.
 
-- [ ] **Step 7: Commit** — `fix(sort): one apply function for every similarity order; a run the user acted during ends with Show (G2 PR1 T4)`
+- [x] **Step 7: Commit** — `fix(sort): one apply function for every similarity order; a run the user acted during ends with Show (G2 PR1 T4)`
 
 ---
 
@@ -736,7 +736,7 @@ In `tests/media-viewer-utils.test.js`:
 
 Fixtures: the default three PNGs. Tests that rate also seed `customLikeFolder` and `customDislikeFolder` (`moveCurrentFile` refuses without both). Read the list order from `mediaFiles`; never assume it.
 
-- [ ] **Step 1: Write the tests.** Wait for `__hashCalls >= 2` before acting mid-run.
+- [x] **Step 1: Write the tests.** Wait for `__hashCalls >= 2` before acting mid-run.
 
 ```js
 test('a run the user waited for applies at once', async () => {
@@ -790,38 +790,72 @@ test('a folder switch mid-run writes nothing to either folder and leaves the new
 });
 ```
 
-- [ ] **Step 2: Run against T4's code**: `npx playwright test tests/e2e/similarity-sort.test.js --reporter=line`. Expected: all pass. These are E2E for behaviour T3–T4 already built (their unit tests were the RED tests). Make the RED proof here with mutations instead:
+- [x] **Step 2: Run against T4's code**: `npx playwright test tests/e2e/similarity-sort.test.js --reporter=line`. Expected: all pass. These are E2E for behaviour T3–T4 already built (their unit tests were the RED tests). Make the RED proof here with mutations instead:
   - Remove the sticky exclusion from the 5-notification prune: `…survives 5 s and other notices…` fails.
   - Remove `_invalidateSimilarityRun()` from `loadFolder`: `a folder switch mid-run…` fails (an old-folder write lands, or the offer survives).
 
   Restore each and rerun green. Log the runs.
 
-- [ ] **Step 3: Stability**: `for i in 1 2 3; do npx playwright test tests/e2e/similarity-sort.test.js --reporter=line || break; done` passes three runs in a row.
+- [x] **Step 3: Stability**: `for i in 1 2 3; do npx playwright test tests/e2e/similarity-sort.test.js --reporter=line || break; done` passes three runs in a row.
 
-- [ ] **Step 4: Commit** — `test(e2e): similarity sort Show, Cancel and folder switch (G2 PR1 T5)`
+- [x] **Step 4: Commit** — `test(e2e): similarity sort Show, Cancel and folder switch (G2 PR1 T5)`
 
 ---
 
 ## Finish (after Task 5)
 
-- [ ] `npx vitest run`, `npm run lint` and `npm run format:check` are green; `git status --short` is clean.
-- [ ] `npx playwright test`: the full suite once. An existing E2E that now fails is a finding: fix the test only if its premise was wrong, and log it.
-- [ ] **Grep sweep** across code, tests **and comments**: `originalMediaFiles`, `applyCachedSortOrder`, `insertNewFilesInSortedOrder`, `isComputingHashes`, `Sorting cancelled`, `saveHashCache(`, `loadHashCache(`, `sortKValue`. Re-read every comment attached to changed code.
-- [ ] `wc -l media-viewer.js` against `bfc4cbf` (**11,439**, measured at planning): record the net change in the Progress Log. This is the week's theme; PR 2 moves the hashing code out.
-- [ ] Dispatch the `regression-checker` agent on `git diff main...HEAD -- media-viewer.js` and triage every finding against the spec.
+- [x] `npx vitest run` (1,800 passed, 1 skipped at `cd1f24e`) and `npm run lint` (0 errors, 2 pre-existing warnings) are green. `npm run format:check` flags only the user's untracked `CLAUDE-SECURITY-2026*` folders; every changed file passes `prettier --check`. `git status --short` is clean apart from this plan.
+- [ ] `npx playwright test`: the full suite once. **On hold: the user asked for no E2E runs until they say so (2026-10-19).** A first run was stopped partway, with no result. An existing E2E that now fails is a finding: fix the test only if its premise was wrong, and log it.
+- [ ] **Final-review E2E mutations** (they need Playwright, so on hold too). With `tests/e2e/similarity-sort.test.js`:
+  - make Show skip its render: Review Focus #3's test (`Show after switching to compare mode…`) must fail;
+  - make the computing path skip `saveSortCache`: Review Focus #5's test (`× then Sort…`) must fail.
+
+  Restore each change and rerun green. Then run the file three times for stability.
+- [x] **Grep sweep** across code, tests **and comments**: done by the final whole-branch review (check 5). Every stale line it found was fixed in `bdfc8e0`, plus `docs/PROJECT_CONTEXT.md:39` in `cd1f24e`.
+- [x] `wc -l media-viewer.js`: 11,802 at `05b5bae`, and **11,944 at `cd1f24e`** after the fix wave, against 11,439 at `bfc4cbf` (**+505**).
+- [x] The `regression-checker` agent ran on `bfc4cbf..05b5bae`. It found 1 Important (the hash-cache overwrite after an unreadable read, fixed as F5) and 4 Minor (fixed or deferred; see the Progress Log).
 - [ ] Push with `git push -u origin g2-hash-sort-off-renderer` (pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
 - [ ] Open the PR: spec and plan links; D3, D7 and my calls 2, 3, 11; amendments A1–A9; RED→GREEN and the mutation runs per task; test deltas; the Residuals. **Ask the user** before running `/code-review` in this chat; the default is a separate chat at `max`. Merge only on the user's go-ahead.
 
 ## Improvements (minimum 2 required before Extract)
 
-1. **A per-run hash map.** `perceptualHashes` is folder-wide state shared with `removeFileFromList`, which deletes a moved file's hash mid-run. A map owned by the run, merged at its end, would make "a stale run writes no hashes" structural instead of checked after each `await`. 🟤 candidate.
-2. **The hash cache never prunes.** `saveHashCache` writes every entry in the map, including files long gone from the folder, and the load restores them all. Pruning to the listed files at save would bound the cache. 🟤 candidate.
+1. **A per-run hash map.** `perceptualHashes` is folder-wide state shared with `removeFileFromList`, which deletes a moved file's hash mid-run. A map owned by the run, merged at its end, would make "a stale run writes no hashes" structural instead of checked after each `await`. It would also fix a spec E2 gap the final review found: a file hashed, moved and restored (undo) during the hash phase loses its hash, because `removeFileFromList` deletes it and undo does not restore it, so the file lands at the end instead of by similarity. 🟤 candidate.
+2. **The hash cache never prunes.** `saveHashCache` writes every entry in the map, including files long gone from the folder, and the load restores them all. Pruning to the listed files at save would bound the cache. Since the final fix wave's merge-on-save (F5), entries for moved-away files also persist across saves. The cache is keyed by file name with no size/mtime check, so a different file later given the same name reuses the old hash. 🟤 candidate.
 3. **Show has no keyboard path.** The sticky message is mouse-only; a shortcut or focus on arrival would help a keyboard-driven user. 🟤 candidate.
 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
 - **"The similarity sort leaves `isSortedByPrediction` set"** stays open (spec § 12). PR 1 makes it visible in a new way: Show applied over an AI order in compare mode pairs from `mlComparePairIndex`/the score list, not from `mediaFiles[0]`. → BACKLOG 🟤, the same entry (append the observation).
 - **`_waitForRenderIdle` commits anyway after 2 s.** It is shared with the AI sort; a stranded `isLoading` lets an order land under a render. Pre-existing. → BACKLOG 🟤 if no entry covers it.
+
+**Deferred review findings (execution, 2026-10-19).** Task reviews, the final whole-branch review and the regression check found these and judged them safe to defer. Each one → BACKLOG 🟤 at closeout, one entry per line. Related lines may share an entry, tagged with each other.
+- **Test gaps, low risk:**
+  - `takeUserMark`'s tournament branch of `mode` has no test, and nothing asserts its shape (for example, `currentPath` is `null` for an empty list). Tournament entry refuses while a run computes, so the run never sees that mode change.
+  - The Tournament-entry Restore Order test checks only `mediaFiles`, not that both sorted flags clear or that `_onOrderChanged('other')` fires.
+  - The AI toggle-off's dropped `originalMediaFiles.length > 0` guard has no test that pins it.
+  - No test pins `_switchToFolderNow`'s order: refusals first, then `_invalidateSimilarityRun()`.
+- **Test harness:**
+  - `extract()`'s regex in the four glue test files handles one level of parentheses in a signature. Anything deeper fails loudly with "Could not find method".
+  - The `like-or-skip-glue` § 4 control scans method headers one line at a time. A method whose signature Prettier wraps, and which assigns `this.mediaFiles`, would escape the control. It is latent: the final review found no wrapped header inside the class today. A guard test that fails on a wrapped header would close it.
+  - The E2E `afterEach` does not null `electronApp`/`page`, so a later `beforeEach` failure would `closeApp` a stale app (a noisy teardown, never a false pass).
+  - The E2E Cancel test relies on the snapshot's hash order: call 1 is ungated.
+- **Small behaviour gaps:**
+  - A Cancel during a save re-saves the same entries: `newSinceSave` resets after the assert, not before.
+  - A run made stale by reopening the same folder still swaps that folder's own cache into the map in `loadHashCache`. The data is correct, but the "a stale run writes no hashes" rule is not kept literally.
+  - The cache-hit `save` phase time is lost from the perf line when the first save goes stale.
+  - The basename conversion before the apply is timed in no perf phase. It is synchronous in preload, so negligible.
+  - `runSortingWorker`'s `complete`/`error` handlers null `this.sortingWorker` without an identity check. This is pre-existing; one run at a time.
+  - A cache hit that falls back to Show offers a message without the cached/new/removed stats, which exist only after the apply.
+  - × closes the offer's element but leaves `_similarityOffer` set until the next dismissal. Harmless; Show is not clickable.
+  - A cancel during a cache hit's placement does not save the placement's hashes. Spec § 6.3; pre-existing.
+  - After a folder switch, the Sort button reads "Sort by Similarity" while the old run unwinds (at most one in-flight hash). A click there is swallowed silently.
+  - Show's placement rewrites a plain-text progress card that was already on screen (the shared element) into the sort-card form. Show then leaves it in place, with Cancel hidden, until that card's owner next updates it.
+- **Found outside PR 1's scope** (the final review's "declined to judge" list):
+  - Restore Order (similarity and AI toggle-off) renders without waiting for an in-flight render. Its `showMedia()` returns early on `isLoading`, so the restored list and cursor can sit under a screen that still shows another file. A rating key would then move a file the user has not seen. This is pre-existing for any order change pressed during a render. M6's render-after-finally (the run renders after releasing its flags) makes it reachable when Restore Order is pressed right after a sort lands. Rate it by what it can move, not by the narrow trigger.
+  - Turning CLIP off during a CLIP run, or with a CLIP offer pending: the run's save recreates the `'clip'` sort cache the toggle just deleted, and the offer survives.
+  - `scoreComplete`/`sortComplete` clear the progress card unconditionally.
+  - `applyPredictionSortResult` drops live files that are missing from the AI result.
+  - A failed folder listing returns before the run is invalidated (the run still writes only to its own folder).
 
 ## Closeout (after the merge, on `main`)
 
@@ -837,7 +871,39 @@ test('a folder switch mid-run writes nothing to either folder and leaves the new
 
 - **2026-10-19** — Branch `g2-hash-sort-off-renderer` from `bfc4cbf`. Brainstormed with a spike (Electron 39.1.2, real `Liked_1`/`Liked_2` images); spec `47d870c`, approved ("Design looks right"). D7 split G2 into two PRs; this plan is PR 1. Planning-time measurements gave amendments A1–A9 and the "existing tests reached" list.
 - **2026-10-19** — Plan approved by the user ("Looks good"); execution method: subagent-driven (T1/T2/T5 Sonnet 5.5 · medium, T3/T4 Opus 5.5 · medium; controller commits).
+- **2026-10-19** — **T1** `84449d6`: RED = module missing; the lint-guard RED proved by removing the ESLint 2c entry (10 HTML-sink cases fail). Review clean.
+- **2026-10-19** — **T2** `43c9cdd`: RED 3/3 with the predicted values; mutation (skip `alignToLive`'s append loop) failed 3 T2 + 3 T1 tests. Review clean.
+- **2026-10-19** — **T3** `184a3e6` + review fix `41f6a78`. RED: 20 behavioural failures; both mutations caught. The task review found a run made stale during the **worker phase** left an orphaned progress card and held `isComputingHashes` in the new folder for the rest of the worker's synchronous sort (the worker reads its abort flag only after its loop). Fix: `runSortingWorker` terminates its own worker and rejects on abort, and ignores late messages (Cancel in the worker phase is now immediate too).
+- **2026-10-19** — **T4** `22f0a98` + `ca1d975`. Controller rulings beyond the plan: **P1** (the run clears the card after the apply, Show clears it only if no sort started); **R-T4a** (the placement checks liveness after every await, before any hash store, progress call or return — a stale placement would otherwise put the old folder's hashes into the new folder's map, A6); **R-T4b** (liveness belongs to the entry: `_applySimilarityOrder(entry, signal)`, so a Cancel during the render wait no longer commits, and an AI sort started during Show declines it as `'sorting'` without re-offering, A9). The extract/method-header regexes in four test files were widened for the new signatures. Review clean (7 minors deferred to the final review).
+- **2026-10-19** — **T5** `05b5bae`: 10 E2E tests, 3 stable runs. Two plan defects found by the mutation proof and fixed in the tests: 6 `info` notices never reach the 5-notification prune (the info prune holds info at 2), so the test fires `success` notices; the mid-run folder-switch test passed without `loadFolder`'s invalidate (the folder half of the token catches it), so a same-folder-reload test was added.
+- **2026-10-19** — `wc -l media-viewer.js`: **11,802** vs 11,439 at `bfc4cbf` (**+363**). PR 1 adds the run/apply/offer machinery; PR 2 is where hashing moves out.
+- **2026-10-19** — **Final review** (Opus, `max`) of `3af82c3..05b5bae`: with fixes, 0 Critical. The 4 Important findings:
+  - Review Focus #1 failed at the run level;
+  - Show could be overtaken by a later order change;
+  - Cancel in the CLIP branch did nothing for the whole extraction;
+  - the #3 and #5 E2E tests could not fail.
+
+  The **regression check** found 1 Important (an unreadable hash-cache read followed by a periodic save could shrink `.hash_cache.json`) and 4 Minor.
+- **2026-10-19** — **Fix wave** `bdfc8e0` + `cd1f24e`:
+  - F1 an emptied list ends the run quietly (outcome `declined`);
+  - F2 Restore Order, the AI toggle-off and start, and Tournament entry call `_invalidateSimilarityRun()`;
+  - F3 the CLIP kickoff takes the run's signal (R-F3b): the first ruling's precondition was disproved by the fixer's probe;
+  - F4 the two E2E tests rewritten (not run);
+  - F5 `saveHashCache` merges into the file on disk;
+  - M1–M8 comments, the Show notice after a folder switch, the folder-load decline, docs, `declined`, `_applySimilarityOrder` neither renders nor sets the label, the card's Cancel hidden when no sort owns it, Show clears only a card it drew;
+  - R-F6 a cache hit with new files renders before its saves (a pre-existing window where a rating key could move an unseen file).
+
+  The scoped re-review (Opus) found all addressed and nothing new broken. One incident: a fixer's mutation-restore step copied an old scratchpad backup over `media-viewer.js`. It rebuilt from `bdfc8e0`, and the controller and the re-reviewer both verified that nothing earlier was reverted. Unit suite: 1,800 passed, 1 skipped.
+- **2026-10-19** — **E2E on hold** at the user's request. The push waits too, because pre-push runs the full E2E suite.
 
 ## Key Discoveries
 
-_(fill during execution)_
+- **Posting `abort` to `sorting-worker.js` stops nothing mid-sort.** Its loops are synchronous, so `onmessage` runs only after they end. A stale run kept `isComputingHashes` and kept re-creating the progress card in the new folder for the rest of the sort. The fix is to terminate the worker and reject at once (T3 review).
+- **Moving every file away is itself a user action.** `moveHistory` grows, so the run offered Show over an empty screen before the apply's `'empty'` decline could run. Review Focus #1 was pinned at the apply layer, but the defect lived in the run (final review).
+- **An apply with no flag of its own is exposed to every later order change.** R-T4b's per-entry liveness stopped a foreign Cancel from ending Show. But a Restore Order press, Tournament entry, or an AI sort that started and finished during Show's apply still landed under it, and could overwrite the Restore Order snapshot. Every order-changing intent now invalidates the run counter (final review F2).
+- **More save points widen a cache's loss surface.** `read-folder-cache` returns `null` for any read error. Periodic and cancel saves after an unreadable read would replace a 13k-entry `.hash_cache.json` with the few hashes computed so far. Before this PR, saves only ran after a complete run, which hid this (regression check; merge-on-save, F5).
+- **Moving a notice to the run's end needs the run to end promptly.** A3 moved the cancel notice to the end of the run. The CLIP branch's extraction wait ignored the run's abort, so Cancel was silent for minutes (final review F3).
+- **Two E2E checks could not fail**, which only the mutation proof showed:
+  - six `info` notices never reach the 5-notification prune, because the info prune holds info notices at 2;
+  - the folder half of the run token hid a missing counter bump in a different-folder test, so only a same-folder reload discriminates (T5).
+- **The final review found two more Review Focus E2E tests that could not fail** (#3 and #5): the start file was already the left file of the compare pair, and a full re-sort also hashes nothing once `.hash_cache.json` exists.
