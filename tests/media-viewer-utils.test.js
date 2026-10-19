@@ -1644,6 +1644,7 @@ describe('handleSortByPrediction lifecycle', () => {
             moveHistory: [],
             _pendingStaleMark: null,
             _refuseIfFileOpInFlight: extractMethod('_refuseIfFileOpInFlight'),
+            _refuseIfFolderLoadInFlight: extractMethod('_refuseIfFolderLoadInFlight'),
             _waitForRenderIdle: extractAsyncMethod('_waitForRenderIdle'),
             _invalidateSimilarityRun: vi.fn(),
             ...overrides,

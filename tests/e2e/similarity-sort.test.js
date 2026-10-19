@@ -86,6 +86,50 @@ test.describe('Similarity sort: Show, Cancel and folder switch', () => {
         await expect(page.locator('.notification.sticky')).toHaveCount(0);
     });
 
+    // T6: showMedia() returns early on isLoading, so a restore committed mid-render would leave the screen on the
+    // sorted first file while the list and the cursor are on the folder's first file.
+    test('Restore Order pressed during a render restores only after the render, and the screen shows the restored first file', async () => {
+        // The file on screen, as a basename (the src probe of tournament-mode.test.js's screenState).
+        const shownName = () =>
+            page.evaluate(() => {
+                const src = window.mediaViewer.currentMedia?.getAttribute('src');
+                return src ? decodeURIComponent(String(src)).split(/[\\/]/).pop() : null;
+            });
+        const folderFirst = await page.evaluate(() => window.mediaViewer.mediaFiles[0].name);
+
+        // Start the sort from the second file, so the sorted first file differs from the folder's first file.
+        await waitForIdle(page);
+        await page.evaluate(() => window.mediaViewer.nextMedia());
+        await waitForIdle(page);
+        await gateHashing(page);
+        await startSort(page);
+        await finishSort(page);
+        await waitForIdle(page);
+        expect(await page.evaluate(() => window.mediaViewer.isSortedBySimilarity)).toBe(true);
+        const sortedFirst = await page.evaluate(() => window.mediaViewer.mediaFiles[0].name);
+        expect(sortedFirst).not.toBe(folderFirst);
+        await expect.poll(shownName).toBe(sortedFirst);
+
+        // A render in flight, then Restore Order.
+        await page.evaluate(() => {
+            window.mediaViewer.isLoading = true;
+            window.__restoreDone = window.mediaViewer.handleSortBySimilarity();
+        });
+        await page.waitForTimeout(200);
+        expect(await page.evaluate(() => window.mediaViewer.isSortedBySimilarity)).toBe(true);
+
+        await page.evaluate(async () => {
+            window.mediaViewer.isLoading = false;
+            await window.__restoreDone;
+        });
+        await waitForIdle(page);
+
+        expect(await page.evaluate(() => window.mediaViewer.isSortedBySimilarity)).toBe(false);
+        expect(await page.evaluate(() => window.mediaViewer.currentIndex)).toBe(0);
+        expect(await page.evaluate(() => window.mediaViewer.mediaFiles[0].name)).toBe(folderFirst);
+        await expect.poll(shownName).toBe(folderFirst);
+    });
+
     test('a run the user moved on during ends with Show, which survives 5 s and other notices, then applies from the start file', async () => {
         await gateHashing(page);
         const startPath = await page.evaluate(() => window.mediaViewer.mediaFiles[0].path);

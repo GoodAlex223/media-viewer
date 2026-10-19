@@ -802,6 +802,61 @@ test('a folder switch mid-run writes nothing to either folder and leaves the new
 
 ---
 
+## Task 6: Restore Order waits for an in-flight render (user-approved follow-up, 2026-10-19)
+
+The final review found this as a pre-existing race. The user chose to fix it on this branch ("Agree, fix it now"). Restore Order's `showMedia()` returns early on `isLoading`. If Restore Order is pressed while a file is still rendering, the restored list and cursor sit under a screen that still shows another file, and a rating key would then move a file the user has not seen. M6 (the run renders after releasing its flags) makes this reachable right after a sort lands.
+
+**Files:**
+- Modify: `media-viewer.js` — the Restore Order branch of `handleSortBySimilarity`, and the toggle-off branch of `handleSortByPrediction`.
+- Test: `tests/similarity-sort-glue.test.js`, `tests/e2e/similarity-sort.test.js`.
+
+**Interfaces:**
+- Consumes: `_waitForRenderIdle()` (existing; waits while `isLoading || mediaNavigationInProgress`, capped at 2 s), `_refuseIfFileOpInFlight()`, `_refuseIfFolderLoadInFlight()`, `_invalidateSimilarityRun()`, `SimilaritySort.alignToLive`.
+- Produces: no new methods.
+
+**Behaviour, the same for both paths:**
+1. Everything up to and including `this._invalidateSimilarityRun()` stays as it is.
+2. `await this._waitForRenderIdle()`.
+3. With no `await` from here until the commit ends, re-check, in this order:
+   - the path no longer applies (`!this.isSortedBySimilarity` for the similarity path, `!this.isSortedByPrediction` for the AI path; for example, a second press already restored, or a folder load reset it), `this.isTournamentMode`, `this.isComputingHashes`, `this.isPredictionSorting` → return silently;
+   - `this._refuseIfFileOpInFlight()` → return (it shows `Wait for the move to finish`);
+   - `this._refuseIfFolderLoadInFlight()` → return (it shows `Wait for the folder to finish loading`).
+4. The existing synchronous restore (`alignToLive`, the flags, `_onOrderChanged('other')`, the indices), then `await this.showMedia()`, then the existing notice and label.
+
+**Steps:**
+- [ ] **Step 1: Write the failing tests.** In `tests/similarity-sort-glue.test.js`:
+  - For each path: `Restore Order waits for an in-flight render, then restores and renders`. The `_waitForRenderIdle`, `_onOrderChanged` and `showMedia` mocks push `'wait'`, `'commit'` and `'render'` to `seq`. Expect `seq` to equal `['wait', 'commit', 'render']`.
+  - For the similarity path, `it.each` over a change made inside the `_waitForRenderIdle` mock:
+    - already restored (`isSortedBySimilarity = false`);
+    - a forced re-sort started (`isComputingHashes = true`);
+    - an AI sort started (`isPredictionSorting = true`);
+    - Tournament mode;
+    - a file action (`_fileOpInFlight = true`, expect the notice `Wait for the move to finish`);
+    - a folder load (`_folderLoadInFlight = true`, expect `Wait for the folder to finish loading`).
+
+    In every case, expect `mediaFiles` to be the same array, `_onOrderChanged` not called, and `showMedia` not called. Use the real `_refuseIfFileOpInFlight` and `_refuseIfFolderLoadInFlight`.
+  - For the AI path: the same `it.each`, over already restored (`isSortedByPrediction = false`), `isComputingHashes`, a file action, and a folder load.
+- [ ] **Step 2: Write the E2E test** in `tests/e2e/similarity-sort.test.js`: `Restore Order pressed during a render restores only after the render, and the screen shows the restored first file`.
+  - Navigate to the second listed file first (`nextMedia()`, after `waitForIdle`). The sort starts from the start file, so the sorted first file then differs from the folder's first file.
+  - Run the sort to completion. It applies directly, because nothing changed during it. Then `waitForIdle`.
+  - Set `window.mediaViewer.isLoading = true` to simulate a render in flight, and start Restore Order without awaiting it (`window.__restoreDone = window.mediaViewer.handleSortBySimilarity()`).
+  - After about 200 ms, expect the list to be still sorted: `isSortedBySimilarity` true.
+  - Set `isLoading = false`, await `__restoreDone`, then `waitForIdle`.
+  - Expect `isSortedBySimilarity` false, `currentIndex` 0, and the file shown on screen to be `mediaFiles[0]`. Find how the existing E2E files read the displayed file in single mode and reuse that; do not invent a new probe if one exists.
+- [ ] **Step 3: Run, expect failure.**
+  - The unit tests fail on today's code: there is no wait, so the restore commits at once and `seq` lacks `'wait'`.
+  - The E2E test fails: the restore lands at once, and `showMedia` returns early on the simulated `isLoading`.
+  - Record both.
+- [ ] **Step 4: Implement** the behaviour above, on both paths. Re-read the comments on both branches.
+- [ ] **Step 5: Run, expect pass:**
+  - the glue file;
+  - `npx vitest run`;
+  - `npm run lint`;
+  - `npx playwright test tests/e2e/similarity-sort.test.js --reporter=line`, three runs in a row.
+- [ ] **Step 6: Mutation check.** Delete the `await this._waitForRenderIdle()` on the similarity path. The similarity unit tests and the new E2E test must fail. Restore with `git checkout -- media-viewer.js` only after the change is committed; until then, revert the one line by hand and confirm with `git diff`.
+- [ ] **Step 7: Report, not fix:** does any key reach a file action while the Tournament config modal is open? `restoreOriginalOrderForTournament` restores the list without a render, and the modal opens over the old file.
+- [ ] **Step 8: Commit** (controller): `fix(sort): Restore Order waits for an in-flight render before it restores (G2 PR1 T6)`.
+
 ## Finish (after Task 5)
 
 - [x] `npx vitest run` (1,800 passed, 1 skipped at `cd1f24e`) and `npm run lint` (0 errors, 2 pre-existing warnings) are green. `npm run format:check` flags only the user's untracked `CLAUDE-SECURITY-2026*` folders; every changed file passes `prettier --check`. `git status --short` is clean apart from this plan.

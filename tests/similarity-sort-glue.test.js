@@ -85,6 +85,8 @@ function similarityCtx(overrides = {}) {
         mlComparePairIndex: 3,
         sortSimilarityBtn: { querySelector: () => label },
         _refuseIfFileOpInFlight: vi.fn(() => false),
+        _refuseIfFolderLoadInFlight: vi.fn(() => false),
+        _waitForRenderIdle: vi.fn(async () => {}),
         _onOrderChanged: vi.fn(),
         _dismissSimilarityOffer: vi.fn(),
         _invalidateSimilarityRun: vi.fn(),
@@ -123,6 +125,98 @@ describe('Restore Order keeps every listed file (spec § 7, A1)', () => {
         const ctx = similarityCtx({ ...screenState(), isSortedBySimilarity: true });
         extract('restoreOriginalOrderForTournament').call(ctx);
         expect(names(ctx.mediaFiles)).toEqual(['a', 'c', 'd']);
+    });
+
+    // T6: showMedia() returns early on isLoading, so a restore committed mid-render would leave the screen on
+    // another file than the cursor. Both paths wait for render idle first, then re-check before they commit.
+    describe('Restore Order waits for an in-flight render (T6)', () => {
+        const restorePaths = {
+            similarity: {
+                method: 'handleSortBySimilarity',
+                args: [false],
+                flag: 'isSortedBySimilarity',
+            },
+            AI: {
+                method: 'handleSortByPrediction',
+                args: [],
+                flag: 'isSortedByPrediction',
+            },
+        };
+
+        /** A restore-ready ctx whose `_waitForRenderIdle` runs `during(ctx)`; seq records wait/commit/render. */
+        function restoreCtx(which, during = () => {}) {
+            const seq = [];
+            const ctx = similarityCtx({
+                ...screenState(),
+                [restorePaths[which].flag]: true,
+                _fileOpInFlight: false,
+                _folderLoadInFlight: false,
+                _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+                _refuseIfFolderLoadInFlight: extract('_refuseIfFolderLoadInFlight'),
+            });
+            ctx._waitForRenderIdle = vi.fn(async () => {
+                seq.push('wait');
+                during(ctx);
+            });
+            ctx._onOrderChanged = vi.fn(() => seq.push('commit'));
+            ctx.showMedia = vi.fn(async () => seq.push('render'));
+            return { ctx, seq };
+        }
+
+        const run = (which, ctx) => extract(restorePaths[which].method).call(ctx, ...restorePaths[which].args);
+
+        it.each(['similarity', 'AI'])(
+            '%s: Restore Order waits for an in-flight render, then restores and renders',
+            async (which) => {
+                const { ctx, seq } = restoreCtx(which);
+                await run(which, ctx);
+                expect(seq).toEqual(['wait', 'commit', 'render']);
+                expect(names(ctx.mediaFiles)).toEqual(['a', 'c', 'd']);
+                expect(ctx[restorePaths[which].flag]).toBe(false);
+                expect(ctx.currentIndex).toBe(0);
+                // The invalidation stays first, ahead of the wait (F2).
+                expect(ctx._invalidateSimilarityRun.mock.invocationCallOrder[0]).toBeLessThan(
+                    ctx._waitForRenderIdle.mock.invocationCallOrder[0]
+                );
+            }
+        );
+
+        const changes = {
+            'already restored (similarity)': [(ctx) => (ctx.isSortedBySimilarity = false), null],
+            'already restored (AI)': [(ctx) => (ctx.isSortedByPrediction = false), null],
+            'a forced re-sort started': [(ctx) => (ctx.isComputingHashes = true), null],
+            'an AI sort started': [(ctx) => (ctx.isPredictionSorting = true), null],
+            'Tournament mode': [(ctx) => (ctx.isTournamentMode = true), null],
+            'a file action': [(ctx) => (ctx._fileOpInFlight = true), 'Wait for the move to finish'],
+            'a folder load': [(ctx) => (ctx._folderLoadInFlight = true), 'Wait for the folder to finish loading'],
+        };
+        const cases = (which, keys) => keys.map((k) => [which, k]);
+
+        it.each([
+            ...cases('similarity', [
+                'already restored (similarity)',
+                'a forced re-sort started',
+                'an AI sort started',
+                'Tournament mode',
+                'a file action',
+                'a folder load',
+            ]),
+            ...cases('AI', ['already restored (AI)', 'a forced re-sort started', 'a file action', 'a folder load']),
+        ])('%s: %s during the wait restores nothing and renders nothing', async (which, key) => {
+            const [change, notice] = changes[key];
+            const { ctx } = restoreCtx(which, change);
+            const before = ctx.mediaFiles;
+            await run(which, ctx);
+            expect(ctx._waitForRenderIdle).toHaveBeenCalledOnce();
+            expect(ctx.mediaFiles).toBe(before);
+            expect(ctx._onOrderChanged).not.toHaveBeenCalled();
+            expect(ctx.showMedia).not.toHaveBeenCalled();
+            if (notice) {
+                expect(ctx.showNotification.mock.calls).toEqual([[notice, 'info']]);
+            } else {
+                expect(ctx.showNotification).not.toHaveBeenCalled();
+            }
+        });
     });
 });
 

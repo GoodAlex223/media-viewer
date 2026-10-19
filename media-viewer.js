@@ -7223,6 +7223,22 @@ class MediaViewer {
             // F2): a pending "Show" offer is dismissed, and a Show whose apply is in flight goes stale and commits
             // nothing over the restored order.
             this._invalidateSimilarityRun();
+            // showMedia() returns early on isLoading: a restore committed mid-render would leave the screen on
+            // another file than the cursor, and a rating key would then move a file the user has not seen (T6).
+            await this._waitForRenderIdle();
+            // The wait yielded: re-check, with no await from here to the commit. Already restored (a second
+            // press, a folder load), a re-sort or an AI sort started, or Tournament mode: nothing to do here.
+            if (
+                !this.isSortedBySimilarity ||
+                this.isTournamentMode ||
+                this.isComputingHashes ||
+                this.isPredictionSorting
+            ) {
+                return;
+            }
+            if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
+                return;
+            }
             // Restore original order: the snapshot's order over the files still listed, then any file
             // restored since the sort (an undo) that the snapshot lacks; a moved file is not resurrected.
             this.mediaFiles = SimilaritySort.alignToLive(
@@ -10066,6 +10082,20 @@ class MediaViewer {
         if (this.isSortedByPrediction && !resort) {
             // The order on screen changes: a similarity Show whose apply is in flight must not commit over it (F2).
             this._invalidateSimilarityRun();
+            // Wait for an in-flight render, as Restore Order does (T6): showMedia() returns early on isLoading.
+            await this._waitForRenderIdle();
+            // The wait yielded: re-check, with no await from here to the commit.
+            if (
+                !this.isSortedByPrediction ||
+                this.isTournamentMode ||
+                this.isComputingHashes ||
+                this.isPredictionSorting
+            ) {
+                return;
+            }
+            if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
+                return;
+            }
             // An empty snapshot yields the live list unchanged.
             this.mediaFiles = SimilaritySort.alignToLive(
                 this.originalMediaFiles.map((f) => f.path),
