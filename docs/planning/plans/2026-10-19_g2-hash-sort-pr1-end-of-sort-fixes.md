@@ -805,7 +805,7 @@ test('a folder switch mid-run writes nothing to either folder and leaves the new
 ## Finish (after Task 5)
 
 - [x] `npx vitest run` (1,800 passed, 1 skipped at `cd1f24e`) and `npm run lint` (0 errors, 2 pre-existing warnings) are green. `npm run format:check` flags only the user's untracked `CLAUDE-SECURITY-2026*` folders; every changed file passes `prettier --check`. `git status --short` is clean apart from this plan.
-- [ ] `npx playwright test`: the full suite once. **On hold: the user asked for no E2E runs until they say so (2026-10-19).** A first run was stopped partway, with no result. An existing E2E that now fails is a finding: fix the test only if its premise was wrong, and log it.
+- [x] `npx playwright test`: the full suite ran in the pre-push hook. The first push hit one failure, a premise fix (see the Progress Log). The second push passed 204, with 6 skipped.
 - [x] **Final-review E2E mutations**, run 2026-10-19 after the user's go-ahead.
   - Baseline: 10/10.
   - Skipping Show's render fails only Review Focus #3's test, at the `compareLeftFile` check (expected `blue-1x1.png`, got `red-1x1.png`).
@@ -820,8 +820,8 @@ test('a folder switch mid-run writes nothing to either folder and leaves the new
 - [x] **Grep sweep** across code, tests **and comments**: done by the final whole-branch review (check 5). Every stale line it found was fixed in `bdfc8e0`, plus `docs/PROJECT_CONTEXT.md:39` in `cd1f24e`.
 - [x] `wc -l media-viewer.js`: 11,802 at `05b5bae`, and **11,944 at `cd1f24e`** after the fix wave, against 11,439 at `bfc4cbf` (**+505**).
 - [x] The `regression-checker` agent ran on `bfc4cbf..05b5bae`. It found 1 Important (the hash-cache overwrite after an unreadable read, fixed as F5) and 4 Minor (fixed or deferred; see the Progress Log).
-- [ ] Push with `git push -u origin g2-hash-sort-off-renderer` (pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
-- [ ] Open the PR: spec and plan links; D3, D7 and my calls 2, 3, 11; amendments A1–A9; RED→GREEN and the mutation runs per task; test deltas; the Residuals. **Ask the user** before running `/code-review` in this chat; the default is a separate chat at `max`. Merge only on the user's go-ahead.
+- [x] Pushed (`1b3bc79`). Push with `git push -u origin g2-hash-sort-off-renderer` (pre-push runs the full E2E suite). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
+- [x] **PR #85** opened (https://github.com/GoodAlex223/media-viewer/pull/85). Open the PR: spec and plan links; D3, D7 and my calls 2, 3, 11; amendments A1–A9; RED→GREEN and the mutation runs per task; test deltas; the Residuals. **Ask the user** before running `/code-review` in this chat; the default is a separate chat at `max`. Merge only on the user's go-ahead.
 
 ## Improvements (minimum 2 required before Extract)
 
@@ -903,6 +903,7 @@ test('a folder switch mid-run writes nothing to either folder and leaves the new
 - **2026-10-19** — **E2E on hold** at the user's request. The push waits too, because pre-push runs the full E2E suite.
 - **2026-10-19** — User go-ahead for E2E. The final-review E2E mutations both caught their targets (Review Focus #3 and #5), and the file passed 3 stability runs at 10/10. Pushing; pre-push runs the full E2E suite.
 - **2026-10-19** — First push blocked by pre-push E2E: 203 passed, 6 skipped, **1 failed**. `sort-progress.test.js` "Cancel button aborts the active sort controller" drew the card with a controller but no sort flag. Under M7, Cancel is hidden when no sort owns the card, so the test's premise no longer matched a real sort, which sets its flag before drawing the card. The test now sets `isComputingHashes = true` (a premise fix, per Finish). Both tests in that file pass.
+- **2026-10-19** — Second push: full E2E **204 passed, 6 skipped**. **PR #85** opened. Waiting on the user for: a `/code-review` (default: a separate chat at `max`), the Restore-Order-during-render question (fix on this branch or BACKLOG), and the merge.
 
 ## Key Discoveries
 
