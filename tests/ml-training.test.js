@@ -8,6 +8,9 @@ import {
     MlTrainingManager,
 } from '../ml-training.js';
 import { createRequire } from 'module';
+import * as MediaUrl from '../media-url.js';
+// The extracted computeFeatures reaches the namespace import through globalThis (like LikeOrSkip).
+globalThis.MediaUrl = MediaUrl;
 
 // feature-cache-transport.js is CommonJS (shared with main.js); createRequire lets this ESM
 // test module load it directly instead of hand-rolling the transport shape it produces.

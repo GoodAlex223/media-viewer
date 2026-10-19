@@ -78,7 +78,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| _None currently active_ | — | — |
+| [2026-10-18_g1-confine-page-file-loads.md](2026-10-18_g1-confine-page-file-loads.md) (public stub; spec and detailed plan local until merge) | G1 (Oct 19–23) | In progress |
 
 <!-- 2026-10-17 (Group G5 closeout): 2026-10-17_g5-claude-md-size-audit.md left this table on
      archive. Merged `3fb797e` via PR #82, moved to docs/archive/plans/ with `git mv`, and indexed in

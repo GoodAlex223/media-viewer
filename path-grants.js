@@ -271,6 +271,26 @@ function createGrantStore({ storePath, fs = fsp, realpathFallback = jsRealpath }
     };
 }
 
+// The one rule for reading a media file's CONTENT (review M-a; G1 I1, spec § 4.3), shared by
+// ipc-guard's read kinds and the app scheme's media door. The requested name is a media file name;
+// it lies inside a grant, or it is an entry of a granted folder (a link there may point anywhere);
+// and the file it resolves to is a media file too, so a media-named link to a document or a key file
+// is refused even inside a grant. Returns the canonical target (the file to read), or null. The
+// extension is folded with asciiFold, never toLowerCase() (U+212A, commit security review).
+function createMediaReadRule({ grants, isMediaFile }) {
+    const isMediaPath = (p) => typeof isMediaFile === 'function' && isMediaFile(asciiFold(path.extname(p)));
+    return async function resolveMediaRead(p) {
+        if (!isCleanAbsolute(p) || !isMediaPath(p)) {
+            return null;
+        }
+        let target = await grants.resolveAllowed(p);
+        if (target === null && (await grants.resolveEntry(p)) !== null) {
+            target = await grants.canonicalize(p);
+        }
+        return target !== null && isMediaPath(target) ? target : null;
+    };
+}
+
 // Temp directories main itself created (extractKeyframes). The renderer gets each path from
 // main and hands it back unchanged, so exact string comparison is both sufficient and strict
 // (no case folding, which equated look-alike names — commit security review).
@@ -304,6 +324,7 @@ function createTempDirRegistry() {
 module.exports = {
     createGrantStore,
     createTempDirRegistry,
+    createMediaReadRule,
     hasDotSegment,
     isCleanAbsolute,
     asciiFold,

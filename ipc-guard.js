@@ -8,38 +8,22 @@
 // is logged; it never throws. Pure CommonJS with no Electron import, so Vitest can load it.
 
 const path = require('path');
-const { isCleanAbsolute, asciiFold } = require('./path-grants');
+const { isCleanAbsolute, asciiFold, createMediaReadRule } = require('./path-grants');
+const { APP_SCHEME } = require('./app-protocol');
 
 const DEFAULT_REJECT = Object.freeze({ success: false, error: 'Not permitted' });
 
-// Percent-decode only well-formed %XX runs: Chromium leaves a lone `%` raw, which a whole-string
-// decodeURIComponent would reject.
-const decodeEscapes = (s) =>
-    s.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
-        try {
-            return decodeURIComponent(run);
-        } catch (_err) {
-            return run;
-        }
-    });
-
-// A file: URL reduced to what identifies the document, compared as a DECODED path (deep review
-// #2): Chromium's frame URL keeps `~ [ ] %` raw where Node's pathToFileURL escapes them, so from
-// an app path such as the checkout's 8.3 alias (MEDIA_~1) every sender was refused. No query or
-// fragment; ASCII case folded on Windows (Chromium and Node can disagree on the drive letter) and
-// only ASCII, so a Unicode look-alike path stays a different document.
-function normalizeFileUrl(raw, platform = process.platform) {
+// The page a sender frame shows: scheme, host and path of its URL, without query or fragment
+// (G1 I1). The app page is served from its own scheme, where a URL has one spelling, so it is
+// compared as text. A file: URL has no host and identifies nothing.
+function pageId(raw) {
     let u;
     try {
         u = new URL(raw);
     } catch (_err) {
         return null;
     }
-    if (u.protocol !== 'file:') {
-        return null;
-    }
-    const id = (u.host ? '//' + u.host : '') + decodeEscapes(u.pathname);
-    return platform === 'win32' ? asciiFold(id) : id;
+    return u.host ? `${u.protocol}//${u.host}${u.pathname}` : null;
 }
 
 function isPlainBasename(v, platform = process.platform) {
@@ -60,9 +44,9 @@ function describe(v) {
 }
 
 function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMediaFile, platform = process.platform }) {
-    const expected = normalizeFileUrl(expectedUrl, platform);
-    if (!expected) {
-        throw new Error('ipc-guard: expectedUrl must be a file: URL');
+    const expected = pageId(expectedUrl);
+    if (!expected || !expected.startsWith(`${APP_SCHEME}://`)) {
+        throw new Error('ipc-guard: expectedUrl must be an app: URL');
     }
 
     const isTrustedSender = (event) => {
@@ -70,21 +54,14 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMedi
         if (!frame || frame.parent) {
             return false;
         }
-        return normalizeFileUrl(frame.url, platform) === expected;
+        return pageId(frame.url) === expected;
     };
 
     const isString = (v) => typeof v === 'string';
-    const allowed = async (v) => (await grants.resolveAllowed(v)) !== null;
-    // Review M-a. A link in a granted folder may be READ only when its real target is a media
-    // file: symlinked media keeps working (CLIP, JXL decode, video probe), while a planted link to
-    // a key file or a document is still refused. Without isMediaFile, content reads stay strict.
-    const linkedMedia = async (v) => {
-        if (typeof isMediaFile !== 'function' || (await grants.resolveEntry(v)) === null) {
-            return false;
-        }
-        const target = await grants.canonicalize(v);
-        return target !== null && isMediaFile(path.extname(target).toLowerCase());
-    };
+    // Content reads (JXL decode, video probe, keyframes, CLIP) go through the one media-read rule
+    // the app scheme's media door also uses (path-grants.js). Without isMediaFile it refuses all.
+    const resolveMediaRead = createMediaReadRule({ grants, isMediaFile });
+    const mediaRead = async (v) => isString(v) && (await resolveMediaRead(v)) !== null;
     const isMediaName = (v) => typeof isMediaFile === 'function' && isMediaFile(path.extname(v).toLowerCase());
     const grantedEntry = async (v) => isString(v) && (await grants.resolveEntry(v)) !== null;
     const kinds = {
@@ -102,14 +79,9 @@ function createIpcGuard({ ipcMain, grants, tempDirs, expectedUrl, logger, isMedi
         // A move could otherwise rename a cache file of chosen text to any name under a grant.
         mediaEntry: async (v) => isString(v) && isMediaName(v) && (await grantedEntry(v)),
         mediaBasename: (v) => isPlainBasename(v, platform) && isMediaName(v),
-        // A read of a media file's content: a media file inside a grant, or a link from a granted
-        // folder to media. Every caller (JXL decode, video probe, keyframes, CLIP) reads media; the
-        // in-grant branch read ANY file until PR #78's close-out (B). Without isMediaFile, both refuse.
-        grantedMediaRead: async (v) =>
-            isString(v) && ((isMediaName(v) && (await allowed(v))) || (await linkedMedia(v))),
-        grantedOrTempMediaRead: async (v) =>
-            isString(v) &&
-            (tempDirs.isChildFile(v) || (isMediaName(v) && (await allowed(v))) || (await linkedMedia(v))),
+        // A read of a media file's content: see mediaRead above.
+        grantedMediaRead: mediaRead,
+        grantedOrTempMediaRead: async (v) => isString(v) && (tempDirs.isChildFile(v) || (await mediaRead(v))),
         binary: (v) => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
     };
     const int = (min, max) => (v) => Number.isSafeInteger(v) && v >= min && v <= max;
@@ -235,7 +207,6 @@ function tierDirMatches(realTier, realRoot, tierName) {
 
 module.exports = {
     createIpcGuard,
-    normalizeFileUrl,
     isPlainBasename,
     tierAssignmentsKind,
     tierDirMatches,

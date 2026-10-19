@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, globalShortcut, protocol, session } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs'); // createReadStream/createWriteStream for streaming the feature cache
@@ -7,9 +7,10 @@ const { promisify } = require('util');
 const logger = require('./logger');
 const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
-const { pathToFileURL } = require('url');
-const { createGrantStore, createTempDirRegistry, isInsideDir } = require('./path-grants');
-const { createIpcGuard, tierAssignmentsKind, tierDirMatches, normalizeFileUrl } = require('./ipc-guard');
+const { createGrantStore, createTempDirRegistry, isInsideDir, createMediaReadRule } = require('./path-grants');
+const { createIpcGuard, tierAssignmentsKind, tierDirMatches } = require('./ipc-guard');
+const { createAppProtocol, isBlockedEgress, APP_SCHEME, APP_HOST } = require('./app-protocol');
+const { migrateStorage } = require('./storage-migration');
 const { readClipImage } = require('./clip-image');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
@@ -20,11 +21,52 @@ const FOLDER_CACHE_FILES = Object.freeze({
     feature: '.feature_cache.json',
 });
 
-// The one page this app shows, loaded AND authorized from this constant (final review I1).
-// loadFile() with a relative name resolves against app.getAppPath(), which keeps a link in the
-// launch path, while __dirname is the resolved real path: two expressions meant the window's URL
-// and the URL the IPC guard expected differed whenever the app was launched through a link.
-const INDEX_HTML = path.join(__dirname, 'index.html');
+// The app is served from its own scheme (G1 I1), so the page can load only what app-protocol.js
+// allows: the app's own files and media from granted folders. The one page this app shows is
+// loaded, trusted by the IPC guard and allowed by the navigation lock from this constant (final
+// review I1: one expression for the page we load and the page we trust). APP_ROOT is Node's JS
+// realpath, the same one app-protocol.js compares each file against.
+const APP_ROOT = fsSync.realpathSync(__dirname);
+const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
+const INDEX_URL = `${APP_ORIGIN}/index.html`;
+const MIGRATE_URL = `${APP_ORIGIN}/migrate.html`;
+
+// The page's Content-Security-Policy, sent as a response header on every app file (G1 I1, spec
+// D8), so it also governs each worker, which takes its policy from its own script's response.
+// 'wasm-unsafe-eval' and inline styles are needed (measured by the E2E walk, G1 § 6.1);
+// frame-ancestors works only as a header.
+const APP_CSP = [
+    "default-src 'none'",
+    "script-src 'self' 'wasm-unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' blob: data:",
+    "media-src 'self' blob:",
+    "font-src 'self' data:",
+    "worker-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+].join('; ');
+
+// Must run before 'ready'. Not bypassCSP, corsEnabled or allowServiceWorkers.
+protocol.registerSchemesAsPrivileged([
+    {
+        scheme: APP_SCHEME,
+        privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, codeCache: true },
+    },
+]);
+
+// Run on another profile folder (G1 I1, user ruling 2026-10-18). A manual session before the merge
+// runs on a COPY of the real profile, so the one-time settings copy (storage-migration.js) happens
+// there. The real profile then migrates at its first launch after the merge, with the settings it
+// has then, not a copy that went stale while older builds kept writing the old store. Set before
+// 'ready', so Chromium's storage follows it too.
+if (process.env.MV_USER_DATA_DIR) {
+    app.setPath('userData', process.env.MV_USER_DATA_DIR);
+}
 
 // Streaming JSON reader for the feature cache (parse a 250MB+ file with a tiny memory
 // footprint instead of fs.readFile + JSON.parse, which peaks past ~1GB and kills the process).
@@ -122,7 +164,7 @@ async function loadClipModel(event) {
 let mainWindow;
 let isQuitting = false; // set true once the user confirms, to let the re-issued close() through
 
-function createWindow() {
+async function createWindow() {
     isQuitting = false; // re-arm the close confirm for this window (macOS dock-activate re-creates it)
     mainWindow = new BrowserWindow({
         width: 1200,
@@ -134,23 +176,26 @@ function createWindow() {
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
             sandbox: false, // Changed from true to false
+            spellcheck: false, // no dictionary download (G1 I1: the renderer makes no network requests)
         },
         title: 'Media Viewer',
     });
+    const win = mainWindow;
+    win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp'); // with the dead proxy: no WebRTC path out
 
-    mainWindow.loadFile(INDEX_HTML);
-
-    // Navigation lock (G1 § 6.2): the window only ever shows the app's own index.html, the same
-    // page the IPC guard authorizes. A page-initiated navigation anywhere else, and every
-    // window.open, is refused and logged. Reloading the app page itself stays allowed.
-    const appUrl = normalizeFileUrl(pathToFileURL(INDEX_HTML).href);
-    mainWindow.webContents.on('will-navigate', (event, legacyUrl) => {
+    // Navigation lock (G1 § 6.2): the window only ever shows INDEX_URL, the page the IPC guard
+    // trusts, so another page on the app's own origin is refused too. A page-initiated navigation
+    // anywhere else, and every window.open, is refused and logged. A reload fires no will-navigate,
+    // and neither do main's own loadURL/loadFile calls (the migration below needs no hole here).
+    win.webContents.on('will-navigate', (event, legacyUrl) => {
         const url = event.url ?? legacyUrl;
-        if (normalizeFileUrl(url) === appUrl) return;
+        if (url === INDEX_URL) {
+            return;
+        }
         event.preventDefault();
         logger.warn('navigation', `Blocked navigation to ${String(url).slice(0, 200)}`);
     });
-    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    win.webContents.setWindowOpenHandler(({ url }) => {
         logger.warn('navigation', `Blocked window.open of ${String(url).slice(0, 200)}`);
         return { action: 'deny' };
     });
@@ -174,6 +219,26 @@ function createWindow() {
         e.preventDefault();
         wc.send('app-close-requested');
     });
+
+    // One-time localStorage move to the app scheme's origin (storage-migration.js). Never blocks
+    // startup: a failure is logged and retried next launch. E2E points the marker at a file it
+    // pre-writes, so tests skip it unless they ask.
+    await migrateStorage({
+        markerPath: process.env.MV_E2E_MIGRATION_MARKER || path.join(app.getPath('userData'), 'storage-migration.json'),
+        fs,
+        loadOldOrigin: () => win.loadFile(path.join(APP_ROOT, 'migrate.html')),
+        loadNewOrigin: () => win.loadURL(MIGRATE_URL),
+        // flushStorageData() returns nothing to await; the pause lets the write reach disk.
+        flush: async () => {
+            win.webContents.session.flushStorageData();
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        },
+        executeJavaScript: (code) => win.webContents.executeJavaScript(code),
+        logger,
+    });
+    if (!win.isDestroyed()) {
+        await win.loadURL(INDEX_URL);
+    }
 }
 
 // App lifecycle
@@ -205,25 +270,23 @@ app.whenReady().then(async () => {
 
     // Folder grants (G1): privileged file IPC acts on paths inside a folder the user picked in main's
     // own dialog, with the exceptions ipc-guard's argument kinds document (main's own keyframe temp
-    // folders; a link entry inside a granted folder; a link there to a media file). The page itself
-    // is not confined by this (spec residual I1). MV_E2E_GRANTS_FILE gives each E2E launch a fresh store and
-    // exposes it to electronApp.evaluate (main process only — the renderer cannot reach it).
+    // folders; a link entry inside a granted folder; a link there to a media file). The page's own
+    // media loads go through the same media-read rule (app-protocol.js). MV_E2E_GRANTS_FILE gives each
+    // E2E launch a fresh store and exposes it to electronApp.evaluate (main process only — the
+    // renderer cannot reach it).
     const grants = createGrantStore({
         storePath: process.env.MV_E2E_GRANTS_FILE || path.join(app.getPath('userData'), 'folder-grants.json'),
     });
     const grantLoad = await grants.load();
     console.log(`Folder grants: ${grantLoad.ok ? `${grantLoad.count} loaded` : grantLoad.reason}`);
-    if (process.env.MV_E2E_GRANTS_FILE) {
-        global.__mvGrants = grants;
-    }
     const tempDirs = createTempDirRegistry();
     const guard = createIpcGuard({
         ipcMain,
         grants,
         tempDirs,
-        expectedUrl: pathToFileURL(INDEX_HTML).href,
+        expectedUrl: INDEX_URL,
         logger,
-        isMediaFile, // lets a symlinked media file be read (review M-a); see ipc-guard's grantedMediaRead
+        isMediaFile, // the shared media-read rule (path-grants.js) needs it; without it, content reads refuse
     });
     const { kinds, int, optional, oneOf, arrayOf, shape } = guard;
 
@@ -247,7 +310,35 @@ app.whenReady().then(async () => {
         }
     }
 
-    createWindow();
+    // The app scheme (G1 I1): app files from an allowlist; media through the same read rule as the
+    // IPC guard's content-read kinds.
+    const appProtocol = createAppProtocol({
+        appRoot: APP_ROOT,
+        resolveMediaRead: createMediaReadRule({ grants, isMediaFile }),
+        getMimeType,
+        csp: APP_CSP,
+        logger,
+    });
+    protocol.handle(APP_SCHEME, (request) => appProtocol.handle(request));
+
+    // The renderer's network (G1 I1, spec § 7): every http(s) and ws(s) request is cancelled and
+    // logged, and the session's proxy is a dead one with no loopback exemption, so nothing outside
+    // webRequest's view reaches a host either. Main-process network (Node's fetch) is untouched.
+    session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+        if (isBlockedEgress(details.url)) {
+            logger.warn('egress', `Cancelled ${details.resourceType} ${String(details.url).slice(0, 200)}`);
+            callback({ cancel: true });
+            return;
+        }
+        callback({});
+    });
+    await session.defaultSession.setProxy({ proxyRules: '127.0.0.1:9', proxyBypassRules: '<-loopback>' });
+    if (process.env.MV_E2E_GRANTS_FILE) {
+        global.__mvGrants = grants;
+        global.__mvAppProtocol = appProtocol; // E2E only: its open-stream count (handle release)
+    }
+
+    createWindow().catch((err) => logger.error('window', `Window failed to load: ${err.message}`));
 
     // Renderer's verdict on a close confirm (no tournament, or Save & leave / Discard chosen).
     // Registered once here (not in createWindow) so it does not accumulate when a window is
@@ -1307,7 +1398,7 @@ app.whenReady().then(async () => {
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
+            createWindow().catch((err) => logger.error('window', `Window failed to load: ${err.message}`));
         }
     });
 });

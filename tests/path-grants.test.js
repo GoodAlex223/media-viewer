@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, sep } from 'path';
 
 const require = createRequire(import.meta.url);
-const { createGrantStore, createTempDirRegistry, GRANTS_VERSION } = require('../path-grants.js');
+const { createGrantStore, createTempDirRegistry, createMediaReadRule, GRANTS_VERSION } = require('../path-grants.js');
+const { isMediaFile } = require('../media-formats.js');
 
 let tmp;
 let storePath;
@@ -190,7 +191,6 @@ describe('createTempDirRegistry', () => {
 // concatenation on purpose — join() would normalize the segments away before the code sees them.
 describe('dot segments and roots (final review I3, I4)', () => {
     const { isInsideDir, hasDotSegment } = require('../path-grants.js');
-    const sep = require('path').sep;
 
     it('refuses a raw . or .. segment even when it would resolve inside a granted folder', async () => {
         const photos = await makeDir('photos');
@@ -486,5 +486,77 @@ describe('grant store, deep review fix pass', () => {
         const dirs = [await makeDir('p1'), await makeDir('p2'), await makeDir('p3')];
         expect(await store.statusMany(dirs)).toEqual(['denied', 'denied', 'denied']);
         expect(peak).toBe(1);
+    });
+});
+
+describe('createMediaReadRule (G1 I1, spec § 4.3)', () => {
+    let media;
+    let elsewhere;
+    let grants;
+    let resolveMediaRead;
+
+    beforeEach(async () => {
+        media = await makeDir('media');
+        elsewhere = await makeDir('elsewhere');
+        await writeFile(join(media, 'a.png'), 'x');
+        await writeFile(join(media, 'B.PNG'), 'x');
+        await writeFile(join(media, 'notes.txt'), 'x');
+        await writeFile(join(elsewhere, 'real.png'), 'x');
+        await writeFile(join(elsewhere, 'id_rsa'), 'x');
+        grants = createGrantStore({ storePath });
+        await grants.load();
+        await grants.grant(media);
+        resolveMediaRead = createMediaReadRule({ grants, isMediaFile });
+    });
+
+    const plant = async (ctx, target, link) => {
+        try {
+            await symlink(target, link, 'file');
+        } catch (err) {
+            if (err.code === 'EPERM') ctx.skip(); // Windows without Developer Mode
+            throw err;
+        }
+    };
+
+    it('returns the canonical target of a media file inside a grant, upper-case extension included', async () => {
+        expect(await resolveMediaRead(join(media, 'a.png'))).toBe(await grants.canonicalize(join(media, 'a.png')));
+        expect(await resolveMediaRead(join(media, 'B.PNG'))).not.toBeNull();
+    });
+
+    it('refuses media outside every grant, a non-media file inside one, and a non-clean path', async () => {
+        expect(await resolveMediaRead(join(elsewhere, 'real.png'))).toBeNull();
+        expect(await resolveMediaRead(join(media, 'notes.txt'))).toBeNull();
+        expect(await resolveMediaRead('relative.png')).toBeNull();
+        // A raw dot segment that WOULD resolve inside the grant (join() would normalize it away):
+        // refused for its shape, before any lookup (final review I3).
+        expect(await resolveMediaRead(`${media}${sep}sub${sep}..${sep}a.png`)).toBeNull();
+    });
+
+    it('follows a path through a junction into a granted folder', async () => {
+        const via = join(tmp, 'via');
+        await symlink(media, via, process.platform === 'win32' ? 'junction' : 'dir');
+        expect(await resolveMediaRead(join(via, 'a.png'))).toBe(await grants.canonicalize(join(media, 'a.png')));
+    });
+
+    it('follows a link from a granted folder to media elsewhere, and returns the target', async (ctx) => {
+        await plant(ctx, join(elsewhere, 'real.png'), join(media, 'linked.png'));
+        expect(await resolveMediaRead(join(media, 'linked.png'))).toBe(
+            await grants.canonicalize(join(elsewhere, 'real.png'))
+        );
+    });
+
+    it('refuses a link from a granted folder to a non-media file elsewhere', async (ctx) => {
+        await plant(ctx, join(elsewhere, 'id_rsa'), join(media, 'key.png'));
+        expect(await resolveMediaRead(join(media, 'key.png'))).toBeNull();
+    });
+
+    it('refuses a media-named link to a non-media file inside the same grant (D12)', async (ctx) => {
+        await plant(ctx, join(media, 'notes.txt'), join(media, 'notes-link.png'));
+        expect(await resolveMediaRead(join(media, 'notes-link.png'))).toBeNull();
+    });
+
+    it('refuses everything when no isMediaFile is supplied', async () => {
+        const strict = createMediaReadRule({ grants, isMediaFile: null });
+        expect(await strict(join(media, 'a.png'))).toBeNull();
     });
 });

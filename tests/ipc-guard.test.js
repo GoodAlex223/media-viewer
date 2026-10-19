@@ -4,10 +4,10 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 
 const require = createRequire(import.meta.url);
-const { createIpcGuard, normalizeFileUrl, isPlainBasename, DEFAULT_REJECT } = require('../ipc-guard.js');
+const { createIpcGuard, isPlainBasename, DEFAULT_REJECT } = require('../ipc-guard.js');
 const { createTempDirRegistry } = require('../path-grants.js');
 
-const APP_URL = 'file:///C:/app/index.html';
+const APP_URL = 'app://media-viewer/index.html';
 const GRANTED = join(tmpdir(), 'granted');
 
 function makeIpcMain() {
@@ -55,7 +55,9 @@ describe('createIpcGuard sender check', () => {
     });
 
     it.each([
-        ['another file', { senderFrame: { url: 'file:///C:/app/other.html', parent: null } }],
+        ['another page on the app origin', { senderFrame: { url: 'app://media-viewer/other.html', parent: null } }],
+        ['another host', { senderFrame: { url: 'app://other/index.html', parent: null } }],
+        ['the same page under file:', { senderFrame: { url: 'file:///C:/app/index.html', parent: null } }],
         ['a sub-frame', { senderFrame: { url: APP_URL, parent: {} } }],
         ['a null frame', { senderFrame: null }],
         ['a remote page', { senderFrame: { url: 'https://example.com/', parent: null } }],
@@ -68,10 +70,10 @@ describe('createIpcGuard sender check', () => {
         expect(logger.warn).toHaveBeenCalledWith('ipc-guard', expect.stringContaining('Refused ch'));
     });
 
-    it('compares the drive letter case-insensitively on win32', async () => {
-        const { guard, ipcMain } = makeGuard({ platform: 'win32' });
-        guard.handle('ch', [], async () => 'ok');
-        expect(await ipcMain.handlers.get('ch')(trusted('file:///c:/app/index.html'))).toBe('ok');
+    it('refuses to be built for a file: URL', () => {
+        expect(() => makeGuard({ expectedUrl: 'file:///C:/app/index.html' })).toThrow(
+            'ipc-guard: expectedUrl must be an app: URL'
+        );
     });
 
     it('drops an on() message from an untrusted sender', () => {
@@ -176,16 +178,6 @@ describe('isPlainBasename', () => {
     });
 });
 
-describe('normalizeFileUrl', () => {
-    // Since deep review #2 the result is the decoded path that identifies the document.
-    it('strips query and hash, folds ASCII case on win32 only, rejects non-file URLs', () => {
-        expect(normalizeFileUrl('file:///C:/a/index.html?x#y', 'linux')).toBe('/C:/a/index.html');
-        expect(normalizeFileUrl('file:///C:/a/Index.html', 'win32')).toBe('/c:/a/index.html');
-        expect(normalizeFileUrl('https://x/index.html', 'linux')).toBeNull();
-        expect(normalizeFileUrl('not a url', 'linux')).toBeNull();
-    });
-});
-
 describe('tierAssignmentsKind', () => {
     const { tierAssignmentsKind } = require('../ipc-guard.js');
     const { isMediaFile } = require('../media-formats.js');
@@ -251,17 +243,18 @@ describe('sender identity (final review I1)', () => {
         expect(fn).toHaveBeenCalledTimes(1);
     });
 
-    // Source-text wiring check (main.js needs Electron, so it is not unit-loadable). loadFile()
-    // with a relative name resolves against app.getAppPath(), which keeps a link in the launch
-    // path, while __dirname is the resolved real path — so the window's URL and the URL the guard
-    // expected differed whenever the app was launched through a link, and every call was refused.
-    it('main.js loads the window from, and authorizes, the same INDEX_HTML constant', () => {
+    // Source-text wiring check (main.js needs Electron, so it is not unit-loadable): the window is
+    // loaded from, the IPC guard trusts, and the navigation lock allows the same INDEX_URL constant.
+    it('main.js loads, authorizes and allows navigation to the same INDEX_URL constant', () => {
         const fs = require('fs');
         const src = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
-        expect(src).toContain("const INDEX_HTML = path.join(__dirname, 'index.html');");
-        expect(src).toContain('mainWindow.loadFile(INDEX_HTML)');
-        expect(src).toContain('expectedUrl: pathToFileURL(INDEX_HTML).href');
-        expect(src).not.toContain("loadFile('index.html')");
+        expect(src).toContain('const INDEX_URL = `${APP_ORIGIN}/index.html`;');
+        expect(src).toContain('await win.loadURL(INDEX_URL);');
+        expect(src).toContain('expectedUrl: INDEX_URL,');
+        expect(src).toContain('if (url === INDEX_URL) {');
+        expect(src).not.toContain('INDEX_HTML');
+        expect(src).not.toContain('normalizeFileUrl');
+        expect(src).not.toContain('pathToFileURL');
     });
 });
 
@@ -348,6 +341,33 @@ describe('entry and linked-media kinds (review M-a)', () => {
         expect(await h(trusted(), join(tmpDir, 'frame-001.png'))).toBe('ok');
         expect(await h(trusted(), LINK)).toBe('ok');
     });
+
+    // G1 I1 (spec D12): the in-grant branch checked only the REQUESTED name. A link named pic.png in a
+    // granted folder that resolves to a document in the same folder passed as media. The rule now
+    // also checks the file the path resolves to.
+    it('grantedMediaRead refuses a media-named path whose resolved target is not media', async () => {
+        const grants = {
+            resolveAllowed: vi.fn(async () => join(GRANTED, 'notes.txt')), // inside the grant, not media
+            resolveEntry: vi.fn(async (x) => x),
+            canonicalize: vi.fn(async () => join(GRANTED, 'notes.txt')),
+        };
+        const { guard, ipcMain } = makeGuard({ grants, isMediaFile });
+        expect(await verdict(guard, ipcMain, guard.kinds.grantedMediaRead, join(GRANTED, 'pic.png'))).toEqual(
+            DEFAULT_REJECT
+        );
+    });
+
+    it('grantedOrTempMediaRead refuses the same path', async () => {
+        const grants = {
+            resolveAllowed: vi.fn(async () => join(GRANTED, 'notes.txt')),
+            resolveEntry: vi.fn(async (x) => x),
+            canonicalize: vi.fn(async () => join(GRANTED, 'notes.txt')),
+        };
+        const { guard, ipcMain } = makeGuard({ grants, isMediaFile });
+        expect(await verdict(guard, ipcMain, guard.kinds.grantedOrTempMediaRead, join(GRANTED, 'pic.png'))).toEqual(
+            DEFAULT_REJECT
+        );
+    });
 });
 
 // Commit security review (2026-10-11): the direct-child check folded with JS toLowerCase(), which
@@ -362,42 +382,6 @@ describe('tierAssignmentsKind and Unicode look-alikes (commit security review)',
         const lookAlike = join(tmpdir(), '\u212Aeys', 'a.png');
         expect(kind({ [join(folder, 'a.png')]: 1 }, [folder])).toBe(true); // control
         expect(kind({ [lookAlike]: 1 }, [folder])).toBe(false);
-    });
-});
-
-// Deep review #2: Chromium's frame URL keeps ~ [ ] % raw where Node's pathToFileURL escapes them
-// (measured: MEDIA_~1 vs MEDIA_%7E1), so from an app path containing one every guarded IPC was
-// refused as an untrusted sender. Both sides are now compared as decoded paths.
-describe('normalizeFileUrl compares decoded paths (deep review #2)', () => {
-    it.each([
-        ['an 8.3 alias (~)', 'file:///C:/Users/a/MEDIA_~1/index.html', 'file:///C:/Users/a/MEDIA_%7E1/index.html'],
-        [
-            'brackets',
-            'file:///D:/Tools%20[portable]/app/index.html',
-            'file:///D:/Tools%20%5Bportable%5D/app/index.html',
-        ],
-        ['a percent sign', 'file:///C:/100%/app/index.html', 'file:///C:/100%25/app/index.html'],
-    ])('treats Chromium and Node spellings with %s as one document', (_label, chromium, node) => {
-        expect(normalizeFileUrl(chromium, 'win32')).not.toBeNull();
-        expect(normalizeFileUrl(chromium, 'win32')).toBe(normalizeFileUrl(node, 'win32'));
-    });
-
-    it('trusts a sender whose frame URL is the raw spelling of an escaped expected URL', async () => {
-        const { guard, ipcMain } = makeGuard({ expectedUrl: 'file:///C:/Users/a/MEDIA_%7E1/index.html' });
-        guard.handle('ch', [], async () => 'ok');
-        const frame = { senderFrame: { url: 'file:///C:/Users/a/MEDIA_~1/index.html', parent: null } };
-        expect(await ipcMain.handlers.get('ch')(frame)).toBe('ok');
-    });
-
-    it('still folds only ASCII case: a Unicode look-alike path is a different document', () => {
-        const k = String.fromCharCode(0x212a);
-        const lookAlike = 'file:///C:/apps/' + encodeURIComponent(k) + 'eys/index.html';
-        expect(normalizeFileUrl(lookAlike, 'win32')).not.toBe(
-            normalizeFileUrl('file:///C:/apps/keys/index.html', 'win32')
-        );
-        expect(normalizeFileUrl('file:///c:/APPS/keys/index.html', 'win32')).toBe(
-            normalizeFileUrl('file:///C:/apps/keys/index.html', 'win32')
-        );
     });
 });
 

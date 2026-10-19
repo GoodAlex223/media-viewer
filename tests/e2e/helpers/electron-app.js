@@ -4,7 +4,7 @@
  */
 
 import { _electron as electron } from '@playwright/test';
-import { cp, mkdir, mkdtemp, rm } from 'fs/promises';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -51,31 +51,31 @@ function getLaunchArgs() {
  * Launch the Electron app and wait for it to be ready.
  * Returns { electronApp, page }.
  */
-export async function launchApp() {
+export async function launchApp({ migrationMarker } = {}) {
     // A fresh grant store per launch (G1): main reads MV_E2E_GRANTS_FILE instead of
     // <userData>/folder-grants.json, so a grant left by an earlier test can never make a
     // refusal test pass for the wrong reason. The same env var exposes global.__mvGrants in the
     // main process, reachable only through electronApp.evaluate — never from the renderer.
     const grantsDir = await mkdtemp(join(tmpdir(), 'mv-e2e-grants-'));
+    // The one-time localStorage migration (G1 I1) runs only when a test asks for it: a marker already
+    // present means "done". Otherwise the shared E2E profile's old file:// store, full of leftovers
+    // from earlier runs, would be copied into every launch.
+    let marker = migrationMarker;
+    if (!marker) {
+        marker = join(grantsDir, 'storage-migration.json');
+        await writeFile(marker, JSON.stringify({ version: 1, migratedAt: 'e2e-skip', keys: 0, written: 0 }));
+    }
     const electronApp = await electron.launch({
         executablePath: getElectronWrapperPath(),
         args: getLaunchArgs(),
         cwd: PROJECT_ROOT,
-        env: { ...process.env, MV_E2E_GRANTS_FILE: join(grantsDir, 'folder-grants.json') },
+        env: {
+            ...process.env,
+            MV_E2E_GRANTS_FILE: join(grantsDir, 'folder-grants.json'),
+            MV_E2E_MIGRATION_MARKER: marker,
+        },
     });
     grantsDirByApp.set(electronApp, grantsDir);
-
-    // Stub lucide CDN before firstWindow() — the synchronous <script src> in <head>
-    // fires during page load, so the route must be registered before the page exists.
-    electronApp.once('window', async (page) => {
-        await page.route('**/unpkg.com/**', (route) =>
-            route.fulfill({
-                status: 200,
-                contentType: 'application/javascript',
-                body: 'window.lucide = { createIcons: function() {} };',
-            })
-        );
-    });
 
     const page = await electronApp.firstWindow();
     appByPage.set(page, electronApp);

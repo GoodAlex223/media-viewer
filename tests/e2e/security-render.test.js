@@ -147,6 +147,15 @@ test.describe('G1 CSP and navigation lock', () => {
         }
     });
 
+    test('the window cannot be navigated to another page on the app origin', async () => {
+        await page.evaluate(() => {
+            window.location.href = 'app://media-viewer/migrate.html';
+        });
+        await page.waitForTimeout(750); // settle: a navigation that will happen has started by now
+        expect(page.url()).toBe('app://media-viewer/index.html');
+        expect(await page.evaluate(() => typeof window.mediaViewer)).toBe('object');
+    });
+
     test('window.open is denied', async () => {
         await page.evaluate(() => {
             window.open('about:blank');

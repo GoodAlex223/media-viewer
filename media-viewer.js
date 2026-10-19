@@ -3,6 +3,7 @@ import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
 import * as LikeOrSkip from './like-or-skip.js';
 import * as RecentFolders from './recent-folders.js';
+import * as MediaUrl from './media-url.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -953,19 +954,6 @@ class MediaViewer {
 
     isJxl(filePath) {
         return /\.jxl$/i.test(filePath);
-    }
-
-    // Convert Windows path to properly encoded file:// URL
-    pathToFileURL(filePath) {
-        // Replace backslashes with forward slashes
-        const normalized = filePath.replace(/\\/g, '/');
-        // Encode special characters while preserving forward slashes and colon
-        const encoded = normalized
-            .split('/')
-            .map((part) => encodeURIComponent(part))
-            .join('/');
-        // Add file:// protocol
-        return `file:///${encoded}`;
     }
 
     ensureJxlWorker() {
@@ -3855,7 +3843,7 @@ class MediaViewer {
         const file = this.mediaFiles[this.currentIndex];
         console.log('Showing media:', file.name);
 
-        const fileUrl = this.pathToFileURL(file.path);
+        const fileUrl = MediaUrl.toMediaUrl(file.path);
 
         let jxlAnimated = false;
         if (file.type.startsWith('image/')) {
@@ -4148,7 +4136,7 @@ class MediaViewer {
         this.rightMediaWrapper.className = 'media-wrapper right-media-wrapper';
 
         // Create left media
-        const leftFileUrl = this.pathToFileURL(leftFile.path);
+        const leftFileUrl = MediaUrl.toMediaUrl(leftFile.path);
         if (leftFile.type.startsWith('image/')) {
             this.leftMedia = document.createElement('img');
             if (this.isJxl(leftFile.path)) {
@@ -4202,7 +4190,7 @@ class MediaViewer {
         }
 
         // Create right media
-        const rightFileUrl = this.pathToFileURL(rightFile.path);
+        const rightFileUrl = MediaUrl.toMediaUrl(rightFile.path);
         if (rightFile.type.startsWith('image/')) {
             this.rightMedia = document.createElement('img');
             if (this.isJxl(rightFile.path)) {
@@ -6317,7 +6305,7 @@ class MediaViewer {
         const wrapper = side === 'left' ? this.leftMediaWrapper : this.rightMediaWrapper;
 
         let media;
-        const fileUrl = this.pathToFileURL(file.path);
+        const fileUrl = MediaUrl.toMediaUrl(file.path);
         if (file.type.startsWith('image/')) {
             media = document.createElement('img');
             if (this.isJxl(file.path)) {
@@ -7525,7 +7513,7 @@ class MediaViewer {
                     { once: true }
                 );
 
-                video.src = filePath;
+                video.src = MediaUrl.toMediaUrl(filePath);
             } else {
                 // Process image
                 const img = new Image();
@@ -7576,7 +7564,7 @@ class MediaViewer {
                             reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
                         });
                 } else {
-                    img.src = filePath;
+                    img.src = MediaUrl.toMediaUrl(filePath);
                 }
             }
         });
@@ -9173,7 +9161,7 @@ class MediaViewer {
 
                 video.addEventListener('error', onError, { once: true });
 
-                video.src = filePath;
+                video.src = MediaUrl.toMediaUrl(filePath);
             } else {
                 const img = new Image();
 
@@ -9215,7 +9203,7 @@ class MediaViewer {
                             reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
                         });
                 } else {
-                    img.src = filePath;
+                    img.src = MediaUrl.toMediaUrl(filePath);
                 }
             }
         });
@@ -10486,7 +10474,7 @@ class MediaViewer {
                     reject(new Error('Video load error'));
                 });
 
-                video.src = filePath;
+                video.src = MediaUrl.toMediaUrl(filePath);
             } else {
                 const img = new Image();
 
@@ -10522,7 +10510,7 @@ class MediaViewer {
                             reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
                         });
                 } else {
-                    img.src = filePath;
+                    img.src = MediaUrl.toMediaUrl(filePath);
                 }
             }
         });

@@ -24,6 +24,8 @@ npm run lint           # Lint all JS (lint:fix to auto-fix)
 npm run format         # Prettier (format:check to verify only)
 ```
 
+`MV_USER_DATA_DIR=<dir>` runs the app on another profile folder. Use it on a copy of the real profile (`%APPDATA%\media_viewer`) for a pre-merge manual test of anything that migrates stored state.
+
 Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret scan) → `node scripts/check-docs-index.js` (whole tree, not just staged files: every file under `docs/archive/plans/` and `docs/superpowers/specs/` must be linked from `docs/README.md`, and every link must resolve) → `node scripts/check-claude-md-size.js` (warns, never blocks, when the staged `CLAUDE.md` grows past its limits) → lint-staged (ESLint --fix + Prettier on staged `*.{js,cjs}`, Prettier only on `*.{json,css,html}`) → `npx vitest run` (unit tests must pass). E2E is NOT run by the pre-commit hook. Pre-push hook (Husky): `node scripts/check-e2e-needed.js` decides RUN or SKIP for the outgoing range (SKIP only when EVERY changed path is `*.md` or under `docs/`; any failure falls back to RUN); on RUN the hook runs the full Playwright E2E suite. **Per-check bypass**: `SKIP=<check>[,<check>…]` waives the named checks for one command and warns on every skip — pre-commit tokens `secrets`, `docs-index`, `lint-staged`, `vitest`; pre-push `e2e` (shared helper `.husky/skip.sh`; PowerShell: `$env:SKIP='docs-index'; git commit …; $env:SKIP=$null`). `--no-verify` is the last resort: it disables every check, the secret scan included.
 
 ## Architecture
@@ -33,6 +35,8 @@ media_viewer/
 ├── main.js              # Electron main process: IPC handlers (every one registered through ipc-guard), file ops, navigation lock
 ├── path-grants.js       # Folder grants: persisted userData/folder-grants.json, containment checks, grant status for absent drives (§ Security)
 ├── ipc-guard.js         # IPC registration wrapper: sender-frame check + per-argument kinds; refusals return the channel's failure value and are logged
+├── app-protocol.js      # The app scheme's handler (app://media-viewer/): app files from an allowlist, granted media under /@fs/ (path-grants.js's shared read rule), the CSP response header
+├── storage-migration.js # One-time localStorage move from the old file:// origin to the app origin, driven from createWindow through migrate.html (a static page)
 ├── clip-image.js        # Main-process CLIP image decode: strict read first, then a bounded lenient fallback (§ Active gotchas)
 ├── logger.js            # Session logger: one media-viewer-<YYYY-MM-DD_HH-MM-SS>.log per launch, newest 10 kept, never deleted on quit (no "Session ended" footer = crash/kill) + append-only media-viewer-perf.log. `npm start` → %APPDATA%\media_viewer\logs; E2E (app name "Electron") → %APPDATA%\Electron\logs
 ├── preload.js           # Security bridge (contextBridge → window.electronAPI): named, folder-scoped calls only (no generic invoke/readFile/writeFile)
@@ -50,14 +54,16 @@ media_viewer/
 ├── ml-training.js       # MlTrainingManager ES module (v2.0 pattern): training-set fingerprint, per-training-folder vector caches, fingerprint-keyed model cache
 ├── like-or-skip.js      # Pure ESM: skip tracking, batch cursor and undo re-insertion plans, the out-of-date count; imported as a namespace (LikeOrSkip)
 ├── recent-folders.js    # Pure ESM: the recently-opened-folders list and its click-time classifier; imported as a namespace (RecentFolders)
+├── media-url.js         # Pure ESM: toMediaUrl(path), the only way the renderer names a media file; imported as a namespace (MediaUrl)
 ├── media-formats.js     # Shared CJS: isMediaFile(ext), getMimeType(ext); .jxl → image/jxl
 ├── jxl-decode-worker.js # Module Web Worker (type:'module'): decodes JXL via jxl-oxide-wasm; streaming meta/frame/done protocol over transferable ArrayBuffers
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config
+├── vendor/              # Vendored builds: jxl-oxide-wasm/ (JXL decoder), lucide/ (icons 1.14.0; Prettier and ESLint ignore it)
 ├── scripts/             # Maintenance scripts (Node CJS, each pure exported functions + a CLI): check-secrets.js (pre-commit secret guard); check-e2e-needed.js (pre-push E2E gate decision, fails safe to RUN); check-docs-index.js (pre-commit docs-index guard); check-claude-md-size.js (pre-commit `CLAUDE.md` size warning, never blocks)
 ├── tests/               # Unit (Vitest, tests/*.test.js) + E2E (Playwright, tests/e2e/)
-│   └── e2e/             # fixtures/ (1x1 PNGs, tiny.mp4 — a 32-byte unplayable stub, playable-64x64.mp4 — a real 1 s H.264 clip, static.jxl) + helpers/ (electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs)
+│   └── e2e/             # fixtures/ (1x1 PNGs, tiny.mp4 — a 32-byte unplayable stub, playable-64x64.mp4 — a real 1 s H.264 clip, static.jxl, animated-64x64.jxl — 4 frames) + helpers/ (electron-app.js, electron-wrapper.cjs/.cmd, rdp-preload.cjs)
 ├── .claude/             # Committed: agents/, hooks/ (format-edited-file.js formats each edited file; guard-preload-bash.js), rules/, settings.json, skills/ (§ Active gotchas)
 └── docs/                # planning/, archive/, ARCHITECTURE.md, PROJECT_CONTEXT.md
 ```
@@ -97,7 +103,7 @@ media_viewer/
 - Config `playwright.config.js`; workers:1, fullyParallel:false (Electron can't parallelize).
 - Electron 30+ workaround: `electron-wrapper.cjs` strips `--remote-debugging-port=0`, re-applied via `rdp-preload.cjs` (playwright#39008); unset `ELECTRON_RUN_AS_NODE` before spawn. `rdp-preload.cjs` loads playwright-core `loader.js` by path — update if it breaks after upgrade.
 - `.media-container` overlay blocks pointer events — use `{force:true}` or `page.evaluate()`.
-- Helpers: `seedLocalStorage(page, kv, { grant = true })` (call after `launchApp()`, before `loadFolder()`; it grants the three folder keys in main first, while `{ grant: false }` seeds a folder main never granted, like one saved before G1); `grantFolder(app, path)`; `mockFolderDialog(app, path)` (grants the pick and records the dialog's `defaultPath` in `global.__mvLastDialogDefaultPath`); `loadFolder` grants first. Each `launchApp()` gets a fresh grant store via `MV_E2E_GRANTS_FILE`, exposed as `global.__mvGrants` to `electronApp.evaluate` only; `closeApp()` (races close vs 5s then SIGKILL; Windows `taskkill /F /T`); Lucide CDN stub via `page.route('**/unpkg.com/**')`; `createTempFixtureDir(names?)`. `closeApp` also clears `recentFolders`, and `launchApp` clears it at start; `mockFolderDialog` counts opens in `global.__mvDialogCalls` (reset on each install).
+- Helpers: `seedLocalStorage(page, kv, { grant = true })` (call after `launchApp()`, before `loadFolder()`; it grants the three folder keys in main first, while `{ grant: false }` seeds a folder main never granted, like one saved before G1); `grantFolder(app, path)`; `mockFolderDialog(app, path)` (grants the pick and records the dialog's `defaultPath` in `global.__mvLastDialogDefaultPath`); `loadFolder` grants first. Each `launchApp()` gets a fresh grant store via `MV_E2E_GRANTS_FILE`, exposed as `global.__mvGrants` to `electronApp.evaluate` only; `closeApp()` (races close vs 5s then SIGKILL; Windows `taskkill /F /T`); `createTempFixtureDir(names?)`. `launchApp({ migrationMarker })` sets `MV_E2E_MIGRATION_MARKER`; by default it points at a pre-written marker, so the one-time `localStorage` migration is skipped. `global.__mvAppProtocol` (with `__mvGrants`) exposes the app scheme handler's `openStreams()` to `electronApp.evaluate`. `closeApp` also clears `recentFolders`, and `launchApp` clears it at start; `mockFolderDialog` counts opens in `global.__mvDialogCalls` (reset on each install).
 - `afterEach` null guards: guard `if (electronApp)`/`if (tmpFixtures)`/`if (page)` before cleanup (`.catch()` only handles rejections, not a sync TypeError on undefined).
 - Before a method that guards on `isLoading` and `mediaNavigationInProgress` (e.g. `handleCancel` after `applyBulkRating`), `await page.waitForFunction(() => !window.mediaViewer.isLoading && !window.mediaViewer.mediaNavigationInProgress)`. The latter flag is set by `showMedia()` for the duration of its own render (e.g. `applyBulkRating`'s fire-and-forget call) without setting `isLoading`.
 - `mlWorker` is **lazy** (`initializeMlWorker()` runs on the first AI sort / settings toggle) — an E2E that needs real scoring must call it, override `getCombinedFeatures` with **576-dim** vectors, and warm the model via the same `trainHistorical` round trip production uses (`_runWorkerTraining`, ≥3 likes + ≥3 dislikes — `ml-worker.js`'s `scoreFiles()` replies `scores: null` below that threshold). Forcing `isSortedByPrediction = true` alone leaves `mlWorker` null and proves nothing. A bulk rating or its undo posts **nothing** to the worker for the rating itself and renders immediately; `compare-mode.test.js`'s real-worker test proves this by instrumenting `mlWorker.postMessage` (`window.__postedTypes`) and `showMedia()` (`window.__showMediaCalls`) on a live, warmed worker.
@@ -152,16 +158,16 @@ Entry shape: `- [ ] **Short title** — body with context, cross-refs, affected 
 
 **Security** ([spec](docs/superpowers/specs/2026-10-10-g1-security-findings-fix-design.md)):
 - Context isolation on, sandbox off (required for file ops).
-- **IPC guard:** every privileged `ipcMain` channel registers through `ipc-guard.js`. The sender frame must be the app's own `index.html` (compared as decoded paths), and each argument passes its declared kind.
+- **IPC guard:** every privileged `ipcMain` channel registers through `ipc-guard.js`. The sender frame's URL must be exactly `INDEX_URL` (`app://media-viewer/index.html`, query and fragment ignored), and each argument passes its declared kind.
 - **Folder grants:** file paths must lie inside folders the user picked in main's dialog (`path-grants.js`).
   - Containment compares `realpath` outputs exactly, never `toLowerCase()`, which equates names NTFS keeps distinct.
   - Entry operations are authorized by the folder holding the entry; content reads accept media files only.
   - Fixed-name caches refuse planted links (`assertFixedPath`).
 - **Renderer:** never parses built HTML (lint-enforced).
 - **Saved state:** saved tournament state is validated at load.
-- **Defense in depth:** a CSP meta tag in `index.html`, measured by `tests/e2e/security-csp-walk.test.js`, with violations sent to the session log. A navigation lock denies `window.open`. `ffmpeg`/`ffprobe` run via `runMediaTool` (`-protocol_whitelist file`).
+- **Defense in depth:** a CSP, measured by `tests/e2e/security-csp-walk.test.js`, with violations sent to the session log. A navigation lock denies `window.open`. `ffmpeg`/`ffprobe` run via `runMediaTool` (`-protocol_whitelist file`).
 - **Re-confirm flow:** folders saved before G1 are re-confirmed once. `refreshFolderGrants` marks them, and moves and the AI sort refuse before any media teardown.
-- **Open residual I1:** the `file://` page itself can load any `file:` URL, because CSP `'self'` covers every one.
+- **App scheme (G1 I1):** the window is served from `app://media-viewer` (`app-protocol.js`). Page-side media loads go through the same read rule as IPC (`createMediaReadRule`). The CSP is a response header (`APP_CSP` in `main.js`), and renderer network requests are cancelled.
 
 **Keyboard Shortcuts**:
 - `DEFAULT_SHORTCUTS` defines `single`/`compare`/`tournament` bindings. Per-mode dispatch: `mode = isTournamentMode ? 'tournament' : isCompareMode ? 'compare' : 'single'`; `D`/`F` resolve to different handlers per mode (compare `bothGood`/`bothBad` = ML training; tournament `bothWin`/`bothLose` = `handleTournamentDraw`, no ML) — isolation comes from the mode-keyed reverse map, not action-name uniqueness.
@@ -174,7 +180,8 @@ Entry shape: `- [ ] **Short title** — body with context, cross-refs, affected 
 Completed-task history, per-PR review notes, test-count deltas, and the forward roadmap live in `docs/planning/DONE.md`, `docs/planning/WEEKLY.md`, `docs/planning/BACKLOG.md`, archived plans under `docs/archive/plans/`, and `git log` — not here.
 
 **Active gotchas** (still-true, must-know before acting):
-- Lucide `createIcons()`: use `{root: element}`, NOT `{nodes:[el]}` (silently ignored → full-document rescan). CDN pinned `@1.14.0` with SHA-384 SRI in `index.html`; wrong hash → icons vanish silently (the `if (typeof lucide !== 'undefined')` guard prevents a crash). Bump: `curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`. The CSP `script-src` in `index.html` pins the same exact URL. Bump both, or the script is blocked before the renderer's violation logger loads.
+- Lucide `createIcons()`: use `{root: element}`, NOT `{nodes:[el]}` (silently ignored → full-document rescan). Lucide 1.14.0 is vendored in `vendor/lucide/`, which Prettier and ESLint ignore (a reformatted build is no longer the released file). Bump: download the new UMD build with a generic User-Agent, check `openssl dgst -sha384 -binary <file> | openssl base64 -A` against the release's published SRI, and check the committed blob the same way.
+- Media URLs go through `MediaUrl.toMediaUrl`; never `file:` (the app origin can't load it, and `tests/media-url.test.js` fails).
 - Compare mode exit: use `switchToSingleModeUI()` (non-toggling), NOT `toggleViewMode()` (re-toggles → infinite loop when <2 files). `loadFolder()` calls it before `hideDropZone()` — folders always open in single mode (compare context is folder-scoped).
 - `#viewModeBtn` is hidden legacy — show/hide `#modeSelector` and enter modes via `switchMode(mode)`, never `toggleViewMode()`.
 - `loadFeatureCache()` must run before `startBackgroundFeatureExtraction()` — `loadFolder()` clears in-memory caches, so `kickoffBackgroundExtractionIfEnabled()` `await`s it first or every file re-extracts on every folder switch.
