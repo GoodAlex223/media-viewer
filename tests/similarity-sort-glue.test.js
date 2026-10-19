@@ -497,6 +497,19 @@ describe('the run (spec § 6–7, T3)', () => {
         expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('done');
     });
 
+    // Spec § 6.4: a stale run shows nothing, its one failed-save warning included.
+    it('a save that fails after the run went stale posts no warning', async () => {
+        const ctx = runCtx();
+        ctx.saveHashCache = vi.fn(async () => {
+            ctx._similarityRunGen++; // a folder switch during the failing save
+            return false;
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.saveHashCache).toHaveBeenCalledOnce();
+        expect(ctx.showNotification.mock.calls.filter((c) => c[0] === '⚠️ Failed to save hash cache')).toEqual([]);
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('stale');
+    });
+
     it('skips the end save when nothing new was hashed', async () => {
         const ctx = runCtx({
             perceptualHashes: new Map([
@@ -1404,6 +1417,24 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
         expect(ctx.showNotification.mock.calls.filter((c) => c[0] === '⚠️ Failed to save hash cache')).toEqual([
             ['⚠️ Failed to save hash cache', 'warning'],
         ]);
+    });
+
+    // Spec § 6.4: an entry gone stale during its failing save shows nothing, on either save path.
+    it.each([
+        ['applied', { applied: true, stats: { cached: 2, added: 1, removed: 0 }, committedPaths: ['/f/c'] }],
+        ['busy', { applied: false, reason: 'busy', stats: { cached: 2, added: 1, removed: 0 } }],
+    ])('a Show (%s) whose hash save fails after the entry went stale posts no warning', async (_l, result) => {
+        const { ctx } = showCtx({
+            _applySimilarityOrder: vi.fn(async () => result),
+            saveSortCache: vi.fn(async () => {}),
+        });
+        ctx.saveHashCache = vi.fn(async () => {
+            ctx._similarityRunGen++; // a folder switch during the failing save
+            return false;
+        });
+        await onShow.call(ctx);
+        expect(ctx.saveHashCache).toHaveBeenCalledOnce();
+        expect(ctx.showNotification.mock.calls.filter((c) => c[0] === '⚠️ Failed to save hash cache')).toEqual([]);
     });
 
     // PR #85 review #2: a render still running at the cap is not committed under; the offer comes back.

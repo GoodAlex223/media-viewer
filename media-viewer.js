@@ -7371,9 +7371,11 @@ class MediaViewer {
         let skipped = 0;
         let newSinceSave = 0; // hashes computed since the last hash-cache save
         // Every hash-cache save of the run goes through here. A failed write warns once per run (PR #85 #18): a
-        // read-only folder fails every periodic save, and saveHashCache itself only returns false.
+        // read-only folder fails every periodic save, and saveHashCache itself only returns false. A run gone stale
+        // during the save shows nothing (spec § 6.4).
         const saveHashes = async () => {
-            if ((await this.saveHashCache(run.folder)) === false && !run.hashSaveWarned) {
+            const saved = await this.saveHashCache(run.folder);
+            if (saved === false && !run.hashSaveWarned && !this._isStaleSimilarityRun(run)) {
                 run.hashSaveWarned = true;
                 this.showNotification('⚠️ Failed to save hash cache', 'warning');
             }
@@ -7986,11 +7988,14 @@ class MediaViewer {
                     this.showNotification(entry.doneMessage, 'success');
                     // The placement hashed files added since the order was computed: saved to the entry's own
                     // folder, both caches, as the run's cache hit does (PR #85 review #6). A failed hash write posts
-                    // the warning saveHashCache leaves to its caller, once (#18); a throw is logged. Never a Show error:
-                    // the order is already on screen.
+                    // the warning saveHashCache leaves to its caller, once (#18), unless the entry went stale during it
+                    // (§ 6.4); a throw is logged. Never a Show error: the order is already on screen.
                     if (result.stats?.added > 0) {
                         try {
-                            if ((await this.saveHashCache(entry.folder)) === false) {
+                            if (
+                                (await this.saveHashCache(entry.folder)) === false &&
+                                !this._isStaleSimilarityRun(entry)
+                            ) {
                                 this.showNotification('⚠️ Failed to save hash cache', 'warning');
                             }
                             await this.saveSortCache(
@@ -8007,10 +8012,11 @@ class MediaViewer {
             } else if (result.reason === 'busy') {
                 // The placement still hashed the files added since the order was computed: kept before the re-offer
                 // (PR #85 review #6). The order is not committed, so the sort cache is not saved. A failed write posts
-                // the warning saveHashCache leaves to its caller, once (#18); a throw is logged. Never a Show error.
+                // the warning saveHashCache leaves to its caller, once (#18), unless the entry went stale during it
+                // (§ 6.4); a throw is logged. Never a Show error.
                 if (result.stats?.added > 0 && !this._isStaleSimilarityRun(entry)) {
                     try {
-                        if ((await this.saveHashCache(entry.folder)) === false) {
+                        if ((await this.saveHashCache(entry.folder)) === false && !this._isStaleSimilarityRun(entry)) {
                             this.showNotification('⚠️ Failed to save hash cache', 'warning');
                         }
                     } catch (saveError) {

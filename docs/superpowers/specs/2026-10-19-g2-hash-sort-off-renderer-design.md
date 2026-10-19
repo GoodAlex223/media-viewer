@@ -456,7 +456,8 @@ The plan's Progress Log has the full record. These notes refine or depart from t
 - **§ 8.2, "apply directly or offer Show".** It is decided again at the commit, not only before the apply. `_applySimilarityOrder(entry, signal, mark)` declines `'acted'` when the user acted since the press. This covers a cache hit (my call 3 had assumed it is near-instant) and a computing run whose placement or render wait took long. Code review #3.
 - **§ 8.4, the render wait.** `_waitForRenderIdle` reports whether the render settled. On its 2 s cap the apply declines (`'busy'`, so Show is offered or re-offered), and both Restore Order paths refuse with `Wait for the file to finish loading`. They no longer commit under a render. The AI sort's own apply keeps the old behaviour. Code review #2.
 - **Restore Order.** On both Restore Order buttons it waits for an in-flight render, then re-checks that the order is unchanged (Task 6, user-approved).
-- **The perf outcome `declined`.** Added for a run that ends with nothing applied or offered (an emptied list, a Tournament or AI-sort decline). Final review M5.
+- **The perf outcome `declined`.** Added for a run that ends with nothing applied or offered (an emptied list, or a Tournament decline). Final review M5. The AI-sort decline (`'sorting'`) was removed in the follow-up review (#23): the AI sort's start invalidates the run synchronously, so any similarity entry is already stale.
+- **Hash-cache saves merge once.** `saveHashCache` merges the on-disk cache into memory once per folder, and only when the load did not parse it; after that it writes memory only (review #20). A read-only folder warns once per run (#18).
 - **Out of PR 1 by user ruling (2026-10-19):**
   - the feature-cache emptying on a mid-extraction folder switch (review #1) is a separate PR next;
   - the non-atomic `write-folder-cache` (review #5) moves into PR 2;
