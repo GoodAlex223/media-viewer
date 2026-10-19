@@ -897,6 +897,7 @@ The final review found this as a pre-existing race. The user chose to fix it on 
 
   This hits the AI sort's Phase 2 extraction too, and it contradicts BACKLOG.md:1002 ("No longer destructive"). → TODO.md at closeout, scheduled next.
 - **Review #5, into PR 2's scope.** `write-folder-cache` writes with a truncating `fs.writeFile`, with no tmp + rename. PR 1's periodic hash saves multiply the exposure: a quit right after a write tears the file, and the next session loads 0 hashes. The base issue is BACKLOG.md:565. → PR 2's plan.
+- **Tournament resume → BACKLOG 🟤 (pre-existing; the review-fix wave's fixer found it).** The resume prompt's Continue reconciles the saved state against the file list captured when the prompt opened, not the list at the moment Continue is pressed.
 - **Review #9, → BACKLOG 🟤.** A cache hit with `stats.added > 0` saves the committed order even when the placement placed none of the new files. That is common for CLIP, because the cache-hit path loads no vectors. The new files sit at the tail in reverse arrival order, and later cache hits keep them there. Pre-existing.
 
 **Deferred review findings (execution, 2026-10-19).** Task reviews, the final whole-branch review and the regression check found these and judged them safe to defer. Each one → BACKLOG 🟤 at closeout, one entry per line. Related lines may share an entry, tagged with each other.

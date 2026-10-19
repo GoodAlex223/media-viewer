@@ -7982,6 +7982,16 @@ class MediaViewer {
                     }
                 }
             } else if (result.reason === 'busy') {
+                // The placement still hashed the files added since the order was computed: kept before the re-offer
+                // (PR #85 review #6). The order is not committed, so the sort cache is not saved. A failed save is
+                // logged, never a Show error.
+                if (result.stats?.added > 0 && !this._isStaleSimilarityRun(entry)) {
+                    try {
+                        await this.saveHashCache(entry.folder);
+                    } catch (saveError) {
+                        console.warn('Saving the hash cache after a declined Show failed:', saveError);
+                    }
+                }
                 this._offerSimilarityOrder(entry);
             }
             // 'sorting': an AI sort is running and owns the order; the offer stays dismissed (A9). 'stale': a folder

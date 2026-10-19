@@ -1136,6 +1136,27 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
         expect(ctx.showNotification).not.toHaveBeenCalled();
     });
 
+    // PR #85 review #6 (follow-up): a busy Show still placed the files added since; their hashes are kept, the order
+    // (not committed) is not.
+    it('a busy Show that placed new files saves its hashes, not the order, and puts the offer back (#6)', async () => {
+        const { ctx, entry } = showCtx({
+            _applySimilarityOrder: vi.fn(async () => ({
+                applied: false,
+                reason: 'busy',
+                stats: { cached: 2, added: 1, removed: 0 },
+            })),
+            saveHashCache: vi.fn(async () => {}),
+            saveSortCache: vi.fn(async () => {}),
+        });
+        await onShow.call(ctx);
+        expect(ctx.saveHashCache).toHaveBeenCalledWith('/f');
+        expect(ctx.saveSortCache).not.toHaveBeenCalled();
+        expect(ctx._offerSimilarityOrder).toHaveBeenCalledWith(entry);
+        expect(ctx.saveHashCache.mock.invocationCallOrder[0]).toBeLessThan(
+            ctx._offerSimilarityOrder.mock.invocationCallOrder[0]
+        );
+    });
+
     it('a failed apply reports the error', async () => {
         const { ctx } = showCtx();
         ctx._applySimilarityOrder = vi.fn(async () => {
