@@ -824,7 +824,7 @@ The final review found this as a pre-existing race. The user chose to fix it on 
 4. The existing synchronous restore (`alignToLive`, the flags, `_onOrderChanged('other')`, the indices), then `await this.showMedia()`, then the existing notice and label.
 
 **Steps:**
-- [ ] **Step 1: Write the failing tests.** In `tests/similarity-sort-glue.test.js`:
+- [x] **Step 1: Write the failing tests.** In `tests/similarity-sort-glue.test.js`:
   - For each path: `Restore Order waits for an in-flight render, then restores and renders`. The `_waitForRenderIdle`, `_onOrderChanged` and `showMedia` mocks push `'wait'`, `'commit'` and `'render'` to `seq`. Expect `seq` to equal `['wait', 'commit', 'render']`.
   - For the similarity path, `it.each` over a change made inside the `_waitForRenderIdle` mock:
     - already restored (`isSortedBySimilarity = false`);
@@ -836,26 +836,26 @@ The final review found this as a pre-existing race. The user chose to fix it on 
 
     In every case, expect `mediaFiles` to be the same array, `_onOrderChanged` not called, and `showMedia` not called. Use the real `_refuseIfFileOpInFlight` and `_refuseIfFolderLoadInFlight`.
   - For the AI path: the same `it.each`, over already restored (`isSortedByPrediction = false`), `isComputingHashes`, a file action, and a folder load.
-- [ ] **Step 2: Write the E2E test** in `tests/e2e/similarity-sort.test.js`: `Restore Order pressed during a render restores only after the render, and the screen shows the restored first file`.
+- [x] **Step 2: Write the E2E test** in `tests/e2e/similarity-sort.test.js`: `Restore Order pressed during a render restores only after the render, and the screen shows the restored first file`.
   - Navigate to the second listed file first (`nextMedia()`, after `waitForIdle`). The sort starts from the start file, so the sorted first file then differs from the folder's first file.
   - Run the sort to completion. It applies directly, because nothing changed during it. Then `waitForIdle`.
   - Set `window.mediaViewer.isLoading = true` to simulate a render in flight, and start Restore Order without awaiting it (`window.__restoreDone = window.mediaViewer.handleSortBySimilarity()`).
   - After about 200 ms, expect the list to be still sorted: `isSortedBySimilarity` true.
   - Set `isLoading = false`, await `__restoreDone`, then `waitForIdle`.
   - Expect `isSortedBySimilarity` false, `currentIndex` 0, and the file shown on screen to be `mediaFiles[0]`. Find how the existing E2E files read the displayed file in single mode and reuse that; do not invent a new probe if one exists.
-- [ ] **Step 3: Run, expect failure.**
+- [x] **Step 3: Run, expect failure.**
   - The unit tests fail on today's code: there is no wait, so the restore commits at once and `seq` lacks `'wait'`.
   - The E2E test fails: the restore lands at once, and `showMedia` returns early on the simulated `isLoading`.
   - Record both.
-- [ ] **Step 4: Implement** the behaviour above, on both paths. Re-read the comments on both branches.
-- [ ] **Step 5: Run, expect pass:**
+- [x] **Step 4: Implement** the behaviour above, on both paths. Re-read the comments on both branches.
+- [x] **Step 5: Run, expect pass:**
   - the glue file;
   - `npx vitest run`;
   - `npm run lint`;
   - `npx playwright test tests/e2e/similarity-sort.test.js --reporter=line`, three runs in a row.
-- [ ] **Step 6: Mutation check.** Delete the `await this._waitForRenderIdle()` on the similarity path. The similarity unit tests and the new E2E test must fail. Restore with `git checkout -- media-viewer.js` only after the change is committed; until then, revert the one line by hand and confirm with `git diff`.
-- [ ] **Step 7: Report, not fix:** does any key reach a file action while the Tournament config modal is open? `restoreOriginalOrderForTournament` restores the list without a render, and the modal opens over the old file.
-- [ ] **Step 8: Commit** (controller): `fix(sort): Restore Order waits for an in-flight render before it restores (G2 PR1 T6)`.
+- [x] **Step 6: Mutation check.** Delete the `await this._waitForRenderIdle()` on the similarity path. The similarity unit tests and the new E2E test must fail. Restore with `git checkout -- media-viewer.js` only after the change is committed; until then, revert the one line by hand and confirm with `git diff`.
+- [x] **Step 7: Report, not fix:** does any key reach a file action while the Tournament config modal is open? `restoreOriginalOrderForTournament` restores the list without a render, and the modal opens over the old file.
+- [x] **Step 8: Commit** (controller): `fix(sort): Restore Order waits for an in-flight render before it restores (G2 PR1 T6)`.
 
 ## Finish (after Task 5)
 
@@ -912,7 +912,8 @@ The final review found this as a pre-existing race. The user chose to fix it on 
   - After a folder switch, the Sort button reads "Sort by Similarity" while the old run unwinds (at most one in-flight hash). A click there is swallowed silently.
   - Show's placement rewrites a plain-text progress card that was already on screen (the shared element) into the sort-card form. Show then leaves it in place, with Cancel hidden, until that card's owner next updates it.
 - **Found outside PR 1's scope** (the final review's "declined to judge" list):
-  - Restore Order (similarity and AI toggle-off) renders without waiting for an in-flight render. Its `showMedia()` returns early on `isLoading`, so the restored list and cursor can sit under a screen that still shows another file. A rating key would then move a file the user has not seen. This is pre-existing for any order change pressed during a render. M6's render-after-finally (the run renders after releasing its flags) makes it reachable when Restore Order is pressed right after a sort lands. Rate it by what it can move, not by the narrow trigger.
+  - ~~Restore Order renders without waiting for an in-flight render.~~ **Fixed in this PR as Task 6**, which the user approved.
+  - **The Tournament entry modals, found in Task 6 Step 7** (a static trace, not run). While the Tournament config modal or the resume prompt is open, single-mode keys (`Q`, `W`, `1`, `F`) still reach file actions. Because `restoreOriginalOrderForTournament` restores the list without a render, those keys act on `mediaFiles[0]` while another file is on screen, so they can move a file the user has not seen. The resume prompt never moves focus into the Rounds box, so the very first key press counts. → Append these two facts to the existing BACKLOG entry "Refuse shortcut dispatch while a modal is open" (BACKLOG.md:641). Rate it by what it can move.
   - Turning CLIP off during a CLIP run, or with a CLIP offer pending: the run's save recreates the `'clip'` sort cache the toggle just deleted, and the offer survives.
   - `scoreComplete`/`sortComplete` clear the progress card unconditionally.
   - `applyPredictionSortResult` drops live files that are missing from the AI result.
@@ -959,6 +960,7 @@ The final review found this as a pre-existing race. The user chose to fix it on 
 - **2026-10-19** — User go-ahead for E2E. The final-review E2E mutations both caught their targets (Review Focus #3 and #5), and the file passed 3 stability runs at 10/10. Pushing; pre-push runs the full E2E suite.
 - **2026-10-19** — First push blocked by pre-push E2E: 203 passed, 6 skipped, **1 failed**. `sort-progress.test.js` "Cancel button aborts the active sort controller" drew the card with a controller but no sort flag. Under M7, Cancel is hidden when no sort owns the card, so the test's premise no longer matched a real sort, which sets its flag before drawing the card. The test now sets `isComputingHashes = true` (a premise fix, per Finish). Both tests in that file pass.
 - **2026-10-19** — Second push: full E2E **204 passed, 6 skipped**. **PR #85** opened. Waiting on the user for: a `/code-review` (default: a separate chat at `max`), the Restore-Order-during-render question (fix on this branch or BACKLOG), and the merge.
+- **2026-10-19** — **T6** (user: "Agree, fix it now") `8928825` + review fix `08cdb55`. Both Restore Order paths wait for an in-flight render. They then re-check that the order did not change during the wait (`_orderGeneration`), and then the path flag, Tournament, a running sort, a file action and a folder load; after that they restore and render with no await between. RED→GREEN: 17 unit tests + 1 E2E. Removing the wait fails 7 unit tests and the E2E. The task review added the order-generation check: a cached similarity sort committing during the AI toggle-off's wait would otherwise make the restore land on the AI order. The scoped re-review found nothing open. Unit tests: 1,817 passed, 1 skipped; the E2E file 11/11 ×3. Step 7 found that keys reach file actions under the Tournament modals; this is pre-existing, and recorded in Residuals → the BACKLOG.md:641 entry.
 
 ## Key Discoveries
 
