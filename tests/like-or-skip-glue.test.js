@@ -3,23 +3,26 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as LikeOrSkip from '../like-or-skip.js';
+import * as SimilaritySort from '../similarity-sort.js';
 
 const require = createRequire(import.meta.url);
 const fs = require('fs');
 const path = require('path');
 const source = fs.readFileSync(path.join(__dirname, '..', 'media-viewer.js'), 'utf-8');
 
-// media-viewer.js imports the module as a namespace. An extracted method runs in the global scope, so
-// it resolves `LikeOrSkip` through the global object.
+// media-viewer.js imports each module as a namespace. An extracted method runs in the global scope, so
+// it resolves `LikeOrSkip` and `SimilaritySort` through the global object.
 globalThis.LikeOrSkip = LikeOrSkip;
+globalThis.SimilaritySort = SimilaritySort;
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const METHOD_HEADER = /^ {4}(async\s+)?([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{\s*$/;
+// The parameter list may hold one level of parentheses (a default like `isLive = () => true`).
+const METHOD_HEADER = /^ {4}(async\s+)?([A-Za-z_$][\w$]*)\s*\(((?:[^()]|\([^()]*\))*)\)\s*\{\s*$/;
 const NOT_METHODS = new Set(['if', 'for', 'while', 'switch', 'catch', 'function']);
 
 /** A MediaViewer method as a callable (the technique of media-viewer-utils.test.js, sync or async). */
 function extract(name) {
-    const match = source.match(new RegExp(`^ {4}(async\\s+)?${name}\\(([^)]*)\\)\\s*\\{`, 'm'));
+    const match = source.match(new RegExp(`^ {4}(async\\s+)?${name}\\(((?:[^()]|\\([^()]*\\))*)\\)\\s*\\{`, 'm'));
     if (!match) {
         throw new Error(`Could not find method: ${name}`);
     }
@@ -198,11 +201,20 @@ describe('removeFileFromList forgets the skip and can defer the bulk-rated save'
     });
 });
 
-describe('a failed similarity sort keeps the skips (spec D1)', () => {
+describe('a failed similarity sort leaves the list and the skips as they are (spec D1; G2 PR 1, T3)', () => {
     const handleSortBySimilarity = extract('handleSortBySimilarity');
+    let origStorage;
+    beforeEach(() => {
+        origStorage = globalThis.localStorage;
+        globalThis.localStorage = { getItem: () => null };
+    });
+    afterEach(() => {
+        globalThis.localStorage = origStorage;
+    });
 
-    it('puts back the order it started from without announcing a reorder, and bumps the generation', async () => {
+    it('writes nothing to the list, announces no reorder and leaves the generation alone', async () => {
         const files = media('a', 'b', 'c');
+        const list = [...files];
         const ctx = {
             isTournamentMode: false,
             isPredictionSorting: false,
@@ -211,19 +223,26 @@ describe('a failed similarity sort keeps the skips (spec D1)', () => {
             sortAbortController: null,
             sortAlgorithm: 'vptree',
             baseFolderPath: '/f',
-            mediaFiles: [...files],
+            mediaFiles: list,
             originalMediaFiles: [],
             currentIndex: 0,
+            moveHistory: [],
             likeOrSkip: activeTracker('/f/a', '/f/b'),
             _orderGeneration: 0,
+            _similarityRunGen: 0,
             _onOrderChanged: vi.fn(),
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
+            _isStaleSimilarityRun: extract('_isStaleSimilarityRun'),
+            _assertSimilarityRunLive: extract('_assertSimilarityRunLive'),
+            _dismissSimilarityOffer: vi.fn(),
+            _logSortPerf: vi.fn(),
+            saveHashCache: vi.fn(),
             showNotification: vi.fn(),
             clearProgressNotification: vi.fn(),
             showMedia: vi.fn(),
             sortSimilarityBtn: { disabled: false, querySelector: () => ({ textContent: '' }) },
-            // loadSortCache is the first collaborator called after the originalMediaFiles snapshot
-            // (forceResort is false, so deleteSortCache is skipped): its throw drives the catch.
+            // loadSortCache is the run's first collaborator (forceResort is false, so deleteSortCache is
+            // skipped): its throw drives the catch.
             loadSortCache: vi.fn(() => {
                 throw new Error('boom');
             }),
@@ -237,10 +256,12 @@ describe('a failed similarity sort keeps the skips (spec D1)', () => {
 
         expect(ctx.loadSortCache).toHaveBeenCalledOnce();
         expect(ctx._onOrderChanged).not.toHaveBeenCalled();
-        expect(ctx._orderGeneration).toBe(1);
+        expect(ctx._orderGeneration).toBe(0);
         expect(ctx.likeOrSkip.active).toBe(true);
         expect([...ctx.likeOrSkip.skipped]).toEqual(['/f/a', '/f/b']);
+        expect(ctx.mediaFiles).toBe(list);
         expect(ctx.mediaFiles.map((f) => f.path)).toEqual(['/f/a', '/f/b', '/f/c']);
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('failed');
         const messages = ctx.showNotification.mock.calls.map((c) => String(c[0]));
         expect(messages.filter((m) => m.includes('Skipped list cleared'))).toEqual([]);
     });
@@ -251,17 +272,16 @@ describe('every method that reassigns mediaFiles announces it through _onOrderCh
     const ORDER_CHANGERS = [
         'loadFolder',
         'restoreOriginalOrderForTournament',
-        'handleSortBySimilarity',
         'applyPredictionSortResult',
-        'handleSortByPrediction',
+        '_applySimilarityOrder',
+        // Restore Order, for both handleSortBySimilarity and the AI toggle-off in handleSortByPrediction (PR #85 #21)
+        '_restoreOriginalOrder',
     ];
     // Reviewed exemptions: assignments that are not a new order on screen, and why.
     const EXEMPT = {
         constructor: 'the initial empty list',
         _switchToFolderNow:
             "change-folder's reset (G4): empties the list once its file-op refusal passed, then loadFolder announces the folder",
-        applyCachedSortOrder: "runs inside handleSortBySimilarity's cache path, which announces on success",
-        insertNewFilesInSortedOrder: 'runs inside applyCachedSortOrder (same)',
         _undoSkipBatch: 'a batch undo re-inserts files; the others keep their order',
     };
 
@@ -1061,8 +1081,7 @@ describe('header actions refuse while a file action is in flight (G2 review R6)'
                 loadSortCache: vi.fn(async () => ({ sortedPaths: ['/f/d', '/f/c', '/f/b', '/f/a'], timestamp: null })),
                 loadHashCache: vi.fn(async () => 0),
                 applyCachedSortOrder: vi.fn(async function () {
-                    this.mediaFiles = [...this.mediaFiles].reverse();
-                    return { cached: 4, added: 0, removed: 0 };
+                    return { order: [...this.mediaFiles].reverse(), stats: { cached: 4, added: 0, removed: 0 } };
                 }),
                 saveHashCache: vi.fn(async () => {}),
                 saveSortCache: vi.fn(async () => {}),
@@ -1096,12 +1115,13 @@ describe('header actions refuse while a file action is in flight (G2 review R6)'
             expect(untouched(ctx)).toEqual(before);
         });
 
+        // The press only aborts (G2 PR 1, A3): the run's end shows "❌ Sorting cancelled" once it unwinds.
         it('Cancel stays live: a running similarity sort still aborts', async () => {
             const controller = new AbortController();
             const ctx = similarityCtx({ isComputingHashes: true, sortAbortController: controller });
             await handleSortBySimilarity.call(ctx);
             expect(controller.signal.aborted).toBe(true);
-            expect(ctx.showNotification.mock.calls).toEqual([['❌ Sorting cancelled', 'info']]);
+            expect(ctx.showNotification).not.toHaveBeenCalled();
         });
     });
 
@@ -1201,6 +1221,7 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
             hideDropZone: vi.fn(),
             loadFolder: vi.fn(async () => {}),
             showNotification: vi.fn(),
+            _invalidateSimilarityRun: vi.fn(),
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             _folderLoadInFlight: false,
             _refuseIfFolderLoadInFlight() {
@@ -1813,6 +1834,18 @@ describe('a batch and its undo round-trip the per-file caches (G2 final review F
         expect(Array.from(ctx.featureCache.get('/f/a'))).toEqual(Array.from(vector.slice(0, 64)));
         expect(ctx.clipCache.has('/f/a')).toBe(false);
         expect(ctx.featureMetadata.get('/f/a')).toEqual({ size: 10, mtime: 0 });
+    });
+
+    // PR #85 review #4: removeFileFromList drops the file's perceptual hash, so the batch stashes it per file and
+    // the undo restores it; otherwise a similarity sort running across the batch and its undo sorts the file last.
+    it('the perceptual hash is stashed per file and comes back with the undo (#4)', async () => {
+        const ctx = tripCtx(combined(true));
+        ctx.perceptualHashes.set('/f/a', '0101');
+        await dislikeSkippedFiles.call(ctx);
+        expect(ctx.moveHistory[0].files[0].perceptualHash).toBe('0101');
+        expect(ctx.perceptualHashes.has('/f/a')).toBe(false);
+        await undoSkipBatch.call(ctx, ctx.moveHistory.pop());
+        expect(ctx.perceptualHashes.get('/f/a')).toBe('0101');
     });
 });
 

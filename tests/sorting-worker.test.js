@@ -237,7 +237,7 @@ describe('sortMediaBySimilarityClip', () => {
     // Direct flag access isn't possible (module-private), so we toggle via the message handler.
     function resetAbort() {
         // The worker's onmessage handler unconditionally sets abortFlag = false
-        // in the 'startSort' branch (sorting-worker.js, see comment near abortFlag declaration).
+        // in the 'startSort' branch (sorting-worker.js, see the comment at that reset).
         // Algorithm 'noop' falls through to default → fails on undefined inputs → outer
         // try/catch in the handler swallows the error and posts {type:'error',...}.
         // onmessage returns normally; abortFlag has been reset.
@@ -283,7 +283,8 @@ describe('sortMediaBySimilarityClip', () => {
     });
 
     it('throws "Sorting cancelled by user" when abort flag is set', () => {
-        // Set abort flag via the worker's onmessage handler
+        // Set abort flag via the worker's onmessage handler. The renderer no longer posts 'abort' (runSortingWorker
+        // terminates the worker instead); this pins the worker's own message contract, which stays.
         globalThis.self.onmessage({ data: { type: 'abort' } });
         const files = [{ path: '/a.png' }, { path: '/b.png' }, { path: '/c.png' }, { path: '/d.png' }];
         const clipVectors = {

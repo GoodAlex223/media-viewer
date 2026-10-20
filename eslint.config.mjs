@@ -173,6 +173,7 @@ export default [
             'ml-training.js',
             'like-or-skip.js',
             'recent-folders.js',
+            'similarity-sort.js',
             'media-url.js',
         ],
         languageOptions: {

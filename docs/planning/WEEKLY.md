@@ -30,6 +30,7 @@
 
 > The last slice of the 24k-sort decomposition (PR1 merged 2026-06-20, PR3 2026-07-20) and GOALS Objective 1's only 🔴 Key Result, open since June. **The 2026-06-19 constraint stands: "quality must not change at all"** — every hash must come out bit-identical, so the off-thread decode must match today's renderer decode. **User-in-the-loop on Thursday**: the 24k smoke on a cold hash cache. Its planning reads the 🟤 [2026-10-12] G2-closeout entries on the same handler (the stale-snapshot catch, a result landing under an in-flight render, Restore Order dropping a file) and checks off only what it fixes by construction. Carries no trial (it already has a user dependency).
 > **Model:** start Opus · `high` (the 8+ SP row: edge cases likely across the renderer, a worker and the hash cache); `xhigh` to write the spec and plan → execute Opus · `medium`, Sonnet · `medium` for steps the plan spells out; review deep (`max`); `sorting-worker.js` is a Tier 2 file (PROJECT.md: plan review required) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
+> **Re-estimated at design, 2026-10-19: ~13 SP in two PRs** ([spec](../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) `47d870c`, D7, user ruling). **PR 1** (~6 SP; [plan](plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md)): the end-of-sort fixes on today's hashing route — snapshot, run token, saves, no-restore cancel, one apply function, the "Show" message — closing the three 🟤 [2026-10-12] entries. **PR 2** (~7 SP; a new branch after PR 1 merges): the background hashing route, the in-app parity mode, the canary and Thursday's smoke. The acceptance below is superseded where the spec differs: parity is checked by the in-app diagnostic on a same-day, same-build run (D4, D5; the December `.hash_cache.json` is not a valid reference, F6), and the "sorted order unchanged" check is dropped (my call 10). **G3 is expected to slip a day or two.** PR 1 leaves `sorting-worker.js` untouched, and PR 2's scope does not list it, so the Tier 2 plan review should not apply.
 
 - [ ] **Move perceptual-hash computation off the renderer main thread (PR2)** — the remaining slice of TODO 🔴 "Speed up AI / similarity sorting on large folders": the biggest cold-cache freeze on the 24k folder. Candidate design: a worker decoding bytes read through the existing guarded IPC with `createImageBitmap` + `OffscreenCanvas` (a `sharp` decode in main would change the hashes); videos stay on their current path unless an off-thread decode is shown bit-identical. Keep the determinate progress card and Cancel (`updateSortProgress` only — the shared-element gotcha). **Acceptance**: (a) an **E2E** parity test (both decode paths are Chromium's, so Vitest cannot run it) on new generated fixtures that exercise where the two decodes can differ — EXIF-rotated, ICC-profiled and progressive JPEGs, a PNG with alpha, an image large enough to be downscaled, an animated GIF's first frame (`sharp` can write them from `tests/e2e/fixtures/generate.js`); the existing fixtures cannot carry this check, since `tests/` holds no JPEG and its PNGs are 1×1, 64×4 and 320×240 (measured 2026-10-18); (b) during the user's 24k smoke, the new path hashes the folder into a **separate** cache file, diffed entry by entry against the folder's existing `.hash_cache.json` (written by today's renderer path) — zero differences, or each one explained (a stale entry, say); (c) the smoke shows the UI responsive during hashing and the sorted order unchanged; before/after timing in `media-viewer-perf.log`; the new hashing code lives in the worker or its own module, not in `media-viewer.js`, and the closeout reports the renderer's net line change (`wc -l` before and after — the week's theme is stopping its growth). It does not move the O(n·K) neighbor-graph floor (the TODO note). `media-viewer.js` (`computePerceptualHash`, `handleSortBySimilarity`), `sorting-worker.js` or a new hash worker, `tests/` (8) — TODO 🔴 [2026-06-18] ← 🔵 manual testing
 
@@ -79,20 +80,20 @@
 ### Tuesday, October 20 — Security lands; PR2 design
 
 - ✅ **[G1](#g1-confine-page-side-file-loads-to-the-granted-folders-i1-solo---main-process--csp--5-sp)** 🟤 — finish; the user starts _Scan changes_; review; merge (part 2 of 2). Merged `4548269` (PR #84) on Monday 2026-10-19, a day early, after one review round; nothing dropped.
-- **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆 — spec and plan: the quality lock and the parity test (part 1 of 3)
+- **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆 — spec and plan: the quality lock and the parity test (part 1 of 3). Spec `47d870c` and the PR 1 plan written on Monday 2026-10-19, after a spike; G2 split into two PRs (D7).
 
 **Daily total**: ~4 SP
 
 ### Wednesday, October 21 — PR2 build; hook cost
 
-- **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆 — implement; parity tests; perf lines (part 2 of 3)
+- **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆 — implement; parity tests; perf lines (part 2 of 3). Re-planned: PR 1 (end-of-sort fixes) implement, review, merge; then PR 2's plan.
 - **[G4](#g4-formatter-hook-per-edit-cost-solo---claude-code-hooks--2-sp)** 🔵 — both remedies; re-time; review; merge
 
 **Daily total**: ~6 SP
 
 ### Thursday, October 22 — PR2 smoke; the extraction starts
 
-- **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆 — the user's 24k smoke; review; merge (part 3 of 3)
+- **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆 — the user's 24k smoke; review; merge (part 3 of 3). Re-planned: PR 2 (background hashing, parity mode) implement; the user's smoke on `Liked_2`; review; merge. G3 starts after PR 2 merges.
 - **[G3](#g3-zoommanager-extraction-v20-solo---renderer-modularization--5-sp)** 🔵 — `typescript@6` and the server check; before screenshots; spec and plan; extract (part 1 of 2)
 
 **Daily total**: ~5 SP
