@@ -1025,6 +1025,11 @@ The defect: `handleSortByPrediction` waits for render idle for at most 2 s, then
 
   Unit tests: 1,870 passed, 1 skipped. Full E2E at `60802db`: 205 passed, 6 skipped. Both review responses are posted on the PR. `media-viewer.js`: 12,175 lines (+736 vs `bfc4cbf`).
 
+- **2026-10-20** — **Task 7** (user: "Yes, add"), `d102ab2` + review fix `7cc57af`. The AI sort now waits up to 30 s for an in-flight render and any file action, and drops its result rather than applying under a loading file. Cancel, a newer sort or a folder load ends the wait at once.
+  - Why: my #2 triage had promised this, but my fix ruling left it out, and the user was not told until a side agent caught the mismatch.
+  - The task review found that Cancel was ignored during the 30 s wait; the fix round made the wait end on Cancel.
+  - Results: unit tests 1,883 passed, 1 skipped; `compare-mode` E2E 13/13.
+
 ## Key Discoveries
 
 - **Posting `abort` to `sorting-worker.js` stops nothing mid-sort.** Its loops are synchronous, so `onmessage` runs only after they end. A stale run kept `isComputingHashes` and kept re-creating the progress card in the new folder for the rest of the sort. The fix is to terminate the worker and reject at once (T3 review).
