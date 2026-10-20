@@ -2201,6 +2201,73 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
     });
 
+    // G2 PR 1, Task 7: the old 2 s cap applied the order regardless, so a render over 2 s (a big JXL, a slow
+    // drive) left the screen on one file while currentIndex named another, and a rating key moved that one.
+    describe('never applies under a loading file (G2 PR 1, Task 7)', () => {
+        it('waits up to 30 s for the render and any file action, and applies once they settle', async () => {
+            const ctx = makeCtx({ _waitForRenderIdle: vi.fn(async () => true) });
+            await handleSortByPrediction.call(ctx);
+            expect(ctx._waitForRenderIdle.mock.calls).toEqual([[30_000, true]]);
+            expect(ctx.isSortedByPrediction).toBe(true);
+            expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('done');
+        });
+
+        it('fails without applying when the wait hits its cap', async () => {
+            const apply = vi.fn(() => true);
+            const showNotification = vi.fn();
+            const ctx = makeCtx({
+                showNotification,
+                applyPredictionSortResult: apply,
+                _waitForRenderIdle: vi.fn(async () => false),
+            });
+            await handleSortByPrediction.call(ctx);
+            expect(apply).not.toHaveBeenCalled();
+            expect(ctx.isSortedByPrediction).toBe(false);
+            expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('failed');
+            expect(showNotification).toHaveBeenCalledWith(
+                'Could not sort: a file is still loading — sort again',
+                'warning'
+            );
+            expect(ctx.clearProgressNotification).toHaveBeenCalled();
+            expect(ctx.clipLeases).toBe(0);
+            expect(ctx.isPredictionSorting).toBe(false);
+        });
+
+        it('a cancel during the wait still reads as cancelled, not as a loading failure', async () => {
+            const showNotification = vi.fn();
+            const ctx = makeCtx({ showNotification });
+            ctx._waitForRenderIdle = vi.fn(async () => {
+                ctx.sortAbortController.abort();
+                return false;
+            });
+            await handleSortByPrediction.call(ctx);
+            expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
+            expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+        });
+
+        it('shows no waiting phase when nothing is in flight', async () => {
+            const ctx = makeCtx({ _waitForRenderIdle: vi.fn(async () => true) });
+            await handleSortByPrediction.call(ctx);
+            expect(ctx._phases).not.toContain('Waiting for the file to load…');
+        });
+
+        it.each([['isLoading'], ['mediaNavigationInProgress'], ['_fileOpInFlight']])(
+            'shows the waiting phase while %s is set',
+            async (flag) => {
+                const ctx = makeCtx({ _waitForRenderIdle: vi.fn(async () => true) });
+                ctx.runMlSort = function () {
+                    this[flag] = true; // set after the entry guards, as a render or a move would be
+                    return Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} });
+                };
+                await handleSortByPrediction.call(ctx);
+                expect(ctx._phases.at(-1)).toBe('Waiting for the file to load…');
+                expect(ctx._phases.indexOf('Waiting for the file to load…')).toBeGreaterThan(
+                    ctx._phases.indexOf('Sorting…')
+                );
+            }
+        );
+    });
+
     // G3 spec § 7: one perf-log record per sort, handed to _logSortPerf from the finally.
     it('logs one sort perf record on success, with the phases that ran', async () => {
         const ctx = makeCtx();
@@ -2362,6 +2429,41 @@ describe('_waitForRenderIdle (G2 final review F4)', () => {
         const stranded = waitForRenderIdle.call({ isLoading: true, mediaNavigationInProgress: false }, 200);
         await vi.advanceTimersByTimeAsync(250);
         expect(await stranded).toBe(false);
+    });
+
+    // G2 PR 1, Task 7: the AI sort's apply also waits out a file action.
+    it('with includeFileOp, keeps waiting while a file action runs and resolves true when it ends', async () => {
+        vi.useFakeTimers();
+        const ctx = { isLoading: false, mediaNavigationInProgress: false, _fileOpInFlight: true };
+        let result;
+        waitForRenderIdle.call(ctx, 1000, true).then((r) => (result = r));
+        await vi.advanceTimersByTimeAsync(500);
+        expect(result).toBeUndefined();
+        ctx._fileOpInFlight = false;
+        await vi.advanceTimersByTimeAsync(50);
+        expect(result).toBe(true);
+    });
+
+    it('with includeFileOp, resolves false at the cap while a file action still runs', async () => {
+        vi.useFakeTimers();
+        let result;
+        waitForRenderIdle
+            .call({ isLoading: false, mediaNavigationInProgress: false, _fileOpInFlight: true }, 200, true)
+            .then((r) => (result = r));
+        await vi.advanceTimersByTimeAsync(150);
+        expect(result).toBeUndefined();
+        await vi.advanceTimersByTimeAsync(100);
+        expect(result).toBe(false);
+    });
+
+    it('without includeFileOp, ignores a file action (the other callers are unchanged)', async () => {
+        vi.useFakeTimers();
+        let result;
+        waitForRenderIdle
+            .call({ isLoading: false, mediaNavigationInProgress: false, _fileOpInFlight: true }, 200)
+            .then((r) => (result = r));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(result).toBe(true);
     });
 });
 

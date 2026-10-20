@@ -10263,15 +10263,17 @@ class MediaViewer {
     // Wait for an in-flight render to settle before applying a new order (G2 review): showMedia()
     // returns early on isLoading, so an order applied mid-render would paint the old file under the
     // new cursor. Capped — a stranded flag must not hold the sort (its card, its CLIP lease) forever.
-    // Resolves true once the render settled, false when the cap was hit with a render still running (PR #85 review
-    // #2). The similarity apply and both Restore Order paths decline on false rather than commit under the render;
-    // the AI sort's own apply ignores the result, as before.
-    async _waitForRenderIdle(maxMs = 2000) {
+    // Resolves true once everything it waits on settled, false when the cap was hit with one still running (PR #85
+    // review #2). With includeFileOp it also waits out a file action (_fileOpInFlight), for the AI sort's apply
+    // (G2 PR 1, Task 7). Every caller declines on false rather than commit under the render: the similarity apply,
+    // both Restore Order paths, and the AI sort's apply, which fails the sort.
+    async _waitForRenderIdle(maxMs = 2000, includeFileOp = false) {
+        const busy = () => this.isLoading || this.mediaNavigationInProgress || (includeFileOp && this._fileOpInFlight);
         const start = Date.now();
-        while ((this.isLoading || this.mediaNavigationInProgress) && Date.now() - start < maxMs) {
+        while (busy() && Date.now() - start < maxMs) {
             await new Promise((resolve) => setTimeout(resolve, 25));
         }
-        return !(this.isLoading || this.mediaNavigationInProgress);
+        return !busy();
     }
 
     async handleSortByPrediction({ resort = false } = {}) {
@@ -10461,10 +10463,19 @@ class MediaViewer {
             const tSort = performance.now();
             const result = await this.runMlSort(allFeatures, runId);
             timePhase('sort', tSort);
-            // Let an in-flight render settle first (G2 final review F4), then check staleness and apply with
-            // no await in between — a cancel or a newer sort during the wait still wins.
-            await this._waitForRenderIdle();
+            // Let an in-flight render or file action settle first (G2 final review F4; G2 PR 1, Task 7): an order
+            // applied under a loading file leaves the screen on one file while currentIndex names another, and the
+            // next rating key moves the unseen one. Never applied past the cap: the sort fails and asks for a
+            // re-run. Then check staleness and apply with no await in between — a cancel or a newer sort during the
+            // wait still wins. No order check is needed: Tournament entry, the similarity sort and Restore Order
+            // all refuse while this sort runs, and a folder load aborts it.
+            const AI_APPLY_WAIT_MS = 30_000;
+            if (this.isLoading || this.mediaNavigationInProgress || this._fileOpInFlight) {
+                this.updateSortProgress({ phase: 'Waiting for the file to load…' });
+            }
+            const settled = await this._waitForRenderIdle(AI_APPLY_WAIT_MS, true);
             if (signal.aborted || runId !== this.sortRunId) throw new Error('cancelled');
+            if (!settled) throw new Error('a file is still loading — sort again');
             this.applyPredictionSortResult(result, { resort });
             sortPerf.outcome = 'done';
         } catch (err) {

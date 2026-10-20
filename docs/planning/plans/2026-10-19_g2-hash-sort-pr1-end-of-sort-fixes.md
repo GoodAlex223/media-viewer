@@ -857,6 +857,35 @@ The final review found this as a pre-existing race. The user chose to fix it on 
 - [x] **Step 7: Report, not fix:** does any key reach a file action while the Tournament config modal is open? `restoreOriginalOrderForTournament` restores the list without a render, and the modal opens over the old file.
 - [x] **Step 8: Commit** (controller): `fix(sort): Restore Order waits for an in-flight render before it restores (G2 PR1 T6)`.
 
+## Task 7: The AI sort never applies under a loading file (user-approved, 2026-10-20)
+
+PR #85 review #2 was approved on a triage that said the AI sort's result "would wait behind it too". The fix ruling then left the AI sort out, and the user was not told; a side agent caught the mismatch. The user chose to add it to this PR ("Yes, add").
+
+The defect: `handleSortByPrediction` waits for render idle for at most 2 s, then applies regardless. A render over 2 s (a big JXL decode of up to 15 s, a slow drive) leaves the screen on file X while `currentIndex` names file Y, and a rating key moves Y.
+
+**Files:** `media-viewer.js` (`handleSortByPrediction`'s apply step, `_waitForRenderIdle`), `CLAUDE.md` (§ Async Patterns, where it says the AI sort waits for an in-flight render), and `tests/media-viewer-utils.test.js` (the `handleSortByPrediction lifecycle` describe and `_waitForRenderIdle`).
+
+**Behaviour:**
+1. `_waitForRenderIdle(maxMs = 2000, includeFileOp = false)`. With `includeFileOp`, it also waits while `_fileOpInFlight` is set. It returns whether everything it waits on settled. The other callers are unchanged.
+2. **Before the apply**, the AI sort checks whether a render or a file action is still in flight: `isLoading`, `mediaNavigationInProgress` or `_fileOpInFlight`. If one is, it shows the card phase `Waiting for the file to load…` through `updateSortProgress`. It then calls `const settled = await this._waitForRenderIdle(AI_APPLY_WAIT_MS, true)`, where `AI_APPLY_WAIT_MS = 30_000`. That is a named constant next to the code, not a magic number.
+3. **After the wait**, with no await before the apply:
+   - The existing `if (signal.aborted || runId !== this.sortRunId) throw new Error('cancelled')` stays first.
+   - Then `if (!settled) throw new Error('a file is still loading — sort again')`. The existing catch turns it into outcome `failed` and the warning `Could not sort: a file is still loading — sort again`.
+   - The `finally` releases the CLIP lease and clears the card, as for any failure.
+4. **Then** `applyPredictionSortResult(result, { resort })`, as now. It is synchronous.
+5. **No dead checks.** Tournament entry, the similarity sort and Restore Order all refuse while an AI sort runs, and a folder load aborts it. So the order cannot change under it, and no `_orderGeneration` or Tournament check is added. Say so in the comment, in one sentence.
+
+**Steps:**
+- [x] **Step 1: Write the failing tests:**
+  - a render that settles within the wait → the result is applied (the existing behaviour);
+  - the wait returns `false` → `applyPredictionSortResult` is not called, the outcome is `failed`, the warning text is as above, and the lease is released and the card cleared;
+  - the AI sort calls `_waitForRenderIdle(30_000, true)`;
+  - the card shows `Waiting for the file to load…` only when something was in flight;
+  - the real `_waitForRenderIdle` with `includeFileOp` keeps waiting while `_fileOpInFlight` is set, returns `true` when it clears, and returns `false` at the cap (fake timers).
+- [x] **Step 2:** Run the tests, expect RED, implement, then expect GREEN. Run the full unit suite, lint and prettier. Run `npx playwright test tests/e2e/compare-mode.test.js --reporter=line`, which holds the real-worker AI sort test.
+- [x] **Step 3:** Mutation: drop the `!settled` throw, and the cap test must fail. Revert by hand.
+- [x] **Step 4:** Update the `_waitForRenderIdle` comment, the CLAUDE.md sentence, spec § 16's render-wait note and this plan's residual about the AI sort's apply (the controller does the spec and the plan).
+
 ## Finish (after Task 5)
 
 - [x] `npx vitest run` (1,800 passed, 1 skipped at `cd1f24e`) and `npm run lint` (0 errors, 2 pre-existing warnings) are green. `npm run format:check` flags only the user's untracked `CLAUDE-SECURITY-2026*` folders; every changed file passes `prettier --check`. `git status --short` is clean apart from this plan.
@@ -887,7 +916,7 @@ The final review found this as a pre-existing race. The user chose to fix it on 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
 - **"The similarity sort leaves `isSortedByPrediction` set"** stays open (spec § 12). PR 1 makes it visible in a new way: Show applied over an AI order in compare mode pairs from `mlComparePairIndex`/the score list, not from `mediaFiles[0]`. → BACKLOG 🟤, the same entry (append the observation).
-- **The AI sort's apply still commits after `_waitForRenderIdle`'s 2 s cap.** After PR #85 review #2, the wait reports whether the render settled. The similarity apply now declines on the cap, and both Restore Order paths refuse. Only `handleSortByPrediction`'s own apply still ignores the result, so a render over 2 s lets the AI order land under it. Pre-existing. → BACKLOG 🟤.
+- ~~The AI sort's apply still commits after the render wait's 2 s cap.~~ **Fixed in this PR as Task 7** (user-approved): the AI sort waits up to 30 s, then drops its result rather than applying under a loading file.
 
 **From the PR #85 code review (2026-10-19). The user ruled on scope.**
 - **Review #1, next as its own PR (high priority: data loss).** A folder switch during feature extraction can replace the new folder's `.feature_cache.json` with an empty file. The steps:
