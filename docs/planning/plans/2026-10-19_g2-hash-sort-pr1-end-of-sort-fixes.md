@@ -926,7 +926,20 @@ The defect: `handleSortByPrediction` waits for render idle for at most 2 s, then
 
   This hits the AI sort's Phase 2 extraction too, and it contradicts BACKLOG.md:1002 ("No longer destructive"). → TODO.md at closeout, scheduled next.
 - **Review #16 (follow-up comment), the same PR as #1** (user, 2026-10-20). `_saveFeatureCacheLocked` checks the shrink guard once, before its loop. It then iterates the live `featureCache` across awaited chunk writes. If `loadFolder` clears the map mid-loop, the iterator ends early, and the close renames the partial file over the old folder's own cache. The probe saw 2,500 entries become 1,000. This affects `main` too. It shares #1's root cause: a save that does not check which folder its data still belongs to. A fix is to snapshot the entries before the loop.
+- **The review close-out's second trigger for the feature-cache wipe, in the same PR as #1 and #16** (probe-confirmed on HEAD and `main`; data loss).
+  - The trigger:
+    - an AI sort or a CLIP kickoff starts the feature pool and its 30 s autosave for the rest of the session;
+    - `loadFolder` resets `_featureCacheDiskCount` to 0 and never loads the new folder's cache;
+    - browsing adds viewed files to `featureCache` and marks it dirty;
+    - the next autosave saves with the shrink guard off (its baseline is 0), and main renames the result over the file without a count check (main.js:981-999).
+  - The probe: 2,000 → 3 entries after viewing 3 files. The everyday workflow is to sort by AI, open another folder and browse for 30 s.
+  - The shared root with #1 and #16: a save treats a cache it never loaded (baseline 0, "unknown") as an empty one. A fix aimed only at #1's late results would not cover this.
 - **Review #5, into PR 2's scope.** `write-folder-cache` writes with a truncating `fs.writeFile`, with no tmp + rename. PR 1's periodic hash saves multiply the exposure: a quit right after a write tears the file, and the next session loads 0 hashes. The base issue is BACKLOG.md:565. → PR 2's plan.
+- **The review close-out's #10 sibling → BACKLOG 🟤** (pre-existing, also on `main`; not blocking).
+  - `startBackgroundFeatureExtraction`'s "all cached" early return clears the pending CLIP unload and does not re-arm it.
+  - So a CLIP similarity sort on a folder whose vectors are all on disk keeps the model resident (~200–400 MB) for the session.
+  - At closeout, also correct BACKLOG.md:722's claim that the kickoff path "re-arms by construction": it is false for this return.
+- **The review close-out's #11 note → BACKLOG 🟤 (optional).** With exactly one file left, both branches still end with "❌ Error: Only 1 files have …" instead of ending quietly.
 - **Tournament resume → BACKLOG 🟤 (pre-existing; the review-fix wave's fixer found it).** The resume prompt's Continue reconciles the saved state against the file list captured when the prompt opened, not the list at the moment Continue is pressed.
 - **The AI sort's wait wording → BACKLOG 🟤 (minor; found in the Task 7 review).** The 30 s wait also covers a file action, and a move holds the file-op flag across its "create the missing folder?" dialog. If that dialog stays open over 30 s, the sort fails with "a file is still loading — sort again", although nothing is loading. Rare, and the outcome is safe; only the wording is wrong.
 - **A folder switch emptied by a refused load → BACKLOG 🟤 (pre-existing; found in the Task 7 fix round).** A file action that starts during `_switchToFolderNow`'s cleanup await makes `loadFolder` refuse after the list was already emptied. `_folderLoadInFlight` is then never set, so an AI sort waiting to apply runs on the empty list once that action ends, with a spurious "No files to sort" warning; it writes nothing. This is the "guard the entry point, not the callee" class (memory: `feedback_guard_in_callee_vs_caller_mutation`).
@@ -968,6 +981,10 @@ The defect: `handleSortByPrediction` waits for render idle for at most 2 s, then
 ## Closeout (after the merge, on `main`)
 
 - [ ] **Extract**: Improvements and Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G2 PR 1 closeout`. Check off the three § 12 entries (catch restore, in-flight render, Restore Order) **in the closeout commit**.
+- [ ] **Carry the out-of-PR items to where they will be done:**
+  - #1, #16 and the close-out's second feature-cache trigger → TODO.md, as one PR, next;
+  - #5 → PR 2's plan, when it is written (PR 2 has no plan file yet, so the carriers are this line and spec § 16);
+  - BACKLOG.md:722's "re-arms by construction" → corrected.
 - [ ] **Archive** this plan (`git mv` to `docs/archive/plans/`, indexed under Archived Plans in `docs/README.md`); remove its Active/Current Plans rows.
 - [ ] **DONE.md** entry. WEEKLY: G2 stays open (PR 2 follows), so mark PR 1 on the G2 item and the Wednesday row only; the Summary-Table Status flips at PR 2's closeout.
 - [ ] **Spec**: a post-implementation note for anything the code departed from.
