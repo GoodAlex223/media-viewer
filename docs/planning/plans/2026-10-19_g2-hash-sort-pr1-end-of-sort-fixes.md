@@ -985,6 +985,12 @@ The defect: `handleSortByPrediction` waits for render idle for at most 2 s, then
   - #1, #16 and the close-out's second feature-cache trigger → TODO.md, as one PR, next;
   - #5 → PR 2's plan, when it is written (PR 2 has no plan file yet, so the carriers are this line and spec § 16);
   - BACKLOG.md:722's "re-arms by construction" → corrected.
+  - **Promote "Revive drag-and-drop folder loading" (BACKLOG.md:574, 🟤 G1 closeout) to 🔵 User-Flagged.** The PR #85 reviewer session relayed this on 2026-10-20 as a user ruling. Confirm it with the user at closeout before moving the entry.
+    - **Why:** the user reproduced the bug. Dropping a folder on the start screen shows "Please drop a folder, not individual files". Electron 32 removed `File.path`, and `handleFolderDrop` still reads it.
+    - **The steps:**
+      - **Move, don't copy.** Put the entry under a new heading, `### [2026-10-20] From: PR #85 review (user-confirmed)`, with a one-line origin: the user reproduced it on 2026-10-20. Then remove it from the 🟤 G1-closeout section (one entry per item).
+      - **Keep "Rename the 'drop' zone" (BACKLOG.md:473) in 🟤.** Repoint its "Pairs with … below" cross-ref to the 🔵 entry.
+      - **Scope:** no code change in PR #85.
 - [ ] **Archive** this plan (`git mv` to `docs/archive/plans/`, indexed under Archived Plans in `docs/README.md`); remove its Active/Current Plans rows.
 - [ ] **DONE.md** entry. WEEKLY: G2 stays open (PR 2 follows), so mark PR 1 on the G2 item and the Wednesday row only; the Summary-Table Status flips at PR 2's closeout.
 - [ ] **Spec**: a post-implementation note for anything the code departed from.
