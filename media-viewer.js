@@ -10266,11 +10266,12 @@ class MediaViewer {
     // Resolves true once everything it waits on settled, false when the cap was hit with one still running (PR #85
     // review #2). With includeFileOp it also waits out a file action (_fileOpInFlight), for the AI sort's apply
     // (G2 PR 1, Task 7). Every caller declines on false rather than commit under the render: the similarity apply,
-    // both Restore Order paths, and the AI sort's apply, which fails the sort.
-    async _waitForRenderIdle(maxMs = 2000, includeFileOp = false) {
+    // both Restore Order paths, and the AI sort's apply, which fails the sort. An isLive that turns false ends the
+    // wait at once (the AI sort's Cancel, fix round 1); the caller then classifies the result.
+    async _waitForRenderIdle(maxMs = 2000, includeFileOp = false, isLive = null) {
         const busy = () => this.isLoading || this.mediaNavigationInProgress || (includeFileOp && this._fileOpInFlight);
         const start = Date.now();
-        while (busy() && Date.now() - start < maxMs) {
+        while (busy() && Date.now() - start < maxMs && !(isLive && !isLive())) {
             await new Promise((resolve) => setTimeout(resolve, 25));
         }
         return !busy();
@@ -10466,15 +10467,18 @@ class MediaViewer {
             // Let an in-flight render or file action settle first (G2 final review F4; G2 PR 1, Task 7): an order
             // applied under a loading file leaves the screen on one file while currentIndex names another, and the
             // next rating key moves the unseen one. Never applied past the cap: the sort fails and asks for a
-            // re-run. Then check staleness and apply with no await in between — a cancel or a newer sort during the
-            // wait still wins. No order check is needed: Tournament entry, the similarity sort and Restore Order
-            // all refuse while this sort runs, and a folder load aborts it.
+            // re-run. A cancel, a newer sort or a folder load ends the wait at once (fix round 1) and wins below;
+            // a folder load counts from its start, because _switchToFolderNow empties the list and clears isLoading
+            // before the load's listing await aborts this sort. Then check staleness and apply with no await in
+            // between. No order check is needed: Tournament entry, the similarity sort and Restore Order all refuse
+            // while this sort runs, and a folder load aborts it.
             const AI_APPLY_WAIT_MS = 30_000;
             if (this.isLoading || this.mediaNavigationInProgress || this._fileOpInFlight) {
                 this.updateSortProgress({ phase: 'Waiting for the file to load…' });
             }
-            const settled = await this._waitForRenderIdle(AI_APPLY_WAIT_MS, true);
-            if (signal.aborted || runId !== this.sortRunId) throw new Error('cancelled');
+            const isLive = () => !signal.aborted && runId === this.sortRunId && !this._folderLoadInFlight;
+            const settled = await this._waitForRenderIdle(AI_APPLY_WAIT_MS, true, isLive);
+            if (signal.aborted || runId !== this.sortRunId || this._folderLoadInFlight) throw new Error('cancelled');
             if (!settled) throw new Error('a file is still loading — sort again');
             this.applyPredictionSortResult(result, { resort });
             sortPerf.outcome = 'done';

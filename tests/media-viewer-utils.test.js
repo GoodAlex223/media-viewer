@@ -2207,7 +2207,7 @@ describe('handleSortByPrediction lifecycle', () => {
         it('waits up to 30 s for the render and any file action, and applies once they settle', async () => {
             const ctx = makeCtx({ _waitForRenderIdle: vi.fn(async () => true) });
             await handleSortByPrediction.call(ctx);
-            expect(ctx._waitForRenderIdle.mock.calls).toEqual([[30_000, true]]);
+            expect(ctx._waitForRenderIdle.mock.calls).toEqual([[30_000, true, expect.any(Function)]]);
             expect(ctx.isSortedByPrediction).toBe(true);
             expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('done');
         });
@@ -2220,7 +2220,12 @@ describe('handleSortByPrediction lifecycle', () => {
                 applyPredictionSortResult: apply,
                 _waitForRenderIdle: vi.fn(async () => false),
             });
-            await handleSortByPrediction.call(ctx);
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {}); // the catch logs the failure
+            try {
+                await handleSortByPrediction.call(ctx);
+            } finally {
+                errorSpy.mockRestore();
+            }
             expect(apply).not.toHaveBeenCalled();
             expect(ctx.isSortedByPrediction).toBe(false);
             expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('failed');
@@ -2243,6 +2248,61 @@ describe('handleSortByPrediction lifecycle', () => {
             await handleSortByPrediction.call(ctx);
             expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
             expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+        });
+
+        // Fix round 1: the card's Cancel must end the wait at once, not when the render settles or the cap hits —
+        // isPredictionSorting blocks the similarity sort, Tournament entry, Rebuild model and bulk dislike meanwhile.
+        it('a Cancel during a held render ends the wait at once, as cancelled', async () => {
+            vi.useFakeTimers();
+            try {
+                const showNotification = vi.fn();
+                const apply = vi.fn(() => true);
+                const ctx = makeCtx({ showNotification, applyPredictionSortResult: apply });
+                ctx.runMlSort = function () {
+                    this.isLoading = true; // a render held for good
+                    setTimeout(() => this.sortAbortController.abort(), 100);
+                    return Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} });
+                };
+                let done = false;
+                const run = handleSortByPrediction.call(ctx).then(() => (done = true));
+                await vi.advanceTimersByTimeAsync(200);
+                expect(done).toBe(true);
+                await run;
+                expect(apply).not.toHaveBeenCalled();
+                expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
+                expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        // Fix round 1: _switchToFolderNow empties mediaFiles and clears isLoading before loadFolder's listing await
+        // (where the sort is aborted), so the wait released and the apply ran on an empty list.
+        it('a folder load starting during the wait cancels the sort without applying', async () => {
+            vi.useFakeTimers();
+            try {
+                const showNotification = vi.fn();
+                const apply = vi.fn(() => true);
+                const ctx = makeCtx({ showNotification, applyPredictionSortResult: apply });
+                ctx.runMlSort = function () {
+                    this.isLoading = true;
+                    setTimeout(() => {
+                        // _switchToFolderNow's reset, then loadFolder's flag, before its listing await
+                        this.mediaFiles = [];
+                        this.isLoading = false;
+                        this._folderLoadInFlight = true;
+                    }, 50);
+                    return Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} });
+                };
+                const run = handleSortByPrediction.call(ctx);
+                await vi.advanceTimersByTimeAsync(200);
+                await run;
+                expect(apply).not.toHaveBeenCalled();
+                expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
+                expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+            } finally {
+                vi.useRealTimers();
+            }
         });
 
         it('shows no waiting phase when nothing is in flight', async () => {
@@ -2453,6 +2513,22 @@ describe('_waitForRenderIdle (G2 final review F4)', () => {
         await vi.advanceTimersByTimeAsync(150);
         expect(result).toBeUndefined();
         await vi.advanceTimersByTimeAsync(100);
+        expect(result).toBe(false);
+    });
+
+    // Fix round 1: the caller's liveness check (the AI sort: not cancelled, not superseded, no folder load) ends the
+    // wait early, whatever is still loading; the caller then classifies the result.
+    it('resolves early once isLive turns false, with the render still running', async () => {
+        vi.useFakeTimers();
+        let live = true;
+        let result;
+        waitForRenderIdle
+            .call({ isLoading: true, mediaNavigationInProgress: false }, 30_000, true, () => live)
+            .then((r) => (result = r));
+        await vi.advanceTimersByTimeAsync(100);
+        expect(result).toBeUndefined();
+        live = false;
+        await vi.advanceTimersByTimeAsync(50);
         expect(result).toBe(false);
     });
 
