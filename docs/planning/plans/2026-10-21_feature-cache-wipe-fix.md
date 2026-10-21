@@ -519,12 +519,15 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 
 - **Remove `computeFeatures`' dead `useHostCache: true` branch.** Its only caller passes `false` (spec § 6). → BACKLOG 🟤.
 - **One streaming read/write implementation.** `ml-training.js`'s `_loadVectorCache` / `_saveVectorCache` duplicate the store's chunk loop and batch writer. Both now follow the same main rules, so the store's IO could serve both. → BACKLOG 🟤.
-- **Main installs no `uncaughtException` handler.** Today's unhandled `error` event on the read stream would surface as Electron's error dialog. A process-level handler that logs through `logger.js` would catch the next one. → BACKLOG 🟤.
+- **Main installs no `uncaughtException` handler.** Before this fix, a read-stream or parser error on `feature-cache-open` was an unhandled `error` event: the open never replied (measured in T6 on a truncated file: "reply was never sent"). The ledger's `pipeline` closes that path; a process-level handler that logs through `logger.js` would catch the next one. → BACKLOG 🟤.
+- **`listMediaFiles`' link branch is untested.** The coverage check follows a link to a media file as `load-folder` does, but no test makes a link: on Windows that needs Developer Mode or admin. A test that skips without the privilege would pin it. → BACKLOG 🟤.
 
 ## Residuals for Extract
 
 - **T4a is pinned at the state level only** (spec my call 13). Recorded here; no BACKLOG entry.
 - **No save at app quit** (spec § 10). A visit's last ≤ 30 s of extraction is lost on quit, as today. → BACKLOG 🟤.
+- **The per-result visit checks (T1) and the empty folder's visit (T5) are pinned at the state level.** Both triggers are closed by several layers on disk, so no disk assertion can isolate them (Progress Log, T3). Recorded here; no BACKLOG entry.
+- **A refusal of a flush on leave is logged, never shown.** The visit has ended, and the warning says "this folder", which would name the folder now open (ledger ruling, T2). An unexplained refusal there reaches only the session log. → BACKLOG 🟤 only if the review asks for it.
 
 ## Closeout (after the merge, on `main`)
 
@@ -584,3 +587,9 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
   - Grep of the moved symbols: code hits only in `ml-training.js` (T4) and `CLAUDE.md` (T6). Planning records and frozen specs still name them; four open BACKLOG entries are carried in the Closeout below.
 - **T4, the training path.** The four new tests failed first on their assertions: the header lacked `fileCount`/`clipRequired`; `notify` was never called on a refused close; `_loadVectorCache`'s result had no `unreadable`; the unreadable folder's save had no `fileCount`. After the change: 123/123 in `ml-training.test.js`, full suite 1,971 passed, 1 skipped. One test's Windows paths were mangled by the shell when written (`C:\pics` → `C:pics`) and were fixed; it was re-run red on the old `ml-training.js` and green on the new. The `unreadable` flag's reader is `_collectFolderVectors`, which logs that every file is re-extracted.
 - **T5, main's ledger and handlers.** `tests/feature-cache-ledger.test.js` first failed on the import (`Cannot find module '../feature-cache-ledger'`), then 35/35. Mutation: main's pre-fix `.pipe()` chain inside `parseFeatureCacheStream` fails `settles with an error when the source stream errors (EISDIR)` (`expected 'hung' to be 'EISDIR'`, plus an unhandled error), and also the truncated-file case: the probe's finding, now pinned. `'feature'` left `read-folder-cache`'s `oneOf` (no caller). Full suite: 2,006 passed, 1 skipped. E2E: `ml-retrain-skip` and `security-ipc` 28/28 against the new handlers, and the wipe E2E now passes outright (still `test.fail` until T6).
+- **T6, end to end and docs.**
+  - The browse-after-AI-sort E2E flipped from `test.fail` to `test`: passes.
+  - Main's five E2E tests pass, and all five failed against T4's `main.js` (before the ledger). On that `main.js`, a truncated `.feature_cache.json` made `feature-cache-open` never reply ("reply was never sent", the test hit its 30 s timeout): the planning probe's finding, reproduced in the real app on a corrupt file. The covering-write test failed there only on the new `written` field; it is the allowed-case control.
+  - `CLAUDE.md`: two Architecture lines; the visit model on the feature-cache bullet; the store's lock on the training-cache bullet; the `loadFeatureCache()` gotcha rewritten in place. +489 bytes.
+  - Full verification: `npx vitest run` 2,006 passed, 1 skipped; `npm run lint` 0 errors, the 2 warnings that `main` has too; `npx playwright test` 211 passed, 6 skipped, 0 failed (9.2 min); `ml-retrain-skip` re-run alone, and its 10 session logs hold no refusal, read-failure or failed-save line.
+  - **`wc -l media-viewer.js`: 11,869**, −321 against `main`'s 12,190.

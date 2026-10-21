@@ -10,9 +10,11 @@ import {
     createTempFixtureDir,
 } from './helpers/electron-app.js';
 
-// The everyday version of the feature-cache wipe (spec docs/superpowers/specs/2026-10-21-feature-cache-wipe-design.md
-// § 3, T3): an AI sort starts the feature pool and its autosave for the session; another folder is then opened and
-// browsed, and its cache, which this session never read, is saved over with the few files viewed.
+// The feature-cache wipe (spec docs/superpowers/specs/2026-10-21-feature-cache-wipe-design.md).
+// - The everyday trigger (§ 3, T3): an AI sort starts the feature pool and its autosave for the session; another folder
+//   is then opened and browsed. Before the fix its cache, which the session never read, was saved over with the few
+//   files viewed (5 cached names became 2 on main).
+// - Main's second line of defence (§ 7.2), driven through window.electronAPI the way the renderer drives it.
 
 const CACHE_FILE = '.feature_cache.json';
 const MEDIA = /\.(png|jpe?g|gif|webp|bmp|mp4|webm|jxl)$/i;
@@ -83,7 +85,7 @@ test.describe('Feature cache wipe', () => {
         }
     });
 
-    test.fail("browsing another folder after an AI sort leaves that folder's cache whole", async () => {
+    test("browsing another folder after an AI sort leaves that folder's cache whole", async () => {
         await seedFeatureCache(srcB.dir);
         const bNames = await mediaNames(srcB.dir);
         expect(bNames.length).toBeGreaterThanOrEqual(5);
@@ -109,5 +111,117 @@ test.describe('Feature cache wipe', () => {
         await page.evaluate(() => window.mediaViewer.saveFeatureCache());
 
         expect(await cachedNames(srcB.dir)).toEqual(bNames);
+    });
+});
+
+test.describe("Main's feature-cache rules", () => {
+    let electronApp, page, folder;
+
+    // Each test starts from a granted folder of 5 media files whose cache, written from Node, holds all 5.
+    test.beforeEach(async () => {
+        folder = await createTempFixtureDir();
+        await folder.addFile('d4.png');
+        await folder.addFile('d5.png');
+        await seedFeatureCache(folder.dir);
+        ({ electronApp, page } = await launchApp());
+        await loadFolder(page, folder.dir);
+    });
+
+    test.afterEach(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (folder) {
+            await folder.cleanup().catch(() => {});
+        }
+    });
+
+    const header = (over = {}) => ({
+        version: 4,
+        featureDim: 64,
+        clipDim: 512,
+        fileCount: 5,
+        clipRequired: false,
+        ...over,
+    });
+
+    /** Cache entries for the named files, with their real size and mtime, as the renderer sends them. */
+    async function entriesFor(names) {
+        const out = [];
+        for (const name of names) {
+            const s = await stat(join(folder.dir, name));
+            out.push([name, { vector: Array(64).fill(0.2), clipVector: null, size: s.size, mtime: s.mtimeMs }]);
+        }
+        return out;
+    }
+
+    /** One streamed save through the bridge: write-open, one chunk, write-close. */
+    function writeThroughMain(hdr, entries) {
+        return page.evaluate(
+            async (args) => {
+                const api = window.electronAPI;
+                const opened = await api.featureCacheWriteOpen(args.dir, args.header);
+                if (!opened.success) {
+                    return { opened };
+                }
+                await api.featureCacheWriteChunk(args.entries);
+                return { opened, closed: await api.featureCacheWriteClose() };
+            },
+            { dir: folder.dir, header: hdr, entries }
+        );
+    }
+
+    const tmpLeft = async () => (await readdir(folder.dir)).includes(`${CACHE_FILE}.tmp`);
+
+    test('main refuses a partial write to a cache it never saw', async () => {
+        const before = await readFile(join(folder.dir, CACHE_FILE), 'utf-8');
+        const names = await mediaNames(folder.dir);
+        const { closed } = await writeThroughMain(header(), await entriesFor(names.slice(0, 1)));
+        expect(closed).toEqual({ success: false, refused: 'unseen', seen: null, written: 1 });
+        expect(await readFile(join(folder.dir, CACHE_FILE), 'utf-8')).toBe(before);
+        expect(await tmpLeft()).toBe(false);
+    });
+
+    test('main allows a write that covers every file without a read', async () => {
+        const names = await mediaNames(folder.dir);
+        const { closed } = await writeThroughMain(header(), await entriesFor(names));
+        expect(closed).toEqual({ success: true, written: 5 });
+        expect(await cachedNames(folder.dir)).toEqual(names);
+    });
+
+    test('main refuses a shrink after a read', async () => {
+        const before = await readFile(join(folder.dir, CACHE_FILE), 'utf-8');
+        const opened = await page.evaluate(async (dir) => {
+            const res = await window.electronAPI.featureCacheOpen(dir);
+            await window.electronAPI.featureCacheClose();
+            return res;
+        }, folder.dir);
+        expect(opened).toEqual({ success: true, version: 4, count: 5 });
+        const names = await mediaNames(folder.dir);
+        const { closed } = await writeThroughMain(header(), await entriesFor(names.slice(0, 1)));
+        expect(closed).toEqual({ success: false, refused: 'shrink', seen: 5, written: 1 });
+        expect(await readFile(join(folder.dir, CACHE_FILE), 'utf-8')).toBe(before);
+        expect(await tmpLeft()).toBe(false);
+    });
+
+    test('a corrupt cache file opens as corrupt and may be replaced', async () => {
+        await writeFile(join(folder.dir, CACHE_FILE), '{"version":4,"features":{"red-1x1.png":{"vector":[0.1');
+        const opened = await page.evaluate(async (dir) => {
+            const res = await window.electronAPI.featureCacheOpen(dir);
+            await window.electronAPI.featureCacheClose();
+            return res;
+        }, folder.dir);
+        expect(opened).toMatchObject({ success: false, corrupt: true });
+        const names = await mediaNames(folder.dir);
+        const { closed } = await writeThroughMain(header(), await entriesFor(names.slice(0, 1)));
+        expect(closed).toEqual({ success: true, written: 1 });
+        expect(await cachedNames(folder.dir)).toEqual(names.slice(0, 1));
+    });
+
+    test('a write-open without fileCount is refused', async () => {
+        const { opened } = await writeThroughMain(header({ fileCount: undefined }), []);
+        expect(opened.success).toBe(false);
+        expect(opened.error).toContain('fileCount');
+        expect(await tmpLeft()).toBe(false);
     });
 });
