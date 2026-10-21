@@ -505,8 +505,8 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
   - Set-up: copy a real folder and its `.feature_cache.json` to a scratch location, twice (A' and B'). Copy the profile, and run with `MV_USER_DATA_DIR` pointing at the profile copy.
   - Steps: an AI sort in A'; open B'; browse for more than 30 s; check that B's entry count is unchanged; switch back to A' and check its count is unchanged or larger; quit; check the session log for any `refused by main` line.
   - Log the counts.
-- [ ] **Final review.** Ask the user before running `/code-review` in this chat. The default is a separate chat at `max` (memory `feedback_ask_before_in_chat_code_review`).
-- [ ] **PR.** Link the spec and the plan. Cover:
+- [x] **Final review.** Ask the user before running `/code-review` in this chat. The default is a separate chat at `max` (memory `feedback_ask_before_in_chat_code_review`). Done in a separate chat, 2026-10-21: 15 findings on PR #86, all fixed (Progress Log, Review fix pass).
+- [x] **PR.** Link the spec and the plan. Cover:
   - the six triggers and their red→green runs;
   - the mutation runs;
   - the line count;
@@ -523,12 +523,17 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - **A disk entry that wins the merge still leaves the visit dirty.** A priority extraction that lands during the read bumps the change counter, the read then puts the disk entry over it, and the visit saves an unchanged copy once (seen in the manual check; the cause is likely, not confirmed). Counting only entries that survive the merge would skip that save. → BACKLOG 🟤.
 - **An abandoned read still waits for main's whole parse, and the sort's perf line counts the wrong folder.** After a switch mid-read, the store abandons the read only when main's open replies (~25 s for a 71 MB cache, measured in the full-size check); the IO lock is held that long. A cancel message to main, or a smaller first reply, would free it sooner. Separately, a sort cancelled by a folder switch logs `files=N` for the new folder. → BACKLOG 🟤 (two entries).
 - **`listMediaFiles`' link branch is untested.** The coverage check follows a link to a media file as `load-folder` does, but no test makes a link: on Windows that needs Developer Mode or admin. A test that skips without the privilege would pin it. → BACKLOG 🟤.
+- **A shrink-guarded dirty visit retries every autosave tick, with no backoff** (PR #86 review chat, a cut finding). The visit stays dirty, so each 30 s tick re-freezes the whole copy and logs a new `Feature-cache save SKIPPED (shrink guard)` line. Retrying only after new changes, and logging once per visit, would stop it. Pre-existing. → BACKLOG 🟤.
+- **`preload.js:17-18` still lists `'feature'` as a `read-folder-cache` name** (PR #86 review chat). T5 removed it from main. A comment-only fix, left out of this PR so that `preload.js` stays unchanged and needs no security review. → BACKLOG 🟤.
+- **`ml-training.js`'s `_loadVectorCache` still reads a chunk without the binary buffers as "no entries".** The store now fails such a read (review #12); the training path keeps its legacy branch, which its own test pins. A zero-entry training read leads to a full re-extraction and a covering save, so nothing is lost by name. → BACKLOG 🟤.
 
 ## Residuals for Extract
 
 - **T4a is pinned at the state level only** (spec my call 13). Recorded here; no BACKLOG entry.
 - **No save at app quit** (spec § 10). A visit's last ≤ 30 s of extraction is lost on quit, as today. → BACKLOG 🟤.
 - **The per-result visit checks (T1) and the empty folder's visit (T5) are pinned at the state level.** Both triggers are closed by several layers on disk, so no disk assertion can isolate them (Progress Log, T3). Recorded here; no BACKLOG entry.
+- **A `stale` refusal of a flush on leave is logged only** (review fix pass). The visit has ended and its maps are gone, so it cannot re-read. When the training step wrote the file, its write covers the like folder's files by name; what is lost is the visit's vectors for files training failed or missed. → BACKLOG 🟤.
+- **An explained refusal right before a folder switch drops the visit's work** (review fix pass). The re-read it queues finds the visit ended. Same loss as the line above, in a narrower window. Recorded here; no BACKLOG entry.
 
 ## Closeout (after the merge, on `main`)
 
@@ -537,6 +542,7 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - [ ] TODO 🔴 "Stop the feature cache being wiped" → DONE.md. Update WEEKLY.md's order note: G2 PR 2 is next.
 - [ ] Archive this plan to `docs/archive/plans/` (`git rm` the original), and link it from `docs/README.md`.
 - [ ] Propagation check: re-read `CLAUDE.md:138/140/193` and the spec against what shipped.
+- [ ] Close or re-point the two open BACKLOG entries the T3 grep missed (PR #86 review chat): BACKLOG.md:1585 "Guard `loadFeatureCache()` against clearing in-memory Maps mid-extraction" (the read now merges in place: close as obsolete, pointing here) and :1594 "Add unit tests for loadFeatureCache/saveFeatureCache validation logic" (the store's suite now covers the version check, staleness, pruning and the round trip: close as delivered).
 - [ ] Re-point the open BACKLOG entries that name the moved symbols (found by T3's grep): BACKLOG.md:807 (`_acquireCacheIoLock`), :841 (`round6` duplicated from `_saveFeatureCacheLocked`, now from `feature-cache-store.js`), :1049 (the `ingest` dimension check, now in the store's read), :1395 (`_featureCacheLoadPromise` + `_acquireCacheIoLock`, now the store's per-visit single-flight and lock). Line numbers at `482ca5f`.
 
 ## Model and Effort
@@ -612,3 +618,16 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
   - **S2, an autosave while the big cache loads.** Back in A-full, with an AI sort. Mid-read, a view and a tick: the tick was `skipped`, `unread`, and A-full's file was untouched. The read took 32 s and ended `read`, baseline 13,207. After quitting, A-full still has 13,207 entries; the file has the same size and mtime, and no name is gone.
   - The session log has no refusal, read-failure or skipped-save line. The four live caches have the same size and mtime as before the first check. The copies (23 GB) are left in the scratchpad for the user to decide on.
   - Observed: the sort cancelled by S1's switch logged `sourceCacheLoad=25646ms … files=300`. The read could not stop main's 71 MB parse, so the abandoned read waited ~25 s for main's reply before the sort ended. The perf line also counts the folder on screen when it was written, not the one sorted. Neither is from this change; both are carried to Improvements.
+
+### 2026-10-22 — PHASE: Review fix pass (PR #86)
+- The separate-chat review posted 15 findings at `1cde460` ([comment](https://github.com/GoodAlex223/media-viewer/pull/86#issuecomment-6327668026)); the chat also named cut findings (an autosave retry with no backoff, stale docs). All 15 were verified against the code; none pushed back. Each fix is test-first; the ledger has every red run and ruling.
+- **A, main fails closed** (`253c830`; #1, #3, #7 main side, #8, #9, #13). The open, stream and key steps moved into `feature-cache-ledger.js` so Vitest drives them.
+  - #1: red on `expected null to be 4`: the head read resolved null on a lock the parse's open no longer met. It now rejects, so the retry sees it; a head with no version opens as unreadable.
+  - #3: three tests red (`resolved` / `hung` / `hung`); the E2E with a directory at the temp path hung on `1cde460`'s main and passes now.
+  - #7: `load-folder` and the coverage check share `listMediaEntries` (a media file whose stat fails is in neither). #8: an unreadable open keeps a read record. #9: the key is path-grants' canonical path. #13: only ENOENT means "no file" at write-close.
+- **B, a write behind the visit** (`15656d7`; #4, #5, #14). main counts its writes per file and refuses a write whose `basisGen` is older (`stale`). An explained refusal re-reads and merges, then saves; a copy frozen before that read is skipped as superseded; three re-reads in a row with no write between and the next refusal is unexplained.
+  - FakeMain gained a rules mode (main's real ledger and checks) and a `trainingWrite` helper. Four store tests failed first on the reported numbers (16 ≠ 20; the false warning; 12 ≠ 20; `a4` lost). The mutation "no stale rule" fails five tests. The E2E stale test failed on `253c830`'s main.
+- **C, the store** (`914b478`; #2, #7 renderer side, #12, #15). An unread visit saves only after a failed read, and coverage needs a CLIP vector per file whatever the setting (store and main); `clipRequired` left the header. An `unseen` refusal of an unread copy is logged only and not retried until the next read. A chunk without the binary buffers fails the read; FakeMain answers with the real `packFeatureChunk`. The dropped-work warning names the folder when its visit ended during the save.
+- **D, the renderer** (`b6ecb9e`; #6, #10, #11). Every history entry records `fileMtimeMs`, every undo restores it (six list restores in `handleCancel`, one tournament), and so does `restoreFeatureCachesFromHistory`. The AI sort's `isLive` (cancel, newer sort, folder load) is checked after every phase. The load-phase cancel test now reaches `loadFeatureCache`; it fails when the post-load check is deleted, where the old one passed.
+- Suite after D: 2,057 passed, 1 skipped. E2E `feature-cache-wipe` 8/8, with `ml-retrain-skip` and `security-ipc` 36/36. `wc -l media-viewer.js`: **11,884** (11,869 at `1cde460`, 12,190 on `main`).
+- Rulings made in the pass (ledger): the D4 amendment's "adopts main's count" became a re-read; the D2 amendment's CLIP clause became "whatever the setting"; a stale flush on leave is logged only; `MAX_AUTO_REREADS = 3`; `clipRequired` removed; the training path keeps its legacy chunk branch. The spec carries the first three as § 2.1 and inline "review #N" notes.

@@ -1,6 +1,6 @@
 # Stop the feature cache being wiped on a folder switch
 
-**Status**: Approved by the user, 2026-10-21 ("document looks right"). Agreed in chat section by section, then amended after the builder check (D2 and D4 amendments, my calls 11–14).
+**Status**: Approved by the user, 2026-10-21 ("document looks right"). Agreed in chat section by section, then amended after the builder check (D2 and D4 amendments, my calls 11–14), and again after the [PR #86 review](https://github.com/GoodAlex223/media-viewer/pull/86#issuecomment-6327668026) (§ 2.1, 2026-10-22; marked "review #N" where they change the text).
 **Branch**: `fix-feature-cache-wipe`, cut from `main` at `5cb1cfb`.
 **Scheduled**: next PR, ahead of G2 PR 2 (the user's ruling at the PR #85 review). Not in [WEEKLY.md](../../planning/WEEKLY.md); see § 12 for what slips.
 **Origin**: [TODO.md](../../planning/TODO.md) 🔴 "Stop the feature cache being wiped on a folder switch (data loss)", from the PR #85 review: [#1](https://github.com/GoodAlex223/media-viewer/pull/85#issuecomment-6275478348), [#16](https://github.com/GoodAlex223/media-viewer/pull/85#issuecomment-6275671877) and the [close-out's second trigger](https://github.com/GoodAlex223/media-viewer/pull/85#issuecomment-6289951316). Also the [archived G2 PR 1 plan](../../archive/plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md) § Residuals, and BACKLOG 🟤 [2026-07-20] "Attribute feature metadata at extraction time…", whose "No longer destructive" claim this work disproves.
@@ -17,7 +17,7 @@ Today six code paths can replace that file with a smaller one, or with another f
 
 **Success** is all of:
 - each of the six triggers has a test that fails on `main` and passes on the branch (§ 9; T4's first part is tested at the state level, § 9.1);
-- no save writes a folder's cache unless that visit read the file, or found it missing or corrupt, or its copy covers every media file now in the folder (D2 amendment);
+- no save writes a folder's cache unless that visit read the file, or found it missing or corrupt, or, after its read failed, its copy covers every media file now in the folder with a CLIP vector each (D2 amendment; review #2);
 - no save writes the live map: it writes a copy frozen when the save was requested;
 - main refuses a write that would shrink a file it never saw, or shrink one it saw by more than the renderer's own rule allows (§ 7);
 - `media-viewer.js` ends shorter than its 12,190 lines on `main` (§ 8);
@@ -32,9 +32,9 @@ Rulings by the user (chat, 2026-10-21):
 | D1 | Recovery of caches already damaged | **Out of scope.** The user has not used the app recently, so no recent session can have damaged a cache. |
 | D2 | Features extracted while browsing a folder whose cache this visit has not read | **Keep them in memory, and save only after the cache has been read.** A later read in the same visit merges them in. If the user leaves first, they are dropped and get re-extracted later. Rejected: reading every folder's cache on open whenever the AI features have been used this session (a ~40 s background read per switch on a 24k folder). |
 | D3 | A save already streaming when the folder changes | **It finishes,** writing the old folder's frozen copy into the old folder. This is how the requirement "every save re-checks its folder after each await" is met: after each await the save checks that it is still writing its own copy to its own folder, and it never touches the new visit's state. Rejected: aborting it, which would throw away up to 30 s of the old folder's extraction. |
-| D2 amendment | A cache file that exists but cannot be read (side-agent note and builder check, 2026-10-21) | **Retry, then allow a full-coverage save, and say so when work is dropped.** Main's read retries brief lock errors. A visit that still could not read the file may save only a copy that covers every media file now in the folder, with a CLIP vector for each when CLIP is on; main verifies the coverage itself (§ 7.2). If an extraction ends and its work still cannot be saved, one warning per visit says so (§ 7.3). Browsing never covers a folder, so D2's effect is unchanged. Without this, an unreadable file made every AI sort re-extract the whole folder and save nothing, silently. The training folders get the same read-failure handling (§ 6). |
+| D2 amendment | A cache file that exists but cannot be read (side-agent note and builder check, 2026-10-21) | **Retry, then allow a full-coverage save, and say so when work is dropped.** Main's read retries brief lock errors. A visit that still could not read the file may save only a copy that covers every media file now in the folder, with a CLIP vector for each, whatever the CLIP setting (review #2: the file was never read, so it may hold CLIP vectors a 64-dim copy would erase); main verifies the coverage itself (§ 7.2). If an extraction ends and its work still cannot be saved, one warning per visit says so (§ 7.3). Browsing never covers a folder, so D2's effect is unchanged. Without this, an unreadable file made every AI sort re-extract the whole folder and save nothing, silently. The training folders get the same read-failure handling (§ 6). |
 | D4 | When main refuses a save | **A warning on screen, once per folder visit** (an ordinary warning that fades, not a sticky one), **plus a session-log line.** The user asked for my recommendation and took it. A refusal means a renderer bug got past the renderer's own guard; the July loss surfaced only because a smoke failed. |
-| D4 amendment | A refusal with an innocent explanation (builder check, 2026-10-21) | **Logged, not shown, when the renderer can explain it.** If main refuses a save from a visit that found no file or a corrupt one, the file changed after the visit looked. One way: the source folder is also a like/dislike folder, and the AI sort's training step wrote its cache. The visit adopts main's count as its baseline and stays able to save (§ 7.3). The warning and the stop on autosave stay for a refusal the renderer cannot explain: it believed it had read the file. |
+| D4 amendment | A refusal with an innocent explanation (builder check, 2026-10-21) | **Logged, not shown, when the renderer can explain it.** If main refuses a save from a visit that found no file or a corrupt one, the file changed after the visit looked. One way: the source folder is also a like/dislike folder, and the AI sort's training step wrote its cache. The visit reads the file again, merging it in, and then saves (§ 7.3; review #4 replaced "adopts main's count as its baseline", which let a later save shrink the file). The warning and the stop on autosave stay for a refusal the renderer cannot explain: it believed it had read the file. |
 
 My calls, presented in chat and not objected to (each is open to correction on review):
 
@@ -55,6 +55,14 @@ Added after the builder check (2026-10-21), shown to the user with the two amend
 12. **Main's read tells its failures apart and catches every stream error.** Today `feature-cache-open` reports any `fs.access` failure as `notFound`, and it builds its parse chain with `.pipe()`, listening for errors only on the last stage, so a read-stream error is probably never seen (read, not run; the plan checks it first and treats a hang as a finding). It must report ENOENT as "no file", a parse failure as corrupt, and anything else as unreadable, and it must use `stream.pipeline` (or listen on every stage).
 13. **T4's first part is tested at the state level.** The baseline that T4a inherits matters only while the new visit is unread, and the design blocks saving in that state. So no disk-level test can fail on it alone. It gets a state-level test (a read that ended stale changes no baseline), while T4b and T4c keep their disk-level tests.
 14. **A blocked visit counts as unread for reading,** so the next AI sort reads the file again. This settles the overlap between my calls 4 and 8.
+
+### 2.1 After the PR #86 review (2026-10-22)
+
+The review found that two paths could still replace a cache, plus the paths below. The fixes keep D1–D4 as the user ruled them; three change how a ruling is carried out, and are marked where the text above changed:
+
+- **The D4 amendment's mechanism** (review #4): an explained refusal re-reads the file and saves what it read with the visit's own work, instead of adopting main's count. What the user sees is unchanged: logged, not shown, and the visit can still save.
+- **The D2 amendment's CLIP clause** (review #2): a full-coverage copy needs a CLIP vector for every file whatever the CLIP setting, and the unread path opens only after a read actually failed. With CLIP on nothing changes; with CLIP off, an unreadable folder's work is dropped with the warning instead of saved without CLIP vectors.
+- **A write behind the visit** (review #5, #14): main counts its writes per file, and refuses a write based on an older count as `stale` (§ 7.2). This replaces the D4 amendment's coverage of a training write, which held only for an `absent` or `discard` visit.
 
 ## 3. The six triggers
 
@@ -89,7 +97,7 @@ Each visit has one cache state:
 
 | State | Meaning | Save allowed? | Shrink guard |
 |---|---|---|---|
-| `unread` | The visit has not read the file, or its read failed or was cancelled | **Only a full-coverage copy** (D2 and its amendment): every media file now in the folder has an entry, with a CLIP vector when CLIP is on | n/a; main checks the coverage (§ 7.2) |
+| `unread` | The visit has not read the file, or its read failed or was cancelled | **Only after a failed read, and only a full-coverage copy** (D2 and its amendment): every media file now in the folder has an entry with a CLIP vector, whatever the CLIP setting (review #2). Not again once main has refused one as not covering the folder, until the visit reads again (review #7) | n/a; main checks the coverage (§ 7.2) |
 | `read` (N) | The read committed; N entries were on disk | Yes | Yes, against N (today's three conjuncts) |
 | `absent` | Main reported no file | Yes | No |
 | `discard` | The file was corrupt, or had another cache version, and is being replaced on purpose | Yes | No |
@@ -147,17 +155,18 @@ What reads or writes the two fields named in the brief, and each feature-map wri
 - `_saveVectorCache` must send the folder's file count (`scanCount`) in its header, and must report a refusal through the same path as the source folder (§ 7.3).
 - `_loadVectorCache` (`ml-training.js:231`) treats every failed open as "no file" today. It takes the same three-way split as the source read (D2 amendment): no file, corrupt, or unreadable. On unreadable it still extracts, because training needs the vectors. Its save is then a full-coverage save, which main verifies; if a file failed extraction, main refuses it and the training folder's warning fires once per session.
 - The injected `cacheIo.acquireLock` points at the store's lock.
-- A training folder that is also the source folder shares one file with the source visit. The D4 amendment covers the save that follows a training write (§ 7.3).
+- A training folder that is also the source folder shares one file with the source visit. A training write moves the file's generation, so the visit's next save is refused as `stale` and the visit re-reads before it saves (§ 7.2, § 7.3; review #5).
 
 ## 7. Main's second line of defence
 
 ### 7.1 What main remembers
 
-For the rest of the session, main records what it last saw of each cache file, keyed by the file path it computes (`path.join(folderPath, '.feature_cache.json')`):
-- `feature-cache-open`: `{ seen: 'read', count, version }`, `{ seen: 'absent' }` (ENOENT only), `{ seen: 'corrupt' }` (the parse failed), or `{ seen: 'unreadable' }` (any other I/O error, or a refused path). Before settling on `unreadable`, the open retries brief lock errors (EBUSY, EPERM, EACCES) a few times, as the rename does (D2 amendment). The parse chain uses `stream.pipeline` or listens on every stage (my call 12). The open's reply to the renderer gains matching `corrupt: true` and `unreadable: true` flags, so the renderer can tell `discard` from `unread`.
+For the rest of the session, main records what it last saw of each cache file, keyed by the file path it computes (the folder's canonical path joined with `.feature_cache.json`):
+- `feature-cache-open`: `{ seen: 'read', count, version }`, `{ seen: 'absent' }` (ENOENT only), `{ seen: 'corrupt' }` (the parse failed), or `{ seen: 'unreadable' }` (any other I/O error, a refused path, or a file whose head names no version; review #1). An `unreadable` open does not replace a `read` record for the same file (review #8). The head's version read fails like the parse does, so the retry sees it (review #1). Before settling on `unreadable`, the open retries brief lock errors (EBUSY, EPERM, EACCES) a few times, as the rename does (D2 amendment). The parse chain uses `stream.pipeline` or listens on every stage (my call 12). The open's reply to the renderer gains matching `corrupt: true` and `unreadable: true` flags, so the renderer can tell `discard` from `unread`.
 - `feature-cache-write-close`, on a successful rename: `{ seen: 'read', count: written, version }`.
 - `feature-cache-write-chunk` counts the entries it writes, and keeps the set of names written and the names whose entry has a CLIP vector (needed only for the coverage check below; 24k names is small).
-- `feature-cache-write-open` takes a `clipRequired` boolean in its header, beside `fileCount`: true when CLIP is on.
+- A **generation** per file: the number of writes main made to it this session (review #5). Every open answers it as `gen`, and a successful write-close answers the new one. The renderer's visit sends the generation of its last read or write as the header's `basisGen`; the training path sends none.
+- The record's key is the folder's canonical path from path-grants (review #9), so every spelling of one folder shares one record. (The builder-check text had a `clipRequired` header field; review #2 made the CLIP rule unconditional, and the field went.)
 
 This covers the source folder and the like/dislike training folders, since both use these channels.
 
@@ -165,22 +174,24 @@ This covers the source folder and the like/dislike training folders, since both 
 
 `feature-cache-write-open` requires a valid non-negative integer `fileCount` in its header. Without one it refuses the open, so a future caller cannot skip the third conjunct.
 
-At `feature-cache-write-close`, before the rename, if a file already exists at the destination, main refuses when any of these holds:
-- **`unseen`**: main has no record for the file, or the record says `unreadable`, *and* the write does not cover the folder. "Covers" means main lists the folder's media files (`media-formats.js`'s `isMediaFile`) at close, and every one of them is among the names written, with a CLIP vector when `clipRequired` is set. Main lists the folder only in this case, which should be rare. This is T3 at main's level: a visit that read the file always leaves a record first, and a browsing visit never covers the folder.
+At `feature-cache-write-close`, before the rename, if a file already exists at the destination (any error but ENOENT counts as one: review #13), main refuses when any of these holds:
+- **`stale`** (review #5, checked first): the header carries a `basisGen`, and main has written the file since. The copy lacks that write's entries, whatever its count.
+- **`unseen`**: main has no record for the file, or the record says `unreadable`, *and* the write does not cover the folder. "Covers" means main lists the folder's media files at close, with the listing `load-folder` uses (review #7), and every one of them is among the names written, with a CLIP vector. Main lists the folder only in this case, which should be rare. This is T3 at main's level: a visit that read the file always leaves a record first, and a browsing visit never covers the folder.
 - **`shrink`**: the record is `read` with count N > 0 and the same version as the header, the written count is under N × 0.5, *and* `fileCount` is over the written count × 2. This is the renderer's own rule, so a real shrink still saves (most files moved out). A version change skips this check, because the old version is being thrown away on purpose.
 
 A `corrupt` or `absent` record allows the write. If `absent` was recorded but a file has since appeared, that counts as no record (the `unseen` rule).
 
-On a refusal main deletes the `.tmp`, leaves the cache file untouched, and returns `{ success: false, refused: 'unseen' | 'shrink', seen, written }`. `seen` is N or null.
+On a refusal main deletes the `.tmp`, leaves the cache file untouched, and returns `{ success: false, refused: 'stale' | 'unseen' | 'shrink', seen, written }`. `seen` is N or null. A temp file main cannot create, or a write that fails, answers `{ success: false }` at the step that failed (review #3).
 
 ### 7.3 How the renderer reports it
 
 Every refusal writes a session-log line through `logError`: the folder, the rule, `seen` and `written`. What else happens depends on whether the renderer can explain it (D4 amendment):
 
-- **Explained:** the visit's frozen state was `absent` or `discard`, so the file changed after the visit looked. For example, the source folder is also a like/dislike folder, and the AI sort's training step wrote its cache. The visit adopts main's `seen` as its baseline (`read` with that count), or goes back to `unread` when `seen` is null (a file appeared that main never saw). Nothing is shown, and the visit can still save; its next save is guarded against the new baseline.
-- **Unexplained:** the visit's frozen state was `read` or `unread`, and main still refused. A warning shows on screen, once per visit (D4). Something like "Feature cache not saved: it would have replaced 2,000 cached entries with 3. The cache on disk is unchanged." For `unseen`: "…: this folder's cache was never read in this session. The cache on disk is unchanged." For a training folder, once per folder per session. The source visit moves to `blocked` (my call 8).
+- **Explained:** the refusal is `stale`, or the visit's frozen state was `absent` or `discard`, so the file changed after the visit looked. For example, the source folder is also a like/dislike folder, and the AI sort's training step wrote its cache. The visit reads the file again, merging it in, and then saves; a copy frozen before that read is skipped (review #4). Nothing is shown. After three such re-reads in a row with no successful write between, the next refusal counts as unexplained, so a main that keeps refusing cannot loop the visit.
+- **Not covering:** an `unseen` refusal of an `unread` copy (main lists a file the renderer's list lacks: a download after the listing, a file taken off the list). Logged only; the visit stays `unread` and does not try the copy again until it reads again (review #7).
+- **Unexplained:** any other refusal: the visit believed it had read the file, and main still refused. A warning shows on screen, once per visit (D4). Something like "Feature cache not saved: it would have replaced 2,000 cached entries with 3. The cache on disk is unchanged." For `unseen`: "…: this folder's cache was never read in this session. The cache on disk is unchanged." For a training folder, once per folder per session. The source visit moves to `blocked` (my call 8).
 
-**Dropped work** (D2 amendment, § 5.4) gets its own warning, once per visit, when an extraction run ends unable to save. Something like "Couldn't read this folder's feature cache, so the new features weren't saved." This is not a refusal by main: the renderer did not attempt the save.
+**Dropped work** (D2 amendment, § 5.4) gets its own warning, once per visit, when an extraction run ends unable to save. Something like "Couldn't read this folder's feature cache, so the new features weren't saved." If the visit ended while the run's save waited, the warning names the folder (review #15). This is not a refusal by main: the renderer did not attempt the save.
 
 The renderer's own guard runs first, so in a correct build main should never refuse without an explanation. An unexplained refusal is a bug report.
 
@@ -212,10 +223,10 @@ The existing `loadFeatureCache incremental + signal` and `saveFeatureCache data-
 
 ### 9.3 Main and the training path
 
-- `feature-cache-ledger.js` gets unit tests for every rule of § 7.2: refuse `unseen`; allow `unseen` with full coverage; refuse it when one media file is missing, or one CLIP vector is missing with `clipRequired`; refuse `shrink`; allow a real shrink; allow a version change; allow `corrupt` / `absent`; treat a file that appeared after `absent` as no record; and refuse an open with no `fileCount`.
+- `feature-cache-ledger.js` gets unit tests for every rule of § 7.2: refuse `unseen`; allow `unseen` with full coverage; refuse it when one media file is missing, or one CLIP vector is missing; refuse `shrink`; allow a real shrink; allow a version change; allow `corrupt` / `absent`; treat a file that appeared after `absent` as no record; and refuse an open with no `fileCount`.
 - Main's open classification (my call 12) gets a test that a read-stream error settles the open as `unreadable` instead of hanging. If `main.js` cannot be driven in-process, the classification moves into the ledger module or the E2E covers it; the plan decides.
-- `ml-training.test.js` asserts that `_saveVectorCache` sends `fileCount` and `clipRequired`, that a refused close is reported and returns `false`, and that `_loadVectorCache` tells no file, corrupt and unreadable apart.
-- The renderer's handling of a refusal (§ 7.3) is tested both ways: an explained refusal adopts the baseline and shows nothing; an unexplained one warns once and blocks the visit.
+- `ml-training.test.js` asserts that `_saveVectorCache` sends `fileCount`, that a refused close is reported and returns `false`, and that `_loadVectorCache` tells no file, corrupt and unreadable apart.
+- The renderer's handling of a refusal (§ 7.3) is tested every way: an explained refusal re-reads, saves and shows nothing (against main's real rules, in FakeMain's rules mode); a not-covering one is logged only; an unexplained one warns once and blocks the visit.
 
 ### 9.4 End to end, and the manual check
 

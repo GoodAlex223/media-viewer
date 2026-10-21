@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_     | —                                      |
+| [Feature Cache Wipe Fix Plan](planning/plans/2026-10-21_feature-cache-wipe-fix.md) | Stop a folder's `.feature_cache.json` being replaced by a smaller copy or another folder's entries: one folder visit owns the cache, and main refuses a write it cannot account for. Six tasks, then the PR #86 review fix pass (TODO 🔴, before G2 PR 2) |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
