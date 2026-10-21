@@ -293,7 +293,8 @@ function cacheFileExists(filePath, access) {
  *   cannot know what the file holds, and a copy without them would erase them (review #2). Only this case lists the
  *   folder.
  * - `shrink`: main read N entries with the header's version, and the write is under N × 0.5 while the folder holds
- *   over twice what is written: the renderer's own rule, so a real shrink still saves. A version change skips it.
+ *   over twice what is written: the renderer's own rule, so a real shrink still saves. A known version change skips
+ *   it; an unknown version on either side does not.
  * A `corrupt` record allows the write: the file is being replaced on purpose.
  */
 async function checkClose({
@@ -317,9 +318,12 @@ async function checkClose({
         const covered = media.length > 0 && media.every((name) => writtenNames.has(name) && clipNames.has(name));
         return covered ? { ok: true } : { ok: false, refused: 'unseen', seen: null, written };
     }
+    // Only a known version change skips the rule (review #1): an unknown version on either side keeps it.
+    const versionChanged =
+        Number.isInteger(record?.version) && Number.isInteger(header.version) && record.version !== header.version;
     if (
         record.seen === 'read' &&
-        record.version === header.version &&
+        !versionChanged &&
         record.count > 0 &&
         written < record.count * 0.5 &&
         header.fileCount > written * 2

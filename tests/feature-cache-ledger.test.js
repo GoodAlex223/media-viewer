@@ -459,6 +459,23 @@ describe('checkClose', () => {
         ).toEqual({ ok: true });
     });
 
+    it('keeps the shrink rule when either version is unknown (review #1)', async () => {
+        // Only a known version change skips it. The open no longer records a null version, and this holds if
+        // anything ever does.
+        const shrink = { header: header({ fileCount: 24000 }), written: 50 };
+        expect(await run({ ...shrink, record: { seen: 'read', count: 24000, version: null } })).toMatchObject({
+            ok: false,
+            refused: 'shrink',
+        });
+        expect(
+            await run({
+                ...shrink,
+                header: header({ fileCount: 24000, version: null }),
+                record: { seen: 'read', count: 24000, version: 4 },
+            })
+        ).toMatchObject({ ok: false, refused: 'shrink' });
+    });
+
     it('allows corrupt, and absent when no file has appeared', async () => {
         expect(await run({ record: { seen: 'corrupt' } })).toEqual({ ok: true });
         expect(await run({ record: { seen: 'absent' }, destinationExists: false })).toEqual({ ok: true });
