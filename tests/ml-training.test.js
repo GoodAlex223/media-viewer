@@ -540,16 +540,15 @@ describe("training-vector cache and main's rules (feature-cache wipe fix)", () =
         { feature: new Float32Array(64).fill(0.5), clip: new Float32Array(512).fill(0.25), size, mtimeMs },
     ];
 
-    it('_saveVectorCache sends fileCount and clipRequired in the header', async () => {
+    it('_saveVectorCache sends fileCount in the header, and no basis (it reads and writes in one call)', async () => {
         const io = makeCacheIo();
         const m = managerWith({ cacheIo: io });
-        await m._saveVectorCache('/likes', new Map([built('a.jpg')]), 0, 7, { clipRequired: true });
+        await m._saveVectorCache('/likes', new Map([built('a.jpg')]), 0, 7);
         expect(io.writeOpen).toHaveBeenCalledWith('/likes', {
             version: 4,
             featureDim: 64,
             clipDim: 512,
             fileCount: 7,
-            clipRequired: true,
         });
     });
 
@@ -610,7 +609,7 @@ describe("training-vector cache and main's rules (feature-cache wipe fix)", () =
         const result = await m._collectFolderVectors('/l', files, 'Processing likes', null, true, undefined);
         expect(result.rows).toHaveLength(2);
         expect(m.computeFeatures).toHaveBeenCalledTimes(2);
-        expect(io.writeOpen).toHaveBeenCalledWith('/l', expect.objectContaining({ fileCount: 2, clipRequired: true }));
+        expect(io.writeOpen).toHaveBeenCalledWith('/l', expect.objectContaining({ fileCount: 2 }));
         expect(io.written.map(([name]) => name)).toEqual(['a.png', 'b.png']);
     });
 });

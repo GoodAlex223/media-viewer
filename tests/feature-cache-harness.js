@@ -1,8 +1,9 @@
 // Shared harness for the feature-cache wipe tests (plan docs/planning/plans/2026-10-21_feature-cache-wipe-fix.md,
 // Task 1). Not a test file. It runs the real MediaViewer methods (extracted from media-viewer.js), with a real
-// FeatureCacheStore, against FakeMain: an in-memory disk that answers the six featureCache* calls the way main.js did
-// before this fix, with no count checks and a close that replaces the folder's cache with exactly what was written.
-// So the trigger tests, which assert on that disk, measure the renderer's own guards, not main's.
+// FeatureCacheStore, against FakeMain: an in-memory disk that answers the six featureCache* calls in main's own shapes
+// (chunks from the real packFeatureChunk), but by default with none of main's checks and a close that replaces the
+// folder's cache with exactly what was written: what main.js allowed before this fix. So the trigger tests, which
+// assert on that disk, measure the renderer's own guards, not main's.
 //
 // The harness wiring may change as the fix lands; the tests' assertions may not (plan § Global Constraints).
 import fs from 'node:fs';
@@ -14,6 +15,8 @@ import { FeatureCacheStore } from '../feature-cache-store.js';
 
 const require = createRequire(import.meta.url);
 const { createFeatureCacheLedger, validateWriteHeader, checkClose } = require('../feature-cache-ledger.js');
+// main's chunk shape, the real packer (review #12: chunks in the old JSON shape left the binary path untested).
+export const { packFeatureChunk } = require('../feature-cache-transport.js');
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(here, '..', 'media-viewer.js'), 'utf-8');
@@ -63,8 +66,9 @@ export function makeFiles(folder, prefix, n) {
 const HOLDABLE = ['featureCacheOpen', 'featureCacheChunk', 'featureCacheWriteChunk', 'featureCacheWriteClose'];
 
 /**
- * Today's main, in memory: one read session and one writer at a time, both global, as in main.js. A cache file is
- * a Map of name → { vector, clipVector, size, mtime }. Chunks use the legacy JSON shape `{ entries: [[name, entry]] }`.
+ * main, in memory: one read session and one writer at a time, both global, as in main.js. A cache file is a Map of
+ * name → { vector, clipVector, size, mtime }. Chunks are packFeatureChunk's binary shape, as main's; with no session
+ * the chunk is `{ entries: [] }`, as main's.
  *
  * With `{ rules: true }` it also keeps main's ledger and applies main's checks (feature-cache-ledger.js, the real
  * module): the open records what it saw and answers the file's generation, write-open validates the header, and
@@ -122,7 +126,6 @@ export class FakeMain {
                 featureDim: 64,
                 clipDim: 512,
                 fileCount: files.length,
-                clipRequired: false,
             });
             if (!opened.success) {
                 return opened;
@@ -200,7 +203,7 @@ export class FakeMain {
                 if (!main.session) {
                     return { entries: [] };
                 }
-                return { entries: main.session.slice(offset, offset + limit) };
+                return packFeatureChunk(main.session.slice(offset, offset + limit));
             },
             async featureCacheClose() {
                 main.session = null;
@@ -442,7 +445,7 @@ export function makeHost(main, { enableClipFeatures = false } = {}) {
         },
         getMaps: () => host,
         getMediaFiles: () => host.mediaFiles,
-        getConfig: () => ({ featureCacheVersion: 4, enableClipFeatures: host.enableClipFeatures }),
+        getConfig: () => ({ featureCacheVersion: 4 }),
         basename: (p) => main.api.path.basename(p),
         logError: (m) => main.api.logError(m),
         notify: (m, type) => host.showNotification(m, type),

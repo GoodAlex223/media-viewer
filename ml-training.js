@@ -321,15 +321,12 @@ export class MlTrainingManager {
      *   two alone). It is also the header's `fileCount`, which main requires as an integer, so a
      *   caller that omits it has its write-open refused. `_collectFolderVectors` passes
      *   `files.length`.
-     * @param {{clipRequired?: boolean}} [opts] `clipRequired` (CLIP is on) goes in the header: when
-     *   main never read this file, it allows the write only if every media file in the folder has
-     *   an entry, with a CLIP vector when this is set (spec § 7.2).
      *
      * Transport: feature-cache-write-chunk (main.js) destructures each element as a
      * [key, value] pair (`for (const [key, value] of entries)`) -- a flat {name, ...} object is
      * not iterable and throws. Mirrors feature-cache-store.js's `batch.push([name, entry])`.
      */
-    async _saveVectorCache(folderPath, entries, diskCount, scanCount = Infinity, { clipRequired = false } = {}) {
+    async _saveVectorCache(folderPath, entries, diskCount, scanCount = Infinity) {
         if (!folderPath || !entries || entries.size === 0) return false;
 
         // DATA-LOSS GUARD: never replace a substantially populated on-disk cache with a
@@ -358,7 +355,6 @@ export class MlTrainingManager {
                 featureDim: FEATURE_DIM,
                 clipDim: CLIP_DIM,
                 fileCount: scanCount,
-                clipRequired,
             });
             if (!opened?.success) return false;
 
@@ -646,9 +642,9 @@ export class MlTrainingManager {
         // save, so entries.size is only an upper bound on what was actually written).
         if (extracted > 0 && !signal?.aborted) {
             const tSave = this._now();
-            await this._saveVectorCache(folderPath, entries, diskCount, files.length, {
-                clipRequired: enableClipFeatures,
-            });
+            // When main never read this file (unreadable), it allows the write only if every media file in the
+            // folder has an entry with a CLIP vector (spec § 7.2, review #2).
+            await this._saveVectorCache(folderPath, entries, diskCount, files.length);
             stats.saveMs = this._now() - tSave;
         }
         return { rows, clipMissing, failed, aborted: false, stats };

@@ -69,21 +69,14 @@ describe('createFeatureCacheLedger', () => {
 });
 
 describe('validateWriteHeader', () => {
-    const ok = { version: 4, featureDim: 64, clipDim: 512, fileCount: 3, clipRequired: false };
+    const ok = { version: 4, featureDim: 64, clipDim: 512, fileCount: 3 };
 
-    it('accepts a header with a non-negative integer fileCount and a boolean clipRequired', () => {
-        expect(validateWriteHeader(ok)).toEqual({
-            ok: true,
-            version: 4,
-            fileCount: 3,
-            clipRequired: false,
-            basisGen: null,
-        });
-        expect(validateWriteHeader({ ...ok, fileCount: 0, clipRequired: true })).toEqual({
+    it('accepts a header with a non-negative integer fileCount', () => {
+        expect(validateWriteHeader(ok)).toEqual({ ok: true, version: 4, fileCount: 3, basisGen: null });
+        expect(validateWriteHeader({ ...ok, fileCount: 0 })).toEqual({
             ok: true,
             version: 4,
             fileCount: 0,
-            clipRequired: true,
             basisGen: null,
         });
     });
@@ -101,7 +94,6 @@ describe('validateWriteHeader', () => {
         ['a non-integer fileCount', { ...ok, fileCount: 1.5 }],
         ['an infinite fileCount', { ...ok, fileCount: Infinity }],
         ['a string fileCount', { ...ok, fileCount: '3' }],
-        ['no clipRequired', { ...ok, clipRequired: undefined }],
         ['a negative basisGen', { ...ok, basisGen: -1 }],
         ['a non-integer basisGen', { ...ok, basisGen: 0.5 }],
         ['a string basisGen', { ...ok, basisGen: '1' }],
@@ -370,7 +362,7 @@ describe('cacheFileExists (review #13)', () => {
 });
 
 describe('checkClose', () => {
-    const header = (over = {}) => ({ version: 4, fileCount: 3, clipRequired: false, basisGen: null, ...over });
+    const header = (over = {}) => ({ version: 4, fileCount: 3, basisGen: null, ...over });
     const names = (...n) => new Set(n);
     const run = (over) =>
         checkClose({
@@ -389,7 +381,8 @@ describe('checkClose', () => {
     });
 
     it('allows unseen with full coverage', async () => {
-        expect(await run({ written: 3, writtenNames: names('a.jpg', 'b.jpg', 'c.jpg') })).toEqual({ ok: true });
+        const all = names('a.jpg', 'b.jpg', 'c.jpg');
+        expect(await run({ written: 3, writtenNames: all, clipNames: all })).toEqual({ ok: true });
     });
 
     it('refuses unseen when one media file is missing', async () => {
@@ -399,19 +392,25 @@ describe('checkClose', () => {
         });
     });
 
-    it('refuses unseen when one CLIP vector is missing and CLIP is required', async () => {
+    it('refuses unseen when one CLIP vector is missing', async () => {
+        const all = names('a.jpg', 'b.jpg', 'c.jpg');
+        expect(await run({ written: 3, writtenNames: all, clipNames: names('a.jpg', 'b.jpg') })).toMatchObject({
+            ok: false,
+            refused: 'unseen',
+        });
+    });
+
+    it('unseen needs a CLIP vector for every file, whatever the header says (review #2)', async () => {
+        // main cannot know what an unread file holds: with CLIP off, a 64-dim copy erased the CLIP vectors on disk.
         const all = names('a.jpg', 'b.jpg', 'c.jpg');
         expect(
             await run({
-                header: header({ clipRequired: true }),
+                header: { ...header(), clipRequired: false },
                 written: 3,
                 writtenNames: all,
-                clipNames: names('a.jpg', 'b.jpg'),
+                clipNames: names(),
             })
         ).toMatchObject({ ok: false, refused: 'unseen' });
-        expect(
-            await run({ header: header({ clipRequired: true }), written: 3, writtenNames: all, clipNames: all })
-        ).toEqual({ ok: true });
     });
 
     it('refuses unseen for a folder with no media files', async () => {
@@ -424,9 +423,10 @@ describe('checkClose', () => {
 
     it('treats absent with an existing destination as no record (a file appeared after the read)', async () => {
         expect(await run({ record: { seen: 'absent' } })).toMatchObject({ ok: false, refused: 'unseen' });
-        expect(
-            await run({ record: { seen: 'absent' }, written: 3, writtenNames: names('a.jpg', 'b.jpg', 'c.jpg') })
-        ).toEqual({ ok: true });
+        const all = names('a.jpg', 'b.jpg', 'c.jpg');
+        expect(await run({ record: { seen: 'absent' }, written: 3, writtenNames: all, clipNames: all })).toEqual({
+            ok: true,
+        });
     });
 
     it('refuses shrink: read 2,000, written 3, fileCount 2,000', async () => {

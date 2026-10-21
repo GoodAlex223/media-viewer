@@ -8,12 +8,13 @@ import {
     coversFolder,
     refusalMessage,
     DROPPED_WORK_MESSAGE,
+    droppedWorkMessage,
     AUTOSAVE_MS,
     MAX_AUTO_REREADS,
     READ_CHUNK,
     WRITE_BATCH,
 } from '../feature-cache-store.js';
-import { FakeMain, makeFiles, settle } from './feature-cache-harness.js';
+import { FakeMain, makeFiles, settle, packFeatureChunk } from './feature-cache-harness.js';
 
 /** The store's io over FakeMain, late-bound so a test can replace one of main's calls. */
 function ioFor(main) {
@@ -28,13 +29,12 @@ function ioFor(main) {
 }
 
 /** A store over `main`, with the host's three maps and its file list in `host`. */
-function makeStore(main, { files = [], clip = false, version = 4, timers } = {}) {
+function makeStore(main, { files = [], version = 4, timers } = {}) {
     const host = {
         featureCache: new Map(),
         clipCache: new Map(),
         featureMetadata: new Map(),
         files,
-        clip,
     };
     const notify = vi.fn();
     const logError = vi.fn();
@@ -42,7 +42,7 @@ function makeStore(main, { files = [], clip = false, version = 4, timers } = {})
         io: ioFor(main),
         getMaps: () => host,
         getMediaFiles: () => host.files,
-        getConfig: () => ({ featureCacheVersion: version, enableClipFeatures: host.clip }),
+        getConfig: () => ({ featureCacheVersion: version }),
         basename: (p) => String(p).split('/').pop(),
         logError,
         notify,
@@ -67,7 +67,7 @@ const clipVec = (v = 0.25) => new Float32Array(512).fill(v);
 /** Main answers the open with `count` entries on disk and empty chunks: the visit reads with that baseline. */
 async function readWithBaseline(main, store, count) {
     main.api.featureCacheOpen = async () => ({ success: true, version: 4, count });
-    main.api.featureCacheChunk = async () => ({ entries: [] });
+    main.api.featureCacheChunk = async () => packFeatureChunk([]);
     await store.ensureRead();
 }
 
@@ -104,10 +104,20 @@ describe('decideSave', () => {
             reason: 'unread',
         });
     });
-    it('unread, covering → write', () => {
+    it('unread after a failed read, covering → write', () => {
+        expect(
+            decideSave(frozen({ state: 'unread', entries: n(3), fileCount: 3, covers: true, readFailed: true }))
+        ).toEqual({ write: true });
+    });
+    it('unread with no failed read, covering → no write (D2: a visit that has not tried to read never saves)', () => {
         expect(decideSave(frozen({ state: 'unread', entries: n(3), fileCount: 3, covers: true }))).toEqual({
-            write: true,
+            write: false,
+            reason: 'unread',
         });
+    });
+    it('unread after main refused a covering copy → no write until the visit reads again', () => {
+        const f = frozen({ state: 'unread', entries: n(3), fileCount: 3, covers: true, readFailed: true });
+        expect(decideSave({ ...f, coverageRefused: true })).toEqual({ write: false, reason: 'unread' });
     });
     it('read 23,559 with 32 entries in a 20,929-file folder → the shrink guard', () => {
         expect(decideSave(frozen({ state: 'read', baseline: 23559, entries: n(32), fileCount: 20929 }))).toEqual({
@@ -131,20 +141,18 @@ describe('decideSave', () => {
 describe('coversFolder', () => {
     const entry = (name, clip = null) => [name, vec(), clip, 1, 1];
 
-    it('is true when every file has an entry, with a clip vector when CLIP is required', () => {
-        expect(coversFolder(['a', 'b'], [entry('a', clipVec()), entry('b', clipVec())], true)).toBe(true);
+    it('is true when every file has an entry with a clip vector', () => {
+        expect(coversFolder(['a', 'b'], [entry('a', clipVec()), entry('b', clipVec())])).toBe(true);
     });
     it('is false when one file has no entry', () => {
-        expect(coversFolder(['a', 'b'], [entry('a')], false)).toBe(false);
+        expect(coversFolder(['a', 'b'], [entry('a', clipVec())])).toBe(false);
     });
-    it('is false when one entry lacks its clip vector and CLIP is required', () => {
-        expect(coversFolder(['a', 'b'], [entry('a', clipVec()), entry('b')], true)).toBe(false);
-    });
-    it('is true for a missing clip vector when CLIP is not required', () => {
-        expect(coversFolder(['a', 'b'], [entry('a'), entry('b')], false)).toBe(true);
+    it('is false when one entry lacks its clip vector, whatever the CLIP setting (review #2)', () => {
+        expect(coversFolder(['a', 'b'], [entry('a', clipVec()), entry('b')])).toBe(false);
+        expect(coversFolder(['a', 'b'], [entry('a'), entry('b')])).toBe(false);
     });
     it('is false for an empty folder', () => {
-        expect(coversFolder([], [], false)).toBe(false);
+        expect(coversFolder([], [])).toBe(false);
     });
 });
 
@@ -244,7 +252,7 @@ describe('ensureRead: ported from loadFeatureCache incremental + signal', () => 
     function installApi(chunks, { version = 4, count } = {}) {
         const all = chunks.flat();
         main.api.featureCacheOpen = async () => ({ success: true, version, count: count ?? all.length });
-        main.api.featureCacheChunk = async (offset, limit) => ({ entries: all.slice(offset, offset + limit) });
+        main.api.featureCacheChunk = async (offset, limit) => packFeatureChunk(all.slice(offset, offset + limit));
     }
     function binaryApi(chunk) {
         main.api.featureCacheOpen = async () => ({ success: true, version: 4, count: chunk.names.length });
@@ -314,6 +322,21 @@ describe('ensureRead: ported from loadFeatureCache incremental + signal', () => 
         expect(store.getState().state).toBe('unread');
     });
 
+    it('a chunk without the binary buffers fails the read instead of committing it (review #12)', async () => {
+        // main always answers packFeatureChunk's shape; `{ entries: [] }` is its reply with no session (or the IPC
+        // guard's refusal value). Read as "no entries", it committed `read` with the full count as baseline, and a
+        // later half-size save then passed both 50% rules.
+        const files = [mkFile('a.png', 10, 100)];
+        main.api.featureCacheOpen = async () => ({ success: true, version: 4, count: 3000 });
+        main.api.featureCacheChunk = async () => ({ entries: [] });
+        const { store, host, logError } = makeStore(main, { files });
+        store.beginVisit('/d');
+        await store.ensureRead();
+        expect(store.getState()).toEqual({ state: 'unread', baseline: null, dirty: false });
+        expect(host.featureCache.size).toBe(0);
+        expect(logError.mock.calls[0][0]).toMatch(/^Feature-cache read failed for \/d: /);
+    });
+
     it('a mid-stream throw leaves the visit unread and the maps untouched', async () => {
         // Changed on purpose (spec my calls 2 and 6): there is no legacy single-read fallback any more.
         const files = Array.from({ length: 1500 }, (_, i) => mkFile(`f${i}.png`, i, i));
@@ -321,7 +344,7 @@ describe('ensureRead: ported from loadFeatureCache incremental + signal', () => 
         main.api.featureCacheOpen = async () => ({ success: true, version: 4, count: 1500 });
         main.api.featureCacheChunk = async (offset) => {
             if (offset === 0) {
-                return { entries: all.slice(0, 1000) };
+                return packFeatureChunk(all.slice(0, 1000));
             }
             throw new Error('IPC hiccup on chunk 2');
         };
@@ -608,8 +631,8 @@ describe('requestSave: ported from saveFeatureCache data-loss guards', () => {
         expect(store.getState()).toEqual({ state: 'read', baseline: 7, dirty: true });
     });
 
-    it('sends the header main checks: version, dims, fileCount, clipRequired and the basis', async () => {
-        const { store } = makeStore(main, { files: dFiles(3), clip: true });
+    it('sends the header main checks: version, dims, fileCount and the basis', async () => {
+        const { store } = makeStore(main, { files: dFiles(3) });
         const v = store.beginVisit('/d');
         main.api.featureCacheOpen = async () => ({ success: false, notFound: true, gen: 2 });
         await store.ensureRead();
@@ -620,7 +643,6 @@ describe('requestSave: ported from saveFeatureCache data-loss guards', () => {
             featureDim: 64,
             clipDim: 512,
             fileCount: 3,
-            clipRequired: true,
             basisGen: 2,
         });
     });
@@ -873,6 +895,66 @@ describe('refusals (spec § 7.3)', () => {
     });
 });
 
+describe('unread saves (review #2, #7)', () => {
+    it('a visit that never tried to read saves nothing, even a copy covering the folder with CLIP off (D2)', async () => {
+        // Browsing a small folder end to end with CLIP off covered it, and the save dropped every CLIP vector on disk.
+        const files = makeFiles('/A', 'a', 3);
+        main.seed('/A', files);
+        const { store } = makeStore(main, { files });
+        const v = store.beginVisit('/A');
+        for (const f of files) {
+            store.putFeature(v, f.path, vec());
+        }
+        expect(await store.requestSave()).toEqual({ outcome: 'skipped', reason: 'unread' });
+        expect(store.endVisit()).not.toBeNull();
+        await settle();
+        expect(main.writes).toHaveLength(0);
+    });
+
+    it('after a failed read, a covering copy needs a CLIP vector for every file, with CLIP off too', async () => {
+        const files = makeFiles('/A', 'a', 3);
+        const { store, notify } = makeStore(main, { files });
+        main.api.featureCacheOpen = async () => ({ success: false, unreadable: true, error: 'EIO' });
+        const v = store.beginVisit('/A');
+        await store.ensureRead();
+        for (const f of files) {
+            store.putFeature(v, f.path, vec());
+        }
+        expect(await store.finishExtractionRun(v)).toEqual({ outcome: 'skipped', reason: 'unread' });
+        expect(notify.mock.calls).toEqual([[DROPPED_WORK_MESSAGE, 'warning']]);
+        for (const f of files) {
+            store.putClip(v, f.path, clipVec());
+        }
+        expect(await store.requestSave()).toEqual({ outcome: 'written', written: 3 });
+    });
+
+    it('an unseen refusal of an unread copy is logged only, and the visit does not retry it until it reads again', async () => {
+        // main lists a file the renderer's list lacks (a download after the listing, a file taken off the list): the
+        // copy the renderer believed covering does not cover. Not a bug report: no warning, no block (review #7).
+        const files = makeFiles('/A', 'a', 2);
+        const { store, notify, logError } = makeStore(main, { files });
+        main.api.featureCacheOpen = async () => ({ success: false, unreadable: true, error: 'EIO' });
+        main.api.featureCacheWriteClose = async () => ({ success: false, refused: 'unseen', seen: null, written: 2 });
+        const v = store.beginVisit('/A');
+        await store.ensureRead();
+        for (const f of files) {
+            store.putFeature(v, f.path, vec());
+            store.putClip(v, f.path, clipVec());
+        }
+        expect(await store.requestSave()).toEqual({ outcome: 'refused', reason: 'unseen', written: 2 });
+        expect(store.getState().state).toBe('unread');
+        expect(notify).not.toHaveBeenCalled();
+        store.putFeature(v, files[0].path, vec());
+        expect(await store.saveIfDirty()).toEqual({ outcome: 'skipped', reason: 'unread' });
+        expect(main.writes).toHaveLength(1);
+        expect(await store.finishExtractionRun(v)).toEqual({ outcome: 'skipped', reason: 'unread' });
+        expect(notify.mock.calls).toEqual([[DROPPED_WORK_MESSAGE, 'warning']]);
+        expect(logError).toHaveBeenCalledWith(
+            'Feature-cache save refused by main (unseen) for /A: seen null, written 2 — the folder has files its list lacks'
+        );
+    });
+});
+
 describe('a write behind the visit (review #4, #5, #14)', () => {
     // FakeMain with main's real rules. The source folder is also a like folder, so the training step writes the
     // visit's own cache file behind the store (cacheIo shares only the lock).
@@ -963,6 +1045,34 @@ describe('a write behind the visit (review #4, #5, #14)', () => {
 });
 
 describe('dropped work (spec D2 amendment)', () => {
+    it("names the folder when its visit ended while the run's save waited (review #15)", async () => {
+        const aFiles = makeFiles('/A', 'a', 4);
+        main.seed('/A', aFiles.slice(0, 3));
+        const { store, host, notify } = makeStore(main, { files: aFiles });
+        const vA = store.beginVisit('/A');
+        await store.ensureRead();
+        store.putFeature(vA, aFiles[3].path, vec());
+        const release = main.hold('featureCacheWriteChunk', 1);
+        store.endVisit(); // A's flush streams
+        await release.reached;
+        host.featureCache.clear();
+        host.featureMetadata.clear();
+        host.files = makeFiles('/B', 'b', 3);
+        main.api.featureCacheOpen = async () => ({ success: false, unreadable: true, error: 'EIO' });
+        const vB = store.beginVisit('/B');
+        const readB = store.ensureRead(); // waits behind A's flush, then fails
+        const finishing = readB.then(() => {
+            store.putFeature(vB, '/B/b0.jpg', vec());
+            return store.finishExtractionRun(vB); // its save waits behind A's flush too
+        });
+        await settle(10);
+        release();
+        await readB;
+        switchTo(store, host, '/C', makeFiles('/C', 'c', 3)); // before B's save answers
+        await finishing;
+        expect(notify.mock.calls).toEqual([[droppedWorkMessage('B'), 'warning']]);
+    });
+
     it('finishExtractionRun warns once when the read failed and the copy does not cover the folder', async () => {
         const files = makeFiles('/A', 'a', 3);
         const { store, notify } = makeStore(main, { files });
@@ -983,8 +1093,10 @@ describe('dropped work (spec D2 amendment)', () => {
         main.api.featureCacheOpen = async () => ({ success: false, unreadable: true, error: 'EACCES' });
         const v = store.beginVisit('/A');
         await store.ensureRead();
-        store.putFeature(v, '/A/a0.jpg', vec());
-        store.putFeature(v, '/A/a1.jpg', vec());
+        for (const f of files) {
+            store.putFeature(v, f.path, vec());
+            store.putClip(v, f.path, clipVec());
+        }
         expect(await store.finishExtractionRun(v)).toEqual({ outcome: 'written', written: 2 });
         expect(notify).not.toHaveBeenCalled();
     });

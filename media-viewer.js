@@ -222,10 +222,7 @@ class MediaViewer {
                 featureMetadata: this.featureMetadata,
             }),
             getMediaFiles: () => this.mediaFiles,
-            getConfig: () => ({
-                featureCacheVersion: MediaViewer.FEATURE_CACHE_VERSION,
-                enableClipFeatures: this.enableClipFeatures,
-            }),
+            getConfig: () => ({ featureCacheVersion: MediaViewer.FEATURE_CACHE_VERSION }),
             basename: (p) => window.electronAPI.path.basename(p),
             logError: (msg) => window.electronAPI?.logError?.(msg),
             notify: (msg, level) => this.showNotification(msg, level),
@@ -10100,7 +10097,7 @@ class MediaViewer {
             // Phase 1 — load cached features (incremental + determinate + cancelable).
             // Once per folder visit (spec my call 4): a repeat sort in the same visit skips the ~40 s read.
             // Not "every file is in memory": a small folder browsed end to end would then never be read,
-            // and an unread visit never saves (D2).
+            // and a visit that has not tried to read never saves (D2).
             if (this.featureCacheStore.needsRead()) {
                 const tLoad = performance.now();
                 await this.loadFeatureCache({
@@ -11146,8 +11143,8 @@ class MediaViewer {
             this.extractionStartTime = null;
         }
 
-        // Save this run's visit, if it is still the current one; otherwise its flush on leave already did. A visit
-        // that could not read its cache and does not cover the folder says once that the work was not saved.
+        // Save this run's visit, if it is still the current one; otherwise its flush on leave saved what it could. A
+        // visit that could not read its cache and cannot save its work says once that the work was not saved.
         await this.featureCacheStore.finishExtractionRun(visit);
 
         // Trigger ML scoring if enabled and model is ready

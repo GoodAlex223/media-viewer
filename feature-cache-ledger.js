@@ -55,17 +55,14 @@ function validateWriteHeader(header) {
     if (!header || typeof header !== 'object') {
         return { ok: false, error: 'feature-cache write refused: no header' };
     }
-    const { version, fileCount, clipRequired, basisGen = null } = header;
+    const { version, fileCount, basisGen = null } = header;
     if (!Number.isInteger(fileCount) || fileCount < 0) {
         return { ok: false, error: 'feature-cache write refused: fileCount must be a non-negative integer' };
-    }
-    if (typeof clipRequired !== 'boolean') {
-        return { ok: false, error: 'feature-cache write refused: clipRequired must be a boolean' };
     }
     if (basisGen !== null && (!Number.isInteger(basisGen) || basisGen < 0)) {
         return { ok: false, error: 'feature-cache write refused: basisGen must be a non-negative integer' };
     }
-    return { ok: true, version: version ?? null, fileCount, clipRequired, basisGen };
+    return { ok: true, version: version ?? null, fileCount, basisGen };
 }
 
 /**
@@ -292,8 +289,9 @@ function cacheFileExists(filePath, access) {
  * - `stale`: the writer sent a basis, and main has written the file since (review #5). Checked first: the copy lacks
  *   that write's entries, whatever its count.
  * - `unseen`: main has no record for the file, or only `unreadable`, or `absent` from before the file appeared; the
- *   write must then cover every media file now in the folder, with a CLIP vector each when `clipRequired`. Only this
- *   case lists the folder.
+ *   write must then cover every media file now in the folder, with a CLIP vector each whatever the CLIP setting: main
+ *   cannot know what the file holds, and a copy without them would erase them (review #2). Only this case lists the
+ *   folder.
  * - `shrink`: main read N entries with the header's version, and the write is under N × 0.5 while the folder holds
  *   over twice what is written: the renderer's own rule, so a real shrink still saves. A version change skips it.
  * A `corrupt` record allows the write: the file is being replaced on purpose.
@@ -316,9 +314,7 @@ async function checkClose({
     }
     if (!record || record.seen === 'unreadable' || record.seen === 'absent') {
         const media = await listFolderMedia();
-        const covered =
-            media.length > 0 &&
-            media.every((name) => writtenNames.has(name) && (!header.clipRequired || clipNames.has(name)));
+        const covered = media.length > 0 && media.every((name) => writtenNames.has(name) && clipNames.has(name));
         return covered ? { ok: true } : { ok: false, refused: 'unseen', seen: null, written };
     }
     if (

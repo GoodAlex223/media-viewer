@@ -20,6 +20,10 @@ export const MAX_AUTO_REREADS = 3;
 
 export const DROPPED_WORK_MESSAGE = "Couldn't read this folder's feature cache, so the new features weren't saved.";
 
+/** The dropped-work warning for a visit that ended before its run's save answered: another folder is on screen. */
+export const droppedWorkMessage = (name) =>
+    `Couldn't read the feature cache for "${name}", so the new features weren't saved.`;
+
 const count = (n) => Number(n).toLocaleString('en-US');
 
 /** The on-screen text for a refusal by main that the renderer cannot explain (spec § 7.3). */
@@ -37,10 +41,11 @@ export function refusalMessage({ refused, seen, written, label = 'Feature cache'
 }
 
 /**
- * Whether a frozen copy's entries (`[name, vector, clip, size, mtime]`) cover every file in the folder, with a CLIP
- * vector for each when CLIP is on. An empty folder is never covered: there is nothing to vouch for.
+ * Whether a frozen copy's entries (`[name, vector, clip, size, mtime]`) cover every file in the folder, each with a
+ * CLIP vector. With CLIP off too (review #2): the file was never read, so it may hold CLIP vectors, and a copy
+ * without them would erase them. An empty folder is never covered: there is nothing to vouch for.
  */
-export function coversFolder(fileNames, entries, clipRequired) {
+export function coversFolder(fileNames, entries) {
     const hasClip = new Map();
     for (const [name, , clip] of entries) {
         hasClip.set(name, !!clip);
@@ -48,7 +53,7 @@ export function coversFolder(fileNames, entries, clipRequired) {
     let any = false;
     for (const name of fileNames) {
         any = true;
-        if (!hasClip.has(name) || (clipRequired && !hasClip.get(name))) {
+        if (!hasClip.get(name)) {
             return false;
         }
     }
@@ -56,8 +61,10 @@ export function coversFolder(fileNames, entries, clipRequired) {
 }
 
 /**
- * Whether a frozen copy may be written, from its frozen state alone (spec § 5.4). `unread` writes only a copy that
- * covers the folder; `read` keeps the original three-conjunct shrink guard against the visit's baseline.
+ * Whether a frozen copy may be written, from its frozen state alone (spec § 5.4). `unread` writes only after a read
+ * failed (D2: a visit that has not tried to read never saves; review #2), only a copy that covers the folder, and
+ * not again once main has refused one as not covering it, until the visit reads again (review #7). `read` keeps the
+ * original three-conjunct shrink guard against the visit's baseline.
  */
 export function decideSave(frozen) {
     if (frozen.state === 'blocked') {
@@ -68,7 +75,9 @@ export function decideSave(frozen) {
         return { write: false, reason: 'empty' };
     }
     if (frozen.state === 'unread') {
-        return frozen.covers ? { write: true } : { write: false, reason: 'unread' };
+        return frozen.readFailed && !frozen.coverageRefused && frozen.covers
+            ? { write: true }
+            : { write: false, reason: 'unread' };
     }
     if (frozen.state === 'read' && frozen.baseline > 0 && n < frozen.baseline * 0.5 && frozen.fileCount > n * 2) {
         return { write: false, reason: 'shrink-guard' };
@@ -92,7 +101,7 @@ export class FeatureCacheStore {
      * @param {object} deps.io main's six feature-cache calls: open, chunk, close, writeOpen, writeChunk, writeClose.
      * @param {() => {featureCache: Map, clipCache: Map, featureMetadata: Map}} deps.getMaps the host's live maps.
      * @param {() => Array<{name, path, size, mtimeMs}>} deps.getMediaFiles the folder's files.
-     * @param {() => {featureCacheVersion: number, enableClipFeatures: boolean}} deps.getConfig
+     * @param {() => {featureCacheVersion: number}} deps.getConfig
      * @param {(path: string) => string} deps.basename synchronous.
      * @param {object} [deps.timers] read at call time, so a test can replace the global setInterval.
      */
@@ -139,6 +148,7 @@ export class FeatureCacheStore {
             autoRereads: 0, // re-reads after explained refusals since the last successful write
             readFailed: false, // the last read failed (not cancelled): dropped work is reported
             readFailureLogged: false,
+            coverageRefused: false, // main refused an unread copy as not covering the folder; reset by a read
             refusalWarned: false,
             droppedWarned: false,
         };
@@ -257,6 +267,7 @@ export class FeatureCacheStore {
                 if (!live()) {
                     return maps.featureCache.size;
                 }
+                rec.coverageRefused = false; // the folder may have changed: an unread copy may try once more
                 if (!opened?.success) {
                     rec.gen = opened?.gen ?? null;
                     if (opened?.notFound) {
@@ -286,31 +297,22 @@ export class FeatureCacheStore {
                     if (!live()) {
                         return maps.featureCache.size;
                     }
-                    if (chunk.vecBuf) {
-                        // Binary shape: .slice() gives each entry its own compact copy, NOT .subarray() (a view
-                        // would pin the whole n*64 / n*512 chunk buffer).
-                        const vecs = new Float32Array(chunk.vecBuf);
-                        const clips = chunk.clipBuf ? new Float32Array(chunk.clipBuf) : null;
-                        for (let i = 0; i < chunk.names.length; i++) {
-                            const vector = vecs.slice(i * FEATURE_DIM, (i + 1) * FEATURE_DIM);
-                            const clip =
-                                clips && chunk.hasClip[i] ? clips.slice(i * CLIP_DIM, (i + 1) * CLIP_DIM) : null;
-                            ingest(chunk.names[i], vector, clip, chunk.sizes[i], chunk.mtimes[i]);
-                        }
-                        loaded += chunk.names.length;
-                    } else {
-                        // Legacy JSON shape: { entries: [[filename, entry]] }.
-                        for (const [name, entry] of chunk.entries || []) {
-                            ingest(
-                                name,
-                                new Float32Array(entry.vector),
-                                entry.clipVector ? new Float32Array(entry.clipVector) : null,
-                                entry.size,
-                                entry.mtime
-                            );
-                        }
-                        loaded += (chunk.entries || []).length;
+                    if (!chunk?.vecBuf) {
+                        // main answers packFeatureChunk's shape (feature-cache-transport.js); `{ entries: [] }` is its
+                        // reply with no session, and the IPC guard's refusal value. Read as "no entries", it
+                        // committed `read` with the full count as baseline (review #12).
+                        throw new Error('a chunk came back without its entries');
                     }
+                    // .slice() gives each entry its own compact copy, NOT .subarray() (a view would pin the whole
+                    // n*64 / n*512 chunk buffer).
+                    const vecs = new Float32Array(chunk.vecBuf);
+                    const clips = chunk.clipBuf ? new Float32Array(chunk.clipBuf) : null;
+                    for (let i = 0; i < chunk.names.length; i++) {
+                        const vector = vecs.slice(i * FEATURE_DIM, (i + 1) * FEATURE_DIM);
+                        const clip = clips && chunk.hasClip[i] ? clips.slice(i * CLIP_DIM, (i + 1) * CLIP_DIM) : null;
+                        ingest(chunk.names[i], vector, clip, chunk.sizes[i], chunk.mtimes[i]);
+                    }
+                    loaded += chunk.names.length;
                     onProgress?.(loaded, total);
                 }
                 // Merge (spec my call 3): the disk entries go in, validated against this folder's files, and win on
@@ -401,8 +403,9 @@ export class FeatureCacheStore {
 
     /**
      * The tail of an extraction run (the AI sort's Phase 2, the CLIP kickoff) for the visit it ran in. Nothing when
-     * that visit is over: its flush on leave already saved it. When the visit could not read its cache and the copy
-     * does not cover the folder, the work cannot be saved, and one warning per visit says so (spec D2 amendment).
+     * that visit is over: its flush on leave saved what it could (for a visit whose read failed, only a covering
+     * copy). When the visit could not read its cache and its work cannot be saved, one warning per visit says so
+     * (spec D2 amendment), naming the folder if the visit ended while the save waited (review #15).
      */
     async finishExtractionRun(visit) {
         if (!this.isCurrent(visit)) {
@@ -410,9 +413,13 @@ export class FeatureCacheStore {
         }
         const rec = this._cur;
         const result = await this.saveIfDirty();
-        if (result?.reason === 'unread' && rec.readFailed && !rec.droppedWarned) {
+        const dropped = result?.reason === 'unread' || result?.reason === 'unseen';
+        if (dropped && rec.readFailed && !rec.droppedWarned) {
             rec.droppedWarned = true;
-            this.notify(DROPPED_WORK_MESSAGE, 'warning');
+            this.notify(
+                this.isCurrent(visit) ? DROPPED_WORK_MESSAGE : droppedWorkMessage(this.basename(visit.folder)),
+                'warning'
+            );
         }
         return result;
     }
@@ -421,8 +428,7 @@ export class FeatureCacheStore {
         const { featureCache, clipCache, featureMetadata } = this.getMaps();
         const files = this.getMediaFiles();
         const byPath = new Map(files.map((f) => [f.path, f]));
-        const { featureCacheVersion, enableClipFeatures } = this.getConfig();
-        const clipRequired = !!enableClipFeatures;
+        const { featureCacheVersion } = this.getConfig();
         const entries = [];
         for (const [path, vector] of featureCache) {
             const meta = featureMetadata.get(path);
@@ -441,12 +447,12 @@ export class FeatureCacheStore {
             baseline: rec.baseline,
             changeCount: rec.changes,
             readSeq: rec.readSeq,
+            readFailed: rec.readFailed,
+            coverageRefused: rec.coverageRefused,
             fileCount: files.length,
-            clipRequired,
             covers: coversFolder(
                 files.map((f) => f.name),
-                entries,
-                clipRequired
+                entries
             ),
             version: featureCacheVersion,
             entries,
@@ -481,7 +487,6 @@ export class FeatureCacheStore {
                 featureDim: FEATURE_DIM,
                 clipDim: CLIP_DIM,
                 fileCount: frozen.fileCount,
-                clipRequired: frozen.clipRequired,
                 basisGen: rec.gen,
             });
             if (!opened?.success) {
@@ -543,6 +548,19 @@ export class FeatureCacheStore {
      * then, and no state changes.
      */
     _refused(frozen, rec, closed) {
+        if (frozen.state === 'unread' && closed.refused === 'unseen') {
+            // main lists a file this visit's list lacks (a download after the listing, a file taken off the list):
+            // the copy the renderer believed covering does not cover. Not a bug report (review #7): no warning, no
+            // block; the visit stays unread and does not try the copy again until it reads again.
+            this.logError(
+                `Feature-cache save refused by main (unseen) for ${frozen.folder}: seen ${closed.seen}, ` +
+                    `written ${closed.written} — the folder has files its list lacks`
+            );
+            if (this.isCurrent(frozen.visit)) {
+                rec.coverageRefused = true;
+            }
+            return { outcome: 'refused', reason: closed.refused, written: closed.written };
+        }
         const changedBehind = closed.refused === 'stale' || frozen.state === 'absent' || frozen.state === 'discard';
         const explained = changedBehind && rec.autoRereads < MAX_AUTO_REREADS;
         this.logError(

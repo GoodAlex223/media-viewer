@@ -143,7 +143,6 @@ test.describe("Main's feature-cache rules", () => {
         featureDim: 64,
         clipDim: 512,
         fileCount: 5,
-        clipRequired: false,
         ...over,
     });
 
@@ -152,7 +151,9 @@ test.describe("Main's feature-cache rules", () => {
         const out = [];
         for (const name of names) {
             const s = await stat(join(folder.dir, name));
-            out.push([name, { vector: Array(64).fill(0.2), clipVector: null, size: s.size, mtime: s.mtimeMs }]);
+            // With a CLIP vector: main's coverage rule needs one per file, whatever the CLIP setting (review #2).
+            const clipVector = Array(512).fill(0.01);
+            out.push([name, { vector: Array(64).fill(0.2), clipVector, size: s.size, mtime: s.mtimeMs }]);
         }
         return out;
     }
