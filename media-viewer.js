@@ -1861,15 +1861,13 @@ class MediaViewer {
             if (this.isMlEnabled && this.mlWorker) {
                 let rawFeatures = this.featureCache.get(currentFile.path);
                 if (!rawFeatures && this.currentMedia) {
+                    // The visit the move started in, taken before the await: moves don't refuse during a folder
+                    // load, so a load already listing can end the visit mid-extraction (PR #86 close-out cut 8).
+                    const visit = this.featureCacheStore.visit;
                     try {
                         rawFeatures = await this.extractFeaturesFromDisplayedMedia();
                         if (rawFeatures) {
-                            // The file-op guard is held, so no folder change can end the visit mid-extraction.
-                            this.featureCacheStore.putFeature(
-                                this.featureCacheStore.visit,
-                                currentFile.path,
-                                rawFeatures
-                            );
+                            this.featureCacheStore.putFeature(visit, currentFile.path, rawFeatures);
                         }
                     } catch (err) {
                         console.warn('Could not extract ML features:', err);
@@ -7004,6 +7002,8 @@ class MediaViewer {
             if (this.isMlEnabled && this.mlWorker) {
                 leftFeatures = this.featureCache.get(leftFile.path);
                 rightFeatures = this.featureCache.get(rightFile.path);
+                // The visit the move started in, taken before the awaits (as moveCurrentFile's, close-out cut 8).
+                const visit = this.featureCacheStore.visit;
 
                 // Fallback: extract from displayed media if not cached (must happen before cleanup)
                 if (!leftFeatures && this.leftMedia) {
@@ -7011,12 +7011,7 @@ class MediaViewer {
                         console.log('[ML Debug] Fallback extraction for left:', leftFile.name);
                         leftFeatures = await this.extractFeaturesFromMediaElement(this.leftMedia);
                         if (leftFeatures) {
-                            // The file-op guard is held, so no folder change can end the visit mid-extraction.
-                            this.featureCacheStore.putFeature(
-                                this.featureCacheStore.visit,
-                                leftFile.path,
-                                leftFeatures
-                            );
+                            this.featureCacheStore.putFeature(visit, leftFile.path, leftFeatures);
                             console.log('[ML Debug] Left features extracted successfully');
                         }
                     } catch (err) {
@@ -7028,11 +7023,7 @@ class MediaViewer {
                         console.log('[ML Debug] Fallback extraction for right:', rightFile.name);
                         rightFeatures = await this.extractFeaturesFromMediaElement(this.rightMedia);
                         if (rightFeatures) {
-                            this.featureCacheStore.putFeature(
-                                this.featureCacheStore.visit,
-                                rightFile.path,
-                                rightFeatures
-                            );
+                            this.featureCacheStore.putFeature(visit, rightFile.path, rightFeatures);
                             console.log('[ML Debug] Right features extracted successfully');
                         }
                     } catch (err) {
@@ -10011,8 +10002,9 @@ class MediaViewer {
         if (this.isPredictionSorting) return; // re-entrancy guard; Cancel is the abort affordance
         // A file action (G1 guard) is moving files: a reorder now would leave the screen and the cursor on
         // different files when it finishes (G2 review). Ahead of the two notices below, so a refused click
-        // shows only this one.
-        if (this._refuseIfFileOpInFlight()) {
+        // shows only this one. A folder load too: the sort checks it after every phase (isLive), so one started
+        // during the load's tail cancelled itself at once (PR #86 close-out R2).
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
             return;
         }
         // Mutual exclusion with the similarity sort — both share this.sortAbortController.
@@ -10473,8 +10465,8 @@ class MediaViewer {
 
                 // One-shot version probe: feature-worker.js answers `getVersion` with the
                 // FEATURE_VERSION that feature-extractor.js actually compiled with, so the training
-                // fingerprint never re-declares it. (The FEATURE_CACHE_VERSION comment claiming the two
-                // constants must match is false — they are 4 and 2 — which is why both are fingerprinted.)
+                // fingerprint never re-declares it. (FEATURE_CACHE_VERSION does not move with it — they are 4
+                // and 2 — which is why both are fingerprinted.)
                 const probe = this.featureWorkers[0];
                 if (probe) {
                     this._probeFeatureVersion(probe, settle, false);

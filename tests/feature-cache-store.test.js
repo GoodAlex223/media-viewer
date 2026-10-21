@@ -701,6 +701,25 @@ describe('requestSave: the frozen copy and the queue', () => {
         expect(main.entriesOf('/A').has('a3.jpg')).toBe(true);
     });
 
+    it('a request made while a save streams, with nothing new, queues no second rewrite (close-out cut 1)', async () => {
+        // savedChanges moves only when a write ends, so the visit still looked dirty: the extraction tail or the
+        // flush on leave queued an identical full rewrite (~6 s and 132 MB at 24k entries).
+        const files = makeFiles('/A', 'a', 4);
+        main.seed('/A', files.slice(0, 3));
+        const { store } = makeStore(main, { files });
+        const v = store.beginVisit('/A');
+        await store.ensureRead();
+        store.putFeature(v, files[3].path, vec());
+        const release = main.hold('featureCacheWriteChunk', 1);
+        const first = store.requestSave();
+        await release.reached;
+        const second = store.saveIfDirty(); // nothing new since the first froze
+        release();
+        expect(await first).toEqual({ outcome: 'written', written: 4 });
+        expect(await second).toEqual({ outcome: 'skipped', reason: 'unchanged' });
+        expect(main.writes).toHaveLength(1);
+    });
+
     it('two queued requests for one visit coalesce to the newer copy', async () => {
         const files = makeFiles('/A', 'a', 6);
         const { store, host, v } = await readVisit(files.slice(0, 3));
@@ -880,6 +899,25 @@ describe('refusals (spec § 7.3)', () => {
         expect(store.getState()).toEqual({ state: 'unread', baseline: null, dirty: false }); // B is untouched
     });
 
+    it('a drive-root folder is named by its path, since its basename is empty (close-out cut 11)', async () => {
+        const files = makeFiles('D:', 'a', 4);
+        main.seed('D:/', files.slice(0, 3));
+        const { store, host, notify } = makeStore(main, { files });
+        const v = store.beginVisit('D:/');
+        await store.ensureRead();
+        store.putFeature(v, files[3].path, vec());
+        main.api.featureCacheWriteClose = async () => ({ success: false, refused: 'shrink', seen: 2000, written: 4 });
+        const flush = store.endVisit();
+        switchTo(store, host, '/B', makeFiles('/B', 'b', 3));
+        await flush;
+        expect(notify.mock.calls).toEqual([
+            [
+                refusalMessage({ refused: 'shrink', seen: 2000, written: 4, label: 'Feature cache for "D:/"' }),
+                'warning',
+            ],
+        ]);
+    });
+
     it('an explained refusal of the flush on leave is only logged', async () => {
         const files = makeFiles('/A', 'a', 3);
         const { store, host, notify, logError } = makeStore(main, { files });
@@ -955,6 +993,44 @@ describe('unread saves (review #2, #7)', () => {
     });
 });
 
+describe('unread saves: the two branches the close-out found untested (close-out R5)', () => {
+    it('a new read lets an unread copy try the folder once more after main refused one as not covering', async () => {
+        // The folder may have changed since (the extra file was removed): one more attempt per read, no more.
+        const files = makeFiles('/A', 'a', 2);
+        const { store } = makeStore(main, { files });
+        main.api.featureCacheOpen = async () => ({ success: false, unreadable: true, error: 'EIO' });
+        main.api.featureCacheWriteClose = async () => ({ success: false, refused: 'unseen', seen: null, written: 2 });
+        const v = store.beginVisit('/A');
+        await store.ensureRead();
+        for (const f of files) {
+            store.putFeature(v, f.path, vec());
+            store.putClip(v, f.path, clipVec());
+        }
+        await store.requestSave(); // refused as not covering
+        store.putFeature(v, files[0].path, vec());
+        expect(await store.requestSave()).toEqual({ outcome: 'skipped', reason: 'unread' });
+        await store.ensureRead(); // fails again
+        store.putFeature(v, files[1].path, vec());
+        expect(await store.requestSave()).toMatchObject({ outcome: 'refused', reason: 'unseen' });
+        expect(main.writes).toHaveLength(2);
+    });
+
+    it("the run's own save refused as not covering still shows the dropped-work warning", async () => {
+        const files = makeFiles('/A', 'a', 2);
+        const { store, notify } = makeStore(main, { files });
+        main.api.featureCacheOpen = async () => ({ success: false, unreadable: true, error: 'EIO' });
+        main.api.featureCacheWriteClose = async () => ({ success: false, refused: 'unseen', seen: null, written: 2 });
+        const v = store.beginVisit('/A');
+        await store.ensureRead();
+        for (const f of files) {
+            store.putFeature(v, f.path, vec());
+            store.putClip(v, f.path, clipVec());
+        }
+        expect(await store.finishExtractionRun(v)).toEqual({ outcome: 'refused', reason: 'unseen', written: 2 });
+        expect(notify.mock.calls).toEqual([[DROPPED_WORK_MESSAGE, 'warning']]);
+    });
+});
+
 describe('a write behind the visit (review #4, #5, #14)', () => {
     // FakeMain with main's real rules. The source folder is also a like folder, so the training step writes the
     // visit's own cache file behind the store (cacheIo shares only the lock).
@@ -1012,6 +1088,36 @@ describe('a write behind the visit (review #4, #5, #14)', () => {
         await store.requestSave();
         await settle();
         expect(host.featureCache.size).toBe(20);
+        expect(rmain.entriesOf('/L').size).toBe(20);
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('a failed re-read still supersedes the copy queued before the refusal (close-out R1)', async () => {
+        // The re-read's open fails, but takes main's current generation: a copy frozen before the refusal then got
+        // past the stale check with it, and its `read` state past both 50% rules (1,530 over training's 2,000).
+        const files = makeFiles('/L', 'l', 20);
+        rmain.list('/L', files);
+        rmain.seed('/L', files.slice(0, 15));
+        const { store, notify } = makeStore(rmain, { files });
+        const v = store.beginVisit('/L');
+        await store.ensureRead(); // read 15
+        await rmain.trainingWrite(store, '/L', files); // all 20
+        store.putFeature(v, files[15].path, vec());
+        const release = rmain.hold('featureCacheWriteClose', 2); // the visit's first close (training's was the 1st)
+        const refused = store.requestSave();
+        await release.reached;
+        store.putFeature(v, files[16].path, vec());
+        const queued = store.requestSave(); // 17 entries, frozen before the refusal
+        rmain.api.featureCacheOpen = async () => ({
+            success: false,
+            unreadable: true,
+            error: 'EIO',
+            gen: rmain.ledger.generation('/L'),
+        });
+        release();
+        expect(await refused).toMatchObject({ outcome: 'refused', reason: 'stale' });
+        expect(await queued).toEqual({ outcome: 'skipped', reason: 'superseded' });
+        await settle();
         expect(rmain.entriesOf('/L').size).toBe(20);
         expect(notify).not.toHaveBeenCalled();
     });

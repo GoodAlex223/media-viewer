@@ -1859,9 +1859,22 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
     });
 
+    it('refuses to start while a folder is loading, instead of cancelling itself (close-out R2)', async () => {
+        // loadFolder sets the new list, then awaits the bulk-rated read and the first render; the button stays
+        // clickable. isLive (review #10) then cancelled the new sort about 4 ms after the click.
+        const showNotification = vi.fn();
+        const ctx = makeCtx({ _folderLoadInFlight: true, showNotification });
+        await handleSortByPrediction.call(ctx);
+        expect(showNotification).toHaveBeenCalledWith('Wait for the folder to finish loading', 'info');
+        expect(showNotification).not.toHaveBeenCalledWith('Sorting cancelled', 'info');
+        expect(ctx._logSortPerf).not.toHaveBeenCalled();
+        expect(ctx.clipLeases).toBe(0);
+    });
+
     it('bails unsorted when aborted during the sort phase', async () => {
-        // Fully warm cache (makeCtx's default has both mediaFiles present) → the load and
-        // extraction phases are both skipped, so this reaches Phase 3 where the abort fires.
+        // makeCtx's defaults: the visit has read its cache (needsRead() false), so the load is
+        // skipped, and both files are in the cache, so extraction is too. This reaches Phase 3,
+        // where the abort fires.
         const ctx = makeCtx({
             runMlSort: function () {
                 this.sortAbortController.abort(); // user cancels mid-sort
@@ -3496,6 +3509,33 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
         expect(ctx.moveHistory[0].prunedPairKeys).toEqual([key]);
         expect(ctx.bulkRatedPairs.has(key)).toBe(false); // pruned after capture
         expect(ctx.mediaFiles).toEqual([f]);
+    });
+
+    it('moveCurrentFile files a fallback extraction under the visit the move started in (close-out cut 8)', async () => {
+        // Moves don't refuse during a folder load: a loadFolder already listing when the move starts ends the visit
+        // during the extraction's await. Read after the await, the visit was always the current one.
+        const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+        const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, mtimeMs: 7, type: 'image/jpeg' };
+        const started = Object.freeze({ id: 1, folder: '/f' });
+        const store = { visit: started, putFeature: vi.fn(() => false) };
+        const ctx = moveCtx([a], [], {
+            isMlEnabled: true,
+            mlWorker: {},
+            currentMedia: {},
+            featureCacheStore: store,
+            extractFeaturesFromDisplayedMedia: async () => {
+                store.visit = Object.freeze({ id: 2, folder: '/g' }); // the load ends the visit mid-extraction
+                return new Float32Array(64);
+            },
+        });
+        await moveCurrentFile.call(ctx, 'like');
+        expect(store.putFeature).toHaveBeenCalledWith(started, '/f/a.jpg', expect.any(Float32Array));
+    });
+
+    it('no move site reads the visit after its extraction await (close-out cut 8)', () => {
+        for (const name of ['moveCurrentFile', 'moveComparePair']) {
+            expect(methodSource(name), name).not.toMatch(/putFeature\(\s*this\.featureCacheStore\.visit/);
+        }
     });
 
     it("moveCurrentFile records the file's mtime on its history entry (review #6)", async () => {

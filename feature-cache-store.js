@@ -417,7 +417,7 @@ export class FeatureCacheStore {
         if (dropped && rec.readFailed && !rec.droppedWarned) {
             rec.droppedWarned = true;
             this.notify(
-                this.isCurrent(visit) ? DROPPED_WORK_MESSAGE : droppedWorkMessage(this.basename(visit.folder)),
+                this.isCurrent(visit) ? DROPPED_WORK_MESSAGE : droppedWorkMessage(this._folderName(visit.folder)),
                 'warning'
             );
         }
@@ -447,6 +447,7 @@ export class FeatureCacheStore {
             baseline: rec.baseline,
             changeCount: rec.changes,
             readSeq: rec.readSeq,
+            savedAtFreeze: rec.savedChanges,
             readFailed: rec.readFailed,
             coverageRefused: rec.coverageRefused,
             fileCount: files.length,
@@ -478,6 +479,11 @@ export class FeatureCacheStore {
                 // A re-read merged the file in after this copy froze (an explained refusal's): the copy lacks what it
                 // read. The save that follows the re-read carries both.
                 return { outcome: 'skipped', reason: 'superseded' };
+            }
+            if (frozen.changeCount > frozen.savedAtFreeze && rec.savedChanges >= frozen.changeCount) {
+                // A save that streamed while this one waited already wrote every change this copy has (close-out
+                // cut 1): savedChanges moves only when a write ends, so the visit still looked dirty at the request.
+                return { outcome: 'skipped', reason: 'unchanged' };
             }
             // The basis is read now, not frozen: a save of this visit that finished while this one waited moved it,
             // and this copy holds everything that one did. main refuses the copy as stale if anyone else wrote the
@@ -580,16 +586,24 @@ export class FeatureCacheStore {
             }
         } else if (!explained && !rec.refusalWarned) {
             rec.refusalWarned = true;
-            const label = `Feature cache for "${this.basename(frozen.folder)}"`;
+            const label = `Feature cache for "${this._folderName(frozen.folder)}"`;
             this.notify(refusalMessage({ ...closed, label }), 'warning');
         }
         return { outcome: 'refused', reason: closed.refused, written: closed.written };
+    }
+
+    // A folder's name in a warning: its basename, or its path for a drive root, whose basename is empty.
+    _folderName(folder) {
+        return this.basename(folder) || folder;
     }
 
     // Called while the refused save still holds the lock, so the read queues on it now, ahead of any copy already
     // waiting in the save chain; that copy is then skipped as superseded.
     _rereadThenSave(rec) {
         rec.autoRereads++;
+        // Every copy frozen before this refusal is out of date, whatever the read does (close-out R1): a failed
+        // open still takes main's current generation, so without this a queued copy got past the stale check.
+        rec.readSeq++;
         rec.state = 'unread';
         rec.baseline = null;
         const { visit } = rec;

@@ -6,7 +6,7 @@
 //
 // Design: docs/superpowers/specs/2026-09-10-ml-training-pipeline-design.md
 
-import { refusalMessage } from './feature-cache-store.js';
+import { refusalMessage, droppedWorkMessage } from './feature-cache-store.js';
 
 /**
  * Everything the trained model is a function of. Training reads the descriptor and nothing
@@ -206,9 +206,11 @@ export class MlTrainingManager {
      * Callers must check `aborted` before treating a partial load as complete.
      *
      * Transport: feature-cache-chunk (main.js) returns packFeatureChunk's output --
-     * { names, sizes, mtimes, hasClip, vecBuf, clipBuf } -- with NO `success` field, or the
-     * legacy { entries: [[filename, entry]] } shape for a pre-binary on-disk cache. Mirrors
-     * feature-cache-store.js's read, `if (chunk.vecBuf) { ... } else { ... }`.
+     * { names, sizes, mtimes, hasClip, vecBuf, clipBuf } -- with NO `success` field, or
+     * `{ entries: [] }` with no session (and as the IPC guard's refusal value). The legacy branch
+     * below reads that as "no entries"; the store's read fails it instead (PR #86 review #12).
+     * Not reachable in production. If it were, with CLIP off the re-extracted save would drop the
+     * folder's CLIP vectors (plan Improvement).
      *
      * `loadPhase` labels the streaming read on the sort card. This read is the longest silent
      * stretch of a rebuild -- the source folder's comparable load is documented at ~40s for a 24k
@@ -326,7 +328,7 @@ export class MlTrainingManager {
      * [key, value] pair (`for (const [key, value] of entries)`) -- a flat {name, ...} object is
      * not iterable and throws. Mirrors feature-cache-store.js's `batch.push([name, entry])`.
      */
-    async _saveVectorCache(folderPath, entries, diskCount, scanCount = Infinity) {
+    async _saveVectorCache(folderPath, entries, diskCount, scanCount = Infinity, { readFailed = false } = {}) {
         if (!folderPath || !entries || entries.size === 0) return false;
 
         // DATA-LOSS GUARD: never replace a substantially populated on-disk cache with a
@@ -388,7 +390,7 @@ export class MlTrainingManager {
             await flush();
             const closed = await this.cacheIo.writeClose();
             if (closed?.refused) {
-                this._reportRefusal(folderPath, closed);
+                this._reportRefusal(folderPath, closed, { readFailed });
                 return false;
             }
             if (!closed?.success) throw new Error(closed?.error || 'write-close failed');
@@ -415,14 +417,24 @@ export class MlTrainingManager {
      * the folder, or the write would shrink the file past the renderer's own rule. The cache on disk is unchanged.
      * Logged every time; shown once per folder per session.
      */
-    _reportRefusal(folderPath, { refused, seen, written }) {
+    _reportRefusal(folderPath, { refused, seen, written }, { readFailed = false } = {}) {
+        // After a failed read, `unseen` means the copy does not cover the folder (a file failed extraction, or CLIP
+        // is off and main needs a CLIP vector per file): the read was tried, so "never read" would be false
+        // (PR #86 close-out R3). The dropped-work text says what happened.
+        const afterFailedRead = refused === 'unseen' && readFailed;
         this.logError(
-            `Feature-cache save refused by main (${refused}) for ${folderPath}: seen ${seen}, written ${written}`
+            `Feature-cache save refused by main (${refused}) for ${folderPath}: seen ${seen}, written ${written}` +
+                (afterFailedRead ? ' — after a failed read' : '')
         );
         if (this._refusalWarned.has(folderPath)) return;
         this._refusalWarned.add(folderPath);
         const name = String(folderPath).split(/[\\/]/).filter(Boolean).pop() || folderPath;
-        this.notify(refusalMessage({ refused, seen, written, label: `Training cache for "${name}"` }), 'warning');
+        this.notify(
+            afterFailedRead
+                ? droppedWorkMessage(name)
+                : refusalMessage({ refused, seen, written, label: `Training cache for "${name}"` }),
+            'warning'
+        );
     }
 
     static MODEL_CACHE_VERSION = 1;
@@ -644,7 +656,7 @@ export class MlTrainingManager {
             const tSave = this._now();
             // When main never read this file (unreadable), it allows the write only if every media file in the
             // folder has an entry with a CLIP vector (spec § 7.2, review #2).
-            await this._saveVectorCache(folderPath, entries, diskCount, files.length);
+            await this._saveVectorCache(folderPath, entries, diskCount, files.length, { readFailed: unreadable });
             stats.saveMs = this._now() - tSave;
         }
         return { rows, clipMissing, failed, aborted: false, stats };

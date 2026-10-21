@@ -7,7 +7,7 @@ import {
     formatTrainingPerfLine,
     MlTrainingManager,
 } from '../ml-training.js';
-import { refusalMessage } from '../feature-cache-store.js';
+import { refusalMessage, droppedWorkMessage } from '../feature-cache-store.js';
 import { createRequire } from 'module';
 import * as MediaUrl from '../media-url.js';
 // The extracted computeFeatures reaches the namespace import through globalThis (like LikeOrSkip).
@@ -550,6 +550,25 @@ describe("training-vector cache and main's rules (feature-cache wipe fix)", () =
             clipDim: 512,
             fileCount: 7,
         });
+    });
+
+    it('an unseen refusal after a failed read says the cache could not be read, not that it was never read (close-out R3)', async () => {
+        // With CLIP off, main's CLIP-always coverage rule refuses the re-extracted save (review #2). The read was
+        // tried and failed; the store's twin of this case shows the dropped-work text.
+        const io = makeCacheIo();
+        io.open = vi.fn().mockResolvedValue({ success: false, unreadable: true, error: 'EIO' });
+        io.writeClose = vi.fn().mockResolvedValue({ success: false, refused: 'unseen', seen: null, written: 2 });
+        const m = managerWith({
+            cacheIo: io,
+            computeFeatures: vi.fn(async () => new Float32Array(64)),
+            extractClipEmbedding: vi.fn(async () => null),
+        });
+        const files = [
+            { name: 'a.png', path: '/pics/l/a.png', size: 1, mtimeMs: 1 },
+            { name: 'b.png', path: '/pics/l/b.png', size: 2, mtimeMs: 2 },
+        ];
+        await m._collectFolderVectors('/pics/l', files, 'Processing likes', null, false, undefined);
+        expect(m.notify.mock.calls).toEqual([[droppedWorkMessage('l'), 'warning']]);
     });
 
     it('a refused close is logged, warns once per folder per session, and returns false', async () => {
