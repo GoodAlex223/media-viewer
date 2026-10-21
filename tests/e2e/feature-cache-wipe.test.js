@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { extname, join } from 'node:path';
 import {
     launchApp,
     closeApp,
@@ -17,7 +18,8 @@ import {
 // - Main's second line of defence (§ 7.2), driven through window.electronAPI the way the renderer drives it.
 
 const CACHE_FILE = '.feature_cache.json';
-const MEDIA = /\.(png|jpe?g|gif|webp|bmp|mp4|webm|jxl)$/i;
+// The app's own rule (review #12: a copied regex listed .bmp and left out .mov).
+const { isMediaFile } = createRequire(import.meta.url)('../../media-formats.js');
 
 /** Force ML prediction on and CLIP off for the live instance (as tests/e2e/ml-retrain-skip.test.js does). */
 async function seedTrainingState(page, likeDir, dislikeDir) {
@@ -36,7 +38,7 @@ async function seedTrainingState(page, likeDir, dislikeDir) {
 /** The folder's media files, by name. */
 async function mediaNames(dir) {
     return (await readdir(dir, { withFileTypes: true }))
-        .filter((d) => d.isFile() && MEDIA.test(d.name))
+        .filter((d) => d.isFile() && isMediaFile(extname(d.name).toLowerCase()))
         .map((d) => d.name)
         .sort();
 }
@@ -216,6 +218,26 @@ test.describe("Main's feature-cache rules", () => {
         const { closed } = await writeThroughMain(header(), await entriesFor(names.slice(0, 1)));
         expect(closed).toEqual({ success: true, written: 1 });
         expect(await cachedNames(folder.dir)).toEqual(names.slice(0, 1));
+    });
+
+    test('a temp file main cannot create fails the save, and the next read still answers (review #3)', async () => {
+        // A directory at the temp path: the open fails (EISDIR), as on a read-only share or a full disk. Before, the
+        // error was uncaught in main and write-chunk waited for a 'drain' that never came.
+        await mkdir(join(folder.dir, `${CACHE_FILE}.tmp`));
+        const names = await mediaNames(folder.dir);
+        const entries = await entriesFor(names);
+        const result = await Promise.race([
+            writeThroughMain(header(), entries),
+            new Promise((resolve) => setTimeout(() => resolve('hung'), 5000)),
+        ]);
+        expect(result).not.toBe('hung');
+        expect(result.opened).toMatchObject({ success: false });
+        const opened = await page.evaluate(async (dir) => {
+            const res = await window.electronAPI.featureCacheOpen(dir);
+            await window.electronAPI.featureCacheClose();
+            return res;
+        }, folder.dir);
+        expect(opened).toMatchObject({ success: true, count: 5 });
     });
 
     test('a write-open without fileCount is refused', async () => {

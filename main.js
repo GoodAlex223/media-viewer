@@ -11,9 +11,14 @@ const {
     createFeatureCacheLedger,
     validateWriteHeader,
     classifyReadError,
-    withReadRetries,
-    parseFeatureCacheStream,
+    readFeatureCacheFile,
+    openWriteStream,
+    writeWithBackpressure,
+    endWriteStream,
     listMediaFiles,
+    listMediaEntries,
+    cacheFileExists,
+    featureCacheKey,
     checkClose,
 } = require('./feature-cache-ledger');
 const { createGrantStore, createTempDirRegistry, isInsideDir, createMediaReadRule } = require('./path-grants');
@@ -439,31 +444,17 @@ app.whenReady().then(async () => {
     guard.handle('load-folder', [kinds.grantedPath], async (event, folderPath) => {
         try {
             console.log('Loading folder:', folderPath);
-            const files = await fs.readdir(folderPath);
-            const mediaFiles = [];
-
-            for (const file of files) {
-                const filePath = path.join(folderPath, file);
-                try {
-                    const stats = await fs.stat(filePath);
-
-                    if (stats.isFile()) {
-                        const ext = path.extname(file).toLowerCase();
-                        if (isMediaFile(ext)) {
-                            mediaFiles.push({
-                                name: file,
-                                path: filePath,
-                                size: stats.size,
-                                mtimeMs: stats.mtimeMs,
-                                type: getMimeType(ext),
-                            });
-                        }
-                    }
-                } catch (fileError) {
-                    console.warn(`Could not process file ${file}:`, fileError.message);
-                    continue;
-                }
-            }
+            // The listing write-close's coverage check uses too (feature-cache-ledger.js, review #7).
+            const listed = await listMediaEntries(folderPath, isMediaFile, {
+                onSkip: (file, fileError) => console.warn(`Could not process file ${file}:`, fileError.message),
+            });
+            const mediaFiles = listed.map(({ name, path: filePath, stats }) => ({
+                name,
+                path: filePath,
+                size: stats.size,
+                mtimeMs: stats.mtimeMs,
+                type: getMimeType(path.extname(name).toLowerCase()),
+            }));
 
             console.log(`Found ${mediaFiles.length} media files`);
             return { success: true, files: mediaFiles };
@@ -856,35 +847,14 @@ app.whenReady().then(async () => {
     // entries here, and let the renderer pull them in small batches via feature-cache-chunk.
     let featureCacheSession = null; // Array<[filename, entry]> between open and close
 
-    // Read just the top-level "version" field cheaply from the file head (our own writer
-    // always emits it as the first key, so it lives in the first few dozen bytes).
-    const readCacheVersion = (filePath) =>
-        new Promise((resolve) => {
-            try {
-                const s = fsSync.createReadStream(filePath, { encoding: 'utf8', start: 0, end: 255 });
-                let buf = '';
-                s.on('data', (c) => {
-                    buf += c;
-                });
-                s.on('end', () => {
-                    const m = buf.match(/"version"\s*:\s*(\d+)/);
-                    resolve(m ? parseInt(m[1], 10) : null);
-                });
-                s.on('error', () => resolve(null));
-            } catch (_e) {
-                resolve(null);
-            }
-        });
-
     // What main last saw of each cache file this session (feature-cache-ledger.js); write-close checks against it.
     const featureCacheLedger = createFeatureCacheLedger();
-    const featureCacheKey = async (folderPath) =>
-        path.join(await fs.realpath(folderPath).catch(() => folderPath), FOLDER_CACHE_FILES.feature);
+    const ledgerKey = (folderPath) => featureCacheKey(folderPath, grants.canonicalize, FOLDER_CACHE_FILES.feature);
     const FEATURE_CACHE_JSON = { parser: jsonParser, pick: jsonPick, streamObject: jsonStreamObject };
 
     guard.handle('feature-cache-open', [kinds.grantedPath], async (_event, folderPath) => {
         const filePath = path.join(folderPath, FOLDER_CACHE_FILES.feature);
-        const key = await featureCacheKey(folderPath);
+        const key = await ledgerKey(folderPath);
         featureCacheSession = null;
         try {
             await assertFixedPath(filePath);
@@ -894,11 +864,10 @@ app.whenReady().then(async () => {
         }
         try {
             // A brief lock (antivirus, the thumbnailer) is retried, as write-close's rename is.
-            const { version, entries } = await withReadRetries(async () => {
-                await fs.access(filePath);
-                const head = await readCacheVersion(filePath);
-                const parsed = await parseFeatureCacheStream(fsSync.createReadStream(filePath), FEATURE_CACHE_JSON);
-                return { version: head, entries: parsed };
+            const { version, entries } = await readFeatureCacheFile(filePath, {
+                access: fs.access,
+                createReadStream: fsSync.createReadStream,
+                json: FEATURE_CACHE_JSON,
             });
             featureCacheSession = entries;
             featureCacheLedger.recordOpen(key, { seen: 'read', count: entries.length, version });
@@ -960,14 +929,14 @@ app.whenReady().then(async () => {
             const tmpPath = filePath + '.tmp';
             await assertFixedPath(tmpPath);
             await assertFixedPath(filePath);
-            const key = await featureCacheKey(folderPath);
-            const stream = fsSync.createWriteStream(tmpPath, { encoding: 'utf8' });
+            const key = await ledgerKey(folderPath);
+            const stream = await openWriteStream(tmpPath, fsSync.createWriteStream);
             const h = header;
             const prefix =
                 `{"version":${JSON.stringify(h.version ?? null)},` +
                 `"featureDim":${JSON.stringify(h.featureDim ?? 64)},` +
                 `"clipDim":${JSON.stringify(h.clipDim ?? 512)},"features":{`;
-            stream.write(prefix);
+            await writeWithBackpressure(stream, prefix);
             featureCacheWriter = {
                 stream,
                 tmpPath,
@@ -1002,11 +971,7 @@ app.whenReady().then(async () => {
                 }
             }
             if (buf) {
-                // Respect backpressure so a slow disk can't balloon the write buffer.
-                const ok = writer.stream.write(buf);
-                if (!ok) {
-                    await new Promise((resolve) => writer.stream.once('drain', resolve));
-                }
+                await writeWithBackpressure(writer.stream, buf);
             }
             return { success: true };
         } catch (error) {
@@ -1019,19 +984,12 @@ app.whenReady().then(async () => {
         featureCacheWriter = null;
         try {
             // Write the closing braces, end the stream, and wait for the OS flush ('finish').
-            await new Promise((resolve, reject) => {
-                writer.stream.once('error', reject);
-                writer.stream.once('finish', resolve);
-                writer.stream.end('}}');
-            });
+            await endWriteStream(writer.stream, '}}');
             // Main's check (spec § 7.2), before the rename: a refused write leaves the cache file as it was.
             const written = writer.names.size;
             const verdict = await checkClose({
                 record: featureCacheLedger.get(writer.key),
-                destinationExists: await fs.access(writer.finalPath).then(
-                    () => true,
-                    () => false
-                ),
+                destinationExists: await cacheFileExists(writer.finalPath, fs.access),
                 header: writer.header,
                 written,
                 writtenNames: writer.names,

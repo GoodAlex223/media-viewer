@@ -8,7 +8,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
-const { pipeline } = require('stream');
+const { pipeline, finished } = require('stream');
 
 /**
  * What main last saw of each cache file this session, keyed by the file's path. A record is `{ seen: 'read', count,
@@ -18,6 +18,12 @@ function createFeatureCacheLedger() {
     const records = new Map();
     return {
         recordOpen(key, record) {
+            // An unreadable open says nothing new about a file main read (review #8): the source folder is also a
+            // like folder, and training's open fails after Phase 1's succeeded. Keeping the read record keeps the
+            // visit's next save from a false `unseen` refusal.
+            if (record.seen === 'unreadable' && records.get(key)?.seen === 'read') {
+                return;
+            }
             records.set(key, record);
         },
         recordWrite(key, { count, version }) {
@@ -106,29 +112,160 @@ function parseFeatureCacheStream(readable, { parser, pick, streamObject }) {
     });
 }
 
+// The top-level "version" from the file head: our writer always emits it first, in the first few dozen bytes. An I/O
+// error rejects, so withReadRetries sees it (review #1): resolving null made a lock caught here, and gone by the
+// parse's own open, read as "no version", which turned off both shrink guards.
+function readCacheVersion(filePath, createReadStream) {
+    return new Promise((resolve, reject) => {
+        const s = createReadStream(filePath, { encoding: 'utf8', start: 0, end: 255 });
+        let buf = '';
+        s.on('data', (c) => {
+            buf += c;
+        });
+        s.on('end', () => {
+            const m = buf.match(/"version"\s*:\s*(\d+)/);
+            resolve(m ? parseInt(m[1], 10) : null);
+        });
+        s.on('error', reject);
+    });
+}
+
 /**
- * The folder's media files, by name, the way load-folder lists them: a file (or a link to one) with a media
- * extension. A stat that fails leaves the entry out, as there.
+ * Reads a cache file for feature-cache-open: its version and its `[name, entry]` pairs. A brief lock is retried, as
+ * write-close's rename is; any other failure rejects, for classifyReadError. A file whose head names no version is
+ * unreadable, not a version change: every writer of this file puts the version first, so main cannot vouch for it.
+ * @param {{access: Function, createReadStream: Function, json: object, sleep?: Function}} deps
+ */
+function readFeatureCacheFile(filePath, { access, createReadStream, json, sleep }) {
+    return withReadRetries(
+        async () => {
+            await access(filePath);
+            const version = await readCacheVersion(filePath, createReadStream);
+            const entries = await parseFeatureCacheStream(createReadStream(filePath), json);
+            if (version === null) {
+                throw Object.assign(new Error('the cache file names no version'), { code: 'ENOVERSION' });
+            }
+            return { version, entries };
+        },
+        sleep ? { sleep } : {}
+    );
+}
+
+// The write stream (review #3): every step settles when the stream fails. A temp file main cannot create (a read-only
+// share, a full disk, the folder deleted in Explorer) used to be an uncaught error in main, and write-chunk then
+// waited for a 'drain' that never came, so the renderer's IO lock stayed held for the rest of the session.
+
+const streamFailure = (stream) => stream.errored || new Error('the cache write stream closed');
+
+/** The temp file's stream for feature-cache-write-open, once it is open; rejects when it cannot be created. */
+function openWriteStream(tmpPath, createWriteStream) {
+    return new Promise((resolve, reject) => {
+        const stream = createWriteStream(tmpPath, { encoding: 'utf8' });
+        // Kept for the stream's life: a later error is read back from stream.errored by the next step.
+        stream.on('error', () => {});
+        stream.once('error', reject);
+        stream.once('open', () => {
+            stream.off('error', reject);
+            resolve(stream);
+        });
+    });
+}
+
+/** One write-chunk's text, respecting backpressure so a slow disk can't balloon the write buffer. */
+function writeWithBackpressure(stream, text) {
+    return new Promise((resolve, reject) => {
+        if (stream.destroyed || stream.errored) {
+            reject(streamFailure(stream));
+            return;
+        }
+        if (stream.write(text)) {
+            resolve();
+            return;
+        }
+        const settle = (err) => {
+            stream.off('drain', onDrain);
+            stream.off('error', onError);
+            stream.off('close', onClose);
+            if (err) {
+                reject(err);
+            } else {
+                resolve();
+            }
+        };
+        const onDrain = () => settle(null);
+        const onError = (err) => settle(err);
+        const onClose = () => settle(streamFailure(stream));
+        stream.on('drain', onDrain);
+        stream.on('error', onError);
+        stream.on('close', onClose);
+    });
+}
+
+/** write-close's last text, then the OS flush ('finish'); rejects on a stream that failed or closed first. */
+function endWriteStream(stream, text) {
+    return new Promise((resolve, reject) => {
+        if (stream.destroyed || stream.errored) {
+            reject(streamFailure(stream));
+            return;
+        }
+        finished(stream, (err) => (err ? reject(err) : resolve()));
+        stream.end(text);
+    });
+}
+
+/**
+ * The folder's media files, by name: listMediaEntries' names.
  */
 async function listMediaFiles(folderPath, isMediaFile) {
-    const names = [];
-    for (const entry of await fs.readdir(folderPath, { withFileTypes: true })) {
-        if (!isMediaFile(path.extname(entry.name).toLowerCase())) {
+    return (await listMediaEntries(folderPath, isMediaFile)).map((e) => e.name);
+}
+
+/**
+ * The listing itself, shared by load-folder and write-close's coverage check (review #7), so main never counts the
+ * folder differently from the list the renderer holds: each name with a media extension whose stat (which follows
+ * links) is a file, as `{ name, path, stats }`, in readdir order. A name whose stat fails is left out and passed to
+ * `onSkip`.
+ */
+async function listMediaEntries(folderPath, isMediaFile, { onSkip } = {}) {
+    const entries = [];
+    for (const name of await fs.readdir(folderPath)) {
+        if (!isMediaFile(path.extname(name).toLowerCase())) {
             continue;
         }
-        if (entry.isFile()) {
-            names.push(entry.name);
-        } else if (entry.isSymbolicLink()) {
-            try {
-                if ((await fs.stat(path.join(folderPath, entry.name))).isFile()) {
-                    names.push(entry.name);
-                }
-            } catch (_err) {
-                // a broken link is no media file
-            }
+        const filePath = path.join(folderPath, name);
+        let stats;
+        try {
+            stats = await fs.stat(filePath);
+        } catch (err) {
+            onSkip?.(name, err);
+            continue;
+        }
+        if (stats.isFile()) {
+            entries.push({ name, path: filePath, stats });
         }
     }
-    return names;
+    return entries;
+}
+
+/**
+ * The ledger's key for a folder's cache file: the folder's canonical path from path-grants (review #9), so every
+ * spelling of one folder (a junction, the like folder saved under its drive-letter path) shares one record.
+ * canonicalize falls back to the JS realpath where the native call throws on some volumes (deep review #4).
+ */
+async function featureCacheKey(folderPath, canonicalize, fileName = '.feature_cache.json') {
+    return path.join((await canonicalize(folderPath)) ?? path.resolve(folderPath), fileName);
+}
+
+/**
+ * Whether a cache file is at `filePath`, for write-close's check. Only "no such file" says no (review #13): any other
+ * error (a one-shot SMB failure, EPERM) fails closed, so checkClose's rules still apply, as classifyReadError fails
+ * closed on an unknown code.
+ */
+function cacheFileExists(filePath, access) {
+    return access(filePath).then(
+        () => true,
+        (err) => err?.code !== 'ENOENT'
+    );
 }
 
 /**
@@ -170,6 +307,13 @@ module.exports = {
     classifyReadError,
     withReadRetries,
     parseFeatureCacheStream,
+    readFeatureCacheFile,
+    openWriteStream,
+    writeWithBackpressure,
+    endWriteStream,
     listMediaFiles,
+    listMediaEntries,
+    cacheFileExists,
+    featureCacheKey,
     checkClose,
 };

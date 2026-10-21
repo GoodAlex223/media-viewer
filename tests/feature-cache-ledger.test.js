@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Readable } = require('stream');
+const { Readable, Writable } = require('stream');
 const { parser: jsonParser } = require('stream-json');
 const { pick: jsonPick } = require('stream-json/filters/Pick');
 const { streamObject: jsonStreamObject } = require('stream-json/streamers/StreamObject');
@@ -16,8 +16,15 @@ const {
     classifyReadError,
     withReadRetries,
     parseFeatureCacheStream,
+    readFeatureCacheFile,
+    openWriteStream,
+    writeWithBackpressure,
+    endWriteStream,
+    cacheFileExists,
+    featureCacheKey,
     checkClose,
     listMediaFiles,
+    listMediaEntries,
 } = require('../feature-cache-ledger');
 const { isMediaFile } = require('../media-formats');
 
@@ -33,6 +40,20 @@ describe('createFeatureCacheLedger', () => {
         ledger.recordWrite('/A/.feature_cache.json', { count: 12, version: 4 });
         expect(ledger.get('/A/.feature_cache.json')).toEqual({ seen: 'read', count: 12, version: 4 });
         expect(ledger.get('/B/.feature_cache.json')).toBeNull();
+    });
+
+    it('keeps a read record when a later open of the same file fails as unreadable (review #8)', () => {
+        // The source folder is also the like folder: Phase 1 reads the file, then training's open fails past the
+        // retries. The visit's next save would be refused as `unseen`, with a false "never read" warning.
+        const ledger = createFeatureCacheLedger();
+        ledger.recordOpen('/A/.feature_cache.json', { seen: 'read', count: 9, version: 4 });
+        ledger.recordOpen('/A/.feature_cache.json', { seen: 'unreadable' });
+        expect(ledger.get('/A/.feature_cache.json')).toEqual({ seen: 'read', count: 9, version: 4 });
+        // Any other open still replaces it: the file is gone, or no longer parses.
+        ledger.recordOpen('/A/.feature_cache.json', { seen: 'corrupt' });
+        expect(ledger.get('/A/.feature_cache.json')).toEqual({ seen: 'corrupt' });
+        ledger.recordOpen('/A/.feature_cache.json', { seen: 'unreadable' });
+        expect(ledger.get('/A/.feature_cache.json')).toEqual({ seen: 'unreadable' });
     });
 });
 
@@ -158,6 +179,166 @@ describe('parseFeatureCacheStream', () => {
         expect(err).toBeInstanceOf(Error);
         expect(err.code).toBeUndefined();
         expect(classifyReadError(err)).toBe('corrupt');
+    });
+});
+
+describe('readFeatureCacheFile', () => {
+    const body = JSON.stringify({
+        version: 4,
+        featureDim: 64,
+        clipDim: 512,
+        features: { 'a.jpg': { vector: [0.1], clipVector: null, size: 1, mtime: 2 } },
+    });
+    const failing = (code) => {
+        const s = new Readable({ read() {} });
+        process.nextTick(() => s.destroy(errWith(code)));
+        return s;
+    };
+    // A fake fs whose head reads (the ones given `end`) fail with `code` the first `headFailures` times.
+    const fakeFs = ({ text = body, headFailures = 0, code = 'EBUSY' } = {}) => {
+        let heads = 0;
+        return {
+            access: vi.fn(async () => {}),
+            createReadStream: vi.fn((_p, opts) => {
+                if (opts && opts.end !== undefined && heads++ < headFailures) {
+                    return failing(code);
+                }
+                return Readable.from([text]);
+            }),
+            json: JSON_STREAM,
+            sleep: vi.fn(async () => {}),
+        };
+    };
+
+    it('reads the version and the entries', async () => {
+        expect(await readFeatureCacheFile('/A/.feature_cache.json', fakeFs())).toEqual({
+            version: 4,
+            entries: [['a.jpg', { vector: [0.1], clipVector: null, size: 1, mtime: 2 }]],
+        });
+    });
+
+    it('retries a head read that hits a brief lock, so the version is never lost (review #1)', async () => {
+        // The lock is released inside the ~0.5 ms between the head's open and the parse's: the head fails, the parse
+        // succeeds. A null version turned off both shrink guards (review #1: 24,000 entries → 5).
+        const deps = fakeFs({ headFailures: 1 });
+        const read = await readFeatureCacheFile('/A/.feature_cache.json', deps);
+        expect(read.version).toBe(4);
+        expect(deps.sleep).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects, as unreadable, a head read that fails with another I/O error', async () => {
+        const err = await readFeatureCacheFile(
+            '/A/.feature_cache.json',
+            fakeFs({ headFailures: 1, code: 'EIO' })
+        ).catch((e) => e);
+        expect(classifyReadError(err)).toBe('unreadable');
+    });
+
+    it('rejects, as unreadable, a parsed file whose head names no version', async () => {
+        const text = JSON.stringify({ features: { 'a.jpg': { vector: [0.1], size: 1, mtime: 2 } } });
+        const err = await readFeatureCacheFile('/A/.feature_cache.json', fakeFs({ text })).catch((e) => e);
+        expect(err).toBeInstanceOf(Error);
+        expect(classifyReadError(err)).toBe('unreadable');
+    });
+});
+
+describe('the write stream (review #3)', () => {
+    // A stream main can no longer write (a read-only share, a full disk, the folder deleted in Explorer) must fail the
+    // IPC call. Before, write-open returned success, the async error was uncaught in main, write-chunk waited for a
+    // 'drain' that never came, and the renderer's IO lock was held for the rest of the session.
+    const HUNG = 'hung';
+    const within = (promise, ms = 1000) =>
+        Promise.race([
+            promise.then(
+                () => 'resolved',
+                (err) => err.code || err.message
+            ),
+            new Promise((resolve) => setTimeout(() => resolve(HUNG), ms)),
+        ]);
+    const failingWritable = (code) =>
+        new Writable({
+            highWaterMark: 1,
+            write(_chunk, _enc, cb) {
+                setTimeout(() => cb(errWith(code)), 5);
+            },
+        });
+    let dir;
+    afterEach(() => {
+        if (dir) {
+            fs.rmSync(dir, { recursive: true, force: true });
+            dir = null;
+        }
+    });
+
+    it('openWriteStream rejects when the temp file cannot be created', async () => {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-ledger-'));
+        const tmp = path.join(dir, 'gone', '.feature_cache.json.tmp');
+        expect(await within(openWriteStream(tmp, fs.createWriteStream))).toBe('ENOENT');
+    });
+
+    it('openWriteStream resolves once the file is open, and the stream writes', async () => {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-ledger-'));
+        const tmp = path.join(dir, '.feature_cache.json.tmp');
+        const stream = await openWriteStream(tmp, fs.createWriteStream);
+        await writeWithBackpressure(stream, '{"a":');
+        await endWriteStream(stream, '1}');
+        expect(fs.readFileSync(tmp, 'utf-8')).toBe('{"a":1}');
+    });
+
+    it('writeWithBackpressure rejects when the stream fails before it drains', async () => {
+        const stream = failingWritable('ENOSPC');
+        stream.on('error', () => {}); // the listener openWriteStream attaches
+        expect(await within(writeWithBackpressure(stream, 'x'.repeat(64)))).toBe('ENOSPC');
+    });
+
+    it('writeWithBackpressure and endWriteStream reject on a stream that has already failed', async () => {
+        const stream = failingWritable('ENOSPC');
+        stream.on('error', () => {});
+        stream.destroy(errWith('ENOSPC'));
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(await within(writeWithBackpressure(stream, 'x'))).not.toBe(HUNG);
+        expect(await within(endWriteStream(stream, '}}'))).not.toBe(HUNG);
+        expect(await within(endWriteStream(stream, '}}'))).not.toBe('resolved');
+    });
+});
+
+describe('featureCacheKey (review #9)', () => {
+    // The key is the folder's canonical path from path-grants, so a folder opened through a junction and the same
+    // folder saved as the like folder share one record. canonicalize falls back to the JS realpath where the native
+    // call throws (deep review #4); the old key fell back to the raw spelling.
+    it('keys every spelling of one folder to one record', async () => {
+        const canonicalize = vi.fn(async (p) => (p === '/J' || p === '/real' ? '/real' : null));
+        const a = await featureCacheKey('/J', canonicalize);
+        const b = await featureCacheKey('/real', canonicalize);
+        expect(a).toBe(b);
+        expect(a).toBe(path.join('/real', '.feature_cache.json'));
+    });
+
+    it('falls back to the resolved path when canonicalize refuses', async () => {
+        expect(await featureCacheKey('/other', async () => null)).toBe(
+            path.join(path.resolve('/other'), '.feature_cache.json')
+        );
+    });
+});
+
+describe('cacheFileExists (review #13)', () => {
+    // Only "no such file" lets checkClose skip its rules. Any other failure (a one-shot SMB error, EPERM) fails
+    // closed: the file is treated as there, so `unseen` and `shrink` still apply.
+    it.each([
+        ['ENOENT', false],
+        ['EPERM', true],
+        ['EACCES', true],
+        ['EBUSY', true],
+        ['ECONNRESET', true],
+        ['ETIMEDOUT', true],
+        ['UNKNOWN', true],
+        ['EIO', true],
+    ])('%s → %s', async (code, exists) => {
+        expect(await cacheFileExists('/A/.feature_cache.json', async () => Promise.reject(errWith(code)))).toBe(exists);
+    });
+
+    it('true when access succeeds', async () => {
+        expect(await cacheFileExists('/A/.feature_cache.json', async () => {})).toBe(true);
     });
 });
 
@@ -295,5 +476,33 @@ describe('listMediaFiles', () => {
         }
         fs.mkdirSync(path.join(dir, 'sub.jpg'));
         expect((await listMediaFiles(dir, isMediaFile)).sort()).toEqual(['B.PNG', 'a.jpg']);
+    });
+
+    it('leaves out a media file whose stat fails, as load-folder does (review #7)', async () => {
+        // A name readdir returns but stat cannot open (the review reproduced it with a lone-surrogate name on NTFS):
+        // load-folder drops it, so the renderer's list never holds it. Kept here, it made the folder uncoverable.
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-ledger-'));
+        for (const name of ['a.jpg', 'b.jpg']) {
+            fs.writeFileSync(path.join(dir, name), 'x');
+        }
+        const realStat = fs.promises.stat;
+        const spy = vi
+            .spyOn(fs.promises, 'stat')
+            .mockImplementation((p, ...rest) =>
+                path.basename(String(p)) === 'b.jpg' ? Promise.reject(errWith('ENOENT')) : realStat(p, ...rest)
+            );
+        try {
+            expect(await listMediaFiles(dir, isMediaFile)).toEqual(['a.jpg']);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    it('gives load-folder each file with its stat, in listing order', async () => {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-ledger-'));
+        fs.writeFileSync(path.join(dir, 'a.jpg'), 'xy');
+        fs.writeFileSync(path.join(dir, 'notes.txt'), 'x');
+        const listed = await listMediaEntries(dir, isMediaFile);
+        expect(listed.map((e) => [e.name, e.path, e.stats.size])).toEqual([['a.jpg', path.join(dir, 'a.jpg'), 2]]);
     });
 });
