@@ -5,7 +5,7 @@
 **Task Reference**: [TODO.md](../TODO.md) 🔴 "Stop the feature cache being wiped on a folder switch (data loss)". Not in WEEKLY.md; it goes ahead of G2 PR 2 by the user's ruling at the PR #85 review.
 **Spec**: [2026-10-21-feature-cache-wipe-design.md](../../superpowers/specs/2026-10-21-feature-cache-wipe-design.md). Approved by the user 2026-10-21 (`c4398d9`). The plan argues from it, and executors read both.
 **Created**: 2026-10-21
-**Status**: Planning
+**Status**: In progress
 **Last Updated**: 2026-10-21
 **Branch**: `fix-feature-cache-wipe` (from `main` @ `5cb1cfb`)
 
@@ -553,3 +553,18 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
   - In the app, the renderer's open would never answer, and the renderer would hold its cache lock for the rest of the session.
   - Probe: `C:\Users\alexm\AppData\Local\Temp\claude\c--Users-alexm-Projects-media-viewer\0894eb63-25ad-4f3f-bbff-8e80c92a7a97\scratchpad\probes\pipe-error.cjs`.
   - It strengthens spec my call 12 ("probably never seen"), and T5's `parseFeatureCacheStream` test pins it.
+
+### 2026-10-21 — PHASE: Implementation (native execution, Opus 5.5; ledger `.superpowers/sdd/2026-10-21_feature-cache-wipe-fix/progress.md`)
+- **Status → In progress.** The user approved the plan and chose native (inline) execution.
+- **T1, red on `main`** (`tests/feature-cache-wipe.test.js`, each trigger run as plain `it` first). Every trigger failed on its own disk assertion, with the probes' values; every control passed:
+  - T1: `expected +0 to be 2000` (B's file replaced by `{}`);
+  - T2: `expected 1000 to be 2500`;
+  - T3: `expected 3 to be 2000`;
+  - T4b: `expected false to be true` on "every name in B's file starts with b" (A's names written into B);
+  - T4c: `expected false to be true` (`/B/b0.jpg` absent: B's caller got A's aborted read);
+  - T5: `expected Map{ 'a0.jpg' => …, …(3) } to be undefined` (A's 4 entries written into `/E`);
+  - T6: `expected false to be true` (`a6.jpg` never saved).
+  - Then marked `it.fails`: 14/14 pass. Both forms are Prettier-stable, so the T3 flip diff is `it.fails` → `it` only.
+- **T4a, state level** (scratch test, deleted): A's open held, switch to B, release. `_featureCacheDiskCount` went 0 → 1500 (A's count) while `baseFolderPath` was `/B`, and A's 1,500 entries (`/A/…` paths) were committed into B's map.
+- **E2E on `main`** (`tests/e2e/feature-cache-wipe.test.js`, run once as plain `test`): B's 5 cached names became 2 (`b4.png`, `b5.png`, the two files viewed). Committed as `test.fail` (passes as expected-fail).
+- Harness deviations from the plan's wording are ledgered as rulings (makeHost's options, the sort signal in T4b/T4c, T3's 2,003-file listing, T2's extra write assertion, the added T4c/T5 controls, two shortened titles).
