@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-19 <!-- Group G1: Confine page-side file loads to the granted folders (residual I1, 🟤, Oct 19–23). MERGED 2026-10-19 via PR #84 (merge 4548269) after one PR review round: 1 finding, fixed, with its open trade-off accepted. -->
+**Last Updated**: 2026-10-21 <!-- Group G2: Hash and similarity sort off the renderer thread, PR 1 of 2 (end-of-sort fixes, 🔵 🏆, Oct 19–23). MERGED 2026-10-20 via PR #85 (merge f668611) after a final review with a fix wave, a 24-finding PR review with three fix waves, and two user-approved additions (Tasks 6–7). G2 stays open for PR 2. -->
+<!-- Previous: Group G1: Confine page-side file loads to the granted folders (residual I1, 🟤, Oct 19–23). MERGED 2026-10-19 via PR #84 (merge 4548269) after one PR review round: 1 finding, fixed, with its open trade-off accepted. -->
 <!-- Previous: Group G6: Weekly Reviews (2026-10-17 run, ⚪ Overhead). MERGED 2026-10-18 via PR #83 (merge 1954109) after three review rounds: 8 findings, then 2 leftovers, then none. -->
 <!-- Previous: Group G5: CLAUDE.md size audit (🟡, Oct 12–16). MERGED 2026-10-17 via PR #82 (merge 3fb797e) after three review rounds: 9 findings, of which 6 were fixed, 1 documented, 1 declined and 1 carried to G6. -->
 <!-- Previous: Group G4: Recently opened folders (🔵, Oct 12–16; reordered ahead of I1 by the user). MERGED 2026-10-16 via PR #81 (merge 51af1ab), after per-task reviews, a whole-branch final review with one fix wave, and a PR review in a separate chat (7 findings: 5 fixed, 1 declined, 1 deferred; re-review found no issues). --> <!-- Prior (2026-10-16): Group G3: Stop the retrain on every AI sort (🔵, Oct 12–16; re-scoped from source-folder vector reuse after the measure-first before run). MERGED 2026-10-16 via PR #80 (merge bf6fcad), after per-task reviews, a whole-branch final review with one fix round, and a PR review in a separate chat (no open items). --> <!-- Prior (2026-10-12): Group G2: Like-or-skip flow (🔵 🏆, Oct 12–16). MERGED 2026-10-12 via PR #79 (merge 96467f7), after per-task reviews, a regression check and an in-chat /code-review max (15 confirmed findings; 12, plus a regression from the controller's own fix, fixed in one wave). The PR close-out found no issues. --> <!-- Prior (2026-10-11): Group G1: High security findings fix (🟤, Oct 12–16) — MERGED 2026-10-11 via PR #78 (merge e5cd3a8) after pre-PR reviews + the user's deep review (15 findings fixed), one review round and two close-outs. -->
@@ -25,6 +26,83 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-20 — Group G2: Hash and similarity sort off the renderer thread, PR 1 of 2 (end-of-sort fixes) 🔵 🏆 (Oct 19–23) — **MERGED `f668611`** (PR #85)
+
+**Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved `47d870c`). § 15 holds the planning amendments A1–A9; § 16 holds the execution notes and the user's scope rulings.
+**Plan**: [2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md](../archive/plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md). It has 7 tasks: Tasks 1–5 were planned, and Tasks 6–7 were user-approved additions.
+**Branch**: `g2-hash-sort-off-renderer`, cut from `main` at `bfc4cbf`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: MERGED 2026-10-20 via PR #85** (merge `f668611`, 32 commits). G2 stays open: PR 2 (background hashing, the parity mode, the user's 24k smoke) follows on a new branch. PR 1 was planned at ~6 SP. It grew well past that: Tasks 6–7 were added, and the reviews took three fix waves. The user approved each step past the 2× line.
+
+**Before the PR:**
+- **Brainstorm.** A spike in Electron 39 found an off-thread decode route (`ImageDecoder` → YUV `VideoFrame` on an `OffscreenCanvas`) that matches today's hashes. It also showed that today's route is not repeatable against its own December cache. So the quality bar was redefined (D4: zero differences on the same day and build; a 1-bit JPEG/WebP difference is the one accepted exception), and G2 was split into two PRs (D7).
+- **Execution, subagent-driven.** Each task got a fresh implementer and a task review. A RED test was recorded for every new test, and mutation checks were run.
+- **Final review.** A whole-branch review (Opus, `max`) and the `regression-checker` found 5 Important issues; one fix wave closed them all:
+  - an emptied list offered Show over an empty screen;
+  - a later order change could overtake Show;
+  - CLIP Cancel was silent for the whole extraction;
+  - a failed hash-cache read followed by a periodic save could shrink `.hash_cache.json`;
+  - two E2E tests could not fail.
+- **E2E hold.** The user put E2E on hold for a stretch. The first push was then blocked by one stale E2E premise (`sort-progress`), which was fixed as a premise fix.
+
+**PR review** (the user's `/code-review` in a separate chat, which posted 24 findings over two comments):
+- **Fixed:** #2–#4, #6–#8, #10, #11, #13–#15 (`de04008`, `69b925e`, `bb12981`) and #17–#24 (`732936b`, `e3d3b2d`). Each wave got a scoped re-review.
+- **Spec note:** #12 (§ 16).
+- **Moved out by the user's ruling:**
+  - #1 and #16 → a separate PR, next. The close-out added a third trigger to it.
+  - #5 → PR 2.
+  - #9 → BACKLOG.
+- **Added, user-approved:**
+  - Task 6: Restore Order waits for render idle.
+  - Task 7: the AI sort never applies its order under a loading file. My #2 response had narrowed what the user approved; a side agent caught it, and the user had it restored.
+- **Close-out:** the reviewer accepted all 24. Its final ruling was "No issues found". It re-raised one residual line, which was verified unreachable and not filed.
+
+**Summary**:
+- **The similarity sort no longer rewrites the list under a user who is using the app.**
+  - **The press.** It captures a run: a snapshot, the algorithm, K and the start file. It checks a run token after every `await`, saves hashes as it goes (every 1,000 hashes or 60 s, merged once into the file on disk), and restores nothing on Cancel or failure.
+  - **Folder switches.** A run made stale by a folder switch or reopen writes nothing to the folder now open.
+- **Every similarity order reaches the screen through one apply function**, `_applySimilarityOrder`. It computes, waits for render idle, re-checks, and then commits synchronously through `SimilaritySort.alignToLive`. It declines when the run is stale, in Tournament, during a file action or a folder load, when the user acted, when the render outlasts its wait, or when the list is empty.
+- **A run the user acted during ends with a sticky "Similarity order ready — Show".** Nothing moves until Show is pressed.
+- **Restore Order** (both buttons and Tournament entry) keeps every listed file. Both buttons wait for render idle and re-check.
+- **The AI sort waits** up to 30 s for a loading file or a file action, and drops its result rather than apply under it. Cancel, a newer sort or a folder load ends the wait.
+
+**Key changes**:
+- **New `similarity-sort.js`** (pure ESM): `alignToLive`, `takeUserMark`/`userActedSince`, and the hash-save schedule.
+- **`media-viewer.js`:**
+  - the run in `handleSortBySimilarity`;
+  - `_applySimilarityOrder` and the offer methods;
+  - `_invalidateSimilarityRun`, called by folder loads, Restore Order, Tournament entry and the AI sort;
+  - the `_restoreOriginalOrder(kind)` helper;
+  - folder-explicit hash and sort cache I/O;
+  - `runSortingWorker` terminates its worker on abort;
+  - the CLIP kickoff takes the run's signal;
+  - `_waitForRenderIdle` returns whether the render settled;
+  - `showNotification({ sticky })`;
+  - undo restores a moved file's perceptual hash.
+- **The renderer grew 11,439 → 12,190 lines (+751)**, against the week's theme of stopping its growth. PR 2 moves the hashing out. `CLAUDE.md` grew 60,077 → 62,705 bytes, after one trim.
+- **Tests:**
+  - Unit 1,666 → **1,883** (1 skipped).
+  - E2E 194 → **205** passed (6 skipped).
+  - New: `similarity-sort` (unit), `similarity-sort-glue`, and `e2e/similarity-sort` (11 tests).
+
+**Spawned**:
+- **BACKLOG 🟤** `[2026-10-21] From: G2 PR 1 closeout`: 25 items. Among them:
+  - the per-run hash map, the hash-cache pruning, and a keyboard path for Show;
+  - the all-cached CLIP return;
+  - the degraded sort cache;
+  - the deferred review minors.
+- **BACKLOG check-offs:** the three 🟤 [2026-10-12] entries (catch restore, in-flight render, Restore Order).
+- **BACKLOG annotations and corrections:** `isSortedByPrediction`, the modal shortcuts, `write-folder-cache` (now in PR 2's scope), the CLIP lease entry, and the feature-metadata entry's "No longer destructive".
+- **BACKLOG 🔵:** "Revive drag-and-drop folder loading", moved from 🟤 by the user's ruling (they reproduced it 2026-10-20).
+- **TODO 🔴:** "Stop the feature cache being wiped on a folder switch (data loss)", the next PR.
+
+**Learnings**:
+- **Name the mutation that must fail each Review Focus test in the plan.** Four of the plan's pins could not fail as written, and only mutation runs and reviews found them.
+- **More save points widen a cache's loss surface** when the read returns `null` for any error. Merge on save, once.
+- **A brief sent to a subagent must not narrow what the user approved.** If scope narrows, tell the user (Task 7).
+- **A PR watcher that exits on the first change misses a follow-up review comment.** List every comment before replying.
+- **Posting `abort` to a worker whose loop is synchronous stops nothing.** Terminate it instead.
 
 ### 2026-10-19 — Group G1: Confine page-side file loads to the granted folders (residual I1) 🟤 (Oct 19–23) — **MERGED `4548269`** (PR #84)
 

@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 19–23 § G2 (🔵 🏆, 8 SP → **~13 SP**, see § 13) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2 (manual testing; user priority "speed these up first")
 **Created**: 2026-10-19
-**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9).
+**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9). **PR 1 implemented: PR #85, merge `f668611` (2026-10-20)**; the execution notes are in § 16. PR 2 is pending.
 **Branch**: `g2-hash-sort-off-renderer` (from `main` @ `bfc4cbf`) for PR 1; PR 2 on a new branch after PR 1 merges (D7, § 13.1)
 
 Items marked **(my call)** were decided by Claude during the brainstorm. They were not put to the user, and are listed together at the end of § 3 for review.
@@ -431,7 +431,7 @@ plan-review flag may not apply.
 ## 15. Planning amendments (PR 1, 2026-10-19)
 
 Measured on `bfc4cbf` while writing the PR 1 plan
-([plan](../../planning/plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md)). Each refines the approved design;
+([plan](../../archive/plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md)). Each refines the approved design;
 none changes a user ruling.
 
 - **A1. Tournament entry restores through the same rule (§ 7).** `restoreOriginalOrderForTournament` (`:5702`) filters `originalMediaFiles` without appending, so it drops the same files Restore Order does. One helper (`alignToLive`) serves all three paths.

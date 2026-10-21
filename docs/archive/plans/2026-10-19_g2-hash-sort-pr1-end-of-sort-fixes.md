@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆, 8 SP → ~13 SP across two PRs, spec D7; this plan is **PR 1, ~6 SP**) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G2 (🔵 🏆, 8 SP → ~13 SP across two PRs, spec D7; this plan is **PR 1, ~6 SP**) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
 **Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (committed `47d870c`, user-approved 2026-10-19; amended at planning — § 15, A1–A9, committed with this plan)
 **Created**: 2026-10-19
-**Status**: Approved 2026-10-19 ("Looks good") — executing, subagent-driven
-**Last Updated**: 2026-10-19
+**Status**: Complete — MERGED 2026-10-20 via PR #85 (merge `f668611`); closeout 2026-10-21. G2 stays open for PR 2.
+**Last Updated**: 2026-10-21
 **Branch**: `g2-hash-sort-off-renderer` (from `main` @ `bfc4cbf`). PR 2 (background hashing) gets its own plan and branch after this merges.
 
 **Goal:** A similarity sort stops rewriting the list under a user who is using the app. It works on a snapshot taken at the press, with the algorithm and K captured then. It saves its hashes as it goes and on Cancel. No end path restores or resurrects a file, and nothing is written after a folder switch. A run ends in one of two ways: it applies its order at once if the user waited, or shows a sticky "Similarity order ready — Show" message if the user acted. Hashing stays on today's route; PR 2 moves it.
@@ -980,8 +980,8 @@ The defect: `handleSortByPrediction` waits for render idle for at most 2 s, then
 
 ## Closeout (after the merge, on `main`)
 
-- [ ] **Extract**: Improvements and Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G2 PR 1 closeout`. Check off the three § 12 entries (catch restore, in-flight render, Restore Order) **in the closeout commit**.
-- [ ] **Carry the out-of-PR items to where they will be done:**
+- [x] **Extract**: Improvements and Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G2 PR 1 closeout`. Check off the three § 12 entries (catch restore, in-flight render, Restore Order) **in the closeout commit**.
+- [x] **Carry the out-of-PR items to where they will be done:**
   - #1, #16 and the close-out's second feature-cache trigger → TODO.md, as one PR, next;
   - #5 → PR 2's plan, when it is written (PR 2 has no plan file yet, so the carriers are this line and spec § 16);
   - BACKLOG.md:722's "re-arms by construction" → corrected.
@@ -991,12 +991,12 @@ The defect: `handleSortByPrediction` waits for render idle for at most 2 s, then
       - **Move, don't copy.** Put the entry under a new heading, `### [2026-10-20] From: PR #85 review (user-confirmed)`, with a one-line origin: the user reproduced it on 2026-10-20. Then remove it from the 🟤 G1-closeout section (one entry per item).
       - **Keep "Rename the 'drop' zone" (BACKLOG.md:473) in 🟤.** Repoint its "Pairs with … below" cross-ref to the 🔵 entry.
       - **Scope:** no code change in PR #85.
-- [ ] **Archive** this plan (`git mv` to `docs/archive/plans/`, indexed under Archived Plans in `docs/README.md`); remove its Active/Current Plans rows.
-- [ ] **DONE.md** entry. WEEKLY: G2 stays open (PR 2 follows), so mark PR 1 on the G2 item and the Wednesday row only; the Summary-Table Status flips at PR 2's closeout.
-- [ ] **Spec**: a post-implementation note for anything the code departed from.
-- [ ] **Propagation check**: re-read `CLAUDE.md`, `docs/ARCHITECTURE.md` and the changed comments for a late correction that did not reach them.
-- [ ] **Memory**: a session file and its MEMORY.md line; durable lessons only.
-- [ ] **Next**: PR 2's plan, on a new branch from `main`.
+- [x] **Archive** this plan (`git mv` to `docs/archive/plans/`, indexed under Archived Plans in `docs/README.md`); remove its Active/Current Plans rows.
+- [x] **DONE.md** entry. WEEKLY: G2 stays open (PR 2 follows), so mark PR 1 on the G2 item and the Wednesday row only; the Summary-Table Status flips at PR 2's closeout.
+- [x] **Spec**: a post-implementation note for anything the code departed from.
+- [x] **Propagation check**: re-read `CLAUDE.md`, `docs/ARCHITECTURE.md` and the changed comments for a late correction that did not reach them.
+- [x] **Memory**: a session file and its MEMORY.md line; durable lessons only.
+- [x] **Next**: PR 2's plan, on a new branch from `main`. Carried: WEEKLY G2 and TODO 🔴 (the 24k item) name it as next, after the data-loss PR the review scheduled.
 
 ## Progress Log
 
@@ -1052,6 +1052,12 @@ The defect: `handleSortByPrediction` waits for render idle for at most 2 s, then
   - Why: my #2 triage had promised this, but my fix ruling left it out, and the user was not told until a side agent caught the mismatch.
   - The task review found that Cancel was ignored during the 30 s wait; the fix round made the wait end on Cancel.
   - Results: unit tests 1,883 passed, 1 skipped; `compare-mode` E2E 13/13.
+- **2026-10-21** — **Closeout on `main`**:
+  - 25 🟤 entries extracted, and 3 🟤 [2026-10-12] entries checked off;
+  - drag-and-drop promoted to 🔵 (user-confirmed);
+  - TODO 🔴 "Stop the feature cache being wiped" added;
+  - DONE entry written, and WEEKLY marked: PR 1 ✅, G2 still open;
+  - plan archived.
 
 ## Key Discoveries
 
