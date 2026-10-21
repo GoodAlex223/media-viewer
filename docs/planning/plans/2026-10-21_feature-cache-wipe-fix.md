@@ -525,15 +525,24 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - **`listMediaFiles`' link branch is untested.** The coverage check follows a link to a media file as `load-folder` does, but no test makes a link: on Windows that needs Developer Mode or admin. A test that skips without the privilege would pin it. → BACKLOG 🟤.
 - **A shrink-guarded dirty visit retries every autosave tick, with no backoff** (PR #86 review chat, a cut finding). The visit stays dirty, so each 30 s tick re-freezes the whole copy and logs a new `Feature-cache save SKIPPED (shrink guard)` line. Retrying only after new changes, and logging once per visit, would stop it. Pre-existing. → BACKLOG 🟤.
 - **`preload.js:17-18` still lists `'feature'` as a `read-folder-cache` name** (PR #86 review chat). T5 removed it from main. A comment-only fix, left out of this PR so that `preload.js` stays unchanged and needs no security review. → BACKLOG 🟤.
-- **`ml-training.js`'s `_loadVectorCache` still reads a chunk without the binary buffers as "no entries".** The store now fails such a read (review #12); the training path keeps its legacy branch, which its own test pins. A zero-entry training read leads to a full re-extraction and a covering save, so nothing is lost by name. → BACKLOG 🟤.
+- **A training rebuild of a source folder that is also a like folder costs one full re-read** (close-out note). Each training write makes the visit's next save `stale`, and the re-read is the whole cache (~25 s for 71 MB in the full-size check). Unmeasured in practice. → BACKLOG 🟤.
+- **The close-out's carried cut findings** (PR #86 [close-out](https://github.com/GoodAlex223/media-viewer/pull/86#issuecomment-6329072004) § The cut findings), each → BACKLOG 🟤:
+  - 2: the extraction tail waits for the whole write (and a second one if an autosave streams) before the AI sort goes on;
+  - 3: the flush on leave overlaps the next folder's listing (a 24k listing went from 3.2 s to ~9 s);
+  - 4: `_freeze` computes coverage on every save, including states that never use it;
+  - 5: `_saveVectorCache`'s `scanCount = Infinity` default is used only by tests, and main refuses it;
+  - 6: the harness compiles renderer methods at import, so one rename breaks three suites; `saveFeatureCache` is called only by the trigger tests;
+  - 9: `beginVisit` does not clear the maps, `loadFolder` clears them by hand on both branches;
+  - 10: `withReadRetries` duplicates write-close's rename retry loop.
+- **`ml-training.js`'s `_loadVectorCache` still reads a chunk without the binary buffers as "no entries".** The store now fails such a read (review #12); the training path keeps its legacy branch, which its own test pins. A zero-entry training read leads to a full re-extraction and a covering save, so nothing is lost by name; but with CLIP off that save drops the folder's CLIP vectors (4 → 0 in the close-out's probe, as on `1cde460`; with CLIP on they are kept). Reachable only through transport drift. → BACKLOG 🟤.
 
 ## Residuals for Extract
 
 - **T4a is pinned at the state level only** (spec my call 13). Recorded here; no BACKLOG entry.
 - **No save at app quit** (spec § 10). A visit's last ≤ 30 s of extraction is lost on quit, as today. → BACKLOG 🟤.
 - **The per-result visit checks (T1) and the empty folder's visit (T5) are pinned at the state level.** Both triggers are closed by several layers on disk, so no disk assertion can isolate them (Progress Log, T3). Recorded here; no BACKLOG entry.
-- **A `stale` refusal of a flush on leave is logged only** (review fix pass). The visit has ended and its maps are gone, so it cannot re-read. When the training step wrote the file, its write covers the like folder's files by name; what is lost is the visit's vectors for files training failed or missed. → BACKLOG 🟤.
-- **An explained refusal right before a folder switch drops the visit's work** (review fix pass). The re-read it queues finds the visit ended. Same loss as the line above, in a narrower window. Recorded here; no BACKLOG entry.
+- **A `stale` refusal of a flush on leave is logged only, and so is an explained refusal right before a folder switch** (review fix pass; the close-out probed both). The visit has ended and its maps are gone, so it cannot re-read (in the second case, the re-read it queued finds the visit ended). When the training step wrote the file, its write covers the like folder's files by name; what is lost is the visit's vectors for files training failed or missed. The close-out's probe: the new visit's 5 entries lost, the old visit's 60 kept, the reverse of `1cde460`. → BACKLOG 🟤.
+- **Training writes send no basis, so main does not check them for staleness** (close-out note). Pre-existing; the source visit's next save heals it (`stale` → re-read → merge). → BACKLOG 🟤.
 
 ## Closeout (after the merge, on `main`)
 
@@ -543,7 +552,8 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - [ ] Archive this plan to `docs/archive/plans/` (`git rm` the original), and link it from `docs/README.md`.
 - [ ] Propagation check: re-read `CLAUDE.md:138/140/193` and the spec against what shipped.
 - [ ] Close or re-point the two open BACKLOG entries the T3 grep missed (PR #86 review chat): BACKLOG.md:1585 "Guard `loadFeatureCache()` against clearing in-memory Maps mid-extraction" (the read now merges in place: close as obsolete, pointing here) and :1594 "Add unit tests for loadFeatureCache/saveFeatureCache validation logic" (the store's suite now covers the version check, staleness, pruning and the round trip: close as delivered).
-- [ ] Re-point the open BACKLOG entries that name the moved symbols (found by T3's grep): BACKLOG.md:807 (`_acquireCacheIoLock`), :841 (`round6` duplicated from `_saveFeatureCacheLocked`, now from `feature-cache-store.js`), :1049 (the `ingest` dimension check, now in the store's read), :1395 (`_featureCacheLoadPromise` + `_acquireCacheIoLock`, now the store's per-visit single-flight and lock). Line numbers at `482ca5f`.
+- [ ] Close the two open BACKLOG entries that say the `FEATURE_CACHE_VERSION` comment is false (PR #86 close-out): BACKLOG.md:835 and :1584 (line numbers at `e5e39e1`). T3 rewrote that comment (`media-viewer.js` above `static FEATURE_CACHE_VERSION`): close both as delivered.
+- [ ] Re-point the open BACKLOG entries that name the moved symbols (found by T3's grep): BACKLOG.md:807 (`_acquireCacheIoLock`), :841 (`round6` duplicated from `_saveFeatureCacheLocked`, now from `feature-cache-store.js`), :1049 (the `ingest` dimension check, now in the store's read), :1395 (`_featureCacheLoadPromise` + `_acquireCacheIoLock`, now the store's per-visit single-flight and lock), and :1401 (incremental serving: it describes the old load; PR #86 close-out). Line numbers at `482ca5f`.
 
 ## Model and Effort
 
@@ -631,3 +641,11 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - **D, the renderer** (`b6ecb9e`; #6, #10, #11). Every history entry records `fileMtimeMs`, every undo restores it (six list restores in `handleCancel`, one tournament), and so does `restoreFeatureCachesFromHistory`. The AI sort's `isLive` (cancel, newer sort, folder load) is checked after every phase. The load-phase cancel test now reaches `loadFeatureCache`; it fails when the post-load check is deleted, where the old one passed.
 - Suite after D: 2,057 passed, 1 skipped. E2E `feature-cache-wipe` 8/8, with `ml-retrain-skip` and `security-ipc` 36/36. `wc -l media-viewer.js`: **11,884** (11,869 at `1cde460`, 12,190 on `main`).
 - Rulings made in the pass (ledger): the D4 amendment's "adopts main's count" became a re-read; the D2 amendment's CLIP clause became "whatever the setting"; a stale flush on leave is logged only; `MAX_AUTO_REREADS = 3`; `clipRequired` removed; the training path keeps its legacy chunk branch. The spec carries the first three as § 2.1 and inline "review #N" notes.
+- **The close-out** ([comment](https://github.com/GoodAlex223/media-viewer/pull/86#issuecomment-6329072004), at `e5e39e1`) confirmed all 15 fixes, each re-probed old → new and each fix reverted in a copy to see its test go red. It raised R1–R5, a Closeout correction and the 12 cut findings. Round 2:
+  - **R1, fixed before merge:** a failed re-read still took main's current generation without moving `readSeq`, so a copy queued before the refusal got past the stale check (1,530 over training's 2,000). `_rereadThenSave` now moves `readSeq` itself. Test red (`written 17`).
+  - **R2, fixed:** the AI sort's start refuses during a folder load, as the other header actions do; `isLive` had cancelled a sort started in the load's tail at once. Test red.
+  - **R3, fixed:** a training save refused `unseen` after a failed read shows the dropped-work text, not "never read". Test red.
+  - **R4:** the Improvement line now says what is lost (CLIP vectors with CLIP off), and `ml-training.js`'s transport comment no longer calls the legacy shape valid.
+  - **R5:** a test each for "a read resets `coverageRefused`" and `finishExtractionRun`'s `unseen` branch; each fails under its mutation.
+  - **Cut findings fixed:** 1 (a request with nothing new since a streaming save queues no second rewrite: `unchanged`), 7 (the stale `FEATURE_CACHE_VERSION` comment), 8 (the move sites take the visit before their extraction await), 11 (a drive root is named by its path), 12 (the Closeout). The rest are carried as Improvements.
+  - The #11 nit (a test comment still blamed a warm cache) is fixed.
