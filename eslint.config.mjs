@@ -74,6 +74,7 @@ export default [
             'clip-image.js',
             'app-protocol.js',
             'storage-migration.js',
+            'feature-cache-ledger.js',
         ],
         languageOptions: {
             ecmaVersion: 2022,
