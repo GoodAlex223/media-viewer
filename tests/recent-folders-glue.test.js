@@ -3,6 +3,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as RecentFolders from '../recent-folders.js';
+import { stubFeatureCacheStore } from './feature-cache-harness.js';
 
 const require = createRequire(import.meta.url);
 const fs = require('fs');
@@ -153,7 +154,7 @@ describe('loadFolder records only a folder that showed media (spec § 5)', () =>
     }
 
     function loadCtx(overrides = {}) {
-        return {
+        const ctx = {
             _folderIntentGen: 0,
             _fileOpInFlight: false,
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
@@ -193,6 +194,8 @@ describe('loadFolder records only a folder that showed media (spec § 5)', () =>
             _recordRecentFolder: vi.fn(),
             ...overrides,
         };
+        ctx.featureCacheStore = stubFeatureCacheStore(ctx);
+        return ctx;
     }
 
     const file = { name: 'a.png', path: 'C:\\pics\\Liked_3\\a.png', size: 1, type: 'image/png' };

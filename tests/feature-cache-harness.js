@@ -1,12 +1,15 @@
 // Shared harness for the feature-cache wipe tests (plan docs/planning/plans/2026-10-21_feature-cache-wipe-fix.md,
-// Task 1). Not a test file. It runs the real MediaViewer methods (extracted from media-viewer.js) against FakeMain,
-// an in-memory disk that answers the six featureCache* calls the way main.js does today: no count checks, and a
-// close that replaces the folder's cache with exactly what was written. The trigger tests assert on that disk.
+// Task 1). Not a test file. It runs the real MediaViewer methods (extracted from media-viewer.js), with a real
+// FeatureCacheStore, against FakeMain: an in-memory disk that answers the six featureCache* calls the way main.js did
+// before this fix, with no count checks and a close that replaces the folder's cache with exactly what was written.
+// So the trigger tests, which assert on that disk, measure the renderer's own guards, not main's.
 //
 // The harness wiring may change as the fix lands; the tests' assertions may not (plan § Global Constraints).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { vi } from 'vitest';
+import { FeatureCacheStore } from '../feature-cache-store.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(here, '..', 'media-viewer.js'), 'utf-8');
@@ -191,7 +194,7 @@ export class FakeMain {
     }
 }
 
-// The real methods the harness runs. A name that no longer exists in media-viewer.js is skipped.
+// The real methods the harness runs.
 const REAL_METHODS = [
     'switchToFolder',
     '_switchToFolderNow',
@@ -209,16 +212,17 @@ const REAL_METHODS = [
     'awaitExtractionGate',
     'calculateFeaturePriority',
     'loadFeatureCache',
-    '_loadFeatureCacheImpl',
-    '_loadFeatureCacheLocked',
     'saveFeatureCache',
-    '_saveFeatureCacheImpl',
-    '_saveFeatureCacheLocked',
-    '_acquireCacheIoLock',
-    'startFeatureCacheAutoSave',
-    'stopFeatureCacheAutoSave',
 ];
-const compiled = Object.fromEntries(REAL_METHODS.map((name) => [name, extract(name)]).filter(([, fn]) => fn));
+const compiled = Object.fromEntries(
+    REAL_METHODS.map((name) => {
+        const fn = extract(name);
+        if (!fn) {
+            throw new Error(`Could not find method: ${name}`);
+        }
+        return [name, fn];
+    })
+);
 
 const IMAGE_DATA = { data: new Uint8ClampedArray(4), width: 1, height: 1 };
 
@@ -304,13 +308,6 @@ export function makeHost(main, { enableClipFeatures = false } = {}) {
         extractionResumeResolve: null,
         extractionResumeTimer: null,
         _extractionCachedCount: 0,
-        // Feature cache (main's fields; gone once the store owns them)
-        featureCacheDirty: false,
-        _featureCacheDiskCount: 0,
-        _featureCacheLoadPromise: null,
-        _featureCacheSavePromise: null,
-        _cacheIoLock: null,
-        featureCacheAutoSaveInterval: null,
         // Test-only: image loads held by holdImage()
         _testImageHolds: new Map(),
         // Stubs
@@ -362,7 +359,58 @@ export function makeHost(main, { enableClipFeatures = false } = {}) {
     for (const [name, fn] of Object.entries(compiled)) {
         host[name] = fn;
     }
+    // Wired as MediaViewer's constructor wires it, over FakeMain.
+    host.featureCacheStore = new FeatureCacheStore({
+        io: {
+            open: (folder) => main.api.featureCacheOpen(folder),
+            chunk: (offset, limit) => main.api.featureCacheChunk(offset, limit),
+            close: () => main.api.featureCacheClose(),
+            writeOpen: (folder, header) => main.api.featureCacheWriteOpen(folder, header),
+            writeChunk: (batch) => main.api.featureCacheWriteChunk(batch),
+            writeClose: () => main.api.featureCacheWriteClose(),
+        },
+        getMaps: () => host,
+        getMediaFiles: () => host.mediaFiles,
+        getConfig: () => ({ featureCacheVersion: 4, enableClipFeatures: host.enableClipFeatures }),
+        basename: (p) => main.api.path.basename(p),
+        logError: (m) => main.api.logError(m),
+        notify: (m, type) => host.showNotification(m, type),
+    });
     return host;
+}
+
+/**
+ * A FeatureCacheStore stand-in for extracted-method tests that do not exercise the cache: one current visit for
+ * `host.baseFolderPath`, and writes that go straight into the host's maps.
+ */
+export function stubFeatureCacheStore(host) {
+    const visit = Object.freeze({ id: 1, folder: host.baseFolderPath });
+    return {
+        visit,
+        isCurrent: () => true,
+        beginVisit: vi.fn(),
+        endVisit: vi.fn(() => null),
+        needsRead: vi.fn(() => true),
+        ensureRead: vi.fn(async () => host.featureCache?.size ?? 0),
+        requestSave: vi.fn(async () => ({ outcome: 'skipped', reason: 'stub' })),
+        saveIfDirty: vi.fn(async () => null),
+        finishExtractionRun: vi.fn(async () => null),
+        startAutoSave: vi.fn(),
+        stopAutoSave: vi.fn(),
+        acquireLock: vi.fn(async () => () => {}),
+        putFeature: (_visit, filePath, vector) => {
+            host.featureCache.set(filePath, vector);
+            const file = (host.mediaFiles || []).find((f) => f.path === filePath);
+            if (file) {
+                host.featureMetadata.set(filePath, { size: file.size, mtime: file.mtimeMs || 0 });
+            }
+            return true;
+        },
+        putClip: (_visit, filePath, clipVector) => {
+            host.clipCache.set(filePath, clipVector);
+            return true;
+        },
+    };
 }
 
 /** Lists `files` for `folder` and opens it through the real loadFolder. */
@@ -416,11 +464,7 @@ export function startAutosave(host) {
     globalThis.clearInterval = () => {
         captured = null;
     };
-    if (host.startFeatureCacheAutoSave) {
-        host.startFeatureCacheAutoSave();
-    } else {
-        host.featureCacheStore.startAutoSave();
-    }
+    host.featureCacheStore.startAutoSave();
     if (!captured || captured.ms !== 30000) {
         throw new Error('the autosave did not arm a 30 s interval');
     }

@@ -1549,6 +1549,7 @@ describe('the offer and Show (spec D3, my call 2, A7)', () => {
                     featureWorkers: [{}],
                     enableClipFeatures: false,
                     featureCache: new Map(['a', 'b', 'c'].map((n) => [`/f/${n}`, new Float32Array(64)])),
+                    featureCacheStore: { needsRead: () => false }, // this visit has read its cache
                     moveHistory: [],
                     mlStats: { isReady: true },
                     mlTraining: { ensureTrainedModel: async () => ({ source: 'session', stats: { isReady: true } }) },

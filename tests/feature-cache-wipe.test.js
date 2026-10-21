@@ -53,7 +53,7 @@ describe('T1: a late extraction result', () => {
         await settle();
     }
 
-    it.fails("T1: a late extraction result from the old folder does not replace the new folder's cache", async () => {
+    it("T1: a late extraction result from the old folder does not replace the new folder's cache", async () => {
         await run({ switchFolder: true });
         expect(main.entriesOf('/B').size).toBe(2000);
     });
@@ -83,7 +83,7 @@ describe('T2: a save cut short', () => {
         await settle();
     }
 
-    it.fails("T2: a save that is streaming when the folder changes writes the old folder's whole cache", async () => {
+    it("T2: a save that is streaming when the folder changes writes the old folder's whole cache", async () => {
         await run({ changeFolder: true });
         expect(main.entriesOf('/A').size).toBe(2500);
         expect(main.writesTo('/A').filter((w) => w.closed)).toHaveLength(1);
@@ -121,7 +121,7 @@ describe('T3: a cache never read', () => {
         await settle();
     }
 
-    it.fails('T3: browsing a folder whose cache was never read does not replace it', async () => {
+    it('T3: browsing a folder whose cache was never read does not replace it', async () => {
         await run({ readB: false });
         expect(main.entriesOf('/B').size).toBe(2000);
     });
@@ -165,7 +165,7 @@ describe('T4: a read that crosses a folder switch', () => {
         }
     }
 
-    it.fails("T4b: an old folder's read that ends after a switch puts nothing in the new folder's file", async () => {
+    it("T4b: an old folder's read that ends after a switch puts nothing in the new folder's file", async () => {
         await runB({ switchFolder: true });
         expect([...main.entriesOf('/B').keys()].every((n) => n.startsWith('b'))).toBe(true);
         expect(main.entriesOf('/B').size).toBe(2000);
@@ -177,7 +177,7 @@ describe('T4: a read that crosses a folder switch', () => {
         expect(host.featureCache.has('/A/a0.jpg')).toBe(true);
     });
 
-    it.fails("T4c: a read in the new folder reads it, even while the old folder's read is in flight", async () => {
+    it("T4c: a read in the new folder reads it, even while the old folder's read is in flight", async () => {
         await openA();
         const release = main.hold('featureCacheOpen', 1);
         const readA = host.loadFeatureCache({ signal: host.sortAbortController.signal });
@@ -217,7 +217,7 @@ describe('T5: a switch to an empty folder', () => {
         await settle();
     }
 
-    it.fails('T5: switching to an empty folder writes nothing into its cache file', async () => {
+    it('T5: switching to an empty folder writes nothing into its cache file', async () => {
         await run({ empty: true });
         expect(main.entriesOf('/E')).toBeUndefined();
     });
@@ -256,7 +256,7 @@ describe('T6: a dirty flag that lies', () => {
         await settle();
     }
 
-    it.fails('T6: an entry added while a save is closing is saved by the next autosave', async () => {
+    it('T6: an entry added while a save is closing is saved by the next autosave', async () => {
         await run({ a6Early: false });
         expect(main.entriesOf('/A').has('a6.jpg')).toBe(true);
     });
@@ -264,5 +264,105 @@ describe('T6: a dirty flag that lies', () => {
     it('T6 control: an entry added before the save is saved by it', async () => {
         await run({ a6Early: true });
         expect(main.entriesOf('/A').has('a6.jpg')).toBe(true);
+    });
+});
+
+describe('where a visit ends and begins (spec my call 11)', () => {
+    // A lists a0–a3; its cache holds a0–a2 and is read; the user views a3, which is then unsaved.
+    async function openDirtyA() {
+        host = makeHost(main);
+        const aFiles = makeFiles('/A', 'a', 4);
+        main.seed('/A', aFiles.slice(0, 3));
+        await openFolder(main, host, '/A', aFiles);
+        await host.loadFeatureCache();
+        startAutosave(host);
+        await view(host, 3);
+        return aFiles;
+    }
+
+    it('a failed listing on the switch path leaves no visit, and the autosave writes nothing', async () => {
+        await openDirtyA();
+        main.listReply('/B', { success: false, error: 'x' });
+        await host.switchToFolder('/B');
+        await settle();
+        // The visit ended at the switch's reset, and its flush saved A's unsaved entry.
+        expect(main.entriesOf('/A').has('a3.jpg')).toBe(true);
+        const writes = main.writes.length;
+        await autosaveTick();
+        await settle();
+        expect(host.featureCacheStore.visit).toBeNull();
+        expect(main.writes).toHaveLength(writes);
+    });
+
+    it('a failed listing from the dialog keeps the old visit', async () => {
+        await openDirtyA();
+        main.listReply('/B', { success: false, error: 'x' });
+        await host.loadFolder('/B');
+        await settle();
+        expect(host.featureCacheStore.visit?.folder).toBe('/A');
+        await autosaveTick();
+        await settle();
+        expect(main.entriesOf('/A').has('a3.jpg')).toBe(true);
+    });
+
+    it('reopening the same folder keeps what the flush wrote', async () => {
+        // Review Focus 2: A → A. The flush writes A's copy and the new visit starts unread.
+        const aFiles = await openDirtyA();
+        await openFolder(main, host, '/A', aFiles);
+        await host.loadFeatureCache();
+        expect(main.entriesOf('/A').has('a3.jpg')).toBe(true);
+        expect(host.featureCache.has('/A/a3.jpg')).toBe(true);
+    });
+});
+
+// T1 and T5 are each closed by more than one layer on the disk (a late result has no metadata in the new folder,
+// an unread visit does not save, every visit writes only its own folder), so no disk assertion can pin the per-result
+// visit check or the empty folder's visit on its own. These pin them at the state level.
+describe('the visit checks at the write sites (spec § 5.3, my call 7)', () => {
+    it('a late worker or CLIP result from the old folder never reaches the new visit', async () => {
+        host = makeHost(main, { enableClipFeatures: true });
+        await openFolder(main, host, '/A', makeFiles('/A', 'a', 3));
+        await host.loadFeatureCache();
+        main.list('/B', makeFiles('/B', 'b', 5));
+        const release = holdImage(host, '/A/a0.jpg');
+        const extraction = host.startBackgroundFeatureExtraction();
+        await release.reached;
+        await host.switchToFolder('/B');
+        await settle();
+        release();
+        await settle();
+        await drainWorker(host);
+        await extraction;
+        expect(host.featureCache.has('/A/a0.jpg')).toBe(false);
+        expect(host.clipCache.has('/A/a0.jpg')).toBe(false);
+        expect(host.featureCacheStore.getState()).toEqual({ state: 'unread', baseline: null, dirty: false });
+    });
+
+    it('a priority extraction that finishes after a switch is dropped', async () => {
+        host = makeHost(main);
+        await openFolder(main, host, '/A', makeFiles('/A', 'a', 3));
+        main.list('/B', makeFiles('/B', 'b', 5));
+        let finish;
+        host.extractFeaturesFromMediaElement = () =>
+            new Promise((resolve) => {
+                finish = resolve;
+            });
+        const viewing = view(host, 1);
+        await settle(5);
+        await host.switchToFolder('/B');
+        await settle();
+        finish(new Float32Array(64).fill(0.25));
+        await viewing;
+        expect(host.featureCache.has('/A/a1.jpg')).toBe(false);
+        expect(host.featureCacheStore.getState().dirty).toBe(false);
+    });
+
+    it('an empty folder gets its own visit, with nothing to save', async () => {
+        host = makeHost(main);
+        await openFolder(main, host, '/A', makeFiles('/A', 'a', 3));
+        await openFolder(main, host, '/E', []);
+        expect(host.featureCacheStore.visit?.folder).toBe('/E');
+        expect(host.featureCacheStore.getState()).toEqual({ state: 'unread', baseline: null, dirty: false });
+        expect(await host.saveFeatureCache()).toEqual({ outcome: 'skipped', reason: 'empty' });
     });
 });

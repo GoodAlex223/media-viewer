@@ -533,6 +533,7 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - [ ] TODO 🔴 "Stop the feature cache being wiped" → DONE.md. Update WEEKLY.md's order note: G2 PR 2 is next.
 - [ ] Archive this plan to `docs/archive/plans/` (`git rm` the original), and link it from `docs/README.md`.
 - [ ] Propagation check: re-read `CLAUDE.md:138/140/193` and the spec against what shipped.
+- [ ] Re-point the open BACKLOG entries that name the moved symbols (found by T3's grep): BACKLOG.md:807 (`_acquireCacheIoLock`), :841 (`round6` duplicated from `_saveFeatureCacheLocked`, now from `feature-cache-store.js`), :1049 (the `ingest` dimension check, now in the store's read), :1395 (`_featureCacheLoadPromise` + `_acquireCacheIoLock`, now the store's per-visit single-flight and lock). Line numbers at `482ca5f`.
 
 ## Model and Effort
 
@@ -573,3 +574,11 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
   - freeze lazily inside the save → 2 fail: `the copy is frozen at the request`, `rapid switches write only the folder that had work`;
   - no live check after the chunk await → 1 fails: `a cancel seen after the last chunk commits nothing`.
   - Full suite: 1,975 passed, 1 skipped.
+- **T3, the renderer wired to the store.**
+  - Step 2's three tests failed first, each on its own assertion: `expected false to be true` (no flush to A at the switch), `expected undefined to be '/A'` (no visit), `expected false to be true` (`a3.jpg` not on disk).
+  - After the wiring all seven `it.fails` reported `Expect test to fail`; flipped to `it`: 17/17. `git diff b22672c -- tests/feature-cache-wipe.test.js` shows seven one-line `it.fails` → `it` hunks plus the appended blocks; no assertion line changed.
+  - **Mutation finding.** Two of the plan's three named mutations survived: the worker result ignoring its task's visit (T1) and the empty branch beginning no visit (T5) left all 17 green. Both triggers are closed by several layers on disk: a late result has no metadata in the new folder (so it is never written), the run's tail saves only its own visit, an unread visit does not save, and every visit writes only its own folder with a fresh counter. Three state-level tests now pin the mechanisms (`the visit checks at the write sites`); each fails under its mutation: the worker result (M1), the CLIP result (M1b), the priority extraction's captured visit (M1c), the empty-branch `beginVisit` (M3). The plan's third mutation, `_switchToFolderNow` not ending the visit, fails `a failed listing on the switch path…`. Two more: the non-empty branch's `beginVisit` (15 fail) and `loadFolder`'s `endVisit` (fails `reopening the same folder…`).
+  - Reached tests: the two ported suites deleted from `media-viewer-utils.test.js`; the deliberate changes are the `loadFolder` empty-folder case (now `endVisit` with the maps still full, then the clears, then `beginVisit('/new/empty-folder')`) and the Phase 1 gate (`needsRead`; the warm-cache case is now "this visit has read", and "reads the cache when this visit has not, even with every file in memory" pins spec my call 4). The perf-phase case and similarity-sort-glue's AI-sort-during-Show case set `needsRead` where they used an empty or warm map. Store stubs were added where `loadFolder`, `_switchToFolderNow`, `handleSortByPrediction` or `initializeFeaturePool` run past the store.
+  - Full suite: 1,967 passed, 1 skipped. Lint: 0 errors; the 2 `no-shadow` warnings are on `main` too.
+  - **`wc -l media-viewer.js`: 11,869** (12,190 on `main`, −321; target ≤ 11,940).
+  - Grep of the moved symbols: code hits only in `ml-training.js` (T4) and `CLAUDE.md` (T6). Planning records and frozen specs still name them; four open BACKLOG entries are carried in the Closeout below.
