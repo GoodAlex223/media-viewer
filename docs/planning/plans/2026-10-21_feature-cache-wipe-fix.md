@@ -527,7 +527,6 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - **T4a is pinned at the state level only** (spec my call 13). Recorded here; no BACKLOG entry.
 - **No save at app quit** (spec § 10). A visit's last ≤ 30 s of extraction is lost on quit, as today. → BACKLOG 🟤.
 - **The per-result visit checks (T1) and the empty folder's visit (T5) are pinned at the state level.** Both triggers are closed by several layers on disk, so no disk assertion can isolate them (Progress Log, T3). Recorded here; no BACKLOG entry.
-- **A refusal of a flush on leave is logged, never shown.** The visit has ended, and the warning says "this folder", which would name the folder now open (ledger ruling, T2). An unexplained refusal there reaches only the session log. → BACKLOG 🟤 only if the review asks for it.
 
 ## Closeout (after the merge, on `main`)
 
@@ -593,3 +592,4 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
   - `CLAUDE.md`: two Architecture lines; the visit model on the feature-cache bullet; the store's lock on the training-cache bullet; the `loadFeatureCache()` gotcha rewritten in place. +489 bytes.
   - Full verification: `npx vitest run` 2,006 passed, 1 skipped; `npm run lint` 0 errors, the 2 warnings that `main` has too; `npx playwright test` 211 passed, 6 skipped, 0 failed (9.2 min); `ml-retrain-skip` re-run alone, and its 10 session logs hold no refusal, read-failure or failed-save line.
   - **`wc -l media-viewer.js`: 11,869**, −321 against `main`'s 12,190.
+- **After the hand-off (2026-10-21), D4 restored for the flush on leave.** A side agent noted that T2's ruling (a refused flush on leave is only logged) narrowed the user's D4, a warning once per visit. The warning now names the folder that was left (`Feature cache for "A" not saved: …`), once per visit, and changes no state; an explained refusal there stays log-only. `an unexplained refusal of the flush on leave warns, naming the folder left` failed first (`expected [] to deeply equal [ [ …(2) ] ]`), then 66/66.

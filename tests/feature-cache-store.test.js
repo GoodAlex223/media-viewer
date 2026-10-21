@@ -784,6 +784,39 @@ describe('refusals (spec § 7.3)', () => {
             ['Feature-cache save refused by main (shrink) for /A: seen 2000, written 4'],
         ]);
     });
+
+    it('an unexplained refusal of the flush on leave warns, naming the folder left', async () => {
+        // D4 holds for the most common save too: by the time main answers, another folder is on screen, so the
+        // warning names the one the save was for.
+        const files = makeFiles('/A', 'a', 4);
+        main.seed('/A', files.slice(0, 3));
+        const { store, host, notify } = makeStore(main, { files });
+        const v = store.beginVisit('/A');
+        await store.ensureRead(); // read 3
+        store.putFeature(v, '/A/a3.jpg', vec());
+        main.api.featureCacheWriteClose = async () => ({ success: false, refused: 'shrink', seen: 2000, written: 4 });
+        const flush = store.endVisit();
+        switchTo(store, host, '/B', makeFiles('/B', 'b', 3));
+        expect(await flush).toEqual({ outcome: 'refused', reason: 'shrink', written: 4 });
+        expect(notify.mock.calls).toEqual([
+            [refusalMessage({ refused: 'shrink', seen: 2000, written: 4, label: 'Feature cache for "A"' }), 'warning'],
+        ]);
+        expect(store.getState()).toEqual({ state: 'unread', baseline: null, dirty: false }); // B is untouched
+    });
+
+    it('an explained refusal of the flush on leave is only logged', async () => {
+        const files = makeFiles('/A', 'a', 3);
+        const { store, host, notify, logError } = makeStore(main, { files });
+        const v = store.beginVisit('/A');
+        await store.ensureRead(); // absent
+        store.putFeature(v, '/A/a0.jpg', vec());
+        main.api.featureCacheWriteClose = async () => ({ success: false, refused: 'unseen', seen: null, written: 1 });
+        const flush = store.endVisit();
+        switchTo(store, host, '/B', makeFiles('/B', 'b', 3));
+        await flush;
+        expect(notify).not.toHaveBeenCalled();
+        expect(logError).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('dropped work (spec D2 amendment)', () => {

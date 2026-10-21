@@ -510,7 +510,8 @@ export class FeatureCacheStore {
      * Main refused the close (spec § 7.3). Explained when the visit had found no file or a corrupt one: the file
      * changed after the visit looked (the source folder is also a training folder, say), so the visit adopts what
      * main saw and stays able to save. Unexplained otherwise: one warning per visit, and the visit is blocked until
-     * it reads again. Always logged. An ended visit's refusal is logged only: its warning would name the wrong folder.
+     * it reads again. Always logged. For a visit that has ended (its flush on leave), the warning names its folder,
+     * since another one is on screen by then, and no state changes.
      */
     _refused(frozen, rec, closed) {
         const explained = frozen.state === 'absent' || frozen.state === 'discard';
@@ -535,6 +536,10 @@ export class FeatureCacheStore {
                     this.notify(refusalMessage(closed), 'warning');
                 }
             }
+        } else if (!explained && !rec.refusalWarned) {
+            rec.refusalWarned = true;
+            const label = `Feature cache for "${this.basename(frozen.folder)}"`;
+            this.notify(refusalMessage({ ...closed, label }), 'warning');
         }
         return { outcome: 'refused', reason: closed.refused, written: closed.written };
     }
