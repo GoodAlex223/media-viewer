@@ -1605,7 +1605,10 @@ class MediaViewer {
         }
 
         if (entry.fileSize !== undefined) {
-            this.featureMetadata.set(path, { size: entry.fileSize, mtime: 0 });
+            // The mtime the file left with (move-file is a rename, so it comes back with it): an entry at 0 is
+            // skipped by every save, and one such file kept an unread visit's full-coverage save from writing
+            // (PR #86 review #6). 0 only for an entry that never recorded it.
+            this.featureMetadata.set(path, { size: entry.fileSize, mtime: entry.fileMtimeMs ?? 0 });
         }
     }
 
@@ -1920,6 +1923,7 @@ class MediaViewer {
                     originalPath: currentFile.path,
                     newPath: moveResult.targetPath,
                     fileSize: currentFile.size,
+                    fileMtimeMs: currentFile.mtimeMs,
                     fileType: currentFile.type,
                     actionType: actionType,
                     mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
@@ -2081,6 +2085,7 @@ class MediaViewer {
                     originalPath: fileToMove.path,
                     newPath: moveResult.targetPath,
                     fileSize: fileToMove.size,
+                    fileMtimeMs: fileToMove.mtimeMs,
                     fileType: fileToMove.type,
                     actionType: 'special',
                     mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
@@ -5183,6 +5188,7 @@ class MediaViewer {
                     fileName: file.name,
                     originalPath: file.path,
                     fileSize: file.size,
+                    fileMtimeMs: file.mtimeMs,
                     mlFeatures: combined ? Array.from(combined) : raw ? Array.from(raw) : null,
                     score: this.predictionScores.get(file.path),
                     bulkBucket: this.bulkRated.get(file.name),
@@ -5462,6 +5468,7 @@ class MediaViewer {
                         name: lastMove.fileName,
                         path: lastMove.originalPath,
                         size: lastMove.fileSize,
+                        mtimeMs: lastMove.fileMtimeMs,
                         type: lastMove.fileType,
                     };
 
@@ -5535,6 +5542,7 @@ class MediaViewer {
                         name: firstMove.fileName,
                         path: firstMove.originalPath,
                         size: firstMove.fileSize,
+                        mtimeMs: firstMove.fileMtimeMs,
                         type: firstMove.fileType,
                     });
 
@@ -5542,6 +5550,7 @@ class MediaViewer {
                         name: secondMove.fileName,
                         path: secondMove.originalPath,
                         size: secondMove.fileSize,
+                        mtimeMs: secondMove.fileMtimeMs,
                         type: secondMove.fileType,
                     });
 
@@ -5605,12 +5614,14 @@ class MediaViewer {
                         name: firstMove.fileName,
                         path: firstMove.originalPath,
                         size: firstMove.fileSize,
+                        mtimeMs: firstMove.fileMtimeMs,
                         type: firstMove.fileType,
                     });
                     this.mediaFiles.push({
                         name: secondMove.fileName,
                         path: secondMove.originalPath,
                         size: secondMove.fileSize,
+                        mtimeMs: secondMove.fileMtimeMs,
                         type: secondMove.fileType,
                     });
 
@@ -5649,6 +5660,7 @@ class MediaViewer {
                         name: undoMove.fileName,
                         path: undoMove.originalPath,
                         size: undoMove.fileSize,
+                        mtimeMs: undoMove.fileMtimeMs,
                         type: undoMove.fileType,
                     });
 
@@ -6697,6 +6709,7 @@ class MediaViewer {
                 name: move.fileName,
                 path: move.originalPath,
                 size: move.fileSize,
+                mtimeMs: move.fileMtimeMs,
                 type: move.fileType,
             });
             this.restoreFeatureCachesFromHistory(move);
@@ -7106,6 +7119,7 @@ class MediaViewer {
                     originalPath: primaryFile.path,
                     newPath: primaryMoveResult.targetPath,
                     fileSize: primaryFile.size,
+                    fileMtimeMs: primaryFile.mtimeMs,
                     fileType: primaryFile.type,
                     actionType: primaryAction,
                     mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
@@ -7138,6 +7152,7 @@ class MediaViewer {
                     originalPath: secondaryFile.path,
                     newPath: secondaryMoveResult.targetPath,
                     fileSize: secondaryFile.size,
+                    fileMtimeMs: secondaryFile.mtimeMs,
                     fileType: secondaryFile.type,
                     actionType: secondaryAction,
                     mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
@@ -10029,6 +10044,10 @@ class MediaViewer {
         this.sortAbortController = new AbortController();
         const runId = ++this.sortRunId;
         const signal = this.sortAbortController.signal;
+        // Live until a cancel, a newer sort or a folder load. Checked after every phase, not only the signal: a folder
+        // switch empties the list and ends Phase 2 at its reset, and loadFolder aborts this sort only once the new
+        // listing returns (PR #86 review #10: the collect loop then ran over the empty list).
+        const isLive = () => !signal.aborted && runId === this.sortRunId && !this._folderLoadInFlight;
         // Cancel must also stop an in-progress background extraction (frees CPU).
         signal.addEventListener('abort', () => this.cancelBackgroundExtraction(), { once: true });
         this.updateSortProgress({ phase: 'Preparing…' }); // card visible before any await
@@ -10092,7 +10111,7 @@ class MediaViewer {
             }
             // Cancel stays clickable throughout the load above; it cannot interrupt the
             // in-flight IPC download, so it takes effect here instead.
-            if (signal.aborted) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
 
             // Phase 1 — load cached features (incremental + determinate + cancelable).
             // Once per folder visit (spec my call 4): a repeat sort in the same visit skips the ~40 s read.
@@ -10107,7 +10126,7 @@ class MediaViewer {
                 });
                 timePhase('sourceCacheLoad', tLoad);
             }
-            if (signal.aborted) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
 
             // The out-of-date mark (G2 spec § 8): the history BEFORE training reads the folders. A rating
             // made while the sort runs then counts as new even if training saw it — the hint may
@@ -10124,7 +10143,7 @@ class MediaViewer {
             if (training.source !== 'skipped' && this.mlStats?.isReady) {
                 this.showMlLearningIndicator(this.mlStats, training.source);
             }
-            if (signal.aborted) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
             if (!this.mlStats?.isReady) {
                 this.showNotification(
                     `Need more ratings (${this.mlStats?.positiveCount || 0} likes, ${this.mlStats?.negativeCount || 0} dislikes)`,
@@ -10155,7 +10174,7 @@ class MediaViewer {
                 }
                 timePhase('extract', tExtract);
             }
-            if (signal.aborted) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
 
             // Collect features.
             const allFeatures = {};
@@ -10185,9 +10204,8 @@ class MediaViewer {
             if (this.isLoading || this.mediaNavigationInProgress || this._fileOpInFlight) {
                 this.updateSortProgress({ phase: 'Waiting for the file to load…' });
             }
-            const isLive = () => !signal.aborted && runId === this.sortRunId && !this._folderLoadInFlight;
             const settled = await this._waitForRenderIdle(AI_APPLY_WAIT_MS, true, isLive);
-            if (signal.aborted || runId !== this.sortRunId || this._folderLoadInFlight) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
             if (!settled) throw new Error('a file is still loading — sort again');
             this.applyPredictionSortResult(result, { resort });
             sortPerf.outcome = 'done';

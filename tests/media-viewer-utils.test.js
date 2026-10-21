@@ -1181,6 +1181,16 @@ describe('restoreFeatureCachesFromHistory', () => {
         restoreFeatureCachesFromHistory.call(ctx, entry);
         expect(ctx.featureMetadata.get('/d/c.png')).toEqual({ size: 5555, mtime: 0 });
     });
+
+    it("restores featureMetadata with the file's mtime when the entry recorded it (review #6)", () => {
+        // An mtime of 0 never matches a real stat, so the store's save skips the entry, and one such file kept an
+        // unread visit's full-coverage save (all or nothing) from ever writing. move-file is a rename, so the
+        // file comes back with the mtime it left with.
+        const ctx = makeCtx();
+        const entry = { originalPath: '/d/c.png', mlFeatures: new Float32Array(64), fileSize: 5555, fileMtimeMs: 7000 };
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+        expect(ctx.featureMetadata.get('/d/c.png')).toEqual({ size: 5555, mtime: 7000 });
+    });
 });
 
 describe('isJxl', () => {
@@ -1740,19 +1750,27 @@ describe('handleSortByPrediction lifecycle', () => {
     });
 
     it('bails unsorted when aborted during the load phase', async () => {
+        // The visit has not read its cache, so Phase 1 calls loadFeatureCache, where the abort fires. With makeCtx's
+        // needsRead() false the read never ran, and the test passed on the sort's own catch of runMlSort's throw
+        // (review #11). Only an early bail leaves training uncalled and the outcome 'cancelled'.
+        const ensureTrainedModel = vi.fn();
+        const loadFeatureCache = vi.fn(function () {
+            this.sortAbortController.abort(); // user cancels mid-load
+            return Promise.resolve();
+        });
         const ctx = makeCtx({
-            // Cold cache so the warm-cache gate actually calls loadFeatureCache (where the
-            // abort fires) — a warm cache would skip the load and never reach the abort.
-            featureCache: new Map(),
-            loadFeatureCache: function () {
-                this.sortAbortController.abort(); // user cancels mid-load
-                return Promise.resolve();
-            },
+            loadFeatureCache,
+            mlTraining: { ensureTrainedModel },
             runMlSort: () => {
                 throw new Error('runMlSort must not be reached after cancel');
             },
         });
+        ctx.featureCacheStore.needsRead = vi.fn(() => true);
         await handleSortByPrediction.call(ctx);
+        expect(loadFeatureCache).toHaveBeenCalledTimes(1);
+        expect(loadFeatureCache.mock.calls[0][0].signal.aborted).toBe(true); // the sort's own signal
+        expect(ensureTrainedModel).not.toHaveBeenCalled();
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(ctx.sortAbortController).toBeNull();
         expect(ctx.isPredictionSorting).toBe(false);
@@ -1764,8 +1782,8 @@ describe('handleSortByPrediction lifecycle', () => {
         const ctx = makeCtx({
             // Not ready yet, so the training branch actually runs.
             mlStats: { isReady: false, positiveCount: 0, negativeCount: 0 },
-            // Cold cache (b.png missing, loadFeatureCache resolves without populating it) so
-            // Phase 2 would call startBackgroundFeatureExtraction if execution got that far.
+            // b.png missing from the cache, so Phase 2 would call
+            // startBackgroundFeatureExtraction if execution got that far.
             // That's the proof point: Phase 2's OWN post-await abort check would otherwise
             // independently catch this same aborted signal and mask a missing training-phase
             // check — asserting only runMlSort/isSortedByPrediction/finally-cleanup would still
@@ -1774,7 +1792,6 @@ describe('handleSortByPrediction lifecycle', () => {
             // startBackgroundFeatureExtraction never being called is what actually isolates the
             // training-phase guard.
             featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
-            loadFeatureCache: () => Promise.resolve(), // resolves without populating the cache
             mlTraining: {
                 ensureTrainedModel: () => {
                     ctx.sortAbortController.abort(); // user cancels mid-training
@@ -1802,10 +1819,9 @@ describe('handleSortByPrediction lifecycle', () => {
     it('bails unsorted when aborted during the extraction phase', async () => {
         const runMlSort = vi.fn(() => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} }));
         const ctx = makeCtx({
-            // One file missing from the cache so the Phase-1 gate fires AND uncachedFiles
-            // stays non-empty after the (no-op) load — Phase 2 actually gets a chance to run.
+            // One file missing from the cache so uncachedFiles stays non-empty: Phase 2
+            // actually gets a chance to run.
             featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
-            loadFeatureCache: () => Promise.resolve(), // resolves without populating the cache
             startBackgroundFeatureExtraction: function () {
                 this.sortAbortController.abort(); // user cancels mid-extraction
                 return Promise.resolve();
@@ -1821,6 +1837,26 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(ctx.sortAbortController).toBeNull();
         expect(ctx.isPredictionSorting).toBe(false);
+    });
+
+    it('ends as cancelled when a folder switch ends Phase 2 before the listing aborts the sort (review #10)', async () => {
+        // _switchToFolderNow cancels the extraction and empties the list at its reset; loadFolder aborts the sort
+        // only once the new folder's listing returns. In between, the collect loop ran over the empty list and the
+        // sort ended with a sticky "Could not extract features from any files".
+        const showNotification = vi.fn();
+        const ctx = makeCtx({
+            showNotification,
+            featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
+            startBackgroundFeatureExtraction: function () {
+                this.mediaFiles = [];
+                this._folderLoadInFlight = true;
+                return Promise.resolve();
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
+        expect(showNotification).not.toHaveBeenCalledWith('Could not extract features from any files', 'error');
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
     });
 
     it('bails unsorted when aborted during the sort phase', async () => {
@@ -2642,6 +2678,43 @@ describe('handleCancel feature restore', () => {
         expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
     });
 
+    it('single-mode undo puts the file back on the list with its mtime (review #6)', async () => {
+        const ctx = commonMocks({
+            moveHistory: [
+                {
+                    fileName: 'a.png',
+                    originalPath: '/folder/a.png',
+                    newPath: '/folder/like/a.png',
+                    fileSize: 100,
+                    fileMtimeMs: 7000,
+                    fileType: 'image/png',
+                    actionType: 'like',
+                    mlFeatures: Array.from(make576()),
+                },
+            ],
+        });
+        await handleCancel.call(ctx);
+        expect(ctx.mediaFiles).toEqual([
+            { name: 'a.png', path: '/folder/a.png', size: 100, mtimeMs: 7000, type: 'image/png' },
+        ]);
+        expect(ctx.featureMetadata.get('/folder/a.png')).toEqual({ size: 100, mtime: 7000 });
+    });
+
+    it('every undo that puts a file back on the list gives it the mtime its history entry recorded (review #6)', () => {
+        // Source check over the seven list restores (handleCancel's six: single, the bulk pair's remaining file, two
+        // pair branches of two; the tournament's one): each `size: <entry>.fileSize` is followed by its mtimeMs.
+        for (const [name, sites] of [
+            ['handleCancel', 6],
+            ['handleTournamentUndo', 1],
+        ]) {
+            const body = methodSource(name);
+            const restores = [...body.matchAll(/size: (\w+)\.fileSize,\s*mtimeMs: (\w+)\.fileMtimeMs,/g)];
+            expect(restores, name).toHaveLength(sites);
+            for (const m of restores) expect(m[2], name).toBe(m[1]);
+            expect([...body.matchAll(/size: \w+\.fileSize,/g)], name).toHaveLength(sites);
+        }
+    });
+
     it('compare-mode pair-undo restores caches for both files', async () => {
         const ctx = commonMocks({
             isCompareMode: true,
@@ -3423,6 +3496,27 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
         expect(ctx.moveHistory[0].prunedPairKeys).toEqual([key]);
         expect(ctx.bulkRatedPairs.has(key)).toBe(false); // pruned after capture
         expect(ctx.mediaFiles).toEqual([f]);
+    });
+
+    it("moveCurrentFile records the file's mtime on its history entry (review #6)", async () => {
+        const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+        const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, mtimeMs: 7000, type: 'image/jpeg' };
+        const ctx = moveCtx([a], []);
+        await moveCurrentFile.call(ctx, 'like');
+        expect(ctx.moveHistory[0]).toMatchObject({ fileSize: 10, fileMtimeMs: 7000 });
+    });
+
+    it("moveToSpecialFolder, moveComparePair and the batch record each file's mtime beside its size (review #6)", () => {
+        for (const [name, sites] of [
+            ['moveToSpecialFolder', 1],
+            ['moveComparePair', 2],
+            ['dislikeSkippedFiles', 1],
+        ]) {
+            const body = methodSource(name);
+            const recorded = [...body.matchAll(/fileSize: (\w+)\.size,\s*fileMtimeMs: (\w+)\.mtimeMs,/g)];
+            expect(recorded, name).toHaveLength(sites);
+            for (const m of recorded) expect(m[2], name).toBe(m[1]);
+        }
     });
 
     it('moveCurrentFile omits prunedPairKeys when nothing referenced the file', async () => {
