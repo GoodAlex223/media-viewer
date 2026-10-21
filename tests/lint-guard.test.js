@@ -24,6 +24,7 @@ const RENDERER_FILES = [
     'face-detector.js',
     'recent-folders.js',
     'similarity-sort.js',
+    'feature-cache-store.js',
 ];
 
 describe.each(RENDERER_FILES)('HTML sink guard in %s', (asFile) => {

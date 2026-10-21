@@ -568,3 +568,8 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - **T4a, state level** (scratch test, deleted): A's open held, switch to B, release. `_featureCacheDiskCount` went 0 → 1500 (A's count) while `baseFolderPath` was `/B`, and A's 1,500 entries (`/A/…` paths) were committed into B's map.
 - **E2E on `main`** (`tests/e2e/feature-cache-wipe.test.js`, run once as plain `test`): B's 5 cached names became 2 (`b4.png`, `b5.png`, the two files viewed). Committed as `test.fail` (passes as expected-fail).
 - Harness deviations from the plan's wording are ledgered as rulings (makeHost's options, the sort signal in T4b/T4c, T3's 2,003-file listing, T2's extra write assertion, the added T4c/T5 controls, two shortened titles).
+- **T2, `feature-cache-store.js`**: `tests/feature-cache-store.test.js` first failed on the import (`Cannot find module '../feature-cache-store.js'`), then 64/64 passed. Mutation runs, each restored afterwards:
+  - `unread` may write → 4 fail: `decideSave > unread, not covering`, `writes nothing when the visit is unread and the copy does not cover the folder`, `finishExtractionRun warns once…`, `a visit whose read failed reads again next time`;
+  - freeze lazily inside the save → 2 fail: `the copy is frozen at the request`, `rapid switches write only the folder that had work`;
+  - no live check after the chunk await → 1 fails: `a cancel seen after the last chunk commits nothing`.
+  - Full suite: 1,975 passed, 1 skipped.

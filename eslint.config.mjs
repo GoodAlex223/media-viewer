@@ -175,6 +175,7 @@ export default [
             'recent-folders.js',
             'similarity-sort.js',
             'media-url.js',
+            'feature-cache-store.js',
         ],
         languageOptions: {
             ecmaVersion: 2022,
