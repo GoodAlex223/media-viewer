@@ -12,10 +12,14 @@ const { pipeline, finished } = require('stream');
 
 /**
  * What main last saw of each cache file this session, keyed by the file's path. A record is `{ seen: 'read', count,
- * version }`, `{ seen: 'absent' }`, `{ seen: 'corrupt' }` or `{ seen: 'unreadable' }`.
+ * version }`, `{ seen: 'absent' }`, `{ seen: 'corrupt' }` or `{ seen: 'unreadable' }`. Each file also has a
+ * generation, the number of writes main made to it this session (review #5): the renderer's visit sends the one it
+ * last read or wrote, and a write since then from anyone else (the training step, when the source folder is also a
+ * like folder) makes its copy stale.
  */
 function createFeatureCacheLedger() {
     const records = new Map();
+    const generations = new Map();
     return {
         recordOpen(key, record) {
             // An unreadable open says nothing new about a file main read (review #8): the source folder is also a
@@ -26,28 +30,42 @@ function createFeatureCacheLedger() {
             }
             records.set(key, record);
         },
+        /** Returns the file's new generation. */
         recordWrite(key, { count, version }) {
             records.set(key, { seen: 'read', count, version });
+            const gen = (generations.get(key) || 0) + 1;
+            generations.set(key, gen);
+            return gen;
         },
         get(key) {
             return records.get(key) || null;
         },
+        generation(key) {
+            return generations.get(key) || 0;
+        },
     };
 }
 
-/** The write-open header, checked: `fileCount` is required, so a caller cannot skip the guard's third conjunct. */
+/**
+ * The write-open header, checked: `fileCount` is required, so a caller cannot skip the guard's third conjunct.
+ * `basisGen` is optional: the generation the writer's copy is based on, or null for a writer that does not track it
+ * (the training path, which reads and writes in one call).
+ */
 function validateWriteHeader(header) {
     if (!header || typeof header !== 'object') {
         return { ok: false, error: 'feature-cache write refused: no header' };
     }
-    const { version, fileCount, clipRequired } = header;
+    const { version, fileCount, clipRequired, basisGen = null } = header;
     if (!Number.isInteger(fileCount) || fileCount < 0) {
         return { ok: false, error: 'feature-cache write refused: fileCount must be a non-negative integer' };
     }
     if (typeof clipRequired !== 'boolean') {
         return { ok: false, error: 'feature-cache write refused: clipRequired must be a boolean' };
     }
-    return { ok: true, version: version ?? null, fileCount, clipRequired };
+    if (basisGen !== null && (!Number.isInteger(basisGen) || basisGen < 0)) {
+        return { ok: false, error: 'feature-cache write refused: basisGen must be a non-negative integer' };
+    }
+    return { ok: true, version: version ?? null, fileCount, clipRequired, basisGen };
 }
 
 /**
@@ -271,6 +289,8 @@ function cacheFileExists(filePath, access) {
 /**
  * Whether write-close may rename the temp file over the cache (spec § 7.2). With no file at the destination,
  * anything goes. Otherwise:
+ * - `stale`: the writer sent a basis, and main has written the file since (review #5). Checked first: the copy lacks
+ *   that write's entries, whatever its count.
  * - `unseen`: main has no record for the file, or only `unreadable`, or `absent` from before the file appeared; the
  *   write must then cover every media file now in the folder, with a CLIP vector each when `clipRequired`. Only this
  *   case lists the folder.
@@ -278,9 +298,21 @@ function cacheFileExists(filePath, access) {
  *   over twice what is written: the renderer's own rule, so a real shrink still saves. A version change skips it.
  * A `corrupt` record allows the write: the file is being replaced on purpose.
  */
-async function checkClose({ record, destinationExists, header, written, writtenNames, clipNames, listFolderMedia }) {
+async function checkClose({
+    record,
+    destinationExists,
+    header,
+    written,
+    writtenNames,
+    clipNames,
+    listFolderMedia,
+    generation = 0,
+}) {
     if (!destinationExists) {
         return { ok: true };
+    }
+    if (header.basisGen !== null && header.basisGen !== undefined && header.basisGen !== generation) {
+        return { ok: false, refused: 'stale', seen: record?.seen === 'read' ? record.count : null, written };
     }
     if (!record || record.seen === 'unreadable' || record.seen === 'absent') {
         const media = await listFolderMedia();

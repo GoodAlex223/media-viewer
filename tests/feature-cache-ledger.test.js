@@ -55,19 +55,43 @@ describe('createFeatureCacheLedger', () => {
         ledger.recordOpen('/A/.feature_cache.json', { seen: 'unreadable' });
         expect(ledger.get('/A/.feature_cache.json')).toEqual({ seen: 'unreadable' });
     });
+
+    it('counts the writes to each file: the generation starts at 0 and only a write moves it (review #5)', () => {
+        const ledger = createFeatureCacheLedger();
+        expect(ledger.generation('/A/.feature_cache.json')).toBe(0);
+        ledger.recordOpen('/A/.feature_cache.json', { seen: 'read', count: 3, version: 4 });
+        expect(ledger.generation('/A/.feature_cache.json')).toBe(0);
+        expect(ledger.recordWrite('/A/.feature_cache.json', { count: 4, version: 4 })).toBe(1);
+        expect(ledger.recordWrite('/A/.feature_cache.json', { count: 5, version: 4 })).toBe(2);
+        expect(ledger.generation('/A/.feature_cache.json')).toBe(2);
+        expect(ledger.generation('/B/.feature_cache.json')).toBe(0);
+    });
 });
 
 describe('validateWriteHeader', () => {
     const ok = { version: 4, featureDim: 64, clipDim: 512, fileCount: 3, clipRequired: false };
 
     it('accepts a header with a non-negative integer fileCount and a boolean clipRequired', () => {
-        expect(validateWriteHeader(ok)).toEqual({ ok: true, version: 4, fileCount: 3, clipRequired: false });
+        expect(validateWriteHeader(ok)).toEqual({
+            ok: true,
+            version: 4,
+            fileCount: 3,
+            clipRequired: false,
+            basisGen: null,
+        });
         expect(validateWriteHeader({ ...ok, fileCount: 0, clipRequired: true })).toEqual({
             ok: true,
             version: 4,
             fileCount: 0,
             clipRequired: true,
+            basisGen: null,
         });
+    });
+
+    it('takes an optional basisGen: the generation of the file the writer last read or wrote', () => {
+        expect(validateWriteHeader({ ...ok, basisGen: 0 })).toMatchObject({ ok: true, basisGen: 0 });
+        expect(validateWriteHeader({ ...ok, basisGen: 7 })).toMatchObject({ ok: true, basisGen: 7 });
+        expect(validateWriteHeader({ ...ok, basisGen: null })).toMatchObject({ ok: true, basisGen: null });
     });
 
     it.each([
@@ -78,6 +102,9 @@ describe('validateWriteHeader', () => {
         ['an infinite fileCount', { ...ok, fileCount: Infinity }],
         ['a string fileCount', { ...ok, fileCount: '3' }],
         ['no clipRequired', { ...ok, clipRequired: undefined }],
+        ['a negative basisGen', { ...ok, basisGen: -1 }],
+        ['a non-integer basisGen', { ...ok, basisGen: 0.5 }],
+        ['a string basisGen', { ...ok, basisGen: '1' }],
     ])('refuses %s', (_label, header) => {
         expect(validateWriteHeader(header)).toMatchObject({ ok: false, error: expect.any(String) });
     });
@@ -343,7 +370,7 @@ describe('cacheFileExists (review #13)', () => {
 });
 
 describe('checkClose', () => {
-    const header = (over = {}) => ({ version: 4, fileCount: 3, clipRequired: false, ...over });
+    const header = (over = {}) => ({ version: 4, fileCount: 3, clipRequired: false, basisGen: null, ...over });
     const names = (...n) => new Set(n);
     const run = (over) =>
         checkClose({
@@ -447,6 +474,48 @@ describe('checkClose', () => {
             })
         ).toEqual({ ok: true });
         expect(await run({ destinationExists: false })).toEqual({ ok: true });
+    });
+
+    it('refuses stale: the file was written since the generation the writer is based on (review #5)', async () => {
+        // The source folder is also a like folder: the visit read the file at generation 0, then training wrote it.
+        // The visit's copy lacks training's entries, so it may not replace them, whatever its count.
+        const read = { seen: 'read', count: 2000, version: 4 };
+        expect(
+            await run({
+                record: read,
+                header: header({ fileCount: 2000, basisGen: 0 }),
+                written: 1520,
+                generation: 1,
+            })
+        ).toEqual({ ok: false, refused: 'stale', seen: 2000, written: 1520 });
+        expect(
+            await run({ record: { seen: 'absent' }, header: header({ basisGen: 0 }), written: 3, generation: 1 })
+        ).toEqual({ ok: false, refused: 'stale', seen: null, written: 3 });
+    });
+
+    it('a basis equal to the generation goes on to the other rules', async () => {
+        const read = { seen: 'read', count: 2000, version: 4 };
+        const base = { record: read, header: header({ fileCount: 2000, basisGen: 1 }), generation: 1 };
+        expect(await run({ ...base, written: 2000 })).toEqual({ ok: true });
+        expect(await run({ ...base, written: 3 })).toMatchObject({ ok: false, refused: 'shrink' });
+    });
+
+    it('a write with no basis (the training path) is not checked for staleness', async () => {
+        const read = { seen: 'read', count: 2000, version: 4 };
+        expect(
+            await run({
+                record: read,
+                header: header({ fileCount: 2000, basisGen: null }),
+                written: 2000,
+                generation: 5,
+            })
+        ).toEqual({ ok: true });
+    });
+
+    it('a stale writer may still write when no file is there', async () => {
+        expect(
+            await run({ destinationExists: false, header: header({ basisGen: 0 }), written: 1, generation: 3 })
+        ).toEqual({ ok: true });
     });
 
     it('lists the folder only for the coverage case', async () => {

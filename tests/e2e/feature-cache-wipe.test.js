@@ -187,7 +187,7 @@ test.describe("Main's feature-cache rules", () => {
     test('main allows a write that covers every file without a read', async () => {
         const names = await mediaNames(folder.dir);
         const { closed } = await writeThroughMain(header(), await entriesFor(names));
-        expect(closed).toEqual({ success: true, written: 5 });
+        expect(closed).toEqual({ success: true, written: 5, gen: 1 });
         expect(await cachedNames(folder.dir)).toEqual(names);
     });
 
@@ -198,10 +198,29 @@ test.describe("Main's feature-cache rules", () => {
             await window.electronAPI.featureCacheClose();
             return res;
         }, folder.dir);
-        expect(opened).toEqual({ success: true, version: 4, count: 5 });
+        expect(opened).toEqual({ success: true, version: 4, count: 5, gen: 0 });
         const names = await mediaNames(folder.dir);
         const { closed } = await writeThroughMain(header(), await entriesFor(names.slice(0, 1)));
         expect(closed).toEqual({ success: false, refused: 'shrink', seen: 5, written: 1 });
+        expect(await readFile(join(folder.dir, CACHE_FILE), 'utf-8')).toBe(before);
+        expect(await tmpLeft()).toBe(false);
+    });
+
+    test('main refuses a write based on a generation another write has since moved past (review #5)', async () => {
+        // The source folder is also a like folder: the visit read the cache (generation 0), then the training step
+        // wrote it (no basis). The visit's copy lacks training's entries, though its count passes the shrink rule.
+        const opened = await page.evaluate(async (dir) => {
+            const res = await window.electronAPI.featureCacheOpen(dir);
+            await window.electronAPI.featureCacheClose();
+            return res;
+        }, folder.dir);
+        expect(opened.gen).toBe(0);
+        const names = await mediaNames(folder.dir);
+        const training = await writeThroughMain(header(), await entriesFor(names));
+        expect(training.closed).toEqual({ success: true, written: 5, gen: 1 });
+        const before = await readFile(join(folder.dir, CACHE_FILE), 'utf-8');
+        const { closed } = await writeThroughMain(header({ basisGen: 0 }), await entriesFor(names.slice(0, 4)));
+        expect(closed).toEqual({ success: false, refused: 'stale', seen: 5, written: 4 });
         expect(await readFile(join(folder.dir, CACHE_FILE), 'utf-8')).toBe(before);
         expect(await tmpLeft()).toBe(false);
     });
@@ -216,7 +235,7 @@ test.describe("Main's feature-cache rules", () => {
         expect(opened).toMatchObject({ success: false, corrupt: true });
         const names = await mediaNames(folder.dir);
         const { closed } = await writeThroughMain(header(), await entriesFor(names.slice(0, 1)));
-        expect(closed).toEqual({ success: true, written: 1 });
+        expect(closed).toEqual({ success: true, written: 1, gen: 1 });
         expect(await cachedNames(folder.dir)).toEqual(names.slice(0, 1));
     });
 

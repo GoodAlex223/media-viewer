@@ -14,6 +14,9 @@ export const CLIP_DIM = 512;
 export const READ_CHUNK = 1000;
 export const WRITE_BATCH = 1000;
 export const AUTOSAVE_MS = 30000;
+// Automatic re-reads after explained refusals, in a row with no successful write between, before the next refusal
+// counts as unexplained: a bound on a main that keeps refusing, not a limit normal use reaches.
+export const MAX_AUTO_REREADS = 3;
 
 export const DROPPED_WORK_MESSAGE = "Couldn't read this folder's feature cache, so the new features weren't saved.";
 
@@ -26,6 +29,9 @@ export function refusalMessage({ refused, seen, written, label = 'Feature cache'
             `${label} not saved: it would have replaced ${count(seen)} cached entries with ${count(written)}. ` +
             'The cache on disk is unchanged.'
         );
+    }
+    if (refused === 'stale') {
+        return `${label} not saved: the cache file kept changing while this folder was open. The cache on disk is unchanged.`;
     }
     return `${label} not saved: this folder's cache was never read in this session. The cache on disk is unchanged.`;
 }
@@ -128,6 +134,9 @@ export class FeatureCacheStore {
             baseline: null,
             changes: 0, // bumped by every write into the maps for this visit
             savedChanges: 0, // the counter a successful save had frozen
+            gen: null, // the file's generation (main's write count) when this visit last read or wrote it (review #5)
+            readSeq: 0, // bumped by every read that merges the file in: a copy frozen before one is out of date
+            autoRereads: 0, // re-reads after explained refusals since the last successful write
             readFailed: false, // the last read failed (not cancelled): dropped work is reported
             readFailureLogged: false,
             refusalWarned: false,
@@ -249,6 +258,7 @@ export class FeatureCacheStore {
                     return maps.featureCache.size;
                 }
                 if (!opened?.success) {
+                    rec.gen = opened?.gen ?? null;
                     if (opened?.notFound) {
                         rec.state = 'absent';
                     } else if (opened?.corrupt) {
@@ -262,6 +272,7 @@ export class FeatureCacheStore {
                 }
                 if (opened.version !== this.getConfig().featureCacheVersion) {
                     // Replaced on purpose; this visit's own extractions are kept (spec § 5.2).
+                    rec.gen = opened.gen ?? null;
                     rec.state = 'discard';
                     return maps.featureCache.size;
                 }
@@ -314,6 +325,8 @@ export class FeatureCacheStore {
                 rec.state = 'read';
                 rec.baseline = total;
                 rec.readFailed = false;
+                rec.gen = opened.gen ?? null;
+                rec.readSeq++;
                 return maps.featureCache.size;
             } catch (err) {
                 if (this.isCurrent(visit)) {
@@ -427,6 +440,7 @@ export class FeatureCacheStore {
             state: rec.state,
             baseline: rec.baseline,
             changeCount: rec.changes,
+            readSeq: rec.readSeq,
             fileCount: files.length,
             clipRequired,
             covers: coversFolder(
@@ -454,12 +468,21 @@ export class FeatureCacheStore {
         // during it neither stops it nor redirects it. Only the reply's effect on the visit checks it is current.
         const release = await this.acquireLock();
         try {
+            if (frozen.readSeq !== rec.readSeq) {
+                // A re-read merged the file in after this copy froze (an explained refusal's): the copy lacks what it
+                // read. The save that follows the re-read carries both.
+                return { outcome: 'skipped', reason: 'superseded' };
+            }
+            // The basis is read now, not frozen: a save of this visit that finished while this one waited moved it,
+            // and this copy holds everything that one did. main refuses the copy as stale if anyone else wrote the
+            // file since (review #5, #14).
             const opened = await this.io.writeOpen(frozen.folder, {
                 version: frozen.version,
                 featureDim: FEATURE_DIM,
                 clipDim: CLIP_DIM,
                 fileCount: frozen.fileCount,
                 clipRequired: frozen.clipRequired,
+                basisGen: rec.gen,
             });
             if (!opened?.success) {
                 // Nothing is written this time, and the baseline stays, so the next save is still guarded.
@@ -485,6 +508,10 @@ export class FeatureCacheStore {
                 throw new Error(closed?.error || 'write-close failed');
             }
             const written = frozen.entries.length;
+            if (Number.isInteger(closed.gen)) {
+                rec.gen = closed.gen; // even for a visit that has ended: its flush may still be queued
+            }
+            rec.autoRereads = 0;
             if (this.isCurrent(frozen.visit)) {
                 rec.state = 'read';
                 rec.baseline = written;
@@ -507,14 +534,17 @@ export class FeatureCacheStore {
     }
 
     /**
-     * Main refused the close (spec § 7.3). Explained when the visit had found no file or a corrupt one: the file
-     * changed after the visit looked (the source folder is also a training folder, say), so the visit adopts what
-     * main saw and stays able to save. Unexplained otherwise: one warning per visit, and the visit is blocked until
-     * it reads again. Always logged. For a visit that has ended (its flush on leave), the warning names its folder,
-     * since another one is on screen by then, and no state changes.
+     * Main refused the close (spec § 7.3). Explained when the file changed behind the visit: main says it was written
+     * since the visit's basis (`stale`: the training step wrote it, the source folder being a like folder), or the
+     * visit had found no file or a corrupt one. The visit then reads the file again, merging it in, and saves what it
+     * read with its own work (review #4: adopting main's count without the entries let a later save shrink the file).
+     * Unexplained otherwise: one warning per visit, and the visit is blocked until it reads again. Always logged. For
+     * a visit that has ended (its flush on leave), the warning names its folder, since another one is on screen by
+     * then, and no state changes.
      */
     _refused(frozen, rec, closed) {
-        const explained = frozen.state === 'absent' || frozen.state === 'discard';
+        const changedBehind = closed.refused === 'stale' || frozen.state === 'absent' || frozen.state === 'discard';
+        const explained = changedBehind && rec.autoRereads < MAX_AUTO_REREADS;
         this.logError(
             `Feature-cache save refused by main (${closed.refused}) for ${frozen.folder}: ` +
                 `seen ${closed.seen}, written ${closed.written}` +
@@ -522,13 +552,7 @@ export class FeatureCacheStore {
         );
         if (this.isCurrent(frozen.visit)) {
             if (explained) {
-                if (closed.seen === null || closed.seen === undefined) {
-                    rec.state = 'unread';
-                    rec.baseline = null;
-                } else {
-                    rec.state = 'read';
-                    rec.baseline = closed.seen;
-                }
+                this._rereadThenSave(rec);
             } else {
                 rec.state = 'blocked';
                 if (!rec.refusalWarned) {
@@ -542,6 +566,16 @@ export class FeatureCacheStore {
             this.notify(refusalMessage({ ...closed, label }), 'warning');
         }
         return { outcome: 'refused', reason: closed.refused, written: closed.written };
+    }
+
+    // Called while the refused save still holds the lock, so the read queues on it now, ahead of any copy already
+    // waiting in the save chain; that copy is then skipped as superseded.
+    _rereadThenSave(rec) {
+        rec.autoRereads++;
+        rec.state = 'unread';
+        rec.baseline = null;
+        const { visit } = rec;
+        this.ensureRead().then(() => (this.isCurrent(visit) ? this.saveIfDirty() : null));
     }
 
     // ==================== LOCK AND AUTOSAVE ====================

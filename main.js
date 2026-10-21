@@ -855,12 +855,14 @@ app.whenReady().then(async () => {
     guard.handle('feature-cache-open', [kinds.grantedPath], async (_event, folderPath) => {
         const filePath = path.join(folderPath, FOLDER_CACHE_FILES.feature);
         const key = await ledgerKey(folderPath);
+        // The file's generation (review #5): the renderer's visit sends it back as its write's basis.
+        const gen = featureCacheLedger.generation(key);
         featureCacheSession = null;
         try {
             await assertFixedPath(filePath);
         } catch (err) {
             featureCacheLedger.recordOpen(key, { seen: 'unreadable' });
-            return { success: false, unreadable: true, error: err.message };
+            return { success: false, unreadable: true, error: err.message, gen };
         }
         try {
             // A brief lock (antivirus, the thumbnailer) is retried, as write-close's rename is.
@@ -871,21 +873,21 @@ app.whenReady().then(async () => {
             });
             featureCacheSession = entries;
             featureCacheLedger.recordOpen(key, { seen: 'read', count: entries.length, version });
-            return { success: true, version, count: entries.length };
+            return { success: true, version, count: entries.length, gen };
         } catch (err) {
             // No file, a corrupt one, or one main could not read (spec my call 12): only the first two let the
             // renderer write a fresh file.
             const kind = classifyReadError(err);
             if (kind === 'absent') {
                 featureCacheLedger.recordOpen(key, { seen: 'absent' });
-                return { success: false, notFound: true };
+                return { success: false, notFound: true, gen };
             }
             if (kind === 'corrupt') {
                 featureCacheLedger.recordOpen(key, { seen: 'corrupt' });
-                return { success: false, corrupt: true, error: err.message };
+                return { success: false, corrupt: true, error: err.message, gen };
             }
             featureCacheLedger.recordOpen(key, { seen: 'unreadable' });
-            return { success: false, unreadable: true, error: err.message };
+            return { success: false, unreadable: true, error: err.message, gen };
         }
     });
     guard.handle(
@@ -995,6 +997,7 @@ app.whenReady().then(async () => {
                 writtenNames: writer.names,
                 clipNames: writer.clipNames,
                 listFolderMedia: () => listMediaFiles(writer.folderPath, isMediaFile),
+                generation: featureCacheLedger.generation(writer.key),
             });
             if (!verdict.ok) {
                 await fs.unlink(writer.tmpPath).catch(() => {});
@@ -1008,8 +1011,11 @@ app.whenReady().then(async () => {
             for (let attempt = 0; attempt < 5; attempt++) {
                 try {
                     await fs.rename(writer.tmpPath, writer.finalPath);
-                    featureCacheLedger.recordWrite(writer.key, { count: written, version: writer.header.version });
-                    return { success: true, written };
+                    const gen = featureCacheLedger.recordWrite(writer.key, {
+                        count: written,
+                        version: writer.header.version,
+                    });
+                    return { success: true, written, gen };
                 } catch (err) {
                     lastErr = err;
                     if (['EPERM', 'EACCES', 'EBUSY'].includes(err.code) && attempt < 4) {

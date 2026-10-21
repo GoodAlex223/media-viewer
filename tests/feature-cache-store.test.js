@@ -9,6 +9,7 @@ import {
     refusalMessage,
     DROPPED_WORK_MESSAGE,
     AUTOSAVE_MS,
+    MAX_AUTO_REREADS,
     READ_CHUNK,
     WRITE_BATCH,
 } from '../feature-cache-store.js';
@@ -607,9 +608,10 @@ describe('requestSave: ported from saveFeatureCache data-loss guards', () => {
         expect(store.getState()).toEqual({ state: 'read', baseline: 7, dirty: true });
     });
 
-    it('sends the header main checks: version, dims, fileCount and clipRequired', async () => {
+    it('sends the header main checks: version, dims, fileCount, clipRequired and the basis', async () => {
         const { store } = makeStore(main, { files: dFiles(3), clip: true });
         const v = store.beginVisit('/d');
+        main.api.featureCacheOpen = async () => ({ success: false, notFound: true, gen: 2 });
         await store.ensureRead();
         fill(store, v, 2);
         await store.requestSave();
@@ -619,7 +621,24 @@ describe('requestSave: ported from saveFeatureCache data-loss guards', () => {
             clipDim: 512,
             fileCount: 3,
             clipRequired: true,
+            basisGen: 2,
         });
+    });
+
+    it("the basis is the generation of the visit's last read or successful write", async () => {
+        const rmain = new FakeMain({ rules: true });
+        const files = dFiles(3);
+        rmain.list('/d', files);
+        rmain.seed('/d', files.slice(0, 1));
+        const { store } = makeStore(rmain, { files });
+        const v = store.beginVisit('/d');
+        await store.ensureRead(); // generation 0
+        fill(store, v, 2);
+        await store.requestSave(); // generation 1
+        fill(store, v, 3);
+        await store.requestSave();
+        expect(rmain.writesTo('/d').map((w) => w.header.basisGen)).toEqual([0, 1]);
+        expect(rmain.writesTo('/d').every((w) => w.closed)).toBe(true);
     });
 });
 
@@ -733,34 +752,69 @@ describe('requestSave: the frozen copy and the queue', () => {
 });
 
 describe('refusals (spec § 7.3)', () => {
-    it("an explained refusal adopts main's count and shows nothing", async () => {
-        // Review Focus 5: the source folder is also the like folder, and training wrote its cache mid-visit.
-        const files = makeFiles('/A', 'a', 3);
-        const { store, notify, logError } = makeStore(main, { files });
+    it("an explained refusal reads the file again, then saves it with the visit's work, and shows nothing", async () => {
+        // Review Focus 5: the source folder is also the like folder, and training wrote its cache mid-visit. The D4
+        // amendment's "adopts main's count" became a re-read (review #4).
+        const rmain = new FakeMain({ rules: true });
+        const files = makeFiles('/A', 'a', 40);
+        rmain.list('/A', files);
+        const { store, host, notify, logError } = makeStore(rmain, { files });
         const v = store.beginVisit('/A');
         await store.ensureRead(); // absent
+        await rmain.trainingWrite(store, '/A', files);
         store.putFeature(v, '/A/a0.jpg', vec());
-        main.api.featureCacheWriteClose = async () => ({ success: false, refused: 'shrink', seen: 40, written: 1 });
-        expect(await store.requestSave()).toEqual({ outcome: 'refused', reason: 'shrink', written: 1 });
-        expect(store.getState()).toEqual({ state: 'read', baseline: 40, dirty: true });
+        expect(await store.requestSave()).toEqual({ outcome: 'refused', reason: 'stale', written: 1 });
+        expect(store.getState()).toEqual({ state: 'unread', baseline: null, dirty: true }); // re-reading
+        await settle();
+        expect(store.getState()).toEqual({ state: 'read', baseline: 40, dirty: false });
+        expect(host.featureCache.size).toBe(40);
         expect(notify).not.toHaveBeenCalled();
         expect(logError.mock.calls).toEqual([
             [
-                'Feature-cache save refused by main (shrink) for /A: seen 40, written 1 — explained, the file changed after this visit looked',
+                'Feature-cache save refused by main (stale) for /A: seen 40, written 1 — explained, the file changed after this visit looked',
             ],
         ]);
     });
 
-    it('an explained unseen with seen null returns the visit to unread', async () => {
+    it('a copy frozen before the re-read is skipped as superseded', async () => {
+        const rmain = new FakeMain({ rules: true });
+        const files = makeFiles('/A', 'a', 10);
+        rmain.list('/A', files);
+        rmain.seed('/A', files.slice(0, 5));
+        const { store } = makeStore(rmain, { files });
+        const v = store.beginVisit('/A');
+        await store.ensureRead(); // read 5
+        await rmain.trainingWrite(store, '/A', files); // all 10
+        store.putFeature(v, '/A/a5.jpg', vec());
+        const release = rmain.hold('featureCacheWriteClose', 2); // the visit's first close (training's was the 1st)
+        const refused = store.requestSave();
+        await release.reached;
+        store.putFeature(v, '/A/a6.jpg', vec());
+        const queued = store.requestSave(); // frozen with 7 entries, before the re-read
+        release();
+        expect(await refused).toMatchObject({ outcome: 'refused', reason: 'stale' });
+        expect(await queued).toEqual({ outcome: 'skipped', reason: 'superseded' });
+        await settle();
+        expect(rmain.entriesOf('/A').size).toBe(10);
+        expect(store.getState()).toEqual({ state: 'read', baseline: 10, dirty: false });
+    });
+
+    it('a main that keeps refusing gets three re-reads, then the warning and a block', async () => {
+        // Each explained refusal re-reads; past MAX_AUTO_REREADS in a row with no write between, the next counts as
+        // unexplained, so a main bug cannot loop the visit on the lock.
         const files = makeFiles('/A', 'a', 3);
+        main.seed('/A', files);
         const { store, notify } = makeStore(main, { files });
         const v = store.beginVisit('/A');
-        await store.ensureRead(); // absent
+        await store.ensureRead();
         store.putFeature(v, '/A/a0.jpg', vec());
-        main.api.featureCacheWriteClose = async () => ({ success: false, refused: 'unseen', seen: null, written: 1 });
+        const opens = vi.spyOn(main.api, 'featureCacheOpen');
+        main.api.featureCacheWriteClose = async () => ({ success: false, refused: 'stale', seen: 3, written: 3 });
         await store.requestSave();
-        expect(store.getState()).toEqual({ state: 'unread', baseline: null, dirty: true });
-        expect(notify).not.toHaveBeenCalled();
+        await settle(60);
+        expect(opens).toHaveBeenCalledTimes(MAX_AUTO_REREADS);
+        expect(store.getState().state).toBe('blocked');
+        expect(notify.mock.calls).toEqual([[refusalMessage({ refused: 'stale', seen: 3, written: 3 }), 'warning']]);
     });
 
     it('an unexplained refusal warns once per visit and blocks', async () => {
@@ -816,6 +870,95 @@ describe('refusals (spec § 7.3)', () => {
         await flush;
         expect(notify).not.toHaveBeenCalled();
         expect(logError).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('a write behind the visit (review #4, #5, #14)', () => {
+    // FakeMain with main's real rules. The source folder is also a like folder, so the training step writes the
+    // visit's own cache file behind the store (cacheIo shares only the lock).
+    let rmain;
+    beforeEach(() => {
+        rmain = new FakeMain({ rules: true });
+    });
+
+    it("a read visit's save after a training write keeps training's entries, silently (#5 i)", async () => {
+        const files = makeFiles('/L', 'l', 20);
+        rmain.list('/L', files);
+        rmain.seed('/L', files.slice(0, 15));
+        const { store, notify } = makeStore(rmain, { files });
+        const v = store.beginVisit('/L');
+        await store.ensureRead(); // read 15
+        await rmain.trainingWrite(store, '/L', files); // all 20
+        store.putFeature(v, files[15].path, vec()); // Phase 2 re-extracts one of the five the visit lacks
+        await store.requestSave(); // 16: passes both 50% rules, so main alone cannot stop it
+        await settle();
+        expect(rmain.entriesOf('/L').size).toBe(20);
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('a training write never turns into a false refusal warning (#5 ii)', async () => {
+        const files = makeFiles('/L', 'l', 20);
+        rmain.list('/L', files);
+        rmain.seed('/L', files.slice(0, 6));
+        const { store, notify } = makeStore(rmain, { files });
+        const v = store.beginVisit('/L');
+        await store.ensureRead(); // read 6
+        await rmain.trainingWrite(store, '/L', files); // all 20
+        store.putFeature(v, files[6].path, vec()); // 7: under half of training's 20
+        await store.requestSave();
+        await settle();
+        expect(notify).not.toHaveBeenCalled();
+        expect(store.getState()).toMatchObject({ state: 'read', dirty: false });
+        expect(rmain.entriesOf('/L').size).toBe(20);
+    });
+
+    it('an absent visit re-reads after a training write instead of adopting its count (#4)', async () => {
+        const files = makeFiles('/L', 'l', 20);
+        rmain.list('/L', files);
+        const { store, host, notify } = makeStore(rmain, { files });
+        const v = store.beginVisit('/L');
+        await store.ensureRead(); // absent
+        await rmain.trainingWrite(store, '/L', files); // all 20
+        store.putFeature(v, files[0].path, vec());
+        await store.requestSave(); // refused, explained
+        await settle();
+        // Then an interrupted Phase 2: 11 more entries, past half of 20. Adopting the count let this save shrink
+        // the file to 12; the visit now holds what it read.
+        for (const f of files.slice(1, 12)) {
+            store.putFeature(v, f.path, vec());
+        }
+        await store.requestSave();
+        await settle();
+        expect(host.featureCache.size).toBe(20);
+        expect(rmain.entriesOf('/L').size).toBe(20);
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    it("a re-opened folder's save keeps what the old visit's flush wrote after its read (#14)", async () => {
+        const aFiles = makeFiles('/A', 'a', 6);
+        const bFiles = makeFiles('/B', 'b', 2);
+        rmain.list('/A', aFiles);
+        rmain.seed('/A', aFiles.slice(0, 3));
+        const { store, host } = makeStore(rmain, { files: aFiles });
+        const v1 = store.beginVisit('/A');
+        await store.ensureRead(); // read 3
+        store.putFeature(v1, aFiles[3].path, vec());
+        const release = rmain.hold('featureCacheWriteChunk', 1);
+        const streaming = store.requestSave(); // S: 4 entries
+        await release.reached;
+        store.putFeature(v1, aFiles[4].path, vec()); // after S froze
+        switchTo(store, host, '/B', bFiles); // the flush F: 5 entries, queued behind S
+        const v2 = switchTo(store, host, '/A', aFiles);
+        const reread = store.ensureRead(); // takes the lock ahead of F, so it reads S's file
+        release();
+        await Promise.all([streaming, reread]);
+        await settle();
+        expect(rmain.entriesOf('/A').has('a4.jpg')).toBe(true); // F wrote it
+        store.putFeature(v2, aFiles[5].path, vec());
+        await store.requestSave();
+        await settle();
+        expect(rmain.entriesOf('/A').has('a4.jpg')).toBe(true);
+        expect(rmain.entriesOf('/A').size).toBe(6);
     });
 });
 

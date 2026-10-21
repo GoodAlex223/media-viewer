@@ -8,8 +8,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { vi } from 'vitest';
 import { FeatureCacheStore } from '../feature-cache-store.js';
+
+const require = createRequire(import.meta.url);
+const { createFeatureCacheLedger, validateWriteHeader, checkClose } = require('../feature-cache-ledger.js');
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(here, '..', 'media-viewer.js'), 'utf-8');
@@ -61,9 +65,16 @@ const HOLDABLE = ['featureCacheOpen', 'featureCacheChunk', 'featureCacheWriteChu
 /**
  * Today's main, in memory: one read session and one writer at a time, both global, as in main.js. A cache file is
  * a Map of name → { vector, clipVector, size, mtime }. Chunks use the legacy JSON shape `{ entries: [[name, entry]] }`.
+ *
+ * With `{ rules: true }` it also keeps main's ledger and applies main's checks (feature-cache-ledger.js, the real
+ * module): the open records what it saw and answers the file's generation, write-open validates the header, and
+ * write-close refuses as main does, with the folder's listing as its media. Without it, nothing is checked, so the
+ * trigger tests measure the renderer's own guards.
  */
 export class FakeMain {
-    constructor() {
+    constructor({ rules = false } = {}) {
+        this.rules = rules;
+        this.ledger = createFeatureCacheLedger();
         this.disk = new Map(); // folder → Map(name → entry)
         this.listings = new Map(); // folder → loadFolder reply
         this.writes = []; // every write-open: { folder, header, entries, closed }
@@ -97,6 +108,35 @@ export class FakeMain {
     /** The folder's cache file, or undefined when it has none. */
     entriesOf(folder) {
         return this.disk.get(folder);
+    }
+
+    /**
+     * The training step's write of `folder`'s cache, as MlTrainingManager makes it through the host's cacheIo: under
+     * the store's lock, with no basis (it reads and writes in one call). `files` get a fresh entry each.
+     */
+    async trainingWrite(store, folder, files) {
+        const release = await store.acquireLock();
+        try {
+            const opened = await this.api.featureCacheWriteOpen(folder, {
+                version: 4,
+                featureDim: 64,
+                clipDim: 512,
+                fileCount: files.length,
+                clipRequired: false,
+            });
+            if (!opened.success) {
+                return opened;
+            }
+            await this.api.featureCacheWriteChunk(
+                files.map((f) => [
+                    f.name,
+                    { vector: new Array(64).fill(0.3), clipVector: null, size: f.size, mtime: f.mtimeMs },
+                ])
+            );
+            return await this.api.featureCacheWriteClose();
+        } finally {
+            release();
+        }
     }
 
     /** The write-opens made for `folder`, in order. */
@@ -145,12 +185,15 @@ export class FakeMain {
             async featureCacheOpen(folder) {
                 await main._gate('featureCacheOpen');
                 const entries = main.disk.get(folder);
+                const gen = main.rules ? { gen: main.ledger.generation(folder) } : {};
                 if (!entries) {
                     main.session = null;
-                    return { success: false, notFound: true };
+                    main.ledger.recordOpen(folder, { seen: 'absent' });
+                    return { success: false, notFound: true, ...gen };
                 }
                 main.session = [...entries].map(([name, e]) => [name, structuredClone(e)]);
-                return { success: true, version: 4, count: main.session.length };
+                main.ledger.recordOpen(folder, { seen: 'read', count: main.session.length, version: 4 });
+                return { success: true, version: 4, count: main.session.length, ...gen };
             },
             async featureCacheChunk(offset, limit) {
                 await main._gate('featureCacheChunk');
@@ -164,6 +207,12 @@ export class FakeMain {
                 return { success: true };
             },
             async featureCacheWriteOpen(folder, header) {
+                if (main.rules) {
+                    const checked = validateWriteHeader(header);
+                    if (!checked.ok) {
+                        return { success: false, error: checked.error };
+                    }
+                }
                 main.writer = { folder, header, entries: new Map(), closed: false };
                 main.writes.push(main.writer);
                 return { success: true };
@@ -186,9 +235,31 @@ export class FakeMain {
                 if (!writer) {
                     return { success: false, error: 'no open writer' };
                 }
+                if (main.rules) {
+                    const verdict = await checkClose({
+                        record: main.ledger.get(writer.folder),
+                        destinationExists: main.disk.has(writer.folder),
+                        header: validateWriteHeader(writer.header),
+                        written: writer.entries.size,
+                        writtenNames: new Set(writer.entries.keys()),
+                        clipNames: new Set([...writer.entries].filter(([, e]) => e.clipVector).map(([n]) => n)),
+                        listFolderMedia: async () => (main.listings.get(writer.folder)?.files || []).map((f) => f.name),
+                        generation: main.ledger.generation(writer.folder),
+                    });
+                    if (!verdict.ok) {
+                        writer.refused = verdict.refused;
+                        return {
+                            success: false,
+                            refused: verdict.refused,
+                            seen: verdict.seen,
+                            written: verdict.written,
+                        };
+                    }
+                }
                 writer.closed = true;
                 main.disk.set(writer.folder, writer.entries);
-                return { success: true, written: writer.entries.size };
+                const gen = main.ledger.recordWrite(writer.folder, { count: writer.entries.size, version: 4 });
+                return { success: true, written: writer.entries.size, ...(main.rules ? { gen } : {}) };
             },
         };
     }
