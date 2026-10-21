@@ -1,6 +1,6 @@
 # Stop the feature cache being wiped on a folder switch
 
-**Status**: Draft, 2026-10-21. Agreed in chat section by section, amended after the builder check (D2 and D4 amendments, my calls 11–14); awaiting the user's review of this document.
+**Status**: Approved by the user, 2026-10-21 ("document looks right"). Agreed in chat section by section, then amended after the builder check (D2 and D4 amendments, my calls 11–14).
 **Branch**: `fix-feature-cache-wipe`, cut from `main` at `5cb1cfb`.
 **Scheduled**: next PR, ahead of G2 PR 2 (the user's ruling at the PR #85 review). Not in [WEEKLY.md](../../planning/WEEKLY.md); see § 12 for what slips.
 **Origin**: [TODO.md](../../planning/TODO.md) 🔴 "Stop the feature cache being wiped on a folder switch (data loss)", from the PR #85 review: [#1](https://github.com/GoodAlex223/media-viewer/pull/85#issuecomment-6275478348), [#16](https://github.com/GoodAlex223/media-viewer/pull/85#issuecomment-6275671877) and the [close-out's second trigger](https://github.com/GoodAlex223/media-viewer/pull/85#issuecomment-6289951316). Also the [archived G2 PR 1 plan](../../archive/plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md) § Residuals, and BACKLOG 🟤 [2026-07-20] "Attribute feature metadata at extraction time…", whose "No longer destructive" claim this work disproves.
