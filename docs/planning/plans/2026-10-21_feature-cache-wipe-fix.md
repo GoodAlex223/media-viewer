@@ -501,7 +501,7 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 
 ## Finish (after Task 6)
 
-- [ ] **The manual check, on copies only** (spec § 9.4). It needs the user's go-ahead before Claude drives the app.
+- [x] **The manual check, on copies only** (spec § 9.4). It needs the user's go-ahead before Claude drives the app. Done 2026-10-21 (Progress Log, Finish).
   - Set-up: copy a real folder and its `.feature_cache.json` to a scratch location, twice (A' and B'). Copy the profile, and run with `MV_USER_DATA_DIR` pointing at the profile copy.
   - Steps: an AI sort in A'; open B'; browse for more than 30 s; check that B's entry count is unchanged; switch back to A' and check its count is unchanged or larger; quit; check the session log for any `refused by main` line.
   - Log the counts.
@@ -520,6 +520,7 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - **Remove `computeFeatures`' dead `useHostCache: true` branch.** Its only caller passes `false` (spec § 6). → BACKLOG 🟤.
 - **One streaming read/write implementation.** `ml-training.js`'s `_loadVectorCache` / `_saveVectorCache` duplicate the store's chunk loop and batch writer. Both now follow the same main rules, so the store's IO could serve both. → BACKLOG 🟤.
 - **Main installs no `uncaughtException` handler.** Before this fix, a read-stream or parser error on `feature-cache-open` was an unhandled `error` event: the open never replied (measured in T6 on a truncated file: "reply was never sent"). The ledger's `pipeline` closes that path; a process-level handler that logs through `logger.js` would catch the next one. → BACKLOG 🟤.
+- **A disk entry that wins the merge still leaves the visit dirty.** A priority extraction that lands during the read bumps the change counter, the read then puts the disk entry over it, and the visit saves an unchanged copy once (seen in the manual check; the cause is likely, not confirmed). Counting only entries that survive the merge would skip that save. → BACKLOG 🟤.
 - **`listMediaFiles`' link branch is untested.** The coverage check follows a link to a media file as `load-folder` does, but no test makes a link: on Windows that needs Developer Mode or admin. A test that skips without the privilege would pin it. → BACKLOG 🟤.
 
 ## Residuals for Extract
@@ -593,3 +594,13 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
   - Full verification: `npx vitest run` 2,006 passed, 1 skipped; `npm run lint` 0 errors, the 2 warnings that `main` has too; `npx playwright test` 211 passed, 6 skipped, 0 failed (9.2 min); `ml-retrain-skip` re-run alone, and its 10 session logs hold no refusal, read-failure or failed-save line.
   - **`wc -l media-viewer.js`: 11,869**, −321 against `main`'s 12,190.
 - **After the hand-off (2026-10-21), D4 restored for the flush on leave.** A side agent noted that T2's ruling (a refused flush on leave is only logged) narrowed the user's D4, a warning once per visit. The warning now names the folder that was left (`Feature cache for "A" not saved: …`), once per visit, and changes no state; an explained refusal there stays log-only. `an unexplained refusal of the flush on leave warns, naming the folder left` failed first (`expected [] to deeply equal [ [ …(2) ] ]`), then 66/66.
+
+### 2026-10-21 — PHASE: Finish
+- **Manual check, on copies only** (spec § 9.4; the user's go-ahead: "You can copy any of …\img, but be careful not to delete anything without asking"). Copies under the session scratchpad:
+  - A′ and B′ hold 300 real images each, from `Liked_1` and `Liked_2`, each with a cache cut from that folder's real cache (300 valid entries, all with CLIP, re-stamped with the copies' size/mtime);
+  - likes′ is 40 images from `Liked_3` with its cache; dislikes′ is 40 images from `to_delete`, no cache;
+  - the profile `%APPDATA%\media_viewer` is copied without its logs.
+  - The app ran on the copied profile (`MV_USER_DATA_DIR`) with a fresh grant store, so only the copies were granted; like/dislike/special pointed at copies.
+  - Run (driven through the E2E helpers): an AI sort in A′ (CLIP on, from the profile; 20 s; trained). Then B′ was browsed for 45 s, 13 views past one autosave tick: B's cache stayed **300 entries, same size and mtime**, and the visit stayed `unread` with 13 unsaved entries in memory. Back to A′: **300 entries**. The session log has no refusal, read-failure or skipped-save line. Training wrote dislikes′'s new cache (40 entries) through main's checks.
+  - The four live caches (`Liked_1/2/3`, `to_delete`) have the same size and mtime before and after.
+  - Observed: A′'s cache was rewritten once, at the same size, when the check left it after the sort. The likely cause (not confirmed): the first file's priority extraction landed during the read, so the visit stayed dirty after the disk entry won the merge. One redundant save; carried to Improvements.
