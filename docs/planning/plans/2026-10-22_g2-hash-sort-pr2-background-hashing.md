@@ -661,6 +661,10 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
 - **Videos still hash on the main thread** (spec non-goal). `Liked_2` holds 60, so each run spends a few seconds of main-thread work on them, spread across the run. → BACKLOG 🟤 only if the smoke shows a stall.
+- **Bulk-rated saves can still land out of order** (T1 review, minor 1; pre-existing) → BACKLOG 🟤, flagged as irreplaceable data.
+  - The renderer fires an un-awaited `saveBulkRatedFile()` from `removeFileFromList` (`media-viewer.js:1491`), and a later save can overtake it. The IPC guard's async `grantedPath` check runs before the writer's per-target chain, so two overlapping saves can reach the chain in the opposite order.
+  - The next save rewrites the whole in-memory map, so a newest rating is lost only if the app quits first.
+  - Fix: a coalescing single-flight `saveBulkRatedFile` in the renderer.
 - **B7's ruling** → append to BACKLOG [2026-10-21] "A per-run hash map".
 - **BACKLOG [2026-10-11] "Make `write-folder-cache` atomic"** → check it off at closeout, if T1 ships.
 - **BACKLOG "Three atomic-write IPC handlers share one fixed `.tmp` path"** → append: `write-folder-cache` and `writeBulkRatedFile` now use unique names (B2), and Improvement #2 covers the remaining two.
@@ -693,6 +697,11 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
     - `Liked_3`: 16,270 files, no hash cache.
 - **2026-10-22** — The user relayed a side agent's note: `.bulk_rated.json` is written with a plain `fs.writeFile` (`main.js:618-628`, verified), and its ratings exist nowhere else. Folded into T1 (B2), with per-target write ordering.
 - **2026-10-22** — **Plan approved** by the user ("Looks good"), with bulk-rated in the atomic writer and the npm `blockhash` removal. Execution is subagent-driven (the brief's model split). **Smoke set for Friday 2026-10-23** (the user agreed to Friday).
+- **2026-10-22** — **T1** `ba6a9f9` (Opus · medium; the controller commits).
+  - RED: `Cannot find module '../atomic-write.js'`.
+  - The 5 named mutations each failed their named test: a direct write, no per-target chain, a fixed tmp name, no `assertPath(tmp)`, and `'w'` for `'wx'`. Reverting either handler to `fs.writeFile` failed its source pin.
+  - Unit: 2,084 passed, 1 skipped. `security-ipc.test.js`: 23 passed, 0 skipped, the planted-link write included. `ml-retrain-skip.test.js` (bulk-rated round trips): 5 passed.
+  - Review: approved, with 5 minors deferred. One became a Residual: the renderer's order of bulk-rated saves.
 - **2026-10-22** — Line references in the brief: BACKLOG.md:617 → the entry is at :644 ("Make `write-folder-cache` atomic"); BACKLOG.md:801 → :828 ("Three atomic-write IPC handlers share one fixed `.tmp` path"). Cited by title from here on (memory `feedback_cite_backlog_by_title`).
 
 ## Key Discoveries
