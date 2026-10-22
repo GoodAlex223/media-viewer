@@ -1,0 +1,12 @@
+n=20 d=576 logistic (dual Newton): 5.2 ms per fit
+n=20 d=576 ridge (LOO lambda): 2.4 ms per fit
+n=20 d=576 app SGD (ml-model.js): 1.9 ms per fit
+n=60 d=576 logistic (dual Newton): 15.2 ms per fit
+n=60 d=576 ridge (LOO lambda): 9.4 ms per fit
+n=60 d=576 app SGD (ml-model.js): 0.4 ms per fit
+n=200 d=832 logistic (dual Newton): 378.3 ms per fit
+n=200 d=832 ridge (LOO lambda): 183.7 ms per fit
+n=200 d=832 app SGD (ml-model.js): 1.8 ms per fit
+n=500 d=832 logistic (dual Newton): 6022.2 ms per fit
+n=500 d=832 ridge (LOO lambda): 3302.2 ms per fit
+n=500 d=832 app SGD (ml-model.js): 6.1 ms per fit

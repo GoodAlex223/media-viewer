@@ -1,0 +1,212 @@
+[
+    {
+        "file": "clip-b32-q8.json",
+        "key": "clip-b32-q8",
+        "repo": "Xenova/clip-vit-base-patch32",
+        "prompts": [
+            "a photo of a cat.",
+            "a photo of a dog.",
+            "a photo of a horse.",
+            "a photo of a bird.",
+            "a photo of an insect.",
+            "a photo of a flower.",
+            "a photo of food.",
+            "a photo of a car.",
+            "a photo of a train.",
+            "a photo of an aircraft.",
+            "a photo of a ship.",
+            "a photo of a church.",
+            "a photo of a lighthouse.",
+            "a photo of a bridge.",
+            "a photo of a mountain.",
+            "a photo of a waterfall."
+        ],
+        "images": 388,
+        "tagAccuracy": 0.7113,
+        "searchMap": 0.6477,
+        "searchP10": 0.825,
+        "perSubject": {
+            "cat": {
+                "ap": 0.9446,
+                "p10": 1
+            },
+            "dog": {
+                "ap": 0.2265,
+                "p10": 0.4
+            },
+            "horse": {
+                "ap": 0.408,
+                "p10": 0.6
+            },
+            "bird": {
+                "ap": 0.271,
+                "p10": 0.5
+            },
+            "insect": {
+                "ap": 0.692,
+                "p10": 1
+            },
+            "flower": {
+                "ap": 0.4943,
+                "p10": 0.7
+            },
+            "food": {
+                "ap": 0.7421,
+                "p10": 1
+            },
+            "car": {
+                "ap": 0.7663,
+                "p10": 1
+            },
+            "train": {
+                "ap": 0.8787,
+                "p10": 1
+            },
+            "aircraft": {
+                "ap": 0.9106,
+                "p10": 1
+            },
+            "ship": {
+                "ap": 0.4449,
+                "p10": 0.7
+            },
+            "church": {
+                "ap": 0.7843,
+                "p10": 1
+            },
+            "lighthouse": {
+                "ap": 0.9091,
+                "p10": 1
+            },
+            "bridge": {
+                "ap": 0.6197,
+                "p10": 0.8
+            },
+            "mountain": {
+                "ap": 0.3873,
+                "p10": 0.5
+            },
+            "waterfall": {
+                "ap": 0.8836,
+                "p10": 1
+            }
+        },
+        "topConfusions": [
+            ["dog->lighthouse", 9],
+            ["dog->church", 6],
+            ["bird->church", 6],
+            ["horse->church", 5],
+            ["ship->lighthouse", 4],
+            ["mountain->lighthouse", 4],
+            ["dog->ship", 3],
+            ["bird->horse", 3]
+        ],
+        "textLoadMs": 1479,
+        "textEncodeMsFor16Prompts": 67
+    },
+    {
+        "file": "siglip2-b16-224-q8.json",
+        "key": "siglip2-b16-224-q8",
+        "repo": "onnx-community/siglip2-base-patch16-224-ONNX",
+        "prompts": [
+            "a photo of a cat.",
+            "a photo of a dog.",
+            "a photo of a horse.",
+            "a photo of a bird.",
+            "a photo of an insect.",
+            "a photo of a flower.",
+            "a photo of food.",
+            "a photo of a car.",
+            "a photo of a train.",
+            "a photo of an aircraft.",
+            "a photo of a ship.",
+            "a photo of a church.",
+            "a photo of a lighthouse.",
+            "a photo of a bridge.",
+            "a photo of a mountain.",
+            "a photo of a waterfall."
+        ],
+        "images": 388,
+        "tagAccuracy": 0.5309,
+        "searchMap": 0.5771,
+        "searchP10": 0.7438,
+        "perSubject": {
+            "cat": {
+                "ap": 0.7112,
+                "p10": 0.9
+            },
+            "dog": {
+                "ap": 0.2018,
+                "p10": 0.4
+            },
+            "horse": {
+                "ap": 0.3823,
+                "p10": 0.6
+            },
+            "bird": {
+                "ap": 0.1251,
+                "p10": 0.1
+            },
+            "insect": {
+                "ap": 0.6657,
+                "p10": 1
+            },
+            "flower": {
+                "ap": 0.4051,
+                "p10": 0.6
+            },
+            "food": {
+                "ap": 0.5216,
+                "p10": 0.9
+            },
+            "car": {
+                "ap": 0.8221,
+                "p10": 0.9
+            },
+            "train": {
+                "ap": 0.8903,
+                "p10": 1
+            },
+            "aircraft": {
+                "ap": 0.9018,
+                "p10": 1
+            },
+            "ship": {
+                "ap": 0.3342,
+                "p10": 0.4
+            },
+            "church": {
+                "ap": 0.6909,
+                "p10": 0.9
+            },
+            "lighthouse": {
+                "ap": 0.8565,
+                "p10": 0.9
+            },
+            "bridge": {
+                "ap": 0.5207,
+                "p10": 0.8
+            },
+            "mountain": {
+                "ap": 0.4509,
+                "p10": 0.5
+            },
+            "waterfall": {
+                "ap": 0.7531,
+                "p10": 1
+            }
+        },
+        "topConfusions": [
+            ["horse->ship", 8],
+            ["bird->ship", 8],
+            ["dog->ship", 7],
+            ["dog->aircraft", 7],
+            ["bridge->ship", 7],
+            ["food->ship", 6],
+            ["lighthouse->ship", 6],
+            ["bird->aircraft", 5]
+        ],
+        "textLoadMs": 4192,
+        "textEncodeMsFor16Prompts": 935
+    }
+]

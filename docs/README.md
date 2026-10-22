@@ -340,6 +340,12 @@ Central index for all project documentation.
 [G3 Bulk-Rate Re-Pair Avoidance]: superpowers/specs/2026-07-24-g3-bulk-rate-repair-avoidance-design.md
 [G3 Re-Score & Counter Fixes]: superpowers/specs/2026-07-25-g3-rescore-and-counter-fixes-design.md
 
+## Research
+
+| Document | Purpose |
+|----------|---------|
+| [AI image sorting the app could run locally (2026-10-22)](research/2026-10-22-ai-sorting.md) | Survey of local image embeddings, aesthetic scoring, tagging, face and near-duplicate grouping and learning from likes and skips, with a throwaway prototype (`prototypes/ai-sorting/`) measured against today's CLIP B/32 + logistic regression; ranking, measurements, recommendation, open questions |
+
 ## Security Audits
 
 | Document | Purpose |

@@ -1,0 +1,54 @@
+[
+    {
+        "file": "clip-b32-q8.json",
+        "key": "clip-b32-q8",
+        "images": 53,
+        "runtime": "electron 39.1.2",
+        "inMain": {
+            "label": "main process (today)",
+            "wallMs": 3950,
+            "inferMedianMs": 29.3,
+            "mainLoopDelayMs": {
+                "p50": 6,
+                "p99": 66.2,
+                "max": 421.3
+            }
+        },
+        "inUtility": {
+            "label": "utilityProcess",
+            "wallMs": 3868,
+            "inferMedianMs": 27.3,
+            "mainLoopDelayMs": {
+                "p50": 15.8,
+                "p99": 20.3,
+                "max": 21.2
+            }
+        }
+    },
+    {
+        "file": "siglip2-b16-224-fp32.json",
+        "key": "siglip2-b16-224-fp32",
+        "images": 53,
+        "runtime": "electron 39.1.2",
+        "inMain": {
+            "label": "main process (today)",
+            "wallMs": 9490,
+            "inferMedianMs": 126,
+            "mainLoopDelayMs": {
+                "p50": 5,
+                "p99": 163.7,
+                "max": 975.7
+            }
+        },
+        "inUtility": {
+            "label": "utilityProcess",
+            "wallMs": 10197,
+            "inferMedianMs": 131.5,
+            "mainLoopDelayMs": {
+                "p50": 15.6,
+                "p99": 25.3,
+                "max": 848.3
+            }
+        }
+    }
+]
