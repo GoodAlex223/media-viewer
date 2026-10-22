@@ -78,6 +78,12 @@ prompt had no source concept).
   - The AI sort has no graph build, so it is not affected.
   - Effort: L (a parallel build), or a user decision (a capped K). Affected: `sorting-worker.js` (Tier 2: plan review), `media-viewer.js` (`runSortingWorker`).
 
+### [2026-10-22] From: v2 modules brainstorm
+
+**Origin**: In the v2 modules brainstorm on 2026-10-22, the user said they may move to Linux, and that others may use the app because the repository is public. That made Linux a v2 goal (spec G-8). The session found that `package.json` declares MIT while the repo has no LICENSE file, and the user asked to file adding one.
+
+- [ ] **Add a LICENSE file (MIT, as `package.json` already declares)** — The repository is public, and `package.json` says `"license": "MIT"`, but no LICENSE file states the terms where people look, so others cannot be sure they may reuse the code. Add the standard MIT text with a copyright line (year and holder, the user's choice of name), and a short License section in `README.md`. The vendored libraries keep their own notices: `vendor/lucide/LICENSE` (ISC) and `vendor/jxl-oxide-wasm/LICENSE-MIT` + `LICENSE-APACHE`. gallery-dl (GPL-2.0) is not bundled, since v2 has the user install it (spec § 12.5), so it does not constrain the choice. Cross-ref: [v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 19 item 5. Effort: XS. Affected: new `LICENSE`, `README.md`.
+
 ### [2026-10-20] From: PR #85 review (user-confirmed)
 
 **Origin**: On 2026-10-20 the user dropped a folder on the start screen and got "Please drop a folder, not individual files", reproducing a known bug. The PR #85 reviewer session relayed the user's ruling to file it 🔵, and the user confirmed it at the G2 PR 1 closeout (2026-10-21). It was moved, not copied, from 🟤 [2026-10-11] From: G1 closeout, where it was filed as a G1 Key Discovery.

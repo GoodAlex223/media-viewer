@@ -1495,7 +1495,8 @@ These are planning actions for the user's sessions, recorded here so they have a
    partners. Under this design they become references, not dependencies.
 5. **For other users (G-8):**
    - `package.json` declares `"license": "MIT"`, but the repository has no LICENSE file, so its terms are not
-     stated where people look. Adding one (with the copyright line) is the user's call.
+     stated where people look. **Filed** as 🔵 BACKLOG [2026-10-22] "Add a LICENSE file (MIT, as `package.json`
+     already declares)".
    - The README needs setup steps for Windows and Linux, including how to install the outside tools.
 
 ---
