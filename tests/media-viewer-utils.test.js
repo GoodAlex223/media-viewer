@@ -746,6 +746,44 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
         await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree', () => true);
         expect(ctx.hashPools).toHaveLength(0);
     });
+
+    // Fix round 1 (R-T5c): a placement made stale while its canary runs must not post the canary's notice into the
+    // folder open now.
+    it('a placement made stale during its canary check reports nothing and terminates its pool', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        let isLiveNow = true;
+        const ctx = makeCtx({
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/c.png', '1111'],
+            ]),
+            computePerceptualHash: vi.fn(async () => '0001'),
+            showNotification: vi.fn(),
+            _reportHashCanaryFailure: vi.fn(),
+            updateSortProgress: vi.fn(),
+        });
+        ctx._createHashPool = function () {
+            const pool = fakeHashPool((p) => this.computePerceptualHash(p), { route: 'main' });
+            pool.checkCanary = vi.fn(async () => {
+                isLiveNow = false; // a folder switch during the check
+                return { ok: false, detail: 'pixels differ' };
+            });
+            this.hashPools.push(pool);
+            return pool;
+        };
+        await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree', () => isLiveNow)).rejects.toThrow(
+            'Sorting cancelled by user'
+        );
+        const [pool] = ctx.hashPools;
+        expect(ctx._reportHashCanaryFailure).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(pool.hashFiles).not.toHaveBeenCalled();
+        expect(pool.terminate).toHaveBeenCalledOnce();
+        expect(ctx.perceptualHashes.has('/b.png')).toBe(false);
+        expect(ctx.updateSortProgress).not.toHaveBeenCalled();
+    });
 });
 
 describe('applyCachedSortOrder (algorithm threading)', () => {

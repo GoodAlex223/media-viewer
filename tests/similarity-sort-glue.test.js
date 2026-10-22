@@ -758,7 +758,9 @@ describe('the run hashes through the pool (PR 2 T5)', () => {
         globalThis.window.electronAPI.logError = logError;
         const ctx = runCtx({ _reportHashCanaryFailure: extract('_reportHashCanaryFailure') });
         ctx._createHashPool = function () {
+            // A failed canary sets the real pool's mainOnly, so every file then goes to the main lane.
             const pool = fakeHashPool((p) => this.computePerceptualHash(p), {
+                route: 'main',
                 canary: { ok: false, detail: 'pixels differ' },
             });
             this.hashPools.push(pool);
@@ -773,7 +775,7 @@ describe('the run hashes through the pool (PR 2 T5)', () => {
             source: 'hash-pool',
             message: 'Hash canary failed: pixels differ',
         });
-        expect(hashNote(ctx)).toBe('new 3, worker 3, fallback 0, skipped 0, pool 3, canary failed');
+        expect(hashNote(ctx)).toBe('new 3, worker 0, fallback 3, skipped 0, pool 3, canary failed');
         expect(outcome(ctx)).toBe('done');
     });
 
@@ -850,6 +852,48 @@ describe('the run hashes through the pool (PR 2 T5)', () => {
         expect(ctx.saveHashCache).toHaveBeenCalledOnce();
         expect(ctx.perceptualHashes.size).toBe(1000);
         expect(outcome(ctx)).toBe('cancelled');
+    });
+
+    // Fix round 1 (R-T5a): the real pool ends its iteration on an abort and yields nothing more, so a Cancel or a
+    // folder switch while the run awaits the next result reaches only the check after the loop. The last file's hash
+    // is the one in flight, so the two before it are stored and the end-save would run without that check.
+    it('a Cancel while the run waits for the next result saves once and ends cancelled', async () => {
+        const ctx = runCtx();
+        ctx.computePerceptualHash.mockImplementation(async (p) => {
+            if (p === '/f/c') {
+                ctx.sortAbortController.abort(); // the Cancel press, while c is in flight
+            }
+            return '0101';
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        const [pool] = ctx.hashPools;
+        expect([...ctx.perceptualHashes.keys()]).toEqual(['/f/a', '/f/b']); // c's result was never yielded
+        expect(ctx.saveHashCache).toHaveBeenCalledOnce();
+        expect(ctx.runSortingWorker).not.toHaveBeenCalled();
+        expect(ctx.saveSortCache).not.toHaveBeenCalled();
+        expect(pool.terminate).toHaveBeenCalledOnce();
+        expect(ctx.showNotification).toHaveBeenCalledWith('❌ Sorting cancelled', 'info');
+        expect(outcome(ctx)).toBe('cancelled');
+    });
+
+    it('a folder switch while the run waits for the next result writes nothing and ends stale', async () => {
+        const ctx = runCtx({ _invalidateSimilarityRun: extract('_invalidateSimilarityRun') });
+        ctx.computePerceptualHash.mockImplementation(async (p) => {
+            if (p === '/f/c') {
+                // loadFolder while c is in flight: the gen moves and the computing run's signal aborts.
+                ctx._invalidateSimilarityRun();
+            }
+            return '0101';
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        const [pool] = ctx.hashPools;
+        expect(ctx.sortAbortController).toBeNull();
+        expect(ctx.saveHashCache).not.toHaveBeenCalled();
+        expect(ctx.saveSortCache).not.toHaveBeenCalled();
+        expect(ctx.runSortingWorker).not.toHaveBeenCalled();
+        expect(pool.terminate).toHaveBeenCalledOnce();
+        expect(ctx.showNotification.mock.calls.filter((c) => /cancelled|Error|⚠️/.test(c[0]))).toEqual([]);
+        expect(outcome(ctx)).toBe('stale');
     });
 
     it('the confirm over 1,000 files says the work runs in the background', async () => {

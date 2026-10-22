@@ -17,14 +17,18 @@ export function fakeHashPool(hashFn, { size = 3, route = 'worker', canary = { ok
                 if (signal?.aborted) {
                     return;
                 }
-                let hash;
+                let result;
                 try {
-                    hash = await hashFn(path);
+                    result = { path, hash: await hashFn(path), route };
                 } catch (error) {
-                    yield { path, hash: null, route: 'none', error };
-                    continue;
+                    result = { path, hash: null, route: 'none', error };
                 }
-                yield { path, hash, route };
+                // The real pool's contract (hash-pool.js): once the signal aborts, nothing more is yielded, the
+                // in-flight result included. The iteration ends without a throw.
+                if (signal?.aborted) {
+                    return;
+                }
+                yield result;
             }
         }),
         terminate: vi.fn(),

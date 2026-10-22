@@ -146,8 +146,8 @@ User clicks "Sort by Similarity"
 │ hash the snapshot's │
 │ images; videos and  │
 │ failures fall back  │
-│ to today's route    │
-│ (or load from       │
+│ to the main-thread  │
+│ route (or load from │
 │ .hash_cache.json)   │
 └──────────┬──────────┘
            │ postMessage(hashes)
