@@ -7,6 +7,7 @@ import {
     formatTrainingPerfLine,
     MlTrainingManager,
 } from '../ml-training.js';
+import { refusalMessage, droppedWorkMessage } from '../feature-cache-store.js';
 import { createRequire } from 'module';
 import * as MediaUrl from '../media-url.js';
 // The extracted computeFeatures reaches the namespace import through globalThis (like LikeOrSkip).
@@ -527,6 +528,108 @@ describe('training-vector cache save', () => {
         const ok = await m._saveVectorCache('/likes', new Map([built('a.jpg', 100, 1000)]), 0);
         expect(ok).toBe(false);
         expect(m.logError).toHaveBeenCalled();
+    });
+});
+
+// The feature-cache wipe fix (spec docs/superpowers/specs/2026-10-21-feature-cache-wipe-design.md § 6, § 7): the
+// training folders' caches go through main's writer, so they send the counts main checks, report its refusals, and
+// tell an unreadable cache apart from a missing or corrupt one.
+describe("training-vector cache and main's rules (feature-cache wipe fix)", () => {
+    const built = (name, size = 100, mtimeMs = 1000) => [
+        name,
+        { feature: new Float32Array(64).fill(0.5), clip: new Float32Array(512).fill(0.25), size, mtimeMs },
+    ];
+
+    it('_saveVectorCache sends fileCount in the header, and no basis (it reads and writes in one call)', async () => {
+        const io = makeCacheIo();
+        const m = managerWith({ cacheIo: io });
+        await m._saveVectorCache('/likes', new Map([built('a.jpg')]), 0, 7);
+        expect(io.writeOpen).toHaveBeenCalledWith('/likes', {
+            version: 4,
+            featureDim: 64,
+            clipDim: 512,
+            fileCount: 7,
+        });
+    });
+
+    it('an unseen refusal after a failed read says the cache could not be read, not that it was never read (close-out R3)', async () => {
+        // With CLIP off, main's CLIP-always coverage rule refuses the re-extracted save (review #2). The read was
+        // tried and failed; the store's twin of this case shows the dropped-work text.
+        const io = makeCacheIo();
+        io.open = vi.fn().mockResolvedValue({ success: false, unreadable: true, error: 'EIO' });
+        io.writeClose = vi.fn().mockResolvedValue({ success: false, refused: 'unseen', seen: null, written: 2 });
+        const m = managerWith({
+            cacheIo: io,
+            computeFeatures: vi.fn(async () => new Float32Array(64)),
+            extractClipEmbedding: vi.fn(async () => null),
+        });
+        const files = [
+            { name: 'a.png', path: '/pics/l/a.png', size: 1, mtimeMs: 1 },
+            { name: 'b.png', path: '/pics/l/b.png', size: 2, mtimeMs: 2 },
+        ];
+        await m._collectFolderVectors('/pics/l', files, 'Processing likes', null, false, undefined);
+        expect(m.notify.mock.calls).toEqual([[droppedWorkMessage('l'), 'warning']]);
+    });
+
+    it('a refused close is logged, warns once per folder per session, and returns false', async () => {
+        const io = makeCacheIo();
+        io.writeClose = vi.fn().mockResolvedValue({ success: false, refused: 'unseen', seen: null, written: 1 });
+        const m = managerWith({ cacheIo: io });
+        expect(await m._saveVectorCache('C:\\pics\\likes', new Map([built('a.jpg')]), 0, 3)).toBe(false);
+        expect(await m._saveVectorCache('C:\\pics\\likes', new Map([built('a.jpg')]), 0, 3)).toBe(false);
+        io.writeClose = vi.fn().mockResolvedValue({ success: false, refused: 'shrink', seen: 2000, written: 3 });
+        expect(await m._saveVectorCache('C:\\pics\\dislikes', new Map([built('b.jpg')]), 0, 2000)).toBe(false);
+        expect(m.notify.mock.calls).toEqual([
+            [
+                refusalMessage({ refused: 'unseen', seen: null, written: 1, label: 'Training cache for "likes"' }),
+                'warning',
+            ],
+            [
+                refusalMessage({ refused: 'shrink', seen: 2000, written: 3, label: 'Training cache for "dislikes"' }),
+                'warning',
+            ],
+        ]);
+        expect(m.logError.mock.calls.map(([msg]) => msg)).toEqual([
+            'Feature-cache save refused by main (unseen) for C:\\pics\\likes: seen null, written 1',
+            'Feature-cache save refused by main (unseen) for C:\\pics\\likes: seen null, written 1',
+            'Feature-cache save refused by main (shrink) for C:\\pics\\dislikes: seen 2000, written 3',
+        ]);
+    });
+
+    it('_loadVectorCache reports unreadable apart from no file and corrupt', async () => {
+        const files = [{ name: 'a.jpg', size: 100, mtimeMs: 1000 }];
+        const replies = [
+            [{ success: false, notFound: true }, false],
+            [{ success: false, corrupt: true, error: 'Unexpected token' }, false],
+            [{ success: false, unreadable: true, error: 'EBUSY' }, true],
+        ];
+        for (const [reply, unreadable] of replies) {
+            const io = makeCacheIo();
+            io.open = vi.fn().mockResolvedValue(reply);
+            const m = managerWith({ cacheIo: io });
+            const result = await m._loadVectorCache('/likes', files);
+            expect(result).toMatchObject({ diskCount: 0, aborted: false, unreadable });
+            expect(result.entries.size).toBe(0);
+        }
+    });
+
+    it('an unreadable training cache still extracts and attempts the save', async () => {
+        const io = makeCacheIo();
+        io.open = vi.fn().mockResolvedValue({ success: false, unreadable: true, error: 'EACCES' });
+        const m = managerWith({
+            cacheIo: io,
+            computeFeatures: vi.fn(async () => new Float32Array(64)),
+            extractClipEmbedding: vi.fn(async () => new Float32Array(512)),
+        });
+        const files = [
+            { name: 'a.png', path: '/l/a.png', size: 1, mtimeMs: 1 },
+            { name: 'b.png', path: '/l/b.png', size: 2, mtimeMs: 2 },
+        ];
+        const result = await m._collectFolderVectors('/l', files, 'Processing likes', null, true, undefined);
+        expect(result.rows).toHaveLength(2);
+        expect(m.computeFeatures).toHaveBeenCalledTimes(2);
+        expect(io.writeOpen).toHaveBeenCalledWith('/l', expect.objectContaining({ fileCount: 2 }));
+        expect(io.written.map(([name]) => name)).toEqual(['a.png', 'b.png']);
     });
 });
 

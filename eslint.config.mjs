@@ -74,6 +74,7 @@ export default [
             'clip-image.js',
             'app-protocol.js',
             'storage-migration.js',
+            'feature-cache-ledger.js',
         ],
         languageOptions: {
             ecmaVersion: 2022,
@@ -175,6 +176,7 @@ export default [
             'recent-folders.js',
             'similarity-sort.js',
             'media-url.js',
+            'feature-cache-store.js',
         ],
         languageOptions: {
             ecmaVersion: 2022,

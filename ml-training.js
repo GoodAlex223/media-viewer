@@ -6,6 +6,8 @@
 //
 // Design: docs/superpowers/specs/2026-09-10-ml-training-pipeline-design.md
 
+import { refusalMessage, droppedWorkMessage } from './feature-cache-store.js';
+
 /**
  * Everything the trained model is a function of. Training reads the descriptor and nothing
  * else, so an input that is not declared here cannot influence the model — which is what
@@ -103,7 +105,7 @@ const NO_CLIP_LOG_LIMIT = 20;
 
 // Round before serializing: full-precision floats stringify to ~17 chars each, and 6 decimals
 // is well below the noise floor for unit-normalized cosine similarity. Mirrors the source
-// folder's cache writer (media-viewer.js _saveFeatureCacheLocked).
+// folder's cache writer (feature-cache-store.js).
 const round6 = (arr) => {
     const out = new Array(arr.length);
     for (let i = 0; i < arr.length; i++) {
@@ -184,24 +186,31 @@ export class MlTrainingManager {
         // model-cache hit. This is what makes a repeat sort in one session free.
         this.sessionFingerprint = null;
         this.sessionStats = null;
+        // Training folders whose refused save has been shown once this session (spec § 7.3).
+        this._refusalWarned = new Set();
     }
 
     /**
      * Load one training folder's vector cache. Entries are validated against the folder scan
      * and returned in a map OWNED BY THIS MODULE — they are never merged into the host's
      * featureCache/clipCache/featureMetadata, which belong to the source folder and are
-     * persisted by its own 30 s auto-save.
+     * persisted by its own store (feature-cache-store.js).
      *
-     * Returns `{ entries, diskCount, aborted }`. `aborted` is true only when the load loop
+     * Returns `{ entries, diskCount, aborted, unreadable }`. `unreadable` is main's third kind of
+     * failed open (spec my call 2): the file exists but could not be read, as opposed to no file or
+     * a corrupt one. The caller still extracts everything; main then saves only a copy that covers
+     * the folder. `aborted` is true only when the load loop
      * broke because `signal` was already tripped by the time it reached its next iteration --
      * in that case `entries` is PARTIAL (whatever was ingested before the abort was noticed)
      * while `diskCount` is still the FULL on-disk count, not the partial amount actually read.
      * Callers must check `aborted` before treating a partial load as complete.
      *
      * Transport: feature-cache-chunk (main.js) returns packFeatureChunk's output --
-     * { names, sizes, mtimes, hasClip, vecBuf, clipBuf } -- with NO `success` field, or the
-     * legacy { entries: [[filename, entry]] } shape for a pre-binary on-disk cache. Mirrors
-     * media-viewer.js _loadFeatureCacheLocked's `if (chunk.vecBuf) { ... } else { ... }` branch.
+     * { names, sizes, mtimes, hasClip, vecBuf, clipBuf } -- with NO `success` field, or
+     * `{ entries: [] }` with no session (and as the IPC guard's refusal value). The legacy branch
+     * below reads that as "no entries"; the store's read fails it instead (PR #86 review #12).
+     * Not reachable in production. If it were, with CLIP off the re-extracted save would drop the
+     * folder's CLIP vectors (plan Improvement).
      *
      * `loadPhase` labels the streaming read on the sort card. This read is the longest silent
      * stretch of a rebuild -- the source folder's comparable load is documented at ~40s for a 24k
@@ -212,7 +221,9 @@ export class MlTrainingManager {
      */
     async _loadVectorCache(folderPath, files, signal, loadPhase = null) {
         const entries = new Map();
-        if (!folderPath || !files || files.length === 0) return { entries, diskCount: 0, aborted: false };
+        if (!folderPath || !files || files.length === 0) {
+            return { entries, diskCount: 0, aborted: false, unreadable: false };
+        }
 
         const current = new Map(files.map((f) => [f.name, f]));
         // `?.()?.` (not just `?.()`): a call through an optional-chaining `?.` only short-circuits
@@ -228,10 +239,12 @@ export class MlTrainingManager {
         let aborted = false;
         try {
             const opened = await this.cacheIo.open(folderPath);
-            if (!opened?.success) return { entries, diskCount: 0, aborted: false };
+            if (!opened?.success) {
+                return { entries, diskCount: 0, aborted: false, unreadable: !!opened?.unreadable };
+            }
             if (expectedVersion !== undefined && opened.version !== expectedVersion) {
                 await this.cacheIo.close();
-                return { entries, diskCount: 0, aborted: false };
+                return { entries, diskCount: 0, aborted: false, unreadable: false };
             }
             diskCount = opened.count || 0;
             const report =
@@ -294,37 +307,37 @@ export class MlTrainingManager {
         } finally {
             release();
         }
-        return { entries, diskCount, aborted };
+        return { entries, diskCount, aborted, unreadable: false };
     }
 
     /**
-     * Persist one training folder's vectors. Returns false when the shrink guard refused.
+     * Persist one training folder's vectors. Returns false when the shrink guard or main refused, or the
+     * write failed.
      * @param {number} diskCount entries last seen on disk FOR THIS FOLDER — the guard is
      *   per-cache, so a legitimately small like folder cannot be blocked by a large dislike one.
      * @param {number} [scanCount=Infinity] file count from the live folder scan this save
-     *   follows. Mirrors _saveFeatureCacheLocked's third guard conjunct
-     *   (`this.mediaFiles.length > this.featureCache.size * 2`) -- this module holds no folder
-     *   state of its own, so the caller passes the count instead of it being read off `this`.
-     *   The Infinity default always satisfies the conjunct (the conservative direction: the
-     *   guard still fires on the first two alone), so a caller that omits it keeps the
-     *   two-conjunct behavior rather than silently bypassing the guard. Task 5 passes
+     *   follows. Mirrors the source folder's third guard conjunct (decideSave in
+     *   feature-cache-store.js: the file count over twice the entries) -- this module holds no
+     *   folder state of its own, so the caller passes the count. The Infinity default always
+     *   satisfies the conjunct here (the conservative direction: the guard still fires on the first
+     *   two alone). It is also the header's `fileCount`, which main requires as an integer, so a
+     *   caller that omits it has its write-open refused. `_collectFolderVectors` passes
      *   `files.length`.
      *
      * Transport: feature-cache-write-chunk (main.js) destructures each element as a
      * [key, value] pair (`for (const [key, value] of entries)`) -- a flat {name, ...} object is
-     * not iterable and throws. Mirrors media-viewer.js _saveFeatureCacheLocked's
-     * `batch.push([filename, entry])`.
+     * not iterable and throws. Mirrors feature-cache-store.js's `batch.push([name, entry])`.
      */
-    async _saveVectorCache(folderPath, entries, diskCount, scanCount = Infinity) {
+    async _saveVectorCache(folderPath, entries, diskCount, scanCount = Infinity, { readFailed = false } = {}) {
         if (!folderPath || !entries || entries.size === 0) return false;
 
         // DATA-LOSS GUARD: never replace a substantially populated on-disk cache with a
         // drastically smaller in-memory one -- UNLESS the live folder scan is ALSO small, which
         // is what tells a genuine shrink (few entries, few files) apart from a partial/rejected
         // load (few entries, but the folder still has many files). Three conjuncts, mirroring
-        // _saveFeatureCacheLocked's guard exactly (real incident: a 23,559-entry cache was
-        // overwritten by 32 entries) -- that guard reads `this.mediaFiles.length` directly; this
-        // module holds no folder state, so `scanCount` arrives as a parameter instead.
+        // the source folder's guard exactly (decideSave; real incident: a 23,559-entry cache was
+        // overwritten by 32 entries) -- that guard counts the folder's files itself; this module
+        // holds no folder state, so `scanCount` arrives as a parameter instead.
         if (diskCount > 0 && entries.size < diskCount * 0.5 && scanCount > entries.size * 2) {
             this.logError(
                 `Training-cache save SKIPPED (shrink guard) for ${folderPath}: ` +
@@ -343,11 +356,12 @@ export class MlTrainingManager {
                 version,
                 featureDim: FEATURE_DIM,
                 clipDim: CLIP_DIM,
+                fileCount: scanCount,
             });
             if (!opened?.success) return false;
 
             let batch = [];
-            // Mirrors _saveFeatureCacheLocked's `flush`: both writeChunk and writeClose report
+            // Mirrors the store's batch writer: both writeChunk and writeClose report
             // failure by RETURNING {success:false}, not by throwing (write-close does this even
             // after exhausting its own EPERM/EACCES/EBUSY rename retries, at which point nothing
             // was persisted at all) -- an unchecked result silently reports success on a save
@@ -375,6 +389,10 @@ export class MlTrainingManager {
             }
             await flush();
             const closed = await this.cacheIo.writeClose();
+            if (closed?.refused) {
+                this._reportRefusal(folderPath, closed, { readFailed });
+                return false;
+            }
             if (!closed?.success) throw new Error(closed?.error || 'write-close failed');
             return true;
         } catch (err) {
@@ -385,7 +403,7 @@ export class MlTrainingManager {
             // result would pass the next load's parse and re-baseline the next save's shrink
             // guard off the truncated count -- silent, permanent, undetectable data loss.
             // Logging only and leaving the writer dangling is correct and matches
-            // _saveFeatureCacheLocked's own catch: the next write-open destroys any leftover
+            // feature-cache-store.js's save: the next write-open destroys any leftover
             // writer, so a stray .tmp file is the only cost.
             this.logError(`Training vector cache save failed for ${folderPath}: ${err.message}`);
             return false;
@@ -394,12 +412,37 @@ export class MlTrainingManager {
         }
     }
 
+    /**
+     * Main refused a training folder's save (spec § 7.3): it never read this file and the write does not cover
+     * the folder, or the write would shrink the file past the renderer's own rule. The cache on disk is unchanged.
+     * Logged every time; shown once per folder per session.
+     */
+    _reportRefusal(folderPath, { refused, seen, written }, { readFailed = false } = {}) {
+        // After a failed read, `unseen` means the copy does not cover the folder (a file failed extraction, or CLIP
+        // is off and main needs a CLIP vector per file): the read was tried, so "never read" would be false
+        // (PR #86 close-out R3). The dropped-work text says what happened.
+        const afterFailedRead = refused === 'unseen' && readFailed;
+        this.logError(
+            `Feature-cache save refused by main (${refused}) for ${folderPath}: seen ${seen}, written ${written}` +
+                (afterFailedRead ? ' — after a failed read' : '')
+        );
+        if (this._refusalWarned.has(folderPath)) return;
+        this._refusalWarned.add(folderPath);
+        const name = String(folderPath).split(/[\\/]/).filter(Boolean).pop() || folderPath;
+        this.notify(
+            afterFailedRead
+                ? droppedWorkMessage(name)
+                : refusalMessage({ refused, seen, written, label: `Training cache for "${name}"` }),
+            'warning'
+        );
+    }
+
     static MODEL_CACHE_VERSION = 1;
     static MODEL_CACHE_LIMIT = 5;
 
     /**
      * Async mutex serializing every MUTATION of the fingerprint-keyed model store. Mirrors the
-     * host's `_acquireCacheIoLock` (media-viewer.js) in shape, but is deliberately a SEPARATE
+     * feature-cache lock (`FeatureCacheStore.acquireLock`) in shape, but is deliberately a SEPARATE
      * lock: the host mutex can be held for tens of seconds by a streaming feature-cache read,
      * and parking the model-cache lookup behind that would forfeit the very cache hit this
      * branch exists to make instant.
@@ -516,7 +559,16 @@ export class MlTrainingManager {
         // Per-folder timings and counts for the perf line (G3 spec § 7), returned on every path.
         const stats = { loadMs: 0, diskCount: 0, misses: 0, failed: 0, noClip: 0, featuresMs: 0, clipMs: 0, saveMs: 0 };
         const tLoad = this._now();
-        const { entries, diskCount, aborted } = await this._loadVectorCache(folderPath, files, signal, loadPhase);
+        const { entries, diskCount, aborted, unreadable } = await this._loadVectorCache(
+            folderPath,
+            files,
+            signal,
+            loadPhase
+        );
+        if (unreadable) {
+            // Every file is extracted again; main saves the result only if it covers the folder (spec § 6).
+            this.logError(`Training vector cache for ${folderPath} could not be read — re-extracting every file`);
+        }
         stats.loadMs = this._now() - tLoad;
         stats.diskCount = diskCount;
         const rows = [];
@@ -602,7 +654,9 @@ export class MlTrainingManager {
         // save, so entries.size is only an upper bound on what was actually written).
         if (extracted > 0 && !signal?.aborted) {
             const tSave = this._now();
-            await this._saveVectorCache(folderPath, entries, diskCount, files.length);
+            // When main never read this file (unreadable), it allows the write only if every media file in the
+            // folder has an entry with a CLIP vector (spec § 7.2, review #2).
+            await this._saveVectorCache(folderPath, entries, diskCount, files.length, { readFailed: unreadable });
             stats.saveMs = this._now() - tSave;
         }
         return { rows, clipMissing, failed, aborted: false, stats };

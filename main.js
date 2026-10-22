@@ -7,6 +7,20 @@ const { promisify } = require('util');
 const logger = require('./logger');
 const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
+const {
+    createFeatureCacheLedger,
+    validateWriteHeader,
+    classifyReadError,
+    readFeatureCacheFile,
+    openWriteStream,
+    writeWithBackpressure,
+    endWriteStream,
+    listMediaFiles,
+    listMediaEntries,
+    cacheFileExists,
+    featureCacheKey,
+    checkClose,
+} = require('./feature-cache-ledger');
 const { createGrantStore, createTempDirRegistry, isInsideDir, createMediaReadRule } = require('./path-grants');
 const { createIpcGuard, tierAssignmentsKind, tierDirMatches } = require('./ipc-guard');
 const { createAppProtocol, isBlockedEgress, APP_SCHEME, APP_HOST } = require('./app-protocol');
@@ -430,31 +444,17 @@ app.whenReady().then(async () => {
     guard.handle('load-folder', [kinds.grantedPath], async (event, folderPath) => {
         try {
             console.log('Loading folder:', folderPath);
-            const files = await fs.readdir(folderPath);
-            const mediaFiles = [];
-
-            for (const file of files) {
-                const filePath = path.join(folderPath, file);
-                try {
-                    const stats = await fs.stat(filePath);
-
-                    if (stats.isFile()) {
-                        const ext = path.extname(file).toLowerCase();
-                        if (isMediaFile(ext)) {
-                            mediaFiles.push({
-                                name: file,
-                                path: filePath,
-                                size: stats.size,
-                                mtimeMs: stats.mtimeMs,
-                                type: getMimeType(ext),
-                            });
-                        }
-                    }
-                } catch (fileError) {
-                    console.warn(`Could not process file ${file}:`, fileError.message);
-                    continue;
-                }
-            }
+            // The listing write-close's coverage check uses too (feature-cache-ledger.js, review #7).
+            const listed = await listMediaEntries(folderPath, isMediaFile, {
+                onSkip: (file, fileError) => console.warn(`Could not process file ${file}:`, fileError.message),
+            });
+            const mediaFiles = listed.map(({ name, path: filePath, stats }) => ({
+                name,
+                path: filePath,
+                size: stats.size,
+                mtimeMs: stats.mtimeMs,
+                type: getMimeType(path.extname(name).toLowerCase()),
+            }));
 
             console.log(`Found ${mediaFiles.length} media files`);
             return { success: true, files: mediaFiles };
@@ -775,7 +775,7 @@ app.whenReady().then(async () => {
     // on any path the renderer named.
     guard.handle(
         'read-folder-cache',
-        [kinds.grantedPath, oneOf('hash', 'sort', 'feature')],
+        [kinds.grantedPath, oneOf('hash', 'sort')], // 'feature' reads stream (feature-cache-open)
         async (_event, folderPath, name) => {
             try {
                 const filePath = path.join(folderPath, FOLDER_CACHE_FILES[name]);
@@ -847,64 +847,48 @@ app.whenReady().then(async () => {
     // entries here, and let the renderer pull them in small batches via feature-cache-chunk.
     let featureCacheSession = null; // Array<[filename, entry]> between open and close
 
-    // Read just the top-level "version" field cheaply from the file head (our own writer
-    // always emits it as the first key, so it lives in the first few dozen bytes).
-    const readCacheVersion = (filePath) =>
-        new Promise((resolve) => {
-            try {
-                const s = fsSync.createReadStream(filePath, { encoding: 'utf8', start: 0, end: 255 });
-                let buf = '';
-                s.on('data', (c) => {
-                    buf += c;
-                });
-                s.on('end', () => {
-                    const m = buf.match(/"version"\s*:\s*(\d+)/);
-                    resolve(m ? parseInt(m[1], 10) : null);
-                });
-                s.on('error', () => resolve(null));
-            } catch (_e) {
-                resolve(null);
-            }
-        });
+    // What main last saw of each cache file this session (feature-cache-ledger.js); write-close checks against it.
+    const featureCacheLedger = createFeatureCacheLedger();
+    const ledgerKey = (folderPath) => featureCacheKey(folderPath, grants.canonicalize, FOLDER_CACHE_FILES.feature);
+    const FEATURE_CACHE_JSON = { parser: jsonParser, pick: jsonPick, streamObject: jsonStreamObject };
 
     guard.handle('feature-cache-open', [kinds.grantedPath], async (_event, folderPath) => {
         const filePath = path.join(folderPath, FOLDER_CACHE_FILES.feature);
+        const key = await ledgerKey(folderPath);
+        // The file's generation (review #5): the renderer's visit sends it back as its write's basis.
+        const gen = featureCacheLedger.generation(key);
+        featureCacheSession = null;
         try {
             await assertFixedPath(filePath);
         } catch (err) {
-            featureCacheSession = null;
-            return { success: false, error: err.message };
+            featureCacheLedger.recordOpen(key, { seen: 'unreadable' });
+            return { success: false, unreadable: true, error: err.message, gen };
         }
         try {
-            // Fail fast if the file is missing (avoids a dangling stream).
-            await fs.access(filePath);
-        } catch (_e) {
-            featureCacheSession = null;
-            return { success: false, notFound: true };
+            // A brief lock (antivirus, the thumbnailer) is retried, as write-close's rename is.
+            const { version, entries } = await readFeatureCacheFile(filePath, {
+                access: fs.access,
+                createReadStream: fsSync.createReadStream,
+                json: FEATURE_CACHE_JSON,
+            });
+            featureCacheSession = entries;
+            featureCacheLedger.recordOpen(key, { seen: 'read', count: entries.length, version });
+            return { success: true, version, count: entries.length, gen };
+        } catch (err) {
+            // No file, a corrupt one, or one main could not read (spec my call 12): only the first two let the
+            // renderer write a fresh file.
+            const kind = classifyReadError(err);
+            if (kind === 'absent') {
+                featureCacheLedger.recordOpen(key, { seen: 'absent' });
+                return { success: false, notFound: true, gen };
+            }
+            if (kind === 'corrupt') {
+                featureCacheLedger.recordOpen(key, { seen: 'corrupt' });
+                return { success: false, corrupt: true, error: err.message, gen };
+            }
+            featureCacheLedger.recordOpen(key, { seen: 'unreadable' });
+            return { success: false, unreadable: true, error: err.message, gen };
         }
-
-        const version = await readCacheVersion(filePath);
-
-        return new Promise((resolve) => {
-            const entries = [];
-            const pipeline = fsSync
-                .createReadStream(filePath)
-                .pipe(jsonParser())
-                .pipe(jsonPick({ filter: 'features' }))
-                .pipe(jsonStreamObject());
-
-            pipeline.on('data', ({ key, value }) => {
-                entries.push([key, value]);
-            });
-            pipeline.on('end', () => {
-                featureCacheSession = entries;
-                resolve({ success: true, version, count: entries.length });
-            });
-            pipeline.on('error', (err) => {
-                featureCacheSession = null;
-                resolve({ success: false, error: err.message });
-            });
-        });
     });
     guard.handle(
         'feature-cache-chunk',
@@ -924,9 +908,16 @@ app.whenReady().then(async () => {
     // Mirrors the reader: the renderer sends entries in small batches and main appends them to
     // a temp file as monolithic JSON (same format the reader expects), then atomically renames
     // into place. Avoids the renderer building a ~130MB JSON string + IPC'ing it every 30s.
-    let featureCacheWriter = null; // { stream, tmpPath, finalPath, first }
+    // { stream, tmpPath, finalPath, first, folderPath, key, header, names, clipNames }: the names written, and those with
+    // a CLIP vector, feed write-close's coverage check.
+    let featureCacheWriter = null;
     guard.handle('feature-cache-write-open', [kinds.grantedPath, kinds.any], async (_event, folderPath, header) => {
         const filePath = path.join(folderPath, FOLDER_CACHE_FILES.feature);
+        // fileCount is required (spec § 7.2), so a caller cannot skip the shrink rule's third conjunct.
+        const checked = validateWriteHeader(header);
+        if (!checked.ok) {
+            return { success: false, error: checked.error };
+        }
         try {
             // Close any leftover writer from an aborted save.
             if (featureCacheWriter) {
@@ -940,14 +931,25 @@ app.whenReady().then(async () => {
             const tmpPath = filePath + '.tmp';
             await assertFixedPath(tmpPath);
             await assertFixedPath(filePath);
-            const stream = fsSync.createWriteStream(tmpPath, { encoding: 'utf8' });
-            const h = header || {};
+            const key = await ledgerKey(folderPath);
+            const stream = await openWriteStream(tmpPath, fsSync.createWriteStream);
+            const h = header;
             const prefix =
                 `{"version":${JSON.stringify(h.version ?? null)},` +
                 `"featureDim":${JSON.stringify(h.featureDim ?? 64)},` +
                 `"clipDim":${JSON.stringify(h.clipDim ?? 512)},"features":{`;
-            stream.write(prefix);
-            featureCacheWriter = { stream, tmpPath, finalPath: filePath, first: true };
+            await writeWithBackpressure(stream, prefix);
+            featureCacheWriter = {
+                stream,
+                tmpPath,
+                finalPath: filePath,
+                first: true,
+                folderPath,
+                key,
+                header: checked,
+                names: new Set(),
+                clipNames: new Set(),
+            };
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
@@ -965,13 +967,13 @@ app.whenReady().then(async () => {
             for (const [key, value] of entries) {
                 buf += (writer.first ? '' : ',') + JSON.stringify(key) + ':' + JSON.stringify(value);
                 writer.first = false;
+                writer.names.add(key);
+                if (value && value.clipVector) {
+                    writer.clipNames.add(key);
+                }
             }
             if (buf) {
-                // Respect backpressure so a slow disk can't balloon the write buffer.
-                const ok = writer.stream.write(buf);
-                if (!ok) {
-                    await new Promise((resolve) => writer.stream.once('drain', resolve));
-                }
+                await writeWithBackpressure(writer.stream, buf);
             }
             return { success: true };
         } catch (error) {
@@ -984,11 +986,23 @@ app.whenReady().then(async () => {
         featureCacheWriter = null;
         try {
             // Write the closing braces, end the stream, and wait for the OS flush ('finish').
-            await new Promise((resolve, reject) => {
-                writer.stream.once('error', reject);
-                writer.stream.once('finish', resolve);
-                writer.stream.end('}}');
+            await endWriteStream(writer.stream, '}}');
+            // Main's check (spec § 7.2), before the rename: a refused write leaves the cache file as it was.
+            const written = writer.names.size;
+            const verdict = await checkClose({
+                record: featureCacheLedger.get(writer.key),
+                destinationExists: await cacheFileExists(writer.finalPath, fs.access),
+                header: writer.header,
+                written,
+                writtenNames: writer.names,
+                clipNames: writer.clipNames,
+                listFolderMedia: () => listMediaFiles(writer.folderPath, isMediaFile),
+                generation: featureCacheLedger.generation(writer.key),
             });
+            if (!verdict.ok) {
+                await fs.unlink(writer.tmpPath).catch(() => {});
+                return { success: false, refused: verdict.refused, seen: verdict.seen, written: verdict.written };
+            }
             // Atomic replace so a crash mid-write never corrupts the live cache. On Windows the
             // rename can transiently fail with EPERM/EACCES/EBUSY if something briefly holds the
             // destination open (antivirus, Explorer thumbnailer, a lingering read handle) — retry
@@ -997,7 +1011,11 @@ app.whenReady().then(async () => {
             for (let attempt = 0; attempt < 5; attempt++) {
                 try {
                     await fs.rename(writer.tmpPath, writer.finalPath);
-                    return { success: true };
+                    const gen = featureCacheLedger.recordWrite(writer.key, {
+                        count: written,
+                        version: writer.header.version,
+                    });
+                    return { success: true, written, gen };
                 } catch (err) {
                     lastErr = err;
                     if (['EPERM', 'EACCES', 'EBUSY'].includes(err.code) && attempt < 4) {

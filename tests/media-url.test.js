@@ -34,6 +34,7 @@ describe('renderer media URLs (G1 I1)', () => {
         'like-or-skip.js',
         'recent-folders.js',
         'media-url.js',
+        'feature-cache-store.js',
         'face-detector.js',
         'feature-extractor.js',
         'sorting-worker.js',

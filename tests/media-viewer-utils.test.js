@@ -4,6 +4,7 @@ import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
 import { MlTrainingManager } from '../ml-training.js';
 import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
+import { stubFeatureCacheStore } from './feature-cache-harness.js';
 // Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
 globalThis.LikeOrSkip = LikeOrSkip;
 globalThis.SimilaritySort = SimilaritySort;
@@ -1103,6 +1104,7 @@ describe('restoreFeatureCachesFromHistory', () => {
             featureCache: new Map(),
             clipCache: new Map(),
             featureMetadata: new Map(),
+            featureCacheStore: { markChanged: vi.fn() },
         };
     }
 
@@ -1179,6 +1181,29 @@ describe('restoreFeatureCachesFromHistory', () => {
         const entry = { originalPath: '/d/c.png', mlFeatures: new Float32Array(64), fileSize: 5555 };
         restoreFeatureCachesFromHistory.call(ctx, entry);
         expect(ctx.featureMetadata.get('/d/c.png')).toEqual({ size: 5555, mtime: 0 });
+    });
+
+    it('counts a restore of features as a change of the visit, and nothing else (close-out round 2, N1)', () => {
+        const ctx = makeCtx();
+        restoreFeatureCachesFromHistory.call(ctx, {
+            originalPath: '/d/c.png',
+            mlFeatures: new Float32Array(64),
+            fileSize: 1,
+        });
+        expect(ctx.featureCacheStore.markChanged).toHaveBeenCalledTimes(1);
+        restoreFeatureCachesFromHistory.call(ctx, { originalPath: '/d/e.png', mlFeatures: null, fileSize: 1 });
+        restoreFeatureCachesFromHistory.call(ctx, { originalPath: '/d/f.png', mlFeatures: new Float32Array(128) });
+        expect(ctx.featureCacheStore.markChanged).toHaveBeenCalledTimes(1);
+    });
+
+    it("restores featureMetadata with the file's mtime when the entry recorded it (review #6)", () => {
+        // An mtime of 0 never matches a real stat, so the store's save skips the entry, and one such file kept an
+        // unread visit's full-coverage save (all or nothing) from ever writing. move-file is a rename, so the
+        // file comes back with the mtime it left with.
+        const ctx = makeCtx();
+        const entry = { originalPath: '/d/c.png', mlFeatures: new Float32Array(64), fileSize: 5555, fileMtimeMs: 7000 };
+        restoreFeatureCachesFromHistory.call(ctx, entry);
+        expect(ctx.featureMetadata.get('/d/c.png')).toEqual({ size: 5555, mtime: 7000 });
     });
 });
 
@@ -1690,6 +1715,11 @@ describe('handleSortByPrediction lifecycle', () => {
             _originalOrderOverLive: extractMethod('_originalOrderOverLive'),
             ...overrides,
         };
+        if (!ctx.featureCacheStore) {
+            // The visit has read its cache already, so Phase 1 skips the read (spec my call 4).
+            ctx.featureCacheStore = stubFeatureCacheStore(ctx);
+            ctx.featureCacheStore.needsRead = vi.fn(() => false);
+        }
         ctx._phases = phases;
         leaseCtxs.push(ctx);
         return ctx;
@@ -1734,19 +1764,27 @@ describe('handleSortByPrediction lifecycle', () => {
     });
 
     it('bails unsorted when aborted during the load phase', async () => {
+        // The visit has not read its cache, so Phase 1 calls loadFeatureCache, where the abort fires. With makeCtx's
+        // needsRead() false the read never ran, and the test passed on the sort's own catch of runMlSort's throw
+        // (review #11). Only an early bail leaves training uncalled and the outcome 'cancelled'.
+        const ensureTrainedModel = vi.fn();
+        const loadFeatureCache = vi.fn(function () {
+            this.sortAbortController.abort(); // user cancels mid-load
+            return Promise.resolve();
+        });
         const ctx = makeCtx({
-            // Cold cache so the warm-cache gate actually calls loadFeatureCache (where the
-            // abort fires) — a warm cache would skip the load and never reach the abort.
-            featureCache: new Map(),
-            loadFeatureCache: function () {
-                this.sortAbortController.abort(); // user cancels mid-load
-                return Promise.resolve();
-            },
+            loadFeatureCache,
+            mlTraining: { ensureTrainedModel },
             runMlSort: () => {
                 throw new Error('runMlSort must not be reached after cancel');
             },
         });
+        ctx.featureCacheStore.needsRead = vi.fn(() => true);
         await handleSortByPrediction.call(ctx);
+        expect(loadFeatureCache).toHaveBeenCalledTimes(1);
+        expect(loadFeatureCache.mock.calls[0][0].signal.aborted).toBe(true); // the sort's own signal
+        expect(ensureTrainedModel).not.toHaveBeenCalled();
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
         expect(ctx.isSortedByPrediction).toBe(false);
         expect(ctx.sortAbortController).toBeNull();
         expect(ctx.isPredictionSorting).toBe(false);
@@ -1758,8 +1796,8 @@ describe('handleSortByPrediction lifecycle', () => {
         const ctx = makeCtx({
             // Not ready yet, so the training branch actually runs.
             mlStats: { isReady: false, positiveCount: 0, negativeCount: 0 },
-            // Cold cache (b.png missing, loadFeatureCache resolves without populating it) so
-            // Phase 2 would call startBackgroundFeatureExtraction if execution got that far.
+            // b.png missing from the cache, so Phase 2 would call
+            // startBackgroundFeatureExtraction if execution got that far.
             // That's the proof point: Phase 2's OWN post-await abort check would otherwise
             // independently catch this same aborted signal and mask a missing training-phase
             // check — asserting only runMlSort/isSortedByPrediction/finally-cleanup would still
@@ -1768,7 +1806,6 @@ describe('handleSortByPrediction lifecycle', () => {
             // startBackgroundFeatureExtraction never being called is what actually isolates the
             // training-phase guard.
             featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
-            loadFeatureCache: () => Promise.resolve(), // resolves without populating the cache
             mlTraining: {
                 ensureTrainedModel: () => {
                     ctx.sortAbortController.abort(); // user cancels mid-training
@@ -1796,10 +1833,9 @@ describe('handleSortByPrediction lifecycle', () => {
     it('bails unsorted when aborted during the extraction phase', async () => {
         const runMlSort = vi.fn(() => Promise.resolve({ sortedFilenames: ['b.png', 'a.png'], scores: {} }));
         const ctx = makeCtx({
-            // One file missing from the cache so the Phase-1 gate fires AND uncachedFiles
-            // stays non-empty after the (no-op) load — Phase 2 actually gets a chance to run.
+            // One file missing from the cache so uncachedFiles stays non-empty: Phase 2
+            // actually gets a chance to run.
             featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
-            loadFeatureCache: () => Promise.resolve(), // resolves without populating the cache
             startBackgroundFeatureExtraction: function () {
                 this.sortAbortController.abort(); // user cancels mid-extraction
                 return Promise.resolve();
@@ -1817,9 +1853,42 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.isPredictionSorting).toBe(false);
     });
 
+    it('ends as cancelled when a folder switch ends Phase 2 before the listing aborts the sort (review #10)', async () => {
+        // _switchToFolderNow cancels the extraction and empties the list at its reset; loadFolder aborts the sort
+        // only once the new folder's listing returns. In between, the collect loop ran over the empty list and the
+        // sort ended with a sticky "Could not extract features from any files".
+        const showNotification = vi.fn();
+        const ctx = makeCtx({
+            showNotification,
+            featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
+            startBackgroundFeatureExtraction: function () {
+                this.mediaFiles = [];
+                this._folderLoadInFlight = true;
+                return Promise.resolve();
+            },
+        });
+        await handleSortByPrediction.call(ctx);
+        expect(showNotification).toHaveBeenCalledWith('Sorting cancelled', 'info');
+        expect(showNotification).not.toHaveBeenCalledWith('Could not extract features from any files', 'error');
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+    });
+
+    it('refuses to start while a folder is loading, instead of cancelling itself (close-out R2)', async () => {
+        // loadFolder sets the new list, then awaits the bulk-rated read and the first render; the button stays
+        // clickable. isLive (review #10) then cancelled the new sort about 4 ms after the click.
+        const showNotification = vi.fn();
+        const ctx = makeCtx({ _folderLoadInFlight: true, showNotification });
+        await handleSortByPrediction.call(ctx);
+        expect(showNotification).toHaveBeenCalledWith('Wait for the folder to finish loading', 'info');
+        expect(showNotification).not.toHaveBeenCalledWith('Sorting cancelled', 'info');
+        expect(ctx._logSortPerf).not.toHaveBeenCalled();
+        expect(ctx.clipLeases).toBe(0);
+    });
+
     it('bails unsorted when aborted during the sort phase', async () => {
-        // Fully warm cache (makeCtx's default has both mediaFiles present) → the load and
-        // extraction phases are both skipped, so this reaches Phase 3 where the abort fires.
+        // makeCtx's defaults: the visit has read its cache (needsRead() false), so the load is
+        // skipped, and both files are in the cache, so extraction is too. This reaches Phase 3,
+        // where the abort fires.
         const ctx = makeCtx({
             runMlSort: function () {
                 this.sortAbortController.abort(); // user cancels mid-sort
@@ -1835,23 +1904,24 @@ describe('handleSortByPrediction lifecycle', () => {
         expect(ctx.isPredictionSorting).toBe(false);
     });
 
-    it('skips the on-disk reload when the in-memory cache is already warm', async () => {
-        // Warm cache (makeCtx's default has both mediaFiles present) → the Phase-1 gate must
+    it('skips the on-disk reload when this folder visit has already read its cache', async () => {
+        // The Phase-1 gate is the visit's read, once per visit (spec my call 4): a repeat sort must
         // NOT replay the ~40s load, yet the sort still applies from the in-memory features.
         const loadFeatureCache = vi.fn(() => Promise.resolve());
         const ctx = makeCtx({ loadFeatureCache });
         await handleSortByPrediction.call(ctx);
+        expect(ctx.featureCacheStore.needsRead).toHaveBeenCalled();
         expect(loadFeatureCache).not.toHaveBeenCalled();
         expect(ctx.isSortedByPrediction).toBe(true);
     });
 
-    it('reloads from disk when the in-memory cache is missing a current file', async () => {
-        // Cold/partial cache (only one of two mediaFiles present) → the gate must call the load.
+    it('reads the cache when this visit has not, even with every file already in memory', async () => {
+        // Changed on purpose (spec my call 4): it used to skip whenever every file was in memory, so a small
+        // folder browsed end to end was never read and, under D2, never saved.
         const loadFeatureCache = vi.fn(() => Promise.resolve());
-        const ctx = makeCtx({
-            featureCache: new Map([['/d/a.png', new Float32Array(64)]]),
-            loadFeatureCache,
-        });
+        const ctx = makeCtx({ loadFeatureCache });
+        ctx.featureCacheStore.needsRead = vi.fn(() => true);
+        expect(ctx.mediaFiles.every((f) => ctx.featureCache.has(f.path))).toBe(true);
         await handleSortByPrediction.call(ctx);
         expect(loadFeatureCache).toHaveBeenCalledTimes(1);
     });
@@ -2343,6 +2413,7 @@ describe('handleSortByPrediction lifecycle', () => {
 
     it('times the lazy init, the CLIP load, the cache load and the extraction when they run', async () => {
         const ctx = makeCtx({ mlWorker: null, enableClipFeatures: true, featureCache: new Map() });
+        ctx.featureCacheStore.needsRead = vi.fn(() => true); // the visit has not read its cache yet
         ctx.initializeMlWorker = function () {
             this.mlWorker = {};
         };
@@ -2581,6 +2652,7 @@ describe('handleCancel feature restore', () => {
             requestPredictionScores: vi.fn(),
             // Helper under test — extracted as a real method so the handler can call it
             restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+            featureCacheStore: { markChanged: vi.fn() }, // the restore counts as the visit's change
             _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             ...overrides,
         };
@@ -2632,6 +2704,43 @@ describe('handleCancel feature restore', () => {
         // G1: the model is no longer updated per-rating, so a like/dislike undo has nothing to
         // request new scores for — requestPredictionScores is not called on this path.
         expect(ctx.requestPredictionScores).not.toHaveBeenCalled();
+    });
+
+    it('single-mode undo puts the file back on the list with its mtime (review #6)', async () => {
+        const ctx = commonMocks({
+            moveHistory: [
+                {
+                    fileName: 'a.png',
+                    originalPath: '/folder/a.png',
+                    newPath: '/folder/like/a.png',
+                    fileSize: 100,
+                    fileMtimeMs: 7000,
+                    fileType: 'image/png',
+                    actionType: 'like',
+                    mlFeatures: Array.from(make576()),
+                },
+            ],
+        });
+        await handleCancel.call(ctx);
+        expect(ctx.mediaFiles).toEqual([
+            { name: 'a.png', path: '/folder/a.png', size: 100, mtimeMs: 7000, type: 'image/png' },
+        ]);
+        expect(ctx.featureMetadata.get('/folder/a.png')).toEqual({ size: 100, mtime: 7000 });
+    });
+
+    it('every undo that puts a file back on the list gives it the mtime its history entry recorded (review #6)', () => {
+        // Source check over the seven list restores (handleCancel's six: single, the bulk pair's remaining file, two
+        // pair branches of two; the tournament's one): each `size: <entry>.fileSize` is followed by its mtimeMs.
+        for (const [name, sites] of [
+            ['handleCancel', 6],
+            ['handleTournamentUndo', 1],
+        ]) {
+            const body = methodSource(name);
+            const restores = [...body.matchAll(/size: (\w+)\.fileSize,\s*mtimeMs: (\w+)\.fileMtimeMs,/g)];
+            expect(restores, name).toHaveLength(sites);
+            for (const m of restores) expect(m[2], name).toBe(m[1]);
+            expect([...body.matchAll(/size: \w+\.fileSize,/g)], name).toHaveLength(sites);
+        }
     });
 
     it('compare-mode pair-undo restores caches for both files', async () => {
@@ -3417,6 +3526,54 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
         expect(ctx.mediaFiles).toEqual([f]);
     });
 
+    it('moveCurrentFile files a fallback extraction under the visit the move started in (close-out cut 8)', async () => {
+        // Moves don't refuse during a folder load: a loadFolder already listing when the move starts ends the visit
+        // during the extraction's await. Read after the await, the visit was always the current one.
+        const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+        const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, mtimeMs: 7, type: 'image/jpeg' };
+        const started = Object.freeze({ id: 1, folder: '/f' });
+        const store = { visit: started, putFeature: vi.fn(() => false) };
+        const ctx = moveCtx([a], [], {
+            isMlEnabled: true,
+            mlWorker: {},
+            currentMedia: {},
+            featureCacheStore: store,
+            extractFeaturesFromDisplayedMedia: async () => {
+                store.visit = Object.freeze({ id: 2, folder: '/g' }); // the load ends the visit mid-extraction
+                return new Float32Array(64);
+            },
+        });
+        await moveCurrentFile.call(ctx, 'like');
+        expect(store.putFeature).toHaveBeenCalledWith(started, '/f/a.jpg', expect.any(Float32Array));
+    });
+
+    it('no move site reads the visit after its extraction await (close-out cut 8)', () => {
+        for (const name of ['moveCurrentFile', 'moveComparePair']) {
+            expect(methodSource(name), name).not.toMatch(/putFeature\(\s*this\.featureCacheStore\.visit/);
+        }
+    });
+
+    it("moveCurrentFile records the file's mtime on its history entry (review #6)", async () => {
+        const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
+        const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, mtimeMs: 7000, type: 'image/jpeg' };
+        const ctx = moveCtx([a], []);
+        await moveCurrentFile.call(ctx, 'like');
+        expect(ctx.moveHistory[0]).toMatchObject({ fileSize: 10, fileMtimeMs: 7000 });
+    });
+
+    it("moveToSpecialFolder, moveComparePair and the batch record each file's mtime beside its size (review #6)", () => {
+        for (const [name, sites] of [
+            ['moveToSpecialFolder', 1],
+            ['moveComparePair', 2],
+            ['dislikeSkippedFiles', 1],
+        ]) {
+            const body = methodSource(name);
+            const recorded = [...body.matchAll(/fileSize: (\w+)\.size,\s*fileMtimeMs: (\w+)\.mtimeMs,/g)];
+            expect(recorded, name).toHaveLength(sites);
+            for (const m of recorded) expect(m[2], name).toBe(m[1]);
+        }
+    });
+
     it('moveCurrentFile omits prunedPairKeys when nothing referenced the file', async () => {
         const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
         const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, type: 'image/jpeg' };
@@ -3542,6 +3699,7 @@ describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
         showMedia: vi.fn(async () => {}),
         requestPredictionScores: vi.fn(),
         restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+        featureCacheStore: { markChanged: vi.fn() }, // the restore counts as the visit's change
         _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
         ...overrides,
     });
@@ -3776,7 +3934,7 @@ describe('initializeFeaturePool version probe (G1)', () => {
             _featureExtractorVersion: 0,
             _probeFeatureVersion,
             shutdownFeaturePool: () => {},
-            startFeatureCacheAutoSave: () => {},
+            featureCacheStore: { startAutoSave: () => {}, stopAutoSave: () => {} },
             handleFeatureWorkerMessage: () => {},
             handleFeatureWorkerError: () => {},
         };
@@ -4900,7 +5058,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
     });
 
     function makeCtx() {
-        return {
+        const ctx = {
             isTournamentMode: false,
             tournament: { engine: 'stale-engine' },
             _onOrderChanged: vi.fn(),
@@ -4913,7 +5071,9 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             sortAbortController: new AbortController(),
             _mlSortResolve: () => {},
             _mlSortReject: vi.fn(),
-            _featureCacheDiskCount: 99,
+            featureCache: new Map([['/old/stale.png', new Float32Array(64)]]),
+            clipCache: new Map([['/old/stale.png', new Float32Array(512)]]),
+            featureMetadata: new Map([['/old/stale.png', { size: 1, mtime: 1 }]]),
             showLoadingSpinner: vi.fn(),
             hideLoadingSpinner: vi.fn(),
             showDropZone: vi.fn(),
@@ -4929,6 +5089,8 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             _refuseIfFolderLoadInFlight: extractMethod('_refuseIfFolderLoadInFlight'),
             _updateRecentFoldersButton: vi.fn(),
         };
+        ctx.featureCacheStore = stubFeatureCacheStore(ctx);
+        return ctx;
     }
 
     // Deep review #13: a startup grant reply computed before this folder was opened could land later
@@ -4958,13 +5120,28 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
     it('tears down an in-flight sort even when the new folder is empty', async () => {
         const ctx = makeCtx();
         const rejectSpy = ctx._mlSortReject; // capture before _abortInFlightPredictionSort nulls ctx._mlSortReject
+        const mapSizes = () => [ctx.featureCache.size, ctx.clipCache.size, ctx.featureMetadata.size];
+        let endSizes;
+        let beginSizes;
+        ctx.featureCacheStore.endVisit.mockImplementation(() => {
+            endSizes = mapSizes();
+            return null;
+        });
+        ctx.featureCacheStore.beginVisit.mockImplementation(() => {
+            beginSizes = mapSizes();
+        });
         await loadFolder.call(ctx, '/new/empty-folder');
 
         // The cleanup trio must fire on the empty-folder early-return path, not just the
         // non-empty path — this is the gap Fix B originally missed.
         expect(ctx.cancelBackgroundExtraction).toHaveBeenCalledTimes(1);
         expect(ctx._abortInFlightPredictionSort).toHaveBeenCalledTimes(1);
-        expect(ctx._featureCacheDiskCount).toBe(0);
+        // Changed on purpose (spec my call 7): the old visit ends while its maps still hold its entries (its
+        // flush freezes them), the maps are then cleared, and a visit to the empty folder begins (T5).
+        expect(ctx.featureCacheStore.endVisit).toHaveBeenCalledTimes(1);
+        expect(endSizes).toEqual([1, 1, 1]);
+        expect(ctx.featureCacheStore.beginVisit).toHaveBeenCalledWith('/new/empty-folder');
+        expect(beginSizes).toEqual([0, 0, 0]);
 
         // Real _abortInFlightPredictionSort side effects (not just "was called"): the pending
         // runMlSort promise is actually settled, so isPredictionSorting won't be stuck true and
@@ -5583,311 +5760,6 @@ describe('handleAppCloseRequest', () => {
     });
 });
 
-describe('loadFeatureCache incremental + signal', () => {
-    const loadFeatureCacheLocked = extractAsyncMethod('_loadFeatureCacheLocked');
-
-    const savedWindow = globalThis.window;
-    const savedMediaViewer = globalThis.MediaViewer;
-    beforeEach(() => {
-        // The extracted method body references the static class field
-        // `MediaViewer.FEATURE_CACHE_VERSION` directly (not `this.constructor...`); `new Function`
-        // resolves free identifiers against the global object, so the real class (never
-        // imported here — this file drives extracted method bodies, not the live class) must be
-        // stood in for with a stub carrying the same value.
-        // NOTE: keep in sync with MediaViewer.FEATURE_CACHE_VERSION in media-viewer.js.
-        globalThis.MediaViewer = { FEATURE_CACHE_VERSION: 4 };
-    });
-    afterEach(() => {
-        globalThis.window = savedWindow;
-        globalThis.MediaViewer = savedMediaViewer;
-    });
-
-    function mkFile(name, size, mtime) {
-        return { name, path: '/d/' + name, size, mtimeMs: mtime };
-    }
-    function mkEntry(size, mtime) {
-        return { vector: Array.from({ length: 64 }, () => 0.1), clipVector: null, size, mtime };
-    }
-
-    function installApi(chunks, { version = 4, count } = {}) {
-        globalThis.window = {
-            electronAPI: {
-                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
-                featureCacheOpen: () =>
-                    Promise.resolve({ success: true, version, count: count ?? chunks.flat().length }),
-                featureCacheChunk: (offset, limit) =>
-                    Promise.resolve({ entries: chunks.flat().slice(offset, offset + limit) }),
-                featureCacheClose: () => Promise.resolve({ success: true }),
-            },
-        };
-    }
-
-    it('populates this.featureCache incrementally and reports progress', async () => {
-        const files = [mkFile('a.png', 10, 100), mkFile('b.png', 20, 200)];
-        installApi([
-            [
-                ['a.png', mkEntry(10, 100)],
-                ['b.png', mkEntry(20, 200)],
-            ],
-        ]);
-        const seen = [];
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: files,
-            featureCache: new Map(),
-            featureMetadata: new Map(),
-            clipCache: new Map(),
-        };
-        await loadFeatureCacheLocked.call(ctx, { onProgress: (c, t) => seen.push([c, t]) });
-        expect(ctx.featureCache.size).toBe(2);
-        expect(seen[seen.length - 1][0]).toBe(2); // final progress reached total
-    });
-
-    it('stops on signal.aborted without loading everything', async () => {
-        const files = Array.from({ length: 5 }, (_, i) => mkFile(`f${i}.png`, i, i));
-        installApi([files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)])], { count: 5 });
-        const controller = new AbortController();
-        controller.abort(); // aborted before the first chunk
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: files,
-            featureCache: new Map(),
-            featureMetadata: new Map(),
-            clipCache: new Map(),
-        };
-        await loadFeatureCacheLocked.call(ctx, { signal: controller.signal });
-        expect(ctx.featureCache.size).toBe(0);
-    });
-
-    it('leaves an existing cache untouched when the file is not found', async () => {
-        globalThis.window = {
-            electronAPI: {
-                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
-                featureCacheOpen: () => Promise.resolve({ success: false, notFound: true }),
-                featureCacheClose: () => Promise.resolve({ success: true }),
-                readFolderCache: () => Promise.resolve(null),
-            },
-        };
-        const existing = new Map([['/d/a.png', new Float32Array(64)]]);
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: [mkFile('a.png', 10, 100)],
-            featureCache: existing,
-            featureMetadata: new Map(),
-            clipCache: new Map(),
-        };
-        await loadFeatureCacheLocked.call(ctx, {});
-        expect(ctx.featureCache).toBe(existing); // same reference, not replaced
-    });
-
-    it('a cancelled mid-load leaves the existing cache untouched (no truncation)', async () => {
-        // DATA-LOSS REGRESSION LOCK. Staging is local; a mid-stream cancel must NOT truncate a
-        // warm cache. If a partial live map survived a cancel, the 30s auto-save would later
-        // atomically overwrite the full on-disk .feature_cache.json with the truncated map,
-        // permanently destroying the un-loaded vectors.
-        // 1500 files → the CHUNK=1000 loop iterates twice (offset 0, offset 1000). Abort AFTER
-        // the first chunk's onProgress fires; the loop's top-of-iteration signal check breaks
-        // before committing. The prior cache (keys NOT in the reload set) must be preserved
-        // untouched — same reference, same entries, and none of the staged reload keys leaked in.
-        const files = Array.from({ length: 1500 }, (_, i) => mkFile(`f${i}.png`, i, i));
-        installApi([files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)])], { count: 1500 });
-        const controller = new AbortController();
-        const prior = new Map([
-            ['/d/old1.png', new Float32Array(64)],
-            ['/d/old2.png', new Float32Array(64)],
-        ]);
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: files,
-            featureCache: prior,
-            featureMetadata: new Map(),
-            clipCache: new Map(),
-        };
-        await loadFeatureCacheLocked.call(ctx, {
-            signal: controller.signal,
-            onProgress: (loaded) => {
-                if (loaded >= 1) controller.abort();
-            },
-        });
-        expect(ctx.featureCache).toBe(prior); // same reference — never replaced
-        expect(ctx.featureCache.size).toBe(2); // prior entries intact, not truncated
-        expect(ctx.featureCache.has('/d/old1.png')).toBe(true);
-        expect(ctx.featureCache.has('/d/f0.png')).toBe(false); // no staged reload key leaked in
-    });
-
-    it('falls through to the legacy read when a chunk fetch throws mid-stream', async () => {
-        // Staging is local, so a mid-stream chunk throw commits NOTHING into this.* — the
-        // existing cache is intact and the streaming failure safely falls through to the legacy
-        // single-read path, which rebuilds from scratch. readFolderCache returns a full valid cache;
-        // the assertions prove the legacy path ran AND produced the complete 1500-entry cache
-        // (the partial staged chunk 1 was cleared, never clobbering the on-disk cache mid-way).
-        const files = Array.from({ length: 1500 }, (_, i) => mkFile(`f${i}.png`, i, i));
-        const all = files.map((f) => [f.name, mkEntry(f.size, f.mtimeMs)]);
-        let legacyReadArgs = null;
-        globalThis.window = {
-            electronAPI: {
-                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
-                featureCacheOpen: () => Promise.resolve({ success: true, version: 4, count: 1500 }),
-                featureCacheChunk: (offset) => {
-                    if (offset === 0) return Promise.resolve({ entries: all.slice(0, 1000) });
-                    return Promise.reject(new Error('IPC hiccup on chunk 2'));
-                },
-                featureCacheClose: () => Promise.resolve({ success: true }),
-                readFolderCache: (...args) => {
-                    legacyReadArgs = args;
-                    return Promise.resolve(JSON.stringify({ version: 4, features: Object.fromEntries(all) }));
-                },
-            },
-        };
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: files,
-            featureCache: new Map(),
-            featureMetadata: new Map(),
-            clipCache: new Map(),
-        };
-        const size = await loadFeatureCacheLocked.call(ctx, {});
-        // Streaming failure fell through to legacy — through the fixed-name channel (G1): the
-        // renderer names the folder and the cache kind, never a file path.
-        expect(legacyReadArgs).toEqual(['/d', 'feature']);
-        expect(size).toBe(1500); // full legacy contents, not the partial chunk 1
-        expect(ctx.featureCache.size).toBe(1500);
-    });
-
-    it('consumes the binary chunk shape (vecBuf/clipBuf) into the caches', async () => {
-        const files = [mkFile('a.png', 10, 100)];
-        const vecs = new Float32Array(64).fill(0.5);
-        const clips = new Float32Array(512).fill(0.25);
-        globalThis.window = {
-            electronAPI: {
-                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
-                featureCacheOpen: () => Promise.resolve({ success: true, version: 4, count: 1 }),
-                featureCacheChunk: () =>
-                    Promise.resolve({
-                        names: ['a.png'],
-                        sizes: [10],
-                        mtimes: [100],
-                        hasClip: [1],
-                        vecBuf: vecs.buffer,
-                        clipBuf: clips.buffer,
-                    }),
-                featureCacheClose: () => Promise.resolve({ success: true }),
-            },
-        };
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: files,
-            featureCache: new Map(),
-            featureMetadata: new Map(),
-            clipCache: new Map(),
-        };
-        await loadFeatureCacheLocked.call(ctx, {});
-        expect(ctx.featureCache.get('/d/a.png')[0]).toBeCloseTo(0.5);
-        expect(ctx.clipCache.get('/d/a.png')[0]).toBeCloseTo(0.25);
-    });
-
-    it('does NOT cache a clip vector for a binary entry with hasClip=0 (garbage clipBuf ignored)', async () => {
-        // The clipBuf carries a full-width 512 slot for EVERY entry; a no-clip entry's slot may
-        // hold arbitrary bytes. The hasClip mask — not the buffer contents — must gate caching,
-        // else zeroed/garbage clips silently leak in and corrupt CLIP sort.
-        const files = [mkFile('a.png', 10, 100)];
-        const vecs = new Float32Array(64).fill(0.5);
-        const clips = new Float32Array(512).fill(0.9); // deliberate non-zero garbage in the unused slot
-        globalThis.window = {
-            electronAPI: {
-                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
-                featureCacheOpen: () => Promise.resolve({ success: true, version: 4, count: 1 }),
-                featureCacheChunk: () =>
-                    Promise.resolve({
-                        names: ['a.png'],
-                        sizes: [10],
-                        mtimes: [100],
-                        hasClip: [0],
-                        vecBuf: vecs.buffer,
-                        clipBuf: clips.buffer,
-                    }),
-                featureCacheClose: () => Promise.resolve({ success: true }),
-            },
-        };
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: files,
-            featureCache: new Map(),
-            featureMetadata: new Map(),
-            clipCache: new Map(),
-        };
-        await loadFeatureCacheLocked.call(ctx, {});
-        expect(ctx.featureCache.get('/d/a.png')[0]).toBeCloseTo(0.5); // 64-dim vector still lands
-        expect(ctx.clipCache.has('/d/a.png')).toBe(false); // no garbage clip leaked in
-    });
-
-    it('round-trips distinct vectors for a multi-entry binary chunk (i*64 / i*512 offset math)', async () => {
-        // Two entries in one buffer: proves the per-entry offset arithmetic is correct for i>0.
-        // A silent off-by-64/off-by-512 regression would swap or corrupt entry 1's vectors with
-        // no other failing test.
-        const files = [mkFile('a.png', 10, 100), mkFile('b.png', 20, 200)];
-        const vecs = new Float32Array(2 * 64);
-        vecs.fill(0.25, 0, 64); // entry 0
-        vecs.fill(0.75, 64, 128); // entry 1
-        const clips = new Float32Array(2 * 512);
-        clips.fill(0.1, 0, 512); // entry 0
-        clips.fill(0.2, 512, 1024); // entry 1
-        globalThis.window = {
-            electronAPI: {
-                path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
-                featureCacheOpen: () => Promise.resolve({ success: true, version: 4, count: 2 }),
-                featureCacheChunk: () =>
-                    Promise.resolve({
-                        names: ['a.png', 'b.png'],
-                        sizes: [10, 20],
-                        mtimes: [100, 200],
-                        hasClip: [1, 1],
-                        vecBuf: vecs.buffer,
-                        clipBuf: clips.buffer,
-                    }),
-                featureCacheClose: () => Promise.resolve({ success: true }),
-            },
-        };
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: files,
-            featureCache: new Map(),
-            featureMetadata: new Map(),
-            clipCache: new Map(),
-        };
-        await loadFeatureCacheLocked.call(ctx, {});
-        expect(ctx.featureCache.get('/d/a.png')[0]).toBeCloseTo(0.25);
-        expect(ctx.featureCache.get('/d/b.png')[0]).toBeCloseTo(0.75);
-        expect(ctx.clipCache.get('/d/a.png')[0]).toBeCloseTo(0.1);
-        expect(ctx.clipCache.get('/d/b.png')[0]).toBeCloseTo(0.2);
-    });
-
-    it('ingests an entry whose size/mtime EXACTLY match the current file as a cache HIT', async () => {
-        // G1 Task-7 defensive regression guard. The staleness gate in `ingest` compares
-        // size/mtime with strict `!==`, and BOTH sides derive from the same fs.stat() values:
-        // the on-disk entry (written full-precision — round6 touches only the vectors) and the
-        // live mediaFiles entry (main.js load-folder → stats.size / stats.mtimeMs). A realistic
-        // large size + sub-ms fractional mtimeMs must round-trip through JSON/IPC to an exact
-        // match and be INGESTED, not dropped as stale. Any future drift (float truncation,
-        // ms-vs-s, a Float32 downcast of size/mtime, string-vs-number) would fail this.
-        const size = 5368709123; // > 2^32 and past Float32 exact-integer range (2^24)
-        const mtime = 1673456789012.345; // sub-ms fractional mtimeMs
-        const files = [mkFile('a.png', size, mtime)];
-        installApi([[['a.png', mkEntry(size, mtime)]]]);
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: files,
-            featureCache: new Map(),
-            featureMetadata: new Map(),
-            clipCache: new Map(),
-        };
-        await loadFeatureCacheLocked.call(ctx, {});
-        expect(ctx.featureCache.size).toBe(1); // HIT — not dropped as stale
-        expect(ctx.featureCache.has('/d/a.png')).toBe(true);
-        expect(ctx.featureMetadata.get('/d/a.png')).toEqual({ size, mtime });
-    });
-});
-
 describe('extraction progress sink', () => {
     const showBackgroundExtractionProgress = extractMethod('showBackgroundExtractionProgress');
 
@@ -5906,154 +5778,6 @@ describe('extraction progress sink', () => {
         showBackgroundExtractionProgress.call(ctx, 8, 24);
         expect(calls).toEqual([[8, 24]]);
         expect(before).toBeNull();
-    });
-});
-
-describe('saveFeatureCache data-loss guards', () => {
-    // DATA-LOSS REGRESSION LOCKS. A real user lost a 23,559-entry / 126MB .feature_cache.json:
-    // extraction skipped featureMetadata for files whose mediaFiles lookup failed, buildEntry
-    // serialized those as size:0/mtime:0, the next load rejected all of them as stale (0 never
-    // matches a real stat), and the resulting 32-entry in-memory map was auto-saved over the
-    // full on-disk cache. Two independent guards below; both must stay armed.
-    const saveFeatureCacheLocked = extractAsyncMethod('_saveFeatureCacheLocked');
-
-    const savedWindow = globalThis.window;
-    const savedMediaViewer = globalThis.MediaViewer;
-    let api;
-    let written;
-    let warnSpy;
-
-    beforeEach(() => {
-        // The extracted method body references the static class field
-        // `MediaViewer.FEATURE_CACHE_VERSION` as a free identifier; `new AsyncFunction` resolves
-        // free identifiers against the global object, so the real class (never imported here)
-        // must be stood in for with a stub carrying the same value.
-        // NOTE: keep in sync with MediaViewer.FEATURE_CACHE_VERSION in media-viewer.js.
-        globalThis.MediaViewer = { FEATURE_CACHE_VERSION: 4 };
-        written = [];
-        api = {
-            path: { join: (...a) => a.join('/'), basename: (p) => p.split('/').pop() },
-            featureCacheWriteOpen: vi.fn(() => Promise.resolve({ success: true })),
-            featureCacheWriteChunk: vi.fn((batch) => {
-                written.push(...batch);
-                return Promise.resolve({ success: true });
-            }),
-            featureCacheWriteClose: vi.fn(() => Promise.resolve({ success: true })),
-            writeFolderCache: vi.fn(() => Promise.resolve({ success: true })),
-            logError: vi.fn(),
-        };
-        globalThis.window = { electronAPI: api };
-        warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    });
-    afterEach(() => {
-        warnSpy.mockRestore();
-        globalThis.window = savedWindow;
-        globalThis.MediaViewer = savedMediaViewer;
-    });
-
-    function mkCtx({ diskCount, cacheSize, fileCount }) {
-        const featureCache = new Map();
-        const featureMetadata = new Map();
-        for (let i = 0; i < cacheSize; i++) {
-            const p = `/d/f${i}.png`;
-            featureCache.set(p, new Float32Array(64).fill(0.5));
-            featureMetadata.set(p, { size: 100 + i, mtime: 1000 + i });
-        }
-        return {
-            baseFolderPath: '/d',
-            mediaFiles: Array.from({ length: fileCount }, (_, i) => ({
-                path: `/d/f${i}.png`,
-                size: 100 + i,
-                mtimeMs: 1000 + i,
-            })),
-            featureCache,
-            featureMetadata,
-            clipCache: new Map(),
-            _featureCacheDiskCount: diskCount,
-        };
-    }
-
-    it('blocks the catastrophe: 32 in-memory entries never replace a 23,559-entry disk cache', async () => {
-        const ctx = mkCtx({ diskCount: 23559, cacheSize: 32, fileCount: 20929 });
-        await saveFeatureCacheLocked.call(ctx);
-        // No write IPC of ANY kind may fire — not even the streaming open, which truncates the
-        // temp file and commits on close.
-        expect(api.featureCacheWriteOpen).not.toHaveBeenCalled();
-        expect(api.featureCacheWriteChunk).not.toHaveBeenCalled();
-        expect(api.featureCacheWriteClose).not.toHaveBeenCalled();
-        expect(api.writeFolderCache).not.toHaveBeenCalled();
-        expect(api.logError).toHaveBeenCalledWith(expect.stringContaining('shrink guard'));
-        expect(ctx._featureCacheDiskCount).toBe(23559); // baseline untouched by the skipped save
-    });
-
-    it('allows a legitimate prune: the folder really shrank, so the smaller map must persist', async () => {
-        const ctx = mkCtx({ diskCount: 23559, cacheSize: 5000, fileCount: 5000 });
-        await saveFeatureCacheLocked.call(ctx);
-        expect(api.featureCacheWriteOpen).toHaveBeenCalledTimes(1);
-        expect(api.featureCacheWriteClose).toHaveBeenCalledTimes(1);
-        expect(written).toHaveLength(5000);
-        expect(ctx._featureCacheDiskCount).toBe(5000); // re-baselined to what was actually written
-    });
-
-    it('allows a fresh build-up when no on-disk cache is known (diskCount 0 → guard inactive)', async () => {
-        const ctx = mkCtx({ diskCount: 0, cacheSize: 500, fileCount: 20929 });
-        await saveFeatureCacheLocked.call(ctx);
-        expect(api.featureCacheWriteOpen).toHaveBeenCalledTimes(1);
-        expect(written).toHaveLength(500);
-        expect(ctx._featureCacheDiskCount).toBe(500);
-    });
-
-    it('skips unresolvable entries rather than poisoning them with size:0/mtime:0', async () => {
-        const ctx = {
-            baseFolderPath: '/d',
-            // `live.png` has no featureMetadata but IS in mediaFiles → resolvable from live stats.
-            // `orphan.png` has neither → unresolvable, must be skipped entirely.
-            mediaFiles: [{ path: '/d/live.png', size: 222, mtimeMs: 2222 }],
-            featureCache: new Map([
-                ['/d/meta.png', new Float32Array(64).fill(0.1)],
-                ['/d/live.png', new Float32Array(64).fill(0.2)],
-                ['/d/orphan.png', new Float32Array(64).fill(0.3)],
-            ]),
-            featureMetadata: new Map([['/d/meta.png', { size: 111, mtime: 1111 }]]),
-            clipCache: new Map(),
-            _featureCacheDiskCount: 0,
-        };
-        await saveFeatureCacheLocked.call(ctx);
-        const names = written.map(([name]) => name);
-        expect(names).toEqual(['meta.png', 'live.png']);
-        expect(names).not.toContain('orphan.png');
-        const byName = Object.fromEntries(written);
-        expect(byName['meta.png']).toMatchObject({ size: 111, mtime: 1111 });
-        expect(byName['live.png']).toMatchObject({ size: 222, mtime: 2222 });
-        // No entry may carry the poison stats that made the cache unloadable forever.
-        for (const [, entry] of written) {
-            expect(entry.size).not.toBe(0);
-            expect(entry.mtime).not.toBe(0);
-        }
-        expect(ctx._featureCacheDiskCount).toBe(2); // counts what was written, not map size (3)
-    });
-
-    // Deep review #10: a refused or failed write-open used to fall through to a legacy single write
-    // that built the whole cache as one string (~131 MB at 24k files) and wrote it non-atomically on
-    // every 30 s auto-save. On main that path was dead; G1's refusals made it live. It is gone:
-    // nothing is written, and the shrink guard keeps its baseline.
-    it('a refused write-open saves nothing and keeps the shrink baseline', async () => {
-        api.featureCacheWriteOpen = vi.fn(() => Promise.resolve({ success: false, error: 'Not permitted' }));
-        api.featureCacheWriteChunk = vi.fn();
-        api.writeFolderCache = vi.fn();
-        const ctx = {
-            baseFolderPath: '/d',
-            mediaFiles: [],
-            featureCache: new Map([['/d/meta.png', new Float32Array(64).fill(0.1)]]),
-            featureMetadata: new Map([['/d/meta.png', { size: 111, mtime: 1111 }]]),
-            clipCache: new Map(),
-            _featureCacheDiskCount: 7,
-        };
-        await saveFeatureCacheLocked.call(ctx);
-        expect(api.featureCacheWriteOpen).toHaveBeenCalledTimes(1);
-        expect(api.featureCacheWriteChunk).not.toHaveBeenCalled();
-        expect(api.writeFolderCache).not.toHaveBeenCalled();
-        expect(ctx._featureCacheDiskCount).toBe(7);
     });
 });
 

@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
+import { stubFeatureCacheStore } from './feature-cache-harness.js';
 
 const require = createRequire(import.meta.url);
 const fs = require('fs');
@@ -714,6 +715,7 @@ describe('_undoSkipBatch — the whole batch back (spec § 7)', () => {
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             restoreFeatureCachesFromHistory: extract('restoreFeatureCachesFromHistory'),
+            featureCacheStore: { markChanged: vi.fn() }, // the restore counts as the visit's change
             _followRestoredFile: extract('_followRestoredFile'),
             saveBulkRatedFile: vi.fn(async () => {}),
             showNotification: vi.fn(),
@@ -1203,7 +1205,7 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
 
     function folderCtx(overrides = {}) {
         globalThis.window = { electronAPI: { openFolderDialog: vi.fn(async () => '/other') } };
-        return {
+        const ctx = {
             _folderIntentGen: 0,
             _fileOpInFlight: true,
             mediaFiles: media('a', 'b'),
@@ -1229,8 +1231,11 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
             },
             switchToFolder: extract('switchToFolder'),
             _switchToFolderNow: extract('_switchToFolderNow'),
+            cancelBackgroundExtraction: vi.fn(),
             ...overrides,
         };
+        ctx.featureCacheStore = stubFeatureCacheStore(ctx);
+        return ctx;
     }
 
     it('a pick during a batch leaves the list, the history and the folder as they were', async () => {
@@ -1787,6 +1792,7 @@ describe('a batch and its undo round-trip the per-file caches (G2 final review F
             getCombinedFeatures: (p) => (p === '/f/a' ? vector : null),
             removeFileFromList: extract('removeFileFromList'),
             restoreFeatureCachesFromHistory: extract('restoreFeatureCachesFromHistory'),
+            featureCacheStore: { markChanged: vi.fn() }, // the restore counts as the visit's change
             _followRestoredFile: extract('_followRestoredFile'),
             saveBulkRatedFile: vi.fn(async () => {}),
             _refuseIfNeedsRegrant: () => false,

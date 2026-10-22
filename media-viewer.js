@@ -1,6 +1,7 @@
 import { FullscreenManager } from './fullscreen.js';
 import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
+import { FeatureCacheStore } from './feature-cache-store.js';
 import * as LikeOrSkip from './like-or-skip.js';
 import * as RecentFolders from './recent-folders.js';
 import * as SimilaritySort from './similarity-sort.js';
@@ -203,6 +204,30 @@ class MediaViewer {
         // initComplete (see handleMlWorkerMessage), distinct from _initCompleteCallback above.
         this._mlWorkerInitResolve = null;
 
+        // The source folder's .feature_cache.json, one folder visit at a time (feature-cache-store.js). loadFolder
+        // and _switchToFolderNow end and begin the visits; every extraction result goes through putFeature/putClip
+        // with the visit its work started in.
+        this.featureCacheStore = new FeatureCacheStore({
+            io: {
+                open: (p) => window.electronAPI.featureCacheOpen(p),
+                chunk: (o, l) => window.electronAPI.featureCacheChunk(o, l),
+                close: () => window.electronAPI.featureCacheClose(),
+                writeOpen: (p, h) => window.electronAPI.featureCacheWriteOpen(p, h),
+                writeChunk: (e) => window.electronAPI.featureCacheWriteChunk(e),
+                writeClose: () => window.electronAPI.featureCacheWriteClose(),
+            },
+            getMaps: () => ({
+                featureCache: this.featureCache,
+                clipCache: this.clipCache,
+                featureMetadata: this.featureMetadata,
+            }),
+            getMediaFiles: () => this.mediaFiles,
+            getConfig: () => ({ featureCacheVersion: MediaViewer.FEATURE_CACHE_VERSION }),
+            basename: (p) => window.electronAPI.path.basename(p),
+            logError: (msg) => window.electronAPI?.logError?.(msg),
+            notify: (msg, level) => this.showNotification(msg, level),
+        });
+
         this.mlTraining = new MlTrainingManager({
             loadFolder: (p) => window.electronAPI.loadFolder(p),
             // useHostCache:false — the manager extracts LIKE/DISLIKE-folder files, which must
@@ -235,7 +260,7 @@ class MediaViewer {
                 clipCache: this.clipCache,
             }),
             cacheIo: {
-                acquireLock: () => this._acquireCacheIoLock(),
+                acquireLock: () => this.featureCacheStore.acquireLock(),
                 open: (p) => window.electronAPI.featureCacheOpen(p),
                 chunk: (o, l) => window.electronAPI.featureCacheChunk(o, l),
                 close: () => window.electronAPI.featureCacheClose(),
@@ -278,9 +303,6 @@ class MediaViewer {
         this.featureTaskIdCounter = 0; // Incrementing task ID
         this.isBackgroundExtracting = false;
         this.backgroundExtractionAbort = null; // AbortController for cancellation
-        this.featureCacheDirty = false; // Flag for auto-save
-        this._featureCacheDiskCount = 0; // entries last seen in .feature_cache.json (shrink guard)
-        this.featureCacheAutoSaveInterval = null;
         this.extractionStartTime = null; // Date.now() when extraction starts
         this.extractionCompletionTimes = []; // Rolling window of completion timestamps
         this.extractionRunId = 0; // Generation counter for cancel-then-restart safety
@@ -1583,8 +1605,14 @@ class MediaViewer {
         }
 
         if (entry.fileSize !== undefined) {
-            this.featureMetadata.set(path, { size: entry.fileSize, mtime: 0 });
+            // The mtime the file left with (move-file is a rename, so it comes back with it): an entry at 0 is
+            // skipped by every save, and one such file kept an unread visit's full-coverage save from writing
+            // (PR #86 review #6). 0 only for an entry that never recorded it.
+            this.featureMetadata.set(path, { size: entry.fileSize, mtime: entry.fileMtimeMs ?? 0 });
         }
+        // The maps are written directly here, so the visit counts it as a change: its next save carries the file
+        // (PR #86 close-out round 2, N1).
+        this.featureCacheStore.markChanged();
     }
 
     // The load-error toast's Remove action (G2 final review F8). Error toasts persist, so the index at error
@@ -1836,17 +1864,13 @@ class MediaViewer {
             if (this.isMlEnabled && this.mlWorker) {
                 let rawFeatures = this.featureCache.get(currentFile.path);
                 if (!rawFeatures && this.currentMedia) {
+                    // The visit the move started in, taken before the await: moves don't refuse during a folder
+                    // load, so a load already listing can end the visit mid-extraction (PR #86 close-out cut 8).
+                    const visit = this.featureCacheStore.visit;
                     try {
                         rawFeatures = await this.extractFeaturesFromDisplayedMedia();
                         if (rawFeatures) {
-                            this.featureCache.set(currentFile.path, rawFeatures);
-                            const ratingFileInfo = this.mediaFiles.find((f) => f.path === currentFile.path);
-                            if (ratingFileInfo) {
-                                this.featureMetadata.set(currentFile.path, {
-                                    size: ratingFileInfo.size,
-                                    mtime: ratingFileInfo.mtimeMs || 0,
-                                });
-                            }
+                            this.featureCacheStore.putFeature(visit, currentFile.path, rawFeatures);
                         }
                     } catch (err) {
                         console.warn('Could not extract ML features:', err);
@@ -1900,6 +1924,7 @@ class MediaViewer {
                     originalPath: currentFile.path,
                     newPath: moveResult.targetPath,
                     fileSize: currentFile.size,
+                    fileMtimeMs: currentFile.mtimeMs,
                     fileType: currentFile.type,
                     actionType: actionType,
                     mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
@@ -2061,6 +2086,7 @@ class MediaViewer {
                     originalPath: fileToMove.path,
                     newPath: moveResult.targetPath,
                     fileSize: fileToMove.size,
+                    fileMtimeMs: fileToMove.mtimeMs,
                     fileType: fileToMove.type,
                     actionType: 'special',
                     mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
@@ -3197,12 +3223,13 @@ class MediaViewer {
             // one that was running. _invalidateSimilarityRun() makes any similarity run stale
             // (G2 spec § 6), even when the same folder is reopened: a stale run writes nothing,
             // so the old run can neither save its hashes nor reorder the folder that loads now.
-            // A skipped _featureCacheDiskCount reset also leaves the old folder's baseline armed
-            // against whatever folder loads next.
+            // The old folder's visit ends here too, unless _switchToFolderNow already ended it
+            // (spec my call 11): its flush freezes its copy now, while mediaFiles still lists the
+            // old folder, and a new visit begins on each branch below, the empty one included.
             this.cancelBackgroundExtraction();
             this._invalidateSimilarityRun();
             this._abortInFlightPredictionSort();
-            this._featureCacheDiskCount = 0;
+            this.featureCacheStore.endVisit();
 
             if (result.files.length === 0) {
                 this.mediaFiles = [];
@@ -3212,6 +3239,10 @@ class MediaViewer {
                 this.moveHistory = [];
                 this._onOrderChanged('folder');
                 this.tournament.engine = null;
+                this.featureCache.clear();
+                this.clipCache.clear();
+                this.featureMetadata.clear();
+                this.featureCacheStore.beginVisit(folderPath);
                 this.showDropZone();
                 this.showError('No media files found in the selected folder');
                 return;
@@ -3237,6 +3268,7 @@ class MediaViewer {
             this.featureCache.clear();
             this.clipCache.clear();
             this.featureMetadata.clear();
+            this.featureCacheStore.beginVisit(folderPath);
             this.predictionScores.clear();
             // Hydrate corrective-training records for this folder (prunes stale filenames)
             await this.loadBulkRatedFile();
@@ -3622,6 +3654,10 @@ class MediaViewer {
         // emptied list and maps, and save or sort them, during cleanupCurrentMedia's await.
         this._invalidateSimilarityRun();
         await this.cleanupCurrentMedia();
+        // The visit ends at this reset, not at the listing (spec my call 11): its flush freezes the copy while the
+        // list is still the old folder's. After a failed listing no visit is current, so nothing saves.
+        this.cancelBackgroundExtraction();
+        this.featureCacheStore.endVisit();
         this.mediaFiles = [];
         this.currentIndex = 0;
         this.currentMedia = null;
@@ -5153,6 +5189,7 @@ class MediaViewer {
                     fileName: file.name,
                     originalPath: file.path,
                     fileSize: file.size,
+                    fileMtimeMs: file.mtimeMs,
                     mlFeatures: combined ? Array.from(combined) : raw ? Array.from(raw) : null,
                     score: this.predictionScores.get(file.path),
                     bulkBucket: this.bulkRated.get(file.name),
@@ -5432,6 +5469,7 @@ class MediaViewer {
                         name: lastMove.fileName,
                         path: lastMove.originalPath,
                         size: lastMove.fileSize,
+                        mtimeMs: lastMove.fileMtimeMs,
                         type: lastMove.fileType,
                     };
 
@@ -5505,6 +5543,7 @@ class MediaViewer {
                         name: firstMove.fileName,
                         path: firstMove.originalPath,
                         size: firstMove.fileSize,
+                        mtimeMs: firstMove.fileMtimeMs,
                         type: firstMove.fileType,
                     });
 
@@ -5512,6 +5551,7 @@ class MediaViewer {
                         name: secondMove.fileName,
                         path: secondMove.originalPath,
                         size: secondMove.fileSize,
+                        mtimeMs: secondMove.fileMtimeMs,
                         type: secondMove.fileType,
                     });
 
@@ -5575,12 +5615,14 @@ class MediaViewer {
                         name: firstMove.fileName,
                         path: firstMove.originalPath,
                         size: firstMove.fileSize,
+                        mtimeMs: firstMove.fileMtimeMs,
                         type: firstMove.fileType,
                     });
                     this.mediaFiles.push({
                         name: secondMove.fileName,
                         path: secondMove.originalPath,
                         size: secondMove.fileSize,
+                        mtimeMs: secondMove.fileMtimeMs,
                         type: secondMove.fileType,
                     });
 
@@ -5619,6 +5661,7 @@ class MediaViewer {
                         name: undoMove.fileName,
                         path: undoMove.originalPath,
                         size: undoMove.fileSize,
+                        mtimeMs: undoMove.fileMtimeMs,
                         type: undoMove.fileType,
                     });
 
@@ -6667,6 +6710,7 @@ class MediaViewer {
                 name: move.fileName,
                 path: move.originalPath,
                 size: move.fileSize,
+                mtimeMs: move.fileMtimeMs,
                 type: move.fileType,
             });
             this.restoreFeatureCachesFromHistory(move);
@@ -6961,6 +7005,8 @@ class MediaViewer {
             if (this.isMlEnabled && this.mlWorker) {
                 leftFeatures = this.featureCache.get(leftFile.path);
                 rightFeatures = this.featureCache.get(rightFile.path);
+                // The visit the move started in, taken before the awaits (as moveCurrentFile's, close-out cut 8).
+                const visit = this.featureCacheStore.visit;
 
                 // Fallback: extract from displayed media if not cached (must happen before cleanup)
                 if (!leftFeatures && this.leftMedia) {
@@ -6968,15 +7014,7 @@ class MediaViewer {
                         console.log('[ML Debug] Fallback extraction for left:', leftFile.name);
                         leftFeatures = await this.extractFeaturesFromMediaElement(this.leftMedia);
                         if (leftFeatures) {
-                            this.featureCache.set(leftFile.path, leftFeatures);
-                            this.featureCacheDirty = true;
-                            const leftInfo = this.mediaFiles.find((f) => f.path === leftFile.path);
-                            if (leftInfo) {
-                                this.featureMetadata.set(leftFile.path, {
-                                    size: leftInfo.size,
-                                    mtime: leftInfo.mtimeMs || 0,
-                                });
-                            }
+                            this.featureCacheStore.putFeature(visit, leftFile.path, leftFeatures);
                             console.log('[ML Debug] Left features extracted successfully');
                         }
                     } catch (err) {
@@ -6988,15 +7026,7 @@ class MediaViewer {
                         console.log('[ML Debug] Fallback extraction for right:', rightFile.name);
                         rightFeatures = await this.extractFeaturesFromMediaElement(this.rightMedia);
                         if (rightFeatures) {
-                            this.featureCache.set(rightFile.path, rightFeatures);
-                            this.featureCacheDirty = true;
-                            const rightInfo = this.mediaFiles.find((f) => f.path === rightFile.path);
-                            if (rightInfo) {
-                                this.featureMetadata.set(rightFile.path, {
-                                    size: rightInfo.size,
-                                    mtime: rightInfo.mtimeMs || 0,
-                                });
-                            }
+                            this.featureCacheStore.putFeature(visit, rightFile.path, rightFeatures);
                             console.log('[ML Debug] Right features extracted successfully');
                         }
                     } catch (err) {
@@ -7083,6 +7113,7 @@ class MediaViewer {
                     originalPath: primaryFile.path,
                     newPath: primaryMoveResult.targetPath,
                     fileSize: primaryFile.size,
+                    fileMtimeMs: primaryFile.mtimeMs,
                     fileType: primaryFile.type,
                     actionType: primaryAction,
                     mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
@@ -7115,6 +7146,7 @@ class MediaViewer {
                     originalPath: secondaryFile.path,
                     newPath: secondaryMoveResult.targetPath,
                     fileSize: secondaryFile.size,
+                    fileMtimeMs: secondaryFile.mtimeMs,
                     fileType: secondaryFile.type,
                     actionType: secondaryAction,
                     mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
@@ -9371,332 +9403,18 @@ class MediaViewer {
         }
     }
 
-    // Feature cache version - must match FEATURE_VERSION in feature-extractor.js
+    // The source folder's .feature_cache.json format version. It does NOT move with feature-extractor.js's
+    // FEATURE_VERSION (they differ today), so the training fingerprint includes both (CLAUDE.md § Active gotchas).
     static FEATURE_CACHE_VERSION = 4;
 
-    // Async mutex serializing ALL feature-cache file IO (load reads + save writes). On Windows,
-    // rename(.tmp → .feature_cache.json) fails with EPERM if the destination has an open handle —
-    // and the streaming reader holds the file open for ~40s while the 30s auto-save tries to
-    // rename over it. Serializing read and write eliminates that overlap. Returns a release fn.
-    async _acquireCacheIoLock() {
-        const prev = this._cacheIoLock || Promise.resolve();
-        let release;
-        this._cacheIoLock = new Promise((resolve) => {
-            release = resolve;
-        });
-        await prev; // wait for the previous holder to release
-        return release;
+    // Reads the current folder visit's cache, at most once per visit (feature-cache-store.js).
+    loadFeatureCache(options = {}) {
+        return this.featureCacheStore.ensureRead(options);
     }
 
-    async loadFeatureCache(options = {}) {
-        // Single-flight: concurrent callers (a CLIP-sort's on-demand extraction + a "Sort by Prediction" click) must
-        // not both drive the shared main-side streaming session, which would corrupt each
-        // other's chunk offsets and close the session out from under the other — yielding an
-        // empty/partial feature load. Coalesce concurrent calls into one in-flight load.
-        if (this._featureCacheLoadPromise) {
-            return this._featureCacheLoadPromise;
-        }
-        this._featureCacheLoadPromise = this._loadFeatureCacheImpl(options);
-        try {
-            return await this._featureCacheLoadPromise;
-        } finally {
-            this._featureCacheLoadPromise = null;
-        }
-    }
-
-    async _loadFeatureCacheImpl(options = {}) {
-        if (!this.baseFolderPath) return 0;
-        const releaseIoLock = await this._acquireCacheIoLock();
-        try {
-            return await this._loadFeatureCacheLocked(options);
-        } finally {
-            releaseIoLock();
-        }
-    }
-
-    async _loadFeatureCacheLocked({ signal, onProgress } = {}) {
-        if (!this.baseFolderPath) return 0;
-
-        // Build lookup of current files for pruning + staleness validation.
-        const currentFiles = new Map();
-        for (const file of this.mediaFiles) {
-            currentFiles.set(file.name, file);
-        }
-        const expectedDim = 64;
-
-        // Precompute the path prefix ONCE (path.join is sync in preload, but ~24k awaits in
-        // the hot loop is needless churn — string-concat instead).
-        const sep = this.baseFolderPath.includes('\\') ? '\\' : '/';
-        const base = this.baseFolderPath.replace(/[\\/]+$/, ''); // strip trailing sep so a drive-root path doesn't double up
-        const makePath = (filename) => base + sep + filename;
-
-        // Validate + STAGE one entry into LOCAL maps. They are committed into this.* only after a
-        // COMPLETE, un-aborted load — a partial load (user cancel or a mid-stream failure) must
-        // NEVER replace a good cache, in memory OR on disk: the 30s auto-save persists the live
-        // this.featureCache via an atomic rename, so a truncated live map would overwrite the
-        // full on-disk .feature_cache.json. `vector` is a Float32Array.
-        const freshFeatureCache = new Map();
-        const freshFeatureMetadata = new Map();
-        const freshClip = new Map();
-        const ingest = (filename, vector, clipVector, size, mtime) => {
-            const currentFile = currentFiles.get(filename);
-            if (!currentFile) return; // pruned — file no longer in folder
-            if (vector.length !== expectedDim) return; // wrong dimension
-            if (size !== currentFile.size || mtime !== currentFile.mtimeMs) return; // stale
-            const fullPath = makePath(filename);
-            freshFeatureCache.set(fullPath, vector);
-            freshFeatureMetadata.set(fullPath, { size, mtime });
-            if (clipVector && clipVector.length === 512) {
-                freshClip.set(fullPath, clipVector);
-            }
-        };
-
-        // Commit a fully-loaded set into the live caches. featureCache/featureMetadata are
-        // REPLACED (prunes removed/stale files); clip vectors are MERGED (additive — matches the
-        // pre-incremental behavior and preserves in-memory-only vectors added by extraction).
-        const commitFresh = () => {
-            this.featureCache = freshFeatureCache;
-            this.featureMetadata = freshFeatureMetadata;
-            for (const [k, v] of freshClip) this.clipCache.set(k, v);
-            return this.featureCache.size;
-        };
-
-        // Preferred path: parse in the main process and pull entries in small batches.
-        // Keeps the renderer from ever holding the full (potentially 250MB+) JSON string.
-        if (window.electronAPI.featureCacheOpen) {
-            try {
-                const opened = await window.electronAPI.featureCacheOpen(this.baseFolderPath);
-                if (!opened.success) {
-                    this._featureCacheDiskCount = 0; // nothing usable on disk
-                    return 0; // notFound/parse error — leave existing cache untouched
-                }
-                if (opened.version !== MediaViewer.FEATURE_CACHE_VERSION) {
-                    console.warn(
-                        `Feature cache version mismatch: found=${opened.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
-                    );
-                    await window.electronAPI.featureCacheClose();
-                    this._featureCacheDiskCount = 0; // the on-disk file is being discarded
-                    this.featureCache = new Map();
-                    this.featureMetadata = new Map();
-                    return 0;
-                }
-                // Baseline for the save-path shrink guard. Recorded even if the load is later
-                // aborted — it reflects what is actually sitting on disk right now.
-                this._featureCacheDiskCount = opened.count;
-                const total = opened.count;
-                const CHUNK = 1000;
-                let loaded = 0;
-                let aborted = false;
-                for (let offset = 0; offset < total; offset += CHUNK) {
-                    if (signal?.aborted) {
-                        aborted = true;
-                        break;
-                    }
-                    const chunk = await window.electronAPI.featureCacheChunk(offset, CHUNK);
-                    if (chunk.vecBuf) {
-                        // Binary shape: .slice() gives each entry its own compact 64/512 copy —
-                        // NOT .subarray() (a view would pin the whole n*64 / n*512 chunk buffer).
-                        const vecs = new Float32Array(chunk.vecBuf);
-                        const clips = chunk.clipBuf ? new Float32Array(chunk.clipBuf) : null;
-                        for (let i = 0; i < chunk.names.length; i++) {
-                            const vector = vecs.slice(i * 64, i * 64 + 64);
-                            const clipVector = clips && chunk.hasClip[i] ? clips.slice(i * 512, i * 512 + 512) : null;
-                            ingest(chunk.names[i], vector, clipVector, chunk.sizes[i], chunk.mtimes[i]);
-                        }
-                        loaded += chunk.names.length;
-                    } else {
-                        // Legacy JSON shape.
-                        for (const [filename, entry] of chunk.entries) {
-                            ingest(
-                                filename,
-                                new Float32Array(entry.vector),
-                                entry.clipVector ? new Float32Array(entry.clipVector) : null,
-                                entry.size,
-                                entry.mtime
-                            );
-                        }
-                        loaded += chunk.entries.length;
-                    }
-                    if (onProgress) onProgress(loaded, total);
-                }
-                await window.electronAPI.featureCacheClose();
-                if (aborted) {
-                    // Cancelled mid-load — discard the staged partial and leave the existing
-                    // cache untouched (a truncated map would later clobber the on-disk cache).
-                    return this.featureCache.size;
-                }
-                return commitFresh();
-            } catch (error) {
-                console.log('Feature cache streaming load failed, falling back to direct read:', error.message);
-                try {
-                    await window.electronAPI.featureCacheClose();
-                } catch (_e) {
-                    // ignore
-                }
-                // Nothing was committed into this.* (staging is local) → existing cache intact →
-                // fall through to the legacy path, which rebuilds from a single read.
-            }
-        }
-
-        // Legacy fallback: single read + parse (older preload, or streaming failed).
-        // Only safe for modest cache sizes.
-        try {
-            const data = await window.electronAPI.readFolderCache(this.baseFolderPath, 'feature');
-            if (data) {
-                const parsed = JSON.parse(data);
-                if (parsed.version !== MediaViewer.FEATURE_CACHE_VERSION) {
-                    console.warn(
-                        `Feature cache version mismatch: found=${parsed.version}, expected=${MediaViewer.FEATURE_CACHE_VERSION}. Cache will be invalidated.`
-                    );
-                    this._featureCacheDiskCount = 0; // the on-disk file is being discarded
-                    this.featureCache = new Map();
-                    this.featureMetadata = new Map();
-                    return 0;
-                }
-                // Baseline for the save-path shrink guard (see _saveFeatureCacheLocked).
-                this._featureCacheDiskCount = Object.keys(parsed.features || {}).length;
-                // Rebuild from scratch — clear any partial staging left by a failed streaming pass.
-                freshFeatureCache.clear();
-                freshFeatureMetadata.clear();
-                freshClip.clear();
-                for (const [filename, entry] of Object.entries(parsed.features || {})) {
-                    ingest(
-                        filename,
-                        new Float32Array(entry.vector),
-                        entry.clipVector ? new Float32Array(entry.clipVector) : null,
-                        entry.size,
-                        entry.mtime
-                    );
-                }
-                return commitFresh();
-            }
-        } catch (error) {
-            console.log('No feature cache found or error loading:', error.message);
-        }
-        return 0;
-    }
-
-    async saveFeatureCache() {
-        // Single-flight: the 30s auto-save interval can fire while an explicit save is still
-        // streaming, and both share the main-side featureCacheWriter (one temp file). Skip if a
-        // save is already in flight — the in-flight one already captures the latest cache state.
-        if (this._featureCacheSavePromise) {
-            return this._featureCacheSavePromise;
-        }
-        this._featureCacheSavePromise = this._saveFeatureCacheImpl();
-        try {
-            return await this._featureCacheSavePromise;
-        } finally {
-            this._featureCacheSavePromise = null;
-        }
-    }
-
-    async _saveFeatureCacheImpl() {
-        if (!this.baseFolderPath || this.featureCache.size === 0) return;
-        const releaseIoLock = await this._acquireCacheIoLock();
-        try {
-            return await this._saveFeatureCacheLocked();
-        } finally {
-            releaseIoLock();
-        }
-    }
-
-    async _saveFeatureCacheLocked() {
-        if (!this.baseFolderPath || this.featureCache.size === 0) return;
-
-        // DATA-LOSS GUARD: never replace a substantially populated on-disk cache with a
-        // drastically smaller in-memory one. The in-memory map shrinks legitimately ONLY when
-        // files leave the folder (pruned at load time). A map covering far fewer entries than
-        // the disk cache WHILE the folder is still large means the load rejected entries
-        // (poisoned size:0/mtime:0 metadata, or an aborted/partial load) — persisting it would
-        // destroy the good cache. Real incident: a 20,929-file folder's 23,559-entry cache was
-        // overwritten by 32 entries.
-        if (
-            this._featureCacheDiskCount > 0 &&
-            this.featureCache.size < this._featureCacheDiskCount * 0.5 &&
-            this.mediaFiles.length > this.featureCache.size * 2
-        ) {
-            const msg =
-                `Feature-cache save SKIPPED (shrink guard): in-memory ${this.featureCache.size} entries vs ` +
-                `${this._featureCacheDiskCount} on disk for ${this.mediaFiles.length} files.`;
-            console.warn(msg);
-            if (window.electronAPI?.logError) window.electronAPI.logError(msg);
-            return;
-        }
-
-        // Round to 6 decimals before serializing. Full-precision floats stringify to
-        // ~17 chars each (e.g. "0.12345678901234567"); 6 decimals is well below the
-        // noise floor for unit-normalized cosine similarity and ~halves the file size
-        // (a 24k-file cache went from 259MB → ~130MB).
-        const round6 = (arr) => {
-            const out = new Array(arr.length);
-            for (let i = 0; i < arr.length; i++) {
-                out[i] = Math.round(arr[i] * 1e6) / 1e6;
-            }
-            return out;
-        };
-
-        // Build the serializable entry for one cache item. Returns null when the entry's
-        // size/mtime cannot be resolved — writing size:0/mtime:0 would poison the cache
-        // (0 never matches a real stat, so the entry is rejected as stale forever).
-        const buildEntry = (fullPath, featureArray) => {
-            const meta = this.featureMetadata.get(fullPath);
-            const clipVector = this.clipCache.get(fullPath);
-            const fileInfo = meta ? null : this.mediaFiles.find((f) => f.path === fullPath);
-            const size = meta ? meta.size : fileInfo?.size;
-            const mtime = meta ? meta.mtime : fileInfo?.mtimeMs;
-            if (!size || !mtime) return null; // unresolvable — skip rather than poison
-            return {
-                vector: round6(featureArray),
-                clipVector: clipVector ? round6(clipVector) : null,
-                size,
-                mtime,
-            };
-        };
-
-        try {
-            // The only write path: stream batches to main (main appends + atomic-renames). Keeps the
-            // renderer from ever building a ~130MB JSON string on every 30s auto-save.
-            if (window.electronAPI.featureCacheWriteOpen) {
-                const opened = await window.electronAPI.featureCacheWriteOpen(this.baseFolderPath, {
-                    version: MediaViewer.FEATURE_CACHE_VERSION,
-                    featureDim: 64,
-                    clipDim: 512,
-                });
-                if (opened?.success) {
-                    const BATCH = 1000;
-                    let batch = [];
-                    let writtenCount = 0;
-                    const flush = async () => {
-                        if (batch.length === 0) return;
-                        const res = await window.electronAPI.featureCacheWriteChunk(batch);
-                        if (!res?.success) throw new Error(res?.error || 'write-chunk failed');
-                        batch = [];
-                    };
-                    for (const [fullPath, featureArray] of this.featureCache.entries()) {
-                        const entry = buildEntry(fullPath, featureArray);
-                        if (!entry) continue; // unresolvable metadata — never poison the cache
-                        const filename = await window.electronAPI.path.basename(fullPath);
-                        batch.push([filename, entry]);
-                        writtenCount++;
-                        if (batch.length >= BATCH) await flush();
-                    }
-                    await flush();
-                    const closed = await window.electronAPI.featureCacheWriteClose();
-                    if (!closed?.success) throw new Error(closed?.error || 'write-close failed');
-                    // Re-baseline the shrink guard to what is now actually on disk.
-                    this._featureCacheDiskCount = writtenCount;
-                    return;
-                }
-                // Deep review #10: a failed or refused open saves NOTHING this tick. There is no
-                // single-write fallback any more: it built the whole cache as one string (~131 MB at
-                // 24k files) and wrote it non-atomically; dead on main, G1's refusals made it live.
-                // The shrink guard keeps its baseline, so the next successful save is still guarded.
-                console.warn('Feature cache not saved:', opened?.error || 'write-open failed');
-            }
-        } catch (error) {
-            console.error('Failed to save feature cache:', error);
-        }
+    // Saves the current visit's entries from a copy frozen now (feature-cache-store.js).
+    saveFeatureCache() {
+        return this.featureCacheStore.requestSave();
     }
 
     // Lets go of a <video> without firing `error` (G3 spec D2). With NO src attribute, the media element load
@@ -9718,9 +9436,9 @@ class MediaViewer {
      *   file that is not a source-folder file must pass `false` — `MlTrainingManager`'s injected
      *   callback does, for the like/dislike folders it scans (design doc § 4.1). Two concrete
      *   costs of not doing so, both traced by the final whole-branch review:
-     *   (1) `_saveFeatureCacheLocked`'s shrink guard reads `this.featureCache.size`, so training
-     *   entries inflate it and its second conjunct can stop firing after a partial or aborted
-     *   load — that is the guard that caught a real 23,559-entry → 32-entry overwrite; and
+     *   (1) the feature-cache store's save copies every `this.featureCache` entry, so training
+     *   entries would be written into the source folder's cache and inflate the shrink guard's
+     *   count — the guard that caught a real 23,559-entry → 32-entry overwrite; and
      *   (2) the `has()` short-circuit below hands back a PRE-modification vector for a training
      *   file the manager's own `size`/`mtime` check just rejected as stale, which is then stored
      *   under the new stat and trained into a model cached under the new fingerprint — a stale
@@ -9816,7 +9534,7 @@ class MediaViewer {
                     // Feature extraction using extractFeatures from feature-extractor.js (v2 with metadata)
                     const features = extractFeatures(imageData, metadata);
                     // Both writes are gated together so featureCache and featureMetadata can never
-                    // disagree about which paths they cover (_saveFeatureCacheLocked's buildEntry
+                    // disagree about which paths they cover (the feature-cache store's frozen copy
                     // walks featureCache and looks each path up in featureMetadata).
                     if (useHostCache) {
                         this.featureCache.set(filePath, features);
@@ -10287,8 +10005,9 @@ class MediaViewer {
         if (this.isPredictionSorting) return; // re-entrancy guard; Cancel is the abort affordance
         // A file action (G1 guard) is moving files: a reorder now would leave the screen and the cursor on
         // different files when it finishes (G2 review). Ahead of the two notices below, so a refused click
-        // shows only this one.
-        if (this._refuseIfFileOpInFlight()) {
+        // shows only this one. A folder load too: the sort checks it after every phase (isLive), so one started
+        // during the load's tail cancelled itself at once (PR #86 close-out R2).
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
             return;
         }
         // Mutual exclusion with the similarity sort — both share this.sortAbortController.
@@ -10320,6 +10039,10 @@ class MediaViewer {
         this.sortAbortController = new AbortController();
         const runId = ++this.sortRunId;
         const signal = this.sortAbortController.signal;
+        // Live until a cancel, a newer sort or a folder load. Checked after every phase, not only the signal: a folder
+        // switch empties the list and ends Phase 2 at its reset, and loadFolder aborts this sort only once the new
+        // listing returns (PR #86 review #10: the collect loop then ran over the empty list).
+        const isLive = () => !signal.aborted && runId === this.sortRunId && !this._folderLoadInFlight;
         // Cancel must also stop an in-progress background extraction (frees CPU).
         signal.addEventListener('abort', () => this.cancelBackgroundExtraction(), { once: true });
         this.updateSortProgress({ phase: 'Preparing…' }); // card visible before any await
@@ -10383,13 +10106,13 @@ class MediaViewer {
             }
             // Cancel stays clickable throughout the load above; it cannot interrupt the
             // in-flight IPC download, so it takes effect here instead.
-            if (signal.aborted) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
 
             // Phase 1 — load cached features (incremental + determinate + cancelable).
-            // Skip the ~40s on-disk reload if the in-memory cache is already warm for every
-            // current file (mirrors the CLIP-sort path's clipVectorsNeedExtraction() gate —
-            // a repeat sort within the same folder session should not replay the full load).
-            if (this.mediaFiles.some((f) => !this.featureCache.has(f.path))) {
+            // Once per folder visit (spec my call 4): a repeat sort in the same visit skips the ~40 s read.
+            // Not "every file is in memory": a small folder browsed end to end would then never be read,
+            // and a visit that has not tried to read never saves (D2).
+            if (this.featureCacheStore.needsRead()) {
                 const tLoad = performance.now();
                 await this.loadFeatureCache({
                     signal,
@@ -10398,7 +10121,7 @@ class MediaViewer {
                 });
                 timePhase('sourceCacheLoad', tLoad);
             }
-            if (signal.aborted) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
 
             // The out-of-date mark (G2 spec § 8): the history BEFORE training reads the folders. A rating
             // made while the sort runs then counts as new even if training saw it — the hint may
@@ -10415,7 +10138,7 @@ class MediaViewer {
             if (training.source !== 'skipped' && this.mlStats?.isReady) {
                 this.showMlLearningIndicator(this.mlStats, training.source);
             }
-            if (signal.aborted) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
             if (!this.mlStats?.isReady) {
                 this.showNotification(
                     `Need more ratings (${this.mlStats?.positiveCount || 0} likes, ${this.mlStats?.negativeCount || 0} dislikes)`,
@@ -10446,7 +10169,7 @@ class MediaViewer {
                 }
                 timePhase('extract', tExtract);
             }
-            if (signal.aborted) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
 
             // Collect features.
             const allFeatures = {};
@@ -10476,9 +10199,8 @@ class MediaViewer {
             if (this.isLoading || this.mediaNavigationInProgress || this._fileOpInFlight) {
                 this.updateSortProgress({ phase: 'Waiting for the file to load…' });
             }
-            const isLive = () => !signal.aborted && runId === this.sortRunId && !this._folderLoadInFlight;
             const settled = await this._waitForRenderIdle(AI_APPLY_WAIT_MS, true, isLive);
-            if (signal.aborted || runId !== this.sortRunId || this._folderLoadInFlight) throw new Error('cancelled');
+            if (!isLive()) throw new Error('cancelled');
             if (!settled) throw new Error('a file is still loading — sort again');
             this.applyPredictionSortResult(result, { resort });
             sortPerf.outcome = 'done';
@@ -10656,21 +10378,15 @@ class MediaViewer {
 
         console.log(`[ML Debug] Prioritizing extraction for ${filesToExtract.length} displayed file(s)`);
 
+        // The folder visit these files belong to: a result that lands after a folder change is dropped.
+        const visit = this.featureCacheStore.visit;
+
         // Extract from displayed media elements directly (faster than loading from disk)
         for (const { file, media, side } of filesToExtract) {
             if (media && (media.complete || media.readyState >= 2)) {
                 try {
                     const features = await this.extractFeaturesFromMediaElement(media);
-                    if (features) {
-                        this.featureCache.set(file.path, features);
-                        this.featureCacheDirty = true;
-                        const prioFileInfo = this.mediaFiles.find((f) => f.path === file.path);
-                        if (prioFileInfo) {
-                            this.featureMetadata.set(file.path, {
-                                size: prioFileInfo.size,
-                                mtime: prioFileInfo.mtimeMs || 0,
-                            });
-                        }
+                    if (features && this.featureCacheStore.putFeature(visit, file.path, features)) {
                         console.log(`[ML Debug] Priority extraction complete for ${side}: ${file.name}`);
                     }
                 } catch (err) {
@@ -10680,7 +10396,10 @@ class MediaViewer {
                 // Media not ready yet, queue for background extraction with high priority
                 try {
                     const imageData = await this.loadMediaAsImageData(file.path);
-                    await this.enqueueFeatureExtraction(file.path, imageData, 0); // Priority 0 = highest
+                    if (!this.featureCacheStore.isCurrent(visit)) {
+                        return;
+                    }
+                    await this.enqueueFeatureExtraction(file.path, imageData, 0, visit); // Priority 0 = highest
                     console.log(`[ML Debug] Queued priority extraction for ${side}: ${file.name}`);
                 } catch (err) {
                     console.warn(`[ML Debug] Could not queue extraction for ${side}:`, err);
@@ -10749,8 +10468,8 @@ class MediaViewer {
 
                 // One-shot version probe: feature-worker.js answers `getVersion` with the
                 // FEATURE_VERSION that feature-extractor.js actually compiled with, so the training
-                // fingerprint never re-declares it. (The FEATURE_CACHE_VERSION comment claiming the two
-                // constants must match is false — they are 4 and 2 — which is why both are fingerprinted.)
+                // fingerprint never re-declares it. (FEATURE_CACHE_VERSION does not move with it — they are 4
+                // and 2 — which is why both are fingerprinted.)
                 const probe = this.featureWorkers[0];
                 if (probe) {
                     this._probeFeatureVersion(probe, settle, false);
@@ -10760,8 +10479,8 @@ class MediaViewer {
 
                 console.log(`[ML Debug] Feature extraction pool initialized with ${this.featureWorkerCount} workers`);
 
-                // Start auto-save interval (every 30 seconds)
-                this.startFeatureCacheAutoSave();
+                // The feature cache's 30 s autosave runs for as long as the pool does.
+                this.featureCacheStore.startAutoSave();
             } catch (err) {
                 console.warn('[ML Debug] Failed to initialize feature workers:', err);
                 settle(); // construction failed — nothing will ever reply
@@ -10953,7 +10672,7 @@ class MediaViewer {
      * Shutdown the feature extraction worker pool
      */
     shutdownFeaturePool() {
-        this.stopFeatureCacheAutoSave();
+        this.featureCacheStore.stopAutoSave();
         this.cancelBackgroundExtraction();
 
         for (const worker of this.featureWorkers) {
@@ -10987,19 +10706,10 @@ class MediaViewer {
             case 'result': {
                 const task = this.featurePendingTasks.get(message.id);
                 if (task) {
-                    // Store in cache
+                    // Into the cache only for the folder visit the task was queued in: a result that arrives after
+                    // a folder change is dropped (T1), though its caller still gets the vector.
                     const features = new Float32Array(message.features);
-                    this.featureCache.set(task.filePath, features);
-                    this.featureCacheDirty = true;
-                    // Store metadata for cache serialization
-                    const fileInfo = this.mediaFiles.find((f) => f.path === task.filePath);
-                    if (fileInfo) {
-                        this.featureMetadata.set(task.filePath, {
-                            size: fileInfo.size,
-                            mtime: fileInfo.mtimeMs || 0,
-                        });
-                    }
-
+                    this.featureCacheStore.putFeature(task.visit, task.filePath, features);
                     task.resolve(features);
                     this.featurePendingTasks.delete(message.id);
                 }
@@ -11082,9 +10792,10 @@ class MediaViewer {
      * @param {string} filePath - Path to the file
      * @param {ImageData} imageData - Extracted image data
      * @param {number} priority - Priority value (lower = higher priority)
+     * @param {object} [visit] - The folder visit the work started in; its result is cached only while it is current
      * @returns {Promise<Float32Array>} Promise resolving to features
      */
-    enqueueFeatureExtraction(filePath, imageData, priority) {
+    enqueueFeatureExtraction(filePath, imageData, priority, visit = this.featureCacheStore.visit) {
         // Check cache first
         if (this.featureCache.has(filePath)) {
             return Promise.resolve(this.featureCache.get(filePath));
@@ -11098,6 +10809,7 @@ class MediaViewer {
                 filePath,
                 imageData,
                 priority,
+                visit,
                 retries: 0,
                 resolve,
                 reject,
@@ -11152,7 +10864,8 @@ class MediaViewer {
         }
         this.featureTaskQueue = [];
 
-        // Note: We don't cancel in-flight tasks, they will complete and be ignored
+        // In-flight tasks are not cancelled: they complete, and handleFeatureWorkerMessage drops a result whose
+        // folder visit has ended.
     }
 
     /**
@@ -11321,6 +11034,9 @@ class MediaViewer {
         this.extractionStartTime = Date.now();
         this.extractionCompletionTimes = [];
         const runId = ++this.extractionRunId;
+        // The folder visit this run extracts for. extractionRunId alone does not cover a folder change:
+        // cancelBackgroundExtraction does not bump it.
+        const visit = this.featureCacheStore.visit;
 
         // Get files that need extraction (not in cache, or missing CLIP)
         const filesToProcess = this.mediaFiles
@@ -11373,7 +11089,7 @@ class MediaViewer {
                     const imageData = needsHandCrafted ? await this.loadMediaAsImageData(file.path) : null;
                     const priority = this.calculateFeaturePriority(index);
 
-                    const featurePromise = this.enqueueFeatureExtraction(file.path, imageData, priority)
+                    const featurePromise = this.enqueueFeatureExtraction(file.path, imageData, priority, visit)
                         .then(() => {
                             if (this.extractionRunId !== runId) return;
                         })
@@ -11386,8 +11102,7 @@ class MediaViewer {
                         .then((clipVector) => {
                             if (this.extractionRunId !== runId) return;
                             if (clipVector) {
-                                this.clipCache.set(file.path, clipVector);
-                                this.featureCacheDirty = true;
+                                this.featureCacheStore.putClip(visit, file.path, clipVector);
                             }
                         })
                         .catch((err) => {
@@ -11441,11 +11156,9 @@ class MediaViewer {
             this.extractionStartTime = null;
         }
 
-        // Save cache after extraction
-        if (this.featureCacheDirty) {
-            await this.saveFeatureCache();
-            this.featureCacheDirty = false;
-        }
+        // Save this run's visit, if it is still the current one; otherwise its flush on leave saved what it could. A
+        // visit that could not read its cache and cannot save its work says once that the work was not saved.
+        await this.featureCacheStore.finishExtractionRun(visit);
 
         // Trigger ML scoring if enabled and model is ready
         if (this.isMlEnabled && this.mlStats?.isReady) {
@@ -11740,30 +11453,6 @@ class MediaViewer {
         const indicator = document.getElementById('featureExtractionProgress');
         if (indicator) {
             indicator.remove();
-        }
-    }
-
-    /**
-     * Start auto-save interval for feature cache
-     */
-    startFeatureCacheAutoSave() {
-        this.stopFeatureCacheAutoSave();
-
-        this.featureCacheAutoSaveInterval = setInterval(async () => {
-            if (this.featureCacheDirty && this.baseFolderPath) {
-                await this.saveFeatureCache();
-                this.featureCacheDirty = false;
-            }
-        }, 30000); // Every 30 seconds
-    }
-
-    /**
-     * Stop auto-save interval
-     */
-    stopFeatureCacheAutoSave() {
-        if (this.featureCacheAutoSaveInterval) {
-            clearInterval(this.featureCacheAutoSaveInterval);
-            this.featureCacheAutoSaveInterval = null;
         }
     }
 

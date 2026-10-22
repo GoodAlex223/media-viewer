@@ -53,7 +53,8 @@ System architecture and component relationships for Media Viewer.
 - `open-folder-dialog` — open the system folder picker; **the only place a folder is granted**
 - `load-folder` — list media files in a granted folder
 - `move-file` — move a media file into a granted folder, never replacing an existing one
-- `read-folder-cache` / `write-folder-cache` — per-folder caches by fixed name (`hash`, `sort`, plus `feature` for reads)
+- `read-folder-cache` / `write-folder-cache` — per-folder caches by fixed name (`hash`, `sort`)
+- `feature-cache-open` / `-chunk` / `-close` and `feature-cache-write-open` / `-write-chunk` / `-write-close` — the feature cache, streamed both ways; `feature-cache-ledger.js` records what main read and refuses a write it cannot account for
 - `get-grant-status` — which saved folders are granted (`true`), not granted (`false`) or `unreachable`
 See `main.js` for the full list and each channel's argument kinds.
 
