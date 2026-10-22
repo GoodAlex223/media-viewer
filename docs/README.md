@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_     | —                                      |
+| [G2 PR 2 Background Hashing Plan](planning/plans/2026-10-22_g2-hash-sort-pr2-background-hashing.md) | PR 2 of G2 (spec D7, amendments § 17 B1–B9): the similarity sort hashes in a per-run worker pool on the measured F4 route, behind a pixel-exact canary, with today's route as the fallback; the `MV_HASH_PARITY=1` diagnostic; atomic writes for `.hash_cache.json`, `.sort_cache.json` and `.bulk_rated.json`; the user's cold-cache smoke on `Liked_2`. Eight tasks, subagent-driven. Status: in progress (approved 2026-10-22; smoke Friday 2026-10-23). |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
