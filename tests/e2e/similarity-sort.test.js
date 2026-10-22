@@ -27,6 +27,11 @@ async function gateHashing(page) {
             pool.hashFiles = async function* (paths, options) {
                 for await (const result of hashFiles(paths, options)) {
                     window.__hashCalls++;
+                    if (window.__hashCalls === 1) {
+                        // Which file finishes first is the pool's order, not the folder's: tests that need to
+                        // know the file the gate let through read it from here.
+                        window.__firstHashedPath = result.path;
+                    }
                     if (window.__hashCalls >= 2) {
                         await window.__hashGate;
                     }
@@ -322,9 +327,6 @@ test.describe('Similarity sort: Show, Cancel and folder switch', () => {
 
     test('Cancel leaves the list as it is and keeps the finished hashes', async () => {
         const before = await listedPaths(page);
-        const firstName = await page.evaluate(() =>
-            window.electronAPI.path.basename(window.mediaViewer.mediaFiles[0].path)
-        );
         await gateHashing(page);
         await startSort(page);
         await waitForHashCalls(page, 2);
@@ -338,6 +340,9 @@ test.describe('Similarity sort: Show, Cancel and folder switch', () => {
         expect(existsSync(join(tmpFixtures.dir, '.sort_cache.json'))).toBe(false);
 
         const hashCache = JSON.parse(await readFile(join(tmpFixtures.dir, '.hash_cache.json'), 'utf8'));
+        // The file the gate let through, not mediaFiles[0]: the pool finishes in completion order. Stricter too,
+        // since it proves result 2 was not stored after the Cancel.
+        const firstName = await page.evaluate(() => window.electronAPI.path.basename(window.__firstHashedPath));
         expect(Object.keys(hashCache)).toEqual([firstName]);
     });
 

@@ -49,6 +49,8 @@ function getLaunchArgs() {
 
 /**
  * Launch the Electron app and wait for it to be ready.
+ * `env` adds environment variables for this launch. An inherited MV_HASH_PARITY is always dropped, so a shell
+ * that left it set cannot turn the launch into a parity run; pass it in `env` to ask for one.
  * Returns { electronApp, page }.
  */
 export async function launchApp({ migrationMarker, env = {} } = {}) {

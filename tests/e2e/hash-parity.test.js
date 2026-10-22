@@ -113,9 +113,10 @@ test.describe('hash routes on generated fixtures', () => {
         const pixelRows = await page.evaluate(
             async (list) => {
                 const { hashImageUrl } = await import('./main-thread-hash.js');
+                const { toMediaUrl } = await import('./media-url.js');
                 const out = [];
                 for (const [name, path] of list) {
-                    const url = 'app://media-viewer/@fs/' + encodeURIComponent(path);
+                    const url = toMediaUrl(path);
                     const mainSide = await hashImageUrl(url, { wantPixels: true });
                     const worker = new Worker('hash-worker.js', { type: 'module' });
                     try {
@@ -134,7 +135,13 @@ test.describe('hash routes on generated fixtures', () => {
                                 }
                             }
                         }
-                        out.push({ name, identical: differing === 0, differing, ok: reply.ok });
+                        out.push({
+                            name,
+                            identical: differing === 0,
+                            differing,
+                            ok: reply.ok,
+                            lengths: [a.length, b.length],
+                        });
                     } catch (error) {
                         out.push({ name, identical: false, differing: -2, ok: false, error: String(error) });
                     } finally {
@@ -155,7 +162,11 @@ test.describe('hash routes on generated fixtures', () => {
             type: 'pixels-summary',
             description: `${pixelRows.filter((r) => r.identical).length} of ${pixelRows.length} identical`,
         });
+        // Harness sanity, not identity: a missing reply or an empty read-back must not read as "identical".
         expect(pixelRows).toHaveLength(imageNames.length);
+        expect(
+            pixelRows.filter((r) => !r.ok || r.lengths?.[0] !== 262144 || r.lengths?.[1] !== 262144).map((r) => r.name)
+        ).toEqual([]);
     });
 
     test('the canary passes on this machine', async () => {
@@ -319,7 +330,7 @@ test.describe('a sort through the workers', () => {
         expect(paths).not.toContain(likedPath);
 
         const routes = await page.evaluate(() => window.__hashRoutes);
-        expect(routes.length).toBeGreaterThan(0);
+        expect(routes).toHaveLength(SMALL_IMAGES.length);
         expect(routes.map((r) => r.route)).toEqual(routes.map(() => 'worker'));
         expect(await page.evaluate(() => window.__mainImageCalls)).toBe(0);
     });
