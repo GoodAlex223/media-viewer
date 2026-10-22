@@ -5,6 +5,7 @@ import { MlTrainingManager } from '../ml-training.js';
 import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
 import { stubFeatureCacheStore } from './feature-cache-harness.js';
+import { fakeHashPool } from './hash-pool-harness.js';
 // Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
 globalThis.LikeOrSkip = LikeOrSkip;
 globalThis.SimilaritySort = SimilaritySort;
@@ -468,6 +469,13 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             async computePerceptualHash(_path) {
                 throw new Error('computePerceptualHash should not be called in CLIP path');
             },
+            // G2 PR 2 T5: the placement hashes through a pool, which hashes through computePerceptualHash.
+            hashPools: [],
+            _createHashPool() {
+                const pool = fakeHashPool((p) => this.computePerceptualHash(p));
+                this.hashPools.push(pool);
+                return pool;
+            },
             updateProgressNotification() {},
             updateSortProgress() {},
             ...overrides,
@@ -687,6 +695,57 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
         expect(out.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
         expect(ctx.perceptualHashes.get('/b.png')).toBe('0001');
     });
+
+    it('placement hashes the missing new files through one pool before it places any', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        const d = { path: '/d.png' };
+        const e = { path: '/e.png' }; // new, but already hashed
+        const seq = [];
+        const ctx = makeCtx({
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/c.png', '1111'],
+                ['/e.png', '0111'],
+            ]),
+            computePerceptualHash: vi.fn(async (p) => {
+                seq.push(`hash ${p}`);
+                if (p === '/d.png') {
+                    throw new Error('decode failed');
+                }
+                return '0001';
+            }),
+            updateSortProgress: vi.fn((p) => seq.push(`${p.phase} ${p.current}/${p.total}`)),
+        });
+        const out = await insertNewFilesInSortedOrder.call(ctx, [a, c], [b, d, e], 'vptree', () => true);
+        expect(ctx.hashPools).toHaveLength(1);
+        const [pool] = ctx.hashPools;
+        expect(pool.checkCanary).toHaveBeenCalledOnce();
+        expect(pool.hashFiles).toHaveBeenCalledOnce();
+        expect(pool.hashFiles.mock.calls[0]).toEqual([['/b.png', '/d.png']]); // no signal: isLive is the check
+        expect(pool.terminate).toHaveBeenCalledOnce();
+        expect(seq).toEqual(['hash /b.png', 'hash /d.png', 'Hashing new files 2/2', 'Placing new files 3/3']);
+        expect(ctx.perceptualHashes.get('/b.png')).toBe('0001');
+        expect(ctx.perceptualHashes.has('/d.png')).toBe(false);
+        // A file with no hash still goes to the end.
+        expect(out.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png', '/e.png', '/d.png']);
+    });
+
+    it('placement makes no pool when every new file is hashed', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        const ctx = makeCtx({
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/b.png', '0001'],
+                ['/c.png', '1111'],
+            ]),
+        });
+        await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree', () => true);
+        expect(ctx.hashPools).toHaveLength(0);
+    });
 });
 
 describe('applyCachedSortOrder (algorithm threading)', () => {
@@ -809,8 +868,9 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
     });
 
     // G2 PR 1 T4 (R-T4a), rewritten for PR #85 #22: the basename call was synchronous, so the placement's real awaits
-    // are the hash and the 25-file yield inside insertNewFilesInSortedOrder. A placement made stale during either
-    // stops: no hash stored, no progress after it, no order returned.
+    // are the hash (the pool's canary and results, G2 PR 2) and the 25-file yield inside insertNewFilesInSortedOrder.
+    // A placement made stale during either stops: no hash stored, no progress after it, no order returned, and its
+    // pool is terminated.
     it.each(['the hash', 'the 25-file yield'])(
         'a placement made stale during %s stops there: no hash stored, no progress after it',
         async (during) => {
@@ -831,6 +891,12 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
                 clipCache: new Map(),
                 calculateHammingDistance: (h1, h2) => [...h1].filter((ch, i) => ch !== h2[i]).length,
                 insertNewFilesInSortedOrder: realInsert,
+                hashPools: [],
+                _createHashPool() {
+                    const pool = fakeHashPool((p) => this.computePerceptualHash(p));
+                    this.hashPools.push(pool);
+                    return pool;
+                },
                 computePerceptualHash: vi.fn(async () => {
                     isLiveNow = false; // a folder switch while n0 is hashed
                     progressAtStale = ctx.updateSortProgress.mock.calls.length;
@@ -857,6 +923,9 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
             expect(ctx.computePerceptualHash).toHaveBeenCalledTimes(yieldCase ? 0 : 1);
             if (!yieldCase) {
                 expect(ctx.perceptualHashes.has('/n0.png')).toBe(false);
+                // Review Focus #4: the fake pool is the hash source, and a stale placement terminates it.
+                expect(ctx.hashPools).toHaveLength(1);
+                expect(ctx.hashPools[0].terminate).toHaveBeenCalled();
             }
             expect(ctx.mediaFiles).toBe(listBefore);
         }

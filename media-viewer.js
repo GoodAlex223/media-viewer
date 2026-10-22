@@ -7,6 +7,7 @@ import * as RecentFolders from './recent-folders.js';
 import * as SimilaritySort from './similarity-sort.js';
 import * as MediaUrl from './media-url.js';
 import * as MainThreadHash from './main-thread-hash.js';
+import * as HashPool from './hash-pool.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -7353,10 +7354,10 @@ class MediaViewer {
         if (this.mediaFiles.length > 1000 && !this.isSortedBySimilarity) {
             const cacheFile = `${this.baseFolderPath}\\.hash_cache.json`;
             const confirmed = confirm(
-                `Sorting ${this.mediaFiles.length} files may take a very long time and could freeze the application.\n\n` +
-                    `Consider sorting smaller folders (recommended: < 1000 files).\n\n` +
+                `Sorting ${this.mediaFiles.length} files may take several minutes.\n\n` +
+                    `Hashing runs in the background, so you can keep using the app while it works.\n\n` +
                     `Hash data will be cached at:\n${cacheFile}\n\n` +
-                    `Continue anyway?`
+                    `Continue?`
             );
             if (!confirmed) {
                 return;
@@ -7403,6 +7404,12 @@ class MediaViewer {
         let newHashes = 0;
         let skipped = 0;
         let newSinceSave = 0; // hashes computed since the last hash-cache save
+        // The hash note's pool counts (G2 PR 2): a new hash came from a worker or from today's main-thread route
+        // (fallback). poolSize stays 0 when nothing needed a hash, so no pool was made.
+        let workerHashes = 0;
+        let fallbackHashes = 0;
+        let poolSize = 0;
+        let canaryFailed = false;
         // Every hash-cache save of the run goes through here. A failed write warns once per run (PR #85 #18): a
         // read-only folder fails every periodic save, and saveHashCache itself only returns false. A run gone stale
         // during the save shows nothing (spec § 6.4).
@@ -7495,9 +7502,9 @@ class MediaViewer {
 
                 // A cache hit applies directly (spec my call 3), through the one apply function, unless the user
                 // acted since the press: the apply checks the run's mark at its commit (PR #85 review #3), since a
-                // far-behind cache hashes each new file on the main thread while navigation stays live. The
-                // captured algorithm is passed explicitly so it threads through to the placement even if the
-                // cached entry was written before the algorithm field existed (older caches).
+                // far-behind cache's placement hashes every new file (in its hash pool) while navigation stays
+                // live. The captured algorithm is passed explicitly so it threads through to the placement even if
+                // the cached entry was written before the algorithm field existed (older caches).
                 const restoredLine = `✅ Restored cached ${algorithmName} order`;
                 const cachedAgo =
                     typeof cachedSortData.timestamp === 'number'
@@ -7651,60 +7658,76 @@ class MediaViewer {
                     // Start progress notification
                     this.updateSortProgress({ phase: 'Starting hash computation…' });
 
-                    let processed = 0;
                     let lastSaveAt = Date.now();
                     const total = run.snapshot.length;
+                    // Hashing runs in a per-run pool (G2 PR 2, B4): images in workers, videos and failures on
+                    // today's main-thread route. Results arrive in completion order; each is stored only after the
+                    // run's liveness check, with no await between the two.
+                    const toHash = run.snapshot.filter((f) => !this.perceptualHashes.has(f.path)).map((f) => f.path);
+                    let processed = total - toHash.length;
                     phaseMs.hash = 0; // the hash phase runs (and is logged) even when every hash was cached
-
-                    for (const file of run.snapshot) {
-                        processed++;
-
-                        if (this.perceptualHashes.has(file.path)) {
-                            continue;
-                        }
-
-                        let hash;
-                        let hashFailed = false;
-                        const hashStart = performance.now();
+                    if (toHash.length > 0) {
+                        const pool = this._createHashPool();
+                        poolSize = pool.size;
+                        const phaseStart = performance.now();
+                        let savesMs = 0; // the in-loop saves, timed into 'save' and taken out of 'hash'
                         try {
-                            hash = await this.computePerceptualHash(file.path);
-                        } catch (error) {
-                            console.error(`Failed to compute hash for ${file.path}:`, error);
-                            hashFailed = true;
-                        }
-                        addPhase('hash', hashStart);
-                        // Before the result is stored: a stale or cancelled run drops its in-flight hash.
-                        this._assertSimilarityRunLive(run);
-
-                        if (hashFailed) {
-                            skipped++;
-                        } else {
-                            this.perceptualHashes.set(file.path, hash);
-                            newHashes++;
-                            newSinceSave++;
-                        }
-
-                        // Update progress every 5 files or at end
-                        if (processed % 5 === 0 || processed === total) {
-                            this.updateSortProgress({
-                                phase: `Computing hashes (${newHashes} new, ${skipped} skipped)`,
-                                current: processed,
-                                total,
-                            });
-                        }
-
-                        // Save as it goes (spec § 6.3), so a long run that is cancelled, fails or is closed keeps
-                        // what it hashed.
-                        if (
-                            !hashFailed &&
-                            SimilaritySort.isHashSaveDue({ newSinceSave, lastSaveAt, now: Date.now() })
-                        ) {
-                            const saveStart = performance.now();
-                            await saveHashes();
-                            addPhase('save', saveStart);
+                            const canary = await pool.checkCanary();
                             this._assertSimilarityRunLive(run);
-                            newSinceSave = 0;
-                            lastSaveAt = Date.now();
+                            if (!canary.ok) {
+                                // The pool now sends every file to today's route: the run goes on, slower.
+                                canaryFailed = true;
+                                this._reportHashCanaryFailure(canary.detail);
+                            }
+                            for await (const r of pool.hashFiles(toHash, { signal: run.controller.signal })) {
+                                // Before the result is stored: a stale or cancelled run drops its in-flight hash.
+                                this._assertSimilarityRunLive(run);
+                                processed++;
+                                if (r.hash === null) {
+                                    console.error(`Failed to compute hash for ${r.path}:`, r.error);
+                                    skipped++;
+                                } else {
+                                    this.perceptualHashes.set(r.path, r.hash);
+                                    newHashes++;
+                                    newSinceSave++;
+                                    if (r.route === 'worker') {
+                                        workerHashes++;
+                                    } else {
+                                        fallbackHashes++;
+                                    }
+                                }
+
+                                // Update progress every 5 files or at end
+                                if (processed % 5 === 0 || processed === total) {
+                                    this.updateSortProgress({
+                                        phase: `Computing hashes (${newHashes} new, ${skipped} skipped)`,
+                                        current: processed,
+                                        total,
+                                    });
+                                }
+
+                                // Save as it goes (spec § 6.3), so a long run that is cancelled, fails or is closed
+                                // keeps what it hashed.
+                                if (
+                                    r.hash !== null &&
+                                    SimilaritySort.isHashSaveDue({ newSinceSave, lastSaveAt, now: Date.now() })
+                                ) {
+                                    // Reset first: a Cancel during this save must not make the catch save the same
+                                    // hashes again.
+                                    newSinceSave = 0;
+                                    lastSaveAt = Date.now();
+                                    const saveStart = performance.now();
+                                    await saveHashes();
+                                    addPhase('save', saveStart);
+                                    savesMs += performance.now() - saveStart;
+                                    this._assertSimilarityRunLive(run);
+                                }
+                            }
+                            // An abort ends the pool's iteration without a throw: the run says so here.
+                            this._assertSimilarityRunLive(run);
+                        } finally {
+                            pool.terminate();
+                            phaseMs.hash += performance.now() - phaseStart - savesMs;
                         }
                     }
 
@@ -7862,7 +7885,13 @@ class MediaViewer {
                 .filter((phase) => phaseMs[phase] !== null)
                 .map((phase) =>
                     phase === 'hash'
-                        ? [phase, phaseMs[phase], `new ${newHashes}, skipped ${skipped}`]
+                        ? [
+                              phase,
+                              phaseMs[phase],
+                              `new ${newHashes}, worker ${workerHashes}, fallback ${fallbackHashes}, ` +
+                                  `skipped ${skipped}, pool ${poolSize}` +
+                                  (canaryFailed ? ', canary failed' : ''),
+                          ]
                         : [phase, phaseMs[phase]]
                 );
             this._logSortPerf(perf);
@@ -7928,8 +7957,8 @@ class MediaViewer {
         // After 'empty': moving every file away is itself a user action, and a Show over the empty screen would do
         // nothing, so an emptied list ends quietly (F1) rather than as 'acted'.
         if (mark && SimilaritySort.userActedSince(mark, SimilaritySort.takeUserMark(this))) {
-            // The user acted since the run's press (navigated during the placement, which hashes new files on the
-            // main thread, or during the render wait): the order waits on "Show" (spec D3, PR #85 review #3).
+            // The user acted since the run's press (navigated during the placement, which hashes new files in its
+            // hash pool, or during the render wait): the order waits on "Show" (spec D3, PR #85 review #3).
             return { applied: false, reason: 'acted', stats };
         }
         if (!renderSettled) {
@@ -8093,6 +8122,31 @@ class MediaViewer {
             isJxl: (p) => this.isJxl(p),
             decodeJxl: (p) => this.decodeJxl(p),
             releaseVideo: (v) => this._releaseVideo(v),
+        });
+    }
+
+    // A fresh hash pool (G2 PR 2, B4) for one run or one placement. Its workers live for the pool's life, so the
+    // caller terminates it in a finally. Today's route (computePerceptualHash) is its fallback lane.
+    _createHashPool() {
+        return new HashPool.HashPool({
+            size: HashPool.POOL_SIZE,
+            createWorker: () => new Worker('hash-worker.js', { type: 'module' }),
+            hashOnMainThread: (p) => this.computePerceptualHash(p),
+            hashMainUrlPixels: (url) => MainThreadHash.hashImageUrl(url, { wantPixels: true }),
+            makeCanaryImages: () => MainThreadHash.makeCanaryImages(),
+            getJxlPngBytes: async (p) => (await this.decodeJxl(p)).frames[0].pngBytes,
+            isJxl: (p) => this.isJxl(p),
+            toMediaUrl: MediaUrl.toMediaUrl,
+        });
+    }
+
+    // The pool's canary failed, so every file goes to today's route. Said once per run or placement, and logged.
+    _reportHashCanaryFailure(detail) {
+        this.showNotification('⚠️ Background hashing check failed — hashing on the main thread', 'warning');
+        window.electronAPI?.logError?.({
+            level: 'warn',
+            source: 'hash-pool',
+            message: `Hash canary failed: ${detail}`,
         });
     }
 
@@ -8491,10 +8545,12 @@ class MediaViewer {
     }
 
     // Returns sortedFiles with newFiles placed by similarity; never writes this.mediaFiles. Throws
-    // 'Sorting cancelled by user' at the top of each iteration and after every await once `isLive()` turns false
-    // (G2 PR 1 R-T4a/R-T4b): the last await must not resolve into a hash write or a progress call. `isLive` is the
-    // only check; the default (for a direct caller) is the shared sortAbortController, the apply function's is
-    // its entry's. The header stays on one line (no arrow default) so the tests' method-header scan can read it.
+    // 'Sorting cancelled by user' at the top of each placement iteration and after every await (the hash pool's
+    // canary, each of its results, the 25-file yield) once `isLive()` turns false (G2 PR 1 R-T4a/R-T4b, PR 2 B4):
+    // the last await must not resolve into a hash write or a progress call. The pool is terminated in a finally.
+    // `isLive` is the only check; the default (for a direct caller) is the shared sortAbortController, the apply
+    // function's is its entry's. The header stays on one line (no arrow default) so the tests' method-header scan
+    // can read it.
     async insertNewFilesInSortedOrder(sortedFiles, newFiles, algorithm, isLive = null) {
         // The default (null) is the shared sortAbortController, for a direct caller.
         const live = isLive ?? (() => !this.sortAbortController?.signal.aborted);
@@ -8564,29 +8620,47 @@ class MediaViewer {
                 }
             }
         } else {
-            // Hash path (vptree, mst, simple, or undefined): unchanged behavior.
+            // Hash path (vptree, mst, simple, or undefined). The new files with no hash are hashed first, through one
+            // pool (G2 PR 2, B4); each result is stored only after assertLive(), with no await between the two. No
+            // signal: isLive is the only check, so a stale placement stops at its next result.
+            const missing = newFiles.filter((f) => !this.perceptualHashes.has(f.path)).map((f) => f.path);
+            if (missing.length > 0) {
+                const pool = this._createHashPool();
+                try {
+                    const canary = await pool.checkCanary();
+                    assertLive();
+                    if (!canary.ok) {
+                        this._reportHashCanaryFailure(canary.detail);
+                    }
+                    let hashed = 0;
+                    for await (const r of pool.hashFiles(missing)) {
+                        // Before the hash is stored: a stale placement must not put a folder's hashes into the map
+                        // of the folder open now (spec A6).
+                        assertLive();
+                        hashed++;
+                        if (r.hash === null) {
+                            console.warn(`Failed to compute hash for ${r.path}:`, r.error);
+                        } else {
+                            this.perceptualHashes.set(r.path, r.hash);
+                        }
+                        if (hashed % 10 === 0 || hashed === missing.length) {
+                            this.updateSortProgress({
+                                phase: 'Hashing new files',
+                                current: hashed,
+                                total: missing.length,
+                            });
+                        }
+                    }
+                    assertLive();
+                } finally {
+                    pool.terminate();
+                }
+            }
+
+            // The placement: a file with no hash (its hash failed) goes to the end.
             for (let i = 0; i < newFiles.length; i++) {
                 assertLive();
                 const newFile = newFiles[i];
-
-                if (!this.perceptualHashes.has(newFile.path)) {
-                    let hash;
-                    let hashFailed = false;
-                    try {
-                        hash = await this.computePerceptualHash(newFile.path);
-                    } catch (error) {
-                        hashFailed = true;
-                        console.warn(`Failed to compute hash for ${newFile.path}:`, error);
-                    }
-                    // Before the hash is stored: a stale placement must not put a folder's hashes into the map
-                    // of the folder open now (spec A6).
-                    assertLive();
-                    if (hashFailed) {
-                        insertions.push({ file: newFile, index: sortedFiles.length, distance: Infinity });
-                        continue;
-                    }
-                    this.perceptualHashes.set(newFile.path, hash);
-                }
 
                 const newHash = this.perceptualHashes.get(newFile.path);
                 if (!newHash) {

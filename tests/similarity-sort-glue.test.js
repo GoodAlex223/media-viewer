@@ -3,6 +3,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as SimilaritySort from '../similarity-sort.js';
+import { fakeHashPool } from './hash-pool-harness.js';
 
 const require = createRequire(import.meta.url);
 const fs = require('fs');
@@ -96,6 +97,15 @@ function similarityCtx(overrides = {}) {
         showMedia: vi.fn(async () => {}),
         showNotification: vi.fn(),
         updateSortPredictionButton: vi.fn(),
+        // G2 PR 2 T5: the run and the placement hash through a pool. The fake hashes through this context's own
+        // computePerceptualHash, serially and in path order, so every mock of it keeps its meaning. Each pool made
+        // is recorded.
+        hashPools: [],
+        _createHashPool() {
+            const pool = fakeHashPool((p) => this.computePerceptualHash(p));
+            this.hashPools.push(pool);
+            return pool;
+        },
         ...overrides,
     };
 }
@@ -677,7 +687,184 @@ describe('the run (spec § 6–7, T3)', () => {
         expect(ctx._logSortPerf).toHaveBeenCalledOnce();
         expect(perf).toMatchObject({ label: 'Similarity sort', outcome: 'done', files: 3 });
         expect(perf.phases.map((p) => p[0])).toEqual(['load', 'hash', 'save', 'sort', 'apply']);
-        expect(perf.phases[1][2]).toBe('new 3, skipped 0');
+        expect(perf.phases[1][2]).toBe('new 3, worker 3, fallback 0, skipped 0, pool 3');
+    });
+});
+
+describe('the run hashes through the pool (PR 2 T5)', () => {
+    const handleSortBySimilarity = extract('handleSortBySimilarity');
+    useRunGlobals();
+
+    const hashNote = (ctx) => ctx._logSortPerf.mock.calls[0][0].phases.find((p) => p[0] === 'hash')[2];
+    const outcome = (ctx) => ctx._logSortPerf.mock.calls[0][0].outcome;
+
+    it("hashes the snapshot's unhashed paths through one pool, with the run's signal", async () => {
+        const ctx = runCtx({ perceptualHashes: new Map([['/f/b', '0110']]) });
+        let signal = null;
+        ctx.computePerceptualHash.mockImplementationOnce(async () => {
+            signal = ctx.sortAbortController.signal; // captured during the call: the finally nulls it
+            return '0101';
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.hashPools).toHaveLength(1);
+        const [pool] = ctx.hashPools;
+        expect(pool.hashFiles).toHaveBeenCalledOnce();
+        expect(pool.hashFiles.mock.calls[0][0]).toEqual(['/f/a', '/f/c']);
+        expect(signal).toBeInstanceOf(AbortSignal);
+        expect(pool.hashFiles.mock.calls[0][1]).toEqual({ signal });
+        expect(pool.hashFiles.mock.calls[0][1].signal).toBe(signal);
+        // The canary is awaited first, on the fresh pool.
+        expect(pool.checkCanary.mock.invocationCallOrder[0]).toBeLessThan(pool.hashFiles.mock.invocationCallOrder[0]);
+        expect(outcome(ctx)).toBe('done');
+    });
+
+    it('makes no pool when every file is hashed', async () => {
+        const ctx = runCtx({
+            perceptualHashes: new Map([
+                ['/f/a', '0101'],
+                ['/f/b', '0110'],
+                ['/f/c', '1100'],
+            ]),
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.hashPools).toHaveLength(0);
+        expect(hashNote(ctx)).toBe('new 0, worker 0, fallback 0, skipped 0, pool 0');
+        expect(outcome(ctx)).toBe('done');
+    });
+
+    it('counts worker and fallback hashes in the perf note', async () => {
+        const ctx = runCtx();
+        const routes = { '/f/a': 'worker', '/f/b': 'main', '/f/c': 'none' };
+        ctx._createHashPool = function () {
+            const pool = fakeHashPool(async () => '0101');
+            pool.hashFiles = vi.fn(async function* (paths) {
+                for (const p of paths) {
+                    yield routes[p] === 'none'
+                        ? { path: p, hash: null, route: 'none', error: 'decode failed' }
+                        : { path: p, hash: '0101', route: routes[p] };
+                }
+            });
+            this.hashPools.push(pool);
+            return pool;
+        };
+        await handleSortBySimilarity.call(ctx, false);
+        expect(hashNote(ctx)).toBe('new 2, worker 1, fallback 1, skipped 1, pool 3');
+        expect([...ctx.perceptualHashes.keys()]).toEqual(['/f/a', '/f/b']);
+        expect(outcome(ctx)).toBe('done');
+    });
+
+    it('a failed canary is reported once, and the note says so', async () => {
+        const logError = vi.fn();
+        globalThis.window.electronAPI.logError = logError;
+        const ctx = runCtx({ _reportHashCanaryFailure: extract('_reportHashCanaryFailure') });
+        ctx._createHashPool = function () {
+            const pool = fakeHashPool((p) => this.computePerceptualHash(p), {
+                canary: { ok: false, detail: 'pixels differ' },
+            });
+            this.hashPools.push(pool);
+            return pool;
+        };
+        await handleSortBySimilarity.call(ctx, false);
+        const warning = '⚠️ Background hashing check failed — hashing on the main thread';
+        expect(ctx.showNotification.mock.calls.filter((c) => c[0] === warning)).toEqual([[warning, 'warning']]);
+        expect(logError).toHaveBeenCalledOnce();
+        expect(logError).toHaveBeenCalledWith({
+            level: 'warn',
+            source: 'hash-pool',
+            message: 'Hash canary failed: pixels differ',
+        });
+        expect(hashNote(ctx)).toBe('new 3, worker 3, fallback 0, skipped 0, pool 3, canary failed');
+        expect(outcome(ctx)).toBe('done');
+    });
+
+    it('a run made stale during the canary check shows nothing and terminates its pool', async () => {
+        const ctx = runCtx({ _reportHashCanaryFailure: vi.fn() });
+        ctx._createHashPool = function () {
+            const pool = fakeHashPool((p) => this.computePerceptualHash(p));
+            pool.checkCanary = vi.fn(async () => {
+                ctx._similarityRunGen++; // a folder switch during the check
+                return { ok: false, detail: 'x' };
+            });
+            this.hashPools.push(pool);
+            return pool;
+        };
+        await handleSortBySimilarity.call(ctx, false);
+        const [pool] = ctx.hashPools;
+        expect(pool.hashFiles).not.toHaveBeenCalled();
+        expect(pool.terminate).toHaveBeenCalledOnce();
+        expect(ctx._reportHashCanaryFailure).not.toHaveBeenCalled();
+        expect(ctx.perceptualHashes.size).toBe(0);
+        for (const m of ['saveHashCache', 'saveSortCache', 'runSortingWorker', 'clearProgressNotification']) {
+            expect(ctx[m], m).not.toHaveBeenCalled();
+        }
+        expect(ctx.showNotification.mock.calls.filter((c) => /cancelled|Error|⚠️/.test(c[0]))).toEqual([]);
+        expect(outcome(ctx)).toBe('stale');
+    });
+
+    it.each([
+        ['done', () => {}],
+        [
+            'cancelled',
+            (ctx) => {
+                ctx.computePerceptualHash.mockImplementationOnce(async () => {
+                    ctx.sortAbortController.abort();
+                    return '0101';
+                });
+            },
+        ],
+        [
+            'failed',
+            (ctx) => {
+                ctx.computePerceptualHash.mockImplementation(async () => {
+                    throw new Error('decode failed');
+                });
+            },
+        ],
+        [
+            'stale',
+            (ctx) => {
+                ctx.computePerceptualHash.mockImplementationOnce(async () => {
+                    ctx._similarityRunGen++;
+                    return '0101';
+                });
+            },
+        ],
+    ])('the pool is terminated on every ending: %s', async (ending, arrange) => {
+        const ctx = runCtx();
+        arrange(ctx);
+        await handleSortBySimilarity.call(ctx, false);
+        expect(outcome(ctx)).toBe(ending);
+        expect(ctx.hashPools).toHaveLength(1);
+        expect(ctx.hashPools[0].terminate).toHaveBeenCalledOnce();
+    });
+
+    // Closes PR 1's deferred note: a Cancel during a periodic save left newSinceSave at 1,000, so the catch saved the
+    // same hashes a second time.
+    it('a Cancel during a periodic save does not save the same hashes twice', async () => {
+        const many = Array.from({ length: 1001 }, (_, i) => `f${i}`);
+        const ctx = runCtx({ mediaFiles: media(...many) });
+        ctx.saveHashCache = vi.fn(async () => {
+            ctx.sortAbortController.abort(); // the Cancel press, during the 1,000th result's save
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.saveHashCache).toHaveBeenCalledOnce();
+        expect(ctx.perceptualHashes.size).toBe(1000);
+        expect(outcome(ctx)).toBe('cancelled');
+    });
+
+    it('the confirm over 1,000 files says the work runs in the background', async () => {
+        const many = Array.from({ length: 1001 }, (_, i) => `f${i}`);
+        const ctx = runCtx({ mediaFiles: media(...many) });
+        const confirmSpy = vi.fn(() => false);
+        globalThis.confirm = confirmSpy;
+        await handleSortBySimilarity.call(ctx, false);
+        expect(confirmSpy).toHaveBeenCalledWith(
+            'Sorting 1001 files may take several minutes.\n\n' +
+                'Hashing runs in the background, so you can keep using the app while it works.\n\n' +
+                'Hash data will be cached at:\n/f\\.hash_cache.json\n\n' +
+                'Continue?'
+        );
+        expect(ctx.hashPools).toHaveLength(0);
     });
 });
 
@@ -1951,7 +2138,7 @@ describe('how a run ends (my call 3)', () => {
         expect(outcome(ctx)).toBe('offered');
     });
 
-    // #3: a far-behind cache hashes each new file on the main thread while navigation stays live.
+    // #3: a far-behind cache hashes each new file while navigation stays live.
     it('a cache hit where the user navigates during the placement offers Show and saves the hashes (#3)', async () => {
         const ctx = runCtx({ loadSortCache: cacheHit(), ...realApply() });
         ctx.applyCachedSortOrder = vi.fn(async function () {

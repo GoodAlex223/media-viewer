@@ -142,10 +142,12 @@ User clicks "Sort by Similarity"
          │
          ▼
 ┌─────────────────────┐
-│ Renderer: compute   │
-│ hashes for snapshot │
-│ images (or load     │
-│ from                │
+│ Hash workers (pool) │
+│ hash the snapshot's │
+│ images; videos and  │
+│ failures fall back  │
+│ to today's route    │
+│ (or load from       │
 │ .hash_cache.json)   │
 └──────────┬──────────┘
            │ postMessage(hashes)

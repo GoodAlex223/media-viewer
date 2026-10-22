@@ -164,6 +164,7 @@ Entry shape: `- [ ] **Short title** — body with context, cross-refs, affected 
   - A run captures its settings and a snapshot of `mediaFiles` at the press and checks its token (`_assertSimilarityRunLive`) after every `await`; a stale run (a newer run or a folder load moved `_similarityRunGen`) writes nothing to the folder now open.
   - A run applies directly unless the user acted since the press (`SimilaritySort.userActedSince`), and then offers a sticky "Show"; every order-changing action calls `_invalidateSimilarityRun()`, which dismisses the offer and makes an in-flight Show stale.
   - Restore Order (`_restoreOriginalOrder(kind)`, shared by the similarity button and the AI toggle-off) waits for render idle, then re-checks before its synchronous commit, since another order may have committed during the wait.
+  - Hashing runs in a per-run `HashPool` (B4): the run's loop stores each result only after `_assertSimilarityRunLive(run)`, a failed canary sends the run to today's route with one notice, and the pool is terminated in the hash phase's `finally`.
 
 **Compare Mode Validation**: `showCompareMedia()` validates files via `checkFileExists` IPC before render (parallel); bounded retry (max 10) → fallback to single mode via `switchToSingleModeUI()`. Compare mode only: in tournament mode a failed file is skipped through `_skipFailedTournamentFile` and the engine's next pair rendered — the retry would render `mediaFiles[currentIndex..+1]`, a pair the engine is not on.
 
