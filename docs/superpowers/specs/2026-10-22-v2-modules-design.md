@@ -101,6 +101,10 @@ core-internal splits (ZoomManager, CompareManager). The board change belongs to 
    responsive pass are delivered (BACKLOG L223–L224).
 7. **G-7 The renderer shrinks.** Each extraction removes its code from `media-viewer.js`, and the file never grows
    across a v2 phase.
+8. **G-8 Runs on Windows and Linux (U, 2026-10-22).** The user may move to Linux, and the repository is public,
+   so others may clone it and use it. The app and its test suites run from source on both platforms and are
+   tested on both at every phase exit. macOS should work, since nothing is Windows- or Linux-only without a
+   fallback, but nobody tests it.
 
 ### Non-goals (v2)
 
@@ -114,9 +118,9 @@ core-internal splits (ZoomManager, CompareManager). The board change belongs to 
   without downloading (L258's no-download variant). They conflict with the offline renderer (§9). L258's
   download-then-rate variant is covered by Fetch. **(C)**
 - **The Telegram bot / rating from a phone.** **(C)**
-- **An installer, packaging or auto-update.** `npm start` stays. **(C)**
-- **macOS/Linux support.** Windows-first; new code uses portable Node APIs where it costs nothing, but nothing is
-  tested off Windows. **(C)** (REVIEW-QUEUE:25 and :94 already call the project Windows-only in practice.)
+- **Auto-update and code signing.** Packaging itself is an optional last phase (P8); until then the app runs from
+  source with `npm start`. **(C)**
+- **Tested macOS support.** It should run, but nobody tests it. **(C)** Windows and Linux are goals (G-8).
 - **Video compression or transcoding**, GIF and WebP conversion (§12.6). **(C)**
 - **A UI framework, a bundler, or a TypeScript migration.** **(C)**, consistent with task-019's "native ES module
   import — no bundler" and the 2026-07-12 decision that dropped the TypeScript migration.
@@ -156,6 +160,16 @@ core-internal splits (ZoomManager, CompareManager). The board change belongs to 
 - **Tier-1 files**: `preload.js` and the file-move handlers in `main.js` need explicit user approval to change
   (PROJECT.md:73–78). Every new IPC call in §8.8 is a preload change.
 - **No packaging, no CI.** Gates are the local Husky hooks. A module ships as files in the repo.
+- **Two platforms.** Today the app is used and tested only on Windows. REVIEW-QUEUE:25 and :94 call it
+  Windows-only in practice. G-8 adds Linux. The code is mostly portable already:
+  - Electron, `sharp`, onnxruntime-node and `ffmpeg-static` all ship Linux builds.
+  - Paths come from `app.getPath`.
+  - The end-to-end helpers already branch on `process.platform` (tests/e2e/helpers/electron-app.js:30, :43,
+    :137).
+  - Folder containment compares realpaths exactly, which suits a case-sensitive filesystem.
+
+  New platform-specific code is confined to main-side services (§8.4–§8.6), each with a branch per platform and
+  unit tests for both.
 - **24k scale.** The user's real folders hold 24,000+ files. Real-scale checks are user-side smokes.
 - **Tests read renderer source and internals.**
   - Twelve test files read `media-viewer.js` as text. The largest is `tests/media-viewer-utils.test.js` (8,792
@@ -367,6 +381,9 @@ These are stated once here and enforced by the host API's shape (§7.12):
 - **What main enforces, per module**, through its services (§8): which per-folder file names it may read and
   write, which job types it may start, which tools those jobs may run, and which file-write capability those
   jobs have. A module that is switched off loses all of them.
+- **Other people's installs.** Someone who clones the public repo gets the same first-party modules, reviewed in
+  the same repository, so the trust model holds for them as it does for the user. The only path for outside code
+  is P7's install-from-file, and it warns plainly. A sandbox for untrusted modules stays future work (§3).
 - **What main does not enforce:** a child process (gallery-dl, cjxl) has the user's full rights and its own
   network. Main checks that a job's output folder is granted before it starts and checks what appeared or
   changed afterwards (§8.5–§8.6). It cannot stop the program from writing elsewhere.
@@ -670,9 +687,10 @@ logs such as `history.jsonl`. Existing app-level files keep their paths (`userDa
 ### 8.4 Tool catalogue and tool grants
 
 `main/tools.js` holds a fixed catalogue of the outside programs v2 knows: `gallery-dl`, `yt-dlp`, `cjxl`, `djxl`.
-Each entry has its executable names, a version command and parse rule, a minimum version where one is a security
-floor (cjxl/djxl ≥ 0.11.2, which the `media_compression` archive track pins for a CVE fix), and an install hint
-(scoop / winget / pip).
+Each entry has its executable names per platform, a version command and parse rule, and a minimum version where
+one is a security floor (cjxl/djxl ≥ 0.11.2, which the `media_compression` archive track pins for a CVE fix). It
+also has install hints per platform: Scoop or winget on Windows; the distribution's package manager or pipx on
+Linux; Homebrew on macOS.
 
 - **Detection** looks on `PATH` (Scoop shims included) and resolves each tool to one absolute path. Main reads
   the version of *that* path and spawns *that* path. A bare name can resolve to a second install at spawn time,
@@ -714,7 +732,10 @@ The supervisor:
 - **Output.** stdout is framed by line, with a per-line and a total cap. stderr goes to the session log,
   redacted (§8.7).
 - **Time.** An idle timeout and a total timeout per adapter.
-- **Cancel** kills the whole process tree (`taskkill /PID <pid> /T /F` on Windows; yt-dlp starts ffmpeg).
+- **Cancel** kills the whole process tree, because yt-dlp starts ffmpeg:
+  - Windows: `taskkill /PID <pid> /T /F`;
+  - Linux and macOS: the child is spawned `detached` as its own process group, and the group is signalled
+    (`process.kill(-pid)`), TERM first, then KILL after a grace period.
 - **Close and quit.**
   - Closing the window while jobs run asks to stop them, joining today's close-confirm flow (main.js:229–235,
     363–374).
@@ -751,8 +772,9 @@ stays as it is.
   3. The new file's mtime is set to the original's.
   4. A swap whose target name exists is refused.
 
-  Originals go to the Recycle Bin (`shell.trashItem`) only when the user finalizes the run. **Nothing in v2
-  deletes a media file permanently.**
+  Originals go to the Recycle Bin (`shell.trashItem`) only when the user finalizes the run. On Linux that is the
+  desktop's freedesktop trash. Where no trash is available, finalizing refuses and the originals stay in the
+  holding folder. **Nothing in v2 deletes a media file permanently.**
 
   With each swap, main also appends the rename to the **rename journal** (`userData/rename-journal.jsonl`):
   folder, old name, new name, `samePixels`/`sameBytes`, and the modules pending. The pending list is every
@@ -1003,8 +1025,7 @@ charters fix scope and the decisions those specs must honour.
       v2 does not promise them.
     - The service picks its accelerator at runtime, with the CPU as the fallback everywhere, and adds a provider
       only after measuring it.
-    - The rest of v2 is Windows-first in the same way (D21): portable where it costs nothing, tested only on
-      Windows.
+    - On Linux, a supported platform (G-8, D21), this means the CPU path is the tested one.
 - **GPU, optional.** DirectML on Windows (adapter 0), with fp32 files only: 20–30 ms per CLIP image on the RTX
   3050 Ti. DirectML is in sustained engineering (new work moved to Windows ML), but it ships inside onnxruntime-node
   and worked in the research.
@@ -1094,7 +1115,8 @@ charters fix scope and the decisions those specs must honour.
 
 - **Engines (C, provisional until the downloader research lands)**: gallery-dl for galleries, boorus,
   imageboards and social sites; yt-dlp for video pages. Each URL is routed by a domain rule table, with a
-  per-run override. The user installs both (Scoop/winget/pip); the app does not bundle them, which also avoids
+  per-run override. The user installs both (Scoop or winget on Windows; the package manager or pipx on Linux); the
+  app does not bundle them, which also avoids
   the GPL question for gallery-dl.
 - **Inputs**:
   - pasted links (one per line);
@@ -1175,8 +1197,10 @@ charters fix scope and the decisions those specs must honour.
 - **Load**:
   - workers default to half the cores, with `cjxl --num_threads` capped;
   - below-normal priority;
-  - a free-space check before starting;
+  - a free-space check before starting (`fs.statfs`);
   - one run per app.
+- **Platforms**: re-implementing in Node (D15) is also what makes compression run on Linux. The PowerShell
+  pipeline is Windows-only, while `cjxl`, `djxl` and `sharp` exist on both.
 - **Tools**: `cjxl` and `djxl` ≥ 0.11.2 through the tool catalogue. PNG decoding for verification uses `sharp`
   (already a dependency) and `djxl`'s own output. ImageMagick is not needed **(C)**.
 - **Browsing speed is the price of the space saved (C).** The viewer shows JPEG XL the slow way. jxl-oxide
@@ -1230,7 +1254,7 @@ Rough story points; the project's estimates have run about 1.9× low (WEEKLY), s
 | Phase | Scope | Host groups added | Exit criteria | SP |
 |---|---|---|---|---|
 | **P0** Prerequisites | G2 PR 2 merged; this spec approved; Friday's G5 board change and the new BACKLOG entries (§19) | — | spec approved; board shows v2 | — |
-| **P1a** Module host | manifest schema, registry, `modules.json`, loader, failure isolation, the Modules tab (list, toggle, restart), app-scheme allowlist, lint M-2, static-adapter test (M-1), bridge-surface test, glob-based sink and `file:` checks, `folder-file-*` channels | basics, folder/visit, files (snapshot, events), storage | an empty module loads, fails safely and toggles; all suites green | ~8 |
+| **P1a** Module host + Linux baseline | manifest schema, registry, `modules.json`, loader, failure isolation, the Modules tab (list, toggle, restart), app-scheme allowlist, lint M-2, static-adapter test (M-1), bridge-surface test, glob-based sink and `file:` checks, `folder-file-*` channels; first, today's app and suites run on Linux, and whatever fails there is fixed | basics, folder/visit, files (snapshot, events), storage | an empty module loads, fails safely and toggles; all suites green on Windows and Linux | ~10 |
 | **P1b** `similarity` | §12.1 | sorting, order, progress, settings, shortcuts, removed/restored hooks, services | §12.1 "done when" | ~10 |
 | **P2** Shell part 1 | side panel, jobs tray (the progress card moves into it), F1 tabs | `host.ui.panel`, `host.jobs` (UI half), `host.progress` | sorts report in the tray; panels open and close | ~6 |
 | **P3a** Job runner and tools | §8.4–§8.5, close/quit integration, `app-data-*` | jobs, tools | a test adapter runs, cancels, kills its tree, survives quit | ~8 |
@@ -1242,17 +1266,20 @@ Rough story points; the project's estimates have run about 1.9× low (WEEKLY), s
 | **P5** `compression` | §12.6; renames in `similarity`, `features`, `ai-sort` and core; the rename journal in main and its replay in `onLoaded` | `onFileRenamed`, the rename journal, `replace` capability | lossless round trips on fixtures (mislabelled files and text-chunk PNGs included); crash-in-the-middle recovery tested; revert and finalize; renames survive a module being off and a crash (journal replay tested); a measured browse speed on a converted 24k copy | ~15 |
 | **P6a** Control registry | the mode-aware action bar, `PairView`, the z-index scale (L223), the unified Sort ▾ menu (sort tests move from the header IDs to the menu) | modes, `ControlSpec` | single and compare run through the registry; overlay tests pass | ~10 |
 | **P6b** `tournament` | §12.4, `onFileRenamed` for its state | vetoes | tournament suites pass with the same assertions (state reached through §7.13); compression stops refusing tournament folders | ~10 |
-| **P7** Finish | responsive pass (L224), UI zoom (L261), the ZoomManager and CompareManager core splits, installing renderer-only modules from a file (§6.4), command palette (optional), CLIP in a `utilityProcess` (optional) | install/uninstall | the §11.1 size target | ~13–18 |
+| **P7** Finish | responsive pass (L224), UI zoom (L261), the ZoomManager and CompareManager core splits, installing renderer-only modules from a file (§6.4), command palette (optional) | install/uninstall | the §11.1 size target | ~13–18 |
+| **P8** Packaging (optional) | installable builds for people who will not run from source, for example with electron-builder: a Windows installer, a Linux AppImage or `.deb`. Includes serving `modules/` from the packed app, unpacking native modules (`sharp`, onnxruntime-node), and a first-run guide for outside tools. No auto-update or code signing (§3) | — | a fresh Windows and a fresh Linux machine install, open a folder and rate | ~5–8 |
 
-Total: about 117–122 SP nominal (A1 included), so roughly seven normal weeks of v2 at full user-flagged capacity,
-or twelve to fourteen with the historical slip and the Cleanup Weeks. A soft target is Q1 2027.
+Total: about 119–124 SP nominal (A1 included, the optional P8 not), so roughly seven normal weeks of v2 at full
+user-flagged capacity, or twelve to fourteen with the historical slip and the Cleanup Weeks. A soft target is Q1
+2027.
 
 **The AI research's order is kept** (learner, then copies, then the utility process with fp32, then SigLIP 2),
 with one change: the research's own rule that the utility process comes "before adding a model" puts P4a ahead of
 P4c's DINOv2 part. A1 needs no module work and can ship first.
 
 **Every phase also (C):**
-1. Shows net `wc -l media-viewer.js` ≤ 0 in its PR (§11.1).
+1. Shows net `wc -l media-viewer.js` ≤ 0 in its PR (§11.1), and passes the unit and end-to-end suites on Linux as
+   well as Windows (G-8).
 2. Rewires the tests that read the code it moves (§4 lists the twelve source-reading files and the 430
    end-to-end references), and its plan names each file.
 3. Sweeps unit tests, end-to-end tests, comments and `CLAUDE.md` for every symbol it moves (CLAUDE.md § Best
@@ -1336,6 +1363,11 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
   - Folder files: the wipe-spec probes re-run against the folder-file service.
 - **Real scale.** The user runs a 24k smoke after P1b, P4b, P5 and P6b. Each phase writes down the timings it must
   match: startup to first media, navigation, and sort times.
+- **Linux runs (G-8).** Every phase exit runs the unit and end-to-end suites on Linux as well as Windows.
+  - Until the user moves, WSL2 with its built-in GUI support on the user's Windows 11 machine is a candidate for
+    the Electron runs. P1a confirms it works, or picks another Linux machine.
+  - Platform branches (tool lookup, process-tree kill, trash) get unit tests for every platform, with the
+    platform faked.
 - **Nothing from the user's folders enters git (C).** This repository is public. Smoke results, real-data checks
   and copy-threshold tuning record only counts, timings and metrics. They never record the user's file names,
   folder names, per-file scores or images, and test fixtures never use them.
@@ -1356,6 +1388,7 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
 | Larger downloads and memory (CLIP fp32 352 MB, DINOv2 88 MB; 0.5–0.74 GB while loaded) | the utility process unloads when idle; the user accepted the cost on 2026-10-22 |
 | The research measured synthetic tastes on 500-px thumbnails | the learner fix waits for the real-data check the user agreed to on 2026-10-22; copy thresholds are tuned on a real folder (§12.1, §12.3) |
 | Community q8 model files that are silently broken | fp32 files only for SigLIP 2 and DINOv2; a fidelity check (cosine against fp32) before any new model file ships |
+| Linux support drifts, because daily use stays on Windows | both suites on Linux at every phase exit; platform code confined to a few main-side services with per-platform unit tests; P1a fixes today's gaps first |
 | Compression loses data | originals held until finalize, ledger before every step, verify before swap, no permanent deletes, fixtures for every failure path |
 | JPEG XL browsing is too slow after conversion | every run opens with a measured preview of display time against space saved, decided per folder; the panel advises converting rarely opened folders; P5 measures a converted 24k copy (§12.6) |
 | Downloaders break as sites change, or sites object | maintained upstream tools the user updates; delays and rate limits; the user decides what to fetch |
@@ -1395,7 +1428,7 @@ scripts), **D1** (v2 absorbs v2.0) and **D14** (fetch engines and the Inbox).
 | D18 | Similarity sort is the pilot module | §12.1 |
 | D19 | The build order in §14 | §14 |
 | D20 | The shell layout in §11.2: action bar, side panel, jobs tray, F1 tabs; style unchanged; dark theme only | §11.2 |
-| D21 | Windows-first; no installer | §3 |
+| D21 | Windows and Linux, from source, both tested at every phase exit **(U, 2026-10-22: the user may move to Linux, and others may use the public repo)**; macOS untested; packaging is an optional P8; no auto-update or code signing | §3, §4, §14, §15 |
 | D22 | End-to-end tests keep their assertions and reach moved state through `window.mediaViewer.modules[<id>]` (`testApi`); element IDs are kept when markup moves | §7.13, G-3 |
 | D23 | Every phase must show net renderer lines ≤ 0; a ratcheting blocking check is recommended to G5 | §11.1, §14 |
 | D24 | v2's `CLAUDE.md` rules move to path-scoped `.claude/rules/<id>.md` files as code moves (BACKLOG L1033) | §14 |
@@ -1434,7 +1467,7 @@ These are planning actions for the user's sessions, recorded here so they have a
 2. **BACKLOG intake (🔵, user-raised on 2026-10-22):**
    - a Fetch module entry (no home today; the nearest are L257 and L258);
    - a v2 shell-redesign entry, if it should be tracked apart from L223–L224;
-   - an update to the compression entry L213: in-place swap, Windows-first, re-implemented.
+   - an update to the compression entry L213: in-place swap, Windows and Linux, re-implemented.
    - Face-detection removal is Claude-surfaced: 🟤.
 3. **Research reports:**
    - **The AI-sorting report is folded in** (§21).
@@ -1460,6 +1493,10 @@ These are planning actions for the user's sessions, recorded here so they have a
    - **When the downloader report lands**, amend §12.5 and D14 in a follow-up commit.
 4. **Sibling repos:** REVIEW-QUEUE:137 asks whether `media_parser` and `media_compression` become propagation
    partners. Under this design they become references, not dependencies.
+5. **For other users (G-8):**
+   - `package.json` declares `"license": "MIT"`, but the repository has no LICENSE file, so its terms are not
+     stated where people look. Adding one (with the copyright line) is the user's call.
+   - The README needs setup steps for Windows and Linux, including how to install the outside tools.
 
 ---
 
@@ -1503,3 +1540,5 @@ message. Folding that research in changed the following; everything else is as a
 | §16 | Four new risks: re-extraction time, download and memory growth, synthetic research tastes, broken q8 files. |
 | §19 | The research's unfiled BACKLOG candidates and its open questions for the user. |
 | §12.2, §12.3, §16, §19, D28, D29 | The user's answers later on 2026-10-22: the fp32 switch accepted, with a note on other platforms (CPU everywhere, DirectML only on Windows); the real-data check agreed, as a follow-up before A1. |
+| §15, §19 | Nothing from the user's folders enters this public repo; the real-data check commits overall numbers only. |
+| G-8, §3, §4, §6.4, §8.4–§8.6, §12.6, §14, §15, §16, §19, D21 | Linux becomes a supported platform beside Windows, because the user may move to Linux and others may use the public repo: Linux test runs at every phase exit; per-platform tool hints, process-tree kill and trash; a Linux baseline in P1a (~10 SP); optional packaging as P8; a LICENSE file to consider. |
