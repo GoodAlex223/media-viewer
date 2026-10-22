@@ -637,8 +637,10 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
 
 **When**: **Friday 2026-10-23** (the user's choice at plan approval). WEEKLY had planned Thursday 2026-10-22, the day this plan was written, when PR 2 was not built yet. If the branch is not ready on Friday, tell the user before Friday ends and agree a new date; the WEEKLY G2 entry then gets a `**Spillover**` line.
 
-1. **Parity.** `$env:MV_HASH_PARITY='1'; npm start` → open `Liked_2` → Sort by Similarity (VP-Tree) → confirm → wait for T8's estimate (the second pass freezes the app) → read the `Hash parity:` lines in `%APPDATA%\media_viewer\logs\media-viewer-perf.log`.
-   **Pass**: `verdict=pass`; every `Hash parity diff:` line is `class=accepted`.
+1. **Parity.** `$env:MV_HASH_PARITY='1'; npm start` → open `Liked_2` → Sort by Similarity (VP-Tree) → confirm → wait. Then read the `Hash parity:` lines in `%APPDATA%\media_viewer\logs\media-viewer-perf.log`.
+   - The first pass runs on workers and stays responsive. The second pass runs on the main thread and **freezes the app**. F2 measured about 1 minute of blocking per 1,000 images, so expect roughly 15–30 minutes for ~15,590 images, possibly more. T8 replaces this with a measured estimate.
+   - Do not cancel. A cancelled run logs `verdict=incomplete` and has to be run again.
+   - **Pass**: all of `outcome=done`, `verdict=pass`, and every `Hash parity diff:` line `class=accepted`. Also note `workerFailed=`: each worker failure becomes a main-thread hash in a normal run. A `canary=fail` line comes with a `Hash parity canary:` line giving the reason.
 2. **Close the app, then `$env:MV_HASH_PARITY=$null`** (or open a new shell).
 3. **Normal run, cold.** `npm start` → open `Liked_2` → Sort by Similarity. While it hashes:
    - browse;
@@ -647,8 +649,9 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
    - change K.
 
    Keep Task Manager open on the memory column (R2).
-   **Pass**: no stall you notice; "Similarity order ready — Show" appears at the end; Show applies the order; the rated files are absent; the undone file is present.
-4. **Timing.** The `Similarity sort:` line of step 3 (`hash=… (new …, worker …, fallback …, pool …)`) against step 1's `worker=`/`main=` times.
+   - A short hitch about every 1,000 hashes is the periodic hash-cache save (about 5 MB of JSON late in the run). Note whether you feel it.
+   - **Pass**: no stall you notice; "Similarity order ready — Show" appears at the end; Show applies the order; the rated files are absent; the undone file is present.
+4. **Timing.** Compare the `Similarity sort:` line of step 3 (`hash=… (new …, worker …, fallback …, pool …)`) against step 1's `worker=`/`main=` times. `fallback` includes `Liked_2`'s 60 videos, which always use the main-thread route. A fallback count far above 60 means images fell back too.
 
 A failure at step 1 is a D4 finding: stop and decide with the user (R1's option B is the known remedy). A stall at step 3 makes T8's pool size, or R3, the first suspect.
 
