@@ -1610,6 +1610,9 @@ class MediaViewer {
             // (PR #86 review #6). 0 only for an entry that never recorded it.
             this.featureMetadata.set(path, { size: entry.fileSize, mtime: entry.fileMtimeMs ?? 0 });
         }
+        // The maps are written directly here, so the visit counts it as a change: its next save carries the file
+        // (PR #86 close-out round 2, N1).
+        this.featureCacheStore.markChanged();
     }
 
     // The load-error toast's Remove action (G2 final review F8). Error toasts persist, so the index at error

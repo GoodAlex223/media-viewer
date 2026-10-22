@@ -1104,6 +1104,7 @@ describe('restoreFeatureCachesFromHistory', () => {
             featureCache: new Map(),
             clipCache: new Map(),
             featureMetadata: new Map(),
+            featureCacheStore: { markChanged: vi.fn() },
         };
     }
 
@@ -1180,6 +1181,19 @@ describe('restoreFeatureCachesFromHistory', () => {
         const entry = { originalPath: '/d/c.png', mlFeatures: new Float32Array(64), fileSize: 5555 };
         restoreFeatureCachesFromHistory.call(ctx, entry);
         expect(ctx.featureMetadata.get('/d/c.png')).toEqual({ size: 5555, mtime: 0 });
+    });
+
+    it('counts a restore of features as a change of the visit, and nothing else (close-out round 2, N1)', () => {
+        const ctx = makeCtx();
+        restoreFeatureCachesFromHistory.call(ctx, {
+            originalPath: '/d/c.png',
+            mlFeatures: new Float32Array(64),
+            fileSize: 1,
+        });
+        expect(ctx.featureCacheStore.markChanged).toHaveBeenCalledTimes(1);
+        restoreFeatureCachesFromHistory.call(ctx, { originalPath: '/d/e.png', mlFeatures: null, fileSize: 1 });
+        restoreFeatureCachesFromHistory.call(ctx, { originalPath: '/d/f.png', mlFeatures: new Float32Array(128) });
+        expect(ctx.featureCacheStore.markChanged).toHaveBeenCalledTimes(1);
     });
 
     it("restores featureMetadata with the file's mtime when the entry recorded it (review #6)", () => {
@@ -2638,6 +2652,7 @@ describe('handleCancel feature restore', () => {
             requestPredictionScores: vi.fn(),
             // Helper under test — extracted as a real method so the handler can call it
             restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+            featureCacheStore: { markChanged: vi.fn() }, // the restore counts as the visit's change
             _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             ...overrides,
         };
@@ -3684,6 +3699,7 @@ describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
         showMedia: vi.fn(async () => {}),
         requestPredictionScores: vi.fn(),
         restoreFeatureCachesFromHistory: extractMethod('restoreFeatureCachesFromHistory'),
+        featureCacheStore: { markChanged: vi.fn() }, // the restore counts as the visit's change
         _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
         ...overrides,
     });

@@ -720,6 +720,41 @@ describe('requestSave: the frozen copy and the queue', () => {
         expect(main.writes).toHaveLength(1);
     });
 
+    it('an undo restored while a save streams is saved, not skipped as unchanged (close-out round 2, N1)', async () => {
+        // The restore writes the maps directly (restoreFeatureCachesFromHistory), so it counts through
+        // markChanged: without it the queued copy that holds the file looked unchanged after the streaming save.
+        const files = makeFiles('/A', 'a', 4);
+        main.seed('/A', files.slice(0, 3));
+        const { store, host } = makeStore(main, { files });
+        const v = store.beginVisit('/A');
+        await store.ensureRead();
+        store.putFeature(v, files[3].path, vec());
+        host.featureCache.delete(files[2].path); // a move takes a2 off the maps
+        host.featureMetadata.delete(files[2].path);
+        const release = main.hold('featureCacheWriteChunk', 1);
+        const first = store.requestSave(); // without a2
+        await release.reached;
+        host.featureCache.set(files[2].path, vec()); // the undo puts it back while that save streams
+        host.featureMetadata.set(files[2].path, { size: files[2].size, mtime: files[2].mtimeMs });
+        store.markChanged();
+        const second = store.saveIfDirty();
+        release();
+        expect(await first).toEqual({ outcome: 'written', written: 3 });
+        expect(await second).toEqual({ outcome: 'written', written: 4 });
+        expect(main.entriesOf('/A').has('a2.jpg')).toBe(true);
+    });
+
+    it('an undo restored after a save makes the visit dirty again (close-out round 2, N1)', async () => {
+        const files = makeFiles('/A', 'a', 3);
+        main.seed('/A', files);
+        const { store } = makeStore(main, { files });
+        store.beginVisit('/A');
+        await store.ensureRead();
+        expect(store.getState().dirty).toBe(false);
+        store.markChanged();
+        expect(store.getState().dirty).toBe(true);
+    });
+
     it('two queued requests for one visit coalesce to the newer copy', async () => {
         const files = makeFiles('/A', 'a', 6);
         const { store, host, v } = await readVisit(files.slice(0, 3));

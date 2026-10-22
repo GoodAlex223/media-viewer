@@ -484,6 +484,7 @@ export function stubFeatureCacheStore(host) {
             host.clipCache.set(filePath, clipVector);
             return true;
         },
+        markChanged: vi.fn(),
     };
 }
 

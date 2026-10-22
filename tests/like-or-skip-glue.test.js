@@ -715,6 +715,7 @@ describe('_undoSkipBatch — the whole batch back (spec § 7)', () => {
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             restoreFeatureCachesFromHistory: extract('restoreFeatureCachesFromHistory'),
+            featureCacheStore: { markChanged: vi.fn() }, // the restore counts as the visit's change
             _followRestoredFile: extract('_followRestoredFile'),
             saveBulkRatedFile: vi.fn(async () => {}),
             showNotification: vi.fn(),
@@ -1791,6 +1792,7 @@ describe('a batch and its undo round-trip the per-file caches (G2 final review F
             getCombinedFeatures: (p) => (p === '/f/a' ? vector : null),
             removeFileFromList: extract('removeFileFromList'),
             restoreFeatureCachesFromHistory: extract('restoreFeatureCachesFromHistory'),
+            featureCacheStore: { markChanged: vi.fn() }, // the restore counts as the visit's change
             _followRestoredFile: extract('_followRestoredFile'),
             saveBulkRatedFile: vi.fn(async () => {}),
             _refuseIfNeedsRegrant: () => false,

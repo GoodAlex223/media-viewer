@@ -213,6 +213,18 @@ export class FeatureCacheStore {
         return true;
     }
 
+    /**
+     * Counts a write into the maps made outside putFeature/putClip as the current visit's change: an undo's restore,
+     * which writes them directly (restoreFeatureCachesFromHistory). Uncounted, the restore stayed unsaved until the
+     * next change, and a save streaming meanwhile let the queued copy that held it be skipped as unchanged (PR #86
+     * close-out round 2, N1).
+     */
+    markChanged() {
+        if (this._cur) {
+            this._cur.changes++;
+        }
+    }
+
     // ==================== READ ====================
 
     /**
