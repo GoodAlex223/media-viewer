@@ -2,12 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [TODO.md](../TODO.md) 🔴 "Stop the feature cache being wiped on a folder switch (data loss)". Not in WEEKLY.md; it goes ahead of G2 PR 2 by the user's ruling at the PR #85 review.
+**Task Reference**: [TODO.md](../../planning/TODO.md) 🔴 "Stop the feature cache being wiped on a folder switch (data loss)". Not in WEEKLY.md; it goes ahead of G2 PR 2 by the user's ruling at the PR #85 review.
 **Spec**: [2026-10-21-feature-cache-wipe-design.md](../../superpowers/specs/2026-10-21-feature-cache-wipe-design.md). Approved by the user 2026-10-21 (`c4398d9`). The plan argues from it, and executors read both.
 **Created**: 2026-10-21
-**Status**: In progress
-**Last Updated**: 2026-10-21
-**Branch**: `fix-feature-cache-wipe` (from `main` @ `5cb1cfb`)
+**Status**: Complete — MERGED 2026-10-22 via PR #86 (merge `654fb3e`); closeout on `main`
+**Last Updated**: 2026-10-22
+**Branch**: `fix-feature-cache-wipe` (from `main` @ `5cb1cfb`); deleted on the remote and locally after the merge
 
 **Goal:** No load, extraction result or save can replace a folder's `.feature_cache.json` with a smaller copy or with another folder's entries. Main refuses a write it cannot account for.
 
@@ -128,9 +128,9 @@ T1 → T2 → T3 → T4 → T5 → T6.
   - `startAutosave(host)` and `autosaveTick()`: the harness captures the interval callback by overriding `globalThis.setInterval` and `globalThis.clearInterval` (restored in `afterEach`), so the same helpers work before and after T3.
 - Starting material (temporary, read now): the PR #85 reviewer's probes in `C:\Users\alexm\AppData\Local\Temp\claude\c--Users-alexm-Projects-media-viewer\e1d3241a-6fc7-480c-b58c-4fbed459c55c\scratchpad\pr85\closeout2\probes\`: `probe-browse-wipe2.mjs` (T3; it has the full `ctx` list for `switchToFolder` → `loadFolder` → `prioritizeDisplayedFilesExtraction` → autosave) and `probe-v1-save-spans-clear.mjs` (T2). Copy what helps; the plan does not depend on them surviving.
 
-- [ ] **Step 1: Write the harness.** `makeHost` extracts these real methods: `switchToFolder`, `_switchToFolderNow`, `loadFolder`, `_abortInFlightPredictionSort`, `_invalidateSimilarityRun`, `_isStaleSimilarityRun`, `prioritizeDisplayedFilesExtraction`, `startBackgroundFeatureExtraction`, `cancelBackgroundExtraction`, `cancelPendingFeatureExtractions`, `enqueueFeatureExtraction`, `dispatchNextFeatureTask`, `handleFeatureWorkerMessage`, `awaitExtractionGate`, `calculateFeaturePriority`, `loadFeatureCache`, `_loadFeatureCacheImpl`, `_loadFeatureCacheLocked`, `saveFeatureCache`, `_saveFeatureCacheImpl`, `_saveFeatureCacheLocked`, `_acquireCacheIoLock`, `startFeatureCacheAutoSave`, `stopFeatureCacheAutoSave`. A method that does not exist (after T3) is skipped, not an error. `extractFeaturesFromMediaElement` is stubbed to resolve a `Float32Array(64)`. The worker is a fake `{ busy, posted, postMessage }`, and the test replies through `host.handleFeatureWorkerMessage(0, { type: 'result', id, features })`.
+- [x] **Step 1: Write the harness.** `makeHost` extracts these real methods: `switchToFolder`, `_switchToFolderNow`, `loadFolder`, `_abortInFlightPredictionSort`, `_invalidateSimilarityRun`, `_isStaleSimilarityRun`, `prioritizeDisplayedFilesExtraction`, `startBackgroundFeatureExtraction`, `cancelBackgroundExtraction`, `cancelPendingFeatureExtractions`, `enqueueFeatureExtraction`, `dispatchNextFeatureTask`, `handleFeatureWorkerMessage`, `awaitExtractionGate`, `calculateFeaturePriority`, `loadFeatureCache`, `_loadFeatureCacheImpl`, `_loadFeatureCacheLocked`, `saveFeatureCache`, `_saveFeatureCacheImpl`, `_saveFeatureCacheLocked`, `_acquireCacheIoLock`, `startFeatureCacheAutoSave`, `stopFeatureCacheAutoSave`. A method that does not exist (after T3) is skipped, not an error. `extractFeaturesFromMediaElement` is stubbed to resolve a `Float32Array(64)`. The worker is a fake `{ busy, posted, postMessage }`, and the test replies through `host.handleFeatureWorkerMessage(0, { type: 'result', id, features })`.
 
-- [ ] **Step 2: Write the trigger tests in `tests/feature-cache-wipe.test.js`.** Folders are `/A`, `/B` and `/E` (empty). Each `it.fails` has a plain-`it` control that must pass on `main` and on the branch.
+- [x] **Step 2: Write the trigger tests in `tests/feature-cache-wipe.test.js`.** Folders are `/A`, `/B` and `/E` (empty). Each `it.fails` has a plain-`it` control that must pass on `main` and on the branch.
 
 | Test (`it.fails` on `main`) | Set-up | Assertion |
 |---|---|---|
@@ -147,7 +147,7 @@ T1 → T2 → T3 → T4 → T5 → T6.
 | `T6: an entry added while a save is closing is saved by the next autosave` | A lists `a0`–`a6`, with `a0`–`a4` on disk and read. View `a5` (dirty). Hold the first `featureCacheWriteClose`. Tick 1 starts. While it is held, view `a6` through `prioritizeDisplayedFilesExtraction()`, and tick 2. Release. Settle; tick 3. | `expect(main.entriesOf('/A').has('a6.jpg')).toBe(true)` |
 | control | the same, with `a6` viewed before tick 1 | `a6.jpg` is on disk |
 
-- [ ] **Step 3: Run the tests, each as plain `it` first.** Run `npx vitest run tests/feature-cache-wipe.test.js`. Expected: every trigger test fails on its own assertion, and every control passes. Expected values from the probes:
+- [x] **Step 3: Run the tests, each as plain `it` first.** Run `npx vitest run tests/feature-cache-wipe.test.js`. Expected: every trigger test fails on its own assertion, and every control passes. Expected values from the probes:
   - T1: `B` 2000 → 0;
   - T2: `A` 2500 → 1000;
   - T3: `B` 2000 → 3;
@@ -158,16 +158,16 @@ T1 → T2 → T3 → T4 → T5 → T6.
 
   Log each message. A trigger that does not reproduce is a finding: log it, keep the test, and tell the controller. Do not "fix" the scenario until it fails. Then mark the six trigger tests `it.fails` and re-run. Expected: all pass.
 
-- [ ] **Step 4: T4a, state-level, logged only** (spec my call 13). In a scratch test on `main` (not committed): A's open is held and `switchToFolder('/B')` resolves, then A's open is released with `count: 1500`. Log that `host._featureCacheDiskCount` is 1500, B's baseline inherited from A. T2's store test `a read that ended stale changes no state` is its branch-side pin.
+- [x] **Step 4: T4a, state-level, logged only** (spec my call 13). In a scratch test on `main` (not committed): A's open is held and `switchToFolder('/B')` resolves, then A's open is released with `count: 1500`. Log that `host._featureCacheDiskCount` is 1500, B's baseline inherited from A. T2's store test `a read that ended stale changes no state` is its branch-side pin.
 
-- [ ] **Step 5: Write `tests/e2e/feature-cache-wipe.test.js` with one `test.fail`:** `browsing another folder after an AI sort leaves that folder's cache whole`.
+- [x] **Step 5: Write `tests/e2e/feature-cache-wipe.test.js` with one `test.fail`:** `browsing another folder after an AI sort leaves that folder's cache whole`.
   - Set-up: `seedTrainingState` as in `tests/e2e/ml-retrain-skip.test.js:57–68` (CLIP off; ≥3 likes and ≥3 dislikes, as that file's fixtures provide). Source A: `createTempFixtureDir()`. Source B: `createTempFixtureDir()` with at least 5 media files.
   - Before launch, write B's `.feature_cache.json` from Node. Each of B's files gets `{ vector: Array(64).fill(0.1), clipVector: null, size, mtime }` with its real `fs.statSync` size and `mtimeMs`, under `{"version":4,"featureDim":64,"clipDim":512,"features":{…}}`.
   - Steps: `loadFolder(page, A)`; one `handleSortByPrediction()` that completes (the training probe of that file). Then `loadFolder(page, B)`; `waitForMedia`; one Next and a 500 ms wait (the priority extraction runs 200 ms after a render); then `await page.evaluate(() => window.mediaViewer.saveFeatureCache())`.
   - Assertion (Node side): B's file still has every one of its entries, by name.
   - Run it once on `main`'s code and log the failure, then commit it as `test.fail`.
 
-- [ ] **Step 6: Commit.** Run `npx vitest run` (all green, the trigger tests passing as `it.fails`).
+- [x] **Step 6: Commit.** Run `npx vitest run` (all green, the trigger tests passing as `it.fails`).
 ```bash
 git add tests/feature-cache-harness.js tests/feature-cache-wipe.test.js tests/e2e/feature-cache-wipe.test.js
 git commit -m "test: reproduce the six feature-cache wipe triggers on main (it.fails until fixed)"
@@ -214,7 +214,7 @@ git commit -m "test: reproduce the six feature-cache wipe triggers on main (it.f
   - `acquireLock()` → `Promise<() => void>`.
   - `SaveResult = { outcome: 'written' | 'skipped' | 'refused' | 'failed', reason?: string, written?: number }`. Skip reasons: `'no-visit'`, `'empty'`, `'blocked'`, `'unread'`, `'shrink-guard'`.
 
-- [ ] **Step 1: Write the failing tests** in `tests/feature-cache-store.test.js`, using a small in-file fake `io` (or `FakeMain` from T1's harness):
+- [x] **Step 1: Write the failing tests** in `tests/feature-cache-store.test.js`, using a small in-file fake `io` (or `FakeMain` from T1's harness):
   - **`decideSave` matrix** (pure), one `it` per row:
     - `blocked` → `{ write: false, reason: 'blocked' }`;
     - 0 entries → `'empty'`;
@@ -257,9 +257,9 @@ git commit -m "test: reproduce the six feature-cache wipe triggers on main (it.f
   - **Autosave:** `startAutoSave arms one 30 s interval that calls saveIfDirty; stopAutoSave clears it`.
   - **Reading again:** `needsRead is true for unread and blocked only` (spec my call 14).
 
-- [ ] **Step 2: Run the tests.** Run `npx vitest run tests/feature-cache-store.test.js`. Expected: FAIL. The file fails to import `../feature-cache-store.js`.
+- [x] **Step 2: Run the tests.** Run `npx vitest run tests/feature-cache-store.test.js`. Expected: FAIL. The file fails to import `../feature-cache-store.js`.
 
-- [ ] **Step 3: Implement `feature-cache-store.js`.**
+- [x] **Step 3: Implement `feature-cache-store.js`.**
   - **Port the read loop from `media-viewer.js:9417–9538`**: the binary and legacy chunk shapes, `ingest`'s staleness rule and the `.slice()` copies. Add these changes:
     - after every await, check `this.isCurrent(visit) && !signal?.aborted`, and abandon without committing when the check fails;
     - `io.close()` goes in a `finally`;
@@ -271,14 +271,14 @@ git commit -m "test: reproduce the six feature-cache wipe triggers on main (it.f
   - **The queue**: a promise chain, plus one "queued, not started" slot per visit that a newer request for the same visit replaces.
   - **`_write(frozen)`** runs under `acquireLock()`. It sends the header, the batches of `WRITE_BATCH` (rounded to 6 decimals, as `media-viewer.js:9631–9637`) and the close. It applies the reply as spec § 7.3 says, and only to the current visit.
 
-- [ ] **Step 4: Run the tests.** Run `npx vitest run tests/feature-cache-store.test.js`. Expected: PASS. Then run the mutation checks, each of which must fail at least one named test:
+- [x] **Step 4: Run the tests.** Run `npx vitest run tests/feature-cache-store.test.js`. Expected: PASS. Then run the mutation checks, each of which must fail at least one named test:
   - allow `unread` to write, which fails the `decideSave` row and `writes nothing when the visit is unread…`;
   - freeze lazily, inside `_write`, which fails `the copy is frozen at the request`;
   - drop the `isCurrent` check after the last chunk, which fails `a cancel seen after the last chunk commits nothing`.
 
   Log all three runs.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 ```bash
 git add feature-cache-store.js tests/feature-cache-store.test.js
 git commit -m "feat: FeatureCacheStore — per-visit cache state, frozen-copy saves, explained refusals"
@@ -300,16 +300,16 @@ git commit -m "feat: FeatureCacheStore — per-visit cache state, frozen-copy sa
   - `saveFeatureCache()` → `this.featureCacheStore.requestSave()`;
   - and, from the harness, `stubFeatureCacheStore(host)` → an object with `visit` set to a frozen `{ id: 1, folder: host.baseFolderPath }`, `isCurrent: () => true`, `beginVisit`, `endVisit` and `needsRead: () => true` as `vi.fn`s, and `putFeature` / `putClip` writing straight into `host`'s maps and returning `true`.
 
-- [ ] **Step 1: Re-point the harness.** `makeHost` builds `host.featureCacheStore = new FeatureCacheStore({ io, getMaps, getMediaFiles, getConfig, basename, logError, notify })` over `FakeMain`. It drops the moved methods from the extract list, and `startAutosave` calls `host.featureCacheStore.startAutoSave()` when `startFeatureCacheAutoSave` is gone. Every T1 control must still pass. The trigger tests stay `it.fails` for now.
+- [x] **Step 1: Re-point the harness.** `makeHost` builds `host.featureCacheStore = new FeatureCacheStore({ io, getMaps, getMediaFiles, getConfig, basename, logError, notify })` over `FakeMain`. It drops the moved methods from the extract list, and `startAutosave` calls `host.featureCacheStore.startAutoSave()` when `startFeatureCacheAutoSave` is gone. Every T1 control must still pass. The trigger tests stay `it.fails` for now.
 
-- [ ] **Step 2: Write the new wiring tests** in `tests/feature-cache-wipe.test.js`, as plain `it`. They must fail before Step 3:
+- [x] **Step 2: Write the new wiring tests** in `tests/feature-cache-wipe.test.js`, as plain `it`. They must fail before Step 3:
   - `a failed listing on the switch path leaves no visit, and the autosave writes nothing` (spec my call 11): A is read and dirty; `switchToFolder('/B')` with the listing `{ success: false, error: 'x' }`; `autosaveTick()`. Expect `host.featureCacheStore.visit` to be `null` and no write-open for any folder after the switch.
   - `a failed listing from the dialog keeps the old visit`: the same, but through `loadFolder('/B')` directly. Expect `host.featureCacheStore.visit.folder` to be `'/A'`, and the tick writes A.
   - `reopening the same folder keeps what the flush wrote` (Review Focus 2): A is read, with `a3` viewed (dirty); `loadFolder('/A')`; settle; `await host.loadFeatureCache()`. Expect `main.entriesOf('/A').has('a3.jpg')` and `host.featureCache.has('/A/a3.jpg')`.
 
   Run `npx vitest run tests/feature-cache-wipe.test.js`. Expected: these three FAIL (there is no `endVisit` / `beginVisit` wiring yet). Log the messages.
 
-- [ ] **Step 3: Wire `media-viewer.js`.** Each item names its location at `5cb1cfb`.
+- [x] **Step 3: Wire `media-viewer.js`.** Each item names its location at `5cb1cfb`.
   - **Import and construct.** Add `import { FeatureCacheStore } from './feature-cache-store.js';` (:1–7). Construct the store before `this.mlTraining` (:206), with `getConfig: () => ({ featureCacheVersion: MediaViewer.FEATURE_CACHE_VERSION, enableClipFeatures: this.enableClipFeatures })` and `basename: (p) => window.electronAPI.path.basename(p)`.
   - **Remove the old fields.** Drop `featureCacheDirty`, `_featureCacheDiskCount` and `featureCacheAutoSaveInterval` (:281–283). `mlTraining`'s `cacheIo.acquireLock` becomes `() => this.featureCacheStore.acquireLock()` (:238).
   - **`loadFolder`**: replace `this._featureCacheDiskCount = 0;` (:3205) with `this.featureCacheStore.endVisit();`. In the empty branch, clear `featureCache`, `clipCache` and `featureMetadata`, then call `this.featureCacheStore.beginVisit(folderPath)` before `showDropZone()`. In the non-empty branch, call `beginVisit(folderPath)` right after the three clears (:3237–3239). Rewrite the comment block above it (:3191–3201), whose last sentence describes the removed reset.
@@ -324,14 +324,14 @@ git commit -m "feat: FeatureCacheStore — per-visit cache state, frozen-copy sa
   - **The AI sort's Phase 1 gate** (:10392): `if (this.featureCacheStore.needsRead())`. Rewrite its comment.
   - **`cancelPendingFeatureExtractions`' comment** (:11155): in-flight tasks complete, and their results are dropped by the visit check.
 
-- [ ] **Step 4: Fix the reached tests.**
+- [x] **Step 4: Fix the reached tests.**
   - Run `npx vitest run`.
   - For every failure of the form `Cannot read properties of undefined (reading '<store method>')`, add `featureCacheStore: stubFeatureCacheStore(ctx)` to that context.
   - Delete the two ported suites from `media-viewer-utils.test.js`.
   - Make the deliberate changes listed under "Existing tests…": the `loadFolder` reset case and the warm-gate cases.
   - Any other assertion change is a finding: stop and report it.
 
-- [ ] **Step 5: Flip the trigger tests.**
+- [x] **Step 5: Flip the trigger tests.**
   - Change the six `it.fails` to `it` in `tests/feature-cache-wipe.test.js`.
   - Run `npx vitest run tests/feature-cache-wipe.test.js`. Expected: all pass, Step 2's three included.
   - Run `git diff <T1's commit> -- tests/feature-cache-wipe.test.js`, with the SHA from the Progress Log. Apart from Step 2's added tests, it must show only `it.fails` → `it`.
@@ -342,13 +342,13 @@ git commit -m "feat: FeatureCacheStore — per-visit cache state, frozen-copy sa
 
     Log all three runs.
 
-- [ ] **Step 6: Run everything and measure.**
+- [x] **Step 6: Run everything and measure.**
   - `npx vitest run`: all pass.
   - `npm run lint`: no new warnings.
   - `wc -l media-viewer.js`: log the count; it must be ≤ 11,940.
   - Grep the symbols in Global Constraints across `*.js` and `*.md` outside `docs/archive`. The only hits left are in `CLAUDE.md` (T6) and `ml-training.js` (T4).
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 ```bash
 git add media-viewer.js tests/
 git commit -m "fix: tie every feature-cache read, write and save to its folder visit (T1-T6)"
@@ -367,7 +367,7 @@ git commit -m "fix: tie every feature-cache read, write and save to its folder v
   - `_loadVectorCache(...)` returns `{ entries, diskCount, aborted, unreadable }`;
   - `_saveVectorCache(folderPath, entries, diskCount, scanCount, { clipRequired = false } = {})` → `boolean`.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `_saveVectorCache sends fileCount and clipRequired in the header`;
   - `a refused close is logged, warns once per folder per session, and returns false`, with the `Training cache for "<name>"` copy;
   - `_loadVectorCache reports unreadable apart from no file and corrupt`:
@@ -376,9 +376,9 @@ git commit -m "fix: tie every feature-cache read, write and save to its folder v
     - `{ unreadable: true }` → `unreadable: true`, `diskCount: 0`;
   - `an unreadable training cache still extracts and attempts the save`.
 
-- [ ] **Step 2: Run the tests.** Run `npx vitest run tests/ml-training.test.js`. Expected: the four new tests FAIL.
+- [x] **Step 2: Run the tests.** Run `npx vitest run tests/ml-training.test.js`. Expected: the four new tests FAIL.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - The header gets `fileCount: scanCount` and `clipRequired`. `_collectFolderVectors` passes `{ clipRequired: enableClipFeatures }`.
   - Check `closed.refused`:
     - log the session line;
@@ -387,9 +387,9 @@ git commit -m "fix: tie every feature-cache read, write and save to its folder v
   - `_loadVectorCache` sets `unreadable` from `opened.unreadable`. Nothing else changes in the flow: an unreadable folder still extracts everything, and main decides the save by coverage.
   - Rename the stale comments (Global Constraints).
 
-- [ ] **Step 4: Run the tests.** Run `npx vitest run`. Expected: all pass.
+- [x] **Step 4: Run the tests.** Run `npx vitest run`. Expected: all pass.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 ```bash
 git add ml-training.js tests/ml-training.test.js
 git commit -m "fix: training caches send fileCount/clipRequired and report main's refusals"
@@ -413,7 +413,7 @@ git commit -m "fix: training caches send fileCount/clipRequired and report main'
   - `parseFeatureCacheStream(readable, { parser, pick, streamObject })` → `Promise<Array<[string, object]>>`. It uses `stream.pipeline` and rejects with the first error from any stage.
   - `checkClose({ record, destinationExists, header, written, writtenNames, clipNames, listFolderMedia })` → `Promise<{ ok: true } | { ok: false, refused: 'unseen' | 'shrink', seen: number | null, written }>`.
 
-- [ ] **Step 1: Write the failing tests** (CommonJS through `createRequire`, as `tests/feature-cache-transport.test.js` does):
+- [x] **Step 1: Write the failing tests** (CommonJS through `createRequire`, as `tests/feature-cache-transport.test.js` does):
   - **`checkClose` refuses or allows:**
     - refuses `unseen` (no record, file exists, partial write);
     - allows `unseen` with full coverage;
@@ -435,9 +435,9 @@ git commit -m "fix: training caches send fileCount/clipRequired and report main'
     - parses a small v4 file;
     - rejects a truncated one with an error that has no `code`.
 
-- [ ] **Step 2: Run the tests.** Run `npx vitest run tests/feature-cache-ledger.test.js`. Expected: FAIL (the module is missing).
+- [x] **Step 2: Run the tests.** Run `npx vitest run tests/feature-cache-ledger.test.js`. Expected: FAIL (the module is missing).
 
-- [ ] **Step 3: Implement `feature-cache-ledger.js`, then the handlers in `main.js`.**
+- [x] **Step 3: Implement `feature-cache-ledger.js`, then the handlers in `main.js`.**
   - **The ledger key**: `path.join(await fs.realpath(folderPath).catch(() => folderPath), FOLDER_CACHE_FILES.feature)`.
   - **`feature-cache-open`**:
     - a refused `assertFixedPath` → record `unreadable` and reply `{ success: false, unreadable: true, error }`;
@@ -453,9 +453,9 @@ git commit -m "fix: training caches send fileCount/clipRequired and report main'
     - otherwise rename (the existing retry loop), call `recordWrite`, and return `{ success: true, written: count }`.
   - **`read-folder-cache`**: if `'feature'` has no remaining caller, remove it from the `oneOf`.
 
-- [ ] **Step 4: Run the tests.** Run `npx vitest run`. Expected: all pass. Then run the mutation check: the old `.pipe()` chain inside `parseFeatureCacheStream` must fail `settles with an error when the source stream errors` (it hangs, or throws unhandled). Log it.
+- [x] **Step 4: Run the tests.** Run `npx vitest run`. Expected: all pass. Then run the mutation check: the old `.pipe()` chain inside `parseFeatureCacheStream` must fail `settles with an error when the source stream errors` (it hangs, or throws unhandled). Log it.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 ```bash
 git add feature-cache-ledger.js tests/feature-cache-ledger.test.js main.js
 git commit -m "fix(main): refuse feature-cache writes main cannot account for; classify read errors"
@@ -468,9 +468,9 @@ git commit -m "fix(main): refuse feature-cache writes main cannot account for; c
 **Files:**
 - Modify: `tests/e2e/feature-cache-wipe.test.js`, `CLAUDE.md`, `docs/README.md`, this plan
 
-- [ ] **Step 1: Flip the E2E.** Change `test.fail` to `test`, then run `npx playwright test tests/e2e/feature-cache-wipe.test.js`. Expected: PASS.
+- [x] **Step 1: Flip the E2E.** Change `test.fail` to `test`, then run `npx playwright test tests/e2e/feature-cache-wipe.test.js`. Expected: PASS.
 
-- [ ] **Step 2: Add main's E2E tests** to the same file. Each grants a temp folder with 5 media files through `loadFolder`, and seeds its `.feature_cache.json` from Node as in T1 Step 5.
+- [x] **Step 2: Add main's E2E tests** to the same file. Each grants a temp folder with 5 media files through `loadFolder`, and seeds its `.feature_cache.json` from Node as in T1 Step 5.
   - `main refuses a partial write to a cache it never saw`: through `window.electronAPI`, write-open with `{ version: 4, featureDim: 64, clipDim: 512, fileCount: 5, clipRequired: false }`, one entry, then close. Expect `refused: 'unseen'`, the file unchanged, and no `.tmp` left.
   - `main allows a write that covers every file without a read`.
   - `main refuses a shrink after a read`: `featureCacheOpen` then `featureCacheClose` first; then write 1 entry with `fileCount: 5`. Expect `refused: 'shrink'`, `seen: 5`.
@@ -479,19 +479,19 @@ git commit -m "fix(main): refuse feature-cache writes main cannot account for; c
 
   Run the file. Expected: all pass.
 
-- [ ] **Step 3: Docs.**
+- [x] **Step 3: Docs.**
   - `CLAUDE.md` § Architecture: one line each for `feature-cache-store.js` and `feature-cache-ledger.js`.
   - `CLAUDE.md:138`: the feature-cache bullet's guard text becomes the visit model, in one sentence plus one "why".
   - `CLAUDE.md:140`: `_acquireCacheIoLock` → the store's lock.
   - `CLAUDE.md:193`: the `loadFeatureCache()` gotcha now reads: a visit reads at most once, and never saves unread.
   - Keep the growth under 500 bytes if possible. `scripts/check-claude-md-size.js` warns at commit.
 
-- [ ] **Step 4: Full verification.**
+- [x] **Step 4: Full verification.**
   - `npx vitest run` and `npm run lint`.
   - `npx playwright test`: the full suite. If the known tournament flake (TODO 🟠) fails, re-run that file once and log it.
   - `wc -l media-viewer.js`: log it, with the net change against 12,190.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 ```bash
 git add tests/e2e/feature-cache-wipe.test.js CLAUDE.md docs/
 git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals; docs"
@@ -547,14 +547,14 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 
 ## Closeout (after the merge, on `main`)
 
-- [ ] Extract the Improvements and Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: feature-cache wipe fix closeout`.
-- [ ] BACKLOG 🟤 [2026-07-20] "Attribute feature metadata at extraction time…": record that its destructive triggers closed here. Check it off only if the visit model closes its own source-level gap; otherwise leave it open with that note (spec § 14).
-- [ ] TODO 🔴 "Stop the feature cache being wiped" → DONE.md. Update WEEKLY.md's order note: G2 PR 2 is next.
-- [ ] Archive this plan to `docs/archive/plans/` (`git rm` the original), and link it from `docs/README.md`.
-- [ ] Propagation check: re-read `CLAUDE.md:138/140/193` and the spec against what shipped.
-- [ ] Close or re-point the two open BACKLOG entries the T3 grep missed (PR #86 review chat): BACKLOG.md:1585 "Guard `loadFeatureCache()` against clearing in-memory Maps mid-extraction" (the read now merges in place: close as obsolete, pointing here) and :1594 "Add unit tests for loadFeatureCache/saveFeatureCache validation logic" (the store's suite now covers the version check, staleness, pruning and the round trip: close as delivered).
-- [ ] Close the two open BACKLOG entries that say the `FEATURE_CACHE_VERSION` comment is false (PR #86 close-out): BACKLOG.md:835 and :1584 (line numbers at `e5e39e1`). T3 rewrote that comment (`media-viewer.js` above `static FEATURE_CACHE_VERSION`): close both as delivered.
-- [ ] Re-point the open BACKLOG entries that name the moved symbols (found by T3's grep): BACKLOG.md:807 (`_acquireCacheIoLock`), :841 (`round6` duplicated from `_saveFeatureCacheLocked`, now from `feature-cache-store.js`), :1049 (the `ingest` dimension check, now in the store's read), :1395 (`_featureCacheLoadPromise` + `_acquireCacheIoLock`, now the store's per-visit single-flight and lock), and :1401 (incremental serving: it describes the old load; PR #86 close-out). Line numbers at `482ca5f`.
+- [x] Extract the Improvements and Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: feature-cache wipe fix closeout`.
+- [x] BACKLOG 🟤 [2026-07-20] "Attribute feature metadata at extraction time…": record that its destructive triggers closed here. Check it off only if the visit model closes its own source-level gap; otherwise leave it open with that note (spec § 14).
+- [x] TODO 🔴 "Stop the feature cache being wiped" → DONE.md. Update WEEKLY.md's order note: G2 PR 2 is next.
+- [x] Archive this plan to `docs/archive/plans/` (`git rm` the original), and link it from `docs/README.md`.
+- [x] Propagation check: re-read `CLAUDE.md:138/140/193` and the spec against what shipped.
+- [x] Close or re-point the two open BACKLOG entries the T3 grep missed (PR #86 review chat): BACKLOG.md:1585 "Guard `loadFeatureCache()` against clearing in-memory Maps mid-extraction" (the read now merges in place: close as obsolete, pointing here) and :1594 "Add unit tests for loadFeatureCache/saveFeatureCache validation logic" (the store's suite now covers the version check, staleness, pruning and the round trip: close as delivered).
+- [x] Close the two open BACKLOG entries that say the `FEATURE_CACHE_VERSION` comment is false (PR #86 close-out): BACKLOG.md:835 and :1584 (line numbers at `e5e39e1`). T3 rewrote that comment (`media-viewer.js` above `static FEATURE_CACHE_VERSION`): close both as delivered.
+- [x] Re-point the open BACKLOG entries that name the moved symbols (found by T3's grep): BACKLOG.md:807 (`_acquireCacheIoLock`), :841 (`round6` duplicated from `_saveFeatureCacheLocked`, now from `feature-cache-store.js`), :1049 (the `ingest` dimension check, now in the store's read), :1395 (`_featureCacheLoadPromise` + `_acquireCacheIoLock`, now the store's per-visit single-flight and lock), and :1401 (incremental serving: it describes the old load; PR #86 close-out). Line numbers at `482ca5f`.
 
 ## Model and Effort
 
@@ -653,3 +653,10 @@ git commit -m "test(e2e): browse-after-AI-sort keeps the cache; main's refusals;
 - **The full-size check, re-run on the merging code** (`37f8753`, 2026-10-22; a side note: the Oct 21 checks predate the review fixes). Fresh copies (A-full: 13,207 files, the real 71 MB cache; robocopy, 161 s). S1 and S2 as before: B's and A-full's ticks skipped (`unread`), both files untouched, the read committed at 13,207. S3 (cut finding 3): re-opening with a flush took 5.0 s against 3.5 s and 2.8 s clean, and the flush ended 8.9 s in; every entry kept. S4 (the source folder is also the like folder; training writes behind the visit): one `refused by main (stale) … — explained` line, then a re-read and a save at 13,209, every original entry and CLIP vector kept, no warning. The live caches were unchanged. The copies (22.5 GB, no links inside) were deleted on the user's go-ahead.
 - **Close-out round 2** ([comment](https://github.com/GoodAlex223/media-viewer/pull/86#issuecomment-6330028918), at `37f8753`): no blocking issues; R1–R5, the nit, the Closeout and cuts 1, 7, 8, 11, 12 confirmed (each fix reverted in a copy turned its test red); the carried cuts accepted. One new low note, **N1**, from cut 1's `unchanged` skip: an undo's restore writes the maps directly and counted no change, so a restore landing while a save streamed was skipped, and one after a save stayed unsaved until the next change. Fixed: the store's `markChanged()`, called by `restoreFeatureCachesFromHistory` when it restores features. Three tests red first (two store, one renderer).
 - **Close-out round 3** ([comment](https://github.com/GoodAlex223/media-viewer/pull/86#issuecomment-6330515975), at `b2a60b1`): no issues; N1 confirmed. Its out-of-diff note (undo to the wrong folder, pre-existing) is a Residuals line.
+
+### 2026-10-22 — PHASE: Closeout (on `main`)
+- **Merged** 2026-10-22 via PR #86 (merge `654fb3e`, 24 commits), with `--merge`, on the user's go-ahead after the review's final close-out ("No issues found"). The user approved spec § 2.1 at the merge. The branch was deleted on the remote and locally.
+- **Extract:** the Improvements and Residuals became 22 entries under BACKLOG 🟤 [2026-10-22] "From: feature-cache wipe fix closeout"; the two state-level-pin residuals stay here only. Closed: BACKLOG :835 and :1584 (the `FEATURE_CACHE_VERSION` comment) and :1594 (the load/save tests) as delivered, and :1585 (the map-clearing guard) as obsolete. Re-pointed: :807, :841, :1049, :1395 and :1401. [2026-07-20] "Attribute feature metadata at extraction time…" stays open with a note: its destructive triggers closed here, but `putFeature` still looks the file up at completion.
+- **Transition:** the TODO 🔴 item moved to DONE.md; WEEKLY.md's order note marks the fix done, with G2 PR 2 next.
+- **Archive:** this plan, linked from `docs/README.md`.
+- **Propagation check:** `CLAUDE.md` (the visit's save rule, the generation, the restored mtime and its change count, the AI sort's refusal during a load), `docs/ARCHITECTURE.md` and the spec (§ 2.1 and its "review #N" notes) match what shipped; a sweep of the live docs for the removed names found none.

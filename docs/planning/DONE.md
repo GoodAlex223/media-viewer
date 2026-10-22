@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-21 <!-- Group G2: Hash and similarity sort off the renderer thread, PR 1 of 2 (end-of-sort fixes, 🔵 🏆, Oct 19–23). MERGED 2026-10-20 via PR #85 (merge f668611) after a final review with a fix wave, a 24-finding PR review with three fix waves, and two user-approved additions (Tasks 6–7). G2 stays open for PR 2. -->
+**Last Updated**: 2026-10-22 <!-- Stop the feature cache being wiped on a folder switch (TODO 🔴, ahead of G2 PR 2). MERGED 2026-10-22 via PR #86 (merge 654fb3e) after a 15-finding PR review and three close-out rounds, all fixed. -->
+<!-- Previous: Group G2: Hash and similarity sort off the renderer thread, PR 1 of 2 (end-of-sort fixes, 🔵 🏆, Oct 19–23). MERGED 2026-10-20 via PR #85 (merge f668611) after a final review with a fix wave, a 24-finding PR review with three fix waves, and two user-approved additions (Tasks 6–7). G2 stays open for PR 2. -->
 <!-- Previous: Group G1: Confine page-side file loads to the granted folders (residual I1, 🟤, Oct 19–23). MERGED 2026-10-19 via PR #84 (merge 4548269) after one PR review round: 1 finding, fixed, with its open trade-off accepted. -->
 <!-- Previous: Group G6: Weekly Reviews (2026-10-17 run, ⚪ Overhead). MERGED 2026-10-18 via PR #83 (merge 1954109) after three review rounds: 8 findings, then 2 leftovers, then none. -->
 <!-- Previous: Group G5: CLAUDE.md size audit (🟡, Oct 12–16). MERGED 2026-10-17 via PR #82 (merge 3fb797e) after three review rounds: 9 findings, of which 6 were fixed, 1 documented, 1 declined and 1 carried to G6. -->
@@ -26,6 +27,52 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-22 — Stop the feature cache being wiped on a folder switch (data loss) 🔴 (TODO, ahead of G2 PR 2) — **MERGED `654fb3e`** (PR #86)
+
+**Spec**: [2026-10-21-feature-cache-wipe-design.md](../superpowers/specs/2026-10-21-feature-cache-wipe-design.md) (approved `c4398d9`). § 2.1 records the review's three changes to how D2 and D4 are carried out; the user approved them at the merge.
+**Plan**: [2026-10-21_feature-cache-wipe-fix.md](../archive/plans/2026-10-21_feature-cache-wipe-fix.md). Six tasks, native execution, then the PR #86 review fix pass.
+**Branch**: `fix-feature-cache-wipe`, cut from `main` at `5cb1cfb`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: MERGED 2026-10-22 via PR #86** (merge `654fb3e`, 24 commits). It was planned at ~7.5 SP; the review fix pass (15 findings, then three close-out rounds) added about 4–5 SP. G2 PR 2 is next.
+
+**What shipped:**
+- `feature-cache-store.js` (new): one folder visit owns the source folder's cache.
+  - Its states are `unread`, `read`, `absent`, `discard` and `blocked`. The read happens once per visit and merges in place.
+  - A save writes a copy frozen at the request; saves queue and coalesce, and a change counter replaces the dirty flag. The store also owns the IO lock and the 30 s autosave.
+  - An unread visit saves only after its read failed, and only a copy that covers every file with a CLIP vector each.
+- `feature-cache-ledger.js` (new) and main's four feature-cache handlers:
+  - main records what it read of each file and counts its writes to it (a generation);
+  - write-close refuses `unseen`, `shrink` and `stale`, and a refusal leaves the cache untouched;
+  - reads and writes fail closed: a lock on the head read is retried, a temp file main cannot create fails the save, and only ENOENT means no file;
+  - `load-folder` and the coverage check share one listing.
+- `media-viewer.js`:
+  - visits begin and end in `loadFolder` and `_switchToFolderNow`, and every result goes through the visit its work started in;
+  - the AI sort checks `isLive` after every phase, and refuses to start during a folder load;
+  - an undo keeps the file's mtime and counts as the visit's change.
+  - 12,190 → 11,876 lines.
+- `ml-training.js`: the training caches send `fileCount`, report main's refusals once per folder (the dropped-work text after a failed read), and tell an unreadable cache from a missing or corrupt one.
+- `preload.js` is unchanged.
+
+**Verification:**
+- The six triggers (T1–T6) were committed red on `main` as `it.fails`, then flipped with no assertion change. Mutation runs covered the store, the wiring and main's rules.
+- Unit: 2,070 passed. E2E: 211 → 213, adding a trigger (browsing after an AI sort) and main's rules, among them a stale write and an uncreatable temp file.
+- Manual checks, on copies only (the user's go-ahead): 300-file slices, then a whole 13k-file folder with its real 71 MB cache. That check ran on Oct 21, and again on Oct 22 on the merging code: S1–S4, including the `stale` → re-read → save path. The live caches were unchanged throughout, and the copies were deleted on the user's go-ahead.
+
+**Review** (a separate chat, at `max`):
+- 15 findings at `1cde460`. Two could still wipe a cache: a swallowed head-read error, and an unread visit's save with CLIP off. All were fixed test-first.
+- The close-out found R1 (a failed re-read let a queued copy past `stale`) and four smaller items, all fixed. Round 2's N1 (an undo's restore was not counted) was fixed. Round 3 and the final close-out found nothing.
+- Of the review's cut findings, 4 were fixed and 7 carried to BACKLOG 🟤 [2026-10-22].
+
+**User rulings:** the review's changes to D2 and D4 (spec § 2.1) were approved at the merge; the flush-on-leave overlap with the next listing (cut finding 3) is recorded for later.
+
+**Key learnings:**
+- ⭐ Two guards keyed on one value are one guard. The renderer's `discard` and main's shrink skip both read the file's version, and one swallowed read error (`resolve(null)`) turned off both (24,000 → 5 entries).
+- ⭐ A baseline adopted without the data it counts lets the guard approve a shrink: the D4 amendment's "adopt main's count" let a later save replace 2,000 entries with 1,110.
+- ⭐ A fix that re-reads must invalidate queued work on the attempt, not on the success (R1).
+- A plan mutation that survives can mean the trigger is closed by several layers; pin each mechanism at the state level.
+
+**Follow-ups:** BACKLOG 🟤 [2026-10-22], 22 entries. Among them is the out-of-diff "Undo can return a file to the wrong folder" (pre-existing), flagged for the user's ranking. BACKLOG 🟤 [2026-07-20] "Attribute feature metadata at extraction time…" stays open for its source-level gap.
 
 ### 2026-10-20 — Group G2: Hash and similarity sort off the renderer thread, PR 1 of 2 (end-of-sort fixes) 🔵 🏆 (Oct 19–23) — **MERGED `f668611`** (PR #85)
 
