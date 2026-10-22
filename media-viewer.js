@@ -8,6 +8,7 @@ import * as SimilaritySort from './similarity-sort.js';
 import * as MediaUrl from './media-url.js';
 import * as MainThreadHash from './main-thread-hash.js';
 import * as HashPool from './hash-pool.js';
+import * as HashParity from './hash-parity.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -161,6 +162,9 @@ class MediaViewer {
         // True from a similarity run's commit until its finally: a Sort press then can no longer cancel anything (#8)
         this._similarityRunCommitted = false;
         this._similarityOffer = null; // { entry, element }: a computed similarity order waiting on its sticky "Show"
+        // MV_HASH_PARITY=1 (main loads ?hashParity=1): every similarity sort is the parity check instead (spec § 9.1)
+        this.hashParityMode = HashParity.readParityFlag(globalThis.location?.search ?? '');
+        this.lastHashParityReport = null; // the last parity run's report, left on the viewer for the E2E (B5)
         this.progressNotification = null; // Reusable progress notification
         this.sortAlgorithm = localStorage.getItem('sortAlgorithm') || 'vptree'; // 'vptree', 'mst', or 'simple'
         this.sortingWorker = null; // Web Worker for sorting to prevent UI freeze
@@ -7350,6 +7354,12 @@ class MediaViewer {
             return;
         }
 
+        // Parity mode (spec § 9.1): this press is the diagnostic, not a sort. It always asks first (B5).
+        if (this.hashParityMode) {
+            await this._runHashParity();
+            return;
+        }
+
         // Warn about large datasets (skipped when already sorted, including force re-sort)
         if (this.mediaFiles.length > 1000 && !this.isSortedBySimilarity) {
             const cacheFile = `${this.baseFolderPath}\\.hash_cache.json`;
@@ -8123,6 +8133,77 @@ class MediaViewer {
             decodeJxl: (p) => this.decodeJxl(p),
             releaseVideo: (v) => this._releaseVideo(v),
         });
+    }
+
+    // The parity diagnostic (G2 PR 2 T6, spec § 9.1, B5): every image on both hash routes, the report to the perf log.
+    // It sorts nothing, writes no cache and offers nothing. It takes a run like a sort (the Cancel branch above aborts
+    // its controller; a folder load makes it stale), and a stale run writes nothing at all.
+    async _runHashParity() {
+        const images = this.mediaFiles.filter((f) => !HashPool.isVideoPath(f.path)).map((f) => f.path);
+        const videos = this.mediaFiles.length - images.length;
+        // Always, whatever the folder's size: the second pass freezes the app (Review Focus #5).
+        const confirmed = confirm(
+            `Hash parity check: ${images.length} images are hashed by both routes. ` +
+                `Nothing is sorted and no cache is written.\n\n` +
+                `The second pass runs on the main thread, so the app will not respond for several minutes.\n\n` +
+                `Continue?`
+        );
+        if (!confirmed) {
+            return;
+        }
+        this._dismissSimilarityOffer();
+        const run = { gen: ++this._similarityRunGen, folder: this.baseFolderPath, controller: new AbortController() };
+        let pool = null;
+        try {
+            this.isComputingHashes = true;
+            this.sortAbortController = run.controller;
+            this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Cancel';
+            this.sortSimilarityBtn.disabled = false;
+            pool = this._createHashPool();
+            const report = await HashParity.runHashParity(pool, images, {
+                signal: run.controller.signal,
+                // A stale run draws no card: the folder load that made it so cleared it.
+                onProgress: (phase, current, total) => {
+                    if (!this._isStaleSimilarityRun(run)) {
+                        this.updateSortProgress({ phase, current, total });
+                    }
+                },
+                isJxl: (p) => this.isJxl(p),
+                videos,
+            });
+            if (this._isStaleSimilarityRun(run)) {
+                return;
+            }
+            for (const line of HashParity.formatParityLines(report, { folder: run.folder })) {
+                window.electronAPI?.logPerf?.(line);
+            }
+            this.lastHashParityReport = report;
+            this.clearProgressNotification();
+            if (report.outcome === 'cancelled') {
+                this.showNotification('❌ Parity check cancelled', 'info');
+            } else {
+                this.showNotification(
+                    'Parity check done — see the perf log',
+                    report.verdict === 'pass' ? 'success' : 'warning'
+                );
+            }
+        } catch (error) {
+            if (!this._isStaleSimilarityRun(run)) {
+                console.error('Hash parity check failed:', error);
+                this.clearProgressNotification();
+                this.showNotification(`❌ Error: ${error.message}`, 'error');
+            }
+        } finally {
+            pool?.terminate();
+            this.isComputingHashes = false;
+            if (this.sortAbortController === run.controller) {
+                this.sortAbortController = null;
+            }
+            this.sortSimilarityBtn.disabled = false;
+            this.sortSimilarityBtn.querySelector('.btn-label').textContent = this.isSortedBySimilarity
+                ? 'Restore Order'
+                : 'Sort by Similarity';
+        }
     }
 
     // A fresh hash pool (G2 PR 2, B4) for one run or one placement. Its workers live for the pool's life, so the

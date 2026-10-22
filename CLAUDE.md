@@ -26,6 +26,8 @@ npm run format         # Prettier (format:check to verify only)
 
 `MV_USER_DATA_DIR=<dir>` runs the app on another profile folder. Use it on a copy of the real profile (`%APPDATA%\media_viewer`) for a pre-merge manual test of anything that migrates stored state.
 
+`MV_HASH_PARITY=1` makes every similarity sort of that launch a parity check while it is set (both hash routes, no cache, report in `media-viewer-perf.log`); unset it before a normal run.
+
 Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret scan) → `node scripts/check-docs-index.js` (whole tree, not just staged files: every file under `docs/archive/plans/` and `docs/superpowers/specs/` must be linked from `docs/README.md`, and every link must resolve) → `node scripts/check-claude-md-size.js` (warns, never blocks, when the staged `CLAUDE.md` grows past its limits) → lint-staged (ESLint --fix + Prettier on staged `*.{js,cjs}`, Prettier only on `*.{json,css,html}`) → `npx vitest run` (unit tests must pass). E2E is NOT run by the pre-commit hook. Pre-push hook (Husky): `node scripts/check-e2e-needed.js` decides RUN or SKIP for the outgoing range (SKIP only when EVERY changed path is `*.md` or under `docs/`; any failure falls back to RUN); on RUN the hook runs the full Playwright E2E suite. **Per-check bypass**: `SKIP=<check>[,<check>…]` waives the named checks for one command and warns on every skip — pre-commit tokens `secrets`, `docs-index`, `lint-staged`, `vitest`; pre-push `e2e` (shared helper `.husky/skip.sh`; PowerShell: `$env:SKIP='docs-index'; git commit …; $env:SKIP=$null`). `--no-verify` is the last resort: it disables every check, the secret scan included.
 
 ## Architecture
@@ -65,6 +67,7 @@ media_viewer/
 ├── jxl-decode-worker.js # Module Web Worker (type:'module'): decodes JXL via jxl-oxide-wasm; streaming meta/frame/done protocol over transferable ArrayBuffers
 ├── hash-worker.js       # Module worker: bytes → sniffed type → ImageDecoder YUV frame or createImageBitmap → fresh OffscreenCanvas → blockhash (the measured F4 route)
 ├── hash-pool.js         # Per-run pool of hash workers: today's route as the fallback, a pixel-exact canary, crash/timeout re-queue, abort
+├── hash-parity.js       # MV_HASH_PARITY=1 diagnostic: both routes on every image, D4 classes, perf-log report
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config

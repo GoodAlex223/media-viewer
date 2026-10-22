@@ -3,6 +3,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as SimilaritySort from '../similarity-sort.js';
+import * as HashPool from '../hash-pool.js';
+import * as HashParity from '../hash-parity.js';
 import { fakeHashPool } from './hash-pool-harness.js';
 
 const require = createRequire(import.meta.url);
@@ -13,6 +15,8 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'media-viewer.js'), 'u
 // media-viewer.js imports the module as a namespace. An extracted method runs in the global scope, so
 // it resolves `SimilaritySort` through the global object.
 globalThis.SimilaritySort = SimilaritySort;
+globalThis.HashPool = HashPool;
+globalThis.HashParity = HashParity;
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
@@ -2679,4 +2683,184 @@ describe('Tournament Start and Continue re-check the sort (#7)', () => {
             expect(ctx.isSortedBySimilarity).toBe(false);
         }
     );
+});
+
+describe('parity mode (PR 2 T6)', () => {
+    const handleSortBySimilarity = extract('handleSortBySimilarity');
+    useRunGlobals();
+
+    const parityConfirm = (images) =>
+        `Hash parity check: ${images} images are hashed by both routes. Nothing is sorted and no cache is written.` +
+        '\n\nThe second pass runs on the main thread, so the app will not respond for several minutes.\n\nContinue?';
+    const parityNotices = (ctx) => ctx.showNotification.mock.calls.filter((c) => /[Pp]arity|Error/.test(c[0]));
+
+    let logPerf;
+    beforeEach(() => {
+        logPerf = vi.fn();
+        globalThis.window.electronAPI.logPerf = logPerf;
+    });
+
+    /** Three images and a video in /f, in parity mode. */
+    const parityCtx = (overrides = {}) =>
+        runCtx({
+            mediaFiles: media('a.jpg', 'b.jpg', 'v.mp4', 'c.jpg'),
+            hashParityMode: true,
+            lastHashParityReport: null,
+            isJxl: () => false,
+            _runHashParity: extract('_runHashParity'),
+            ...overrides,
+        });
+
+    // Review Focus #5: MV_HASH_PARITY=1 left set in the user's shell. The second pass freezes the app, so even a
+    // 3-file folder asks first.
+    it('parity mode always asks first, and declining starts nothing', async () => {
+        const ctx = parityCtx({ mediaFiles: media('a.jpg', 'b.jpg', 'c.jpg') });
+        const confirmSpy = vi.fn(() => false);
+        globalThis.confirm = confirmSpy;
+        const createPool = vi.spyOn(ctx, '_createHashPool');
+        await handleSortBySimilarity.call(ctx, false);
+        expect(confirmSpy).toHaveBeenCalledOnce();
+        expect(confirmSpy).toHaveBeenCalledWith(parityConfirm(3));
+        expect(createPool).not.toHaveBeenCalled();
+        expect(ctx.isComputingHashes).toBe(false);
+        expect(ctx.sortAbortController).toBeNull();
+        expect(ctx._similarityRunGen).toBe(0);
+        expect(ctx._dismissSimilarityOffer).not.toHaveBeenCalled();
+        expect(logPerf).not.toHaveBeenCalled();
+        expect(ctx.lastHashParityReport).toBeNull();
+    });
+
+    it('a parity run writes no cache, sorts nothing and offers nothing', async () => {
+        const ctx = parityCtx();
+        const confirmSpy = vi.fn(() => true);
+        globalThis.confirm = confirmSpy;
+        await handleSortBySimilarity.call(ctx, false);
+        expect(confirmSpy).toHaveBeenCalledWith(parityConfirm(3)); // the video is not an image
+        for (const m of [
+            'saveHashCache',
+            'saveSortCache',
+            'runSortingWorker',
+            '_offerSimilarityOrder',
+            '_applySimilarityOrder',
+            'loadHashCache',
+            'loadSortCache',
+            '_logSortPerf',
+        ]) {
+            expect(ctx[m], m).not.toHaveBeenCalled();
+        }
+        expect(ctx.perceptualHashes.size).toBe(0);
+        const [pool] = ctx.hashPools;
+        expect(ctx.hashPools).toHaveLength(1);
+        expect(pool.hashFiles.mock.calls.map((c) => [c[0], c[1].route])).toEqual([
+            [['/f/a.jpg', '/f/b.jpg', '/f/c.jpg'], 'worker'],
+            [['/f/a.jpg', '/f/b.jpg', '/f/c.jpg'], 'main'],
+        ]);
+        expect(pool.terminate).toHaveBeenCalledOnce();
+        expect(logPerf.mock.calls[0][0]).toMatch(
+            /^Hash parity: outcome=done verdict=pass images=3 compared=3 identical=3 diff1=0 diff2plus=0 rate=0\.00% workerFailed=0 mainFailed=0 videos=1 canary=pass \| worker=\d+ms \(pool 3\) \| main=\d+ms \| order=worker,main \| folder=\/f$/
+        );
+        expect(logPerf).toHaveBeenCalledOnce();
+        expect(ctx.lastHashParityReport).toMatchObject({
+            outcome: 'done',
+            verdict: 'pass',
+            compared: 3,
+            identical: 3,
+            videos: 1,
+        });
+        expect(ctx.updateSortProgress).toHaveBeenCalledWith({
+            phase: 'Parity: background route',
+            current: 3,
+            total: 3,
+        });
+        expect(ctx.updateSortProgress).toHaveBeenCalledWith({ phase: "Parity: today's route", current: 3, total: 3 });
+        expect(ctx.clearProgressNotification).toHaveBeenCalled();
+        expect(parityNotices(ctx)).toEqual([['Parity check done — see the perf log', 'success']]);
+        expect(ctx._dismissSimilarityOffer).toHaveBeenCalledOnce();
+        expect([ctx.isComputingHashes, ctx.sortAbortController]).toEqual([false, null]);
+        expect(ctx.sortSimilarityBtn.querySelector('.btn-label').textContent).toBe('Sort by Similarity');
+    });
+
+    it('a failing verdict posts the done notice as a warning', async () => {
+        const ctx = parityCtx();
+        let call = 0;
+        // Worker pass: calls 1-3; main pass: calls 4-6. a's main hash differs by 2 bits: a defect.
+        ctx.computePerceptualHash.mockImplementation(async () => (++call === 4 ? '1111' : '0011'));
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.lastHashParityReport.verdict).toBe('fail');
+        expect(parityNotices(ctx)).toEqual([['Parity check done — see the perf log', 'warning']]);
+        expect(logPerf.mock.calls.map((c) => c[0]).slice(1)).toEqual([
+            'Hash parity diff: a.jpg bits=2 class=defect type=null format=- icc=no',
+        ]);
+    });
+
+    it.each([
+        ['a newer run (the gen moves)', (ctx) => ctx._similarityRunGen++],
+        ['a folder switch (_invalidateSimilarityRun)', (ctx) => ctx._invalidateSimilarityRun()],
+    ])('a stale parity run logs and notifies nothing: %s', async (_label, makeStale) => {
+        const ctx = parityCtx({ _invalidateSimilarityRun: extract('_invalidateSimilarityRun') });
+        let progressAtStale = null;
+        ctx.computePerceptualHash.mockImplementationOnce(async () => {
+            makeStale(ctx);
+            progressAtStale = ctx.updateSortProgress.mock.calls.length;
+            return '0101';
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(logPerf).not.toHaveBeenCalled();
+        expect(ctx.lastHashParityReport).toBeNull();
+        expect(parityNotices(ctx)).toEqual([]);
+        expect(ctx.updateSortProgress.mock.calls.length).toBe(progressAtStale); // no card after it went stale
+        expect(ctx.hashPools[0].terminate).toHaveBeenCalledOnce();
+        expect([ctx.isComputingHashes, ctx.sortAbortController]).toEqual([false, null]);
+        for (const m of ['saveHashCache', 'saveSortCache', 'runSortingWorker', '_offerSimilarityOrder']) {
+            expect(ctx[m], m).not.toHaveBeenCalled();
+        }
+    });
+
+    it('Cancel posts ❌ Parity check cancelled and logs the partial summary', async () => {
+        const ctx = parityCtx();
+        let call = 0;
+        ctx.computePerceptualHash.mockImplementation(async () => {
+            if (++call === 5) {
+                // The Sort button's Cancel press, while b's main-route hash is in flight.
+                await handleSortBySimilarity.call(ctx, false);
+            }
+            return '0101';
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(logPerf.mock.calls[0][0]).toMatch(
+            /^Hash parity: outcome=cancelled verdict=pass images=3 compared=1 identical=1 diff1=0 diff2plus=0 /
+        );
+        expect(ctx.lastHashParityReport).toMatchObject({ outcome: 'cancelled', compared: 1 });
+        expect(ctx.clearProgressNotification).toHaveBeenCalled();
+        expect(parityNotices(ctx)).toEqual([['❌ Parity check cancelled', 'info']]);
+        expect(ctx.hashPools[0].terminate).toHaveBeenCalledOnce();
+        expect([ctx.isComputingHashes, ctx.sortAbortController]).toEqual([false, null]);
+        expect(ctx.sortSimilarityBtn.querySelector('.btn-label').textContent).toBe('Sort by Similarity');
+    });
+
+    it("a parity failure posts the sort's ❌ Error and terminates the pool", async () => {
+        const ctx = parityCtx();
+        ctx._createHashPool = function () {
+            const pool = fakeHashPool(async () => '0101');
+            pool.hashFiles = vi.fn(async function* () {
+                yield* [];
+                throw new Error('pool broke');
+            });
+            this.hashPools.push(pool);
+            return pool;
+        };
+        await handleSortBySimilarity.call(ctx, false);
+        expect(parityNotices(ctx)).toEqual([['❌ Error: pool broke', 'error']]);
+        expect(logPerf).not.toHaveBeenCalled();
+        expect(ctx.lastHashParityReport).toBeNull();
+        expect(ctx.hashPools[0].terminate).toHaveBeenCalledOnce();
+        expect([ctx.isComputingHashes, ctx.sortAbortController]).toEqual([false, null]);
+    });
+
+    it('outside parity mode the sort runs as before', async () => {
+        const ctx = parityCtx({ hashParityMode: false });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.runSortingWorker).toHaveBeenCalledOnce();
+        expect(logPerf).not.toHaveBeenCalled();
+    });
 });

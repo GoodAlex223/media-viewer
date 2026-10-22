@@ -27,6 +27,7 @@ const RENDERER_FILES = [
     'perceptual-hash.js',
     'main-thread-hash.js',
     'hash-pool.js',
+    'hash-parity.js',
     'feature-cache-store.js',
 ];
 

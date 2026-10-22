@@ -253,7 +253,9 @@ async function createWindow() {
         logger,
     });
     if (!win.isDestroyed()) {
-        await win.loadURL(INDEX_URL);
+        // MV_HASH_PARITY=1 (G2 PR 2 T6, spec § 9.1): the flag travels as a query (F15). main's own loadURL fires no
+        // will-navigate, and the IPC guard compares the sender URL without its query, so neither needs a change.
+        await win.loadURL(process.env.MV_HASH_PARITY === '1' ? `${INDEX_URL}?hashParity=1` : INDEX_URL);
     }
 }
 
@@ -295,6 +297,9 @@ app.whenReady().then(async () => {
     });
     const grantLoad = await grants.load();
     console.log(`Folder grants: ${grantLoad.ok ? `${grantLoad.count} loaded` : grantLoad.reason}`);
+    if (process.env.MV_HASH_PARITY === '1') {
+        console.log('Hash parity mode: on (MV_HASH_PARITY=1)');
+    }
     const tempDirs = createTempDirRegistry();
     const guard = createIpcGuard({
         ipcMain,
