@@ -717,6 +717,17 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
     - junk bytes returned `Unrecognised image bytes`.
   - **Finding**: Chromium's canvas JPEG encoder embeds an sRGB ICC profile in an APP2 segment, so spec § 9.2's "no color profile" is wrong as a fact. B1 had already measured that JPEG pixel-exact, so the canary design stands (spec note at closeout).
   - Review: approved, with 6 minors deferred.
+- **2026-10-22** — **T4** `6d253db` + review fix `7179365` (Opus · medium).
+  - RED: the module was missing. Review Focus #2's mutation (no abort listener) timed out at the 1 s guard. #3's mutation (`[bytes]` and `[bytes.buffer]` transfer lists) failed the copy assertion.
+  - **The task review found a hang** (Important, probe-confirmed): a freed slot woke only the run that freed it, so a second run on a shared pool waited forever.
+    - Ruling R-T4a: every freed slot wakes every live run, at completion, at a stopped run's early return and in the canary's release.
+    - Also pulled in: the canary could reject instead of failing safe (R-T4b), and "`ok:false` is not retried" asserted nothing that could fail (R-T4c).
+  - Fix round 1:
+    - 5 new tests, each RED on `6d253db`.
+    - The canary now holds one slot across both images and waits for one when every slot is busy.
+    - The scoped re-review found all three findings addressed, plus 3 new minors that apply only when a run overlaps the canary. The worst: a failed canary releases its slot before it sets `mainOnly`.
+    - The planned order (canary first, on a fresh pool) never overlaps them.
+  - Unit: 2,177 passed, 1 skipped. `hash-pool.js` is 460 lines; the review judged that size warranted.
 - **2026-10-22** — Line references in the brief: BACKLOG.md:617 → the entry is at :644 ("Make `write-folder-cache` atomic"); BACKLOG.md:801 → :828 ("Three atomic-write IPC handlers share one fixed `.tmp` path"). Cited by title from here on (memory `feedback_cite_backlog_by_title`).
 
 ## Key Discoveries
