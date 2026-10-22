@@ -665,6 +665,10 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - The renderer fires an un-awaited `saveBulkRatedFile()` from `removeFileFromList` (`media-viewer.js:1491`), and a later save can overtake it. The IPC guard's async `grantedPath` check runs before the writer's per-target chain, so two overlapping saves can reach the chain in the opposite order.
   - The next save rewrites the whole in-memory map, so a newest rating is lost only if the app quits first.
   - Fix: a coalescing single-flight `saveBulkRatedFile` in the renderer.
+- **The committed 1×1 E2E PNG fixtures are malformed** (found in T5; pre-existing) → BACKLOG 🟤.
+  - `red-1x1.png` and `green-1x1.png` have a bad IDAT CRC and an invalid zlib stream. `blue-1x1.png` cannot even be walked as chunks.
+  - Chromium's `<img>` tolerates them, but `createImageBitmap` rejects them ("The source image could not be decoded"). So the worker falls back on them, as designed, and every E2E built on them exercises only today's route.
+  - Fix: regenerate them in `tests/e2e/fixtures/generate.js` with correct CRCs and deflate (`zlib.deflateSync`), then re-run the E2E suite.
 - **B7's ruling** → append to BACKLOG [2026-10-21] "A per-run hash map".
 - **BACKLOG [2026-10-11] "Make `write-folder-cache` atomic"** → check it off at closeout, if T1 ships.
 - **BACKLOG "Three atomic-write IPC handlers share one fixed `.tmp` path"** → append: `write-folder-cache` and `writeBulkRatedFile` now use unique names (B2), and Improvement #2 covers the remaining two.
@@ -728,6 +732,11 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
     - The scoped re-review found all three findings addressed, plus 3 new minors that apply only when a run overlaps the canary. The worst: a failed canary releases its slot before it sets `mainOnly`.
     - The planned order (canary first, on a fresh pool) never overlaps them.
   - Unit: 2,177 passed, 1 skipped. `hash-pool.js` is 460 lines; the review judged that size warranted.
+- **2026-10-22** — **T5** `f0a9c23` (Opus · medium).
+  - RED: 12 glue tests and 2 utils tests failed, the PR 1 double save among them ("got 2 times"). All three named mutations failed their tests.
+  - Unit: 2,190 passed, 1 skipped. `sort-progress` E2E: 2 passed, but with `worker 0, fallback 3`.
+  - **Finding**: the 1×1 fixtures are malformed PNGs, so the worker rejects them and falls back (Residuals). T7 uses sharp-made fixtures and asserts the worker route.
+  - **`wc -l media-viewer.js`: 11,810** (11,879 at the base).
 - **2026-10-22** — Line references in the brief: BACKLOG.md:617 → the entry is at :644 ("Make `write-folder-cache` atomic"); BACKLOG.md:801 → :828 ("Three atomic-write IPC handlers share one fixed `.tmp` path"). Cited by title from here on (memory `feedback_cite_backlog_by_title`).
 
 ## Key Discoveries
