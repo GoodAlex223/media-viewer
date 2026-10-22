@@ -63,6 +63,7 @@ media_viewer/
 ├── main-thread-hash.js  # Today's hash route (the pool's fallback and parity reference): hashFile, hashImageUrl, makeCanaryImages
 ├── media-formats.js     # Shared CJS: isMediaFile(ext), getMimeType(ext); .jxl → image/jxl
 ├── jxl-decode-worker.js # Module Web Worker (type:'module'): decodes JXL via jxl-oxide-wasm; streaming meta/frame/done protocol over transferable ArrayBuffers
+├── hash-worker.js       # Module worker: bytes → sniffed type → ImageDecoder YUV frame or createImageBitmap → fresh OffscreenCanvas → blockhash (the measured F4 route)
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
 ├── playwright.config.js # E2E test config

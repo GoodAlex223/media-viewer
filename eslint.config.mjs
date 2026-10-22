@@ -9,7 +9,7 @@
 //   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
 //   2c. Browser renderer modules     — fullscreen.js, ml-training.js, perceptual-hash.js, main-thread-hash.js (ES modules, imported by media-viewer.js)
 //   3a. Web Workers                  — sorting-worker.js, ml-worker.js, feature-worker.js
-//   3a-jxl. Module Web Worker        — jxl-decode-worker.js (ES module worker)
+//   3a-jxl. Module Web Workers        — jxl-decode-worker.js, hash-worker.js (ES module workers)
 //   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js, media-formats.js
 //   4.  Unit tests (Vitest)          — tests/**/*.js (excl. e2e)
 //   5a. E2E helpers (CJS)            — tests/e2e/**/*.cjs
@@ -222,9 +222,9 @@ export default [
         },
     },
 
-    // 3a-jxl. Module Web Worker (ES module worker — `new Worker(url, { type: 'module' })`)
+    // 3a-jxl. Module Web Workers (ES module workers — `new Worker(url, { type: 'module' })`)
     {
-        files: ['jxl-decode-worker.js'],
+        files: ['jxl-decode-worker.js', 'hash-worker.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'module',

@@ -76,8 +76,10 @@ describe('blockhash', () => {
         expect(renderer).not.toContain('blockhash(');
     });
 
-    // T3 Step 2 makes this real: hash-worker.js must contain "from './perceptual-hash.js'" too.
-    it.todo('hash-worker.js imports the one blockhash');
+    it('hash-worker.js imports the one blockhash', () => {
+        const worker = fs.readFileSync(path.join(root, 'hash-worker.js'), 'utf-8');
+        expect(worker).toContain("from './perceptual-hash.js'");
+    });
 
     it('package.json has no blockhash dependency', () => {
         const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8'));
