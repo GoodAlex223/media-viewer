@@ -702,6 +702,12 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - The 5 named mutations each failed their named test: a direct write, no per-target chain, a fixed tmp name, no `assertPath(tmp)`, and `'w'` for `'wx'`. Reverting either handler to `fs.writeFile` failed its source pin.
   - Unit: 2,084 passed, 1 skipped. `security-ipc.test.js`: 23 passed, 0 skipped, the planted-link write included. `ml-retrain-skip.test.js` (bulk-rated round trips): 5 passed.
   - Review: approved, with 5 minors deferred. One became a Residual: the renderer's order of bulk-rated saves.
+- **2026-10-22** — **T2** `19b81cd` (Sonnet · medium).
+  - Known vectors came from the renderer's `blockhash`. `media-viewer.js` is unchanged between `bf5ec84` and `f9914d6`, the capture point.
+  - RED: the modules were missing. Both named mutations (`willReadFrequently`, a hoisted canvas) failed the canvas-recipe test.
+  - Unit: 2,124 passed, 1 skipped, 1 todo (the worker half of the single-source test, for T3). `app-launch` E2E: 5/5, so the page boots with the new modules.
+  - **`wc -l media-viewer.js`: 11,879 → 11,736.**
+  - Review: approved, with 7 minors deferred. The largest: the JXL test does not pin that the URL is revoked after load.
 - **2026-10-22** — Line references in the brief: BACKLOG.md:617 → the entry is at :644 ("Make `write-folder-cache` atomic"); BACKLOG.md:801 → :828 ("Three atomic-write IPC handlers share one fixed `.tmp` path"). Cited by title from here on (memory `feedback_cite_backlog_by_title`).
 
 ## Key Discoveries
