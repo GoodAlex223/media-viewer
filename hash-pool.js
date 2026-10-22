@@ -73,6 +73,7 @@ export class HashPool {
         this._runs = new Set();
         this._nextId = 0;
         this._canary = null;
+        this._slotWaiters = []; // the canary, waiting for a slot every run holds
         this._terminated = false;
     }
 
@@ -270,6 +271,22 @@ export class HashPool {
         }
     }
 
+    // Slots are shared across runs (and the canary), so a freed slot must pump every live run, not only the one
+    // that freed it: a run whose own pump found every slot busy has nothing in flight to wake it.
+    _pumpAll() {
+        while (this._slotWaiters.length > 0) {
+            const slot = this._freeSlot();
+            if (!slot) {
+                break;
+            }
+            slot.busy = true;
+            this._slotWaiters.shift()(slot);
+        }
+        for (const run of this._runs) {
+            this._pump(run);
+        }
+    }
+
     // One worker attempt -> { kind: 'ok', reply } | { kind: 'fail'|'crash'|'timeout'|'stopped', error }.
     async _attemptOnWorker(run, path, slot) {
         let message;
@@ -312,6 +329,7 @@ export class HashPool {
             run.workerInFlight--;
         }
         if (run.stopped) {
+            this._pumpAll(); // the slot this stopped run held is free for the others
             return;
         }
         if (outcome.kind === 'stopped') {
@@ -328,7 +346,7 @@ export class HashPool {
         } else {
             run.results.push({ path: item.path, hash: null, route: 'none', error: outcome.error });
         }
-        this._pump(run);
+        this._pumpAll();
         this._notify(run);
     }
 
@@ -367,7 +385,17 @@ export class HashPool {
         return this._canary;
     }
 
+    // Never rejects: any throw, per image or overall, is a failed canary (the spec's "any failure falls back").
     async _runCanary() {
+        try {
+            return await this._compareCanaryImages();
+        } catch (err) {
+            this.mainOnly = true;
+            return { ok: false, detail: 'canary error: ' + errorText(err) };
+        }
+    }
+
+    async _compareCanaryImages() {
         let ok = true;
         const parts = [];
         let images;
@@ -377,10 +405,24 @@ export class HashPool {
             this.mainOnly = true;
             return { ok: false, detail: 'canary images: ' + errorText(err) };
         }
-        for (const { name, blob } of images) {
-            const part = await this._canaryImage(blob);
-            ok = ok && part.ok;
-            parts.push(`${name}: ${part.detail}`);
+        // One slot for the whole canary, so a run started meanwhile cannot take it between images.
+        const slot = await this._acquireSlot();
+        try {
+            for (const { name, blob } of images) {
+                let part;
+                try {
+                    part = await this._canaryImage(blob, slot);
+                } catch (err) {
+                    part = { ok: false, detail: 'error: ' + errorText(err) };
+                }
+                ok = ok && part.ok;
+                parts.push(`${name}: ${part.detail}`);
+            }
+        } finally {
+            if (slot) {
+                slot.busy = false;
+                this._pumpAll(); // a run may be waiting for the slot the canary held
+            }
         }
         if (!ok) {
             this.mainOnly = true;
@@ -388,21 +430,38 @@ export class HashPool {
         return { ok, detail: parts.join('; ') };
     }
 
-    async _canaryImage(blob) {
+    // A free slot, marked busy; waits while every slot is busy. null once the pool is terminated.
+    _acquireSlot() {
+        if (this._terminated) {
+            return Promise.resolve(null);
+        }
+        const slot = this._freeSlot();
+        if (slot) {
+            slot.busy = true;
+            return Promise.resolve(slot);
+        }
+        return new Promise((resolve) => this._slotWaiters.push(resolve));
+    }
+
+    async _canaryImage(blob, slot) {
         let main;
-        const url = URL.createObjectURL(blob);
+        let url = null;
         try {
+            url = URL.createObjectURL(blob);
             main = await this.hashMainUrlPixels(url);
         } catch (err) {
             return { ok: false, detail: 'main error: ' + errorText(err) };
         } finally {
-            URL.revokeObjectURL(url);
+            if (url !== null) {
+                URL.revokeObjectURL(url);
+            }
         }
-        const slot = this._terminated ? null : this._freeSlot();
-        if (!slot) {
-            return { ok: false, detail: 'worker error: no free worker' };
+        if (!main || !main.pixels || typeof main.pixels.length !== 'number') {
+            return { ok: false, detail: 'main error: no pixels' };
         }
-        slot.busy = true;
+        if (!slot || this._terminated) {
+            return { ok: false, detail: 'worker error: pool terminated' };
+        }
         let reply;
         try {
             const { worker, error } = this._ensureWorker(slot);
@@ -413,8 +472,6 @@ export class HashPool {
             reply = await this._post(slot, { type: 'hash', bytes, wantPixels: true }, this.canaryTimeoutMs);
         } catch (err) {
             return { ok: false, detail: 'worker error: ' + errorText(err) };
-        } finally {
-            slot.busy = false;
         }
         if (!reply.ok) {
             return { ok: false, detail: 'worker error: ' + String(reply.error) };
@@ -455,6 +512,9 @@ export class HashPool {
         }
         for (const slot of this._slots) {
             this._failSlot(slot, 'stopped', 'Stopped');
+        }
+        for (const waiter of this._slotWaiters.splice(0)) {
+            waiter(null);
         }
     }
 }

@@ -227,6 +227,8 @@ describe('HashPool dispatch', () => {
             route: 'none',
             error: 'Image load error: x',
         });
+        // An ok:false reply is the file's answer, not a crash: it is never retried on a worker.
+        expect(allPosts()).toBe(2);
     }, 2000);
 
     it("a crashed worker is replaced and its file re-queued once; a second crash sends it to today's route", async () => {
@@ -432,6 +434,93 @@ describe('HashPool dispatch', () => {
         expect(pool.hashOnMainThread).toHaveBeenCalledTimes(4);
     }, 1000);
 
+    // F1: a freed slot must pump every live run, not only the one that freed it.
+    it('a run started while another holds every slot still finishes', async () => {
+        const pool = makePool({ size: 1, createWorker: factory(null) });
+        const one = collect(pool.hashFiles(['a.jpg']));
+        await tick();
+        const two = collect(pool.hashFiles(['b.jpg']));
+        await tick();
+        expect(allPosts()).toBe(1);
+        okReply(workers[0], workers[0].posts[0].message);
+        expect(await one).toEqual([expect.objectContaining({ path: 'a.jpg', route: 'worker' })]);
+        await tick();
+        expect(allPosts()).toBe(2);
+        okReply(workers[0], workers[0].posts[1].message);
+        expect(await two).toEqual([expect.objectContaining({ path: 'b.jpg', route: 'worker' })]);
+    }, 1000);
+
+    it("a run started right after another's abort still finishes", async () => {
+        // Worker 0 hangs; the respawned worker answers.
+        const pool = makePool({ size: 1, createWorker: factory((w, m) => (w.index === 0 ? w.hang() : okReply(w, m))) });
+        const controller = new AbortController();
+        const one = pool.hashFiles(['a.jpg'], { signal: controller.signal });
+        const oneNext = one.next();
+        await tick();
+        expect(allPosts()).toBe(1);
+        controller.abort();
+        const two = collect(pool.hashFiles(['b.jpg']));
+        expect(await oneNext).toEqual({ done: true, value: undefined });
+        expect(await two).toEqual([expect.objectContaining({ path: 'b.jpg', route: 'worker' })]);
+        expect(workers[0].terminated).toBe(1);
+    }, 1000);
+
+    it('a run started while the canary holds the only slot still finishes', async () => {
+        // Replies by hand, so the canary's first task holds the only slot while the run starts.
+        const pool = makePool({ size: 1, createWorker: factory(null) });
+        const canary = pool.checkCanary();
+        for (let i = 0; i < 10 && allPosts() === 0; i++) {
+            await tick();
+        }
+        expect(allPosts()).toBe(1);
+        const run = collect(pool.hashFiles(['a.jpg']));
+        let settled = false;
+        Promise.all([canary, run]).then(() => (settled = true));
+        // Answer whatever is open (canary tasks with pixels, the run's task plainly) until both end.
+        for (let guard = 0; guard < 50 && !settled; guard++) {
+            for (const w of workers) {
+                for (const p of w.posts) {
+                    if (!w.answered.has(p.message.id) && !w.terminated) {
+                        const pixels = p.message.wantPixels ? { pixels: new ArrayBuffer(PIXEL_BYTES) } : {};
+                        w.reply(p.message.id, { ok: true, hash: H('1'), info: {}, ...pixels });
+                    }
+                }
+            }
+            await tick();
+        }
+        expect((await canary).ok).toBe(true);
+        expect(await run).toEqual([expect.objectContaining({ path: 'a.jpg', route: 'worker' })]);
+    }, 1000);
+
+    it('a canary started while a run holds the only slot waits for it, then passes', async () => {
+        const pool = makePool({ size: 1, createWorker: factory(null) });
+        const run = collect(pool.hashFiles(['a.jpg']));
+        await tick();
+        const canary = pool.checkCanary();
+        for (let i = 0; i < 5; i++) {
+            await tick();
+        }
+        expect(allPosts()).toBe(1); // the canary is waiting, not failing
+        let settled = false;
+        Promise.all([canary, run]).then(() => (settled = true));
+        for (let guard = 0; guard < 50 && !settled; guard++) {
+            for (const w of workers) {
+                for (const p of w.posts) {
+                    if (!w.answered.has(p.message.id) && !w.terminated) {
+                        const pixels = p.message.wantPixels ? { pixels: new ArrayBuffer(PIXEL_BYTES) } : {};
+                        w.reply(p.message.id, { ok: true, hash: H('1'), info: {}, ...pixels });
+                    }
+                }
+            }
+            await tick();
+        }
+        expect(await canary).toEqual({
+            ok: true,
+            detail: 'canary-jpeg: 0 bytes differ, 0 bits; canary-png: 0 bytes differ, 0 bits',
+        });
+        expect(await run).toEqual([expect.objectContaining({ path: 'a.jpg', route: 'worker' })]);
+    }, 1000);
+
     it("one run's abort does not strand another run's file", async () => {
         const pool = makePool({ size: 2, createWorker: factory(null) });
         const controller = new AbortController();
@@ -550,6 +639,27 @@ describe('HashPool canary', () => {
         expect(workers.every((w) => w.terminated === 1)).toBe(true);
         expect(vi.getTimerCount()).toBe(0);
     }, 2000);
+
+    it('a canary whose main route returns no pixels fails safe', async () => {
+        // F2: checkCanary() never rejects; any throw inside it is a failed canary.
+        const hashMainUrlPixels = vi.fn(async () => ({ hash: H('1') }));
+        const pool = makePool({ createWorker: factory(pixelResponder()), hashMainUrlPixels });
+        const result = await pool.checkCanary();
+        expect(result.ok).toBe(false);
+        expect(result.detail).toMatch(/^canary-jpeg: .+; canary-png: .+$/);
+        expect(pool.mainOnly).toBe(true);
+
+        // A throw outside the per-image compare (here, the blob URL itself) fails safe too.
+        workers = [];
+        vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+            throw new Error('no blob URLs');
+        });
+        const pool2 = makePool({ createWorker: factory(pixelResponder()) });
+        const r2 = await pool2.checkCanary();
+        expect(r2.ok).toBe(false);
+        expect(r2.detail).toContain('no blob URLs');
+        expect(pool2.mainOnly).toBe(true);
+    }, 1000);
 
     it("revokes the blob URL when today's route rejects", async () => {
         const revoke = vi.spyOn(URL, 'revokeObjectURL');
