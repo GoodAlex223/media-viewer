@@ -512,3 +512,10 @@ process with the GPU raster path enabled. None of them changes a user ruling.
   B1's seven candidates.
 - **B9. The unused npm `blockhash` dependency is removed.** It is a different algorithm, and nothing imports it. The
   one `blockhash` is `perceptual-hash.js`.
+- **B10. The pool size is measured, and stays 3 (§ 14; plan T8, 2026-10-22).**
+  - *The run*: 597 `Liked_3` images, read only, each configuration in a fresh process, on a quiet machine.
+  - *Main thread vs pool 3*: today's route took 95 ms per image, and its main thread was late by up to 325 ms (p99).
+    Pool 3 took 47 ms per image, with a p99 lateness of 15 ms, about one frame.
+  - *Pool 4*: 38 ms per image, at a peak working set 400 MB higher (2,041 MB vs 1,640 MB).
+  - *Why 3*: risk R2. The machine has 15.2 GB, of which 1.2 GB was free during the run.
+  - *Across the measurement*: the canary passed at every size, and every image took the worker route.

@@ -625,11 +625,16 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
 
 ## Finish (after Task 8)
 
-- [ ] `npx vitest run`, `npm run lint` and `npm run format:check` (changed files) are green; `git status --short` is clean.
-- [ ] Full `npx playwright test`: log the totals.
-- [ ] `wc -l media-viewer.js`: **11,879 at `bf5ec84`** (PR 1 left 12,190; PR #86 took it to 11,879). Log the after count and the net change.
-- [ ] Grep sweep across code, tests **and comments**: `computePerceptualHash`, `blockhash`, `could freeze`, `.tmp'`, `fs.writeFile(` in `main.js`. Re-read every comment attached to changed code.
-- [ ] The `regression-checker` agent on `bf5ec84..HEAD` for `media-viewer.js`, then the final whole-branch review (Opus, `max`) against this plan and spec § 17. Fix, then re-review scoped.
+- [x] `npx vitest run` passes 2,246, with 1 skipped (pre-commit at `9068c27`).
+  - `npm run lint`: 0 errors, plus 2 warnings that were already there. One error appears only inside another session's `.claude/worktrees/v2-modules` copy, which is not part of this branch.
+  - Prettier is clean on every changed file.
+- [ ] Full `npx playwright test` on the final head: running. T7's run at `0e1f335` gave 219 passed and 6 skipped in 29.4 min.
+- [x] `wc -l media-viewer.js`: **11,879 at `bf5ec84` → 11,904 at `9068c27` (net +25).**
+  - Out: the hash route (`computePerceptualHash`'s body and `blockhash`, ~150 lines).
+  - In: the pool and canary orchestration, the parity glue (+81) and the bulk-rated save warning.
+  - The new hashing code is in its own modules: `hash-pool.js` 555, `hash-worker.js` 186, `hash-parity.js` 211, `main-thread-hash.js` 206, `perceptual-hash.js` 40, `atomic-write.js` 101.
+- [x] Grep sweep: done by the final fix wave (F9). Its re-review grepped `[Tt]oday['’]s` repo-wide and found no route mention left in code, tests or `CLAUDE.md`.
+- [x] The `regression-checker` and the final whole-branch review (Opus · `max`) ran, then one fix wave (`9068c27`) and its scoped re-review. All findings were addressed. Three new minors are parked for BACKLOG (Progress Log).
 - [ ] Push with `git push -u origin g2-pr2-background-hashing` (pre-push runs E2E). If GCM hands out the wrong identity, stop and ask (memory `reference_github_auth_identities`).
 - [ ] Open the PR: spec and plan links; B1–B9; RED → GREEN and the mutation runs per task; the T8 table; test deltas; `wc -l`; the Residuals. **Ask the user** before any `/code-review` here (default: a separate chat at `max`), and ask them to start `/claude-security` → *Scan changes*. Merge only on the user's go-ahead, after the smoke passes.
 
@@ -638,7 +643,9 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
 **When**: **Friday 2026-10-23** (the user's choice at plan approval). WEEKLY had planned Thursday 2026-10-22, the day this plan was written, when PR 2 was not built yet. If the branch is not ready on Friday, tell the user before Friday ends and agree a new date; the WEEKLY G2 entry then gets a `**Spillover**` line.
 
 1. **Parity.** `$env:MV_HASH_PARITY='1'; npm start` → open `Liked_2` → Sort by Similarity (VP-Tree) → confirm → wait. Then read the `Hash parity:` lines in `%APPDATA%\media_viewer\logs\media-viewer-perf.log`.
-   - The first pass runs on workers and stays responsive. The second pass runs on the main thread and **freezes the app**. F2 measured about 1 minute of blocking per 1,000 images, so expect roughly 15–30 minutes for ~15,590 images, possibly more. T8 replaces this with a measured estimate.
+   - The first pass runs on workers and stays responsive: about 47 ms per image at pool 3 (T8), so **~12 minutes**.
+   - The second pass runs on the main thread and **freezes the app**: about 95 ms per image (T8), so **~25 minutes**.
+   - Reading `Liked_2` cold from disk may add time to both, since T8 measured with a warm OS cache.
    - Do not cancel. A cancelled run logs `verdict=incomplete` and has to be run again.
    - **Pass**: all of `outcome=done`, `verdict=pass`, and every `Hash parity diff:` line `class=accepted`. Also note `workerFailed=`: each worker failure becomes a main-thread hash in a normal run. A `canary=fail` line comes with a `Hash parity canary:` line giving the reason.
 2. **Close the app, then `$env:MV_HASH_PARITY=$null`** (or open a new shell).
@@ -672,6 +679,19 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - `red-1x1.png` and `green-1x1.png` have a bad IDAT CRC and an invalid zlib stream. `blue-1x1.png` cannot even be walked as chunks.
   - Chromium's `<img>` tolerates them, but `createImageBitmap` rejects them ("The source image could not be decoded"). So the worker falls back on them, as designed, and every E2E built on them exercises only today's route.
   - Fix: regenerate them in `tests/e2e/fixtures/generate.js` with correct CRCs and deflate (`zlib.deflateSync`), then re-run the E2E suite.
+- **From the final reviews → BACKLOG 🟤, one entry per line** (whole-branch review M-numbers, regression check R-numbers):
+  - M7: only the first worker is canary-checked. Slots 2–3, and replacement workers after a crash, never are. Fold into Improvement #1: run the canary JPEG on each new worker.
+  - M9 / R1: the cache-hit placement's pool gets no abort signal, so a Cancel or folder switch waits for its next result. That is ≤ ~90 s on a hanging file, with `isComputingHashes` held. Pass `_applySimilarityOrder`'s signal down.
+  - M11: the worker reads a whole file before it checks the type. A misnamed huge video is read in full, twice with the retry.
+  - M12: nothing stops repeated worker crashes. After K crashes in a row, set `mainOnly` and log once.
+  - M14: the periodic `saveHashCache` costs ~50–150 ms of main-thread time late in a 15.6k run (5 MB of JSON plus 15.6k bridge calls). Watch for it in the smoke, then decide.
+  - M10: the perf note's `fallback` count includes videos. Split it out.
+  - R3: the 1,000-file confirm says "keep using the app", but acting turns the auto-apply into Show, and some actions refuse. It is the spec's approved copy (my call 8), so reword only if the user wants it.
+  - M6's companion: the bulk-rated warning now exists (F8). The ordering Residual above still stands.
+  - The fix wave's re-review: three comments (`hash-pool.js:387`, `:541`; `tests/hash-pool.test.js:708`) give a false reason for `terminate()` settling a canary. It is defence in depth; R-F4a's timeout is what bounds the wait.
+  - The fix wave's re-review: `tests/e2e/hash-parity.test.js:355` (`state.after > 0`) races the cancellation's own close. It can fail loudly, never falsely.
+  - The fix wave's re-review: `terminate()` leaves an armed canary timer and its slot live for ≤ `canaryTimeoutMs` on a dead pool. A Cancel during the canary waits ≤ ~25 s.
+  - The deferred task-loop minors the whole-branch review triaged as BACKLOG: T1–T7 (the SDD ledger's list, copied at closeout).
 - **B7's ruling** → append to BACKLOG [2026-10-21] "A per-run hash map".
 - **BACKLOG [2026-10-11] "Make `write-folder-cache` atomic"** → check it off at closeout, if T1 ships.
 - **BACKLOG "Three atomic-write IPC handlers share one fixed `.tmp` path"** → append: `write-folder-cache` and `writeBulkRatedFile` now use unique names (B2), and Improvement #2 covers the remaining two.
@@ -756,6 +776,41 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - **Acceptance mutation** (`willReadFrequently` in the worker): the parity test failed on 7 of 28 fixtures (`icc-p3.jpg`, `large-6000x4000.jpg`, `pano-8000x2000.jpg`, `odd-257x255.jpg`, `alpha.png`, `alpha-small.png`, `alpha.webp`), and the canary failed. The Review Focus #1 and #5-B mutations failed as intended.
   - **Gate blocker**: the pre-commit Vitest gate refused the commit. 4–5 git-spawning hook tests timed out, a different set on each run, because another session's model benchmarks held the CPU at 100%; 5 git calls took 4.1 s. Fixed in `bb6f4d8` with BACKLOG [2026-10-11]'s own remedy, a 30 s timeout on those two describes, rather than skipping the check.
   - Review: 1 Important. The re-pointed gate made an unchanged Cancel test depend on which of three workers answers first. Fix round 1 is running.
+- **2026-10-22** — **The final reviews** of `bf5ec84..5a33a87`.
+  - The `regression-checker` (Opus) found no Critical or Important issue, with 693 focused tests passing. Its 3 minors include one it could not measure: a worker terminated mid-`fetch` might leave a file open, so a later move fails with `EBUSY`.
+  - The whole-branch review (Opus · `max`) returned **with fixes**: 0 Critical, 1 Important and 14 minors. The Important finding: a cancelled parity run logged `verdict=pass`, the smoke's own pass word. Two of its minors were mine to correct:
+    - the end-of-phase save still double-saved on a Cancel, because T5 fixed only the periodic site;
+    - the canary had no end-to-end time limit, so the "bounded" reasoning I accepted at T5 was wrong.
+  - It also triaged every deferred minor.
+- **2026-10-22** — **The final fix wave** `9068c27` (Opus · medium), F1–F9:
+  - verdict `incomplete` for a cancelled parity run;
+  - a canary detail line;
+  - the end save resets its counter first;
+  - the canary is bounded end to end, and `mainOnly` is set before its slot is released;
+  - `gray.jpg` is truly 1-component;
+  - a failed bulk-ratings save warns once per folder visit;
+  - the "today's route" wording sweep.
+  - Two measurements came out clean:
+    - **F6**: a 16,500-px panorama hashes identically on both routes (`I420`), so it stays as a fixture.
+    - **F7**: a 256 MB read cut off by `terminate()` closed 6–8 ms later in 3 runs, and the file then moved. A control showed that an unread 300 MB response stays open, so the check can fail.
+  - Unit: 2,246 passed, 1 skipped. E2E (`hash-parity` + `similarity-sort`): 18/18.
+- **2026-10-22** — **T8**, pool size, run by the controller at 12:23 once the machine was quiet. The other session's model benchmarks had held the CPU at 100% for about 2 hours.
+  - The sample was 597 `Liked_3` images, read-only and pre-read with Node: 450 jpg, 120 png, 15 gif, and 12 webp (all `Liked_3` has).
+  - Each configuration ran in a fresh `launchApp()`. The grant went to the throwaway E2E store: no `loadFolder`, nothing written to the folder.
+
+    | Config | Wall | Per image | Lateness p99 / max | Peak working set |
+    | --- | --- | --- | --- | --- |
+    | main-thread route only | 56.9 s | 95 ms | 325 / 487 ms | 858 MB |
+    | pool 1 | 59.2 s | 99 ms | 15 / 91 ms | 1,017 MB |
+    | pool 2 | 34.2 s | 57 ms | 15 / 187 ms | 1,332 MB |
+    | pool 3 | 28.0 s | 47 ms | 15 / 197 ms | 1,640 MB |
+    | pool 4 | 22.9 s | 38 ms | 14 / 120 ms | 2,041 MB |
+
+  - Every worker image took the worker route. The canary passed at every size, with 0 bytes differing.
+  - **Ruling: `POOL_SIZE` stays 3**, against Step 3's rule, which picks 4.
+    - Why: the rule weighs throughput and lateness but not memory, which is spec risk R2. Pool 4 costs about 400 MB more at peak, on a 15.2 GB machine with 1.2 GB free during the run. Pool 3 is still 2× the main-thread route's throughput, at the same p99.
+    - Cost if wrong: a cold `Liked_2` run takes about 2 minutes longer, and it is one constant to change.
+  - Smoke estimate from these figures: worker pass ≈ 12 min, frozen main-thread pass ≈ 25 min.
 - **2026-10-22** — Line references in the brief: BACKLOG.md:617 → the entry is at :644 ("Make `write-folder-cache` atomic"); BACKLOG.md:801 → :828 ("Three atomic-write IPC handlers share one fixed `.tmp` path"). Cited by title from here on (memory `feedback_cite_backlog_by_title`).
 
 ## Key Discoveries
