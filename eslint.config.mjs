@@ -7,7 +7,7 @@
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
 //   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
-//   2c. Browser renderer modules     — fullscreen.js, ml-training.js (ES modules, imported by media-viewer.js)
+//   2c. Browser renderer modules     — fullscreen.js, ml-training.js, perceptual-hash.js, main-thread-hash.js (ES modules, imported by media-viewer.js)
 //   3a. Web Workers                  — sorting-worker.js, ml-worker.js, feature-worker.js
 //   3a-jxl. Module Web Worker        — jxl-decode-worker.js (ES module worker)
 //   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js, media-formats.js
@@ -177,6 +177,8 @@ export default [
             'recent-folders.js',
             'similarity-sort.js',
             'media-url.js',
+            'perceptual-hash.js',
+            'main-thread-hash.js',
             'feature-cache-store.js',
         ],
         languageOptions: {

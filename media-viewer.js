@@ -6,6 +6,7 @@ import * as LikeOrSkip from './like-or-skip.js';
 import * as RecentFolders from './recent-folders.js';
 import * as SimilaritySort from './similarity-sort.js';
 import * as MediaUrl from './media-url.js';
+import * as MainThreadHash from './main-thread-hash.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -8087,156 +8088,12 @@ class MediaViewer {
         }
     }
 
-    async computePerceptualHash(filePath) {
-        return new Promise((resolve, reject) => {
-            const isVideo = /\.(mp4|webm|mov)$/i.test(filePath);
-            const timeout = setTimeout(() => {
-                reject(new Error('Timeout: processing took too long'));
-            }, 30000); // 30 second timeout
-
-            const cleanup = () => {
-                clearTimeout(timeout);
-            };
-
-            if (isVideo) {
-                // Extract first frame from video
-                const video = document.createElement('video');
-                video.preload = 'metadata';
-                video.muted = true;
-
-                video.addEventListener('loadeddata', () => {
-                    try {
-                        video.currentTime = 0.1; // Seek to 0.1s to avoid black frames
-                    } catch (error) {
-                        cleanup();
-                        this._releaseVideo(video);
-                        reject(error);
-                    }
-                });
-
-                video.addEventListener('seeked', () => {
-                    try {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 256;
-                        canvas.height = 256;
-                        const ctx = canvas.getContext('2d');
-
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-                        const hash = this.blockhash(imageData, 16);
-                        cleanup();
-                        this._releaseVideo(video);
-                        resolve(hash);
-                    } catch (error) {
-                        cleanup();
-                        this._releaseVideo(video);
-                        reject(error);
-                    }
-                });
-
-                // G3: never empties `src` (see _releaseVideo). The old `video.src = ''` here fired `error` again,
-                // forever, after every video this method hashed.
-                video.addEventListener(
-                    'error',
-                    (error) => {
-                        cleanup();
-                        reject(new Error(`Video load error: ${error.message || 'Unknown error'}`));
-                    },
-                    { once: true }
-                );
-
-                video.src = MediaUrl.toMediaUrl(filePath);
-            } else {
-                // Process image
-                const img = new Image();
-                img.addEventListener('load', () => {
-                    try {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 256;
-                        canvas.height = 256;
-                        const ctx = canvas.getContext('2d');
-
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-                        const hash = this.blockhash(imageData, 16);
-                        cleanup();
-                        resolve(hash);
-                    } catch (error) {
-                        cleanup();
-                        reject(error);
-                    }
-                });
-
-                img.addEventListener('error', (error) => {
-                    cleanup();
-                    reject(new Error(`Image load error: ${error.message || 'Unknown error'}`));
-                });
-
-                if (this.isJxl(filePath)) {
-                    this.decodeJxl(filePath)
-                        .then((decoded) => {
-                            if (!decoded.frames || decoded.frames.length === 0) {
-                                cleanup();
-                                reject(new Error('JXL decoded with no frames'));
-                                return;
-                            }
-                            // Local, self-contained object URL: revoke as soon as the img loads/fails.
-                            // (Do NOT use jxlFrameToObjectURL here — that set is revoked on media-display
-                            //  cleanup and could revoke this in-flight extraction URL mid-load.)
-                            const url = URL.createObjectURL(
-                                new Blob([decoded.frames[0].pngBytes], { type: 'image/png' })
-                            );
-                            img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
-                            img.addEventListener('error', () => URL.revokeObjectURL(url), { once: true });
-                            img.src = url;
-                        })
-                        .catch((err) => {
-                            cleanup();
-                            reject(new Error('JXL decode failed: ' + (err && err.message ? err.message : err)));
-                        });
-                } else {
-                    img.src = MediaUrl.toMediaUrl(filePath);
-                }
-            }
+    computePerceptualHash(filePath) {
+        return MainThreadHash.hashFile(filePath, {
+            isJxl: (p) => this.isJxl(p),
+            decodeJxl: (p) => this.decodeJxl(p),
+            releaseVideo: (v) => this._releaseVideo(v),
         });
-    }
-
-    blockhash(imageData, bits) {
-        // Simple blockhash implementation
-        const blockWidth = Math.floor(imageData.width / bits);
-        const blockHeight = Math.floor(imageData.height / bits);
-        const result = [];
-
-        for (let y = 0; y < bits; y++) {
-            for (let x = 0; x < bits; x++) {
-                let total = 0;
-                let count = 0;
-
-                for (let by = 0; by < blockHeight; by++) {
-                    for (let bx = 0; bx < blockWidth; bx++) {
-                        const px = x * blockWidth + bx;
-                        const py = y * blockHeight + by;
-                        const idx = (py * imageData.width + px) * 4;
-
-                        // Convert to grayscale
-                        const gray =
-                            imageData.data[idx] * 0.299 +
-                            imageData.data[idx + 1] * 0.587 +
-                            imageData.data[idx + 2] * 0.114;
-                        total += gray;
-                        count++;
-                    }
-                }
-
-                result.push(total / count);
-            }
-        }
-
-        // Convert to binary hash based on median
-        const median = result.slice().sort((a, b) => a - b)[Math.floor(result.length / 2)];
-        return result.map((val) => (val > median ? '1' : '0')).join('');
     }
 
     calculateHammingDistance(hash1, hash2) {
@@ -9420,7 +9277,7 @@ class MediaViewer {
     // Lets go of a <video> without firing `error` (G3 spec D2). With NO src attribute, the media element load
     // algorithm just empties the element; an EMPTY src attribute is a load failure that fires `error`, and an
     // `error` handler that empties src again loops forever (~37,000 events a second, measured). The only way
-    // computeFeatures and computePerceptualHash release a video. Never `video.src = ''`.
+    // computeFeatures and main-thread-hash.js (hashFile) release a video. Never `video.src = ''`.
     _releaseVideo(video) {
         video.removeAttribute('src');
         video.load();

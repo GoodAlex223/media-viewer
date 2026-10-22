@@ -24,6 +24,8 @@ const RENDERER_FILES = [
     'face-detector.js',
     'recent-folders.js',
     'similarity-sort.js',
+    'perceptual-hash.js',
+    'main-thread-hash.js',
     'feature-cache-store.js',
 ];
 

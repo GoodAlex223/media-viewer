@@ -59,6 +59,8 @@ media_viewer/
 ├── recent-folders.js    # Pure ESM: the recently-opened-folders list and its click-time classifier; imported as a namespace (RecentFolders)
 ├── similarity-sort.js   # Pure ESM: the similarity sort's list rule (alignToLive), the user-acted mark and the hash-save schedule; imported as a namespace (SimilaritySort)
 ├── media-url.js         # Pure ESM: toMediaUrl(path), the only way the renderer names a media file; imported as a namespace (MediaUrl)
+├── perceptual-hash.js   # The one blockhash (both hash routes import it)
+├── main-thread-hash.js  # Today's hash route (the pool's fallback and parity reference): hashFile, hashImageUrl, makeCanaryImages
 ├── media-formats.js     # Shared CJS: isMediaFile(ext), getMimeType(ext); .jxl → image/jxl
 ├── jxl-decode-worker.js # Module Web Worker (type:'module'): decodes JXL via jxl-oxide-wasm; streaming meta/frame/done protocol over transferable ArrayBuffers
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
@@ -123,7 +125,7 @@ Entry shape: `- [ ] **Short title** — body with context, cross-refs, affected 
 
 **Error Handling**: user-facing errors via the notification system (bottom-right); renderer errors forwarded to the main-process file logger via `window.electronAPI.logError` (fire-and-forget), which accepts a plain string or `{ level, message, source }` — `main.js` normalises both via `logger.normalizeRendererLogEntry`; `showError()`, `window.onerror`, `unhandledrejection` all forward. `showNotification(…, { sticky: true })` stays until closed, is exempt from the 5-notification and info prunes, and leaves its action button's closing to the caller. `showNotification` returns its element.
 
-**Data Structures**: MinHeap (priority queue) and VPTree (nearest neighbor) live only in `sorting-worker.js`: sorting is worker-only. Perceptual hashing (image similarity), cosine distance for CLIP (`1 - dot(a,b)` on unit-normalized 512-dim). `calculateCosineDistance` exists in both `sorting-worker.js` and the `MediaViewer` class — the renderer copy returns `1` (not `Infinity`) on null/mismatched input (cosine is bounded [0,2]; 1 = "no signal").
+**Data Structures**: MinHeap (priority queue) and VPTree (nearest neighbor) live only in `sorting-worker.js`: sorting is worker-only. Perceptual hashing (`blockhash` in `perceptual-hash.js`, the one copy both routes import), cosine distance for CLIP (`1 - dot(a,b)` on unit-normalized 512-dim). `calculateCosineDistance` exists in both `sorting-worker.js` and the `MediaViewer` class — the renderer copy returns `1` (not `Infinity`) on null/mismatched input (cosine is bounded [0,2]; 1 = "no signal").
 
 **State Management**:
 - Class-based state in MediaViewer; localStorage for prefs (constructor validates/clamps). Settings panel (F1); `enableClipFeatures` (default true) toggles CLIP (~87 MB model on first use). On CLIP disable: revert `sortAlgorithm`→`'vptree'` + sync dropdown SYNCHRONOUSLY, THEN `await deleteSortCache('clip')` (also `clearTimeout(clipUnloadTimer)`) — order matters to avoid a stale-state transient.
