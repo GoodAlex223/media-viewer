@@ -628,7 +628,7 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
 - [x] `npx vitest run` passes 2,246, with 1 skipped (pre-commit at `9068c27`).
   - `npm run lint`: 0 errors, plus 2 warnings that were already there. One error appears only inside another session's `.claude/worktrees/v2-modules` copy, which is not part of this branch.
   - Prettier is clean on every changed file.
-- [ ] Full `npx playwright test` on the final head: running. T7's run at `0e1f335` gave 219 passed and 6 skipped in 29.4 min.
+- [x] Full `npx playwright test` on the final code (`9068c27`; later commits change docs only): **220 passed, 6 skipped, 0 failed, 13.3 min**. The full log is in the session scratchpad, `e2e-full-final.log`. T7's earlier run, at `0e1f335`, under load, was 219 passed in 29.4 min.
 - [x] `wc -l media-viewer.js`: **11,879 at `bf5ec84` → 11,904 at `9068c27` (net +25).**
   - Out: the hash route (`computePerceptualHash`'s body and `blockhash`, ~150 lines).
   - In: the pool and canary orchestration, the parity glue (+81) and the bulk-rated save warning.
