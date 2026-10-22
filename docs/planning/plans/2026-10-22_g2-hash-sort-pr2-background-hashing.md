@@ -708,6 +708,15 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - Unit: 2,124 passed, 1 skipped, 1 todo (the worker half of the single-source test, for T3). `app-launch` E2E: 5/5, so the page boots with the new modules.
   - **`wc -l media-viewer.js`: 11,879 → 11,736.**
   - Review: approved, with 7 minors deferred. The largest: the JXL test does not pin that the URL is revoked after load.
+- **2026-10-22** — **T3** `2ce6ab6` (Sonnet · medium).
+  - RED: the module was missing. The `willReadFrequently` mutation failed the canvas pin and the banned-options pin.
+  - Unit: 2,131 passed, 1 skipped.
+  - **The controller's runtime smoke** ran in the real app with a scratch E2E, deleted afterwards:
+    - a PNG through its app-scheme URL hashed the same as `computePerceptualHash`;
+    - a canvas JPEG sent as bytes decoded as `I420`, with 0 of 262,144 pixel bytes different and the same hash;
+    - junk bytes returned `Unrecognised image bytes`.
+  - **Finding**: Chromium's canvas JPEG encoder embeds an sRGB ICC profile in an APP2 segment, so spec § 9.2's "no color profile" is wrong as a fact. B1 had already measured that JPEG pixel-exact, so the canary design stands (spec note at closeout).
+  - Review: approved, with 6 minors deferred.
 - **2026-10-22** — Line references in the brief: BACKLOG.md:617 → the entry is at :644 ("Make `write-folder-cache` atomic"); BACKLOG.md:801 → :828 ("Three atomic-write IPC handlers share one fixed `.tmp` path"). Cited by title from here on (memory `feedback_cite_backlog_by_title`).
 
 ## Key Discoveries
