@@ -26,6 +26,7 @@ const RENDERER_FILES = [
     'similarity-sort.js',
     'perceptual-hash.js',
     'main-thread-hash.js',
+    'hash-pool.js',
     'feature-cache-store.js',
 ];
 
