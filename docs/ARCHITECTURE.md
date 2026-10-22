@@ -234,7 +234,7 @@ User clicks Like/Dislike
 | Data | Storage | Purpose |
 |------|---------|---------|
 | Settings | localStorage | User preferences |
-| Image Hashes | `.hash_cache.json` in the media folder (filename → hash) | Sorting cache, survives restarts. The first save in a folder whose load did not parse the file merges the file's valid entries into memory, so later saves (which write memory) keep them |
+| Image Hashes | `.hash_cache.json` in the media folder (filename → hash) | Sorting cache, survives restarts; written atomically (tmp + rename). The first save in a folder whose load did not parse the file merges the file's valid entries into memory, so later saves (which write memory) keep them |
 
 ---
 

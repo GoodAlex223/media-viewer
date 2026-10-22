@@ -11,6 +11,7 @@ const {
     createFeatureCacheLedger,
     validateWriteHeader,
     classifyReadError,
+    withReadRetries,
     readFeatureCacheFile,
     openWriteStream,
     writeWithBackpressure,
@@ -26,6 +27,7 @@ const { createIpcGuard, tierAssignmentsKind, tierDirMatches } = require('./ipc-g
 const { createAppProtocol, isBlockedEgress, APP_SCHEME, APP_HOST } = require('./app-protocol');
 const { migrateStorage } = require('./storage-migration');
 const { readClipImage } = require('./clip-image');
+const { createAtomicWriter } = require('./atomic-write');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
 // name, so the renderer never names a file path for these channels.
@@ -324,6 +326,10 @@ app.whenReady().then(async () => {
         }
     }
 
+    // Folder files a quit mid-save must not tear (G2 PR 2, B2): the writer checks its tmp and the target with
+    // assertFixedPath before it touches the disk, so its callers do not check them again.
+    const atomicWriter = createAtomicWriter({ fs, assertPath: assertFixedPath, withRetries: withReadRetries });
+
     // The app scheme (G1 I1): app files from an allowlist; media through the same read rule as the
     // IPC guard's content-read kinds.
     const appProtocol = createAppProtocol({
@@ -618,9 +624,7 @@ app.whenReady().then(async () => {
     guard.handle('writeBulkRatedFile', [kinds.grantedPath, kinds.any], async (_event, folderPath, data) => {
         try {
             const filePath = path.join(folderPath, '.bulk_rated.json');
-            await assertFixedPath(filePath);
-            const text = JSON.stringify(data, null, 2);
-            await fs.writeFile(filePath, text, 'utf-8');
+            await atomicWriter.writeFileAtomic(filePath, JSON.stringify(data, null, 2));
             return { success: true };
         } catch (err) {
             return { success: false, error: err.message };
@@ -794,8 +798,7 @@ app.whenReady().then(async () => {
         async (_event, folderPath, name, data) => {
             try {
                 const filePath = path.join(folderPath, FOLDER_CACHE_FILES[name]);
-                await assertFixedPath(filePath);
-                await fs.writeFile(filePath, data, 'utf8');
+                await atomicWriter.writeFileAtomic(filePath, data);
                 return { success: true };
             } catch (error) {
                 console.error('Write folder cache error:', error);

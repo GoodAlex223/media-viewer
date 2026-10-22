@@ -2,7 +2,7 @@
 //
 // Twelve file-group blocks, plus one rule-only object (1c):
 //   1.  Node/Electron main           — main.js, logger.js, path-grants.js, ipc-guard.js, app-protocol.js,
-//                                      storage-migration.js
+//                                      storage-migration.js, atomic-write.js
 //   1c. main.js IPC guard            — no ipcMain registration outside ipc-guard (G1)
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
@@ -75,6 +75,7 @@ export default [
             'app-protocol.js',
             'storage-migration.js',
             'feature-cache-ledger.js',
+            'atomic-write.js',
         ],
         languageOptions: {
             ecmaVersion: 2022,
