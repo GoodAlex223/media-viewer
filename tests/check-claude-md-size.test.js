@@ -113,7 +113,9 @@ describe('the figures', () => {
     });
 });
 
-describe('CLI: never blocks a commit', () => {
+// Spawns git and node per test: the default 5 s timeout fails under load, as check-secrets.test.js's
+// real-git tests do (BACKLOG 🟤 [2026-10-11] "Raise the 5 s timeout…").
+describe('CLI: never blocks a commit', { timeout: 30_000 }, () => {
     let dir;
 
     // Vitest runs inside the pre-commit hook, where git can export these. The script's own git
