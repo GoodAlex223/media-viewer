@@ -740,6 +740,19 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - **The task review found the post-loop liveness check unpinned** (Important, probe-confirmed). The plan specified a fake that yields after an abort, which the real pool never does, so every Cancel test was caught by the in-loop check instead. Deleting the post-loop check broke no test, yet it brought back the double save and let a stale run write the hash cache.
   - Ruling R-T5a: the fake now follows the pool's contract, and two production-shaped run tests pin the check. Both fail with the check deleted. R-T5b–d pulled in three minors.
   - Fix `eae61f7` touches tests and one doc line only. Unit: 2,193 passed, 1 skipped. The re-review verified every mutant independently.
+- **2026-10-22** — **T6** `c6fe9d5` (Opus · medium).
+  - RED: 28 tests failed. Mutation A (confirm only above 1,000 files) failed Review Focus #5's unit test.
+  - **Pre-review correction R-T6a**, from the implementer's own concern: the plan's verdict rule let a run that compared nothing read `verdict=pass`, a false pass at the smoke. `pass` now also needs `compared > 0`; dropping that conjunct fails the new test.
+  - `tests/ipc-guard.test.js`'s `loadURL` pin was re-pinned to the parity ternary. The review confirmed it still guards "the page main loads is the page the guard trusts".
+  - Unit: 2,236 passed. `media-viewer.js`: 11,891 (+81 lines of parity glue).
+  - Review: approved, with 7 minors. Two are flagged to fix before the smoke: a cancelled report can read `verdict=pass`, and the canary's failure detail is dropped in parity mode.
+- **2026-10-22** — **T7** `0e1f335` (Sonnet · medium).
+  - 30 fixtures are generated at test time: 28 are compared, 26 of them non-JXL.
+  - New and re-pointed E2E: 17/17. Three stability runs of `hash-parity.test.js`: 6/6 each. Full E2E: **219 passed**, 6 skipped, in 29.4 min. The tournament flake did not occur.
+  - Pixel identity: 26 of 26 non-JXL fixtures identical (recorded, not asserted).
+  - **Acceptance mutation** (`willReadFrequently` in the worker): the parity test failed on 7 of 28 fixtures (`icc-p3.jpg`, `large-6000x4000.jpg`, `pano-8000x2000.jpg`, `odd-257x255.jpg`, `alpha.png`, `alpha-small.png`, `alpha.webp`), and the canary failed. The Review Focus #1 and #5-B mutations failed as intended.
+  - **Gate blocker**: the pre-commit Vitest gate refused the commit. 4–5 git-spawning hook tests timed out, a different set on each run, because another session's model benchmarks held the CPU at 100%; 5 git calls took 4.1 s. Fixed in `bb6f4d8` with BACKLOG [2026-10-11]'s own remedy, a 30 s timeout on those two describes, rather than skipping the check.
+  - Review: 1 Important. The re-pointed gate made an unchanged Cancel test depend on which of three workers answers first. Fix round 1 is running.
 - **2026-10-22** — Line references in the brief: BACKLOG.md:617 → the entry is at :644 ("Make `write-folder-cache` atomic"); BACKLOG.md:801 → :828 ("Three atomic-write IPC handlers share one fixed `.tmp` path"). Cited by title from here on (memory `feedback_cite_backlog_by_title`).
 
 ## Key Discoveries
