@@ -294,6 +294,7 @@ class MediaViewer {
         // (spec G3 D2): reset empty on each folder load, never persisted. Suppresses re-showing the
         // same pair in AI-sorted compare.
         this.bulkRatedPairs = new Set();
+        this._bulkRatedSaveWarned = false; // saveBulkRatedFile's once-per-visit warning; loadFolder re-arms it
 
         // CLIP model state (main process IPC)
         this.clipWorkerReady = false;
@@ -3236,6 +3237,7 @@ class MediaViewer {
             this._invalidateSimilarityRun();
             this._abortInFlightPredictionSort();
             this.featureCacheStore.endVisit();
+            this._bulkRatedSaveWarned = false; // a failed .bulk_rated.json write warns once per folder visit
 
             if (result.files.length === 0) {
                 this.mediaFiles = [];
@@ -7414,7 +7416,7 @@ class MediaViewer {
         let newHashes = 0;
         let skipped = 0;
         let newSinceSave = 0; // hashes computed since the last hash-cache save
-        // The hash note's pool counts (G2 PR 2): a new hash came from a worker or from today's main-thread route
+        // The hash note's pool counts (G2 PR 2): a new hash came from a worker or from the main-thread route
         // (fallback). poolSize stays 0 when nothing needed a hash, so no pool was made.
         let workerHashes = 0;
         let fallbackHashes = 0;
@@ -7671,7 +7673,7 @@ class MediaViewer {
                     let lastSaveAt = Date.now();
                     const total = run.snapshot.length;
                     // Hashing runs in a per-run pool (G2 PR 2, B4): images in workers, videos and failures on
-                    // today's main-thread route. Results arrive in completion order; each is stored only after the
+                    // the main-thread route. Results arrive in completion order; each is stored only after the
                     // run's liveness check, with no await between the two.
                     const toHash = run.snapshot.filter((f) => !this.perceptualHashes.has(f.path)).map((f) => f.path);
                     let processed = total - toHash.length;
@@ -7685,7 +7687,7 @@ class MediaViewer {
                             const canary = await pool.checkCanary();
                             this._assertSimilarityRunLive(run);
                             if (!canary.ok) {
-                                // The pool now sends every file to today's route: the run goes on, slower.
+                                // The pool now sends every file to the main-thread route: the run goes on, slower.
                                 canaryFailed = true;
                                 this._reportHashCanaryFailure(canary.detail);
                             }
@@ -7757,11 +7759,12 @@ class MediaViewer {
 
                     // Save the hashes not yet saved (none new → no write, spec A8)
                     if (newSinceSave > 0) {
+                        // Reset first, as at the periodic save: a Cancel during it must not make the catch save again.
+                        newSinceSave = 0;
                         const saveStart = performance.now();
                         await saveHashes();
                         addPhase('save', saveStart);
                         this._assertSimilarityRunLive(run);
-                        newSinceSave = 0;
                     }
 
                     // For Simple algorithm, show K value as separate notification
@@ -8207,7 +8210,7 @@ class MediaViewer {
     }
 
     // A fresh hash pool (G2 PR 2, B4) for one run or one placement. Its workers live for the pool's life, so the
-    // caller terminates it in a finally. Today's route (computePerceptualHash) is its fallback lane.
+    // caller terminates it in a finally. The main-thread route (computePerceptualHash) is its fallback lane.
     _createHashPool() {
         return new HashPool.HashPool({
             size: HashPool.POOL_SIZE,
@@ -8221,7 +8224,8 @@ class MediaViewer {
         });
     }
 
-    // The pool's canary failed, so every file goes to today's route. Said once per run or placement, and logged.
+    // The pool's canary failed, so every file goes to the main-thread route. Said once per run or placement, and
+    // logged.
     _reportHashCanaryFailure(detail) {
         this.showNotification('⚠️ Background hashing check failed — hashing on the main thread', 'warning');
         window.electronAPI?.logError?.({
@@ -9709,10 +9713,19 @@ class MediaViewer {
             if (bucket === 'good') data.good.push(name);
             else if (bucket === 'bad') data.bad.push(name);
         }
+        let result;
         try {
-            await window.electronAPI.writeBulkRatedFile(this.baseFolderPath, data);
+            result = await window.electronAPI.writeBulkRatedFile(this.baseFolderPath, data);
         } catch (err) {
-            console.warn('Failed to save .bulk_rated.json:', err.message);
+            result = { success: false, error: err.message };
+        }
+        // These ratings exist nowhere else, so a failed write is said, once per folder visit (R-F8).
+        if (!result?.success) {
+            console.warn('Failed to save .bulk_rated.json:', result?.error);
+            if (!this._bulkRatedSaveWarned) {
+                this._bulkRatedSaveWarned = true;
+                this.showNotification('⚠️ Failed to save the bulk ratings', 'warning');
+            }
         }
     }
 

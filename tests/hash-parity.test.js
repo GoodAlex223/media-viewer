@@ -173,6 +173,41 @@ describe('formatParityLines', () => {
         ]);
     });
 
+    // R-F2: a failed canary's detail is the first detail line; a passing canary writes none.
+    it('a failed canary writes its detail first, before the diff lines', () => {
+        const rows = [row('ok.jpg'), row('a.png', 3, { type: 'png', format: null, icc: false })];
+        const report = {
+            ...base,
+            canary: 'fail',
+            canaryDetail: 'canary-jpeg: 12 bytes differ, 0 bits',
+            ...classifyParity(rows),
+        };
+        const lines = formatParityLines(report, { folder: '/f' });
+        expect(lines[0]).toMatch(/^Hash parity: outcome=done verdict=fail .* canary=fail \| worker=/);
+        expect(lines.slice(1)).toEqual([
+            'Hash parity canary: canary-jpeg: 12 bytes differ, 0 bits',
+            'Hash parity diff: a.png bits=3 class=defect type=png format=- icc=no',
+        ]);
+        const passing = formatParityLines(
+            { ...report, canary: 'pass', canaryDetail: 'canary-jpeg: 0 bytes differ, 0 bits' },
+            {
+                folder: '/f',
+            }
+        );
+        expect(passing.filter((l) => l.startsWith('Hash parity canary:'))).toEqual([]);
+    });
+
+    it('the canary line counts toward the 200-line cap', () => {
+        const rows = Array.from({ length: 250 }, (_, i) => row(`d${i}.png`, 2, { type: 'png', format: null }));
+        const lines = formatParityLines(
+            { ...base, canary: 'fail', canaryDetail: 'pool terminated', ...classifyParity(rows) },
+            { folder: '/f' }
+        );
+        expect(lines).toHaveLength(1 + 200 + 1);
+        expect(lines[1]).toBe('Hash parity canary: pool terminated');
+        expect(lines[201]).toBe('Hash parity: 51 more lines not written');
+    });
+
     it('caps the detail lines at 200 and says how many were not written', () => {
         const rows = Array.from({ length: 250 }, (_, i) => row(`d${i}.png`, 2, { type: 'png', format: null }));
         const lines = formatParityLines({ ...base, ...classifyParity(rows) }, { folder: '/f' });
@@ -234,9 +269,11 @@ describe('runHashParity', () => {
         expect(typeof report.workerMs).toBe('number');
         expect(typeof report.mainMs).toBe('number');
         const phases = onProgress.mock.calls.map((c) => c[0]);
-        expect(phases.indexOf("Parity: today's route")).toBeGreaterThan(phases.lastIndexOf('Parity: background route'));
+        expect(phases.indexOf('Parity: main-thread route')).toBeGreaterThan(
+            phases.lastIndexOf('Parity: background route')
+        );
         expect(onProgress).toHaveBeenCalledWith('Parity: background route', 2, 2);
-        expect(onProgress).toHaveBeenCalledWith("Parity: today's route", 2, 2);
+        expect(onProgress).toHaveBeenCalledWith('Parity: main-thread route', 2, 2);
     });
 
     it('classifies what the two passes returned, by file name and kind', async () => {
@@ -271,6 +308,7 @@ describe('runHashParity', () => {
         const pool = routePool({ worker: workerOk, main: mainOk, canary: { ok: false, detail: 'pixels differ' } });
         const report = await runHashParity(pool, ['/f/a.jpg'], {});
         expect(report.canary).toBe('fail');
+        expect(report.canaryDetail).toBe('pixels differ');
         expect(pool.hashFiles).toHaveBeenCalledTimes(2);
         expect(report.compared).toBe(1);
         expect(report.outcome).toBe('done');
@@ -303,6 +341,8 @@ describe('runHashParity', () => {
             signal: controller.signal,
         });
         expect(report.outcome).toBe('cancelled');
+        // R-F1: the smoke's pass criterion is `verdict=pass`, so a partial count must never carry it.
+        expect(report.verdict).toBe('incomplete');
         expect(report).toMatchObject({ images: 3, compared: 1, identical: 1, workerFailures: [], mainFailures: [] });
     });
 
@@ -322,6 +362,7 @@ describe('runHashParity', () => {
         });
         expect(report.outcome).toBe('cancelled');
         expect(pool.hashFiles).toHaveBeenCalledTimes(1);
+        expect(report.verdict).toBe('incomplete');
         expect(report).toMatchObject({ images: 1, compared: 0, workerFailures: [], mainFailures: [] });
     });
 });

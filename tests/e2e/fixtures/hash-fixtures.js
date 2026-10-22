@@ -58,9 +58,12 @@ export async function generateHashFixtures(dir) {
         'cmyk.jpg': () => photo(1200, 900, 3, 6).withIccProfile('cmyk').jpeg({ quality: 90 }),
         'progressive.jpg': () => photo(1600, 1200, 3, 7).jpeg({ quality: 85, progressive: true }),
         'chroma444.jpg': () => photo(1200, 900, 3, 8).jpeg({ quality: 95, chromaSubsampling: '4:4:4' }),
-        'gray.jpg': () => photo(1200, 900, 3, 9).grayscale().jpeg(),
+        // b-w makes a 1-component JPEG; .grayscale() alone writes a 3-component YCbCr one (R-F5).
+        'gray.jpg': () => photo(1200, 900, 3, 9).grayscale().toColourspace('b-w').jpeg(),
         'large-6000x4000.jpg': () => photo(6000, 4000, 3, 10).jpeg({ quality: 88 }),
         'pano-8000x2000.jpg': () => photo(8000, 2000, 3, 11).jpeg({ quality: 88 }),
+        // Wider than a 16,384 px maximum texture, where one route could take a CPU path (R-F6).
+        'pano-16500x1500.jpg': () => photo(16500, 1500, 3, 25).jpeg({ quality: 88 }),
         'odd-257x255.jpg': () => photo(257, 255, 3, 18).jpeg(),
         'large-4000x3000.png': () => photo(4000, 3000, 3, 12).png(),
         'alpha.png': () => photo(1200, 900, 4, 13).png(),

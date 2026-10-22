@@ -1,6 +1,6 @@
 // hash-parity.js
 // The in-app hash parity diagnostic (G2 PR 2, spec § 9.1, D4/D5, B5/B6). Launched with MV_HASH_PARITY=1, main loads
-// the page with ?hashParity=1, and the next similarity sort hashes every image through both routes (the worker route
+// the page with ?hashParity=1, and every similarity sort hashes every image through both routes (the worker route
 // first, then the main-thread route), sorts nothing, writes no cache, and writes a D4-classified report to the perf
 // log. Pure: the pool, the signal and the progress sink are injected, and nothing here touches a document.
 import { isVideoPath } from './hash-pool.js';
@@ -12,7 +12,7 @@ export const PARITY_MAX_RATE = 0.005;
 export const MAX_PARITY_DETAIL_LINES = 200;
 
 export const PHASE_WORKER = 'Parity: background route';
-export const PHASE_MAIN = "Parity: today's route";
+export const PHASE_MAIN = 'Parity: main-thread route';
 
 // The page's query, read once by the renderer (F15: the flag travels as a query, so no preload change).
 export function readParityFlag(search) {
@@ -110,7 +110,9 @@ export function formatParityLines(report, { folder }) {
         `workerFailed=${r.workerFailures.length} mainFailed=${r.mainFailures.length} videos=${r.videos} ` +
         `canary=${r.canary} | worker=${Math.round(r.workerMs)}ms (pool ${r.poolSize}) | ` +
         `main=${Math.round(r.mainMs)}ms | order=worker,main | folder=${folder}`;
+    // R-F2: a failed canary says why, first; it counts toward the cap like any other detail line.
     const details = [
+        ...(r.canary === 'fail' && r.canaryDetail ? [`Hash parity canary: ${r.canaryDetail}`] : []),
         ...r.diffs.map(
             (d) =>
                 `Hash parity diff: ${d.name} bits=${d.bits} class=${d.cls} type=${d.type} ` +
@@ -128,9 +130,9 @@ export function formatParityLines(report, { folder }) {
 
 /**
  * The two passes (B5): the canary (recorded, not enforced), every image on the worker route, then every image on the
- * main-thread route, each timed. An abort ends the run with the partial report, `outcome: 'cancelled'`; it never
- * throws for an abort. `videos` is the count of videos the caller left out; any video still in `paths` is left out
- * here and counted too (E16). The caller owns the pool and terminates it.
+ * main-thread route, each timed. An abort ends the run with the partial report, `outcome: 'cancelled'` and
+ * `verdict: 'incomplete'`; it never throws for an abort. `videos` is the count of videos the caller left out; any
+ * video still in `paths` is left out here and counted too (E16). The caller owns the pool and terminates it.
  */
 export async function runHashParity(
     pool,
@@ -193,13 +195,17 @@ export async function runHashParity(
             };
         });
 
+    const classified = classifyParity(rows);
     return {
         outcome: cancelled ? 'cancelled' : 'done',
         canary: canary?.ok ? 'pass' : 'fail',
+        canaryDetail: String(canary?.detail ?? ''),
         poolSize: pool.size,
         workerMs,
         mainMs,
         videos: videoCount,
-        ...classifyParity(rows),
+        ...classified,
+        // R-F1: a cancelled run compared only part of the folder, so it neither passes nor fails.
+        verdict: cancelled ? 'incomplete' : classified.verdict,
     };
 }

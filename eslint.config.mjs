@@ -1,15 +1,18 @@
 // ESLint flat configuration for Electron media_viewer project.
 //
 // Twelve file-group blocks, plus one rule-only object (1c):
-//   1.  Node/Electron main           — main.js, logger.js, path-grants.js, ipc-guard.js, app-protocol.js,
-//                                      storage-migration.js, atomic-write.js
+//   1.  Node/Electron main           — main.js, logger.js, path-grants.js, ipc-guard.js, clip-image.js,
+//                                      app-protocol.js, storage-migration.js, feature-cache-ledger.js,
+//                                      atomic-write.js
 //   1c. main.js IPC guard            — no ipcMain registration outside ipc-guard (G1)
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
 //   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
-//   2c. Browser renderer modules     — fullscreen.js, ml-training.js, perceptual-hash.js, main-thread-hash.js, hash-pool.js, hash-parity.js (ES modules, imported by media-viewer.js)
+//   2c. Browser renderer modules     — fullscreen.js, ml-training.js, perceptual-hash.js, main-thread-hash.js,
+//                                      hash-pool.js, hash-parity.js, … (ES modules the renderer imports, directly
+//                                      or through another module)
 //   3a. Web Workers                  — sorting-worker.js, ml-worker.js, feature-worker.js
-//   3a-jxl. Module Web Workers        — jxl-decode-worker.js, hash-worker.js (ES module workers)
+//   3a-jxl. Module Web Workers       — jxl-decode-worker.js, hash-worker.js (ES module workers)
 //   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js, media-formats.js
 //   4.  Unit tests (Vitest)          — tests/**/*.js (excl. e2e)
 //   5a. E2E helpers (CJS)            — tests/e2e/**/*.cjs
@@ -166,7 +169,7 @@ export default [
         },
     },
 
-    // 2c. Browser renderer modules (ES module — imported by media-viewer.js)
+    // 2c. Browser renderer modules (ES modules — imported by media-viewer.js, or by one of these)
     {
         files: [
             'fullscreen.js',

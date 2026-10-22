@@ -62,11 +62,11 @@ media_viewer/
 ├── similarity-sort.js   # Pure ESM: the similarity sort's list rule (alignToLive), the user-acted mark and the hash-save schedule; imported as a namespace (SimilaritySort)
 ├── media-url.js         # Pure ESM: toMediaUrl(path), the only way the renderer names a media file; imported as a namespace (MediaUrl)
 ├── perceptual-hash.js   # The one blockhash (both hash routes import it)
-├── main-thread-hash.js  # Today's hash route (the pool's fallback and parity reference): hashFile, hashImageUrl, makeCanaryImages
+├── main-thread-hash.js  # The main-thread hash route (the pool's fallback and parity reference): hashFile, hashImageUrl, makeCanaryImages
 ├── media-formats.js     # Shared CJS: isMediaFile(ext), getMimeType(ext); .jxl → image/jxl
 ├── jxl-decode-worker.js # Module Web Worker (type:'module'): decodes JXL via jxl-oxide-wasm; streaming meta/frame/done protocol over transferable ArrayBuffers
 ├── hash-worker.js       # Module worker: bytes → sniffed type → ImageDecoder YUV frame or createImageBitmap → fresh OffscreenCanvas → blockhash (the measured F4 route)
-├── hash-pool.js         # Per-run pool of hash workers: today's route as the fallback, a pixel-exact canary, crash/timeout re-queue, abort
+├── hash-pool.js         # Per-run pool of hash workers: the main-thread route as the fallback, a pixel-exact canary, crash/timeout re-queue, abort
 ├── hash-parity.js       # MV_HASH_PARITY=1 diagnostic: both routes on every image, D4 classes, perf-log report
 ├── face-detector.js     # Face detection (@vladmandic/face-api)
 ├── vitest.config.js     # Unit test config
@@ -83,7 +83,7 @@ media_viewer/
 1. Main process: file system ops, JXL decode support (`read-file-buffer`, `read-jxl-wasm`), CLIP model inference, tournament state (`.tournament_state.json`), bulk-rated cache (`.bulk_rated.json`), feature-cache streaming (stream-json parse + batched atomic writes), atomic folder-cache and bulk-rated writes
 2. Preload exposes a secure IPC bridge to the renderer (`onClipDownloadProgress` returns a cleanup function)
 3. Renderer (media-viewer.js) manages UI state; calls CLIP via `window.electronAPI`; TournamentManager delegates IPC
-4. CPU-intensive work → Web Workers (sorting, ML, feature extraction); CLIP is main-process IPC (§ Active gotchas)
+4. CPU-intensive work → Web Workers (sorting, ML, feature extraction, perceptual hashing in a per-run pool of hash workers); CLIP is main-process IPC (§ Active gotchas)
 
 ## Code Conventions
 
@@ -114,6 +114,7 @@ media_viewer/
 - Config `playwright.config.js`; workers:1, fullyParallel:false (Electron can't parallelize).
 - Electron 30+ workaround: `electron-wrapper.cjs` strips `--remote-debugging-port=0`, re-applied via `rdp-preload.cjs` (playwright#39008); unset `ELECTRON_RUN_AS_NODE` before spawn. `rdp-preload.cjs` loads playwright-core `loader.js` by path — update if it breaks after upgrade.
 - `.media-container` overlay blocks pointer events — use `{force:true}` or `page.evaluate()`.
+- The committed `*-1x1.png` fixtures are malformed PNGs that `createImageBitmap` rejects, so they always take the main-thread hash route; a worker-route E2E must generate its images with `tests/e2e/fixtures/hash-fixtures.js`.
 - Helpers: `seedLocalStorage(page, kv, { grant = true })` (call after `launchApp()`, before `loadFolder()`; it grants the three folder keys in main first, while `{ grant: false }` seeds a folder main never granted, like one saved before G1); `grantFolder(app, path)`; `mockFolderDialog(app, path)` (grants the pick and records the dialog's `defaultPath` in `global.__mvLastDialogDefaultPath`); `loadFolder` grants first. Each `launchApp()` gets a fresh grant store via `MV_E2E_GRANTS_FILE`, exposed as `global.__mvGrants` to `electronApp.evaluate` only; `closeApp()` (races close vs 5s then SIGKILL; Windows `taskkill /F /T`); `createTempFixtureDir(names?)`. `launchApp({ migrationMarker })` sets `MV_E2E_MIGRATION_MARKER`; by default it points at a pre-written marker, so the one-time `localStorage` migration is skipped; `launchApp({ env })` passes extra env vars and drops an inherited `MV_HASH_PARITY` unless the test sets it. `global.__mvAppProtocol` (with `__mvGrants`) exposes the app scheme handler's `openStreams()` to `electronApp.evaluate`. `closeApp` also clears `recentFolders`, and `launchApp` clears it at start; `mockFolderDialog` counts opens in `global.__mvDialogCalls` (reset on each install).
 - `afterEach` null guards: guard `if (electronApp)`/`if (tmpFixtures)`/`if (page)` before cleanup (`.catch()` only handles rejections, not a sync TypeError on undefined).
 - Before a method that guards on `isLoading` and `mediaNavigationInProgress` (e.g. `handleCancel` after `applyBulkRating`), `await page.waitForFunction(() => !window.mediaViewer.isLoading && !window.mediaViewer.mediaNavigationInProgress)`. The latter flag is set by `showMedia()` for the duration of its own render (e.g. `applyBulkRating`'s fire-and-forget call) without setting `isLoading`.
@@ -167,7 +168,7 @@ Entry shape: `- [ ] **Short title** — body with context, cross-refs, affected 
   - A run captures its settings and a snapshot of `mediaFiles` at the press and checks its token (`_assertSimilarityRunLive`) after every `await`; a stale run (a newer run or a folder load moved `_similarityRunGen`) writes nothing to the folder now open.
   - A run applies directly unless the user acted since the press (`SimilaritySort.userActedSince`), and then offers a sticky "Show"; every order-changing action calls `_invalidateSimilarityRun()`, which dismisses the offer and makes an in-flight Show stale.
   - Restore Order (`_restoreOriginalOrder(kind)`, shared by the similarity button and the AI toggle-off) waits for render idle, then re-checks before its synchronous commit, since another order may have committed during the wait.
-  - Hashing runs in a per-run `HashPool` (B4): the run's loop stores each result only after `_assertSimilarityRunLive(run)`, a failed canary sends the run to today's route with one notice, and the pool is terminated in the hash phase's `finally`.
+  - Hashing runs in a per-run `HashPool` (B4): the run's loop stores each result only after `_assertSimilarityRunLive(run)`, a failed canary sends the run to the main-thread route with one notice, and the pool is terminated in the hash phase's `finally`.
 
 **Compare Mode Validation**: `showCompareMedia()` validates files via `checkFileExists` IPC before render (parallel); bounded retry (max 10) → fallback to single mode via `switchToSingleModeUI()`. Compare mode only: in tournament mode a failed file is skipped through `_skipFailedTournamentFile` and the engine's next pair rendered — the retry would render `mediaFiles[currentIndex..+1]`, a pair the engine is not on.
 

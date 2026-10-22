@@ -3200,6 +3200,44 @@ describe('bulk-rated persistence', () => {
         await saveBulkRatedFile.call(ctx);
         expect(written).toEqual({ version: 1, good: ['x.png'], bad: ['y.png'] });
     });
+
+    // R-F8: those ratings exist nowhere else, and the atomic writer can fail where an in-place write did not.
+    it('a failed save warns once per folder visit, and a folder load re-arms it', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        globalThis.window.electronAPI.writeBulkRatedFile = vi
+            .fn()
+            .mockResolvedValueOnce({ success: false, error: 'EPERM' })
+            .mockRejectedValueOnce(new Error('IPC gone'))
+            .mockResolvedValueOnce({ success: false, error: 'EBUSY' });
+        const ctx = {
+            baseFolderPath: '/folder',
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarned: false,
+            showNotification: vi.fn(),
+        };
+        await saveBulkRatedFile.call(ctx);
+        await saveBulkRatedFile.call(ctx);
+        expect(ctx.showNotification.mock.calls).toEqual([['⚠️ Failed to save the bulk ratings', 'warning']]);
+        expect(warn).toHaveBeenCalledTimes(2);
+        expect(warn.mock.calls[0]).toEqual(['Failed to save .bulk_rated.json:', 'EPERM']);
+        expect(warn.mock.calls[1]).toEqual(['Failed to save .bulk_rated.json:', 'IPC gone']);
+        ctx._bulkRatedSaveWarned = false; // what loadFolder does (pinned below)
+        await saveBulkRatedFile.call(ctx);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(2);
+        warn.mockRestore();
+    });
+
+    it('a successful save posts nothing', async () => {
+        const ctx = {
+            baseFolderPath: '/folder',
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarned: false,
+            showNotification: vi.fn(),
+        };
+        await saveBulkRatedFile.call(ctx);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx._bulkRatedSaveWarned).toBe(false);
+    });
 });
 
 describe('applyBulkRating', () => {
@@ -5211,6 +5249,14 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
         await loadFolder.call(ctx, '/new/empty-folder');
         expect(ctx.refreshFolderGrants).toHaveBeenCalledTimes(1);
         expect(ctx._grantRefreshGen).toBe(1);
+    });
+
+    // R-F8: the once-per-visit bulk-ratings warning re-arms on every folder load, an empty folder included.
+    it('a folder load re-arms the bulk-ratings save warning', async () => {
+        const ctx = makeCtx();
+        ctx._bulkRatedSaveWarned = true;
+        await loadFolder.call(ctx, '/new/empty-folder');
+        expect(ctx._bulkRatedSaveWarned).toBe(false);
     });
 
     it('asks nothing after a load when no folder is saved', async () => {

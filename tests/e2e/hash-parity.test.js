@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { existsSync } from 'fs';
-import { copyFile, mkdtemp, rm } from 'fs/promises';
+import { copyFile, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { launchApp, closeApp, loadFolder, seedLocalStorage, createTempFixtureDir } from './helpers/electron-app.js';
 import { generateHashFixtures, ENCODING_NAMES } from './fixtures/hash-fixtures.js';
 
 // G2 PR 2 T7: the background hashing route, proven in the real app. The fixtures are generated with sharp (the
-// committed 1x1 PNGs are malformed, so createImageBitmap rejects them and they would all take today's route).
+// committed 1x1 PNGs are malformed, so createImageBitmap rejects them and they would all take the main-thread route).
 
 const SMALL_IMAGES = ['tiny-40x30.png', 'alpha-small.png', 'odd-257x255.jpg', 'still.gif', 'lossy.webp', 'alpha.png'];
 
@@ -91,6 +91,8 @@ test.describe('hash routes on generated fixtures', () => {
                             main: main.get(path),
                             worker: w ? w.hash : undefined,
                             route: w ? w.route : undefined,
+                            format: w?.info?.format ?? null,
+                            type: w?.info?.type ?? null,
                             error: w ? w.error : 'no result',
                             canary: canary.ok,
                         });
@@ -104,6 +106,16 @@ test.describe('hash routes on generated fixtures', () => {
         );
 
         expect(rows).toHaveLength(names.length);
+        // R-F5/R-F6: each file's worker frame, and for a mismatch both hashes and their bit difference.
+        for (const r of rows) {
+            const bits = r.main && r.worker ? [...r.main].filter((c, i) => c !== r.worker[i]).length : 'n/a';
+            test.info().annotations.push({
+                type: 'route',
+                description:
+                    `${r.name}: route=${r.route} type=${r.type} format=${r.format}` +
+                    (r.main === r.worker ? '' : ` main=${r.main} worker=${r.worker} bits=${bits}`),
+            });
+        }
         const mismatched = rows.filter((r) => !r.main || r.main !== r.worker).map((r) => r.name);
         const wrongRoute = rows.filter((r) => r.route !== 'worker').map((r) => `${r.name}:${r.route}:${r.error}`);
         expect({ mismatched, wrongRoute }).toEqual({ mismatched: [], wrongRoute: [] });
@@ -233,6 +245,136 @@ test.describe('hash routes on generated fixtures', () => {
     });
 });
 
+// R-F7: a pool terminated while its workers read files must leave no read stream open, or Windows keeps the file
+// open and a later move (a rating) of that file can fail with EBUSY. A response nobody reads holds its stream open
+// only past what Chromium buffers (measured: an unread 3 MB pano closed by itself, an unread 256 MB file did not), so
+// the read in flight at terminate() is a 256 MB filler: only a cancelled read closes it.
+test.describe('a terminated pool', () => {
+    const LARGE = ['large-6000x4000.jpg', 'pano-8000x2000.jpg', 'large-4000x3000.png', 'pano-16500x1500.jpg'];
+    const FILLER = 'zz-filler-256mb.jpg';
+    let electronApp;
+    let page;
+    let tmpFixtures;
+
+    test.afterEach(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+            electronApp = null;
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+            tmpFixtures = null;
+        }
+    });
+
+    test('closes the reads its workers had open, and their files can move', async () => {
+        test.setTimeout(120_000);
+        tmpFixtures = await createTempFixtureDir([]);
+        await copyInto(tmpFixtures.dir, LARGE);
+        await writeFile(join(tmpFixtures.dir, FILLER), Buffer.alloc(256 * 1024 * 1024, 7));
+        ({ electronApp, page } = await launchApp());
+        await seedLocalStorage(page, { customLikeFolder: tmpFixtures.likeDir });
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForIdle(page);
+        const openStreams = () => electronApp.evaluate(() => global.__mvAppProtocol.openStreams());
+        await expect.poll(openStreams, { timeout: 10_000 }).toBe(0); // the first image's display read is done
+
+        const names = [FILLER, ...LARGE];
+        const paths = await page.evaluate(
+            (list) => list.map((n) => window.mediaViewer.mediaFiles.find((f) => f.name === n)?.path),
+            names
+        );
+        expect(paths.every(Boolean), 'every file is listed').toBe(true);
+        // How long the filler takes to read in full, unhindered: the sampler below terminates well inside it.
+        const fullReadMs = await page.evaluate(async (path) => {
+            const { toMediaUrl } = await import('./media-url.js');
+            const start = performance.now();
+            await (await fetch(toMediaUrl(path))).arrayBuffer();
+            return performance.now() - start;
+        }, paths[0]);
+        await expect.poll(openStreams, { timeout: 10_000 }).toBe(0);
+
+        // Main samples its open-stream count every 1 ms. A quarter of a full read after it first sees one open, it
+        // has the page terminate the pool, then counts again: a read still open right after terminate() is the
+        // case this test is for.
+        const sampled = electronApp.evaluate(
+            ({ BrowserWindow }, delayMs) => {
+                const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('index.html'));
+                const count = () => global.__mvAppProtocol.openStreams();
+                const state = { peak: 0, before: null, after: null };
+                return new Promise((resolve) => {
+                    const started = Date.now();
+                    let firstOpenAt = null;
+                    const timer = setInterval(async () => {
+                        const n = count();
+                        state.peak = Math.max(state.peak, n);
+                        if (n > 0 && firstOpenAt === null) {
+                            firstOpenAt = Date.now();
+                        }
+                        if (n > 0 && state.before === null && Date.now() - firstOpenAt >= delayMs) {
+                            state.before = n;
+                            clearInterval(timer);
+                            await win.webContents.executeJavaScript('window.__terminateHashPool()');
+                            state.after = count();
+                            resolve(state);
+                        } else if (Date.now() - started > 60_000) {
+                            clearInterval(timer);
+                            resolve(state);
+                        }
+                    }, 1);
+                });
+            },
+            Math.max(20, Math.round(fullReadMs / 4))
+        );
+        await page.evaluate(
+            (list) => {
+                const pool = window.mediaViewer._createHashPool();
+                window.__terminateHashPool = () => {
+                    pool.terminate();
+                    return true;
+                };
+                window.__hashRun = (async () => {
+                    let yielded = 0;
+                    for await (const _r of pool.hashFiles(list, { route: 'worker' })) {
+                        yielded++;
+                    }
+                    return yielded;
+                })();
+            },
+            [...paths, ...paths.slice(1)]
+        );
+
+        const state = await sampled;
+        test.info().annotations.push({
+            type: 'streams',
+            description:
+                `full filler read ${Math.round(fullReadMs)} ms; open reads: before terminate=${state.before}, ` +
+                `right after=${state.after}, peak=${state.peak}`,
+        });
+        expect(state.before, 'main saw a read open while the pool ran').toBeGreaterThan(0);
+        expect(state.after, 'a read was still open right after terminate()').toBeGreaterThan(0);
+        const yielded = await page.evaluate(() => window.__hashRun);
+        expect(yielded).toBeLessThan(paths.length * 2 - 1); // the run ended early, without a throw
+
+        const closeStart = Date.now();
+        await expect.poll(openStreams, { timeout: 15_000 }).toBe(0);
+        test.info().annotations.push({
+            type: 'streams-closed',
+            description: `all reads closed ${Date.now() - closeStart} ms after terminate() returned`,
+        });
+
+        for (const [i, filePath] of paths.entries()) {
+            const result = await page.evaluate(
+                ({ sourcePath, targetFolder, fileName }) =>
+                    window.electronAPI.moveFile({ sourcePath, targetFolder, fileName }),
+                { sourcePath: filePath, targetFolder: tmpFixtures.likeDir, fileName: names[i] }
+            );
+            expect(result, names[i]).toMatchObject({ success: true });
+            expect(existsSync(join(tmpFixtures.likeDir, names[i])), names[i]).toBe(true);
+        }
+    });
+});
+
 test.describe('a sort through the workers', () => {
     let electronApp;
     let page;
@@ -261,7 +403,7 @@ test.describe('a sort through the workers', () => {
 
     test('a sort hashes images in the workers and keeps the app usable', async () => {
         // The gateHashing wrapper of similarity-sort.test.js, plus a record of each result's route and a count of
-        // today's route for images.
+        // the main-thread route for images.
         await page.evaluate(() => {
             const viewer = window.mediaViewer;
             let open;

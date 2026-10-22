@@ -1,5 +1,5 @@
 // perceptual-hash.js
-// The one blockhash (G2 PR 2): the block-mean perceptual hash both hash routes import — today's main-thread route
+// The one blockhash (G2 PR 2): the block-mean perceptual hash both hash routes import — the main-thread route
 // (main-thread-hash.js) and the pool's worker (hash-worker.js). A hash is the 256-character 0/1 string
 // blockhash(imageData, 16) returns, so a second copy that drifted would split the cache in two.
 export const HASH_CANVAS_SIZE = 256;

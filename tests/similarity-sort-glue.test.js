@@ -858,6 +858,19 @@ describe('the run hashes through the pool (PR 2 T5)', () => {
         expect(outcome(ctx)).toBe('cancelled');
     });
 
+    // R-F3: the end-of-phase save had the same hole as the periodic one.
+    it('a Cancel during the end-of-phase save does not save the same hashes twice', async () => {
+        const ctx = runCtx();
+        ctx.saveHashCache = vi.fn(async () => {
+            ctx.sortAbortController.abort(); // the Cancel press, during the save of a, b and c
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx.perceptualHashes.size).toBe(3);
+        expect(ctx.saveHashCache).toHaveBeenCalledOnce();
+        expect(ctx.runSortingWorker).not.toHaveBeenCalled();
+        expect(outcome(ctx)).toBe('cancelled');
+    });
+
     // Fix round 1 (R-T5a): the real pool ends its iteration on an abort and yields nothing more, so a Cancel or a
     // folder switch while the run awaits the next result reaches only the check after the loop. The last file's hash
     // is the one in flight, so the two before it are stored and the end-save would run without that check.
@@ -2772,7 +2785,11 @@ describe('parity mode (PR 2 T6)', () => {
             current: 3,
             total: 3,
         });
-        expect(ctx.updateSortProgress).toHaveBeenCalledWith({ phase: "Parity: today's route", current: 3, total: 3 });
+        expect(ctx.updateSortProgress).toHaveBeenCalledWith({
+            phase: 'Parity: main-thread route',
+            current: 3,
+            total: 3,
+        });
         expect(ctx.clearProgressNotification).toHaveBeenCalled();
         expect(parityNotices(ctx)).toEqual([['Parity check done — see the perf log', 'success']]);
         expect(ctx._dismissSimilarityOffer).toHaveBeenCalledOnce();
@@ -2828,9 +2845,9 @@ describe('parity mode (PR 2 T6)', () => {
         });
         await handleSortBySimilarity.call(ctx, false);
         expect(logPerf.mock.calls[0][0]).toMatch(
-            /^Hash parity: outcome=cancelled verdict=pass images=3 compared=1 identical=1 diff1=0 diff2plus=0 /
+            /^Hash parity: outcome=cancelled verdict=incomplete images=3 compared=1 identical=1 diff1=0 diff2plus=0 /
         );
-        expect(ctx.lastHashParityReport).toMatchObject({ outcome: 'cancelled', compared: 1 });
+        expect(ctx.lastHashParityReport).toMatchObject({ outcome: 'cancelled', verdict: 'incomplete', compared: 1 });
         expect(ctx.clearProgressNotification).toHaveBeenCalled();
         expect(parityNotices(ctx)).toEqual([['❌ Parity check cancelled', 'info']]);
         expect(ctx.hashPools[0].terminate).toHaveBeenCalledOnce();

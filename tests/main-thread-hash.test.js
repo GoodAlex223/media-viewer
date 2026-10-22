@@ -1,5 +1,5 @@
-// G2 PR 2 T2: main-thread-hash.js — today's hash route, moved out of the renderer. Run against a fake document and
-// Image. The route is the measured one (spec § 5.2, F4): a fresh 256x256 canvas per file, a default 2D context.
+// G2 PR 2 T2: main-thread-hash.js — the main-thread hash route, moved out of the renderer. Run against a fake document
+// and Image. The route is the measured one (spec § 5.2, F4): a fresh 256x256 canvas per file, a default 2D context.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as MediaUrl from '../media-url.js';
 import { hashFile, hashImageUrl, makeCanaryImages, MAIN_ROUTE_TIMEOUT_MS } from '../main-thread-hash.js';

@@ -1,6 +1,6 @@
 // hash-pool.js
 // A per-run pool of hash workers (G2 PR 2, spec § 5.2, E9, § 17 B1). Images go to module workers (hash-worker.js),
-// at most `size` at a time; videos, and anything a worker could not hash, go to today's main-thread route, one call
+// at most `size` at a time; videos, and anything a worker could not hash, go to the main-thread route, one call
 // at a time in its own lane. A crashed or timed-out worker is terminated and its file re-queued once. Abort, or the
 // consumer stopping, ends the run at once and terminates every worker. A pixel-exact canary decides whether the
 // workers may be trusted at all. Everything DOM-side is injected, so this module never touches a document.
@@ -17,6 +17,7 @@ export function isVideoPath(path) {
 }
 
 const errorText = (err) => String(err && err.message ? err.message : err);
+const CANARY_TIMED_OUT = Symbol('canary timed out');
 
 // A FIFO with a front lane for re-queued files; shift() is O(1), so a 15k-file run never re-copies the array.
 class TaskQueue {
@@ -67,12 +68,14 @@ export class HashPool {
         this.toMediaUrl = toMediaUrl;
         this.taskTimeoutMs = taskTimeoutMs;
         this.canaryTimeoutMs = canaryTimeoutMs;
-        // Set by a failed canary or a worker that could not be created: 'auto' then sends every file to today's route.
+        // Set by a failed canary or a worker that could not be created: 'auto' then sends every file to the main-thread
+        // route.
         this.mainOnly = false;
         this._slots = Array.from({ length: this.size }, () => ({ worker: null, busy: false, task: null }));
         this._runs = new Set();
         this._nextId = 0;
         this._canary = null;
+        this._settleCanary = null;
         this._slotWaiters = []; // the canary, waiting for a slot every run holds
         this._terminated = false;
     }
@@ -157,9 +160,9 @@ export class HashPool {
 
     /**
      * Hashes `paths`, yielding each result as it completes (completion order, buffered while the consumer is busy).
-     * route 'auto': workers with today's route as the fallback; 'worker' (parity): workers only; 'main': today's
-     * route only. Stopping (signal abort, the consumer's return()) ends the iteration at once and terminates
-     * every worker; nothing more is yielded.
+     * route 'auto': workers with the main-thread route as the fallback; 'worker' (parity): workers only; 'main': the
+     * main-thread route only. Stopping (signal abort, the consumer's return()) ends the iteration at once and
+     * terminates every worker; nothing more is yielded.
      * @returns {AsyncGenerator<{ path: string, hash: string|null, route: 'worker'|'main'|'none', info?: object, error?: string }>}
      */
     async *hashFiles(paths, { signal = null, route = 'auto' } = {}) {
@@ -174,7 +177,7 @@ export class HashPool {
             stopped: false,
             finished: false,
             queue: new TaskQueue(), // worker-bound files
-            mainQueue: new TaskQueue(), // today's-route files
+            mainQueue: new TaskQueue(), // main-thread-route files
             workerInFlight: 0,
             mainInFlight: false,
             results: [],
@@ -350,8 +353,8 @@ export class HashPool {
         this._notify(run);
     }
 
-    // Today's route, one call at a time. A stopped run never awaits it; the handlers below catch and drop a late
-    // settlement, so a late rejection is never unhandled.
+    // The main-thread route, one call at a time. A stopped run never awaits it; the handlers below catch and drop a
+    // late settlement, so a late rejection is never unhandled.
     _runMainTask(run, item) {
         run.mainInFlight = true;
         const settle = (result) => {
@@ -375,12 +378,20 @@ export class HashPool {
 
     /**
      * Hashes the canary images through both routes and compares hashes AND pixels: a raster-path change can leave
-     * the hashes equal (spec § 17 B1). Runs once per pool; a failure sets mainOnly.
+     * the hashes equal (spec § 17 B1). Runs once per pool; a failure sets mainOnly. Each step has canaryTimeoutMs, and
+     * a timeout is a failure.
      * @returns {Promise<{ ok: boolean, detail: string }>}
      */
     checkCanary() {
         if (!this._canary) {
-            this._canary = this._runCanary();
+            // terminate() settles it too (R-F4b): the run awaiting it terminates the pool in its finally.
+            this._canary = new Promise((resolve) => {
+                this._settleCanary = (result) => {
+                    this._settleCanary = null;
+                    resolve(result);
+                };
+                this._runCanary().then((result) => this._settleCanary?.(result));
+            });
         }
         return this._canary;
     }
@@ -400,13 +411,14 @@ export class HashPool {
         const parts = [];
         let images;
         try {
-            images = await this.makeCanaryImages();
+            images = await this._withCanaryTimeout(this.makeCanaryImages());
         } catch (err) {
             this.mainOnly = true;
-            return { ok: false, detail: 'canary images: ' + errorText(err) };
+            return { ok: false, detail: 'canary images: ' + (err === CANARY_TIMED_OUT ? 'timed out' : errorText(err)) };
         }
         // One slot for the whole canary, so a run started meanwhile cannot take it between images.
         const slot = await this._acquireSlot();
+        let failed = true; // until every image has compared equal
         try {
             for (const { name, blob } of images) {
                 let part;
@@ -417,17 +429,32 @@ export class HashPool {
                 }
                 ok = ok && part.ok;
                 parts.push(`${name}: ${part.detail}`);
+                if (part.hung) {
+                    break; // a main route that never answered would not answer the next image either
+                }
             }
+            failed = !ok;
         } finally {
+            // mainOnly before the slot is released (R-F4c): a waiting 'auto' run must not take it to a worker.
+            if (failed) {
+                this.mainOnly = true;
+            }
             if (slot) {
                 slot.busy = false;
                 this._pumpAll(); // a run may be waiting for the slot the canary held
             }
         }
-        if (!ok) {
-            this.mainOnly = true;
-        }
         return { ok, detail: parts.join('; ') };
+    }
+
+    // `promise`, or a CANARY_TIMED_OUT rejection after canaryTimeoutMs (R-F4a): an <img> whose load and error never
+    // fire would otherwise hold the run that awaits the canary. The timer is cleared either way.
+    _withCanaryTimeout(promise) {
+        let timer;
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(CANARY_TIMED_OUT), this.canaryTimeoutMs);
+        });
+        return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
     }
 
     // A free slot, marked busy; waits while every slot is busy. null once the pool is terminated.
@@ -448,8 +475,11 @@ export class HashPool {
         let url = null;
         try {
             url = URL.createObjectURL(blob);
-            main = await this.hashMainUrlPixels(url);
+            main = await this._withCanaryTimeout(this.hashMainUrlPixels(url));
         } catch (err) {
+            if (err === CANARY_TIMED_OUT) {
+                return { ok: false, hung: true, detail: 'main route timed out' };
+            }
             return { ok: false, detail: 'main error: ' + errorText(err) };
         } finally {
             if (url !== null) {
@@ -507,6 +537,11 @@ export class HashPool {
             return;
         }
         this._terminated = true;
+        if (this._settleCanary) {
+            // A canary still pending fails (R-F4b): the run awaiting it would otherwise wait for the session.
+            this.mainOnly = true;
+            this._settleCanary({ ok: false, detail: 'pool terminated' });
+        }
         for (const run of [...this._runs]) {
             this._stopRun(run);
         }

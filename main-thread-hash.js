@@ -1,6 +1,6 @@
 // main-thread-hash.js
-// Today's perceptual-hash route (G2 PR 2), moved out of the renderer unchanged in behaviour: a file is drawn on a
-// canvas in the page and hashed with the one blockhash (perceptual-hash.js). The pool's fallback and parity
+// The main-thread perceptual-hash route (G2 PR 2), moved out of the renderer unchanged in behaviour: a file is drawn
+// on a canvas in the page and hashed with the one blockhash (perceptual-hash.js). The pool's fallback and parity
 // reference. The route is the measured one (spec § 5.2, F4): a FRESH canvas per file, a default 2D context
 // (never `willReadFrequently`), drawImage then getImageData at 256x256.
 import { blockhash, HASH_BITS, HASH_CANVAS_SIZE } from './perceptual-hash.js';
@@ -96,8 +96,8 @@ export function hashFile(filePath, { isJxl, decodeJxl, releaseVideo }) {
                 }
             });
 
-            // G3: never empties `src` (see _releaseVideo). The old `video.src = ''` here fired `error` again,
-            // forever, after every video this method hashed.
+            // G3: never empties `src`: see MediaViewer._releaseVideo, injected as `releaseVideo`. The old
+            // `video.src = ''` here fired `error` again, forever, after every video this method hashed.
             video.addEventListener(
                 'error',
                 (error) => {
