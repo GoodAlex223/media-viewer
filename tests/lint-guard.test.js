@@ -24,6 +24,11 @@ const RENDERER_FILES = [
     'face-detector.js',
     'recent-folders.js',
     'similarity-sort.js',
+    'perceptual-hash.js',
+    'main-thread-hash.js',
+    'hash-pool.js',
+    'hash-parity.js',
+    'hash-worker.js', // a module worker the page imports too (PR #87 review #15)
     'feature-cache-store.js',
 ];
 

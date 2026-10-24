@@ -49,9 +49,11 @@ function getLaunchArgs() {
 
 /**
  * Launch the Electron app and wait for it to be ready.
+ * `env` adds environment variables for this launch. An inherited MV_HASH_PARITY is always dropped, so a shell
+ * that left it set cannot turn the launch into a parity run; pass it in `env` to ask for one.
  * Returns { electronApp, page }.
  */
-export async function launchApp({ migrationMarker } = {}) {
+export async function launchApp({ migrationMarker, env = {} } = {}) {
     // A fresh grant store per launch (G1): main reads MV_E2E_GRANTS_FILE instead of
     // <userData>/folder-grants.json, so a grant left by an earlier test can never make a
     // refusal test pass for the wrong reason. The same env var exposes global.__mvGrants in the
@@ -65,12 +67,19 @@ export async function launchApp({ migrationMarker } = {}) {
         marker = join(grantsDir, 'storage-migration.json');
         await writeFile(marker, JSON.stringify({ version: 1, migratedAt: 'e2e-skip', keys: 0, written: 0 }));
     }
+    // A shell that left MV_HASH_PARITY set must not turn every E2E launch into a parity run (G2 PR 2, Review Focus
+    // #5): drop it, then let the test ask for it through `env`. In any spelling: Windows names are case-insensitive,
+    // so a `mv_hash_parity` copied here would still read as MV_HASH_PARITY in main (PR #87 review #9).
+    const launchEnv = Object.fromEntries(
+        Object.entries(process.env).filter(([name]) => name.toUpperCase() !== 'MV_HASH_PARITY')
+    );
     const electronApp = await electron.launch({
         executablePath: getElectronWrapperPath(),
         args: getLaunchArgs(),
         cwd: PROJECT_ROOT,
         env: {
-            ...process.env,
+            ...launchEnv,
+            ...env,
             MV_E2E_GRANTS_FILE: join(grantsDir, 'folder-grants.json'),
             MV_E2E_MIGRATION_MARKER: marker,
         },

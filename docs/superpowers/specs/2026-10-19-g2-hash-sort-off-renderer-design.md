@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 19–23 § G2 (🔵 🏆, 8 SP → **~13 SP**, see § 13) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2 (manual testing; user priority "speed these up first")
 **Created**: 2026-10-19
-**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9). **PR 1 implemented: PR #85, merge `f668611` (2026-10-20)**; the execution notes are in § 16. PR 2 is pending.
+**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9). **PR 1 implemented: PR #85, merge `f668611` (2026-10-20)**; the execution notes are in § 16. **PR 2 planned 2026-10-22** on `g2-pr2-background-hashing`; its planning amendments are § 17 (B1–B9).
 **Branch**: `g2-hash-sort-off-renderer` (from `main` @ `bfc4cbf`) for PR 1; PR 2 on a new branch after PR 1 merges (D7, § 13.1)
 
 Items marked **(my call)** were decided by Claude during the brainstorm. They were not put to the user, and are listed together at the end of § 3 for review.
@@ -462,3 +462,98 @@ The plan's Progress Log has the full record. These notes refine or depart from t
   - the feature-cache emptying on a mid-extraction folder switch (review #1) is a separate PR next;
   - the non-atomic `write-folder-cache` (review #5) moves into PR 2;
   - a degraded order saved as the sort cache (review #9) goes to BACKLOG.
+
+## 17. Planning amendments (PR 2, 2026-10-22)
+
+These were measured on `bf5ec84` while writing the PR 2 plan
+([plan](../../planning/plans/2026-10-22_g2-hash-sort-pr2-background-hashing.md)), each in a fresh Electron 39.1.2
+process with the GPU raster path enabled. None of them changes a user ruling.
+
+- **B1. The canary compares pixels, not hashes (§ 9.2).**
+  - *The probe*: seven canvas-encoded candidates went through both routes. The worker route matched today's route
+    byte for byte on all seven, with the window both visible and minimized.
+  - *The mutation*: with the worker's context forced to `willReadFrequently: true` (the CPU path), 94k–239k of
+    262,144 bytes differed on every candidate, yet the hash differed on only two. The two images § 9.2 describes, a
+    320×240 JPEG and a 320×240 alpha PNG, kept **identical hashes**, so a hash-only canary would not have fired.
+  - *The rule*: the canary passes only when every byte of both 256×256 read-backs is equal and the hashes are equal.
+- **B2. Atomic folder-file writes (§ 16, PR #85 review #5).** `write-folder-cache` and `writeBulkRatedFile` write
+  through one helper, `atomic-write.js`:
+  - a unique tmp name per write, created exclusively;
+  - `assertFixedPath` on both the tmp and the target before anything is written;
+  - fsync, then a rename with the lock retry;
+  - writes to one file applied in the order main received them;
+  - orphaned tmps older than 10 minutes removed on the first write to each file.
+
+  `.bulk_rated.json` is included because its ratings exist nowhere else: a bulk rating moves no file. This came from
+  a side agent's note, which the user relayed on 2026-10-22. The ordering rule is needed because unique names alone
+  stop a tear but do not stop an older write's rename landing last.
+- **B3. Today's route moves to `main-thread-hash.js` (§ 5.1, the builder's call).** `computePerceptualHash` stays
+  on `MediaViewer` as a one-line delegate and serves as the pool's fallback. Its image draw becomes `hashImageUrl`,
+  which the canary also runs on a `blob:` URL. The error messages are unchanged.
+- **B4. One pool per run (§ 6.2, § 6.4).** A run creates a pool, and so does a placement with files to hash; each
+  terminates its pool in its `finally`. No worker outlives the run that made it, so § 6.4's "a stale run only lets
+  its workers go" holds by construction.
+- **B5. Parity mode runs two passes, the worker route first (§ 9.1).**
+  - The second pass reads files the first pass already read, so the speed-up it reports is conservative.
+  - Parity mode always asks before it starts, because its second pass freezes the app.
+  - It writes no cache, and it leaves its report on the viewer for the E2E.
+- **B6. D4's classes, as code.** A 1-bit difference is accepted when the bytes sniff as JPEG, or as WebP decoded to
+  a YUV frame (lossy). Every other difference is a defect. A differing share above 0.5% of the compared images also
+  fails the verdict.
+- **B7. PR 1's Improvement #1 (a per-run hash map) is not absorbed.** It stays in BACKLOG, for three reasons:
+  - The pool's results reach `perceptualHashes` through a single store in the run's loop, after the token check, so
+    the pool adds no write path.
+  - The E2 gap the map would close needs a hash computed after a move. The pool cannot produce one, because a moved
+    file's read fails on both routes.
+  - Adopting the map would rework `saveHashCache`'s merge-once rule (PR #85 #20), which guards the 13k-entry cache
+    against shrinking.
+- **B8. Re-measured.** F4 still holds: the spike's 25 fixtures were 25/25 pixel-exact and hash-identical, in the
+  frame formats BGRA, BGRX, I444 and I420. For E15, both routes stayed pixel-identical with the window minimized, on
+  B1's seven candidates.
+- **B9. The unused npm `blockhash` dependency is removed.** It is a different algorithm, and nothing imports it. The
+  one `blockhash` is `perceptual-hash.js`.
+- **B10. The pool size is measured, and stays 3 (§ 14; plan T8, 2026-10-22).**
+  - *The run*: 597 `Liked_3` images, read only, each configuration in a fresh process, on a quiet machine.
+  - *Main thread vs pool 3*: today's route took 95 ms per image, and its main thread was late by up to 325 ms (p99).
+    Pool 3 took 47 ms per image, with a p99 lateness of 15 ms, about one frame.
+  - *Pool 4*: 38 ms per image, at a peak working set 400 MB higher (2,041 MB vs 1,640 MB).
+  - *Why 3*: risk R2. The machine has 15.2 GB, of which 1.2 GB was free during the run.
+
+**Review amendments (PR #87 review round 1, 2026-10-24).** None of them changes a hash or a user ruling.
+
+- **B11. JXL decodes for hashing run one at a time (§ 5.2).** The app has one JXL decode worker, which decodes one
+  request at a time, and `decodeJxl` starts its 15 s frame-0 timer when it posts a request. The pool's three slots
+  and its main lane asked at once, so the second request in the queue timed out behind the first. The reviewer's
+  verifier timed 8.2–11.8 s per 6000×4000 photo. Two fixes:
+  - every hash-initiated decode queues in the renderer (`_decodeJxlForHash`), so its wait is outside its timer, as
+    the one-file-at-a-time loop's was;
+  - a run puts at most one JXL on its workers at a time, so its other slots keep hashing images.
+
+  A stopped run's queued decode skips its turn. Each turn is bounded at the main route's 30 s, so a decode that never
+  settles cannot hold the queue: `decodeJxl` arms its timer only at the post, after the worker's init. D6's fallback
+  is unchanged.
+- **B12. A held-open target is written in place (B2).** Measured on this machine: Windows refuses a rename over a
+  file another process holds open (`EPERM` after about 650 ms of retries), even when the reader shares it for delete.
+  An in-place write of the same file succeeds under the same handle. A rename still refused after its retries with
+  `EPERM`, `EACCES` or `EBUSY` now writes the target in place, as every write did before B2, after `assertFixedPath`
+  checks the target again. The flush is best effort: some volumes refuse it, and the writes before B2 had none.
+
+  An in-place write is not crash-safe, so, by the user's ruling (2026-10-24), the writer keeps its whole, flushed tmp
+  until that write is complete. When `.bulk_rated.json` does not parse, `readBulkRatedFile` reads the newest tmp that
+  does (`readRecoveryCopy`), and the renderer writes the file back at once. A missing file is never recovered, so
+  ratings the user deleted stay deleted. The orphan sweep now runs only after a successful write, so it cannot remove
+  the one whole copy a torn file has.
+- **B13. One run per pool, and the canary is the run's own first step (B4, § 9.2).** Every caller makes a pool per
+  run, so the support for several runs at once (R-T4a's wake of every live run) was unreachable, and is gone: a second
+  `hashFiles` while one is live throws. An `'auto'` run awaits the memoized canary before its first worker post, so no
+  caller can skip it. A run of videos only needs none.
+- **B14. One pool sequence (B4).** A run's hash phase and every placement hash through `HashPool.hashThroughPool`:
+  - the canary;
+  - each result stored only after the caller's liveness check;
+  - worker fallbacks and failures logged with file and reason (20 lines a call, then a count);
+  - the pool terminated in a `finally`.
+
+  A run's placement counts its hashes and saves them through the run's own hooks, so a Cancel during a cache hit's
+  placement keeps them and the perf line reports them. Every gen bump aborts the old gen's signal, which a
+  placement's pool hashes on, so a stale Show stops reading the old folder's files at once.
+  - *Across the measurement*: the canary passed at every size, and every image took the worker route.

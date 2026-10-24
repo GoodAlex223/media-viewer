@@ -70,7 +70,7 @@ Single-mode defaults; the rating, navigation and undo bindings can be remapped i
 | Framework | Electron 39.x |
 | Language | JavaScript (ES6+) |
 | UI | HTML/CSS (no framework) |
-| Image Hashing | blockhash-js |
+| Image Hashing | own block-mean hash (`perceptual-hash.js`) |
 | Face Detection | @vladmandic/face-api |
 | Video Metadata | ffprobe-static |
 

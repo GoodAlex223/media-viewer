@@ -11,6 +11,7 @@ const {
     createFeatureCacheLedger,
     validateWriteHeader,
     classifyReadError,
+    withReadRetries,
     readFeatureCacheFile,
     openWriteStream,
     writeWithBackpressure,
@@ -26,6 +27,7 @@ const { createIpcGuard, tierAssignmentsKind, tierDirMatches } = require('./ipc-g
 const { createAppProtocol, isBlockedEgress, APP_SCHEME, APP_HOST } = require('./app-protocol');
 const { migrateStorage } = require('./storage-migration');
 const { readClipImage } = require('./clip-image');
+const { createAtomicWriter, readRecoveryCopy } = require('./atomic-write');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
 // name, so the renderer never names a file path for these channels.
@@ -251,7 +253,9 @@ async function createWindow() {
         logger,
     });
     if (!win.isDestroyed()) {
-        await win.loadURL(INDEX_URL);
+        // MV_HASH_PARITY=1 (G2 PR 2 T6, spec § 9.1): the flag travels as a query (F15). main's own loadURL fires no
+        // will-navigate, and the IPC guard compares the sender URL without its query, so neither needs a change.
+        await win.loadURL(process.env.MV_HASH_PARITY === '1' ? `${INDEX_URL}?hashParity=1` : INDEX_URL);
     }
 }
 
@@ -293,6 +297,9 @@ app.whenReady().then(async () => {
     });
     const grantLoad = await grants.load();
     console.log(`Folder grants: ${grantLoad.ok ? `${grantLoad.count} loaded` : grantLoad.reason}`);
+    if (process.env.MV_HASH_PARITY === '1') {
+        console.log('Hash parity mode: on (MV_HASH_PARITY=1)');
+    }
     const tempDirs = createTempDirRegistry();
     const guard = createIpcGuard({
         ipcMain,
@@ -323,6 +330,10 @@ app.whenReady().then(async () => {
             throw new Error(`Not permitted: ${path.basename(p)}`);
         }
     }
+
+    // Folder files a quit mid-save must not tear (G2 PR 2, B2): the writer checks its tmp and the target with
+    // assertFixedPath before it touches the disk, so its callers do not check them again.
+    const atomicWriter = createAtomicWriter({ fs, assertPath: assertFixedPath, withRetries: withReadRetries });
 
     // The app scheme (G1 I1): app files from an allowlist; media through the same read rule as the
     // IPC guard's content-read kinds.
@@ -601,8 +612,8 @@ app.whenReady().then(async () => {
     });
 
     guard.handle('readBulkRatedFile', [kinds.grantedPath], async (_event, folderPath) => {
+        const filePath = path.join(folderPath, '.bulk_rated.json');
         try {
-            const filePath = path.join(folderPath, '.bulk_rated.json');
             await assertFixedPath(filePath);
             const text = await fs.readFile(filePath, 'utf-8');
             const json = JSON.parse(text);
@@ -611,6 +622,16 @@ app.whenReady().then(async () => {
             if (err.code === 'ENOENT') {
                 return { success: true, data: null };
             }
+            // A torn file: the writer's in-place write of a held-open file was cut short, and its tmp is the last whole
+            // copy (atomic-write.js, the user's ruling on PR #87 review #2). Only for a file that does not parse: a
+            // missing one stays missing, so ratings the user deleted are not brought back.
+            if (err instanceof SyntaxError) {
+                const data = await readRecoveryCopy(filePath, { fs, assertPath: assertFixedPath, parse: JSON.parse });
+                if (data !== null) {
+                    logger.warn('main', `.bulk_rated.json did not parse (${err.message}); read its last whole copy`);
+                    return { success: true, data, recovered: true };
+                }
+            }
             return { success: false, error: err.message };
         }
     });
@@ -618,9 +639,7 @@ app.whenReady().then(async () => {
     guard.handle('writeBulkRatedFile', [kinds.grantedPath, kinds.any], async (_event, folderPath, data) => {
         try {
             const filePath = path.join(folderPath, '.bulk_rated.json');
-            await assertFixedPath(filePath);
-            const text = JSON.stringify(data, null, 2);
-            await fs.writeFile(filePath, text, 'utf-8');
+            await atomicWriter.writeFileAtomic(filePath, JSON.stringify(data, null, 2));
             return { success: true };
         } catch (err) {
             return { success: false, error: err.message };
@@ -794,8 +813,7 @@ app.whenReady().then(async () => {
         async (_event, folderPath, name, data) => {
             try {
                 const filePath = path.join(folderPath, FOLDER_CACHE_FILES[name]);
-                await assertFixedPath(filePath);
-                await fs.writeFile(filePath, data, 'utf8');
+                await atomicWriter.writeFileAtomic(filePath, data);
                 return { success: true };
             } catch (error) {
                 console.error('Write folder cache error:', error);

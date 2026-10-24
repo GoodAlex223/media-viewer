@@ -1,0 +1,546 @@
+import { test, expect } from '@playwright/test';
+import { existsSync } from 'fs';
+import { copyFile, mkdtemp, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { launchApp, closeApp, loadFolder, seedLocalStorage, createTempFixtureDir } from './helpers/electron-app.js';
+import { generateHashFixtures, ENCODING_NAMES } from './fixtures/hash-fixtures.js';
+
+// G2 PR 2 T7: the background hashing route, proven in the real app. The fixtures are generated with sharp (the
+// committed 1x1 PNGs are malformed, so createImageBitmap rejects them and they would all take the main-thread route).
+
+const SMALL_IMAGES = ['tiny-40x30.png', 'alpha-small.png', 'odd-257x255.jpg', 'still.gif', 'lossy.webp', 'alpha.png'];
+
+let srcDir;
+let allNames;
+
+test.beforeAll(async () => {
+    test.setTimeout(180_000);
+    srcDir = await mkdtemp(join(tmpdir(), 'mv-e2e-hashfix-'));
+    allNames = await generateHashFixtures(srcDir);
+});
+
+test.afterAll(async () => {
+    if (srcDir) {
+        await rm(srcDir, { recursive: true, force: true }).catch(() => {});
+    }
+});
+
+async function copyInto(dir, names) {
+    for (const name of names) {
+        await copyFile(join(srcDir, name), join(dir, name));
+    }
+}
+
+async function waitForIdle(page) {
+    await page.waitForFunction(() => !window.mediaViewer.isLoading && !window.mediaViewer.mediaNavigationInProgress);
+}
+
+test.describe('hash routes on generated fixtures', () => {
+    let electronApp;
+    let page;
+    let tmpFixtures;
+
+    test.beforeAll(async () => {
+        test.setTimeout(120_000);
+        tmpFixtures = await createTempFixtureDir([]);
+        await copyInto(tmpFixtures.dir, allNames);
+        ({ electronApp, page } = await launchApp());
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForIdle(page);
+    });
+
+    test.afterAll(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+        }
+    });
+
+    test('every fixture hashes the same on both routes', async () => {
+        test.setTimeout(300_000);
+        const names = allNames.filter((n) => !ENCODING_NAMES.includes(n));
+        const paths = await page.evaluate(() => window.mediaViewer.mediaFiles.map((f) => [f.name, f.path]));
+        const byName = new Map(paths);
+        expect(byName.size).toBe(allNames.length);
+
+        const rows = await page.evaluate(
+            async (list) => {
+                const viewer = window.mediaViewer;
+                const out = [];
+                const main = new Map();
+                for (const [, path] of list) {
+                    main.set(path, await viewer.computePerceptualHash(path));
+                }
+                const pool = viewer._createHashPool();
+                try {
+                    const canary = await pool.checkCanary();
+                    const worker = new Map();
+                    for await (const r of pool.hashFiles(
+                        list.map(([, p]) => p),
+                        { route: 'worker' }
+                    )) {
+                        worker.set(r.path, r);
+                    }
+                    for (const [name, path] of list) {
+                        const w = worker.get(path);
+                        out.push({
+                            name,
+                            main: main.get(path),
+                            worker: w ? w.hash : undefined,
+                            route: w ? w.route : undefined,
+                            format: w?.info?.format ?? null,
+                            type: w?.info?.type ?? null,
+                            error: w ? w.error : 'no result',
+                            canary: canary.ok,
+                        });
+                    }
+                } finally {
+                    pool.terminate();
+                }
+                return out;
+            },
+            names.map((n) => [n, byName.get(n)])
+        );
+
+        expect(rows).toHaveLength(names.length);
+        // R-F5/R-F6: each file's worker frame, and for a mismatch both hashes and their bit difference.
+        for (const r of rows) {
+            const bits = r.main && r.worker ? [...r.main].filter((c, i) => c !== r.worker[i]).length : 'n/a';
+            test.info().annotations.push({
+                type: 'route',
+                description:
+                    `${r.name}: route=${r.route} type=${r.type} format=${r.format}` +
+                    (r.main === r.worker ? '' : ` main=${r.main} worker=${r.worker} bits=${bits}`),
+            });
+        }
+        const mismatched = rows.filter((r) => !r.main || r.main !== r.worker).map((r) => r.name);
+        const wrongRoute = rows.filter((r) => r.route !== 'worker').map((r) => `${r.name}:${r.route}:${r.error}`);
+        expect({ mismatched, wrongRoute }).toEqual({ mismatched: [], wrongRoute: [] });
+
+        // Pixel identity (spec § 11.3) is recorded, not asserted: a difference is a fact about the machine.
+        const imageNames = names.filter((n) => !n.endsWith('.jxl'));
+        const pixelRows = await page.evaluate(
+            async (list) => {
+                const { hashImageUrl } = await import('./main-thread-hash.js');
+                const { toMediaUrl } = await import('./media-url.js');
+                const out = [];
+                for (const [name, path] of list) {
+                    const url = toMediaUrl(path);
+                    const mainSide = await hashImageUrl(url, { wantPixels: true });
+                    const worker = new Worker('hash-worker.js', { type: 'module' });
+                    try {
+                        const reply = await new Promise((resolve, reject) => {
+                            worker.onmessage = (e) => resolve(e.data);
+                            worker.onerror = (e) => reject(new Error(e.message || 'worker error'));
+                            worker.postMessage({ type: 'hash', id: 1, url, wantPixels: true });
+                        });
+                        const a = new Uint8Array(mainSide.pixels.buffer ?? mainSide.pixels);
+                        const b = new Uint8Array(reply.pixels);
+                        let differing = a.length === b.length ? 0 : -1;
+                        if (differing === 0) {
+                            for (let i = 0; i < a.length; i++) {
+                                if (a[i] !== b[i]) {
+                                    differing++;
+                                }
+                            }
+                        }
+                        out.push({
+                            name,
+                            identical: differing === 0,
+                            differing,
+                            ok: reply.ok,
+                            lengths: [a.length, b.length],
+                        });
+                    } catch (error) {
+                        out.push({ name, identical: false, differing: -2, ok: false, error: String(error) });
+                    } finally {
+                        worker.terminate();
+                    }
+                }
+                return out;
+            },
+            imageNames.map((n) => [n, byName.get(n)])
+        );
+        for (const r of pixelRows) {
+            test.info().annotations.push({
+                type: 'pixels',
+                description: `${r.name}: ${r.identical ? 'identical' : `differs (${r.differing} bytes)`}`,
+            });
+        }
+        test.info().annotations.push({
+            type: 'pixels-summary',
+            description: `${pixelRows.filter((r) => r.identical).length} of ${pixelRows.length} identical`,
+        });
+        // Harness sanity, not identity: a missing reply or an empty read-back must not read as "identical".
+        expect(pixelRows).toHaveLength(imageNames.length);
+        expect(
+            pixelRows.filter((r) => !r.ok || r.lengths?.[0] !== 262144 || r.lengths?.[1] !== 262144).map((r) => r.name)
+        ).toEqual([]);
+    });
+
+    test('the canary passes on this machine', async () => {
+        const result = await page.evaluate(async () => {
+            const pool = window.mediaViewer._createHashPool();
+            try {
+                return await pool.checkCanary();
+            } finally {
+                pool.terminate();
+            }
+        });
+        expect(result.ok, result.detail).toBe(true);
+    });
+
+    test('file names that need encoding are hashed by the worker', async () => {
+        const rows = await page.evaluate(async (names) => {
+            const viewer = window.mediaViewer;
+            const files = viewer.mediaFiles.filter((f) => names.includes(f.name));
+            window.__encodingRoutes = [];
+            const create = viewer._createHashPool.bind(viewer);
+            viewer._createHashPool = () => {
+                const pool = create();
+                const real = pool.hashFiles.bind(pool);
+                pool.hashFiles = async function* (paths, opts) {
+                    for await (const r of real(paths, opts)) {
+                        window.__encodingRoutes.push({ path: r.path, route: r.route });
+                        yield r;
+                    }
+                };
+                return pool;
+            };
+            try {
+                const pool = viewer._createHashPool();
+                const got = new Map();
+                try {
+                    await pool.checkCanary();
+                    for await (const r of pool.hashFiles(files.map((f) => f.path))) {
+                        got.set(r.path, r.hash);
+                    }
+                } finally {
+                    pool.terminate();
+                }
+                const out = [];
+                for (const f of files) {
+                    out.push({
+                        name: f.name,
+                        main: await viewer.computePerceptualHash(f.path),
+                        worker: got.get(f.path),
+                        route: window.__encodingRoutes.find((r) => r.path === f.path)?.route,
+                    });
+                }
+                return out;
+            } finally {
+                viewer._createHashPool = create;
+            }
+        }, ENCODING_NAMES);
+
+        expect(rows.map((r) => r.name).sort()).toEqual([...ENCODING_NAMES].sort());
+        for (const r of rows) {
+            expect(r.route, r.name).toBe('worker');
+            expect(typeof r.main, r.name).toBe('string');
+            expect(r.worker, r.name).toBe(r.main);
+        }
+    });
+});
+
+// R-F7: a pool terminated while its workers read files must leave no read stream open, or Windows keeps the file
+// open and a later move (a rating) of that file can fail with EBUSY. A response nobody reads holds its stream open
+// only past what Chromium buffers (measured: an unread 3 MB pano closed by itself, an unread 256 MB file did not), so
+// the read in flight at terminate() is a 256 MB filler: only a cancelled read closes it.
+test.describe('a terminated pool', () => {
+    const LARGE = ['large-6000x4000.jpg', 'pano-8000x2000.jpg', 'large-4000x3000.png', 'pano-16500x1500.jpg'];
+    const FILLER = 'zz-filler-256mb.jpg';
+    let electronApp;
+    let page;
+    let tmpFixtures;
+
+    test.afterEach(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+            electronApp = null;
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+            tmpFixtures = null;
+        }
+    });
+
+    test('closes the reads its workers had open, and their files can move', async () => {
+        test.setTimeout(120_000);
+        tmpFixtures = await createTempFixtureDir([]);
+        await copyInto(tmpFixtures.dir, LARGE);
+        await writeFile(join(tmpFixtures.dir, FILLER), Buffer.alloc(256 * 1024 * 1024, 7));
+        ({ electronApp, page } = await launchApp());
+        await seedLocalStorage(page, { customLikeFolder: tmpFixtures.likeDir });
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForIdle(page);
+        const openStreams = () => electronApp.evaluate(() => global.__mvAppProtocol.openStreams());
+        await expect.poll(openStreams, { timeout: 10_000 }).toBe(0); // the first image's display read is done
+
+        const names = [FILLER, ...LARGE];
+        const paths = await page.evaluate(
+            (list) => list.map((n) => window.mediaViewer.mediaFiles.find((f) => f.name === n)?.path),
+            names
+        );
+        expect(paths.every(Boolean), 'every file is listed').toBe(true);
+        // How long the filler takes to read in full, unhindered: the sampler below terminates well inside it.
+        const fullReadMs = await page.evaluate(async (path) => {
+            const { toMediaUrl } = await import('./media-url.js');
+            const start = performance.now();
+            await (await fetch(toMediaUrl(path))).arrayBuffer();
+            return performance.now() - start;
+        }, paths[0]);
+        await expect.poll(openStreams, { timeout: 10_000 }).toBe(0);
+
+        // Main samples its open-stream count every 1 ms. A quarter of a full read after it first sees one open, it
+        // has the page terminate the pool, then counts again: a read still open right after terminate() is the
+        // case this test is for.
+        const sampled = electronApp.evaluate(
+            ({ BrowserWindow }, delayMs) => {
+                const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('index.html'));
+                const count = () => global.__mvAppProtocol.openStreams();
+                const state = { peak: 0, before: null, after: null };
+                return new Promise((resolve) => {
+                    const started = Date.now();
+                    let firstOpenAt = null;
+                    const timer = setInterval(async () => {
+                        const n = count();
+                        state.peak = Math.max(state.peak, n);
+                        if (n > 0 && firstOpenAt === null) {
+                            firstOpenAt = Date.now();
+                        }
+                        if (n > 0 && state.before === null && Date.now() - firstOpenAt >= delayMs) {
+                            state.before = n;
+                            clearInterval(timer);
+                            await win.webContents.executeJavaScript('window.__terminateHashPool()');
+                            state.after = count();
+                            resolve(state);
+                        } else if (Date.now() - started > 60_000) {
+                            clearInterval(timer);
+                            resolve(state);
+                        }
+                    }, 1);
+                });
+            },
+            Math.max(20, Math.round(fullReadMs / 4))
+        );
+        await page.evaluate(
+            (list) => {
+                const pool = window.mediaViewer._createHashPool();
+                window.__terminateHashPool = () => {
+                    pool.terminate();
+                    return true;
+                };
+                window.__hashRun = (async () => {
+                    let yielded = 0;
+                    for await (const _r of pool.hashFiles(list, { route: 'worker' })) {
+                        yielded++;
+                    }
+                    return yielded;
+                })();
+            },
+            [...paths, ...paths.slice(1)]
+        );
+
+        const state = await sampled;
+        test.info().annotations.push({
+            type: 'streams',
+            description:
+                `full filler read ${Math.round(fullReadMs)} ms; open reads: before terminate=${state.before}, ` +
+                `right after=${state.after}, peak=${state.peak}`,
+        });
+        expect(state.before, 'main saw a read open while the pool ran').toBeGreaterThan(0);
+        expect(state.after, 'a read was still open right after terminate()').toBeGreaterThan(0);
+        const yielded = await page.evaluate(() => window.__hashRun);
+        expect(yielded).toBeLessThan(paths.length * 2 - 1); // the run ended early, without a throw
+
+        const closeStart = Date.now();
+        await expect.poll(openStreams, { timeout: 15_000 }).toBe(0);
+        test.info().annotations.push({
+            type: 'streams-closed',
+            description: `all reads closed ${Date.now() - closeStart} ms after terminate() returned`,
+        });
+
+        for (const [i, filePath] of paths.entries()) {
+            const result = await page.evaluate(
+                ({ sourcePath, targetFolder, fileName }) =>
+                    window.electronAPI.moveFile({ sourcePath, targetFolder, fileName }),
+                { sourcePath: filePath, targetFolder: tmpFixtures.likeDir, fileName: names[i] }
+            );
+            expect(result, names[i]).toMatchObject({ success: true });
+            expect(existsSync(join(tmpFixtures.likeDir, names[i])), names[i]).toBe(true);
+        }
+    });
+});
+
+test.describe('a sort through the workers', () => {
+    let electronApp;
+    let page;
+    let tmpFixtures;
+
+    test.beforeAll(async () => {
+        tmpFixtures = await createTempFixtureDir([]);
+        await copyInto(tmpFixtures.dir, SMALL_IMAGES);
+        ({ electronApp, page } = await launchApp());
+        await seedLocalStorage(page, {
+            customLikeFolder: tmpFixtures.likeDir,
+            customDislikeFolder: tmpFixtures.dislikeDir,
+        });
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForIdle(page);
+    });
+
+    test.afterAll(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+        }
+    });
+
+    test('a sort hashes images in the workers and keeps the app usable', async () => {
+        // The gateHashing wrapper of similarity-sort.test.js, plus a record of each result's route and a count of
+        // the main-thread route for images.
+        await page.evaluate(() => {
+            const viewer = window.mediaViewer;
+            let open;
+            window.__hashGate = new Promise((resolve) => {
+                open = resolve;
+            });
+            window.__openHashGate = () => open();
+            window.__hashCalls = 0;
+            window.__hashRoutes = [];
+            window.__mainImageCalls = 0;
+            const mainRoute = viewer.computePerceptualHash.bind(viewer);
+            viewer.computePerceptualHash = (filePath) => {
+                if (!/\.(mp4|webm|mov)$/i.test(filePath)) {
+                    window.__mainImageCalls++;
+                }
+                return mainRoute(filePath);
+            };
+            const create = viewer._createHashPool.bind(viewer);
+            viewer._createHashPool = () => {
+                const pool = create();
+                const real = pool.hashFiles.bind(pool);
+                pool.hashFiles = async function* (paths, opts) {
+                    for await (const r of real(paths, opts)) {
+                        window.__hashCalls++;
+                        window.__hashRoutes.push({ path: r.path, route: r.route });
+                        if (window.__hashCalls >= 2) {
+                            await window.__hashGate;
+                        }
+                        yield r;
+                    }
+                };
+                return pool;
+            };
+            window.__sortDone = viewer.handleSortBySimilarity();
+        });
+        await page.waitForFunction(() => window.__hashCalls >= 2);
+        await waitForIdle(page);
+
+        // The app is usable while the run is held mid-hash: navigate, then like the file on screen.
+        const before = await page.evaluate(() => window.mediaViewer.currentIndex);
+        await page.evaluate(() => window.mediaViewer.nextMedia());
+        await waitForIdle(page);
+        expect(await page.evaluate(() => window.mediaViewer.currentIndex)).not.toBe(before);
+        const likedPath = await page.evaluate(
+            () => window.mediaViewer.mediaFiles[window.mediaViewer.currentIndex].path
+        );
+        await page.evaluate(() => window.mediaViewer.moveCurrentFile('like'));
+        await waitForIdle(page);
+        expect(await page.evaluate((p) => window.mediaViewer.mediaFiles.some((f) => f.path === p), likedPath)).toBe(
+            false
+        );
+
+        await page.evaluate(async () => {
+            window.__openHashGate();
+            await window.__sortDone;
+        });
+        await waitForIdle(page);
+
+        const offer = page.locator('.notification.sticky').filter({ hasText: 'Similarity order ready' });
+        await expect(offer).toBeVisible();
+        await offer.locator('.notification-action').click({ force: true });
+        await expect(offer).toHaveCount(0);
+        await expect.poll(() => page.evaluate(() => window.mediaViewer.isSortedBySimilarity)).toBe(true);
+
+        const paths = await page.evaluate(() => window.mediaViewer.mediaFiles.map((f) => f.path));
+        expect(paths).not.toContain(likedPath);
+
+        const routes = await page.evaluate(() => window.__hashRoutes);
+        expect(routes).toHaveLength(SMALL_IMAGES.length);
+        expect(routes.map((r) => r.route)).toEqual(routes.map(() => 'worker'));
+        expect(await page.evaluate(() => window.__mainImageCalls)).toBe(0);
+    });
+});
+
+test.describe('parity mode', () => {
+    let electronApp;
+    let page;
+    let tmpFixtures;
+
+    test.afterEach(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+            electronApp = null;
+        }
+        if (tmpFixtures) {
+            await tmpFixtures.cleanup();
+            tmpFixtures = null;
+        }
+    });
+
+    test('parity mode via MV_HASH_PARITY', async () => {
+        test.setTimeout(120_000);
+        tmpFixtures = await createTempFixtureDir(['playable-64x64.mp4']);
+        await copyInto(tmpFixtures.dir, SMALL_IMAGES);
+        ({ electronApp, page } = await launchApp({ env: { MV_HASH_PARITY: '1' } }));
+        expect(await page.evaluate(() => window.mediaViewer.hashParityMode)).toBe(true);
+        await loadFolder(page, tmpFixtures.dir);
+        await waitForIdle(page);
+
+        const orderBefore = await page.evaluate(() => window.mediaViewer.mediaFiles.map((f) => f.path));
+        await page.evaluate(async () => {
+            window.confirm = () => true;
+            await window.mediaViewer.handleSortBySimilarity();
+        });
+        await waitForIdle(page);
+
+        const report = await page.evaluate(() => window.mediaViewer.lastHashParityReport);
+        expect(report, 'a report was left on the viewer').toBeTruthy();
+        expect({
+            verdict: report.verdict,
+            compared: report.compared,
+            identical: report.identical,
+            videos: report.videos,
+        }).toEqual({ verdict: 'pass', compared: 6, identical: 6, videos: 1 });
+
+        expect(existsSync(join(tmpFixtures.dir, '.hash_cache.json'))).toBe(false);
+        expect(existsSync(join(tmpFixtures.dir, '.sort_cache.json'))).toBe(false);
+        expect(await page.evaluate(() => window.mediaViewer.mediaFiles.map((f) => f.path))).toEqual(orderBefore);
+        await expect(page.locator('.notification.sticky')).toHaveCount(0);
+    });
+
+    // Review Focus #5: a shell that left MV_HASH_PARITY set must not turn an ordinary launch into a parity run. In any
+    // spelling: Windows environment names are case-insensitive (PR #87 review #9).
+    for (const name of ['MV_HASH_PARITY', 'mv_hash_parity']) {
+        test(`a normal launch is not in parity mode even when the shell sets ${name}`, async () => {
+            const previous = process.env[name];
+            process.env[name] = '1';
+            try {
+                ({ electronApp, page } = await launchApp());
+                expect(await page.evaluate(() => window.mediaViewer.hashParityMode)).toBe(false);
+            } finally {
+                if (previous === undefined) {
+                    delete process.env[name];
+                } else {
+                    process.env[name] = previous;
+                }
+            }
+        });
+    }
+});
