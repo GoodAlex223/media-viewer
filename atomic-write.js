@@ -1,13 +1,18 @@
 // Main's folder-file writer (G2 PR 2, B2): .hash_cache.json, .sort_cache.json and .bulk_rated.json. A truncating
 // writeFile left a torn file when the app quit mid-save, and .bulk_rated.json holds ratings that exist nowhere else.
-// Each write goes to a tmp with a fresh name, is fsynced, then renamed over the target; writes to one target run one
-// at a time, in call order. An orphaned tmp (a quit mid-write) is swept by a later session's first write to that
+// Each write goes to a tmp with a fresh name, is fsynced, then renamed over the target (written in place instead when
+// another program holds the target open); writes to one target run one at a time, in call order. An orphaned tmp (a quit mid-write) is swept by a later session's first write to that
 // target, once it is TMP_SWEEP_MIN_AGE_MS old.
 const crypto = require('crypto');
 const path = require('path');
 
 // Old enough that no live write still owns it: a write holds its tmp for seconds, not minutes.
 const TMP_SWEEP_MIN_AGE_MS = 600_000;
+
+// A rename that still fails with one of these after its retries meets a target another program holds open: Windows
+// refuses to replace an open file, even one shared for delete (PR #87 review #2, measured). The write then goes in
+// place, as every write did before this writer: not atomic, but saved.
+const HELD_OPEN_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 
 function tmpPathFor(targetPath, id) {
     return path.join(path.dirname(targetPath), `${path.basename(targetPath)}.${id}.tmp`);
@@ -71,11 +76,24 @@ function createAtomicWriter({
         try {
             try {
                 await fh.writeFile(data, 'utf8');
-                await fh.sync();
+                // Best effort: some volumes refuse a flush (libuv reports ERROR_INVALID_FUNCTION as EISDIR), and the
+                // writes before this writer had none. The data is written either way; the flush adds power-loss safety.
+                await fh.sync().catch(() => {});
             } finally {
                 await fh.close();
             }
-            await withRetries(() => fs.rename(tmp, targetPath));
+            try {
+                await withRetries(() => fs.rename(tmp, targetPath));
+            } catch (err) {
+                if (!HELD_OPEN_CODES.has(err && err.code)) {
+                    throw err;
+                }
+                // Checked again: the target is opened, not replaced, so a link planted since the first check would be
+                // followed out of the folder.
+                await assertPath(targetPath);
+                await fs.writeFile(targetPath, data, 'utf8');
+                await fs.unlink(tmp).catch(() => {});
+            }
         } catch (err) {
             await fs.unlink(tmp).catch(() => {});
             throw err;

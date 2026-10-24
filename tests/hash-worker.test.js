@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { sniffImageType, isYuvFormat, hasIccProfile } from '../hash-worker.js';
+import { sniffImageType, isYuvFormat, hasIccProfile, hashBytes } from '../hash-worker.js';
 
 const require = createRequire(import.meta.url);
 const sharp = require('sharp');
@@ -69,5 +69,61 @@ describe('hash-worker.js', () => {
         expect(source).not.toContain('willReadFrequently');
         expect(source).not.toContain('resizeWidth');
         expect(source).not.toContain('desiredWidth');
+    });
+});
+
+// hashBytes's resource order, with the browser's decode and canvas classes recorded (Node has none of them).
+describe('hashBytes frees what it no longer needs', () => {
+    const saved = {};
+    afterEach(() => {
+        for (const [k, v] of Object.entries(saved)) {
+            globalThis[k] = v;
+        }
+    });
+
+    function recordBrowser(format) {
+        const events = [];
+        for (const k of ['OffscreenCanvas', 'ImageDecoder', 'createImageBitmap']) {
+            saved[k] = globalThis[k];
+        }
+        globalThis.OffscreenCanvas = class {
+            getContext() {
+                return {
+                    drawImage: (src) => events.push(`draw ${src.kind}`),
+                    getImageData: (_x, _y, w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+                };
+            }
+        };
+        globalThis.ImageDecoder = class {
+            async decode() {
+                return { image: { kind: 'frame', format, close: () => events.push('frame closed') } };
+            }
+            close() {
+                events.push('decoder closed');
+            }
+        };
+        globalThis.createImageBitmap = async () => {
+            events.push('createImageBitmap');
+            return { kind: 'bitmap', close: () => events.push('bitmap closed') };
+        };
+        return events;
+    }
+
+    // PR #87 review #4: a CMYK JPEG or an alpha, lossless or animated WebP decodes to no YUV frame. Its full-size frame
+    // (~96 MB at 6000x4000) and the decoder's copy of the bytes stayed open through createImageBitmap's own copy.
+    it('closes a non-YUV frame and its decoder before createImageBitmap', async () => {
+        const events = recordBrowser('BGRA');
+        const jpeg = await bytesOf(base().jpeg());
+        const r = await hashBytes(jpeg.buffer);
+        expect(events).toEqual(['frame closed', 'decoder closed', 'createImageBitmap', 'draw bitmap', 'bitmap closed']);
+        expect(r.info).toEqual({ type: 'jpeg', format: 'BGRA', icc: false });
+    });
+
+    it('draws a YUV frame itself, and closes it and the decoder after', async () => {
+        const events = recordBrowser('I420');
+        const jpeg = await bytesOf(base().jpeg());
+        const r = await hashBytes(jpeg.buffer);
+        expect(events).toEqual(['draw frame', 'frame closed', 'decoder closed']);
+        expect(r.info.format).toBe('I420');
     });
 });

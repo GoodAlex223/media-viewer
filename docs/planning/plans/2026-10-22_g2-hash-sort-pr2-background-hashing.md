@@ -640,6 +640,8 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
 
 ## The user's smoke (`Liked_2`, ~15,649 files, cold) — on the branch, before merge
 
+**On the branch head after the review fixes** (review round 1, 2026-10-24): it changes the pool and the run's hashing code, so a smoke on an earlier head would not test what merges. It has not run yet: no `Hash parity:` line is in the perf log as of 2026-10-24.
+
 **When**: **Friday 2026-10-23** (the user's choice at plan approval). WEEKLY had planned Thursday 2026-10-22, the day this plan was written, when PR 2 was not built yet. If the branch is not ready on Friday, tell the user before Friday ends and agree a new date; the WEEKLY G2 entry then gets a `**Spillover**` line.
 
 1. **Parity.** `$env:MV_HASH_PARITY='1'; npm start` → open `Liked_2` → Sort by Similarity (VP-Tree) → confirm → wait. Then read the `Hash parity:` lines in `%APPDATA%\media_viewer\logs\media-viewer-perf.log`.
@@ -657,6 +659,7 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
 
    Keep Task Manager open on the memory column (R2).
    - A short hitch about every 1,000 hashes is the periodic hash-cache save (about 5 MB of JSON late in the run). Note whether you feel it.
+   - Afterwards, the session log (`%APPDATA%\media_viewer\logs\media-viewer-<date>.log`) names each file that fell back to the main-thread route (`Hash worker: … -> hashed on the main route`) or failed (`Hash failed:`), at most 20 per run plus a count. A long list is a finding.
    - **Pass**: no stall you notice; "Similarity order ready — Show" appears at the end; Show applies the order; the rated files are absent; the undone file is present.
 4. **Timing.** Compare the `Similarity sort:` line of step 3 (`hash=… (new …, worker …, fallback …, pool …)`) against step 1's `worker=`/`main=` times. `fallback` includes `Liked_2`'s 60 videos, which always use the main-thread route. A fallback count far above 60 means images fell back too.
 
@@ -665,7 +668,7 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
 ## Improvements (minimum 2 required before Extract)
 
 1. **Re-check the canary during a long run.** It runs at the start of each run only. A GPU-process restart mid-run (a driver reset) could move the workers' canvases to another raster path for the rest of the run, unseen. A re-check at each periodic save (about every 1,000 hashes, ~100 ms) would bound the exposure to one save interval. 🟤 candidate.
-2. **Move the other two tmp + rename writers onto `atomic-write.js`.** `writeTournamentState` and `write-ml-model-cache` still use one fixed `.tmp`, which is safe today only because their callers serialize. Adopting the writer is XS now that it exists, and it closes BACKLOG "Three atomic-write IPC handlers share one fixed `.tmp` path" (the feature-cache writer stays on its streaming path). 🟤 candidate.
+2. **Move the other two tmp + rename writers onto `atomic-write.js`.** `writeTournamentState` and `write-ml-model-cache` still use one fixed `.tmp`, which is safe today only because their callers serialize. `writeTournamentState` writes the source folder and can share main's writer. `write-ml-model-cache` writes `userData`, which `assertFixedPath` refuses (it is no granted folder), so it needs a second writer instance with its own link check (PR #87 review, held back). Together they close BACKLOG "Three atomic-write IPC handlers share one fixed `.tmp` path" (the feature-cache writer stays on its streaming path). Effort: S. 🟤 candidate.
 3. **The off-thread decoder for the AI sort** (spec § 12; `loadMediaAsImageData` on the main thread). Needs its own parity proof on feature vectors. 🟤 candidate.
 
 ## Residuals for Extract (found while designing and planning — not fixed here)
@@ -681,17 +684,22 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - Fix: regenerate them in `tests/e2e/fixtures/generate.js` with correct CRCs and deflate (`zlib.deflateSync`), then re-run the E2E suite.
 - **From the final reviews → BACKLOG 🟤, one entry per line** (whole-branch review M-numbers, regression check R-numbers):
   - M7: only the first worker is canary-checked. Slots 2–3, and replacement workers after a crash, never are. Fold into Improvement #1: run the canary JPEG on each new worker.
-  - M9 / R1: the cache-hit placement's pool gets no abort signal, so a Cancel or folder switch waits for its next result. That is ≤ ~90 s on a hanging file, with `isComputingHashes` held. Pass `_applySimilarityOrder`'s signal down.
+  - ~~M9 / R1: the cache-hit placement's pool gets no abort signal.~~ **Fixed in review round 1** (PR #87 review #10, #11; spec B14): not for BACKLOG.
   - M11: the worker reads a whole file before it checks the type. A misnamed huge video is read in full, twice with the retry.
   - M12: nothing stops repeated worker crashes. After K crashes in a row, set `mainOnly` and log once.
   - M14: the periodic `saveHashCache` costs ~50–150 ms of main-thread time late in a 15.6k run (5 MB of JSON plus 15.6k bridge calls). Watch for it in the smoke, then decide.
   - M10: the perf note's `fallback` count includes videos. Split it out.
   - R3: the 1,000-file confirm says "keep using the app", but acting turns the auto-apply into Show, and some actions refuse. It is the spec's approved copy (my call 8), so reword only if the user wants it.
   - M6's companion: the bulk-rated warning now exists (F8). The ordering Residual above still stands.
-  - The fix wave's re-review: three comments (`hash-pool.js:387`, `:541`; `tests/hash-pool.test.js:708`) give a false reason for `terminate()` settling a canary. It is defence in depth; R-F4a's timeout is what bounds the wait.
+  - The fix wave's re-review: three comments (`hash-pool.js` at `checkCanary()` and `terminate()`; the test "terminate() settles a pending canary as failed") give a false reason for `terminate()` settling a canary. It is defence in depth; R-F4a's timeout is what bounds the wait.
   - The fix wave's re-review: `tests/e2e/hash-parity.test.js:355` (`state.after > 0`) races the cancellation's own close. It can fail loudly, never falsely.
   - The fix wave's re-review: `terminate()` leaves an armed canary timer and its slot live for ≤ `canaryTimeoutMs` on a dead pool. A Cancel during the canary waits ≤ ~25 s.
   - The deferred task-loop minors the whole-branch review triaged as BACKLOG: T1–T7 (the SDD ledger's list, copied at closeout).
+- **The pool on a network share** (PR #87 review #3; recorded, not fixed) → BACKLOG 🟤. Plausible, not measured: T8 sized the pool on a local folder.
+  - If a share drops mid-sort, each of the 3 worker reads and the main lane holds one of main's 4 libuv threads in `fs.realpath` for the ~21 s SMB timeout, so every other filesystem call in main (moves, cache reads and writes) waits until they return. The one-at-a-time loop held one.
+  - On a ~1–2 MB/s link, three concurrent reads can push a 15–25 MB photo past the 30 s task timeout; it is read again, then skipped.
+  - No data is harmed: a skipped file is placed at the end, uncached, and hashed again by the next sort.
+  - First step: measure on a real share (a dropped one and a slow one). Candidate remedies, after measuring: one worker for a network folder, or a fetch timeout separate from the decode's.
 - **B7's ruling** → append to BACKLOG [2026-10-21] "A per-run hash map".
 - **BACKLOG [2026-10-11] "Make `write-folder-cache` atomic"** → check it off at closeout, if T1 ships.
 - **BACKLOG "Three atomic-write IPC handlers share one fixed `.tmp` path"** → append: `write-folder-cache` and `writeBulkRatedFile` now use unique names (B2), and Improvement #2 covers the remaining two.
@@ -812,6 +820,32 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
     - Cost if wrong: a cold `Liked_2` run takes about 2 minutes longer, and it is one constant to change.
   - Smoke estimate from these figures: worker pass ≈ 12 min, frozen main-thread pass ≈ 25 min.
 - **2026-10-22** — Line references in the brief: BACKLOG.md:617 → the entry is at :644 ("Make `write-folder-cache` atomic"); BACKLOG.md:801 → :828 ("Three atomic-write IPC handlers share one fixed `.tmp` path"). Cited by title from here on (memory `feedback_cite_backlog_by_title`).
+- **2026-10-22** — Pushed; **PR #87** opened. Another session's research commit (`96d9b22`), made in this checkout, had reached it; with the user's approval it moved to its own branch, `research/local-ai-sorting`, and the PR branch went back to `b7e07f9` (a PR comment says so).
+- **2026-10-24** — **Review round 1** (`/code-review max`, a separate chat; 15 findings, 8 held back, plus one remark found only in the reviewer's session text: a cache hit's placement hashes were not saved on a Cancel). One commit; spec § 17 B11–B14.
+  - **#1 JXLs**: hash-initiated JXL decodes queue in the renderer (`_decodeJxlForHash`), and a run puts one JXL on its workers at a time (B11). Each turn is bounded at the main route's 30 s, found on my own re-read: `decodeJxl` arms its timer only at the post, after the worker's init, which has no timeout, and a decode that never settled would have held the queue for the session. Not measured on a real large JXL (none in the folders; the E2E JXLs are 64×64); pinned by unit tests instead.
+  - **#2 a held-open target**: reproduced first-hand. With another process holding `.bulk_rated.json` open, the rename failed with `EPERM` after 648–664 ms, whether or not the reader shared it for delete; an in-place write succeeded both times. After the fix the same probe saved in 681 ms and left no tmp (B12). The flush is best effort (held back #8).
+  - **#3 network shares**: recorded, not fixed (Residuals): plausible, unmeasured, and no data at risk.
+  - **#4–#15**: fixed as the reviewer proposed. Each fix has a test that fails with the fix removed:
+    - #4: the non-YUV frame and its decoder close before `createImageBitmap`.
+    - #5: `media-url.test.js` now derives the set of files the page loads, and fails on the reviewer's mutant.
+    - #6: `icc-p3-rot6.jpg` now carries the same P3 profile as `icc-p3.jpg`. With it, the `willReadFrequently` acceptance mutation fails 8 of 28 fixtures instead of 7: `icc-p3-rot6.jpg` is the new one.
+    - #7: each worker fallback and failure is logged, with its file and reason.
+    - #8: the bulk-ratings warning belongs to the visit its save started in.
+    - #9: every spelling of `MV_HASH_PARITY` is dropped. The old code put a lowercase launch into parity mode (measured).
+    - #10: every gen bump aborts the old gen's placement pools.
+    - #11: one pool sequence, `HashPool.hashThroughPool`, used through the run's hooks (B14).
+    - #12: one run per pool, and the canary as the `'auto'` run's first step. This replaces R-T4a (B13); the six multi-run tests became the one-run tests.
+    - #13: the canary uses `HASH_CANVAS_SIZE` and the shared `countDifferences`. At a canvas size of 128, the fix passes and the old literal fails 2 tests.
+    - #14: `hashFile` imports `isVideoPath`.
+    - #15: the HTML-sink guard covers the module workers.
+  - **Held back**:
+    - fixed: the parity check shares the run's button state; Improvement #2's text; the `CLAUDE.md` CJS rule; the BACKLOG pointer; the duplicated draw recipe; the flush.
+    - pushed back: the sweep's three `readdir`s run once per file per launch, in main's async I/O; buffered results dropped on a Cancel are intended.
+  - **Mutations**: every named mutation failed its test.
+    - 36 ran through the runner in the session scratchpad (`mutate.cjs`): it applies one, runs the suite, restores the file, and prints a sentinel. This count includes the pool-sequence mutations run again after the code moved to `hash-pool.js`.
+    - 3 ran by hand: the canvas size, the env spelling, and the acceptance mutation.
+  - Unit: 2,246 → **2,281** passed, 1 skipped. `hash-parity` + `similarity-sort` E2E: 19/19.
+  - **`wc -l media-viewer.js`: 11,904 → 11,933 (+29).** The shared pool sequence lives in `hash-pool.js` (555 → 668 lines), with a delegate in the renderer.
 
 ## Key Discoveries
 

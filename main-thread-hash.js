@@ -4,9 +4,25 @@
 // reference. The route is the measured one (spec § 5.2, F4): a FRESH canvas per file, a default 2D context
 // (never `willReadFrequently`), drawImage then getImageData at 256x256.
 import { blockhash, HASH_BITS, HASH_CANVAS_SIZE } from './perceptual-hash.js';
+import { isVideoPath } from './hash-pool.js';
 import * as MediaUrl from './media-url.js';
 
 export const MAIN_ROUTE_TIMEOUT_MS = 30_000;
+
+// The one draw recipe, for an image and a video frame alike: a fresh canvas, a default 2D context, a stretched
+// drawImage, then getImageData. `wantPixels` also returns the read-back's bytes.
+function hashDrawn(source, wantPixels) {
+    const canvas = document.createElement('canvas');
+    canvas.width = HASH_CANVAS_SIZE;
+    canvas.height = HASH_CANVAS_SIZE;
+    const ctx = canvas.getContext('2d');
+
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    const hash = blockhash(imageData, HASH_BITS);
+    return wantPixels ? { hash, pixels: imageData.data } : { hash };
+}
 
 /**
  * Draws an image URL on a fresh canvas and hashes it. `wantPixels` also returns the read-back's bytes (the parity
@@ -18,16 +34,7 @@ export function hashImageUrl(url, { wantPixels = false } = {}) {
         const img = new Image();
         img.addEventListener('load', () => {
             try {
-                const canvas = document.createElement('canvas');
-                canvas.width = HASH_CANVAS_SIZE;
-                canvas.height = HASH_CANVAS_SIZE;
-                const ctx = canvas.getContext('2d');
-
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-                const hash = blockhash(imageData, HASH_BITS);
-                resolve(wantPixels ? { hash, pixels: imageData.data } : { hash });
+                resolve(hashDrawn(img, wantPixels));
             } catch (error) {
                 reject(error);
             }
@@ -50,7 +57,7 @@ export function hashImageUrl(url, { wantPixels = false } = {}) {
  */
 export function hashFile(filePath, { isJxl, decodeJxl, releaseVideo }) {
     return new Promise((resolve, reject) => {
-        const isVideo = /\.(mp4|webm|mov)$/i.test(filePath);
+        const isVideo = isVideoPath(filePath); // the pool's own test, so a video is never routed to a worker
         const timeout = setTimeout(() => {
             reject(new Error('Timeout: processing took too long'));
         }, MAIN_ROUTE_TIMEOUT_MS);
@@ -77,15 +84,7 @@ export function hashFile(filePath, { isJxl, decodeJxl, releaseVideo }) {
 
             video.addEventListener('seeked', () => {
                 try {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = HASH_CANVAS_SIZE;
-                    canvas.height = HASH_CANVAS_SIZE;
-                    const ctx = canvas.getContext('2d');
-
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-                    const hash = blockhash(imageData, HASH_BITS);
+                    const { hash } = hashDrawn(video, false);
                     cleanup();
                     releaseVideo(video);
                     resolve(hash);

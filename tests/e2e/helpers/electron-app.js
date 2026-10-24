@@ -68,9 +68,11 @@ export async function launchApp({ migrationMarker, env = {} } = {}) {
         await writeFile(marker, JSON.stringify({ version: 1, migratedAt: 'e2e-skip', keys: 0, written: 0 }));
     }
     // A shell that left MV_HASH_PARITY set must not turn every E2E launch into a parity run (G2 PR 2, Review Focus
-    // #5): drop it, then let the test ask for it through `env`.
-    const launchEnv = { ...process.env };
-    delete launchEnv.MV_HASH_PARITY;
+    // #5): drop it, then let the test ask for it through `env`. In any spelling: Windows names are case-insensitive,
+    // so a `mv_hash_parity` copied here would still read as MV_HASH_PARITY in main (PR #87 review #9).
+    const launchEnv = Object.fromEntries(
+        Object.entries(process.env).filter(([name]) => name.toUpperCase() !== 'MV_HASH_PARITY')
+    );
     const electronApp = await electron.launch({
         executablePath: getElectronWrapperPath(),
         args: getLaunchArgs(),

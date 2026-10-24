@@ -5,6 +5,7 @@ import { createRequire } from 'module';
 import * as SimilaritySort from '../similarity-sort.js';
 import * as HashPool from '../hash-pool.js';
 import * as HashParity from '../hash-parity.js';
+import * as MainThreadHash from '../main-thread-hash.js';
 import { fakeHashPool } from './hash-pool-harness.js';
 
 const require = createRequire(import.meta.url);
@@ -17,6 +18,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'media-viewer.js'), 'u
 globalThis.SimilaritySort = SimilaritySort;
 globalThis.HashPool = HashPool;
 globalThis.HashParity = HashParity;
+globalThis.MainThreadHash = MainThreadHash;
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
@@ -95,6 +97,14 @@ function similarityCtx(overrides = {}) {
         _onOrderChanged: vi.fn(),
         _dismissSimilarityOffer: vi.fn(),
         _invalidateSimilarityRun: vi.fn(),
+        // PR #87: the gen bump (which aborts the gen's signal), the run's hold on the button, and the one pool
+        // sequence: the real ones, by default.
+        _similarityGenAbort: new AbortController(),
+        _bumpSimilarityRunGen: extract('_bumpSimilarityRunGen'),
+        _beginSimilarityRunState: extract('_beginSimilarityRunState'),
+        _endSimilarityRunState: extract('_endSimilarityRunState'),
+        _hashThroughPool: extract('_hashThroughPool'),
+        _reportHashCanaryFailure: vi.fn(),
         // Both Restore Order handlers delegate to the shared protocol (PR #85 #21): the real one, by default.
         _restoreOriginalOrder: extract('_restoreOriginalOrder'),
         _originalOrderOverLive: extract('_originalOrderOverLive'),
@@ -934,13 +944,18 @@ describe('_invalidateSimilarityRun', () => {
         const invalidate = extract('_invalidateSimilarityRun');
         const ctx = {
             _similarityRunGen: 3,
+            _similarityGenAbort: new AbortController(),
+            _bumpSimilarityRunGen: extract('_bumpSimilarityRunGen'),
             isComputingHashes: false,
             sortAbortController: new AbortController(),
             clearProgressNotification: vi.fn(),
             _dismissSimilarityOffer: vi.fn(),
         };
+        const gen3 = ctx._similarityGenAbort.signal;
         invalidate.call(ctx);
         expect(ctx._similarityRunGen).toBe(4);
+        expect(gen3.aborted).toBe(true); // PR #87 review #10: the old gen's placements stop
+        expect(ctx._similarityGenAbort.signal.aborted).toBe(false);
         expect(ctx.sortAbortController.signal.aborted).toBe(false);
         expect(ctx.clearProgressNotification).not.toHaveBeenCalled();
 
@@ -1856,7 +1871,9 @@ describe('how a run ends (my call 3)', () => {
             }),
             expect.any(AbortSignal),
             // #3: the run's mark, checked again at the commit
-            expect.objectContaining({ currentPath: '/f/a', currentIndex: 0, historyLength: 0 })
+            expect.objectContaining({ currentPath: '/f/a', currentIndex: 0, historyLength: 0 }),
+            // PR #87 review #11: its placement hashes through the run's own hooks
+            { stats: expect.objectContaining({ worker: 3 }), onResult: expect.any(Function) }
         );
         expect(ctx._offerSimilarityOrder).not.toHaveBeenCalled();
         expect(ctx.showNotification).toHaveBeenCalledWith('✅ Sorted 3 files with VP-Tree (fastest)!', 'success');
@@ -2358,6 +2375,8 @@ describe('how a run ends (my call 3)', () => {
 
         const folder = {
             _similarityRunGen: 0,
+            _similarityGenAbort: new AbortController(),
+            _bumpSimilarityRunGen: extract('_bumpSimilarityRunGen'),
             isComputingHashes: false,
             sortAbortController: null,
             clearProgressNotification: vi.fn(),
@@ -2879,5 +2898,288 @@ describe('parity mode (PR 2 T6)', () => {
         await handleSortBySimilarity.call(ctx, false);
         expect(ctx.runSortingWorker).toHaveBeenCalledOnce();
         expect(logPerf).not.toHaveBeenCalled();
+    });
+});
+
+// ---------------------------------------------------------------------------------------------------
+// PR #87 review, round 1: the one pool sequence (#11), the gen signal (#10), JXL decodes one at a time (#1) and the
+// logged fallbacks (#7).
+// ---------------------------------------------------------------------------------------------------
+
+describe('a placement hashes through the run (PR #87 review #11)', () => {
+    const handleSortBySimilarity = extract('handleSortBySimilarity');
+    useRunGlobals();
+
+    // A cache hit over [c, a] with b listed too: the placement hashes b.
+    const cacheHitCtx = (overrides = {}) =>
+        runCtx({
+            loadSortCache: vi.fn(async () => ({ algorithm: 'vptree', sortedPaths: ['c', 'a'], timestamp: 1 })),
+            perceptualHashes: new Map([
+                ['/f/a', '0000'],
+                ['/f/c', '1111'],
+            ]),
+            calculateHammingDistance: hamming,
+            _applySimilarityOrder: extract('_applySimilarityOrder'),
+            applyCachedSortOrder: extract('applyCachedSortOrder'),
+            insertNewFilesInSortedOrder: extract('insertNewFilesInSortedOrder'),
+            _fileOpInFlight: false,
+            _folderLoadInFlight: false,
+            ...overrides,
+        });
+    const phases = (ctx) => Object.fromEntries(ctx._logSortPerf.mock.calls[0][0].phases.map((p) => [p[0], p]));
+
+    it("a cache hit's perf line counts the placement's hashing", async () => {
+        const ctx = cacheHitCtx();
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('done');
+        expect(ctx.perceptualHashes.get('/f/b')).toBe('0101');
+        const p = phases(ctx);
+        expect(p.hash[2]).toBe('new 1, worker 1, fallback 0, skipped 0, pool 3');
+        expect(p.apply).toBeDefined();
+    });
+
+    it("a Cancel after the placement hashed keeps the placement's hashes", async () => {
+        const ctx = cacheHitCtx();
+        ctx._waitForRenderIdle = vi.fn(async () => {
+            ctx.sortAbortController.abort(); // the Cancel press, once b is hashed and stored
+            return true;
+        });
+        await handleSortBySimilarity.call(ctx, false);
+        expect(ctx._logSortPerf.mock.calls[0][0].outcome).toBe('cancelled');
+        expect(ctx.perceptualHashes.get('/f/b')).toBe('0101');
+        expect(ctx.saveHashCache).toHaveBeenCalledOnce();
+        expect(ctx.saveHashCache).toHaveBeenCalledWith('/f');
+        expect(ctx.saveSortCache).not.toHaveBeenCalled();
+    });
+});
+
+describe("a placement's pool stops with its entry (PR #87 review #10)", () => {
+    const apply = extract('_applySimilarityOrder');
+    useRunGlobals();
+
+    // Live [a, c, d, e, g]; the order lists c, a, b, e: d and g are new, and d has no hash.
+    const placementCtx = (computePerceptualHash) =>
+        similarityCtx({
+            baseFolderPath: '/f',
+            _similarityRunGen: 1,
+            _fileOpInFlight: false,
+            _folderLoadInFlight: false,
+            mediaFiles: media('a', 'c', 'd', 'e', 'g'),
+            perceptualHashes: new Map([
+                ['/f/c', '1111'],
+                ['/f/a', '0000'],
+                ['/f/e', '0011'],
+                ['/f/g', '0111'],
+            ]),
+            clipCache: new Map(),
+            calculateHammingDistance: hamming,
+            computePerceptualHash,
+            updateSortProgress: vi.fn(),
+            applyCachedSortOrder: extract('applyCachedSortOrder'),
+            insertNewFilesInSortedOrder: extract('insertNewFilesInSortedOrder'),
+            _waitForRenderIdle: vi.fn(async () => true),
+            _isStaleSimilarityRun: extract('_isStaleSimilarityRun'),
+        });
+    const signalOf = (ctx) => ctx.hashPools[0].hashFiles.mock.calls[0][1].signal;
+
+    it("Show's placement hashes on the gen's signal, which a gen bump aborts", async () => {
+        let ctx = null;
+        ctx = placementCtx(
+            vi.fn(async () => {
+                ctx._bumpSimilarityRunGen(); // a new Sort, or a folder switch, while d is hashed
+                return '0001';
+            })
+        );
+        await expect(apply.call(ctx, sortEntry())).rejects.toThrow('Sorting cancelled by user');
+        expect(signalOf(ctx)).toBeInstanceOf(AbortSignal);
+        expect(signalOf(ctx).aborted).toBe(true);
+        expect(ctx.perceptualHashes.has('/f/d')).toBe(false);
+        expect(ctx.hashPools[0].terminate).toHaveBeenCalledOnce();
+    });
+
+    it("a run's placement stops on the run's own signal too", async () => {
+        const own = new AbortController();
+        const ctx = placementCtx(
+            vi.fn(async () => {
+                own.abort(); // the run's Cancel while d is hashed
+                return '0001';
+            })
+        );
+        await expect(apply.call(ctx, sortEntry(), own.signal)).rejects.toThrow('Sorting cancelled by user');
+        expect(signalOf(ctx).aborted).toBe(true);
+        expect(ctx._similarityGenAbort.signal.aborted).toBe(false); // the gen did not move
+    });
+});
+
+describe('JXL decodes for hashing run one at a time (PR #87 review #1)', () => {
+    const decodeForHash = extract('_decodeJxlForHash');
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+
+    function jxlCtx() {
+        const pending = [];
+        return {
+            pending,
+            _hashJxlTail: Promise.resolve(),
+            decodeJxl: vi.fn(
+                (p) =>
+                    new Promise((resolve, reject) => {
+                        pending.push({ p, resolve: () => resolve({ frames: [{ pngBytes: p }] }), reject });
+                    })
+            ),
+        };
+    }
+
+    it('a decode starts only when the one before it settled, and a failed one does not stall the queue', async () => {
+        const ctx = jxlCtx();
+        const a = decodeForHash.call(ctx, '/f/a.jxl');
+        const b = decodeForHash.call(ctx, '/f/b.jxl');
+        const c = decodeForHash.call(ctx, '/f/c.jxl');
+        a.catch(() => {});
+        await flush();
+        expect(ctx.decodeJxl.mock.calls.map((x) => x[0])).toEqual(['/f/a.jxl']);
+        ctx.pending[0].reject(new Error('JXL decode timeout'));
+        await flush();
+        expect(ctx.decodeJxl.mock.calls.map((x) => x[0])).toEqual(['/f/a.jxl', '/f/b.jxl']);
+        ctx.pending[1].resolve();
+        expect((await b).frames[0].pngBytes).toBe('/f/b.jxl');
+        await flush();
+        ctx.pending[2].resolve();
+        await c;
+        await expect(a).rejects.toThrow('JXL decode timeout');
+        expect(ctx.decodeJxl).toHaveBeenCalledTimes(3);
+    });
+
+    it("a stopped run's queued decode skips its turn", async () => {
+        const ctx = jxlCtx();
+        let stopped = false;
+        const a = decodeForHash.call(ctx, '/f/a.jxl');
+        const b = decodeForHash.call(ctx, '/f/b.jxl', () => stopped);
+        await flush();
+        stopped = true; // the run's Cancel while a decodes
+        ctx.pending[0].resolve();
+        await a;
+        await expect(b).rejects.toThrow('Stopped');
+        expect(ctx.decodeJxl).toHaveBeenCalledOnce();
+    });
+
+    // Bounded like the main route: a decode that never settles must not hold the queue for the session.
+    it('a decode that never settles gives up its turn after the main route\x27s timeout', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            const ctx = jxlCtx();
+            const a = decodeForHash.call(ctx, '/f/a.jxl'); // never settled below
+            const b = decodeForHash.call(ctx, '/f/b.jxl');
+            a.catch(() => {});
+            await vi.advanceTimersByTimeAsync(MainThreadHash.MAIN_ROUTE_TIMEOUT_MS - 1);
+            expect(ctx.decodeJxl).toHaveBeenCalledOnce();
+            await vi.advanceTimersByTimeAsync(1);
+            await expect(a).rejects.toThrow('JXL decode timeout');
+            expect(ctx.decodeJxl).toHaveBeenCalledTimes(2);
+            ctx.pending[1].resolve();
+            expect((await b).frames[0].pngBytes).toBe('/f/b.jxl');
+            expect(vi.getTimerCount()).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("the pool's JXL bytes and its main lane both decode through the queue", async () => {
+        const saved = globalThis.MediaUrl;
+        globalThis.MediaUrl = await import('../media-url.js');
+        try {
+            const stop = () => false;
+            const ctx = {
+                isJxl: (p) => p.endsWith('.jxl'),
+                _decodeJxlForHash: vi.fn(async (p) => ({ frames: [{ pngBytes: `png of ${p}` }] })),
+                computePerceptualHash: vi.fn(async () => '0101'),
+            };
+            const pool = extract('_createHashPool').call(ctx);
+            expect(await pool.getJxlPngBytes('/f/a.jxl', stop)).toBe('png of /f/a.jxl');
+            expect(ctx._decodeJxlForHash).toHaveBeenCalledWith('/f/a.jxl', stop);
+            await pool.hashOnMainThread('/f/b.jxl', stop);
+            expect(ctx.computePerceptualHash).toHaveBeenCalledWith('/f/b.jxl', stop);
+            expect(extract('computePerceptualHash').toString()).toContain('this._decodeJxlForHash(p, isStopped)');
+        } finally {
+            globalThis.MediaUrl = saved;
+        }
+    });
+});
+
+describe('_hashThroughPool: the one pool sequence (PR #87 review #7, #11)', () => {
+    const hashThroughPool = extract('_hashThroughPool');
+    useRunGlobals();
+
+    /** A pool stub that yields `results` as given. */
+    function poolCtx(results) {
+        const pool = {
+            size: 3,
+            checkCanary: vi.fn(async () => ({ ok: true, detail: '' })),
+            hashFiles: vi.fn(async function* () {
+                yield* results;
+            }),
+            terminate: vi.fn(),
+        };
+        return {
+            pool,
+            ctx: { perceptualHashes: new Map(), _createHashPool: () => pool, _reportHashCanaryFailure: vi.fn() },
+        };
+    }
+
+    it('logs each worker fallback with its file and reasons, at most 20 lines, then a count', async () => {
+        const logError = vi.fn();
+        globalThis.window.electronAPI.logError = logError;
+        const results = Array.from({ length: 25 }, (_, i) => ({
+            path: `/f/${i}.jpg`,
+            hash: '0101',
+            route: 'main',
+            workerErrors: ['crash: Worker crashed: boom', 'timeout: Worker timed out'],
+        }));
+        const { ctx } = poolCtx(results);
+        const stats = HashPool.newHashStats();
+        await hashThroughPool.call(
+            ctx,
+            results.map((r) => r.path),
+            { assertLive: () => {}, stats }
+        );
+        expect(logError).toHaveBeenCalledTimes(21);
+        expect(logError.mock.calls[0][0]).toEqual({
+            level: 'warn',
+            source: 'hash-pool',
+            message:
+                'Hash worker: /f/0.jpg: crash: Worker crashed: boom; timeout: Worker timed out -> hashed on the main route',
+        });
+        expect(logError.mock.calls[20][0].message).toBe('Hash pool: 5 more fallback or failure lines not logged');
+        expect(stats).toMatchObject({ poolSize: 3, worker: 0, fallback: 25, failed: 0 });
+    });
+
+    it('reports progress every 5 results and at the end, after each result is counted', async () => {
+        const results = Array.from({ length: 12 }, (_, i) => ({ path: `/f/${i}.jpg`, hash: '0101', route: 'worker' }));
+        const { ctx } = poolCtx(results);
+        let counted = 0;
+        const seen = [];
+        await hashThroughPool.call(
+            ctx,
+            results.map((r) => r.path),
+            {
+                assertLive: () => {},
+                onResult: () => {
+                    counted++;
+                },
+                onProgress: (done) => seen.push([done, counted]),
+            }
+        );
+        expect(seen).toEqual([
+            [5, 5],
+            [10, 10],
+            [12, 12],
+        ]);
+    });
+
+    it('runs no canary when every file is a video', async () => {
+        const results = [{ path: '/f/v.mp4', hash: '0101', route: 'main' }];
+        const { ctx, pool } = poolCtx(results);
+        await hashThroughPool.call(ctx, ['/f/v.mp4'], { assertLive: () => {} });
+        expect(pool.checkCanary).not.toHaveBeenCalled();
+        expect(ctx.perceptualHashes.get('/f/v.mp4')).toBe('0101');
     });
 });

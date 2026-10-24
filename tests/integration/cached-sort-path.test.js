@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
+import * as HashPool from '../../hash-pool.js';
 const require = createRequire(import.meta.url);
+// An extracted method resolves media-viewer.js's namespace import through the global object.
+globalThis.HashPool = HashPool;
 
 // Integration tests: exercise the REAL call graph between applyCachedSortOrder
 // and insertNewFilesInSortedOrder. The PR #33 algorithm-threading bug slipped
@@ -94,6 +97,7 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
             computePerceptualHash: vi.fn(),
             // G2 PR 2 T5: nor is a hash pool made when nothing needs a hash.
             _createHashPool: vi.fn(),
+            _hashThroughPool: extractAsyncMethod('_hashThroughPool'),
             updateProgressNotification: vi.fn(),
             updateSortProgress: vi.fn(),
             ...overrides,

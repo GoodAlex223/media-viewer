@@ -4,20 +4,121 @@
 // at a time in its own lane. A crashed or timed-out worker is terminated and its file re-queued once. Abort, or the
 // consumer stopping, ends the run at once and terminates every worker. A pixel-exact canary decides whether the
 // workers may be trusted at all. Everything DOM-side is injected, so this module never touches a document.
+import { HASH_CANVAS_SIZE, countDifferences } from './perceptual-hash.js';
 
 export const POOL_SIZE = 3;
 export const WORKER_TASK_TIMEOUT_MS = 30_000;
 export const CANARY_TIMEOUT_MS = 5_000;
+export const HASH_PROGRESS_EVERY = 5;
+export const MAX_HASH_LOG_LINES = 20;
 
 const ROUTES = new Set(['auto', 'worker', 'main']);
+const CANARY_PIXEL_BYTES = HASH_CANVAS_SIZE * HASH_CANVAS_SIZE * 4;
 
-// Today's video test (main-thread-hash.js's hashFile uses the same one).
+// Today's video test, the one both routes use (main-thread-hash.js's hashFile imports it).
 export function isVideoPath(path) {
     return /\.(mp4|webm|mov)$/i.test(path);
 }
 
 const errorText = (err) => String(err && err.message ? err.message : err);
 const CANARY_TIMED_OUT = Symbol('canary timed out');
+// A result after a failed worker attempt says so, whichever route then answered (PR #87 review #7).
+const withWorkerErrors = (result, errors) =>
+    errors && errors.length > 0 ? { ...result, workerErrors: errors } : result;
+
+/**
+ * A fresh tally for hashThroughPool, which adds into it: the pool's size, the hashes from a worker and from the
+ * main-thread route (fallback), the failures, whether a canary failed, and the milliseconds spent. One tally serves a
+ * run's hash phase and its placement, so the run's perf line counts both.
+ */
+export function newHashStats() {
+    return { poolSize: 0, worker: 0, fallback: 0, failed: 0, canaryFailed: false, ms: 0 };
+}
+
+/**
+ * The one way the renderer hashes through a pool (PR #87 review #11): a run's hash phase and a placement's new files
+ * alike. A fresh pool from `createPool()`; its canary, reported once through `onCanaryFailure(detail)` and skipped when
+ * every file is a video; each result stored with `store(path, hash)` only after `assertLive()`, with no await between
+ * the two; the pool terminated in a finally. `onResult(r)` runs after each store (a run counts and saves there; it may
+ * await); `onProgress(done)` every HASH_PROGRESS_EVERY results and at the end. `stats` (newHashStats()) is the caller's,
+ * so a run's two callers add into one. Each worker fallback and failure goes to `log(message)` with its file and reason,
+ * at most MAX_HASH_LOG_LINES per call, then one line counting the rest (#7).
+ */
+export async function hashThroughPool(
+    paths,
+    {
+        createPool,
+        store,
+        assertLive,
+        signal = null,
+        onResult = null,
+        onProgress = null,
+        onCanaryFailure = () => {},
+        log = () => {},
+        stats = null,
+    }
+) {
+    if (paths.length === 0) {
+        return;
+    }
+    const s = stats ?? newHashStats();
+    const start = performance.now();
+    const pool = createPool();
+    s.poolSize = pool.size;
+    let logged = 0;
+    const logLine = (message) => {
+        if (logged++ < MAX_HASH_LOG_LINES) {
+            log(message);
+        }
+    };
+    let done = 0;
+    try {
+        if (paths.some((p) => !isVideoPath(p))) {
+            // The 'auto' run awaits the same, memoized check before its first post: awaited here to report it.
+            const canary = await pool.checkCanary();
+            assertLive();
+            if (!canary.ok) {
+                s.canaryFailed = true;
+                onCanaryFailure(canary.detail);
+            }
+        }
+        for await (const r of pool.hashFiles(paths, { signal })) {
+            assertLive();
+            done++;
+            if (r.hash === null) {
+                s.failed++;
+                console.error(`Failed to compute hash for ${r.path}:`, r.error);
+            } else {
+                store(r.path, r.hash);
+                if (r.route === 'worker') {
+                    s.worker++;
+                } else {
+                    s.fallback++;
+                }
+            }
+            if (r.workerErrors) {
+                const outcome = r.hash === null ? `failed: ${r.error}` : `hashed on the ${r.route} route`;
+                logLine(`Hash worker: ${r.path}: ${r.workerErrors.join('; ')} -> ${outcome}`);
+            } else if (r.hash === null) {
+                logLine(`Hash failed: ${r.path}: ${r.error}`);
+            }
+            // The result's own bookkeeping first, so the progress line counts it; then any save it started.
+            const pending = onResult?.(r);
+            if (done % HASH_PROGRESS_EVERY === 0 || done === paths.length) {
+                onProgress?.(done);
+            }
+            await pending;
+        }
+        // An abort ends the pool's iteration without a throw: the caller says so here.
+        assertLive();
+    } finally {
+        pool.terminate();
+        if (logged > MAX_HASH_LOG_LINES) {
+            log(`Hash pool: ${logged - MAX_HASH_LOG_LINES} more fallback or failure lines not logged`);
+        }
+        s.ms += performance.now() - start;
+    }
+}
 
 // A FIFO with a front lane for re-queued files; shift() is O(1), so a 15k-file run never re-copies the array.
 class TaskQueue {
@@ -72,11 +173,10 @@ export class HashPool {
         // route.
         this.mainOnly = false;
         this._slots = Array.from({ length: this.size }, () => ({ worker: null, busy: false, task: null }));
-        this._runs = new Set();
+        this._run = null; // the one live run (PR #87 review #12: every caller makes a pool per run)
         this._nextId = 0;
         this._canary = null;
         this._settleCanary = null;
-        this._slotWaiters = []; // the canary, waiting for a slot every run holds
         this._terminated = false;
     }
 
@@ -105,6 +205,8 @@ export class HashPool {
             task.resolve(data);
         };
         // Any error event is this slot's crash: a malformed message can throw uncaught in the worker, with no id.
+        // preventDefault keeps it out of the page's onerror; its message reaches the log on the file's result, as one
+        // of its workerErrors.
         const onError = (e) => {
             if (e && typeof e.preventDefault === 'function') {
                 e.preventDefault();
@@ -160,14 +262,21 @@ export class HashPool {
 
     /**
      * Hashes `paths`, yielding each result as it completes (completion order, buffered while the consumer is busy).
-     * route 'auto': workers with the main-thread route as the fallback; 'worker' (parity): workers only; 'main': the
-     * main-thread route only. Stopping (signal abort, the consumer's return()) ends the iteration at once and
-     * terminates every worker; nothing more is yielded.
-     * @returns {AsyncGenerator<{ path: string, hash: string|null, route: 'worker'|'main'|'none', info?: object, error?: string }>}
+     * One run at a time: a call while another run is live throws. route 'auto': workers with the main-thread route as
+     * the fallback, behind the canary, which the run awaits before its first worker post (a caller's own earlier
+     * checkCanary() is the same, memoized check); 'worker' (parity): workers only; 'main': the main-thread route only.
+     * Stopping (signal abort, the consumer's return()) ends the iteration at once and terminates every worker; nothing
+     * more is yielded. A result that follows a failed worker attempt carries `workerErrors`, one `kind: message` per
+     * attempt.
+     * @returns {AsyncGenerator<{ path: string, hash: string|null, route: 'worker'|'main'|'none', info?: object,
+     *     error?: string, workerErrors?: string[] }>}
      */
     async *hashFiles(paths, { signal = null, route = 'auto' } = {}) {
         if (!ROUTES.has(route)) {
             throw new Error(`Unknown hash route: ${route}`);
+        }
+        if (this._run) {
+            throw new Error('HashPool runs one hashFiles at a time');
         }
         if (this._terminated || (signal && signal.aborted)) {
             return;
@@ -177,8 +286,10 @@ export class HashPool {
             stopped: false,
             finished: false,
             queue: new TaskQueue(), // worker-bound files
+            jxlQueue: new TaskQueue(), // worker-bound JXLs: one in flight at a time (_pump)
             mainQueue: new TaskQueue(), // main-thread-route files
             workerInFlight: 0,
+            jxlInFlight: false,
             mainInFlight: false,
             results: [],
             wake: null,
@@ -189,15 +300,26 @@ export class HashPool {
             } else if (isVideoPath(path)) {
                 run.results.push({ path, hash: null, route: 'none', error: 'video' });
             } else {
-                run.queue.push({ path, retried: false });
+                (this.isJxl(path) ? run.jxlQueue : run.queue).push({ path, retried: false });
             }
         }
         const onAbort = () => this._stopRun(run);
         if (signal) {
             signal.addEventListener('abort', onAbort, { once: true });
         }
-        this._runs.add(run);
+        this._run = run;
         try {
+            if (route === 'auto' && run.queue.length + run.jxlQueue.length > 0) {
+                // The canary is the run's own first step (PR #87 review #12), so no caller can send a file to a worker
+                // it has not checked. A stop meanwhile wakes the run; a run of videos only needs no canary.
+                await Promise.race([
+                    this.checkCanary(),
+                    new Promise((resolve) => {
+                        run.wake = resolve;
+                    }),
+                ]);
+                run.wake = null;
+            }
             this._pump(run);
             for (;;) {
                 if (run.stopped) {
@@ -209,6 +331,7 @@ export class HashPool {
                 }
                 if (
                     run.queue.length === 0 &&
+                    run.jxlQueue.length === 0 &&
                     run.mainQueue.length === 0 &&
                     run.workerInFlight === 0 &&
                     !run.mainInFlight
@@ -224,7 +347,7 @@ export class HashPool {
             if (signal) {
                 signal.removeEventListener('abort', onAbort);
             }
-            this._runs.delete(run);
+            this._run = null;
             if (!run.finished) {
                 this._stopRun(run);
             }
@@ -258,8 +381,19 @@ export class HashPool {
             return;
         }
         if (run.route === 'auto' && this.mainOnly) {
-            while (run.queue.length > 0) {
-                run.mainQueue.push(run.queue.shift());
+            for (const queue of [run.jxlQueue, run.queue]) {
+                while (queue.length > 0) {
+                    run.mainQueue.push(queue.shift());
+                }
+            }
+        }
+        // One JXL on the workers at a time (PR #87 review #1). Its bytes come from the app's one JXL decoder, which
+        // decodes one file at a time: a second JXL would only hold a slot while it waits.
+        if (!run.jxlInFlight && run.jxlQueue.length > 0) {
+            const slot = this._freeSlot();
+            if (slot) {
+                run.jxlInFlight = true;
+                this._runWorkerTask(run, run.jxlQueue.shift(), slot);
             }
         }
         while (run.queue.length > 0) {
@@ -274,29 +408,14 @@ export class HashPool {
         }
     }
 
-    // Slots are shared across runs (and the canary), so a freed slot must pump every live run, not only the one
-    // that freed it: a run whose own pump found every slot busy has nothing in flight to wake it.
-    _pumpAll() {
-        while (this._slotWaiters.length > 0) {
-            const slot = this._freeSlot();
-            if (!slot) {
-                break;
-            }
-            slot.busy = true;
-            this._slotWaiters.shift()(slot);
-        }
-        for (const run of this._runs) {
-            this._pump(run);
-        }
-    }
-
     // One worker attempt -> { kind: 'ok', reply } | { kind: 'fail'|'crash'|'timeout'|'stopped', error }.
     async _attemptOnWorker(run, path, slot) {
         let message;
         if (this.isJxl(path)) {
             let bytes;
             try {
-                bytes = await this.getJxlPngBytes(path);
+                // The stop check lets a decode still queued behind another one skip its turn once the run stops.
+                bytes = await this.getJxlPngBytes(path, () => run.stopped);
             } catch (err) {
                 return { kind: 'fail', error: 'JXL decode failed: ' + errorText(err) };
             }
@@ -320,6 +439,7 @@ export class HashPool {
     }
 
     async _runWorkerTask(run, item, slot) {
+        const jxl = this.isJxl(item.path);
         slot.busy = true;
         run.workerInFlight++;
         let outcome;
@@ -330,31 +450,36 @@ export class HashPool {
         } finally {
             slot.busy = false;
             run.workerInFlight--;
+            if (jxl) {
+                run.jxlInFlight = false;
+            }
         }
+        // A 'stopped' outcome only comes from this run's own stop or the pool's terminate().
         if (run.stopped) {
-            this._pumpAll(); // the slot this stopped run held is free for the others
             return;
         }
-        if (outcome.kind === 'stopped') {
-            // Another run's stop killed this slot: not this file's fault, so its retry is not spent.
-            run.queue.unshift(item);
-        } else if (outcome.kind === 'ok') {
+        if (outcome.kind === 'ok') {
             const { hash, info } = outcome.reply;
-            run.results.push({ path: item.path, hash, route: 'worker', info });
-        } else if ((outcome.kind === 'crash' || outcome.kind === 'timeout') && !item.retried) {
-            item.retried = true;
-            run.queue.unshift(item);
-        } else if (run.route === 'auto') {
-            run.mainQueue.push({ path: item.path });
+            run.results.push(withWorkerErrors({ path: item.path, hash, route: 'worker', info }, item.errors));
         } else {
-            run.results.push({ path: item.path, hash: null, route: 'none', error: outcome.error });
+            item.errors = [...(item.errors ?? []), `${outcome.kind}: ${outcome.error}`];
+            if ((outcome.kind === 'crash' || outcome.kind === 'timeout') && !item.retried) {
+                item.retried = true;
+                (jxl ? run.jxlQueue : run.queue).unshift(item);
+            } else if (run.route === 'auto') {
+                run.mainQueue.push({ path: item.path, errors: item.errors });
+            } else {
+                run.results.push(
+                    withWorkerErrors({ path: item.path, hash: null, route: 'none', error: outcome.error }, item.errors)
+                );
+            }
         }
-        this._pumpAll();
+        this._pump(run);
         this._notify(run);
     }
 
     // The main-thread route, one call at a time. A stopped run never awaits it; the handlers below catch and drop a
-    // late settlement, so a late rejection is never unhandled.
+    // late settlement, so a late rejection is never unhandled. The stop check reaches a JXL decode still queued.
     _runMainTask(run, item) {
         run.mainInFlight = true;
         const settle = (result) => {
@@ -362,12 +487,12 @@ export class HashPool {
             if (run.stopped) {
                 return;
             }
-            run.results.push(result);
+            run.results.push(withWorkerErrors(result, item.errors));
             this._pump(run);
             this._notify(run);
         };
         Promise.resolve()
-            .then(() => this.hashOnMainThread(item.path))
+            .then(() => this.hashOnMainThread(item.path, () => run.stopped))
             .then(
                 (hash) => settle({ path: item.path, hash, route: 'main' }),
                 (err) => settle({ path: item.path, hash: null, route: 'none', error: errorText(err) })
@@ -379,7 +504,8 @@ export class HashPool {
     /**
      * Hashes the canary images through both routes and compares hashes AND pixels: a raster-path change can leave
      * the hashes equal (spec § 17 B1). Runs once per pool; a failure sets mainOnly. Each step has canaryTimeoutMs, and
-     * a timeout is a failure.
+     * a timeout is a failure. An 'auto' run awaits it before its first worker post; a caller may await it first, to
+     * report the result.
      * @returns {Promise<{ ok: boolean, detail: string }>}
      */
     checkCanary() {
@@ -416,8 +542,8 @@ export class HashPool {
             this.mainOnly = true;
             return { ok: false, detail: 'canary images: ' + (err === CANARY_TIMED_OUT ? 'timed out' : errorText(err)) };
         }
-        // One slot for the whole canary, so a run started meanwhile cannot take it between images.
-        const slot = await this._acquireSlot();
+        // One slot for the whole canary, so a run's dispatch cannot take it between images.
+        const slot = this._takeSlot();
         let failed = true; // until every image has compared equal
         try {
             for (const { name, blob } of images) {
@@ -435,13 +561,15 @@ export class HashPool {
             }
             failed = !ok;
         } finally {
-            // mainOnly before the slot is released (R-F4c): a waiting 'auto' run must not take it to a worker.
+            // mainOnly before the slot is released (R-F4c): a run's dispatch must not take it to a worker.
             if (failed) {
                 this.mainOnly = true;
             }
             if (slot) {
                 slot.busy = false;
-                this._pumpAll(); // a run may be waiting for the slot the canary held
+                if (this._run) {
+                    this._pump(this._run); // a 'worker' or 'main' run started meanwhile may want the slot
+                }
             }
         }
         return { ok, detail: parts.join('; ') };
@@ -457,17 +585,17 @@ export class HashPool {
         return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
     }
 
-    // A free slot, marked busy; waits while every slot is busy. null once the pool is terminated.
-    _acquireSlot() {
+    // A free slot, marked busy, or null: the pool is terminated, or a 'worker' or 'main' run holds every slot (an
+    // 'auto' run checks the canary before its first post, so it never does).
+    _takeSlot() {
         if (this._terminated) {
-            return Promise.resolve(null);
+            return null;
         }
         const slot = this._freeSlot();
         if (slot) {
             slot.busy = true;
-            return Promise.resolve(slot);
         }
-        return new Promise((resolve) => this._slotWaiters.push(resolve));
+        return slot;
     }
 
     async _canaryImage(blob, slot) {
@@ -490,7 +618,7 @@ export class HashPool {
             return { ok: false, detail: 'main error: no pixels' };
         }
         if (!slot || this._terminated) {
-            return { ok: false, detail: 'worker error: pool terminated' };
+            return { ok: false, detail: 'worker error: ' + (this._terminated ? 'pool terminated' : 'no free slot') };
         }
         let reply;
         try {
@@ -508,21 +636,9 @@ export class HashPool {
         }
         const a = new Uint8Array(reply.pixels || new ArrayBuffer(0));
         const b = main.pixels;
-        let bytesDiffer = Math.abs(a.length - b.length);
-        for (let i = 0, n = Math.min(a.length, b.length); i < n; i++) {
-            if (a[i] !== b[i]) {
-                bytesDiffer++;
-            }
-        }
-        const h1 = String(reply.hash);
-        const h2 = String(main.hash);
-        let bits = Math.abs(h1.length - h2.length);
-        for (let i = 0, n = Math.min(h1.length, h2.length); i < n; i++) {
-            if (h1[i] !== h2[i]) {
-                bits++;
-            }
-        }
-        const sizeOk = a.length === b.length && a.length === 256 * 256 * 4;
+        const bytesDiffer = countDifferences(a, b);
+        const bits = countDifferences(String(reply.hash), String(main.hash));
+        const sizeOk = a.length === b.length && a.length === CANARY_PIXEL_BYTES;
         return {
             ok: sizeOk && bytesDiffer === 0 && bits === 0,
             detail: `${bytesDiffer} bytes differ, ${bits} bits`,
@@ -531,7 +647,7 @@ export class HashPool {
 
     // --- lifetime ----------------------------------------------------------------------------------------------
 
-    // Ends the pool's life: stops every run and terminates every worker. Idempotent; a later hashFiles yields nothing.
+    // Ends the pool's life: stops the run and terminates every worker. Idempotent; a later hashFiles yields nothing.
     terminate() {
         if (this._terminated) {
             return;
@@ -542,14 +658,11 @@ export class HashPool {
             this.mainOnly = true;
             this._settleCanary({ ok: false, detail: 'pool terminated' });
         }
-        for (const run of [...this._runs]) {
-            this._stopRun(run);
+        if (this._run) {
+            this._stopRun(this._run);
         }
         for (const slot of this._slots) {
             this._failSlot(slot, 'stopped', 'Stopped');
-        }
-        for (const waiter of this._slotWaiters.splice(0)) {
-            waiter(null);
         }
     }
 }

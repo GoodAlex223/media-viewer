@@ -525,19 +525,22 @@ test.describe('parity mode', () => {
         await expect(page.locator('.notification.sticky')).toHaveCount(0);
     });
 
-    // Review Focus #5: a shell that left MV_HASH_PARITY set must not turn an ordinary launch into a parity run.
-    test('a normal launch is not in parity mode even when the shell sets MV_HASH_PARITY', async () => {
-        const previous = process.env.MV_HASH_PARITY;
-        process.env.MV_HASH_PARITY = '1';
-        try {
-            ({ electronApp, page } = await launchApp());
-            expect(await page.evaluate(() => window.mediaViewer.hashParityMode)).toBe(false);
-        } finally {
-            if (previous === undefined) {
-                delete process.env.MV_HASH_PARITY;
-            } else {
-                process.env.MV_HASH_PARITY = previous;
+    // Review Focus #5: a shell that left MV_HASH_PARITY set must not turn an ordinary launch into a parity run. In any
+    // spelling: Windows environment names are case-insensitive (PR #87 review #9).
+    for (const name of ['MV_HASH_PARITY', 'mv_hash_parity']) {
+        test(`a normal launch is not in parity mode even when the shell sets ${name}`, async () => {
+            const previous = process.env[name];
+            process.env[name] = '1';
+            try {
+                ({ electronApp, page } = await launchApp());
+                expect(await page.evaluate(() => window.mediaViewer.hashParityMode)).toBe(false);
+            } finally {
+                if (previous === undefined) {
+                    delete process.env[name];
+                } else {
+                    process.env[name] = previous;
+                }
             }
-        }
-    });
+        });
+    }
 });

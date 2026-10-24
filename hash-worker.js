@@ -123,8 +123,16 @@ export async function hashBytes(buffer, { wantPixels = false } = {}) {
             decoder = new ImageDecoder({ data: buffer, type: mime });
             image = (await decoder.decode({ frameIndex: 0 })).image;
             format = image.format;
+            if (!isYuvFormat(format)) {
+                // Spec § 5.2's "else: close it", before createImageBitmap makes its own copy (PR #87 review #4): the
+                // full-size frame and the decoder's copy of the bytes were needed only for `format`.
+                image.close();
+                image = null;
+                decoder.close();
+                decoder = null;
+            }
         }
-        if (image && isYuvFormat(format)) {
+        if (image) {
             ctx.drawImage(image, 0, 0, HASH_CANVAS_SIZE, HASH_CANVAS_SIZE);
         } else {
             bitmap = await createImageBitmap(new Blob([buffer], { type: mime }));

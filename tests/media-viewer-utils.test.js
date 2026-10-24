@@ -4,11 +4,13 @@ import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
 import { MlTrainingManager } from '../ml-training.js';
 import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
+import * as HashPool from '../hash-pool.js';
 import { stubFeatureCacheStore } from './feature-cache-harness.js';
 import { fakeHashPool } from './hash-pool-harness.js';
 // Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
 globalThis.LikeOrSkip = LikeOrSkip;
 globalThis.SimilaritySort = SimilaritySort;
+globalThis.HashPool = HashPool;
 const require = createRequire(import.meta.url);
 
 // MediaViewer methods are instance methods on an ES module class.
@@ -471,6 +473,7 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             },
             // G2 PR 2 T5: the placement hashes through a pool, which hashes through computePerceptualHash.
             hashPools: [],
+            _hashThroughPool: extractAsyncMethod('_hashThroughPool'),
             _createHashPool() {
                 const pool = fakeHashPool((p) => this.computePerceptualHash(p));
                 this.hashPools.push(pool);
@@ -718,13 +721,28 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             }),
             updateSortProgress: vi.fn((p) => seq.push(`${p.phase} ${p.current}/${p.total}`)),
         });
-        const out = await insertNewFilesInSortedOrder.call(ctx, [a, c], [b, d, e], 'vptree', () => true);
+        const savedWindow = globalThis.window;
+        const logError = vi.fn();
+        globalThis.window = { electronAPI: { logError } };
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        let out;
+        try {
+            out = await insertNewFilesInSortedOrder.call(ctx, [a, c], [b, d, e], 'vptree', () => true);
+        } finally {
+            globalThis.window = savedWindow;
+            errorSpy.mockRestore();
+        }
         expect(ctx.hashPools).toHaveLength(1);
         const [pool] = ctx.hashPools;
         expect(pool.checkCanary).toHaveBeenCalledOnce();
         expect(pool.hashFiles).toHaveBeenCalledOnce();
-        expect(pool.hashFiles.mock.calls[0]).toEqual([['/b.png', '/d.png']]); // no signal: isLive is the check
+        // A direct caller passes no signal; the apply function passes its entry's (PR #87 review #10).
+        expect(pool.hashFiles.mock.calls[0]).toEqual([['/b.png', '/d.png'], { signal: null }]);
         expect(pool.terminate).toHaveBeenCalledOnce();
+        // The failure reaches the session log with its file and reason (PR #87 review #7), not the console alone.
+        expect(logError.mock.calls).toEqual([
+            [{ level: 'warn', source: 'hash-pool', message: 'Hash failed: /d.png: Error: decode failed' }],
+        ]);
         expect(seq).toEqual(['hash /b.png', 'hash /d.png', 'Hashing new files 2/2', 'Placing new files 3/3']);
         expect(ctx.perceptualHashes.get('/b.png')).toBe('0001');
         expect(ctx.perceptualHashes.has('/d.png')).toBe(false);
@@ -930,6 +948,7 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
                 calculateHammingDistance: (h1, h2) => [...h1].filter((ch, i) => ch !== h2[i]).length,
                 insertNewFilesInSortedOrder: realInsert,
                 hashPools: [],
+                _hashThroughPool: extractAsyncMethod('_hashThroughPool'),
                 _createHashPool() {
                     const pool = fakeHashPool((p) => this.computePerceptualHash(p));
                     this.hashPools.push(pool);
@@ -3211,32 +3230,61 @@ describe('bulk-rated persistence', () => {
             .mockResolvedValueOnce({ success: false, error: 'EBUSY' });
         const ctx = {
             baseFolderPath: '/folder',
+            currentFolderPath: 'folder',
             bulkRated: new Map([['x.png', 'good']]),
-            _bulkRatedSaveWarned: false,
+            _bulkRatedSaveWarning: { warned: false },
             showNotification: vi.fn(),
         };
         await saveBulkRatedFile.call(ctx);
         await saveBulkRatedFile.call(ctx);
-        expect(ctx.showNotification.mock.calls).toEqual([['⚠️ Failed to save the bulk ratings', 'warning']]);
+        expect(ctx.showNotification.mock.calls).toEqual([['⚠️ Failed to save the bulk ratings for folder', 'warning']]);
         expect(warn).toHaveBeenCalledTimes(2);
         expect(warn.mock.calls[0]).toEqual(['Failed to save .bulk_rated.json:', 'EPERM']);
         expect(warn.mock.calls[1]).toEqual(['Failed to save .bulk_rated.json:', 'IPC gone']);
-        ctx._bulkRatedSaveWarned = false; // what loadFolder does (pinned below)
+        ctx._bulkRatedSaveWarning = { warned: false }; // what loadFolder does (pinned below)
         await saveBulkRatedFile.call(ctx);
         expect(ctx.showNotification).toHaveBeenCalledTimes(2);
+        warn.mockRestore();
+    });
+
+    // PR #87 review #8: a save still in flight when the user switches folder fails, if it does, after the switch.
+    it("a save from the folder left behind warns for that folder, and keeps the new folder's warning", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        let failA;
+        globalThis.window.electronAPI.writeBulkRatedFile = vi
+            .fn()
+            .mockImplementationOnce(() => new Promise((resolve) => (failA = resolve)))
+            .mockResolvedValueOnce({ success: false, error: 'EPERM' });
+        const ctx = {
+            baseFolderPath: '/A',
+            currentFolderPath: 'A',
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        };
+        const saveA = saveBulkRatedFile.call(ctx);
+        // The switch to B (loadFolder's part of it), while A's write is still in flight.
+        Object.assign(ctx, { baseFolderPath: '/B', currentFolderPath: 'B', _bulkRatedSaveWarning: { warned: false } });
+        failA({ success: false, error: 'EPERM' });
+        await saveA;
+        expect(ctx.showNotification.mock.calls).toEqual([['⚠️ Failed to save the bulk ratings for A', 'warning']]);
+        // B's own first failure still warns.
+        await saveBulkRatedFile.call(ctx);
+        expect(ctx.showNotification.mock.calls[1]).toEqual(['⚠️ Failed to save the bulk ratings for B', 'warning']);
         warn.mockRestore();
     });
 
     it('a successful save posts nothing', async () => {
         const ctx = {
             baseFolderPath: '/folder',
+            currentFolderPath: 'folder',
             bulkRated: new Map([['x.png', 'good']]),
-            _bulkRatedSaveWarned: false,
+            _bulkRatedSaveWarning: { warned: false },
             showNotification: vi.fn(),
         };
         await saveBulkRatedFile.call(ctx);
         expect(ctx.showNotification).not.toHaveBeenCalled();
-        expect(ctx._bulkRatedSaveWarned).toBe(false);
+        expect(ctx._bulkRatedSaveWarning.warned).toBe(false);
     });
 });
 
@@ -5254,9 +5302,12 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
     // R-F8: the once-per-visit bulk-ratings warning re-arms on every folder load, an empty folder included.
     it('a folder load re-arms the bulk-ratings save warning', async () => {
         const ctx = makeCtx();
-        ctx._bulkRatedSaveWarned = true;
+        const previous = { warned: true };
+        ctx._bulkRatedSaveWarning = previous;
         await loadFolder.call(ctx, '/new/empty-folder');
-        expect(ctx._bulkRatedSaveWarned).toBe(false);
+        // A new one, so a save still in flight from the old visit keeps (and spends) the old one (PR #87 review #8).
+        expect(ctx._bulkRatedSaveWarning).toEqual({ warned: false });
+        expect(previous.warned).toBe(true);
     });
 
     it('asks nothing after a load when no folder is saved', async () => {

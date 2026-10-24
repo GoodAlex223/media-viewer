@@ -518,4 +518,36 @@ process with the GPU raster path enabled. None of them changes a user ruling.
     Pool 3 took 47 ms per image, with a p99 lateness of 15 ms, about one frame.
   - *Pool 4*: 38 ms per image, at a peak working set 400 MB higher (2,041 MB vs 1,640 MB).
   - *Why 3*: risk R2. The machine has 15.2 GB, of which 1.2 GB was free during the run.
+
+**Review amendments (PR #87 review round 1, 2026-10-24).** None of them changes a hash or a user ruling.
+
+- **B11. JXL decodes for hashing run one at a time (§ 5.2).** The app has one JXL decode worker, which decodes one
+  request at a time, and `decodeJxl` starts its 15 s frame-0 timer when it posts a request. The pool's three slots
+  and its main lane asked at once, so the second request in the queue timed out behind the first. The reviewer's
+  verifier timed 8.2–11.8 s per 6000×4000 photo. Two fixes:
+  - every hash-initiated decode queues in the renderer (`_decodeJxlForHash`), so its wait is outside its timer, as
+    the one-file-at-a-time loop's was;
+  - a run puts at most one JXL on its workers at a time, so its other slots keep hashing images.
+
+  A stopped run's queued decode skips its turn. Each turn is bounded at the main route's 30 s, so a decode that never
+  settles cannot hold the queue: `decodeJxl` arms its timer only at the post, after the worker's init. D6's fallback
+  is unchanged.
+- **B12. A held-open target is written in place (B2).** Measured on this machine: Windows refuses a rename over a
+  file another process holds open (`EPERM` after about 650 ms of retries), even when the reader shares it for delete.
+  An in-place write of the same file succeeds under the same handle. A rename still refused after its retries with
+  `EPERM`, `EACCES` or `EBUSY` now writes the target in place, as every write did before B2, after `assertFixedPath`
+  checks the target again. The flush is best effort: some volumes refuse it, and the writes before B2 had none.
+- **B13. One run per pool, and the canary is the run's own first step (B4, § 9.2).** Every caller makes a pool per
+  run, so the support for several runs at once (R-T4a's wake of every live run) was unreachable, and is gone: a second
+  `hashFiles` while one is live throws. An `'auto'` run awaits the memoized canary before its first worker post, so no
+  caller can skip it. A run of videos only needs none.
+- **B14. One pool sequence (B4).** A run's hash phase and every placement hash through `HashPool.hashThroughPool`:
+  - the canary;
+  - each result stored only after the caller's liveness check;
+  - worker fallbacks and failures logged with file and reason (20 lines a call, then a count);
+  - the pool terminated in a `finally`.
+
+  A run's placement counts its hashes and saves them through the run's own hooks, so a Cancel during a cache hit's
+  placement keeps them and the perf line reports them. Every gen bump aborts the old gen's signal, which a
+  placement's pool hashes on, so a stale Show stops reading the old folder's files at once.
   - *Across the measurement*: the canary passed at every size, and every image took the worker route.

@@ -157,8 +157,10 @@ class MediaViewer {
         this.isComputingHashes = false;
         this.sortAbortController = null;
         // Bumped per similarity run and by _invalidateSimilarityRun (every folder load, both Restore Order paths,
-        // Tournament entry, the AI sort's start): a run, or a Show, that sees it move is stale
+        // Tournament entry, the AI sort's start): a run, or a Show, that sees it move is stale. Each bump also aborts
+        // the gen's controller, so a placement's hash pool stops with it (_bumpSimilarityRunGen)
         this._similarityRunGen = 0;
+        this._similarityGenAbort = new AbortController();
         // True from a similarity run's commit until its finally: a Sort press then can no longer cancel anything (#8)
         this._similarityRunCommitted = false;
         this._similarityOffer = null; // { entry, element }: a computed similarity order waiting on its sticky "Show"
@@ -173,6 +175,7 @@ class MediaViewer {
         this.jxlWorker = null;
         this.jxlFrameCache = new Map(); // filePath -> { frames (grows in place), width, height, animated, numLoops, frameCount, complete, whenComplete }
         this._jxlReqId = 0;
+        this._hashJxlTail = Promise.resolve(); // the queue of hash-initiated JXL decodes (_decodeJxlForHash)
         this._jxlPending = new Map(); // id -> { entry, resolveFirst, rejectFirst, resolveComplete, rejectComplete }
         this._jxlReady = null;
         this._jxlResolveReady = null;
@@ -294,7 +297,9 @@ class MediaViewer {
         // (spec G3 D2): reset empty on each folder load, never persisted. Suppresses re-showing the
         // same pair in AI-sorted compare.
         this.bulkRatedPairs = new Set();
-        this._bulkRatedSaveWarned = false; // saveBulkRatedFile's once-per-visit warning; loadFolder re-arms it
+        // saveBulkRatedFile's once-per-visit warning: loadFolder makes a new one per visit, and a save keeps the one of
+        // the visit it started in, so a late failure warns for its own folder (PR #87 review #8)
+        this._bulkRatedSaveWarning = { warned: false };
 
         // CLIP model state (main process IPC)
         this.clipWorkerReady = false;
@@ -3237,7 +3242,7 @@ class MediaViewer {
             this._invalidateSimilarityRun();
             this._abortInFlightPredictionSort();
             this.featureCacheStore.endVisit();
-            this._bulkRatedSaveWarned = false; // a failed .bulk_rated.json write warns once per folder visit
+            this._bulkRatedSaveWarning = { warned: false }; // a failed .bulk_rated.json write warns once per visit
 
             if (result.files.length === 0) {
                 this.mediaFiles = [];
@@ -7310,12 +7315,21 @@ class MediaViewer {
     // None of the last four is reachable while a run computes (each refuses while isComputingHashes), so for them
     // this only bumps the gen and dismisses the offer.
     _invalidateSimilarityRun() {
-        this._similarityRunGen++;
+        this._bumpSimilarityRunGen();
         this._dismissSimilarityOffer();
         if (this.isComputingHashes) {
             this.sortAbortController?.abort();
             this.clearProgressNotification();
         }
+    }
+
+    // Every move of the similarity gen comes here: a new run, the parity check and _invalidateSimilarityRun. It aborts
+    // the old gen's signal, which every placement started under it hashes with (PR #87 review #10): a Show that went
+    // stale stops reading the old folder's files at once, not at its next result.
+    _bumpSimilarityRunGen() {
+        this._similarityGenAbort.abort();
+        this._similarityGenAbort = new AbortController();
+        return ++this._similarityRunGen;
     }
 
     async handleSortBySimilarity(forceResort = false) {
@@ -7393,7 +7407,7 @@ class MediaViewer {
         // newer run or a folder load makes it stale (it then writes nothing at all), a Cancel aborts it.
         const savedK = localStorage.getItem('sortKValue');
         const run = {
-            gen: ++this._similarityRunGen,
+            gen: this._bumpSimilarityRunGen(),
             folder: this.baseFolderPath,
             controller: new AbortController(),
             algorithm: this.sortAlgorithm,
@@ -7416,12 +7430,12 @@ class MediaViewer {
         let newHashes = 0;
         let skipped = 0;
         let newSinceSave = 0; // hashes computed since the last hash-cache save
-        // The hash note's pool counts (G2 PR 2): a new hash came from a worker or from the main-thread route
-        // (fallback). poolSize stays 0 when nothing needed a hash, so no pool was made.
-        let workerHashes = 0;
-        let fallbackHashes = 0;
-        let poolSize = 0;
-        let canaryFailed = false;
+        let lastSaveAt = Date.now();
+        // The hash note's pool counts (G2 PR 2), for the hash phase's pool and a placement's alike (PR #87 review #11):
+        // a new hash came from a worker or from the main-thread route (fallback). poolSize stays 0 when nothing
+        // needed a hash, so no pool was made. hashSavesMs: the saves made while hashing, timed into 'save', not 'hash'.
+        const hashStats = HashPool.newHashStats();
+        let hashSavesMs = 0;
         // Every hash-cache save of the run goes through here. A failed write warns once per run (PR #85 #18): a
         // read-only folder fails every periodic save, and saveHashCache itself only returns false. A run gone stale
         // during the save shows nothing (spec § 6.4).
@@ -7431,6 +7445,40 @@ class MediaViewer {
                 run.hashSaveWarned = true;
                 this.showNotification('⚠️ Failed to save hash cache', 'warning');
             }
+        };
+        // Each hash a pool of this run stored, in the hash phase or in a placement: counted, and saved as it goes (spec
+        // § 6.3), so a long run that is cancelled, fails or is closed keeps what it hashed. A placement's hashes were
+        // kept only by the saves after its apply, so a Cancel during one lost them (PR #87 review #11).
+        const onHashResult = async (r) => {
+            if (r.hash === null) {
+                skipped++;
+                return;
+            }
+            newHashes++;
+            newSinceSave++;
+            if (SimilaritySort.isHashSaveDue({ newSinceSave, lastSaveAt, now: Date.now() })) {
+                // Reset first: a Cancel during this save must not make the catch save the same hashes again.
+                newSinceSave = 0;
+                lastSaveAt = Date.now();
+                const saveStart = performance.now();
+                await saveHashes();
+                addPhase('save', saveStart);
+                hashSavesMs += performance.now() - saveStart;
+                this._assertSimilarityRunLive(run);
+            }
+        };
+        // The run's one way to apply an order (a cache hit, a computed one). Its placement hashes through this run's
+        // hooks, and the hashing is timed as the hash phase's, not the apply's.
+        const applyOrder = async (entry) => {
+            const applyStart = performance.now();
+            const hashMsBefore = hashStats.ms;
+            const result = await this._applySimilarityOrder(entry, run.controller.signal, run.mark, {
+                stats: hashStats,
+                onResult: onHashResult,
+            });
+            addPhase('apply', applyStart);
+            phaseMs.apply -= hashStats.ms - hashMsBefore;
+            return result;
         };
         // Past a commit, a Cancel press has nothing left to undo, so only staleness ends the run there. The catch
         // classifies by state, stale first.
@@ -7458,6 +7506,7 @@ class MediaViewer {
         // committed, so the sort cache is not saved here.
         const offerAfterDecline = async (entry, stats) => {
             if (stats?.added > 0) {
+                newSinceSave = 0; // reset first, as at every save: a Cancel during it must not save again
                 const saveStart = performance.now();
                 await saveHashes();
                 addPhase('save', saveStart);
@@ -7472,11 +7521,7 @@ class MediaViewer {
         let renderPending = false;
 
         try {
-            this.isComputingHashes = true;
-            this.sortAbortController = run.controller;
-            this.sortSimilarityBtn.disabled = true;
-            this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Cancel';
-            this.sortSimilarityBtn.disabled = false; // Re-enable for cancel
+            this._beginSimilarityRunState(run);
 
             const algorithmNames = {
                 vptree: 'VP-Tree (fastest)',
@@ -7529,9 +7574,7 @@ class MediaViewer {
                     folder: run.folder,
                     doneMessage: `${restoredLine}${cachedAgo}`,
                 };
-                const applyStart = performance.now();
-                const result = await this._applySimilarityOrder(entry, run.controller.signal, run.mark);
-                addPhase('apply', applyStart);
+                const result = await applyOrder(entry);
 
                 if (result.applied) {
                     renderPending = true; // first: whatever follows, a committed order gets its render
@@ -7556,6 +7599,7 @@ class MediaViewer {
                             }
                         }
                         endIfStale();
+                        newSinceSave = 0; // reset first, as at every save: a throw after it must not save again
                         const saveStart = performance.now();
                         await saveHashes();
                         endIfStale();
@@ -7670,78 +7714,25 @@ class MediaViewer {
                     // Start progress notification
                     this.updateSortProgress({ phase: 'Starting hash computation…' });
 
-                    let lastSaveAt = Date.now();
                     const total = run.snapshot.length;
-                    // Hashing runs in a per-run pool (G2 PR 2, B4): images in workers, videos and failures on
-                    // the main-thread route. Results arrive in completion order; each is stored only after the
-                    // run's liveness check, with no await between the two.
+                    // Hashing runs in a per-run pool (G2 PR 2, B4) through the one pool sequence, _hashThroughPool:
+                    // images in workers, videos and failures on the main-thread route, in completion order. A failed
+                    // canary sends every file to the main-thread route: the run goes on, slower.
                     const toHash = run.snapshot.filter((f) => !this.perceptualHashes.has(f.path)).map((f) => f.path);
-                    let processed = total - toHash.length;
+                    const alreadyHashed = total - toHash.length;
                     phaseMs.hash = 0; // the hash phase runs (and is logged) even when every hash was cached
-                    if (toHash.length > 0) {
-                        const pool = this._createHashPool();
-                        poolSize = pool.size;
-                        const phaseStart = performance.now();
-                        let savesMs = 0; // the in-loop saves, timed into 'save' and taken out of 'hash'
-                        try {
-                            const canary = await pool.checkCanary();
-                            this._assertSimilarityRunLive(run);
-                            if (!canary.ok) {
-                                // The pool now sends every file to the main-thread route: the run goes on, slower.
-                                canaryFailed = true;
-                                this._reportHashCanaryFailure(canary.detail);
-                            }
-                            for await (const r of pool.hashFiles(toHash, { signal: run.controller.signal })) {
-                                // Before the result is stored: a stale or cancelled run drops its in-flight hash.
-                                this._assertSimilarityRunLive(run);
-                                processed++;
-                                if (r.hash === null) {
-                                    console.error(`Failed to compute hash for ${r.path}:`, r.error);
-                                    skipped++;
-                                } else {
-                                    this.perceptualHashes.set(r.path, r.hash);
-                                    newHashes++;
-                                    newSinceSave++;
-                                    if (r.route === 'worker') {
-                                        workerHashes++;
-                                    } else {
-                                        fallbackHashes++;
-                                    }
-                                }
-
-                                // Update progress every 5 files or at end
-                                if (processed % 5 === 0 || processed === total) {
-                                    this.updateSortProgress({
-                                        phase: `Computing hashes (${newHashes} new, ${skipped} skipped)`,
-                                        current: processed,
-                                        total,
-                                    });
-                                }
-
-                                // Save as it goes (spec § 6.3), so a long run that is cancelled, fails or is closed
-                                // keeps what it hashed.
-                                if (
-                                    r.hash !== null &&
-                                    SimilaritySort.isHashSaveDue({ newSinceSave, lastSaveAt, now: Date.now() })
-                                ) {
-                                    // Reset first: a Cancel during this save must not make the catch save the same
-                                    // hashes again.
-                                    newSinceSave = 0;
-                                    lastSaveAt = Date.now();
-                                    const saveStart = performance.now();
-                                    await saveHashes();
-                                    addPhase('save', saveStart);
-                                    savesMs += performance.now() - saveStart;
-                                    this._assertSimilarityRunLive(run);
-                                }
-                            }
-                            // An abort ends the pool's iteration without a throw: the run says so here.
-                            this._assertSimilarityRunLive(run);
-                        } finally {
-                            pool.terminate();
-                            phaseMs.hash += performance.now() - phaseStart - savesMs;
-                        }
-                    }
+                    await this._hashThroughPool(toHash, {
+                        assertLive: () => this._assertSimilarityRunLive(run),
+                        signal: run.controller.signal,
+                        stats: hashStats,
+                        onResult: onHashResult,
+                        onProgress: (done) =>
+                            this.updateSortProgress({
+                                phase: `Computing hashes (${newHashes} new, ${skipped} skipped)`,
+                                current: alreadyHashed + done,
+                                total,
+                            }),
+                    });
 
                     // Check if we have enough hashes to sort
                     const filesWithHashes = run.snapshot.filter((f) => this.perceptualHashes.has(f.path));
@@ -7824,9 +7815,7 @@ class MediaViewer {
                     this._offerSimilarityOrder(entry);
                     perf.outcome = 'offered';
                 } else {
-                    const applyStart = performance.now();
-                    const result = await this._applySimilarityOrder(entry, run.controller.signal, run.mark);
-                    addPhase('apply', applyStart);
+                    const result = await applyOrder(entry);
                     if (result.applied) {
                         renderPending = true; // first: whatever follows, a committed order gets its render
                         this._similarityRunCommitted = true; // a Sort press can no longer cancel (#8)
@@ -7882,17 +7871,11 @@ class MediaViewer {
                 }
             }
         } finally {
-            this.isComputingHashes = false;
-            this._similarityRunCommitted = false;
-            if (this.sortAbortController === run.controller) {
-                this.sortAbortController = null;
-            }
-            this.sortSimilarityBtn.disabled = false;
-            // Restore button label based on state
-            if (this.sortSimilarityBtn) {
-                this.sortSimilarityBtn.querySelector('.btn-label').textContent = this.isSortedBySimilarity
-                    ? 'Restore Order'
-                    : 'Sort by Similarity';
+            this._endSimilarityRunState(run);
+            // The time spent hashing, in the hash phase or in a placement, less the saves made meanwhile. A cache hit
+            // whose placement hashed now reports it too (PR #87 review #11).
+            if (hashStats.poolSize > 0) {
+                phaseMs.hash = hashStats.ms - hashSavesMs;
             }
             perf.phases = ['load', 'extract', 'hash', 'save', 'sort', 'apply']
                 .filter((phase) => phaseMs[phase] !== null)
@@ -7901,9 +7884,9 @@ class MediaViewer {
                         ? [
                               phase,
                               phaseMs[phase],
-                              `new ${newHashes}, worker ${workerHashes}, fallback ${fallbackHashes}, ` +
-                                  `skipped ${skipped}, pool ${poolSize}` +
-                                  (canaryFailed ? ', canary failed' : ''),
+                              `new ${newHashes}, worker ${hashStats.worker}, fallback ${hashStats.fallback}, ` +
+                                  `skipped ${skipped}, pool ${hashStats.poolSize}` +
+                                  (hashStats.canaryFailed ? ', canary failed' : ''),
                           ]
                         : [phase, phaseMs[phase]]
                 );
@@ -7937,9 +7920,14 @@ class MediaViewer {
     // sortAbortController is never read here, so an AI sort's Cancel cannot end a Show. `mark`: the run's user mark
     // from its press (Show passes none); a user who acted since is not moved to the new order at the commit (PR #85
     // review #3). A 'busy' or 'acted' decline carries `stats`, so the caller can save what the placement hashed (#6).
-    async _applySimilarityOrder(entry, signal = null, mark = null) {
+    // `hashHooks`: a run's { stats, onResult } for its placement's hashing (PR #87 review #11); Show passes none.
+    async _applySimilarityOrder(entry, signal = null, mark = null, hashHooks = null) {
         const isLive = () => !this._isStaleSimilarityRun(entry) && !signal?.aborted;
-        const { order, stats } = await this.applyCachedSortOrder(entry, entry.algorithm, isLive);
+        // The placement's pool stops with the entry (PR #87 review #10): on the caller's own signal (a run's Cancel),
+        // and on the gen's, which every gen bump aborts, so a Show that went stale stops reading files at once.
+        const genSignal = this._similarityGenAbort.signal;
+        const hashing = { ...hashHooks, signal: signal ? AbortSignal.any([signal, genSignal]) : genSignal };
+        const { order, stats } = await this.applyCachedSortOrder(entry, entry.algorithm, isLive, hashing);
         const renderSettled = await this._waitForRenderIdle();
 
         // No await from here to the end of the commit: a file moved during one would come back.
@@ -8130,12 +8118,42 @@ class MediaViewer {
         }
     }
 
-    computePerceptualHash(filePath) {
+    // The main-thread route, the pool's fallback lane. Its JXL decodes queue with the workers' (_decodeJxlForHash).
+    computePerceptualHash(filePath, isStopped = null) {
         return MainThreadHash.hashFile(filePath, {
             isJxl: (p) => this.isJxl(p),
-            decodeJxl: (p) => this.decodeJxl(p),
+            decodeJxl: (p) => this._decodeJxlForHash(p, isStopped),
             releaseVideo: (v) => this._releaseVideo(v),
         });
+    }
+
+    // Every JXL decode a hash asks for, one at a time app-wide (PR #87 review #1). The JXL worker decodes one request
+    // at a time, and decodeJxl's 15 s frame-0 timer starts at the post, so decodes posted together timed each other
+    // out (8-12 s each at 6000x4000) and the files went unsorted. Queued here, a decode waits outside its timer, as
+    // the one-file-at-a-time loop's did. `isStopped` lets a stopped run's queued decode skip its turn.
+    _decodeJxlForHash(filePath, isStopped = null) {
+        const turn = this._hashJxlTail.then(() => {
+            if (isStopped?.()) {
+                throw new Error('Stopped');
+            }
+            // Bounded like the main route: decodeJxl's own timer starts only at its post, after the worker's init and
+            // the file read, so one that never settles would otherwise hold the queue for the session.
+            let timer;
+            return Promise.race([
+                this.decodeJxl(filePath),
+                new Promise((_, reject) => {
+                    timer = setTimeout(
+                        () => reject(new Error('JXL decode timeout')),
+                        MainThreadHash.MAIN_ROUTE_TIMEOUT_MS
+                    );
+                }),
+            ]).finally(() => clearTimeout(timer));
+        });
+        this._hashJxlTail = turn.then(
+            () => {},
+            () => {}
+        );
+        return turn;
     }
 
     // The parity diagnostic (G2 PR 2 T6, spec § 9.1, B5): every image on both hash routes, the report to the perf log.
@@ -8155,13 +8173,14 @@ class MediaViewer {
             return;
         }
         this._dismissSimilarityOffer();
-        const run = { gen: ++this._similarityRunGen, folder: this.baseFolderPath, controller: new AbortController() };
+        const run = {
+            gen: this._bumpSimilarityRunGen(),
+            folder: this.baseFolderPath,
+            controller: new AbortController(),
+        };
         let pool = null;
         try {
-            this.isComputingHashes = true;
-            this.sortAbortController = run.controller;
-            this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Cancel';
-            this.sortSimilarityBtn.disabled = false;
+            this._beginSimilarityRunState(run);
             pool = this._createHashPool();
             const report = await HashParity.runHashParity(pool, images, {
                 signal: run.controller.signal,
@@ -8198,15 +8217,31 @@ class MediaViewer {
             }
         } finally {
             pool?.terminate();
-            this.isComputingHashes = false;
-            if (this.sortAbortController === run.controller) {
-                this.sortAbortController = null;
-            }
-            this.sortSimilarityBtn.disabled = false;
-            this.sortSimilarityBtn.querySelector('.btn-label').textContent = this.isSortedBySimilarity
-                ? 'Restore Order'
-                : 'Sort by Similarity';
+            this._endSimilarityRunState(run);
         }
+    }
+
+    // A similarity run's hold on the sort button and the shared abort controller, for a sort and the parity check
+    // alike (PR #87 review, held back: the parity check copied the run's). The button stays enabled: its press is now
+    // the run's Cancel.
+    _beginSimilarityRunState(run) {
+        this.isComputingHashes = true;
+        this.sortAbortController = run.controller;
+        this.sortSimilarityBtn.querySelector('.btn-label').textContent = 'Cancel';
+        this.sortSimilarityBtn.disabled = false;
+    }
+
+    // Its release, in the run's finally. The label says what the next press does.
+    _endSimilarityRunState(run) {
+        this.isComputingHashes = false;
+        this._similarityRunCommitted = false;
+        if (this.sortAbortController === run.controller) {
+            this.sortAbortController = null;
+        }
+        this.sortSimilarityBtn.disabled = false;
+        this.sortSimilarityBtn.querySelector('.btn-label').textContent = this.isSortedBySimilarity
+            ? 'Restore Order'
+            : 'Sort by Similarity';
     }
 
     // A fresh hash pool (G2 PR 2, B4) for one run or one placement. Its workers live for the pool's life, so the
@@ -8215,12 +8250,24 @@ class MediaViewer {
         return new HashPool.HashPool({
             size: HashPool.POOL_SIZE,
             createWorker: () => new Worker('hash-worker.js', { type: 'module' }),
-            hashOnMainThread: (p) => this.computePerceptualHash(p),
+            hashOnMainThread: (p, isStopped) => this.computePerceptualHash(p, isStopped),
             hashMainUrlPixels: (url) => MainThreadHash.hashImageUrl(url, { wantPixels: true }),
             makeCanaryImages: () => MainThreadHash.makeCanaryImages(),
-            getJxlPngBytes: async (p) => (await this.decodeJxl(p)).frames[0].pngBytes,
+            getJxlPngBytes: async (p, isStopped) => (await this._decodeJxlForHash(p, isStopped)).frames[0].pngBytes,
             isJxl: (p) => this.isJxl(p),
             toMediaUrl: MediaUrl.toMediaUrl,
+        });
+    }
+
+    // The one hash-pool sequence (HashPool.hashThroughPool, PR #87 review #11), for a run's hash phase and a
+    // placement's new files: into this folder's hash map, with this page's canary notice and session log.
+    async _hashThroughPool(paths, options) {
+        return HashPool.hashThroughPool(paths, {
+            ...options,
+            createPool: () => this._createHashPool(),
+            store: (path, hash) => this.perceptualHashes.set(path, hash),
+            onCanaryFailure: (detail) => this._reportHashCanaryFailure(detail),
+            log: (message) => window.electronAPI?.logError?.({ level: 'warn', source: 'hash-pool', message }),
         });
     }
 
@@ -8564,8 +8611,9 @@ class MediaViewer {
     // Computes a cached order over the files listed now and returns it with its stats; it never writes
     // this.mediaFiles (G2 PR 1: _applySimilarityOrder commits). `isLive` is the only liveness check (R-T4b): the
     // apply function passes its entry's (not stale, its own signal not aborted). After every await, a placement
-    // no longer live throws before it stores a hash, reports progress or returns. Passed through to the placement.
-    async applyCachedSortOrder(cachedData, algorithm, isLive = null) {
+    // no longer live throws before it stores a hash, reports progress or returns. Passed through to the placement, with
+    // `hashing` (insertNewFilesInSortedOrder's).
+    async applyCachedSortOrder(cachedData, algorithm, isLive = null, hashing = null) {
         // The default (null) is the shared sortAbortController, for a direct caller.
         const live = isLive ?? (() => !this.sortAbortController?.signal.aborted);
         const assertLive = () => {
@@ -8611,7 +8659,8 @@ class MediaViewer {
                 cachedOrder,
                 newFiles,
                 algorithm ?? cachedData.algorithm,
-                isLive
+                isLive,
+                hashing
             );
             assertLive();
         } else {
@@ -8634,9 +8683,9 @@ class MediaViewer {
     // canary, each of its results, the 25-file yield) once `isLive()` turns false (G2 PR 1 R-T4a/R-T4b, PR 2 B4):
     // the last await must not resolve into a hash write or a progress call. The pool is terminated in a finally.
     // `isLive` is the only check; the default (for a direct caller) is the shared sortAbortController, the apply
-    // function's is its entry's. The header stays on one line (no arrow default) so the tests' method-header scan
-    // can read it.
-    async insertNewFilesInSortedOrder(sortedFiles, newFiles, algorithm, isLive = null) {
+    // function's is its entry's. `hashing`: the apply function's { signal, stats?, onResult? } for the pool. The header
+    // stays on one line (no arrow default) so the tests' method-header scan can read it.
+    async insertNewFilesInSortedOrder(sortedFiles, newFiles, algorithm, isLive = null, hashing = null) {
         // The default (null) is the shared sortAbortController, for a direct caller.
         const live = isLive ?? (() => !this.sortAbortController?.signal.aborted);
         const assertLive = () => {
@@ -8705,42 +8754,18 @@ class MediaViewer {
                 }
             }
         } else {
-            // Hash path (vptree, mst, simple, or undefined). The new files with no hash are hashed first, through one
-            // pool (G2 PR 2, B4); each result is stored only after assertLive(), with no await between the two. No
-            // signal: isLive is the only check, so a stale placement stops at its next result.
+            // Hash path (vptree, mst, simple, or undefined). The new files with no hash are hashed first, through the
+            // one pool sequence (_hashThroughPool): a stale placement must not put a folder's hashes into the map of
+            // the folder open now (spec A6). Its signal stops the pool on a Cancel or a gen bump (PR #87 review #10).
             const missing = newFiles.filter((f) => !this.perceptualHashes.has(f.path)).map((f) => f.path);
-            if (missing.length > 0) {
-                const pool = this._createHashPool();
-                try {
-                    const canary = await pool.checkCanary();
-                    assertLive();
-                    if (!canary.ok) {
-                        this._reportHashCanaryFailure(canary.detail);
-                    }
-                    let hashed = 0;
-                    for await (const r of pool.hashFiles(missing)) {
-                        // Before the hash is stored: a stale placement must not put a folder's hashes into the map
-                        // of the folder open now (spec A6).
-                        assertLive();
-                        hashed++;
-                        if (r.hash === null) {
-                            console.warn(`Failed to compute hash for ${r.path}:`, r.error);
-                        } else {
-                            this.perceptualHashes.set(r.path, r.hash);
-                        }
-                        if (hashed % 10 === 0 || hashed === missing.length) {
-                            this.updateSortProgress({
-                                phase: 'Hashing new files',
-                                current: hashed,
-                                total: missing.length,
-                            });
-                        }
-                    }
-                    assertLive();
-                } finally {
-                    pool.terminate();
-                }
-            }
+            await this._hashThroughPool(missing, {
+                assertLive,
+                signal: hashing?.signal ?? null,
+                stats: hashing?.stats ?? null,
+                onResult: hashing?.onResult ?? null,
+                onProgress: (done) =>
+                    this.updateSortProgress({ phase: 'Hashing new files', current: done, total: missing.length }),
+            });
 
             // The placement: a file with no hash (its hash failed) goes to the end.
             for (let i = 0; i < newFiles.length; i++) {
@@ -9713,6 +9738,10 @@ class MediaViewer {
             if (bucket === 'good') data.good.push(name);
             else if (bucket === 'bad') data.bad.push(name);
         }
+        // Taken before the write's await (PR #87 review #8): a save still in flight when the user switches folder
+        // fails, if it does, for the folder it was writing, and must not use up the next folder's warning.
+        const warning = this._bulkRatedSaveWarning;
+        const folderName = this.currentFolderPath;
         let result;
         try {
             result = await window.electronAPI.writeBulkRatedFile(this.baseFolderPath, data);
@@ -9722,9 +9751,9 @@ class MediaViewer {
         // These ratings exist nowhere else, so a failed write is said, once per folder visit (R-F8).
         if (!result?.success) {
             console.warn('Failed to save .bulk_rated.json:', result?.error);
-            if (!this._bulkRatedSaveWarned) {
-                this._bulkRatedSaveWarned = true;
-                this.showNotification('⚠️ Failed to save the bulk ratings', 'warning');
+            if (!warning.warned) {
+                warning.warned = true;
+                this.showNotification(`⚠️ Failed to save the bulk ratings for ${folderName}`, 'warning');
             }
         }
     }

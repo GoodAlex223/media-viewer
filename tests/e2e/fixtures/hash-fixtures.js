@@ -54,7 +54,8 @@ export async function generateHashFixtures(dir) {
         'exif-rot3.jpg': () => photo(1200, 900, 3, 2).jpeg({ quality: 90 }).withMetadata({ orientation: 3 }),
         'exif-rot8.jpg': () => photo(1000, 1400, 3, 3).jpeg({ quality: 90 }).withMetadata({ orientation: 8 }),
         'icc-p3.jpg': () => photo(1200, 900, 3, 4).withIccProfile('p3').jpeg({ quality: 90 }),
-        'icc-p3-rot6.jpg': () => photo(1200, 900, 3, 5).withIccProfile('p3').withMetadata({ orientation: 6 }).jpeg(),
+        // The profile goes in withMetadata: on its own, withMetadata() resets it to sRGB (PR #87 review #6).
+        'icc-p3-rot6.jpg': () => photo(1200, 900, 3, 5).withMetadata({ orientation: 6, icc: 'p3' }).jpeg(),
         'cmyk.jpg': () => photo(1200, 900, 3, 6).withIccProfile('cmyk').jpeg({ quality: 90 }),
         'progressive.jpg': () => photo(1600, 1200, 3, 7).jpeg({ quality: 85, progressive: true }),
         'chroma444.jpg': () => photo(1200, 900, 3, 8).jpeg({ quality: 95, chromaSubsampling: '4:4:4' }),

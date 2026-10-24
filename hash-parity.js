@@ -5,6 +5,7 @@
 // log. Pure: the pool, the signal and the progress sink are injected, and nothing here touches a document.
 import { isVideoPath } from './hash-pool.js';
 import { isYuvFormat } from './hash-worker.js';
+import { countDifferences } from './perceptual-hash.js';
 
 // D4: more than 0.5% of the compared images differing fails the verdict, whatever the classes.
 export const PARITY_MAX_RATE = 0.005;
@@ -21,18 +22,6 @@ export function readParityFlag(search) {
 
 const fileName = (path) => String(path).split(/[\\/]/).pop();
 const hasHash = (side) => !!side && typeof side.hash === 'string';
-
-// Differing bit positions; a length mismatch counts every missing position as differing.
-function hammingBits(a, b) {
-    const n = Math.max(a.length, b.length);
-    let bits = 0;
-    for (let i = 0; i < n; i++) {
-        if (a[i] !== b[i]) {
-            bits++;
-        }
-    }
-    return bits;
-}
 
 /**
  * D4's classes, as code (B6). Each row: `{ name, kind, worker: { hash, info } | { error }, main: { hash } | { error } }`;
@@ -60,7 +49,7 @@ export function classifyParity(rows) {
             continue;
         }
         compared++;
-        const bits = hammingBits(row.worker.hash, row.main.hash);
+        const bits = countDifferences(row.worker.hash, row.main.hash);
         if (bits === 0) {
             identical++;
             continue;

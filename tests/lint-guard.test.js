@@ -28,6 +28,7 @@ const RENDERER_FILES = [
     'main-thread-hash.js',
     'hash-pool.js',
     'hash-parity.js',
+    'hash-worker.js', // a module worker the page imports too (PR #87 review #15)
     'feature-cache-store.js',
 ];
 

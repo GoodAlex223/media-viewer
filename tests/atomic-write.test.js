@@ -260,6 +260,48 @@ describe('createAtomicWriter', () => {
         expect(await readTarget()).toBe(DATA);
         expect(await tmpFiles()).toEqual([]);
     });
+
+    // PR #87 review #2, measured: while another program holds the target open, Windows refuses the rename with EPERM
+    // through every retry (~650 ms), even when the reader shares the file for delete. An in-place write succeeds.
+    it.each(['EPERM', 'EACCES', 'EBUSY'])(
+        'a rename refused with %s through every retry writes the target in place',
+        async (code) => {
+            const asserted = [];
+            const fs = { ...fsp, rename: async () => Promise.reject(errWith(code)) };
+            const assertPath = async (p) => {
+                asserted.push(path.basename(p));
+            };
+            await makeWriter({ fs, assertPath, makeId: () => 'abcdef012345' }).writeFileAtomic(target, DATA);
+            expect(await readTarget()).toBe(DATA);
+            expect(await tmpFiles()).toEqual([]);
+            // The target is checked again right before it is opened in place.
+            expect(asserted).toEqual(['.hash_cache.json.abcdef012345.tmp', '.hash_cache.json', '.hash_cache.json']);
+        }
+    );
+
+    it('the in-place write refuses a target that became a link since the first check', async () => {
+        let targetChecks = 0;
+        const assertPath = async (p) => {
+            if (!p.endsWith('.tmp') && ++targetChecks === 2) {
+                throw new Error('Not permitted: .hash_cache.json is a link');
+            }
+        };
+        const fs = { ...fsp, rename: async () => Promise.reject(errWith('EPERM')) };
+        await expect(makeWriter({ fs, assertPath }).writeFileAtomic(target, DATA)).rejects.toThrow(
+            'Not permitted: .hash_cache.json is a link'
+        );
+        expect(await readTarget()).toBe('old');
+        expect(await tmpFiles()).toEqual([]);
+    });
+
+    // PR #87 review, held back: some volumes refuse FlushFileBuffers (libuv: EISDIR). The writes before this writer
+    // never flushed, so a refused flush must not cost the save.
+    it('a refused flush still saves', async () => {
+        const fs = fsWithHandles(() => ({ sync: async () => Promise.reject(errWith('EISDIR')) }));
+        await makeWriter({ fs }).writeFileAtomic(target, DATA);
+        expect(await readTarget()).toBe(DATA);
+        expect(await tmpFiles()).toEqual([]);
+    });
 });
 
 describe('tmpPathFor', () => {

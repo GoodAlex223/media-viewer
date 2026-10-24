@@ -227,7 +227,8 @@ export default [
         },
     },
 
-    // 3a-jxl. Module Web Workers (ES module workers — `new Worker(url, { type: 'module' })`)
+    // 3a-jxl. Module Web Workers (ES module workers — `new Worker(url, { type: 'module' })`). The HTML sink guard too:
+    // the renderer page imports hash-worker.js as well (hash-parity.js takes isYuvFormat from it).
     {
         files: ['jxl-decode-worker.js', 'hash-worker.js'],
         languageOptions: {
@@ -240,6 +241,7 @@ export default [
         rules: {
             ...sharedRules,
             'no-undef': 'error',
+            'no-restricted-syntax': htmlSinkGuard,
         },
     },
 

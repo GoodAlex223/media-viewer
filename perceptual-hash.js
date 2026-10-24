@@ -5,6 +5,19 @@
 export const HASH_CANVAS_SIZE = 256;
 export const HASH_BITS = 16;
 
+// The positions where `a` and `b` differ, for hash strings and pixel arrays alike; a length mismatch counts every
+// missing position as differing. The pool's canary and the parity report share it (PR #87 review #13).
+export function countDifferences(a, b) {
+    const n = Math.max(a.length, b.length);
+    let count = 0;
+    for (let i = 0; i < n; i++) {
+        if (a[i] !== b[i]) {
+            count++;
+        }
+    }
+    return count;
+}
+
 export function blockhash(imageData, bits) {
     // Simple blockhash implementation
     const blockWidth = Math.floor(imageData.width / bits);
