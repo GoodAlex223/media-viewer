@@ -537,6 +537,12 @@ process with the GPU raster path enabled. None of them changes a user ruling.
   An in-place write of the same file succeeds under the same handle. A rename still refused after its retries with
   `EPERM`, `EACCES` or `EBUSY` now writes the target in place, as every write did before B2, after `assertFixedPath`
   checks the target again. The flush is best effort: some volumes refuse it, and the writes before B2 had none.
+
+  An in-place write is not crash-safe, so, by the user's ruling (2026-10-24), the writer keeps its whole, flushed tmp
+  until that write is complete. When `.bulk_rated.json` does not parse, `readBulkRatedFile` reads the newest tmp that
+  does (`readRecoveryCopy`), and the renderer writes the file back at once. A missing file is never recovered, so
+  ratings the user deleted stay deleted. The orphan sweep now runs only after a successful write, so it cannot remove
+  the one whole copy a torn file has.
 - **B13. One run per pool, and the canary is the run's own first step (B4, § 9.2).** Every caller makes a pool per
   run, so the support for several runs at once (R-T4a's wake of every live run) was unreachable, and is gone: a second
   `hashFiles` while one is live throws. An `'auto'` run awaits the memoized canary before its first worker post, so no

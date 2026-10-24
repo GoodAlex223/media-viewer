@@ -9725,7 +9725,9 @@ class MediaViewer {
                 if (validNames.has(name)) this.bulkRated.set(name, 'bad');
                 else pruned = true;
             }
-            if (pruned) await this.saveBulkRatedFile();
+            // `recovered`: main read the file's last whole copy because the file itself was torn (PR #87 review #2).
+            // Written back now, so the file is whole again before the next crash can find it torn.
+            if (pruned || result.recovered) await this.saveBulkRatedFile();
         } catch (err) {
             console.warn('Failed to load .bulk_rated.json:', err.message);
         }

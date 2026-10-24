@@ -821,9 +821,15 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - Smoke estimate from these figures: worker pass ≈ 12 min, frozen main-thread pass ≈ 25 min.
 - **2026-10-22** — Line references in the brief: BACKLOG.md:617 → the entry is at :644 ("Make `write-folder-cache` atomic"); BACKLOG.md:801 → :828 ("Three atomic-write IPC handlers share one fixed `.tmp` path"). Cited by title from here on (memory `feedback_cite_backlog_by_title`).
 - **2026-10-22** — Pushed; **PR #87** opened. Another session's research commit (`96d9b22`), made in this checkout, had reached it; with the user's approval it moved to its own branch, `research/local-ai-sorting`, and the PR branch went back to `b7e07f9` (a PR comment says so).
-- **2026-10-24** — **Review round 1** (`/code-review max`, a separate chat; 15 findings, 8 held back, plus one remark found only in the reviewer's session text: a cache hit's placement hashes were not saved on a Cancel). One commit; spec § 17 B11–B14.
+- **2026-10-24** — **Review round 1** (`/code-review max`, a separate chat; 15 findings, 8 held back, plus one remark found only in the reviewer's session text: a cache hit's placement hashes were not saved on a Cancel). Commits: `e3c2fae` (full E2E 221 passed, 6 skipped), then the recovery copy. Spec § 17 B11–B14.
   - **#1 JXLs**: hash-initiated JXL decodes queue in the renderer (`_decodeJxlForHash`), and a run puts one JXL on its workers at a time (B11). Each turn is bounded at the main route's 30 s, found on my own re-read: `decodeJxl` arms its timer only at the post, after the worker's init, which has no timeout, and a decode that never settled would have held the queue for the session. Not measured on a real large JXL (none in the folders; the E2E JXLs are 64×64); pinned by unit tests instead.
   - **#2 a held-open target**: reproduced first-hand. With another process holding `.bulk_rated.json` open, the rename failed with `EPERM` after 648–664 ms, whether or not the reader shared it for delete; an in-place write succeeded both times. After the fix the same probe saved in 681 ms and left no tmp (B12). The flush is best effort (held back #8).
+    - **The user's ruling (2026-10-24)**: a side agent pointed out that the in-place fallback is not crash-safe. Of the three options offered, the user chose "Overwrite + recovery copy" over "Plain overwrite" and "Fail with a warning".
+      - The writer keeps its whole tmp until the in-place write is complete.
+      - `readBulkRatedFile` reads the newest tmp that parses when `.bulk_rated.json` does not, never when it is missing.
+      - The renderer writes a recovered file back at once.
+      - The sweep runs only after a successful write.
+    - Tests: 4 unit tests and a new E2E, `bulk-rated-recovery.test.js` (3 tests). Mutations: 5 unit and 3 E2E, all failing their tests. My first missing-file mutant was the wrong shape (it removed the early return, but recovery was still gated on `SyntaxError`); it survived, and the corrected one, which recovers on `ENOENT`, fails the test.
   - **#3 network shares**: recorded, not fixed (Residuals): plausible, unmeasured, and no data at risk.
   - **#4–#15**: fixed as the reviewer proposed. Each fix has a test that fails with the fix removed:
     - #4: the non-YUV frame and its decoder close before `createImageBitmap`.
@@ -844,8 +850,8 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - **Mutations**: every named mutation failed its test.
     - 36 ran through the runner in the session scratchpad (`mutate.cjs`): it applies one, runs the suite, restores the file, and prints a sentinel. This count includes the pool-sequence mutations run again after the code moved to `hash-pool.js`.
     - 3 ran by hand: the canvas size, the env spelling, and the acceptance mutation.
-  - Unit: 2,246 → **2,281** passed, 1 skipped. `hash-parity` + `similarity-sort` E2E: 19/19.
-  - **`wc -l media-viewer.js`: 11,904 → 11,933 (+29).** The shared pool sequence lives in `hash-pool.js` (555 → 668 lines), with a delegate in the renderer.
+  - Unit: 2,246 → **2,285** passed, 1 skipped. `hash-parity` + `similarity-sort` E2E: 19/19.
+  - **`wc -l media-viewer.js`: 11,904 → 11,935 (+31).** The shared pool sequence lives in `hash-pool.js` (555 → 668 lines), with a delegate in the renderer.
 
 ## Key Discoveries
 

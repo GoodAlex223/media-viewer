@@ -1,8 +1,9 @@
 // Main's folder-file writer (G2 PR 2, B2): .hash_cache.json, .sort_cache.json and .bulk_rated.json. A truncating
 // writeFile left a torn file when the app quit mid-save, and .bulk_rated.json holds ratings that exist nowhere else.
-// Each write goes to a tmp with a fresh name, is fsynced, then renamed over the target (written in place instead when
-// another program holds the target open); writes to one target run one at a time, in call order. An orphaned tmp (a quit mid-write) is swept by a later session's first write to that
-// target, once it is TMP_SWEEP_MIN_AGE_MS old.
+// Each write goes to a tmp with a fresh name, is fsynced, then renamed over the target; writes to one target run one
+// at a time, in call order. When another program holds the target open, the target is written in place instead, and
+// the tmp stays until that write is complete, so a torn target still has a whole copy (readRecoveryCopy). An orphaned
+// tmp is swept after a later session's first successful write to that target, once it is TMP_SWEEP_MIN_AGE_MS old.
 const crypto = require('crypto');
 const path = require('path');
 
@@ -11,7 +12,7 @@ const TMP_SWEEP_MIN_AGE_MS = 600_000;
 
 // A rename that still fails with one of these after its retries meets a target another program holds open: Windows
 // refuses to replace an open file, even one shared for delete (PR #87 review #2, measured). The write then goes in
-// place, as every write did before this writer: not atomic, but saved.
+// place, as every write did before this writer.
 const HELD_OPEN_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 
 function tmpPathFor(targetPath, id) {
@@ -19,6 +20,54 @@ function tmpPathFor(targetPath, id) {
 }
 
 const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// The names tmpPathFor gives `targetPath`'s tmps, and nothing else in its folder.
+const tmpPattern = (targetPath) => new RegExp(`^${escapeRegExp(path.basename(targetPath))}\\.[0-9a-f]{12}\\.tmp$`);
+
+// targetPath's tmps that are plain files, newest first.
+async function listTmps(fs, targetPath) {
+    const dir = path.dirname(targetPath);
+    const pattern = tmpPattern(targetPath);
+    let names;
+    try {
+        names = await fs.readdir(dir);
+    } catch (_err) {
+        return [];
+    }
+    const tmps = [];
+    for (const name of names.filter((n) => pattern.test(n))) {
+        const p = path.join(dir, name);
+        try {
+            const st = await fs.lstat(p);
+            if (st.isFile()) {
+                tmps.push({ path: p, mtimeMs: st.mtimeMs });
+            }
+        } catch (_err) {
+            // gone meanwhile
+        }
+    }
+    return tmps.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+/**
+ * The last whole copy of a target that does not parse (the user's ruling on PR #87 review #2, 2026-10-24): an in-place
+ * write of a held-open target that a crash cut short leaves it torn, with the writer's fsynced tmp still beside it.
+ * Returns the first tmp, newest first, that `parse` accepts, or null. Each is checked with `assertPath` before it is
+ * read; a torn, refused or vanished one is skipped.
+ * @param {string} targetPath
+ * @param {{ fs: typeof import('fs').promises, assertPath: (p: string) => Promise<void>, parse: (text: string) => any }} deps
+ */
+async function readRecoveryCopy(targetPath, { fs, assertPath, parse }) {
+    for (const tmp of await listTmps(fs, targetPath)) {
+        try {
+            await assertPath(tmp.path);
+            return parse(await fs.readFile(tmp.path, 'utf8'));
+        } catch (_err) {
+            // the next one
+        }
+    }
+    return null;
+}
 
 /**
  * @param {object} deps
@@ -38,27 +87,11 @@ function createAtomicWriter({
     const swept = new Set(); // targets whose directory this writer has swept
 
     async function sweepOrphans(targetPath) {
-        const dir = path.dirname(targetPath);
-        const pattern = new RegExp(`^${escapeRegExp(path.basename(targetPath))}\\.[0-9a-f]{12}\\.tmp$`);
         const cutoff = now() - TMP_SWEEP_MIN_AGE_MS;
-        let names;
-        try {
-            names = await fs.readdir(dir);
-        } catch (_err) {
-            return;
-        }
-        for (const name of names) {
-            if (!pattern.test(name)) {
-                continue;
-            }
-            const p = path.join(dir, name);
-            try {
-                const st = await fs.lstat(p);
-                if (st.isFile() && st.mtimeMs < cutoff) {
-                    await fs.unlink(p);
-                }
-            } catch (_err) {
+        for (const tmp of await listTmps(fs, targetPath)) {
+            if (tmp.mtimeMs < cutoff) {
                 // best effort: an orphan left now is swept by a later session
+                await fs.unlink(tmp.path).catch(() => {});
             }
         }
     }
@@ -67,10 +100,7 @@ function createAtomicWriter({
         const tmp = tmpPathFor(targetPath, makeId());
         await assertPath(tmp);
         await assertPath(targetPath);
-        if (!swept.has(targetPath)) {
-            swept.add(targetPath);
-            await sweepOrphans(targetPath);
-        }
+        let tmpIsTheWholeCopy = false;
         // 'wx': an entry already at this name (planted, or another writer's) is refused, and never unlinked below.
         const fh = await fs.open(tmp, 'wx');
         try {
@@ -91,12 +121,22 @@ function createAtomicWriter({
                 // Checked again: the target is opened, not replaced, so a link planted since the first check would be
                 // followed out of the folder.
                 await assertPath(targetPath);
+                // From here the tmp is the whole copy: an overwrite cut short (a crash, a full disk) tears the target,
+                // and readRecoveryCopy then reads the tmp. It goes only once the overwrite is complete.
+                tmpIsTheWholeCopy = true;
                 await fs.writeFile(targetPath, data, 'utf8');
                 await fs.unlink(tmp).catch(() => {});
             }
         } catch (err) {
-            await fs.unlink(tmp).catch(() => {});
+            if (!tmpIsTheWholeCopy) {
+                await fs.unlink(tmp).catch(() => {});
+            }
             throw err;
+        }
+        // After a successful write, never before one: a sweep first could remove the only whole copy of a torn target.
+        if (!swept.has(targetPath)) {
+            swept.add(targetPath);
+            await sweepOrphans(targetPath);
         }
     }
 
@@ -116,4 +156,4 @@ function createAtomicWriter({
     return { writeFileAtomic };
 }
 
-module.exports = { createAtomicWriter, tmpPathFor, TMP_SWEEP_MIN_AGE_MS };
+module.exports = { createAtomicWriter, readRecoveryCopy, tmpPathFor, TMP_SWEEP_MIN_AGE_MS };

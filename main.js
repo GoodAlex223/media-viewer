@@ -27,7 +27,7 @@ const { createIpcGuard, tierAssignmentsKind, tierDirMatches } = require('./ipc-g
 const { createAppProtocol, isBlockedEgress, APP_SCHEME, APP_HOST } = require('./app-protocol');
 const { migrateStorage } = require('./storage-migration');
 const { readClipImage } = require('./clip-image');
-const { createAtomicWriter } = require('./atomic-write');
+const { createAtomicWriter, readRecoveryCopy } = require('./atomic-write');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
 // name, so the renderer never names a file path for these channels.
@@ -612,8 +612,8 @@ app.whenReady().then(async () => {
     });
 
     guard.handle('readBulkRatedFile', [kinds.grantedPath], async (_event, folderPath) => {
+        const filePath = path.join(folderPath, '.bulk_rated.json');
         try {
-            const filePath = path.join(folderPath, '.bulk_rated.json');
             await assertFixedPath(filePath);
             const text = await fs.readFile(filePath, 'utf-8');
             const json = JSON.parse(text);
@@ -621,6 +621,16 @@ app.whenReady().then(async () => {
         } catch (err) {
             if (err.code === 'ENOENT') {
                 return { success: true, data: null };
+            }
+            // A torn file: the writer's in-place write of a held-open file was cut short, and its tmp is the last whole
+            // copy (atomic-write.js, the user's ruling on PR #87 review #2). Only for a file that does not parse: a
+            // missing one stays missing, so ratings the user deleted are not brought back.
+            if (err instanceof SyntaxError) {
+                const data = await readRecoveryCopy(filePath, { fs, assertPath: assertFixedPath, parse: JSON.parse });
+                if (data !== null) {
+                    logger.warn('main', `.bulk_rated.json did not parse (${err.message}); read its last whole copy`);
+                    return { success: true, data, recovered: true };
+                }
             }
             return { success: false, error: err.message };
         }

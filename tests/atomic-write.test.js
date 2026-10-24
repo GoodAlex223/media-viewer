@@ -7,7 +7,7 @@ const fsSync = require('fs');
 const fsp = require('fs').promises;
 const os = require('os');
 const path = require('path');
-const { createAtomicWriter, tmpPathFor, TMP_SWEEP_MIN_AGE_MS } = require('../atomic-write.js');
+const { createAtomicWriter, readRecoveryCopy, tmpPathFor, TMP_SWEEP_MIN_AGE_MS } = require('../atomic-write.js');
 const { withReadRetries } = require('../feature-cache-ledger');
 
 const TMP_NAME = /^\.hash_cache\.json\.[0-9a-f]{12}\.tmp$/;
@@ -294,6 +294,35 @@ describe('createAtomicWriter', () => {
         expect(await tmpFiles()).toEqual([]);
     });
 
+    // The user's ruling on PR #87 review #2 (2026-10-24): an in-place write is not crash-safe, so the whole tmp stays
+    // until it is complete, and a torn target is read back from it.
+    it('an in-place write cut short keeps the whole tmp, and readRecoveryCopy reads it back', async () => {
+        const ratings = JSON.stringify({ version: 1, good: ['a.png'], bad: ['b.png'] });
+        const fs = {
+            ...fsp,
+            rename: async () => Promise.reject(errWith('EPERM')),
+            writeFile: async (p, d, enc) => {
+                await fsp.writeFile(p, d.slice(0, 10), enc); // the crash, or a full disk, mid-overwrite
+                throw errWith('ENOSPC');
+            },
+        };
+        await expect(makeWriter({ fs }).writeFileAtomic(target, ratings)).rejects.toMatchObject({ code: 'ENOSPC' });
+        expect(() => JSON.parse(fsSync.readFileSync(target, 'utf8'))).toThrow(SyntaxError);
+        expect(await tmpFiles()).toHaveLength(1);
+        const recovered = await readRecoveryCopy(target, { fs: fsp, assertPath: async () => {}, parse: JSON.parse });
+        expect(recovered).toEqual({ version: 1, good: ['a.png'], bad: ['b.png'] });
+    });
+
+    it('a failed write sweeps nothing, so an old whole copy survives it', async () => {
+        const old = (Date.now() - TMP_SWEEP_MIN_AGE_MS - 60_000) / 1000;
+        const copy = path.join(dir, '.hash_cache.json.111111111111.tmp');
+        fsSync.writeFileSync(copy, '{"whole":true}');
+        fsSync.utimesSync(copy, old, old);
+        const fs = { ...fsp, rename: async () => Promise.reject(errWith('EXDEV')) };
+        await expect(makeWriter({ fs }).writeFileAtomic(target, DATA)).rejects.toMatchObject({ code: 'EXDEV' });
+        expect(fsSync.existsSync(copy)).toBe(true);
+    });
+
     // PR #87 review, held back: some volumes refuse FlushFileBuffers (libuv: EISDIR). The writes before this writer
     // never flushed, so a refused flush must not cost the save.
     it('a refused flush still saves', async () => {
@@ -301,6 +330,38 @@ describe('createAtomicWriter', () => {
         await makeWriter({ fs }).writeFileAtomic(target, DATA);
         expect(await readTarget()).toBe(DATA);
         expect(await tmpFiles()).toEqual([]);
+    });
+});
+
+describe('readRecoveryCopy', () => {
+    const at = (name, text, ageSeconds) => {
+        const p = path.join(dir, name);
+        fsSync.writeFileSync(p, text);
+        const t = Date.now() / 1000 - ageSeconds;
+        fsSync.utimesSync(p, t, t);
+        return p;
+    };
+    const read = (assertPath = async () => {}) => readRecoveryCopy(target, { fs: fsp, assertPath, parse: JSON.parse });
+
+    it('reads the newest tmp that parses, skipping a torn one and one the path check refuses', async () => {
+        at('.hash_cache.json.aaaaaaaaaaaa.tmp', '{"n":1}', 300);
+        const refused = at('.hash_cache.json.bbbbbbbbbbbb.tmp', '{"n":2}', 200);
+        at('.hash_cache.json.cccccccccccc.tmp', '{"n":', 100); // newest, torn
+        at('.sort_cache.json.dddddddddddd.tmp', '{"n":4}', 10); // another target's
+        at('.hash_cache.json.bak', '{"n":5}', 10); // not a tmp name
+        const assertPath = async (p) => {
+            if (p === refused) {
+                throw new Error('Not permitted: link');
+            }
+        };
+        expect(await read(assertPath)).toEqual({ n: 1 });
+        expect(await read()).toEqual({ n: 2 });
+    });
+
+    it('returns null when no tmp parses', async () => {
+        expect(await read()).toBeNull();
+        at('.hash_cache.json.aaaaaaaaaaaa.tmp', 'not json', 100);
+        expect(await read()).toBeNull();
     });
 });
 
