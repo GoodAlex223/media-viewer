@@ -875,7 +875,7 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
     - the stream wait unbounded;
     - the canary wait not raced;
     - the save left unawaited, which failed its test only once the test was fixed.
-  - Unit: 2,285 → **2,292** passed, 1 skipped.
+  - Unit: 2,285 → **2,292** passed, 1 skipped. Full E2E at `bd515b2` (the pre-push hook): **224 passed**, 6 skipped, 0 failed.
   - `wc -l media-viewer.js`: **11,942** (+38 over `b7e07f9`).
 
 ## Key Discoveries
