@@ -644,6 +644,11 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
 
 **When**: set for **Friday 2026-10-23** at plan approval (the user's choice), and not run then; now on a date the user sets, on the head after the review fixes. WEEKLY had planned Thursday 2026-10-22, the day this plan was written, when PR 2 was not built yet. If the branch is not ready on Friday, tell the user before Friday ends and agree a new date; the WEEKLY G2 entry then gets a `**Spillover**` line.
 
+**Before step 1** (added 2026-10-24):
+- `git log --oneline -1` in this checkout shows `0e3eaf3` or later. Other sessions share the checkout.
+- If `Liked_2` holds `.hash_cache.json` or `.sort_cache.json`, rename it aside and back afterwards. A hash cache would skip step 3's hashing, and a saved VP-Tree order would apply at once.
+- Note the CPU load. The machine stays busy with other sessions' work for the foreseeable future, and the user is running the smoke under that load. The verdict is unaffected, since hashes do not depend on load. Durations stretch: about an hour for step 1. `workerFailed=` can be above 0 from the 30 s per-file limit, which is a load artifact and not a defect. Step 4's timings are not comparable to T8's.
+
 1. **Parity.** `$env:MV_HASH_PARITY='1'; npm start` → open `Liked_2` → Sort by Similarity (VP-Tree) → confirm → wait. Then read the `Hash parity:` lines in `%APPDATA%\media_viewer\logs\media-viewer-perf.log`.
    - The first pass runs on workers and stays responsive: about 47 ms per image at pool 3 (T8), so **~12 minutes**.
    - The second pass runs on the main thread and **freezes the app**: about 95 ms per image (T8), so **~25 minutes**.
