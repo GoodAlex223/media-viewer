@@ -3,10 +3,10 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆; ~13 SP across two PRs, spec D7; this plan is **PR 2**, re-estimated ~9 SP below) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
-**Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved 2026-10-19; PR 1 amendments § 15, PR 1 execution notes § 16; **PR 2 planning amendments § 17, B1–B9, committed with this plan**)
+**Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved 2026-10-19; PR 1 amendments § 15, PR 1 execution notes § 16; **PR 2 amendments § 17: B1–B10 from planning, B11–B14 from the PR #87 review**)
 **Created**: 2026-10-22
-**Status**: In Progress — plan approved by the user 2026-10-22 ("Looks good"); smoke Friday 2026-10-23
-**Last Updated**: 2026-10-22
+**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1 and 2 answered (2026-10-24). The `Liked_2` smoke has not run.
+**Last Updated**: 2026-10-24
 **Branch**: `g2-pr2-background-hashing` (from `main` @ `bf5ec84`, after PR #86 merged as `654fb3e`)
 
 **Goal:** A similarity sort hashes its images in background workers, so the app stays usable during a cold-cache sort of a large folder, with hashes that match today's route under the D4 bar. `.hash_cache.json`, `.sort_cache.json` and `.bulk_rated.json` can no longer be torn by a quit mid-save.
@@ -642,7 +642,7 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
 
 **On the branch head after the review fixes** (review round 1, 2026-10-24): it changes the pool and the run's hashing code, so a smoke on an earlier head would not test what merges. It has not run yet: no `Hash parity:` line is in the perf log as of 2026-10-24.
 
-**When**: **Friday 2026-10-23** (the user's choice at plan approval). WEEKLY had planned Thursday 2026-10-22, the day this plan was written, when PR 2 was not built yet. If the branch is not ready on Friday, tell the user before Friday ends and agree a new date; the WEEKLY G2 entry then gets a `**Spillover**` line.
+**When**: set for **Friday 2026-10-23** at plan approval (the user's choice), and not run then; now on a date the user sets, on the head after the review fixes. WEEKLY had planned Thursday 2026-10-22, the day this plan was written, when PR 2 was not built yet. If the branch is not ready on Friday, tell the user before Friday ends and agree a new date; the WEEKLY G2 entry then gets a `**Spillover**` line.
 
 1. **Parity.** `$env:MV_HASH_PARITY='1'; npm start` → open `Liked_2` → Sort by Similarity (VP-Tree) → confirm → wait. Then read the `Hash parity:` lines in `%APPDATA%\media_viewer\logs\media-viewer-perf.log`.
    - The first pass runs on workers and stays responsive: about 47 ms per image at pool 3 (T8), so **~12 minutes**.
@@ -693,7 +693,7 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - M6's companion: the bulk-rated warning now exists (F8). The ordering Residual above still stands.
   - The fix wave's re-review: three comments (`hash-pool.js` at `checkCanary()` and `terminate()`; the test "terminate() settles a pending canary as failed") give a false reason for `terminate()` settling a canary. It is defence in depth; R-F4a's timeout is what bounds the wait.
   - The fix wave's re-review: `tests/e2e/hash-parity.test.js:355` (`state.after > 0`) races the cancellation's own close. It can fail loudly, never falsely.
-  - The fix wave's re-review: `terminate()` leaves an armed canary timer and its slot live for ≤ `canaryTimeoutMs` on a dead pool. A Cancel during the canary waits ≤ ~25 s.
+  - The fix wave's re-review: `terminate()` leaves an armed canary timer and its slot live for ≤ `canaryTimeoutMs` on a dead pool. (Its second half, "a Cancel during the canary waits ≤ ~25 s", is fixed by review round 2 #3: `hashThroughPool` races that wait with the signal.)
   - The deferred task-loop minors the whole-branch review triaged as BACKLOG: T1–T7 (the SDD ledger's list, copied at closeout).
 - **The pool on a network share** (PR #87 review #3; recorded, not fixed) → BACKLOG 🟤. Plausible, not measured: T8 sized the pool on a local folder.
   - If a share drops mid-sort, each of the 3 worker reads and the main lane holds one of main's 4 libuv threads in `fs.realpath` for the ~21 s SMB timeout, so every other filesystem call in main (moves, cache reads and writes) waits until they return. The one-at-a-time loop held one.
@@ -852,6 +852,31 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
     - 3 ran by hand: the canvas size, the env spelling, and the acceptance mutation.
   - Unit: 2,246 → **2,285** passed, 1 skipped. `hash-parity` + `similarity-sort` E2E: 19/19.
   - **`wc -l media-viewer.js`: 11,904 → 11,935 (+31).** The shared pool sequence lives in `hash-pool.js` (555 → 668 lines), with a delegate in the renderer.
+- **2026-10-24** — **Review round 2** (the re-review of `26874e2`): 8 findings and 18 held back. The reviewer accepted 21 of round 1's 23 answers and partly re-raised two, as round-2 findings #2 and #3. Each fix went RED first: its test failed on `26874e2`.
+  - **#1 tmps left by a failed open**: reproduced the class by unit test (3 failed saves left 3 tmps). Fixed: the in-place write opens the target first (`'w'`), and the tmp becomes the recovery copy only after that open succeeds. A first-hand probe after the fix, 3 saves each:
+    - a reader sharing read only: `EBUSY`, 0 tmps;
+    - a read-only file: `EPERM`, 0 tmps;
+    - a reader sharing write: saved in place, 0 tmps.
+  - **#4 no flush before the tmp goes**: fixed in the same shape. The target's handle is flushed (best effort) before the tmp is removed, and a test pins the order.
+  - **#2 the JXL queue moves on at frame 0**: fixed. The queue now waits for the entry's `whenComplete`, bounded at 30 s like the frame. Pinned with a fake pending stream; the real-body timing model was the reviewer's.
+  - **#3 a stop-wake that cannot fire**: fixed. `hashThroughPool` races its own wait for the canary with the signal (`untilAborted`), so a Cancel during the canary ends the call at once; that retires the Residual's "≤ ~25 s" half. The race inside `hashFiles` is removed, its wait made plain and bounded, and its test now pins that behaviour.
+  - **#5–#8, docs**:
+    - "the one way" now names the parity check as the other caller;
+    - B10's last bullet is back under B10;
+    - the status lines in `docs/README.md`, `plans/README.md`, this plan's header and spec line 5 are updated;
+    - CLAUDE.md is trimmed by 477 bytes (65,886 at `b7e07f9`, 67,055 at `26874e2`, 66,578 now), with the history parenthetical gone.
+  - **Held back**: 1 fixed (a throwing `onProgress` left `onResult`'s promise unawaited). The rest are pushed back, agreeing with the reviewer's own drop or doubt, with reasons in the PR comment.
+    - My first test for that fix passed on the old code, so it covered nothing. Every save rejected, so the call failed at the first result, before the throwing progress call at the fifth. Only the fifth save fails now, and the old code fails the test.
+  - **Mutations**: 7 named, run through the runner, all failing their tests:
+    - the flag set before the open;
+    - no flush;
+    - the tmp removed on a cut-short write;
+    - the queue moving on at frame 0;
+    - the stream wait unbounded;
+    - the canary wait not raced;
+    - the save left unawaited, which failed its test only once the test was fixed.
+  - Unit: 2,285 → **2,292** passed, 1 skipped.
+  - `wc -l media-viewer.js`: **11,942** (+38 over `b7e07f9`).
 
 ## Key Discoveries
 

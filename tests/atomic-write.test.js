@@ -298,19 +298,69 @@ describe('createAtomicWriter', () => {
     // until it is complete, and a torn target is read back from it.
     it('an in-place write cut short keeps the whole tmp, and readRecoveryCopy reads it back', async () => {
         const ratings = JSON.stringify({ version: 1, good: ['a.png'], bad: ['b.png'] });
-        const fs = {
-            ...fsp,
-            rename: async () => Promise.reject(errWith('EPERM')),
-            writeFile: async (p, d, enc) => {
-                await fsp.writeFile(p, d.slice(0, 10), enc); // the crash, or a full disk, mid-overwrite
-                throw errWith('ENOSPC');
-            },
-        };
+        const fs = fsWithHandles(
+            (real, index) =>
+                index === 1 // the target's handle: the crash, or a full disk, mid-overwrite
+                    ? {
+                          writeFile: async (d, enc) => {
+                              await real.writeFile(d.slice(0, 10), enc);
+                              throw errWith('ENOSPC');
+                          },
+                      }
+                    : {},
+            { rename: async () => Promise.reject(errWith('EPERM')) }
+        );
         await expect(makeWriter({ fs }).writeFileAtomic(target, ratings)).rejects.toMatchObject({ code: 'ENOSPC' });
         expect(() => JSON.parse(fsSync.readFileSync(target, 'utf8'))).toThrow(SyntaxError);
         expect(await tmpFiles()).toHaveLength(1);
         const recovered = await readRecoveryCopy(target, { fs: fsp, assertPath: async () => {}, parse: JSON.parse });
         expect(recovered).toEqual({ version: 1, good: ['a.png'], bad: ['b.png'] });
+    });
+
+    // PR #87 round 2 #1: the tmp is the whole copy only once the target is open (and so truncated). A target that
+    // cannot be opened at all (read-only, or a reader that refuses write sharing) is untouched, and every failed save
+    // used to leave its full tmp behind.
+    it.each(['EBUSY', 'EPERM'])(
+        'an in-place open refused with %s leaves the target as it was and no tmp',
+        async (code) => {
+            const fs = {
+                ...fsp,
+                rename: async () => Promise.reject(errWith('EPERM')),
+                open: (p, flags) => (p === target ? Promise.reject(errWith(code)) : fsp.open(p, flags)),
+            };
+            const writer = makeWriter({ fs });
+            for (let i = 0; i < 3; i++) {
+                await expect(writer.writeFileAtomic(target, DATA)).rejects.toMatchObject({ code });
+            }
+            expect(await readTarget()).toBe('old');
+            expect(await tmpFiles()).toEqual([]);
+        }
+    );
+
+    // Round 2 #4: the tmp is the only flushed copy, so the in-place write is flushed before the tmp goes.
+    it('the in-place write is flushed before its tmp is removed', async () => {
+        const events = [];
+        const fs = fsWithHandles(
+            (real, index) =>
+                index === 1 // the target's handle (index 0 is the tmp's)
+                    ? {
+                          sync: async () => {
+                              events.push('target flushed');
+                              return real.sync();
+                          },
+                      }
+                    : {},
+            {
+                rename: async () => Promise.reject(errWith('EPERM')),
+                unlink: async (p) => {
+                    events.push(p.endsWith('.tmp') ? 'tmp removed' : 'other removed');
+                    return fsp.unlink(p);
+                },
+            }
+        );
+        await makeWriter({ fs }).writeFileAtomic(target, DATA);
+        expect(await readTarget()).toBe(DATA);
+        expect(events).toEqual(['target flushed', 'tmp removed']);
     });
 
     it('a failed write sweeps nothing, so an old whole copy survives it', async () => {

@@ -3063,7 +3063,7 @@ describe('JXL decodes for hashing run one at a time (PR #87 review #1)', () => {
     });
 
     // Bounded like the main route: a decode that never settles must not hold the queue for the session.
-    it('a decode that never settles gives up its turn after the main route\x27s timeout', async () => {
+    it("a decode that never settles gives up its turn after the main route's timeout", async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
         try {
             const ctx = jxlCtx();
@@ -3077,6 +3077,47 @@ describe('JXL decodes for hashing run one at a time (PR #87 review #1)', () => {
             expect(ctx.decodeJxl).toHaveBeenCalledTimes(2);
             ctx.pending[1].resolve();
             expect((await b).frames[0].pngBytes).toBe('/f/b.jxl');
+            expect(vi.getTimerCount()).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // PR #87 round 2 #2: decodeJxl resolves at frame 0, but the worker decodes every frame of an animated JXL before it
+    // takes the next request, so the next decode's own 15 s timer ran during the rest of the stream.
+    it("the next decode waits for the current file's whole stream, not its frame 0", async () => {
+        const ctx = jxlCtx();
+        let finishStream;
+        const whenComplete = new Promise((resolve) => (finishStream = resolve));
+        ctx.decodeJxl.mockImplementationOnce(async (p) => ({ frames: [{ pngBytes: p }], whenComplete }));
+        const a = decodeForHash.call(ctx, '/f/anim.jxl');
+        const b = decodeForHash.call(ctx, '/f/b.jxl');
+        expect((await a).frames[0].pngBytes).toBe('/f/anim.jxl'); // the hash gets its frame 0 at once
+        await flush();
+        expect(ctx.decodeJxl).toHaveBeenCalledOnce(); // b waits while the worker decodes anim's other frames
+        finishStream();
+        await flush();
+        expect(ctx.decodeJxl).toHaveBeenCalledTimes(2);
+        ctx.pending[0].resolve();
+        expect((await b).frames[0].pngBytes).toBe('/f/b.jxl');
+    });
+
+    it('a stream that never ends frees the queue after the bound', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            const ctx = jxlCtx();
+            ctx.decodeJxl.mockImplementationOnce(async (p) => ({
+                frames: [{ pngBytes: p }],
+                whenComplete: new Promise(() => {}),
+            }));
+            await decodeForHash.call(ctx, '/f/anim.jxl');
+            const b = decodeForHash.call(ctx, '/f/b.jxl');
+            await vi.advanceTimersByTimeAsync(MainThreadHash.MAIN_ROUTE_TIMEOUT_MS - 1);
+            expect(ctx.decodeJxl).toHaveBeenCalledOnce();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(ctx.decodeJxl).toHaveBeenCalledTimes(2);
+            ctx.pending[0].resolve();
+            await b;
             expect(vi.getTimerCount()).toBe(0);
         } finally {
             vi.useRealTimers();
@@ -3173,6 +3214,58 @@ describe('_hashThroughPool: the one pool sequence (PR #87 review #7, #11)', () =
             [10, 10],
             [12, 12],
         ]);
+    });
+
+    // Round 2 #3: the wait inside hashFiles could not see a stop, since this call had already waited for the canary.
+    // The plan's Residual: a Cancel during the canary waited up to ~25 s.
+    it('a Cancel during the canary ends the call at once', async () => {
+        const { ctx, pool } = poolCtx([{ path: '/f/a.jpg', hash: '0101', route: 'worker' }]);
+        pool.checkCanary = vi.fn(() => new Promise(() => {})); // a canary still comparing
+        const controller = new AbortController();
+        const assertLive = () => {
+            if (controller.signal.aborted) {
+                throw new Error('Sorting cancelled by user');
+            }
+        };
+        const call = hashThroughPool.call(ctx, ['/f/a.jpg'], { assertLive, signal: controller.signal });
+        call.catch(() => {});
+        await new Promise((r) => setTimeout(r, 0));
+        controller.abort();
+        expect(await settledWithin(call, 100)).toBe('settled');
+        await expect(call).rejects.toThrow('Sorting cancelled by user');
+        expect(pool.hashFiles).not.toHaveBeenCalled();
+        expect(pool.terminate).toHaveBeenCalledOnce();
+        expect(ctx._reportHashCanaryFailure).not.toHaveBeenCalled();
+    });
+
+    // Round 2, held back: a progress call that threw left the result's own save unawaited.
+    it('a progress call that throws still awaits the save its result started', async () => {
+        const results = Array.from({ length: 5 }, (_, i) => ({ path: `/f/${i}.jpg`, hash: '0101', route: 'worker' }));
+        const { ctx } = poolCtx(results);
+        const unhandled = vi.fn();
+        process.on('unhandledRejection', unhandled);
+        try {
+            const call = hashThroughPool.call(
+                ctx,
+                results.map((r) => r.path),
+                {
+                    assertLive: () => {},
+                    // Only the fifth result's save fails: it is the one in flight when the progress call (at 5) throws.
+                    onResult: (r) =>
+                        r.path === '/f/4.jpg'
+                            ? new Promise((_, reject) => setTimeout(() => reject(new Error('save failed')), 0))
+                            : undefined,
+                    onProgress: () => {
+                        throw new Error('progress failed');
+                    },
+                }
+            );
+            await expect(call).rejects.toThrow();
+            await new Promise((r) => setTimeout(r, 20));
+            expect(unhandled).not.toHaveBeenCalled();
+        } finally {
+            process.off('unhandledRejection', unhandled);
+        }
     });
 
     it('runs no canary when every file is a video', async () => {

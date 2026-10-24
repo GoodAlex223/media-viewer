@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 19–23 § G2 (🔵 🏆, 8 SP → **~13 SP**, see § 13) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2 (manual testing; user priority "speed these up first")
 **Created**: 2026-10-19
-**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9). **PR 1 implemented: PR #85, merge `f668611` (2026-10-20)**; the execution notes are in § 16. **PR 2 planned 2026-10-22** on `g2-pr2-background-hashing`; its planning amendments are § 17 (B1–B9).
+**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9). **PR 1 implemented: PR #85, merge `f668611` (2026-10-20)**; the execution notes are in § 16. **PR 2 planned 2026-10-22** on `g2-pr2-background-hashing`; its planning amendments are § 17 (B1–B10), and the PR #87 review's are B11–B14.
 **Branch**: `g2-hash-sort-off-renderer` (from `main` @ `bfc4cbf`) for PR 1; PR 2 on a new branch after PR 1 merges (D7, § 13.1)
 
 Items marked **(my call)** were decided by Claude during the brainstorm. They were not put to the user, and are listed together at the end of § 3 for review.
@@ -518,6 +518,7 @@ process with the GPU raster path enabled. None of them changes a user ruling.
     Pool 3 took 47 ms per image, with a p99 lateness of 15 ms, about one frame.
   - *Pool 4*: 38 ms per image, at a peak working set 400 MB higher (2,041 MB vs 1,640 MB).
   - *Why 3*: risk R2. The machine has 15.2 GB, of which 1.2 GB was free during the run.
+  - *Across the measurement*: the canary passed at every size, and every image took the worker route.
 
 **Review amendments (PR #87 review round 1, 2026-10-24).** None of them changes a hash or a user ruling.
 
@@ -529,9 +530,10 @@ process with the GPU raster path enabled. None of them changes a user ruling.
     the one-file-at-a-time loop's was;
   - a run puts at most one JXL on its workers at a time, so its other slots keep hashing images.
 
-  A stopped run's queued decode skips its turn. Each turn is bounded at the main route's 30 s, so a decode that never
-  settles cannot hold the queue: `decodeJxl` arms its timer only at the post, after the worker's init. D6's fallback
-  is unchanged.
+  A stopped run's queued decode skips its turn. The queue moves on when the worker is done with the file, not at its
+  frame 0: the worker decodes every frame of an animated JXL before it takes the next request (round 2). Each wait, for
+  the frame and for the rest of the stream, is bounded at the main route's 30 s, so a decode that never settles cannot
+  hold the queue: `decodeJxl` arms its timer only at the post, after the worker's init. D6's fallback is unchanged.
 - **B12. A held-open target is written in place (B2).** Measured on this machine: Windows refuses a rename over a
   file another process holds open (`EPERM` after about 650 ms of retries), even when the reader shares it for delete.
   An in-place write of the same file succeeds under the same handle. A rename still refused after its retries with
@@ -542,11 +544,16 @@ process with the GPU raster path enabled. None of them changes a user ruling.
   until that write is complete. When `.bulk_rated.json` does not parse, `readBulkRatedFile` reads the newest tmp that
   does (`readRecoveryCopy`), and the renderer writes the file back at once. A missing file is never recovered, so
   ratings the user deleted stay deleted. The orphan sweep now runs only after a successful write, so it cannot remove
-  the one whole copy a torn file has.
+  the one whole copy a torn file has. Round 2: the tmp becomes the recovery copy only once the target is open, since
+  `'w'` truncates as it opens. A target that cannot be opened (a read-only file, a reader that refuses write sharing)
+  is left as it was, its tmp is removed, and the save fails as before B2. The in-place write is flushed before the tmp
+  goes.
 - **B13. One run per pool, and the canary is the run's own first step (B4, § 9.2).** Every caller makes a pool per
   run, so the support for several runs at once (R-T4a's wake of every live run) was unreachable, and is gone: a second
   `hashFiles` while one is live throws. An `'auto'` run awaits the memoized canary before its first worker post, so no
-  caller can skip it. A run of videos only needs none.
+  caller can skip it. A run of videos only needs none. Round 2: `hashThroughPool` races its own wait for the canary
+  with the signal, so a Cancel during the canary ends the call at once; the wait inside `hashFiles` stays plain, since
+  the canary is bounded.
 - **B14. One pool sequence (B4).** A run's hash phase and every placement hash through `HashPool.hashThroughPool`:
   - the canary;
   - each result stored only after the caller's liveness check;
@@ -555,5 +562,5 @@ process with the GPU raster path enabled. None of them changes a user ruling.
 
   A run's placement counts its hashes and saves them through the run's own hooks, so a Cancel during a cache hit's
   placement keeps them and the perf line reports them. Every gen bump aborts the old gen's signal, which a
-  placement's pool hashes on, so a stale Show stops reading the old folder's files at once.
-  - *Across the measurement*: the canary passed at every size, and every image took the worker route.
+  placement's pool hashes on, so a stale Show stops reading the old folder's files at once. The parity check is the
+  one caller that drives its pool itself, since it hashes each image on both routes.

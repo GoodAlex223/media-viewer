@@ -121,10 +121,18 @@ function createAtomicWriter({
                 // Checked again: the target is opened, not replaced, so a link planted since the first check would be
                 // followed out of the folder.
                 await assertPath(targetPath);
-                // From here the tmp is the whole copy: an overwrite cut short (a crash, a full disk) tears the target,
-                // and readRecoveryCopy then reads the tmp. It goes only once the overwrite is complete.
+                // 'w' truncates as it opens, so from a successful open until the write completes the target is torn and
+                // the tmp is the whole copy readRecoveryCopy reads. An open that fails (a read-only file, a reader that
+                // refuses write sharing) leaves the target as it was, and the tmp goes as on any failure (round 2 #1).
+                const out = await fs.open(targetPath, 'w');
                 tmpIsTheWholeCopy = true;
-                await fs.writeFile(targetPath, data, 'utf8');
+                try {
+                    await out.writeFile(data, 'utf8');
+                    // Flushed before the tmp, the only flushed copy, is removed (round 2 #4). Best effort, as above.
+                    await out.sync().catch(() => {});
+                } finally {
+                    await out.close();
+                }
                 await fs.unlink(tmp).catch(() => {});
             }
         } catch (err) {

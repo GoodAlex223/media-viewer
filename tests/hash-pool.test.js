@@ -803,20 +803,20 @@ describe('HashPool canary', () => {
         expect(pool.getJxlPngBytes).not.toHaveBeenCalled();
     }, 1000);
 
-    it('a stop while the run waits for its canary ends the run at once', async () => {
+    // Round 2 #3: hashThroughPool, every production caller, races its own wait for the canary with the signal, so
+    // hashFiles' wait only has to be bounded: a stop meanwhile ends the run once the canary settles, with no file sent.
+    it('a stop while the run waits for its canary ends the run once the bounded canary settles', async () => {
         const pool = makeCanaryPool({
             createWorker: factory(pixelResponder()),
-            hashMainUrlPixels: vi.fn(() => new Promise(() => {})), // the canary never finishes on its own
-            canaryTimeoutMs: 60_000,
+            hashMainUrlPixels: vi.fn(() => new Promise(() => {})), // the canary ends only at its timeout
+            canaryTimeoutMs: 50,
         });
         const controller = new AbortController();
         const next = pool.hashFiles(['a.jpg'], { signal: controller.signal }).next();
         await tick();
         controller.abort();
-        expect(await Promise.race([next, tick().then(() => 'still waiting')])).toEqual({
-            done: true,
-            value: undefined,
-        });
+        expect(await next).toEqual({ done: true, value: undefined });
+        expect(allPosts()).toBe(0);
         expect(pool.hashOnMainThread).not.toHaveBeenCalled();
         pool.terminate();
     }, 1000);

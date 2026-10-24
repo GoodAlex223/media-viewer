@@ -8132,15 +8132,12 @@ class MediaViewer {
     // out (8-12 s each at 6000x4000) and the files went unsorted. Queued here, a decode waits outside its timer, as
     // the one-file-at-a-time loop's did. `isStopped` lets a stopped run's queued decode skip its turn.
     _decodeJxlForHash(filePath, isStopped = null) {
-        const turn = this._hashJxlTail.then(() => {
-            if (isStopped?.()) {
-                throw new Error('Stopped');
-            }
-            // Bounded like the main route: decodeJxl's own timer starts only at its post, after the worker's init and
-            // the file read, so one that never settles would otherwise hold the queue for the session.
+        // Bounded like the main route: decodeJxl's own timer starts only at its post, after the worker's init and the
+        // file read, so a decode, or a stream, that never settles would otherwise hold the queue for the session.
+        const bounded = (promise) => {
             let timer;
             return Promise.race([
-                this.decodeJxl(filePath),
+                promise,
                 new Promise((_, reject) => {
                     timer = setTimeout(
                         () => reject(new Error('JXL decode timeout')),
@@ -8148,11 +8145,21 @@ class MediaViewer {
                     );
                 }),
             ]).finally(() => clearTimeout(timer));
+        };
+        const turn = this._hashJxlTail.then(() => {
+            if (isStopped?.()) {
+                throw new Error('Stopped');
+            }
+            return bounded(this.decodeJxl(filePath));
         });
-        this._hashJxlTail = turn.then(
-            () => {},
-            () => {}
-        );
+        // The hash has its frame 0 when the turn resolves, but the worker decodes every frame of an animated JXL
+        // before it takes the next request: the queue moves on when the stream completes (round 2 #2).
+        this._hashJxlTail = turn
+            .then((entry) => (entry?.whenComplete ? bounded(entry.whenComplete) : undefined))
+            .then(
+                () => {},
+                () => {}
+            );
         return turn;
     }
 

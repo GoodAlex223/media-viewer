@@ -26,6 +26,32 @@ const CANARY_TIMED_OUT = Symbol('canary timed out');
 const withWorkerErrors = (result, errors) =>
     errors && errors.length > 0 ? { ...result, workerErrors: errors } : result;
 
+const ABORTED = Symbol('aborted');
+
+// `promise`'s outcome, or ABORTED as soon as `signal` aborts, whichever comes first. The promise itself runs on.
+function untilAborted(promise, signal) {
+    if (!signal) {
+        return promise;
+    }
+    if (signal.aborted) {
+        return Promise.resolve(ABORTED);
+    }
+    return new Promise((resolve, reject) => {
+        const onAbort = () => resolve(ABORTED);
+        signal.addEventListener('abort', onAbort, { once: true });
+        promise.then(
+            (value) => {
+                signal.removeEventListener('abort', onAbort);
+                resolve(value);
+            },
+            (err) => {
+                signal.removeEventListener('abort', onAbort);
+                reject(err);
+            }
+        );
+    });
+}
+
 /**
  * A fresh tally for hashThroughPool, which adds into it: the pool's size, the hashes from a worker and from the
  * main-thread route (fallback), the failures, whether a canary failed, and the milliseconds spent. One tally serves a
@@ -36,10 +62,11 @@ export function newHashStats() {
 }
 
 /**
- * The one way the renderer hashes through a pool (PR #87 review #11): a run's hash phase and a placement's new files
- * alike. A fresh pool from `createPool()`; its canary, reported once through `onCanaryFailure(detail)` and skipped when
- * every file is a video; each result stored with `store(path, hash)` only after `assertLive()`, with no await between
- * the two; the pool terminated in a finally. `onResult(r)` runs after each store (a run counts and saves there; it may
+ * How a similarity sort hashes through a pool (PR #87 review #11): a run's hash phase and a placement's new files
+ * alike. The parity check is the one other caller, and drives its pool itself (hash-parity.js), since it hashes each
+ * image on both routes. A fresh pool from `createPool()`; its canary, reported once through `onCanaryFailure(detail)`,
+ * raced with `signal` and skipped when every file is a video; each result stored with `store(path, hash)` only after
+ * `assertLive()`, with no await between the two; the pool terminated in a finally. `onResult(r)` runs after each store (a run counts and saves there; it may
  * await); `onProgress(done)` every HASH_PROGRESS_EVERY results and at the end. `stats` (newHashStats()) is the caller's,
  * so a run's two callers add into one. Each worker fallback and failure goes to `log(message)` with its file and reason,
  * at most MAX_HASH_LOG_LINES per call, then one line counting the rest (#7).
@@ -74,10 +101,11 @@ export async function hashThroughPool(
     let done = 0;
     try {
         if (paths.some((p) => !isVideoPath(p))) {
-            // The 'auto' run awaits the same, memoized check before its first post: awaited here to report it.
-            const canary = await pool.checkCanary();
+            // The 'auto' run awaits the same, memoized check before its first post: awaited here to report it, and
+            // raced with the signal, so a Cancel during the canary ends the call at once (round 2 #3).
+            const canary = await untilAborted(pool.checkCanary(), signal);
             assertLive();
-            if (!canary.ok) {
+            if (canary !== ABORTED && !canary.ok) {
                 s.canaryFailed = true;
                 onCanaryFailure(canary.detail);
             }
@@ -102,12 +130,16 @@ export async function hashThroughPool(
             } else if (r.hash === null) {
                 logLine(`Hash failed: ${r.path}: ${r.error}`);
             }
-            // The result's own bookkeeping first, so the progress line counts it; then any save it started.
+            // The result's own bookkeeping first, so the progress line counts it; then any save it started, awaited
+            // even when the progress call throws, so its rejection is never left unhandled.
             const pending = onResult?.(r);
-            if (done % HASH_PROGRESS_EVERY === 0 || done === paths.length) {
-                onProgress?.(done);
+            try {
+                if (done % HASH_PROGRESS_EVERY === 0 || done === paths.length) {
+                    onProgress?.(done);
+                }
+            } finally {
+                await pending;
             }
-            await pending;
         }
         // An abort ends the pool's iteration without a throw: the caller says so here.
         assertLive();
@@ -311,14 +343,10 @@ export class HashPool {
         try {
             if (route === 'auto' && run.queue.length + run.jxlQueue.length > 0) {
                 // The canary is the run's own first step (PR #87 review #12), so no caller can send a file to a worker
-                // it has not checked. A stop meanwhile wakes the run; a run of videos only needs no canary.
-                await Promise.race([
-                    this.checkCanary(),
-                    new Promise((resolve) => {
-                        run.wake = resolve;
-                    }),
-                ]);
-                run.wake = null;
+                // it has not checked; a run of videos only needs none. A stop meanwhile is seen once the canary settles
+                // (it is bounded): a caller that must answer a Cancel at once races its own wait for it, as
+                // hashThroughPool does.
+                await this.checkCanary();
             }
             this._pump(run);
             for (;;) {
