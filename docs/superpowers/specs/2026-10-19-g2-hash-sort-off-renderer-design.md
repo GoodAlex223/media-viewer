@@ -552,8 +552,9 @@ process with the GPU raster path enabled. None of them changes a user ruling.
   run, so the support for several runs at once (R-T4a's wake of every live run) was unreachable, and is gone: a second
   `hashFiles` while one is live throws. An `'auto'` run awaits the memoized canary before its first worker post, so no
   caller can skip it. A run of videos only needs none. Round 2: `hashThroughPool` races its own wait for the canary
-  with the signal, so a Cancel during the canary ends the call at once; the wait inside `hashFiles` stays plain, since
-  the canary is bounded.
+  with the signal, so a Cancel during a sort's canary ends the call at once; the wait inside `hashFiles` stays plain,
+  since the canary is bounded. The parity check awaits its canary unraced, so a Cancel there still waits ≤ ~25 s:
+  accepted, since it is a bounded diagnostic (review round 3).
 - **B14. One pool sequence (B4).** A run's hash phase and every placement hash through `HashPool.hashThroughPool`:
   - the canary;
   - each result stored only after the caller's liveness check;

@@ -693,11 +693,12 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - M6's companion: the bulk-rated warning now exists (F8). The ordering Residual above still stands.
   - The fix wave's re-review: three comments (`hash-pool.js` at `checkCanary()` and `terminate()`; the test "terminate() settles a pending canary as failed") give a false reason for `terminate()` settling a canary. It is defence in depth; R-F4a's timeout is what bounds the wait.
   - The fix wave's re-review: `tests/e2e/hash-parity.test.js:355` (`state.after > 0`) races the cancellation's own close. It can fail loudly, never falsely.
-  - The fix wave's re-review: `terminate()` leaves an armed canary timer and its slot live for ≤ `canaryTimeoutMs` on a dead pool. (Its second half, "a Cancel during the canary waits ≤ ~25 s", is fixed by review round 2 #3: `hashThroughPool` races that wait with the signal.)
+  - The fix wave's re-review: `terminate()` leaves an armed canary timer and its slot live for ≤ `canaryTimeoutMs` on a dead pool. (Its second half, "a Cancel during the canary waits ≤ ~25 s", is fixed **for the sorts** by review round 2 #3: `hashThroughPool` races that wait with the signal. A Cancel during the **parity check's** canary still waits ≤ ~25 s, because `runHashParity` awaits it unraced. That is accepted, since parity mode is a bounded diagnostic (review round 3 #1).)
   - The deferred task-loop minors the whole-branch review triaged as BACKLOG: T1–T7 (the SDD ledger's list, copied at closeout).
 - **A ratings save fails while another program blocks writing to `.bulk_rated.json`** (the user's ruling 2026-10-24: record it, no change in PR #87) → BACKLOG 🟤, flagged as irreplaceable data.
   - Measured 2026-10-24, 3 saves each: a reader sharing read only fails every save with `EBUSY`, and a read-only file fails every save with `EPERM`. The overwrite fallback (B12) helps only a holder that allows writing. Before this PR every save failed the same way.
   - The user sees one warning per folder visit, naming the folder. The ratings stay in memory and the next rating retries, but ratings since the last good save are lost if the app closes first. Today's remedy: close the other program, then rate again.
+  - A constraint on the `userData` candidate (review round 3): its merge on load must respect ratings cleared or undone after the fallback copy was written. An absent-only merge would bring them back, the PR #84 trap (memory `feedback_idempotent_is_not_retry_safe`).
   - Fix candidates: retry a failed save every few seconds until it succeeds, in the renderer's `saveBulkRatedFile` (S), so closing the other program is enough. Or keep a fallback copy in `userData` when the folder save fails and merge it on the next load (M; touches `main.js` IPC, so it needs a security pass).
 - **The pool on a network share** (PR #87 review #3; recorded, not fixed) → BACKLOG 🟤. Plausible, not measured: T8 sized the pool on a local folder.
   - If a share drops mid-sort, each of the 3 worker reads and the main lane holds one of main's 4 libuv threads in `fs.realpath` for the ~21 s SMB timeout, so every other filesystem call in main (moves, cache reads and writes) waits until they return. The one-at-a-time loop held one.
@@ -863,7 +864,7 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
     - a reader sharing write: saved in place, 0 tmps.
   - **#4 no flush before the tmp goes**: fixed in the same shape. The target's handle is flushed (best effort) before the tmp is removed, and a test pins the order.
   - **#2 the JXL queue moves on at frame 0**: fixed. The queue now waits for the entry's `whenComplete`, bounded at 30 s like the frame. Pinned with a fake pending stream; the real-body timing model was the reviewer's.
-  - **#3 a stop-wake that cannot fire**: fixed. `hashThroughPool` races its own wait for the canary with the signal (`untilAborted`), so a Cancel during the canary ends the call at once; that retires the Residual's "≤ ~25 s" half. The race inside `hashFiles` is removed, its wait made plain and bounded, and its test now pins that behaviour.
+  - **#3 a stop-wake that cannot fire**: fixed. `hashThroughPool` races its own wait for the canary with the signal (`untilAborted`), so a Cancel during a sort's canary ends the call at once; that retires the Residual's "≤ ~25 s" half for the sorts. The parity check still awaits its canary unraced, which is accepted: it is a bounded diagnostic. The race inside `hashFiles` is removed, its wait made plain and bounded, and its test now pins that behaviour.
   - **#5–#8, docs**:
     - "the one way" now names the parity check as the other caller;
     - B10's last bullet is back under B10;
@@ -881,6 +882,10 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
     - the save left unawaited, which failed its test only once the test was fixed.
   - Unit: 2,285 → **2,292** passed, 1 skipped. Full E2E at `bd515b2` (the pre-push hook): **224 passed**, 6 skipped, 0 failed.
   - `wc -l media-viewer.js`: **11,942** (+38 over `b7e07f9`).
+- **2026-10-24** — **Review round 3** (the re-review of `8f7eb87`): all of round 2's answers accepted, 1 new finding, 5 held back.
+  - **#1**: two records called the canary-Cancel fix complete, though it covers the sorts only. Both now say "for the sorts" and record the parity check's accepted wait (≤ ~25 s, a bounded diagnostic), so Extract carries it: this plan's Residual and log, spec B13, and two test comments. Comments and docs only.
+  - The reviewer's note on the new Residual is recorded there: a `userData` fallback's merge must respect ratings cleared or undone since its copy was written.
+  - Held back: all 5 pushed back, as the reviewer dropped or doubted them.
 
 ## Key Discoveries
 

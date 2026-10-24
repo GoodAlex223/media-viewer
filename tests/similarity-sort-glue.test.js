@@ -3217,7 +3217,7 @@ describe('_hashThroughPool: the one pool sequence (PR #87 review #7, #11)', () =
     });
 
     // Round 2 #3: the wait inside hashFiles could not see a stop, since this call had already waited for the canary.
-    // The plan's Residual: a Cancel during the canary waited up to ~25 s.
+    // The plan's Residual: a Cancel during a sort's canary waited up to ~25 s (the parity check's still does, accepted).
     it('a Cancel during the canary ends the call at once', async () => {
         const { ctx, pool } = poolCtx([{ path: '/f/a.jpg', hash: '0101', route: 'worker' }]);
         pool.checkCanary = vi.fn(() => new Promise(() => {})); // a canary still comparing

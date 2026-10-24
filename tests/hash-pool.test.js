@@ -803,8 +803,9 @@ describe('HashPool canary', () => {
         expect(pool.getJxlPngBytes).not.toHaveBeenCalled();
     }, 1000);
 
-    // Round 2 #3: hashThroughPool, every production caller, races its own wait for the canary with the signal, so
-    // hashFiles' wait only has to be bounded: a stop meanwhile ends the run once the canary settles, with no file sent.
+    // Round 2 #3: hashThroughPool, the sorts' caller, races its own wait for the canary with the signal, and the parity
+    // check accepts a bounded wait, so hashFiles' wait only has to be bounded: a stop meanwhile ends the run once the
+    // canary settles, with no file sent.
     it('a stop while the run waits for its canary ends the run once the bounded canary settles', async () => {
         const pool = makeCanaryPool({
             createWorker: factory(pixelResponder()),
