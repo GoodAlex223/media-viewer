@@ -709,6 +709,7 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
 - **BACKLOG [2026-10-11] "Make `write-folder-cache` atomic"** → check it off at closeout, if T1 ships.
 - **BACKLOG "Three atomic-write IPC handlers share one fixed `.tmp` path"** → append: `write-folder-cache` and `writeBulkRatedFile` now use unique names (B2), and Improvement #2 covers the remaining two.
 - **BACKLOG [2026-10-21] "A Cancel during a hash save re-saves the same entries"** → check it off at closeout if T5's test ships.
+- **BACKLOG [2026-10-21] "A Cancel during a cache hit's placement drops the placement's hashes"** (under "From: G2 PR 1 closeout") → check it off at closeout: fixed by review round 1 #11. The placement's `onResult` is the run's `onHashResult`, which counts into `newSinceSave`, so the run's catch saves them; the glue test "a Cancel after the placement hashed keeps the placement's hashes" pins it.
 - **Spec § 12's "to file at closeout" items, not yet in BACKLOG** (checked 2026-10-22; PR 1's closeout did not file them) → BACKLOG 🟤:
   - today's hashes depend on the GPU raster path and drift across Chromium updates (F3, F6);
   - `insertNewFilesInSortedOrder`'s placement loop scans the whole list per new file on the main thread (my call 12);
@@ -886,6 +887,7 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - **#1**: two records called the canary-Cancel fix complete, though it covers the sorts only. Both now say "for the sorts" and record the parity check's accepted wait (≤ ~25 s, a bounded diagnostic), so Extract carries it: this plan's Residual and log, spec B13, and two test comments. Comments and docs only.
   - The reviewer's note on the new Residual is recorded there: a `userData` fallback's merge must respect ratings cleared or undone since its copy was written.
   - Held back: all 5 pushed back, as the reviewer dropped or doubted them.
+- **2026-10-24** — **Review round 4 and close-out** (the re-review of `a9b1d6e`): no code issue. The close-out's one finding was a fixed BACKLOG entry with no check-off line. Added under Residuals beside T5's: "A Cancel during a cache hit's placement drops the placement's hashes". Held back: 3, all pushed back.
 
 ## Key Discoveries
 
