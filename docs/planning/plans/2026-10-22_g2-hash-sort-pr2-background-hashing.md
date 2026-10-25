@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆; ~13 SP across two PRs, spec D7; this plan is **PR 2**, re-estimated ~9 SP below) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
 **Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved 2026-10-19; PR 1 amendments § 15, PR 1 execution notes § 16; **PR 2 amendments § 17: B1–B10 from planning, B11–B14 from the PR #87 review**)
 **Created**: 2026-10-22
-**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and the re-run on `124fb69` passed. Steps 3–4 have not run.
+**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and the re-run on `124fb69` passed. Steps 3–4 passed the same day: the smoke is complete.
 **Last Updated**: 2026-10-24
 **Branch**: `g2-pr2-background-hashing` (from `main` @ `bf5ec84`, after PR #86 merged as `654fb3e`)
 
@@ -681,7 +681,8 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
-- **Videos still hash on the main thread** (spec non-goal). `Liked_2` holds 60, so each run spends a few seconds of main-thread work on them, spread across the run. → BACKLOG 🟤 only if the smoke shows a stall.
+- **Videos still hash on the main thread** (spec non-goal). `Liked_2` holds 60, so each run spends a few seconds of main-thread work on them, spread across the run. → BACKLOG 🟤 only if the smoke shows a stall. **Smoke step 3 (2026-10-25): no stall with 51 videos, so no entry.**
+- **The similarity sort's own phase is now the long part of a cold run** (smoke step 3, 2026-10-25): `sort=361520ms` on 14,201 files (VP-Tree, `sorting-worker.js`), 38% of the run's 943 s, after a 580 s hash phase. It runs in the sorting worker, so the app stays usable, and PR 2 does not touch it. TODO 🔴 "Speed up AI / similarity sorting on large folders (24k+ files)" names this half too: "the neighbor-graph build is O(n·K) … with an O(n²) MST/greedy fallback". → At closeout, do not check that TODO off on PR 2 alone. Either keep it open for the sort phase or move that half to a 🟤 BACKLOG entry carrying this figure; ask the user which.
 - **Bulk-rated saves can still land out of order** (T1 review, minor 1; pre-existing) → BACKLOG 🟤, flagged as irreplaceable data.
   - The renderer fires an un-awaited `saveBulkRatedFile()` from `removeFileFromList` (`media-viewer.js:1491`), and a later save can overtake it. The IPC guard's async `grantedPath` check runs before the writer's per-target chain, so two overlapping saves can reach the chain in the opposite order.
   - The next save rewrites the whole in-memory map, so a newest rating is lost only if the app quits first.
@@ -917,6 +918,13 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - My error on the way: I first told the user no report had been written, from the perf log's directory listing. NTFS showed a stale time and size for a file the app holds open. The report had been written at 03:52:51. Saved to memory.
   - **Next**: the user re-runs step 1 on the B15 head, then steps 3–4.
 - **2026-10-25** — **Smoke step 1 re-run on `124fb69`: `verdict=pass`.** `images=14150 compared=14150 identical=14146 diff1=1 diff2plus=3 rate=0.03% workerFailed=0 mainFailed=0 videos=51 canary=pass`. The same four JPEGs as the first run differ, so the differences repeat across sessions. Each is `class=accepted maxPixel=1`. The worker pass took 544 s (38 ms an image, pool 3) and the main pass 1,262 s (89 ms), under the same load. `Liked_2` held no `.hash_cache.json` or `.sort_cache.json`, so step 3 runs cold. Next: the user's step 3, then step 4's timing.
+- **2026-10-25** — **Smoke steps 3–4 on `124fb69`: pass.**
+  - The user's step 3 (normal run, cold, browsing, rating, undo, compare and back, K changed): no stall noticed. "Similarity order ready — Show" appeared, Show applied the order, the rated files were absent and the undone file present. The user did not report a memory peak (R2), so no figure is recorded.
+  - Perf line: `Similarity sort: outcome=offered total=943422ms | load=8ms | hash=579963ms (new 14201, worker 14150, fallback 51, skipped 0, pool 3) | save=1891ms | sort=361520ms | files=14201`. `outcome=offered` is right: the user acted during the run, so it offered Show (D3).
+  - The session log has no `Hash worker:` or `Hash failed:` line. `fallback 51` is exactly the folder's 51 videos, so no image fell back.
+  - **Step 4, timing.** The hash phase took 580 s (41 ms a file) in the background, with the user working. Step 1's main-thread pass, today's route, took 1,262 s for the 14,150 images (89 ms each) with the app frozen. So a cold hash phase is about 2.2× faster and no longer blocks. T8's figures don't compare, given the load.
+  - The VP-Tree sort phase, 361 s, is now 38% of the run. Residual added, carrying it to TODO 🔴 "Speed up AI / similarity sorting…".
+  - **The smoke is complete.** Before merge: the reviewer's pass over `124fb69`, the real-JXL measurement, and the user's go-ahead.
 
 ## Key Discoveries
 
