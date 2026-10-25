@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 19–23 § G2 (🔵 🏆, 8 SP → **~13 SP**, see § 13) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2 (manual testing; user priority "speed these up first")
 **Created**: 2026-10-19
-**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9). **PR 1 implemented: PR #85, merge `f668611` (2026-10-20)**; the execution notes are in § 16. **PR 2 planned 2026-10-22** on `g2-pr2-background-hashing`; its planning amendments are § 17 (B1–B10), the PR #87 review's are B11–B14, and the smoke's D4 ruling is B15 (2026-10-25).
+**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9). **PR 1 implemented: PR #85, merge `f668611` (2026-10-20)**; the execution notes are in § 16. **PR 2 planned 2026-10-22** on `g2-pr2-background-hashing`; its planning amendments are § 17 (B1–B10), the PR #87 review's are B11–B14, and the smoke's D4 ruling is B15 (2026-10-25). **PR 2 implemented: PR #87, merge `f5ddfa3` (2026-10-25)**; its post-implementation notes close § 17.
 **Branch**: `g2-hash-sort-off-renderer` (from `main` @ `bfc4cbf`) for PR 1; PR 2 on a new branch after PR 1 merges (D7, § 13.1)
 
 Items marked **(my call)** were decided by Claude during the brainstorm. They were not put to the user, and are listed together at the end of § 3 for review.
@@ -467,7 +467,7 @@ The plan's Progress Log has the full record. These notes refine or depart from t
 ## 17. Planning amendments (PR 2, 2026-10-22)
 
 These were measured on `bf5ec84` while writing the PR 2 plan
-([plan](../../planning/plans/2026-10-22_g2-hash-sort-pr2-background-hashing.md)), each in a fresh Electron 39.1.2
+([plan](../../archive/plans/2026-10-22_g2-hash-sort-pr2-background-hashing.md), archived), each in a fresh Electron 39.1.2
 process with the GPU raster path enabled. None of them changes a user ruling.
 
 - **B1. The canary compares pixels, not hashes (§ 9.2).**
@@ -608,3 +608,20 @@ process with the GPU raster path enabled. None of them changes a user ruling.
     difference that flips 2 bits. Zero differences, which would put every JPEG back on the main thread: three
     quarters of `Liked_2`'s images (11,690 of 15,589 on 2026-10-22).
     R1's option B, which would not have covered the file without a color profile.
+
+**Post-implementation notes (PR 2 merged 2026-10-25, PR #87, merge `f5ddfa3`).**
+- **§ 9.2's canary JPEG has a color profile.** Chromium's canvas JPEG encoder embeds an sRGB ICC profile in an APP2
+  segment (T3, confirmed with libvips), so "no color profile" is wrong as a fact. B1 had already measured that JPEG
+  pixel-exact on both routes, so the canary design stands.
+- **§ 11.1's grayscale fixture** was first written as a 3-component JPEG. The final review's fix wave made it truly
+  1-component (`gray.jpg`). The spec's list was right; the fixture was not.
+- **The smoke** (§ 11.4) ran on 2026-10-25 under load, not on Thursday.
+  - Step 1 failed on the bit-count rule, which led to B15. The re-run passed: 14,150 compared, 4 differing (0.03%),
+    all `maxPixel=1`.
+  - Step 3: no stall, and Show applied the order. The cold hash phase took 580 s in the background, against 1,262 s
+    for the same images frozen on the main thread.
+  - The sort phase itself took 361 s, 38% of the run. PR 2 did not touch it; it is BACKLOG 🔵 [2026-10-25].
+- **B11's limit** (a stream past 30 s lets the next decode into a busy worker) is BACKLOG 🟤 [2026-10-25] "A long
+  animated JXL stalls the hash JXL queue", by the user's ruling: a follow-up PR.
+- **The review's recorded items** (the pool on a network share, a ratings save blocked by another program, the parity
+  check's unraced canary wait) are in BACKLOG 🟤 [2026-10-25]. Nothing else in the code departs from § 17.

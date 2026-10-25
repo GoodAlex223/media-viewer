@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-22 <!-- Stop the feature cache being wiped on a folder switch (TODO 🔴, ahead of G2 PR 2). MERGED 2026-10-22 via PR #86 (merge 654fb3e) after a 15-finding PR review and three close-out rounds, all fixed. -->
+**Last Updated**: 2026-10-25 <!-- Group G2: Hash and similarity sort off the renderer thread, PR 2 of 2 (background hashing, parity mode, atomic folder writes; 🔵 🏆, Oct 19–23). MERGED 2026-10-25 via PR #87 (merge f5ddfa3) after a final review with a fix wave, five PR review rounds, the user's Liked_2 smoke (B15 ruling) and a real-JXL measurement. Closes G2 and TODO 🔴 "Speed up AI / similarity sorting…". -->
+<!-- Previous: Stop the feature cache being wiped on a folder switch (TODO 🔴, ahead of G2 PR 2). MERGED 2026-10-22 via PR #86 (merge 654fb3e) after a 15-finding PR review and three close-out rounds, all fixed. -->
 <!-- Previous: Group G2: Hash and similarity sort off the renderer thread, PR 1 of 2 (end-of-sort fixes, 🔵 🏆, Oct 19–23). MERGED 2026-10-20 via PR #85 (merge f668611) after a final review with a fix wave, a 24-finding PR review with three fix waves, and two user-approved additions (Tasks 6–7). G2 stays open for PR 2. -->
 <!-- Previous: Group G1: Confine page-side file loads to the granted folders (residual I1, 🟤, Oct 19–23). MERGED 2026-10-19 via PR #84 (merge 4548269) after one PR review round: 1 finding, fixed, with its open trade-off accepted. -->
 <!-- Previous: Group G6: Weekly Reviews (2026-10-17 run, ⚪ Overhead). MERGED 2026-10-18 via PR #83 (merge 1954109) after three review rounds: 8 findings, then 2 leftovers, then none. -->
@@ -27,6 +28,62 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-25 — Group G2: Hash and similarity sort off the renderer thread, PR 2 of 2 (background hashing, parity mode, atomic folder writes) 🔵 🏆 (Oct 19–23) — **MERGED `f5ddfa3`** (PR #87)
+
+**Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md). § 17 holds PR 2's amendments: B1–B10 from planning, B11–B14 from the review, and B15 from the smoke. Its post-implementation notes are at the end of § 17.
+**Plan**: [2026-10-22_g2-hash-sort-pr2-background-hashing.md](../archive/plans/2026-10-22_g2-hash-sort-pr2-background-hashing.md). Eight tasks, subagent-driven, then a final review with one fix wave, five PR review rounds, the user's smoke and a real-JXL measurement.
+**Branch**: `g2-pr2-background-hashing`, cut from `main` at `bf5ec84`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: MERGED 2026-10-25 via PR #87** (merge `f5ddfa3`, 37 commits). It was planned at ~9 SP; the five review rounds, the smoke's D4 ruling (B15) and the JXL measurement added about 5–6 SP. With PR 1 (PR #85) it closes G2, and with it TODO 🔴 "Speed up AI / similarity sorting on large folders (24k+ files)" (the user's ruling). The similarity sort's own graph-build phase moves to BACKLOG 🔵 [2026-10-25].
+
+**What shipped:**
+- **Background hashing.** A similarity sort hashes its images in a per-run pool of 3 module workers (`hash-pool.js`, `hash-worker.js`).
+  - Each image goes through the measured F4 route: bytes → sniffed type → an `ImageDecoder` YUV frame or `createImageBitmap` → a fresh 256×256 `OffscreenCanvas` → the one `blockhash` (`perceptual-hash.js`, shared by both routes).
+  - The main-thread route (`main-thread-hash.js`) is the fallback, for videos and for any worker failure. A worker crash or timeout re-queues the file once.
+  - A pixel-exact canary runs before each run's first worker post. Its failure sends the whole run to the main thread.
+  - Every run's hashing and its placements go through `hashThroughPool` (B4, B14): one sequence, results stored only after the caller's liveness check, the pool terminated in a `finally`.
+- **Parity mode** (`MV_HASH_PARITY=1`, `hash-parity.js`). Every similarity sort of that launch hashes every image on both routes, sorts nothing, writes no cache, and writes a D4-classified report to the perf log.
+  - Since B15, D4's accepted class is measured on the pixels: a JPEG or lossy-WebP difference passes when its re-measure reproduces both hashes and no read-back byte is more than 1 level off, whatever the bit count. The 0.5% cap stays.
+- **Atomic folder writes** (`atomic-write.js`). `.hash_cache.json`, `.sort_cache.json` and `.bulk_rated.json` get a unique tmp, fsync and rename, one write per file at a time. A file another program holds open is written in place, keeping its tmp until the write completes. A failed ratings save warns once per folder visit.
+- **Hash JXL decodes queue one at a time** (`_decodeJxlForHash`, B11), each turn bounded at 30 s.
+- `media-viewer.js`: 11,879 → 11,945 lines (+66). Out went the hash route (~150 lines); in came the pool and canary orchestration, the parity glue (+81) and the ratings-save warning. The hashing code lives in its own modules: `hash-pool.js` 754, `hash-parity.js` 277, `main-thread-hash.js` 205, `hash-worker.js` 194, `atomic-write.js` 167, `perceptual-hash.js` 53.
+
+**Verification:**
+- Every task went RED first, with named mutations. The E2E parity test has 30 generated fixtures, and its acceptance mutation (`willReadFrequently` in the worker) failed 7 of 28 fixtures and the canary.
+- T8 measured pool sizes 1–4 and kept 3, against the plan's rule, because of peak memory (B10).
+- Unit: 2,070 → **2,318** passed, 1 skipped. E2E: 213 → **225** passed, 6 skipped.
+- **The user's smoke on `Liked_2`** (14,255 files, cold, with other work loading the CPU):
+  - Step 1, parity: the first run failed D4 on three 2-bit JPEG differences, all ±1-pixel rounding. That led to the B15 ruling.
+  - The re-run on `124fb69` passed: 14,150 compared, 4 differing (0.03%), each `class=accepted maxPixel=1`.
+  - Step 3, a normal cold run while browsing, rating and undoing: no stall, and Show applied the order. The hash phase took 580 s in the background, against 1,262 s for the same images frozen on the main thread.
+- **The real-JXL measurement:** the stills queue fix holds (3 of 3, against 1 of 3 before). A stream longer than 30 s still stalls the next decode. That is not a regression (4 of 6 hashed, against `main`'s 1), and it goes to a follow-up by the user's ruling.
+
+**Review:**
+- The final whole-branch review (Opus · `max`) found 1 Important and 14 minors, fixed in one wave (`9068c27`). Its main finding: a cancelled parity run logged `verdict=pass`.
+- PR #87 had four rounds in a separate chat (15 findings, then 8, 1 and 1), then round 5 in the implementation chat through a fresh subagent at the user's request (4 low, 6 nits). All were answered; the last close-out re-raised nothing.
+- Recorded, not fixed (BACKLOG 🟤 [2026-10-25]):
+  - the pool on a network share (review #3, unmeasured);
+  - a ratings save blocked by another program, with its `userData` merge constraint;
+  - the parity check's unraced canary wait;
+  - three comments with a false reason for `terminate()`;
+  - the bulk-rated save order.
+
+**User rulings:**
+- the atomic writer covers `.bulk_rated.json` too;
+- the smoke moved to Friday, then ran on 2026-10-25 under load;
+- B15: D4 measured on the pixels;
+- the long-stream JXL stall goes to a follow-up PR;
+- round 5 ran in this chat through a subagent;
+- the 24k TODO closes, and its sort-phase half goes to BACKLOG 🔵.
+
+**Key learnings:**
+- ⭐ A median-split hash's smallest change is 2 bits. With no block tied at the median, `blockhash` sets exactly 127 bits, so a parity bar written in bits rejected the very rounding it meant to accept. Measure the mechanism, the pixels.
+- ⭐ A hash-equality canary cannot see a raster-path change: a ~100k-byte read-back change left 5 of 7 hashes identical. Compare pixels (B1).
+- ⭐ A serializing queue with a timer armed at post time turns concurrency into timeouts. Bound each turn, and check where the callee's timer starts (B11).
+- ⭐ A mutation of an asymmetric operator needs both directions, and fixtures with non-zero data on both sides. A one-way `abs` mutation "passed" a tally that missed `a - b`.
+
+**Follow-ups:** BACKLOG 🟤 [2026-10-25] (G2 PR 2 closeout) and 🔵 [2026-10-25] (the sort-phase half). Next is G3 (ZoomManager), which waited for this merge.
 
 ### 2026-10-22 — Stop the feature cache being wiped on a folder switch (data loss) 🔴 (TODO, ahead of G2 PR 2) — **MERGED `654fb3e`** (PR #86)
 

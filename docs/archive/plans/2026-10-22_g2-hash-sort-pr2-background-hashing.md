@@ -2,10 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆; ~13 SP across two PRs, spec D7; this plan is **PR 2**, re-estimated ~9 SP below) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) § G2 (🔵 🏆; ~13 SP across two PRs, spec D7; this plan is **PR 2**, re-estimated ~9 SP below) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
 **Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved 2026-10-19; PR 1 amendments § 15, PR 1 execution notes § 16; **PR 2 amendments § 17: B1–B10 from planning, B11–B14 from the PR #87 review, B15 from the smoke**)
 **Created**: 2026-10-22
-**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and the re-run on `124fb69` passed. Steps 3–4 passed the same day: the smoke is complete. The real-JXL measurement ran the same day; its long-stream finding goes to a follow-up by the user's ruling. Review round 5 (the pass over `124fb69` and the docs after it, run in the implementation chat through a fresh subagent at the user's request) found 4 low and 6 nit findings, all answered; its close-out re-raised none. The user gave the merge go-ahead on 2026-10-25.
+**Status**: ✅ Complete — **PR #87 MERGED 2026-10-25 (merge `f5ddfa3`)**, closed out on `main` the same day. Plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and the re-run on `124fb69` passed. Steps 3–4 passed the same day: the smoke is complete. The real-JXL measurement ran the same day; its long-stream finding goes to a follow-up by the user's ruling. Review round 5 (the pass over `124fb69` and the docs after it, run in the implementation chat through a fresh subagent at the user's request) found 4 low and 6 nit findings, all answered; its close-out re-raised none. The user gave the merge go-ahead on 2026-10-25.
 **Last Updated**: 2026-10-25
 **Branch**: `g2-pr2-background-hashing` (from `main` @ `bf5ec84`, after PR #86 merged as `654fb3e`)
 
@@ -738,13 +738,25 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
 
 ## Closeout (after the merge, on `main`)
 
-- [ ] **Extract**: Improvements and Residuals → BACKLOG 🟤 under `### [YYYY-MM-DD] From: G2 PR 2 closeout`. Check off the entries T1 and T5 closed, in the closeout commit.
-- [ ] **Transition**: TODO 🔴 "Speed up AI / similarity sorting…" → PR2 slice done; the item closes if PR1–PR3 are all in (its note). DONE.md entry. WEEKLY: G2's Summary-Table Status → `✅ PR #N`, plus its Daily-Schedule rows. GOALS Objective 1's 🔴 KR is for G5 to record.
-- [ ] **Archive** this plan (`git mv` to `docs/archive/plans/`, indexed under Archived Plans); remove its Active rows.
-- [ ] **Spec**: § 17 gains a post-implementation note for anything the code departed from.
-- [ ] **Propagation check**: re-read `CLAUDE.md`, `docs/ARCHITECTURE.md`, `PROJECT.md` and the changed comments for a late correction that did not reach them.
-- [ ] **Memory**: a session file and its MEMORY.md line; durable lessons only.
-- [ ] **Next**: G3 (ZoomManager), which waits for this merge.
+- [x] **Extract** (2026-10-25, after merge `f5ddfa3`):
+  - The Improvements, Residuals and triaged task-loop minors went to BACKLOG 🟤 [2026-10-25] From: G2 PR 2 closeout.
+  - The sort-phase Residual went to 🔵 [2026-10-25] by the user's ruling.
+  - Appends: Improvement #2 and B2 → "Three atomic-write IPC handlers…"; B7 → "A per-run hash map"; the smoke's sort-phase figure → the workstream #7 and graph-build-floor entries.
+  - Checked off:
+    - [2026-10-11] "Make `write-folder-cache` atomic" (T1);
+    - [2026-10-21] "A Cancel during a hash save re-saves the same entries" (T5 + F3);
+    - [2026-10-21] "A Cancel during a cache hit's placement drops the placement's hashes" (review round 1 #11);
+    - "Raise the 5 s timeout on `check-secrets.test.js`'s real-git tests" (`bb6f4d8`).
+  - The final triage's "at closeout" pointer fix (BACKLOG "Route the remaining video teardowns…") was already done. Its "RED count 471 vs 468" is in the T5 implementer's report, not in this log, so this log needs no correction.
+- [x] **Transition**:
+  - TODO 🔴 "Speed up AI / similarity sorting…" is checked off: all three slices are in, and the user ruled to close it and file the sort-phase half.
+  - The DONE.md entry is written.
+  - WEEKLY: G2's Summary-Table Status → `✅ f5ddfa3 (PR #87)`, its Daily-Schedule rows and its task line. GOALS Objective 1's 🔴 KR is for G5 to record.
+- [x] **Archive**: this plan is moved to `docs/archive/plans/` and indexed under Archived Plans; its Active row is removed.
+- [x] **Spec**: the Status line and § 17's post-implementation notes.
+- [x] **Propagation check**: `CLAUDE.md` still holds (the JXL queue is still one at a time, bounded at 30 s; the parity line is unchanged). `PROJECT.md` names nothing that changed. `docs/ARCHITECTURE.md` has two stale names from before this PR (`getFileHash`, `imageHashes`), filed in 🟤 [2026-10-25].
+- [x] **Memory**: the session file and its MEMORY.md line.
+- [ ] **Next**: G3 (ZoomManager), which waited for this merge.
 
 ## Progress Log
 

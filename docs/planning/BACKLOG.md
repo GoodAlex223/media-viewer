@@ -66,6 +66,18 @@ prompt had no source concept).
 
 ## 🔵 User-Flagged Ideas
 
+### [2026-10-25] From: G2 PR 2 closeout (the user's ruling)
+
+**Origin**: the remaining half of TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", the user's own report ("speed these up first"). The TODO closed at G2 PR 2's closeout, once all three slices had landed, and the user ruled on 2026-10-25 to file this half here as 🔵.
+
+- [ ] **The similarity sort's graph-build phase is now the long part of a cold run** [possible-dup-of: 🟤 [2026-06-21] "Decide how to close the visual-similarity graph-build floor — #7 parallelization vs. relaxing the quality-lock (capped K)"; 🟤 [2026-06-19] "Neighbor-graph build parallelization (workstream #7)"].
+  - **Measured** in the user's smoke step 3 (2026-10-25, `Liked_2`, 14,201 files, VP-Tree, cold): `sort=361520ms`, 38% of the run's 943 s. It follows a 580 s hash phase, which now runs in the background.
+  - The sort runs in `sorting-worker.js`, so the app stays usable, and none of the three PRs moved it.
+  - The neighbor-graph build is O(n·K) (K ≈ √n·10), with an O(n²) MST/greedy fallback.
+  - The quality lock ("quality must not change at all", 2026-06-19) rules out capping K without a user decision. Parallelizing the per-file kNN queries across workers keeps the results identical.
+  - The AI sort has no graph build, so it is not affected.
+  - Effort: L (a parallel build), or a user decision (a capped K). Affected: `sorting-worker.js` (Tier 2: plan review), `media-viewer.js` (`runSortingWorker`).
+
 ### [2026-10-20] From: PR #85 review (user-confirmed)
 
 **Origin**: On 2026-10-20 the user dropped a folder on the start screen and got "Please drop a folder, not individual files", reproducing a known bug. The PR #85 reviewer session relayed the user's ruling to file it 🔵, and the user confirmed it at the G2 PR 1 closeout (2026-10-21). It was moved, not copied, from 🟤 [2026-10-11] From: G1 closeout, where it was filed as a G1 Key Discovery.
@@ -379,6 +391,107 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 
 ## 🟤 Auto-Generated Tech Debt
 
+### [2026-10-25] From: G2 PR 2 closeout (PR #87 — background hashing, parity mode, atomic folder writes)
+
+**Origin**: [archive/plans/2026-10-22_g2-hash-sort-pr2-background-hashing.md](../archive/plans/2026-10-22_g2-hash-sort-pr2-background-hashing.md), from its Improvements and Residuals.
+- **Sources:**
+  - the task reviews, and the final whole-branch review's triage of their deferred minors;
+  - the regression check;
+  - the PR #87 review: five rounds and a close-out;
+  - the user's `Liked_2` smoke;
+  - the real-JXL measurement.
+- **Filed elsewhere:**
+  - the similarity sort's graph-build phase → 🔵 [2026-10-25] (the user's ruling);
+  - Improvement #2 → appended to "Three atomic-write IPC handlers share one fixed `.tmp` path";
+  - B7's ruling → appended to [2026-10-21] "A per-run hash map";
+  - the smoke's sort-phase figure → also appended to "Neighbor-graph build parallelization (workstream #7)".
+- **Not filed:**
+  - the placement's missing abort signal (M9/R1), fixed in review round 1;
+  - videos hashing on the main thread: the smoke saw no stall with 51 videos.
+
+- [ ] **Re-check the canary during a long run, and on every new worker** (plan Improvement #1, with whole-branch review M7). The canary runs once, at the start of a run, on the first worker only. Slots 2–3 and replacement workers after a crash are never checked. A GPU-process restart mid-run (a driver reset) could move the workers' canvases to another raster path for the rest of the run, unseen. Fix: run the canary JPEG on each new worker, and re-check at each periodic save (about every 1,000 hashes, ~100 ms), which bounds the exposure to one save interval. Effort: S. Affected: `hash-pool.js`.
+- [ ] **The off-thread decoder for the AI sort** (plan Improvement #3; spec § 12). `loadMediaAsImageData` still decodes on the main thread. Moving it needs its own parity proof on feature vectors, as D4 was for hashes. Effort: L. Affected: `media-viewer.js`, `feature-extractor.js`, a new worker.
+- [ ] **A long animated JXL stalls the hash JXL queue** (the real-JXL measurement, 2026-10-25; the user's ruling: a follow-up PR). Not a regression: on the same six files `main`'s old loop hashed 1 and PR 2 hashes 4. The user's folders hold no JXL files today.
+  - **Mechanism:**
+    - The app has one JXL decode worker, and a timeout ends the renderer's wait, not the decode.
+    - `_decodeJxlForHash`'s 30 s stream bound lets the next request in while the worker is still streaming. That request then fails on `decodeJxl`'s 15 s frame-0 timer.
+    - The main-route fallback fails too, because `hashFile`'s 30 s timer is armed before its decode waits in the queue.
+  - **Measured** under 20–34% load on generated files: 4 stills at 6000×4000, and animations at 1280×720×90 (59 MB) and 1920×1080×60 (86 MB). The two streams took 43 s and 66 s. Three concurrent stills went 3/3 through the queue, against 1/3 posted at once.
+  - **Fix direction:** a hash-only JXL decoder, separate from the display's, terminated after frame 0 (a hash needs nothing more) or on a timeout. Also arm `hashFile`'s timer after the decode.
+  - **Acceptance:** rebuild the recipe (stills and animations made with sharp noise frames plus `cjxl` at its defaults, run in a fresh E2E app). Run `main`'s old loop against `_hashThroughPool`, each from a fresh decoder, with each file's outcome and time, catching errors per phase.
+  - Related: `getJxlPngBytes` is awaited with no pool timer (T4 minor, `hash-pool.js`); production's `decodeJxl` bounds only frame 0.
+  - Effort: M. Affected: `media-viewer.js` (`_decodeJxlForHash`, `ensureJxlWorker`), `main-thread-hash.js` (`hashFile`), `jxl-decode-worker.js`, `hash-pool.js`.
+- [ ] **Bulk-rated saves can still land out of order** (T1 review, minor 1; pre-existing). **Irreplaceable data**: the ratings exist nowhere else. The renderer fires an un-awaited `saveBulkRatedFile()` from `removeFileFromList`, and a later save can overtake it. The IPC guard's async `grantedPath` check runs before the writer's per-target chain, so two overlapping saves can reach the chain in the opposite order. The next save rewrites the whole in-memory map, so a newest rating is lost only if the app quits first. PR 2 added a warning for a failed save (once per folder visit), but not for one overtaken. Fix: a coalescing single-flight `saveBulkRatedFile` in the renderer. Effort: S. Affected: `media-viewer.js` (`saveBulkRatedFile`, `removeFileFromList`).
+- [ ] **A ratings save fails while another program blocks writing to `.bulk_rated.json`** (PR #87 review; the user's ruling 2026-10-24: record it, no change in PR #87). **Irreplaceable data.**
+  - Measured 2026-10-24, 3 saves each: a reader sharing read only fails every save with `EBUSY`, and a read-only file fails every save with `EPERM`. The overwrite fallback (spec B12) helps only a holder that allows writing. Before PR #87 every save failed the same way.
+  - The user sees one warning per folder visit, naming the folder. Ratings stay in memory and the next rating retries, but the ratings since the last good save are lost if the app closes first. Today's remedy: close the other program, then rate again.
+  - Fix candidates:
+    - (S) In the renderer's `saveBulkRatedFile`, retry a failed save every few seconds until it succeeds, so closing the other program is enough.
+    - (M) When the folder save fails, keep a fallback copy in `userData` and merge it on the next load. This touches `main.js` IPC, so it needs a security pass.
+  - Constraint on the `userData` candidate (review round 3): its merge on load must respect ratings cleared or undone after the copy was written. An absent-only merge would bring them back, the PR #84 trap.
+  - Affected: `media-viewer.js`, possibly `main.js`.
+- [ ] **The hash pool on a network share** (PR #87 review #3; recorded, not fixed). Plausible, not measured: T8 sized the pool on a local folder.
+  - If a share drops mid-sort, each of the 3 worker reads and the main lane holds one of main's 4 libuv threads in `fs.realpath` for the ~21 s SMB timeout. Every other filesystem call in main (moves, cache reads and writes) waits until they return. The one-at-a-time loop held one.
+  - On a ~1–2 MB/s link, three concurrent reads can push a 15–25 MB photo past the 30 s task timeout; it is read again, then skipped.
+  - No data is harmed: a skipped file is placed at the end, uncached, and hashed again by the next sort.
+  - First step: measure on a real share, both dropped and slow. Candidate remedies, after measuring: one worker for a network folder, or a fetch timeout separate from the decode's.
+  - Effort: S to measure. Affected: `hash-pool.js`, `main.js`.
+- [ ] **The committed 1×1 E2E PNG fixtures are malformed** (found in T5; pre-existing). `red-1x1.png` and `green-1x1.png` have a bad IDAT CRC and an invalid zlib stream, and `blue-1x1.png` cannot even be walked as chunks. Chromium's `<img>` tolerates them, but `createImageBitmap` rejects them, so the hash worker falls back on them (as designed). Every E2E built on them exercises only the main-thread route. `CLAUDE.md` § Testing (E2E) now says so. Fix: regenerate them in `tests/e2e/fixtures/generate.js` with correct CRCs and `zlib.deflateSync`, then re-run the E2E suite. Effort: S. Affected: `tests/e2e/fixtures/`.
+- [ ] **The hash worker reads a whole file before it checks the type** (whole-branch review M11). A huge video misnamed as an image is read in full, twice with the retry. Sniff the first bytes before reading the rest. Effort: S. Affected: `hash-worker.js`.
+- [ ] **Nothing stops repeated hash-worker crashes, and an `'auto'` crash leaves no trace** (whole-branch review M12, with T4's minor). After K crashes in a row, set `mainOnly` and log once. Today a worker crash in `'auto'` is `preventDefault`ed, and the fallback drops `outcome.error`, so nothing records it. Effort: S. Affected: `hash-pool.js`.
+- [ ] **The periodic hash-cache save costs main-thread time at scale** (whole-branch review M14). Late in a 15.6k run, each save serialises ~5 MB of JSON and makes ~15.6k bridge calls: roughly 50–150 ms, once per 1,000 hashes. The user's smoke step 3 noticed no hitch (2026-10-25). Watch item; act only on a felt hitch. Effort: S. Affected: `media-viewer.js` (`saveHashCache`).
+- [ ] **The similarity perf line's `fallback` count includes videos** (whole-branch review M10). `fallback 51` on `Liked_2` was exactly its 51 videos, which always take the main-thread route. Split videos out, so `fallback` counts image fallbacks only. Effort: XS. Affected: `media-viewer.js` (the `Similarity sort:` perf line).
+- [ ] **The 1,000-file confirm says "keep using the app", but acting changes the outcome** (regression check R3). Acting during the run turns the auto-apply into Show, and some actions refuse. It is the spec's approved copy (my call 8), so reword it only if the user wants. Effort: XS. Affected: `media-viewer.js` (`handleSortBySimilarity`).
+- [ ] **Three comments give a false reason for `terminate()` settling a canary** (the final fix wave's re-review). They are in `hash-pool.js` at `checkCanary()` and `terminate()`, and on the test "terminate() settles a pending canary as failed". `terminate()` never runs while a production caller awaits the canary. The settle is defence in depth; R-F4a's timeout is what bounds the wait. Comment-only. Effort: XS. Affected: `hash-pool.js`, `tests/hash-pool.test.js`.
+- [ ] **`terminate()` leaves an armed canary timer live on a dead pool, and the parity check's canary ignores Cancel** (the final fix wave's re-review; review round 3 #1). The timer and its slot stay live for ≤ `canaryTimeoutMs` after `terminate()`, which is harmless on a dead pool. A Cancel during the **parity check's** canary still waits ≤ ~25 s, because `runHashParity` awaits it unraced. The sorts race it (review round 2 #3), and so does the parity check's pixel measure (round 5). This was accepted for a bounded diagnostic. Fix, if wanted: race it with the signal as `hashThroughPool` does. Effort: XS. Affected: `hash-pool.js`, `hash-parity.js`.
+- [ ] **`tests/e2e/hash-parity.test.js`'s `state.after > 0` races the cancellation's own close** (the final fix wave's re-review). It can fail loudly, never falsely: re-run on a spurious pre-push failure. Effort: XS. Affected: `tests/e2e/hash-parity.test.js`.
+- [ ] **Hashes depend on the GPU raster path, so they drift across Chromium updates** (spec § 12, F3 and F6). A `.hash_cache.json` written before an Electron or driver update can differ from fresh hashes, as December's did (F6). Nothing invalidates the cache on such a change. A cache stamp (Electron version plus the canary's read-back digest) would turn it into a re-hash. Effort: S. Affected: `media-viewer.js` (`loadHashCache`, `saveHashCache`).
+- [ ] **`insertNewFilesInSortedOrder`'s placement scans the whole list per new file** (spec § 12, my call 12). It runs on the main thread: O(new × n) distance calls with an `await` per file. It is fine for a handful of new files, slow for thousands. Move it into the sorting worker, or index the order with the VP-tree. Effort: M. Affected: `media-viewer.js`, `sorting-worker.js` (Tier 2: plan review).
+- [ ] **`atomic-write.js`'s sweep and close paths are unpinned** (T1 minors). Two paths have no test: the orphan sweep's error tolerance (`readdir`/`lstat`/`unlink` throwing) and its `isFile()` filter. A `close()` error can also mask the `writeFile` error, under the plain `finally` the brief mandated. Effort: XS. Affected: `atomic-write.js`, `tests/atomic-write.test.js`.
+- [ ] **`main-thread-hash.js`'s test gaps** (T2 minors). Unpinned:
+  - the JXL object URL's "revoked after load" order, and the error-path revoke and its raw message;
+  - the 30 s timeout itself (only the constant is pinned);
+  - the URL stub, unstubbed inside the test body, so a rejected `hashFile` leaks it;
+  - the canary images' seed and alpha.
+
+  Effort: XS. Affected: `tests/main-thread-hash.test.js`.
+- [ ] **The video branch duplicates the draw recipe** (T2 minor). `hashFile`'s video path repeats the canvas-and-draw steps unpinned. A shared `drawAndHash` would give the recipe one owner. Effort: XS. Affected: `main-thread-hash.js`.
+- [ ] **`hasIccProfile` matches APP2 ICC before its length guard** (T3 minor). A zero-length corrupt segment returns `true`. It affects only the parity report's `icc=` field. Effort: XS. Affected: `hash-worker.js`.
+- [ ] **A malformed message to the hash worker throws outside its `try`** (T3 minor). The message destructure sits before the `try`, so the pool sees an `error` event with no id and treats it as a crash. Effort: XS. Affected: `hash-worker.js` (`handleMessage`).
+- [ ] **`hash-worker.js`'s test gaps** (T3 minors):
+  - `Unrecognised image bytes` is pinned by substring only; a behavioural `hashBytes` rejection test runs in Node;
+  - the "installs no handler" test can fail only through an import crash;
+  - `handleMessage`'s url/HTTP-status, bytes-copy and pixels-transfer branches are covered only by E2E;
+  - the file-wide banned-option pins forbid comments that name the options.
+
+  Effort: S. Affected: `tests/hash-worker.test.js`.
+- [ ] **`hash-pool.js`'s test gaps** (T4 minors):
+  - the abort, consumer-stop and terminate tests do not pin timer clearing or abort-listener removal;
+  - the constructor's timeout defaults are unpinned;
+  - there is no crash-then-timeout mixed-failure test (the code reads correctly);
+  - a test comment misdescribes which catch fires, and two catch layers are reached by no test.
+
+  Effort: S. Affected: `tests/hash-pool.test.js`.
+- [ ] **The parity glue's loose ends** (T6 minors):
+  - the stale-parity test does not pin "no card clear";
+  - the parity catch has no aborted class (unreachable today);
+  - a stale-but-not-aborted run is unreachable, since `_invalidateSimilarityRun` always aborts while `isComputingHashes` is set; one guard would make that structural.
+
+  Effort: XS. Affected: `media-viewer.js` (`_runHashParity`), `tests/similarity-sort-glue.test.js`.
+- [ ] **Move the parity glue out of the renderer** (T6 minor). `_runHashParity` added 81 lines to `media-viewer.js`. Its notice choice and its run start and `finally` could move into `hash-parity.js`, or be shared with the sort's. Effort: S. Affected: `media-viewer.js`, `hash-parity.js`.
+- [ ] **Hash E2E test hygiene** (T7 minors, seven items):
+  - the sort test's name overstates (nothing measures a stall);
+  - dead fields in the comparison row (`canary`, `error`);
+  - the gate and route-recorder wrappers are duplicated across `similarity-sort.test.js` and `hash-parity.test.js`;
+  - a top-level `beforeAll` generates all 30 fixtures, huge ones included, for every describe;
+  - the parity-mode E2E overrides `confirm` without recording its message;
+  - `_createHashPool` is restored with a bound copy;
+  - `gateHashing` does not reset `__firstHashedPath` per install.
+
+  Effort: S. Affected: `tests/e2e/similarity-sort.test.js`, `tests/e2e/hash-parity.test.js`.
+- [ ] **`untilAborted`'s already-aborted path drops a later rejection unhandled** (review round 5 close-out, a dropped candidate). When the signal has already aborted at the call, it returns `ABORTED` without attaching a handler to the promise, so a rejection of that promise is unhandled: one renderer log line, no state. Unreachable in production: `runHashParity` checks the signal synchronously after each measure, and `hashThroughPool`'s canary never rejects. Fix: `promise.catch(() => {})` on that path, which the other path effectively does already. Effort: XS. Affected: `hash-pool.js`.
+- [ ] **`docs/ARCHITECTURE.md` names two things the code no longer has** (the final whole-branch review, declined to judge; pre-existing). `window.electronAPI.getFileHash(path)` (§ IPC) and `imageHashes: Map` (§ state) match nothing in any `.js` file (`git grep`, 2026-10-25). The hashes live in `perceptualHashes`, and no IPC hashes a file. Effort: XS. Affected: `docs/ARCHITECTURE.md`.
+
 ### [2026-10-22] From: feature-cache wipe fix closeout (PR #86 — a folder visit owns its cache)
 
 **Origin**: [archive/plans/2026-10-21_feature-cache-wipe-fix.md](../archive/plans/2026-10-21_feature-cache-wipe-fix.md), from its Improvements and Residuals. The sources were the executor's own observations, the two manual checks on copies (300-file slices, then a whole 13k-file folder, twice), and the PR #86 review: 15 findings, three close-out rounds and the review's cut findings, all ruled on in the PR. Spec: [2026-10-21-feature-cache-wipe-design.md](../superpowers/specs/2026-10-21-feature-cache-wipe-design.md). Not filed: the plan's two state-level-pin residuals (T4a; the T1 and T5 mechanisms), recorded in the plan only.
@@ -416,6 +529,7 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 - "a folder switch emptied by a refused load", whose window cannot open (the final review's probe).
 
 - [ ] **A per-run hash map** (plan Improvement #1). `perceptualHashes` is folder-wide state, and `removeFileFromList` deletes a moved file's hash mid-run. A map owned by the run and merged at its end would make "a stale run writes no hashes" structural, instead of a check after each `await`. It would also close a spec E2 gap: a file hashed, moved and restored during the hash phase loses its hash and lands at the end. (Undo now restores the hash on the move's history entry, but a hash computed after the move is still lost.) Effort: M. Affected: `media-viewer.js` (`handleSortBySimilarity`, `saveHashCache`).
+  ↳ **2026-10-25 (G2 PR 2 closeout)**: not absorbed by PR 2 (spec § 17 B7). The pool adds no write path to `perceptualHashes`: one store in the run's loop, after the token check. The E2 gap needs a hash computed after a move, which the pool cannot produce, because a moved file's read fails on both routes. Adopting the map would also rework `saveHashCache`'s merge-once rule (PR #85 #20).
 - [ ] **The hash cache never prunes, and is keyed by name only** (plan Improvement #2). `saveHashCache` writes every entry, including files long gone. Since PR #85 review #20 merges the on-disk cache into memory once per folder, entries for moved-away files also persist across saves. There is no size/mtime check, so a different file later given the same name reuses the old hash. Prune to the listed files at save, and add size/mtime like the feature cache. Effort: S. Affected: `media-viewer.js` (`loadHashCache`, `saveHashCache`).
 - [ ] **Show has no keyboard path** (plan Improvement #3). The sticky "Similarity order ready — Show" is mouse-only. Add a shortcut, or focus the button on arrival. Effort: XS–S. Affected: `media-viewer.js` (`_offerSimilarityOrder`), the shortcut tables.
 - [ ] **The "all cached" early return leaves the CLIP model resident** (PR #85 review close-out, the #10 sibling; pre-existing, also on `main`). `startBackgroundFeatureExtraction`'s early return when every vector is cached clears the pending unload and does not re-arm it. So a CLIP similarity sort on a fully cached folder keeps ~200–400 MB resident for the session. Fix: `_scheduleClipUnload()` before that return. Effort: XS. Affected: `media-viewer.js`. Corrects the [2026-09-12] CLIP-lease entry's "held by construction".
@@ -435,7 +549,8 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 - [ ] **The order-change control's header scan misses a wrapped signature** (PR #85 Task 4). `tests/like-or-skip-glue.test.js` § 4 scans method headers one line at a time, so a method whose signature Prettier wraps, and which assigns `this.mediaFiles`, escapes the control. This is latent: no wrapped header exists inside the class today. Add a guard test that fails on any wrapped class-method header, or scan multi-line. Effort: XS–S. Affected: `tests/like-or-skip-glue.test.js`. Related: the `extract()` regex limit below.
 - [ ] **`extract()` handles only one level of parentheses in a signature** (PR #85 review fix waves). The extract helpers in the four glue test files fail loudly ("Could not find method") on a deeper signature. Share one parser across the test files. Effort: XS. Affected: `tests/*-glue.test.js`, `tests/media-viewer-utils.test.js`.
 - [ ] **Similarity-sort E2E hygiene** (PR #85 Task 5 review). `afterEach` does not null `electronApp`/`page`, so a later `beforeEach` failure would `closeApp` a stale app; this gives a noisy teardown, never a false pass. The Cancel test relies on the snapshot's hash order, with call 1 ungated. Effort: XS. Affected: `tests/e2e/similarity-sort.test.js`.
-- [ ] **A Cancel during a hash save re-saves the same entries** (PR #85 Task 3 review). `newSinceSave` resets after the liveness assert, not before it, so a Cancel during the save makes the catch write the same entries again. Correct data, a redundant write. Effort: XS. Affected: `media-viewer.js` (`handleSortBySimilarity`).
+- [x] **A Cancel during a hash save re-saves the same entries** (PR #85 Task 3 review). `newSinceSave` resets after the liveness assert, not before it, so a Cancel during the save makes the catch write the same entries again. Correct data, a redundant write. Effort: XS. Affected: `media-viewer.js` (`handleSortBySimilarity`).
+  ↳ **2026-10-25 (G2 PR 2 closeout)**: ✅ fixed by G2 PR 2 (PR #87, merge `f5ddfa3`). T5 reset `newSinceSave` before the periodic save, and the final fix wave (F3) did the same for the end-of-phase save. The test "a Cancel during a periodic save does not save the same hashes twice" pins it.
 - [ ] **A stale run swaps its own folder's cache into memory on a same-folder reopen** (PR #85 Task 3 review). `loadHashCache` checks only the folder path, so a run made stale by reopening the same folder still swaps that folder's own cache into the map. The data is correct, but "a stale run writes no hashes" does not hold literally. Effort: XS. Affected: `media-viewer.js` (`loadHashCache`).
 - [ ] **Perf-line gaps in the similarity sort** (PR #85 reviews; diagnostics only). The cache hit's `save` time is lost when the first save goes stale. The name conversion before the apply is timed in no phase; it is synchronous, so the cost is negligible. Effort: XS. Affected: `media-viewer.js`.
 - [ ] **`runSortingWorker`'s handlers null `this.sortingWorker` without an identity check** (PR #85 Task 3 review; pre-existing). Only one run exists at a time today. Effort: XS. Affected: `media-viewer.js`.
@@ -444,7 +559,8 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
   - × closes the offer's element but leaves `_similarityOffer` set until the next dismissal. This is harmless, because the element is gone, but the state no longer reflects what is on screen.
 
   Effort: XS. Affected: `media-viewer.js` (`_offerSimilarityOrder`, `_dismissSimilarityOffer`).
-- [ ] **A Cancel during a cache hit's placement drops the placement's hashes** (PR #85 final review; pre-existing, spec § 6.3). Only the hash loop's `newSinceSave` triggers the save on Cancel. Effort: XS. Affected: `media-viewer.js`.
+- [x] **A Cancel during a cache hit's placement drops the placement's hashes** (PR #85 final review; pre-existing, spec § 6.3). Only the hash loop's `newSinceSave` triggers the save on Cancel. Effort: XS. Affected: `media-viewer.js`.
+  ↳ **2026-10-25 (G2 PR 2 closeout)**: ✅ fixed by PR #87 review round 1 #11 (PR #87, merge `f5ddfa3`). The placement's `onResult` is the run's `onHashResult`, which counts into `newSinceSave`, so the run's catch saves them. The glue test "a Cancel after the placement hashed keeps the placement's hashes" pins it.
 - [ ] **Show's placement re-forms a plain-text progress card** (PR #85 final fix wave). The shared element that ML scoring may be using is rewritten into the sort-card form. Show then leaves it in place, with Cancel hidden, until that card's owner next updates it. Effort: XS–S. Affected: `media-viewer.js` (`updateSortProgress`, `_onSimilarityShow`).
 - [ ] **Turning CLIP off during a CLIP run, or with a CLIP offer pending** (PR #85 final review, declined to judge). The run's save recreates the `'clip'` sort cache that the toggle just deleted, and the offer survives the toggle. Effort: S. Affected: `media-viewer.js` (the CLIP toggle, `handleSortBySimilarity`).
 - [ ] **`scoreComplete`/`sortComplete` clear the progress card unconditionally** (PR #85 final review, declined to judge; pre-existing). They can remove a card that another sort owns. Effort: XS. Affected: `media-viewer.js`.
@@ -613,9 +729,10 @@ Claude-surfaced → 🟤. The first entry is the cost of that review's data-corr
 
 - [ ] **Fix the flaky tournament E2E "Ctrl+A undo restores the previous pair after a pick"** — ⚠️ **raise its priority.** It failed 2 of ~8 full runs during G1, once blocking the pre-push gate. It passed 6/6 and 8/8 on repeat each time. Mechanism, from both failing diffs: `tiny.mp4` is dealt into the first pair, and its decode-failure skip lands after the test captured "before", so the pair changes underneath it. Fix: drop `tiny.mp4` from this test's fixtures (it is not under test), or wait for the skip to settle before capturing. Effort: XS. Affected: `tests/e2e/tournament-mode.test.js`.
   ↳ **2026-10-18 (G1 I1, PR #84)**: recurred, and blocked the pre-push gate again (193 passed, 1 failed, 6 skipped; the same mechanism, `tiny.mp4`'s skip landing after "before"). 8/8 on `--repeat-each`; the push was re-run, not bypassed. **Promoted to [TODO.md](TODO.md) 🟠 at the G1 I1 closeout (2026-10-19)**: it has now blocked the gate twice.
-- [ ] **Raise the 5 s timeout on `check-secrets.test.js`'s real-git tests** — two different tests in the file timed out at 5000 ms under load during G1 commits, each refusing a pre-commit run. Each passed alone in ~1.6 s. They spawn `git`, so the default timeout is too tight on a busy machine. Effort: XS. Affected: `tests/check-secrets.test.js`.
+- [x] **Raise the 5 s timeout on `check-secrets.test.js`'s real-git tests** — two different tests in the file timed out at 5000 ms under load during G1 commits, each refusing a pre-commit run. Each passed alone in ~1.6 s. They spawn `git`, so the default timeout is too tight on a busy machine. Effort: XS. Affected: `tests/check-secrets.test.js`.
   ↳ **2026-10-12 (G2, PR #79)**: recurred. "flags a planted key from real diff output (end-to-end through git)" timed out at 7.3 s in a pre-commit run (the file took 9.8 s; 3.0 s on the immediate retry), and a `path-grants` test timed out once in an implementer's full run.
   ↳ **2026-10-18 (G1 I1)**: recurred once in a full unit run, together with a `check-claude-md-size` test, also on the 5 s timeout. Both spawn `git`; an isolated re-run passed 48/48, and the full re-run passed. The same fix would cover both files.
+  ↳ **2026-10-22 (G2 PR 2, `bb6f4d8`)**: ✅ done. A 30 s timeout on the real-git describes of `check-secrets.test.js` and `check-claude-md-size.test.js`. The pre-commit gate had refused T7 on these timeouts under a 100% CPU load from another session; this was applied instead of skipping the check. Merged with PR #87 (`f5ddfa3`).
 - [ ] **Tournament engine re-key after a suffixed special-move undo** (PR #78 close-out A).
   - **Symptom:** when a same-named file appears in the source folder mid-tournament, undoing a special move restores the file as `name (n).ext`. The list follows it, but `engine.files` (restored from the snapshot) keeps the old path. So the `-1` net prunes the old path with a "File missing" toast, and the restored file never rejoins the tournament.
   - **Scope:** no file is moved wrongly. Before G1, the restore overwrote the other file.
@@ -641,8 +758,9 @@ Claude-surfaced → 🟤. The first entry is the cost of that review's data-corr
   - A failed save leaves a `.tmp` behind.
 
   Effort: S. Affected: `path-grants.js`.
-- [ ] **Make `write-folder-cache` atomic** (M3). It is a plain write, as the old `write-file` was. The hash and sort caches could be truncated by a crash mid-write; they are rebuildable. Use tmp + rename like the other stores. Effort: XS. Affected: `main.js`.
+- [x] **Make `write-folder-cache` atomic** (M3). It is a plain write, as the old `write-file` was. The hash and sort caches could be truncated by a crash mid-write; they are rebuildable. Use tmp + rename like the other stores. Effort: XS. Affected: `main.js`.
   ↳ **2026-10-21 (G2 PR 1 closeout)**: now in **G2 PR 2's scope** (PR #85 review #5, user ruling). PR 1's periodic hash saves multiply the exposure: a cold 13.2k-file run writes the hash cache 14 times instead of once. Under Electron 39.1.2 a quit 0–20 ms after a write left the file torn every time, and the next session then loads 0 hashes.
+  ↳ **2026-10-25 (G2 PR 2 closeout)**: ✅ done by G2 PR 2 (PR #87, merge `f5ddfa3`). `write-folder-cache` writes through `atomic-write.js` (spec § 17 B2): a unique tmp, fsync and rename, one write per file at a time, and in place while another program holds the file open.
 - [ ] **Strengthen weak grant and cache tests** (M4).
   - The concurrent-grant test passes without the save serialization.
   - The folder-argument contract of `featureCacheOpen`/`featureCacheWriteOpen` and `cacheIo.open`/`writeOpen` is unpinned.
@@ -839,6 +957,7 @@ back on, recorded rather than fixed because the right scope is wider than that P
   either unique temp names (plus an orphan-`.tmp` sweep, since the current `unlink` cleanup only
   covers the error path of the call that created it) or an explicit, documented "callers must
   serialize" contract with a test per writer. Effort: S. Affected: `main.js`.
+  ↳ **2026-10-25 (G2 PR 2 closeout)**: the folder files now go through `atomic-write.js` (spec § 17 B2): a unique tmp, fsync and rename, one write per file at a time, and an orphan-tmp sweep. That covers `write-folder-cache` and `.bulk_rated.json`. `writeTournamentState` and `write-ml-model-cache` remain; the feature-cache writer stays on its streaming path. `writeTournamentState` writes the source folder and can share main's writer. `write-ml-model-cache` writes `userData`, which `assertFixedPath` refuses, so it needs a second writer instance with its own link check (G2 PR 2 plan Improvement #2; PR #87 review, held back). Effort for both: S.
 
 ### [2026-09-10] From: G1 ML training pipeline — execution review follow-ups
 
@@ -1219,6 +1338,7 @@ Claude/automation-surfaced.
 **Origin**: Receiving-code-review pass on the merged PR #54 (Group P1 PR1). Beyond the [2026-06-20] sub-threshold findings, the discussion surfaced that the "PR2/PR3 = raw-speed continuation" framing is imprecise and that the real residual cost (the visual-similarity graph build) is unaddressed by the whole 3-PR plan under the quality-lock — a decision worth deferring rather than resolving at session-end. Both Claude-surfaced; the first **needs a user decision**.
 
 - [ ] **Decide how to close the visual-similarity graph-build floor — #7 parallelization vs. relaxing the quality-lock (capped K)** (needs user decision) — Precise per-phase cost map for a 24k similarity sort: cache-load ~40s → **PR3**; cold-cache perceptual hashing (hash sorts only) → **PR2**; **the O(n·K) neighbor-graph build (`K≈1,550 @ 24k`) → NOT addressed by PR1/PR2/PR3**; MST/fallback + `insertNewFilesInSortedOrder` → PR1. So even after all three PRs land, the visual-similarity sort's graph-build wall-time is the floor. (The **AI-prediction sort has no graph build** — O(n) scoring + O(n log n) sort — so it is fully addressed by PR3 + PR1's progress; this gap is specific to vptree/mst/clip _similarity_ sorts.) The floor moves only via **(a) workstream #7** — parallelize the per-file `findKNearest` across a worker pool (same total work ÷ cores, quality-preserving; see the [2026-06-19] #7 entry below, already measure-first) — or **(b) relax the quality-lock to a bounded K-cap** (e.g. 64–128), the direct fix the user explicitly declined in PR1 ("quality must not change at all"; see [archived plan](../archive/plans/2026-06-19-sort-responsiveness-core.md) + spec §Decisions 2). Note PR1 already made this phase non-freezing/transparent/cancelable, so the decision is about raw wall-time, not freeze. **Decide after PR2/PR3 land + a measured 24k per-phase timing pass** (instrument per-phase timings during PR2/PR3 so the call is data-driven). Effort: decision, then L (#7) or S (K-cap). Affected: [sorting-worker.js](../../sorting-worker.js) (graph build). [related: [2026-06-19] #7 parallelization entry]
+  ↳ **2026-10-25 (G2 PR 2 closeout)**: all three PRs have landed. The floor measured 361 s of a 943 s cold run on 14,201 files, 38%, in the user's smoke; see 🔵 [2026-10-25]. The decision this entry asks for is still open.
 - [x] **Correct the "PR2/PR3 = raw-speed continuation" framing in the P1 closeout docs** — ✅ **Resolved 2026-07-03** (Group CW-D, PR #60, `318ab27`): DONE.md (2 spots) + TODO.md tightened to the per-phase cost map (PR2 = hashing wait/hash sorts only, PR3 = ~40s cache-load, NEITHER touches the O(n·K) graph-build floor; AI-prediction sort has no graph build → fully addressed by PR3+PR1). _Original:_ [DONE.md](DONE.md) 2026-06-19, the [TODO.md](TODO.md) P1 comment, and the session memory characterize PR2 (hash off-thread) + PR3 (cache-load) as the "raw-speed continuation," which overstates them: they remove the hashing + cache-load waits but do **not** touch the core O(n·K) graph-build time (see the decision item above). Tighten to the precise per-phase framing on the next doc-hygiene / `revise-claude-md` pass. Effort: XS. Affected: [docs/planning/DONE.md](DONE.md), [docs/planning/TODO.md](TODO.md).
 
 ### [2026-06-20] PR #54 post-merge review follow-ups (sub-threshold items)
@@ -1233,6 +1353,7 @@ Claude/automation-surfaced.
 
 - [x] **Optional E2E smoke for the sort-progress card** — ✅ **Done 2026-07-05** (Group CW-V, PR #61): new `tests/e2e/sort-progress.test.js` — a real `vptree` sort with a MutationObserver installed **before** the sort to capture the transient `.notification-progress` card (a poll would miss the sub-100ms window), then `not.toBeAttached()` after the awaited sort resolves; plus a deterministic `.progress-cancel` → `sortAbortController.abort()` wiring check (fresh controller + direct `updateSortProgress()` render, no race). See [DONE.md](DONE.md) 2026-07-05. _Original:_ `updateSortProgress` renders DOM (`node`-env Vitest has no DOM), so it is currently only verified by the manual 24k smoke. Add a Playwright smoke on the tiny fixture: trigger a sort → assert the `.notification-progress` card appears → completes → is removed, and that clicking `.progress-cancel` aborts. Use `toBeAttached()` + a `!isLoading` wait (per CLAUDE.md E2E notes), not `.toBeVisible()` on media wrappers. Effort: S. Affected: new/extended `tests/e2e/*.test.js`.
 - [ ] **Neighbor-graph build parallelization (workstream #7) — the only raw-speed lever under the quality-lock** — With no K-cap allowed, the O(n·K) neighbor-graph build (K≈1,550 @ 24k) in `sorting-worker.js` cannot be made faster except by parallelizing the per-file `findKNearest` queries across a worker pool (identical results, more cores). Deferred from the P1 brainstorm (user chose "Approach A — no parallel build"). **Trigger: only pursue if, after PR2 (hash off-thread) + PR3 (cache-load) land, the graph build is still the dominant perceived wait on a real 24k folder** — measure first. High complexity (worker-pool lifecycle, per-worker VP-tree rebuild, chunked abort). Effort: L. Affected: `sorting-worker.js`, `media-viewer.js` (`runSortingWorker`).
+  ↳ **2026-10-25 (G2 PR 2 closeout)**: the trigger's measurement exists. PR2 and PR3 have both landed. In the user's cold smoke on `Liked_2` (14,201 files, VP-Tree), the sort phase took 361 s, 38% of a 943 s run, after a 580 s hash phase that now runs in the background. Both phases leave the app usable, so whether the graph build is the dominant *perceived* wait is the user's call: see 🔵 [2026-10-25].
 - [x] **CLAUDE.md / docs drift from PR1 dead-code removal** — ✅ **Resolved 2026-07-03** (Group CW-D, PR #60, `4d15c39`): CLAUDE.md Data-Structures note now marks MinHeap/VPTree worker-only (renderer copies + `sortMediaBySimilarity*` methods removed in PR #54); `calculateCosineDistance` dual-location note kept (verified still true in both files). Per decision **D2**, the historical planning-doc `~NNNN` line-refs were left as-is (rewriting settled entries = churn). _Original:_ PR1 deleted `media-viewer.js`'s own `MinHeap`/`VPTree` classes + the three `sortMediaBySimilarity*` renderer methods (now worker-only). CLAUDE.md "Detected Patterns → Data Structures" still says "`calculateCosineDistance` exists in both `sorting-worker.js` and the `MediaViewer` class" (still true) and lists MinHeap/VPTree as data structures without noting they're worker-only now; several affected-line refs (e.g. TODO/BACKLOG `media-viewer.js:~5992-6120`, `:5125-5200`) shifted by ~925 deleted lines. Fold into the next `revise-claude-md` pass. Effort: XS. Affected: [CLAUDE.md](../../CLAUDE.md) (Detected Patterns / Data Structures), planning-doc affected-line refs.
 
 ### [2026-06-18] PR #52 review follow-ups (2 items)
