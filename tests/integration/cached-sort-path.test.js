@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
+import * as HashPool from '../../hash-pool.js';
 const require = createRequire(import.meta.url);
+// An extracted method resolves media-viewer.js's namespace import through the global object.
+globalThis.HashPool = HashPool;
 
 // Integration tests: exercise the REAL call graph between applyCachedSortOrder
 // and insertNewFilesInSortedOrder. The PR #33 algorithm-threading bug slipped
@@ -92,6 +95,9 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
             // computePerceptualHash should NOT be called when hash already cached
             // in tests below. A spy lets us assert that.
             computePerceptualHash: vi.fn(),
+            // G2 PR 2 T5: nor is a hash pool made when nothing needs a hash.
+            _createHashPool: vi.fn(),
+            _hashThroughPool: extractAsyncMethod('_hashThroughPool'),
             updateProgressNotification: vi.fn(),
             updateSortProgress: vi.fn(),
             ...overrides,
@@ -126,6 +132,7 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
         expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
         // Hash branch must NOT have been taken — no on-demand hash computation
         expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
+        expect(ctx._createHashPool).not.toHaveBeenCalled();
     });
 
     it('VPTree cache entry routes through hash branch and uses Hamming distance', async () => {
@@ -157,6 +164,7 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
         expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
         // Hash already cached, no on-demand extraction expected
         expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
+        expect(ctx._createHashPool).not.toHaveBeenCalled();
     });
 
     it('old cache entry without algorithm field falls through to Hamming (pre-PR#33 format)', async () => {
@@ -189,5 +197,6 @@ describe('cache-hit sort path — algorithm threading (integration)', () => {
         expect(order.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
         expect(ctx.mediaFiles).toBe(listBefore); // the order is returned, never written
         expect(ctx.computePerceptualHash).not.toHaveBeenCalled();
+        expect(ctx._createHashPool).not.toHaveBeenCalled();
     });
 });

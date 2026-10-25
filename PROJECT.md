@@ -114,7 +114,7 @@ npm run format        # Prettier (format:check to verify only)
 | Service | Purpose | Docs Location |
 |---------|---------|---------------|
 | Electron | Desktop app framework | [electronjs.org](https://electronjs.org) |
-| blockhash | Perceptual image hashing | npm package |
+| perceptual hash | Image similarity | the app's own block-mean hash, perceptual-hash.js |
 | @vladmandic/face-api | Face detection | npm package |
 | ffprobe-static | Video metadata | npm package |
 

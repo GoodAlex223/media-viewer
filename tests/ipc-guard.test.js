@@ -249,7 +249,10 @@ describe('sender identity (final review I1)', () => {
         const fs = require('fs');
         const src = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
         expect(src).toContain('const INDEX_URL = `${APP_ORIGIN}/index.html`;');
-        expect(src).toContain('await win.loadURL(INDEX_URL);');
+        // G2 PR 2 T6: the parity flag rides on the same constant as a query, which pageId drops (F15).
+        expect(src).toContain(
+            "await win.loadURL(process.env.MV_HASH_PARITY === '1' ? `${INDEX_URL}?hashParity=1` : INDEX_URL);"
+        );
         expect(src).toContain('expectedUrl: INDEX_URL,');
         expect(src).toContain('if (url === INDEX_URL) {');
         expect(src).not.toContain('INDEX_HTML');

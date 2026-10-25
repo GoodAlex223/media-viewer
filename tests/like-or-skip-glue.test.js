@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
+import * as HashPool from '../hash-pool.js';
 import { stubFeatureCacheStore } from './feature-cache-harness.js';
 
 const require = createRequire(import.meta.url);
@@ -15,6 +16,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'media-viewer.js'), 'u
 // it resolves `LikeOrSkip` and `SimilaritySort` through the global object.
 globalThis.LikeOrSkip = LikeOrSkip;
 globalThis.SimilaritySort = SimilaritySort;
+globalThis.HashPool = HashPool;
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 // The parameter list may hold one level of parentheses (a default like `isLive = () => true`).
@@ -231,6 +233,10 @@ describe('a failed similarity sort leaves the list and the skips as they are (sp
             likeOrSkip: activeTracker('/f/a', '/f/b'),
             _orderGeneration: 0,
             _similarityRunGen: 0,
+            _similarityGenAbort: new AbortController(),
+            _bumpSimilarityRunGen: extract('_bumpSimilarityRunGen'),
+            _beginSimilarityRunState: extract('_beginSimilarityRunState'),
+            _endSimilarityRunState: extract('_endSimilarityRunState'),
             _onOrderChanged: vi.fn(),
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             _isStaleSimilarityRun: extract('_isStaleSimilarityRun'),

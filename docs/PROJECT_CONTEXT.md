@@ -33,7 +33,7 @@ Project decisions, patterns, and historical context for Media Viewer.
 
 | Decision | Choice | Rationale | Date |
 |----------|--------|-----------|------|
-| Image Hashing | blockhash-js | Fast perceptual hashing, good balance of speed/accuracy | Initial |
+| Image Hashing | own block-mean hash (`perceptual-hash.js`) | Fast perceptual hashing, good balance of speed/accuracy | Initial |
 | Similarity Search | VP-Tree | O(log n) nearest neighbor search vs O(n) brute force | Initial |
 | Sorting Algorithm | MST-based | Produces optimal path through similarity graph | Initial |
 | Hash Storage | `.hash_cache.json` in the media folder | Persistent cache, survives app restarts | 2025-12 |

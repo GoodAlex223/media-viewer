@@ -4,10 +4,13 @@ import { TournamentEngine, SwissStrategy } from '../tournament-engine.js';
 import { MlTrainingManager } from '../ml-training.js';
 import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
+import * as HashPool from '../hash-pool.js';
 import { stubFeatureCacheStore } from './feature-cache-harness.js';
+import { fakeHashPool } from './hash-pool-harness.js';
 // Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
 globalThis.LikeOrSkip = LikeOrSkip;
 globalThis.SimilaritySort = SimilaritySort;
+globalThis.HashPool = HashPool;
 const require = createRequire(import.meta.url);
 
 // MediaViewer methods are instance methods on an ES module class.
@@ -468,6 +471,14 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
             async computePerceptualHash(_path) {
                 throw new Error('computePerceptualHash should not be called in CLIP path');
             },
+            // G2 PR 2 T5: the placement hashes through a pool, which hashes through computePerceptualHash.
+            hashPools: [],
+            _hashThroughPool: extractAsyncMethod('_hashThroughPool'),
+            _createHashPool() {
+                const pool = fakeHashPool((p) => this.computePerceptualHash(p));
+                this.hashPools.push(pool);
+                return pool;
+            },
             updateProgressNotification() {},
             updateSortProgress() {},
             ...overrides,
@@ -687,6 +698,110 @@ describe('insertNewFilesInSortedOrder (algorithm-aware)', () => {
         expect(out.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png']);
         expect(ctx.perceptualHashes.get('/b.png')).toBe('0001');
     });
+
+    it('placement hashes the missing new files through one pool before it places any', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        const d = { path: '/d.png' };
+        const e = { path: '/e.png' }; // new, but already hashed
+        const seq = [];
+        const ctx = makeCtx({
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/c.png', '1111'],
+                ['/e.png', '0111'],
+            ]),
+            computePerceptualHash: vi.fn(async (p) => {
+                seq.push(`hash ${p}`);
+                if (p === '/d.png') {
+                    throw new Error('decode failed');
+                }
+                return '0001';
+            }),
+            updateSortProgress: vi.fn((p) => seq.push(`${p.phase} ${p.current}/${p.total}`)),
+        });
+        const savedWindow = globalThis.window;
+        const logError = vi.fn();
+        globalThis.window = { electronAPI: { logError } };
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        let out;
+        try {
+            out = await insertNewFilesInSortedOrder.call(ctx, [a, c], [b, d, e], 'vptree', () => true);
+        } finally {
+            globalThis.window = savedWindow;
+            errorSpy.mockRestore();
+        }
+        expect(ctx.hashPools).toHaveLength(1);
+        const [pool] = ctx.hashPools;
+        expect(pool.checkCanary).toHaveBeenCalledOnce();
+        expect(pool.hashFiles).toHaveBeenCalledOnce();
+        // A direct caller passes no signal; the apply function passes its entry's (PR #87 review #10).
+        expect(pool.hashFiles.mock.calls[0]).toEqual([['/b.png', '/d.png'], { signal: null }]);
+        expect(pool.terminate).toHaveBeenCalledOnce();
+        // The failure reaches the session log with its file and reason (PR #87 review #7), not the console alone.
+        expect(logError.mock.calls).toEqual([
+            [{ level: 'warn', source: 'hash-pool', message: 'Hash failed: /d.png: Error: decode failed' }],
+        ]);
+        expect(seq).toEqual(['hash /b.png', 'hash /d.png', 'Hashing new files 2/2', 'Placing new files 3/3']);
+        expect(ctx.perceptualHashes.get('/b.png')).toBe('0001');
+        expect(ctx.perceptualHashes.has('/d.png')).toBe(false);
+        // A file with no hash still goes to the end.
+        expect(out.map((f) => f.path)).toEqual(['/b.png', '/a.png', '/c.png', '/e.png', '/d.png']);
+    });
+
+    it('placement makes no pool when every new file is hashed', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        const ctx = makeCtx({
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/b.png', '0001'],
+                ['/c.png', '1111'],
+            ]),
+        });
+        await insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree', () => true);
+        expect(ctx.hashPools).toHaveLength(0);
+    });
+
+    // Fix round 1 (R-T5c): a placement made stale while its canary runs must not post the canary's notice into the
+    // folder open now.
+    it('a placement made stale during its canary check reports nothing and terminates its pool', async () => {
+        const a = { path: '/a.png' };
+        const c = { path: '/c.png' };
+        const b = { path: '/b.png' };
+        let isLiveNow = true;
+        const ctx = makeCtx({
+            perceptualHashes: new Map([
+                ['/a.png', '0000'],
+                ['/c.png', '1111'],
+            ]),
+            computePerceptualHash: vi.fn(async () => '0001'),
+            showNotification: vi.fn(),
+            _reportHashCanaryFailure: vi.fn(),
+            updateSortProgress: vi.fn(),
+        });
+        ctx._createHashPool = function () {
+            const pool = fakeHashPool((p) => this.computePerceptualHash(p), { route: 'main' });
+            pool.checkCanary = vi.fn(async () => {
+                isLiveNow = false; // a folder switch during the check
+                return { ok: false, detail: 'pixels differ' };
+            });
+            this.hashPools.push(pool);
+            return pool;
+        };
+        await expect(insertNewFilesInSortedOrder.call(ctx, [a, c], [b], 'vptree', () => isLiveNow)).rejects.toThrow(
+            'Sorting cancelled by user'
+        );
+        const [pool] = ctx.hashPools;
+        expect(ctx._reportHashCanaryFailure).not.toHaveBeenCalled();
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(pool.hashFiles).not.toHaveBeenCalled();
+        expect(pool.terminate).toHaveBeenCalledOnce();
+        expect(ctx.perceptualHashes.has('/b.png')).toBe(false);
+        expect(ctx.updateSortProgress).not.toHaveBeenCalled();
+    });
 });
 
 describe('applyCachedSortOrder (algorithm threading)', () => {
@@ -809,8 +924,9 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
     });
 
     // G2 PR 1 T4 (R-T4a), rewritten for PR #85 #22: the basename call was synchronous, so the placement's real awaits
-    // are the hash and the 25-file yield inside insertNewFilesInSortedOrder. A placement made stale during either
-    // stops: no hash stored, no progress after it, no order returned.
+    // are the hash (the pool's canary and results, G2 PR 2) and the 25-file yield inside insertNewFilesInSortedOrder.
+    // A placement made stale during either stops: no hash stored, no progress after it, no order returned, and its
+    // pool is terminated.
     it.each(['the hash', 'the 25-file yield'])(
         'a placement made stale during %s stops there: no hash stored, no progress after it',
         async (during) => {
@@ -831,6 +947,13 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
                 clipCache: new Map(),
                 calculateHammingDistance: (h1, h2) => [...h1].filter((ch, i) => ch !== h2[i]).length,
                 insertNewFilesInSortedOrder: realInsert,
+                hashPools: [],
+                _hashThroughPool: extractAsyncMethod('_hashThroughPool'),
+                _createHashPool() {
+                    const pool = fakeHashPool((p) => this.computePerceptualHash(p));
+                    this.hashPools.push(pool);
+                    return pool;
+                },
                 computePerceptualHash: vi.fn(async () => {
                     isLiveNow = false; // a folder switch while n0 is hashed
                     progressAtStale = ctx.updateSortProgress.mock.calls.length;
@@ -857,6 +980,9 @@ describe('applyCachedSortOrder (algorithm threading)', () => {
             expect(ctx.computePerceptualHash).toHaveBeenCalledTimes(yieldCase ? 0 : 1);
             if (!yieldCase) {
                 expect(ctx.perceptualHashes.has('/n0.png')).toBe(false);
+                // Review Focus #4: the fake pool is the hash source, and a stale placement terminates it.
+                expect(ctx.hashPools).toHaveLength(1);
+                expect(ctx.hashPools[0].terminate).toHaveBeenCalled();
             }
             expect(ctx.mediaFiles).toBe(listBefore);
         }
@@ -3093,6 +3219,73 @@ describe('bulk-rated persistence', () => {
         await saveBulkRatedFile.call(ctx);
         expect(written).toEqual({ version: 1, good: ['x.png'], bad: ['y.png'] });
     });
+
+    // R-F8: those ratings exist nowhere else, and the atomic writer can fail where an in-place write did not.
+    it('a failed save warns once per folder visit, and a folder load re-arms it', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        globalThis.window.electronAPI.writeBulkRatedFile = vi
+            .fn()
+            .mockResolvedValueOnce({ success: false, error: 'EPERM' })
+            .mockRejectedValueOnce(new Error('IPC gone'))
+            .mockResolvedValueOnce({ success: false, error: 'EBUSY' });
+        const ctx = {
+            baseFolderPath: '/folder',
+            currentFolderPath: 'folder',
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        };
+        await saveBulkRatedFile.call(ctx);
+        await saveBulkRatedFile.call(ctx);
+        expect(ctx.showNotification.mock.calls).toEqual([['⚠️ Failed to save the bulk ratings for folder', 'warning']]);
+        expect(warn).toHaveBeenCalledTimes(2);
+        expect(warn.mock.calls[0]).toEqual(['Failed to save .bulk_rated.json:', 'EPERM']);
+        expect(warn.mock.calls[1]).toEqual(['Failed to save .bulk_rated.json:', 'IPC gone']);
+        ctx._bulkRatedSaveWarning = { warned: false }; // what loadFolder does (pinned below)
+        await saveBulkRatedFile.call(ctx);
+        expect(ctx.showNotification).toHaveBeenCalledTimes(2);
+        warn.mockRestore();
+    });
+
+    // PR #87 review #8: a save still in flight when the user switches folder fails, if it does, after the switch.
+    it("a save from the folder left behind warns for that folder, and keeps the new folder's warning", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        let failA;
+        globalThis.window.electronAPI.writeBulkRatedFile = vi
+            .fn()
+            .mockImplementationOnce(() => new Promise((resolve) => (failA = resolve)))
+            .mockResolvedValueOnce({ success: false, error: 'EPERM' });
+        const ctx = {
+            baseFolderPath: '/A',
+            currentFolderPath: 'A',
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        };
+        const saveA = saveBulkRatedFile.call(ctx);
+        // The switch to B (loadFolder's part of it), while A's write is still in flight.
+        Object.assign(ctx, { baseFolderPath: '/B', currentFolderPath: 'B', _bulkRatedSaveWarning: { warned: false } });
+        failA({ success: false, error: 'EPERM' });
+        await saveA;
+        expect(ctx.showNotification.mock.calls).toEqual([['⚠️ Failed to save the bulk ratings for A', 'warning']]);
+        // B's own first failure still warns.
+        await saveBulkRatedFile.call(ctx);
+        expect(ctx.showNotification.mock.calls[1]).toEqual(['⚠️ Failed to save the bulk ratings for B', 'warning']);
+        warn.mockRestore();
+    });
+
+    it('a successful save posts nothing', async () => {
+        const ctx = {
+            baseFolderPath: '/folder',
+            currentFolderPath: 'folder',
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        };
+        await saveBulkRatedFile.call(ctx);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(ctx._bulkRatedSaveWarning.warned).toBe(false);
+    });
 });
 
 describe('applyBulkRating', () => {
@@ -5104,6 +5297,17 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
         await loadFolder.call(ctx, '/new/empty-folder');
         expect(ctx.refreshFolderGrants).toHaveBeenCalledTimes(1);
         expect(ctx._grantRefreshGen).toBe(1);
+    });
+
+    // R-F8: the once-per-visit bulk-ratings warning re-arms on every folder load, an empty folder included.
+    it('a folder load re-arms the bulk-ratings save warning', async () => {
+        const ctx = makeCtx();
+        const previous = { warned: true };
+        ctx._bulkRatedSaveWarning = previous;
+        await loadFolder.call(ctx, '/new/empty-folder');
+        // A new one, so a save still in flight from the old visit keeps (and spends) the old one (PR #87 review #8).
+        expect(ctx._bulkRatedSaveWarning).toEqual({ warned: false });
+        expect(previous.warned).toBe(true);
     });
 
     it('asks nothing after a load when no folder is saved', async () => {

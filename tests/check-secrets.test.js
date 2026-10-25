@@ -140,7 +140,10 @@ describe('extractAddedLines — unified=0 diff parsing', () => {
     });
 });
 
-describe('extractAddedLines — real git diff output', () => {
+// Each test spawns git several times. On a loaded machine (other sessions, the E2E suite) five git
+// calls measured 4.1 s, so the default 5 s timeout refused commits that broke nothing (BACKLOG
+// 🟤 [2026-10-11] "Raise the 5 s timeout…").
+describe('extractAddedLines — real git diff output', { timeout: 30_000 }, () => {
     let repoDir;
 
     // These tests also run inside the pre-commit hook (a git-hook context). Git can export

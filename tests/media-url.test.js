@@ -41,9 +41,46 @@ describe('renderer media URLs (G1 I1)', () => {
         'ml-worker.js',
         'feature-worker.js',
         'jxl-decode-worker.js',
+        'similarity-sort.js',
+        'tournament-engine.js',
+        'ml-model.js',
+        'perceptual-hash.js',
+        'main-thread-hash.js',
+        'hash-pool.js',
+        'hash-parity.js',
+        'hash-worker.js',
         'index.html',
     ];
     const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+
+    // Every app file the page loads, by import, worker or importScripts, from index.html. G2 PR 2 moved the hash
+    // route's src assignments into a module the list above did not name (PR #87 review #5).
+    function loadedByThePage() {
+        const seen = new Set(['index.html']);
+        const queue = ['index.html'];
+        while (queue.length > 0) {
+            const text = read(queue.shift());
+            const refs = [
+                ...text.matchAll(/<script[^>]*\bsrc="(?:\.\/)?([a-z0-9-]+\.js)"/g),
+                ...text.matchAll(/\bfrom\s+'\.\/([a-z0-9-]+\.js)'/g),
+                ...text.matchAll(/new Worker\('(?:\.\/)?([a-z0-9-]+\.js)'/g),
+                ...text.matchAll(/importScripts\(\s*'(?:\.\/)?([a-z0-9-]+\.js)'/g),
+            ].map((m) => m[1]);
+            for (const ref of refs) {
+                if (!seen.has(ref)) {
+                    seen.add(ref);
+                    queue.push(ref);
+                }
+            }
+        }
+        return seen;
+    }
+
+    it('the list names every app file the page loads', () => {
+        const loaded = loadedByThePage();
+        expect(loaded.has('main-thread-hash.js')).toBe(true); // the walk reaches a module two imports deep
+        expect([...loaded].filter((f) => !RENDERER_FILES.includes(f))).toEqual([]);
+    });
     // Code only: full-line and block comments removed, so prose that quotes an assignment is not one.
     const code = (f) =>
         read(f)

@@ -1,9 +1,14 @@
 // G3 training-folder video extraction (spec docs/superpowers/specs/2026-10-13-g3-training-video-extraction-design.md
-// § 6): computeFeatures and computePerceptualHash let go of a <video> through _releaseVideo, never by emptying its
+// § 6): computeFeatures and hashFile (main-thread-hash.js) let go of a <video> through _releaseVideo, never by emptying its
 // src. Run against a fake element that follows the two HTML rules the fix rests on.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as MediaUrl from '../media-url.js';
+import { blockhash } from '../perceptual-hash.js';
+import { hashFile } from '../main-thread-hash.js';
+
+// hashFile hashes through the one blockhash; the fake canvas has no pixels worth hashing.
+vi.mock('../perceptual-hash.js', () => ({ blockhash: vi.fn(() => 'hash-1'), HASH_CANVAS_SIZE: 256, HASH_BITS: 16 }));
 // The extracted methods reach the namespace import through globalThis (like LikeOrSkip).
 globalThis.MediaUrl = MediaUrl;
 
@@ -207,13 +212,20 @@ describe('computeFeatures — video (G3)', () => {
     });
 });
 
-describe('computePerceptualHash — video (G3)', () => {
-    const computePerceptualHash = extract('computePerceptualHash');
-    const ctxFor = () => ({ blockhash: vi.fn(() => 'hash-1'), _releaseVideo: extract('_releaseVideo') });
+describe('hashFile — video (G3)', () => {
+    const host = () => ({
+        isJxl: () => false,
+        decodeJxl: vi.fn(),
+        releaseVideo: extract('_releaseVideo'),
+    });
+    beforeEach(() => {
+        blockhash.mockReset();
+        blockhash.mockImplementation(() => 'hash-1');
+    });
 
     it('returns the hash, and its element fires no error afterwards', async () => {
         // The hash part passed before G3 as well (it resolved before the queued error); the error count is the RED.
-        expect(await computePerceptualHash.call(ctxFor(), '/t/clip.mp4')).toBe('hash-1');
+        expect(await hashFile('/t/clip.mp4', host())).toBe('hash-1');
         await settle();
         expect(videos[0].errors).toBe(0);
         expect(videos[0].getAttribute('src')).toBeNull();
@@ -221,21 +233,16 @@ describe('computePerceptualHash — video (G3)', () => {
 
     it('a video that cannot load rejects once, and nothing empties its src afterwards', async () => {
         videoOptions = { loadable: false };
-        await expect(computePerceptualHash.call(ctxFor(), '/t/clip.mp4')).rejects.toThrow(
-            'Video load error: Unknown error'
-        );
+        await expect(hashFile('/t/clip.mp4', host())).rejects.toThrow('Video load error: Unknown error');
         await settle();
         expect(videos[0].errors).toBe(1);
     });
 
     it('a hash that throws rejects, and nothing empties its src afterwards', async () => {
-        const ctx = {
-            ...ctxFor(),
-            blockhash: vi.fn(() => {
-                throw new Error('hash failed');
-            }),
-        };
-        await expect(computePerceptualHash.call(ctx, '/t/clip.mp4')).rejects.toThrow('hash failed');
+        blockhash.mockImplementation(() => {
+            throw new Error('hash failed');
+        });
+        await expect(hashFile('/t/clip.mp4', host())).rejects.toThrow('hash failed');
         await settle();
         expect(videos[0].errors).toBe(0);
         expect(videos[0].getAttribute('src')).toBeNull();

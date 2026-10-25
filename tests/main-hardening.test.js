@@ -23,3 +23,24 @@ describe('ffmpeg and ffprobe run with -protocol_whitelist file (G1)', () => {
         expect([...main.matchAll(/runMediaTool\(\s*(ffprobePath|ffmpegPath)/g)]).toHaveLength(4);
     });
 });
+
+// G2 PR 2, B2: a truncating writeFile tore these files when the app quit mid-save. Both handlers go through
+// atomic-write.js (tests/atomic-write.test.js pins its behaviour); this pins that they still do.
+describe('folder files are written atomically (G2 PR 2, B2)', () => {
+    const handlerBody = (start) => {
+        const from = main.indexOf(start);
+        expect(from).toBeGreaterThan(-1);
+        const to = main.indexOf('guard.handle(', from + start.length);
+        expect(to).toBeGreaterThan(from);
+        return main.slice(from, to);
+    };
+
+    it.each([
+        ['write-folder-cache', "'write-folder-cache',"],
+        ['writeBulkRatedFile', "guard.handle('writeBulkRatedFile',"],
+    ])('%s writes through the atomic writer, never fs.writeFile', (_name, start) => {
+        const body = handlerBody(start);
+        expect(body).toContain('atomicWriter.writeFileAtomic(');
+        expect(body).not.toContain('fs.writeFile(');
+    });
+});

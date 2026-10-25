@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 19–23 § G2 (🔵 🏆, 8 SP → **~13 SP**, see § 13) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2 (manual testing; user priority "speed these up first")
 **Created**: 2026-10-19
-**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9). **PR 1 implemented: PR #85, merge `f668611` (2026-10-20)**; the execution notes are in § 16. PR 2 is pending.
+**Status**: Approved by the user on 2026-10-19 ("Design looks right"), my calls 1–12 included. Brainstormed with the user the same day (decisions D1–D7, § 3). The builder check is done: its four questions were answered as my calls 3, 11 and 12 and as D7. Amended at PR 1 planning (§ 15, A1–A9). **PR 1 implemented: PR #85, merge `f668611` (2026-10-20)**; the execution notes are in § 16. **PR 2 planned 2026-10-22** on `g2-pr2-background-hashing`; its planning amendments are § 17 (B1–B10), the PR #87 review's are B11–B14, and the smoke's D4 ruling is B15 (2026-10-25).
 **Branch**: `g2-hash-sort-off-renderer` (from `main` @ `bfc4cbf`) for PR 1; PR 2 on a new branch after PR 1 merges (D7, § 13.1)
 
 Items marked **(my call)** were decided by Claude during the brainstorm. They were not put to the user, and are listed together at the end of § 3 for review.
@@ -65,7 +65,7 @@ folders (read only) and 25 generated fixtures. GPU feature status: `2d_canvas`, 
 | D1 | Spend the slot on the similarity sort, given the user only uses the AI sort? Its waits are dominated by cache re-reads (~108 s of a 165 s sort, BACKLOG 🟤 "`MlTrainingManager` retains no vectors…" and "source-folder feature cache load ~25 s"). | **Yes, the similarity sort** (user): the AI-sort waits stay in BACKLOG until planned. |
 | D2 | What may the user do while a run hashes? | **Everything, as usual** (user): rate/move, skip, undo, switch single↔compare, change settings. |
 | D3 | What happens when the run finishes mid-use? | **Nothing moves** (user approved the proposal): the order is saved, and a sticky **"Similarity order ready — Show"** message appears. Show applies it, starting from the file that was current when Sort was pressed. Dismissed, it costs nothing: pressing Sort later loads the saved order instantly. |
-| D4 | What does "quality must not change at all" (the user's 2026-06-19 constraint) mean? | **Zero hash differences expected** between today's route and the new route on a whole real folder, run the same day on the same build. **Accepted exception** (user ruling, option A, after F4): a 1-bit difference on a JPEG or lossy WebP, traced to the ±1 color rounding of F4. **Defect**: any difference of 2 or more bits; any difference on a PNG, GIF or JXL; or more than 0.5% of the folder's images differing. |
+| D4 | What does "quality must not change at all" (the user's 2026-06-19 constraint) mean? | **Zero hash differences expected** between today's route and the new route on a whole real folder, run the same day on the same build. **Accepted exception** (user ruling, option A, after F4; restated by the user's ruling of 2026-10-25, B15): a difference on a JPEG or lossy WebP whose two routes' pixels differ by at most 1 level, measured on the file: the ±1 color rounding of F4, whatever the bit count. **Defect**: any other difference: a pixel more than 1 level off, or a difference not measured; any difference on a PNG, GIF or JXL; or more than 0.5% of the folder's images differing. (The first wording, "a 1-bit difference … any difference of 2 or more bits is a defect", took 1 bit for the rounding's size; the smoke showed its smallest size is usually 2, B15.) |
 | D5 | How is D4 checked on Thursday? | **In-app parity diagnostic** (user agreed), not the December cache (F6): one launch hashes the folder both ways and writes the comparison to the perf log (§ 9). |
 | D6 | Which route? | **The F4 route** (my call, from the measurements): in a worker pool, `ImageDecoder` → YUV frame drawn directly; non-YUV → `createImageBitmap(blob)`. Any failure falls back to **today's route** for that file, never to the other worker sub-route. Videos stay on today's route. |
 | D7 | The estimate grew to ~13 SP against 8 planned. One PR with G3 slipping, or a split? | **Two PRs** (user ruling, option B; § 13.1). PR 1 has the end-of-sort fixes on today's hashing route; they fix bugs reachable today and ship safely alone. PR 2 has the background route, the parity mode and the Thursday smoke. Doing it the other way round has no safe seam: the background route alone would make F9–F11 reachable. G3 (ZoomManager) is expected to slip a day or two. |
@@ -249,7 +249,8 @@ In parity mode, a similarity sort:
 - writes **no** hash cache, sorts nothing, and shows no Show message;
 - writes to the perf log:
   - a summary line: files, identical, differing by bits (1, 2+), per-route total time;
-  - one line per differing file: name, bits, decoded frame format, sniffed type, embedded color profile yes/no;
+  - one line per differing file: name, bits, decoded frame format, sniffed type, embedded color profile yes/no,
+    and, for a JPEG or lossy WebP, the largest pixel difference between the routes (B15);
 - notifies "Parity check done — see the perf log".
 
 Today's route blocks the main thread in this mode; that is accepted for a diagnostic. **(My call:** the per-route
@@ -321,7 +322,7 @@ The pure parts of `hash-pool.js`:
 - the fallback chain;
 - queue, cancel, token and stale-drop;
 - periodic-save scheduling;
-- the parity report's classification (1-bit vs 2+, D4's classes).
+- the parity report's classification (D4's classes, measured on the pixels: B15).
 
 Also:
 
@@ -352,7 +353,7 @@ Also:
 3. **Timing**: the perf line of step 2 vs the per-route times of step 1, in `media-viewer-perf.log`.
 
 **(My call 10:)** the WEEKLY's "sorted order unchanged" check is dropped. With identical hashes, VP-Tree/MST order
-follows (F16). With accepted 1-bit differences, local order changes are explained by them, and a separate order
+follows (F16). With accepted differences, local order changes are explained by them, and a separate order
 diff would add a ~minutes-long second sort for no new information.
 
 ### 11.5 Acceptance
@@ -410,7 +411,7 @@ spelled-out steps, deep review (`max`). `sorting-worker.js` is untouched unless 
 plan-review flag may not apply.
 
 **Risks**:
-- **R1. The 1-bit rate on the full folder is higher than the sample's ~1/1,000.** D4 caps it at 0.5%; above that, it is a finding, and the fallback for color-profiled JPEGs (option B) is the known remedy.
+- **R1. The 1-bit rate on the full folder is higher than the sample's ~1/1,000.** D4 caps it at 0.5%; above that, it is a finding, and the fallback for color-profiled JPEGs (option B) is the known remedy. (Smoke, 2026-10-25: 4 of 14,154 differed, 0.03%. One had no color profile, so option B would not have covered it: B15.)
 - **R2. Worker memory on huge images.** Measure peak RSS during the smoke; cap concurrency for large files if needed.
 - **R3. GPU contention.** Workers and the visible media share the GPU. The smoke's "no stall" check covers it; lower the pool size if browsing stutters.
 - **R4. `ImageDecoder` support changes in a future Electron.** The canary and the fallback contain it.
@@ -462,3 +463,148 @@ The plan's Progress Log has the full record. These notes refine or depart from t
   - the feature-cache emptying on a mid-extraction folder switch (review #1) is a separate PR next;
   - the non-atomic `write-folder-cache` (review #5) moves into PR 2;
   - a degraded order saved as the sort cache (review #9) goes to BACKLOG.
+
+## 17. Planning amendments (PR 2, 2026-10-22)
+
+These were measured on `bf5ec84` while writing the PR 2 plan
+([plan](../../planning/plans/2026-10-22_g2-hash-sort-pr2-background-hashing.md)), each in a fresh Electron 39.1.2
+process with the GPU raster path enabled. None of them changes a user ruling.
+
+- **B1. The canary compares pixels, not hashes (§ 9.2).**
+  - *The probe*: seven canvas-encoded candidates went through both routes. The worker route matched today's route
+    byte for byte on all seven, with the window both visible and minimized.
+  - *The mutation*: with the worker's context forced to `willReadFrequently: true` (the CPU path), 94k–239k of
+    262,144 bytes differed on every candidate, yet the hash differed on only two. The two images § 9.2 describes, a
+    320×240 JPEG and a 320×240 alpha PNG, kept **identical hashes**, so a hash-only canary would not have fired.
+  - *The rule*: the canary passes only when every byte of both 256×256 read-backs is equal and the hashes are equal.
+- **B2. Atomic folder-file writes (§ 16, PR #85 review #5).** `write-folder-cache` and `writeBulkRatedFile` write
+  through one helper, `atomic-write.js`:
+  - a unique tmp name per write, created exclusively;
+  - `assertFixedPath` on both the tmp and the target before anything is written;
+  - fsync, then a rename with the lock retry;
+  - writes to one file applied in the order main received them;
+  - orphaned tmps older than 10 minutes removed on the first write to each file.
+
+  `.bulk_rated.json` is included because its ratings exist nowhere else: a bulk rating moves no file. This came from
+  a side agent's note, which the user relayed on 2026-10-22. The ordering rule is needed because unique names alone
+  stop a tear but do not stop an older write's rename landing last.
+- **B3. Today's route moves to `main-thread-hash.js` (§ 5.1, the builder's call).** `computePerceptualHash` stays
+  on `MediaViewer` as a one-line delegate and serves as the pool's fallback. Its image draw becomes `hashImageUrl`,
+  which the canary also runs on a `blob:` URL. The error messages are unchanged.
+- **B4. One pool per run (§ 6.2, § 6.4).** A run creates a pool, and so does a placement with files to hash; each
+  terminates its pool in its `finally`. No worker outlives the run that made it, so § 6.4's "a stale run only lets
+  its workers go" holds by construction.
+- **B5. Parity mode runs two passes, the worker route first (§ 9.1).**
+  - The second pass reads files the first pass already read, so the speed-up it reports is conservative.
+  - Parity mode always asks before it starts, because its second pass freezes the app.
+  - It writes no cache, and it leaves its report on the viewer for the E2E.
+- **B6. D4's classes, as code.** A 1-bit difference is accepted when the bytes sniff as JPEG, or as WebP decoded to
+  a YUV frame (lossy). Every other difference is a defect. A differing share above 0.5% of the compared images also
+  fails the verdict. (Replaced by B15: the accepted class is measured on the pixels, not read from the bit count.)
+- **B7. PR 1's Improvement #1 (a per-run hash map) is not absorbed.** It stays in BACKLOG, for three reasons:
+  - The pool's results reach `perceptualHashes` through a single store in the run's loop, after the token check, so
+    the pool adds no write path.
+  - The E2 gap the map would close needs a hash computed after a move. The pool cannot produce one, because a moved
+    file's read fails on both routes.
+  - Adopting the map would rework `saveHashCache`'s merge-once rule (PR #85 #20), which guards the 13k-entry cache
+    against shrinking.
+- **B8. Re-measured.** F4 still holds: the spike's 25 fixtures were 25/25 pixel-exact and hash-identical, in the
+  frame formats BGRA, BGRX, I444 and I420. For E15, both routes stayed pixel-identical with the window minimized, on
+  B1's seven candidates.
+- **B9. The unused npm `blockhash` dependency is removed.** It is a different algorithm, and nothing imports it. The
+  one `blockhash` is `perceptual-hash.js`.
+- **B10. The pool size is measured, and stays 3 (§ 14; plan T8, 2026-10-22).**
+  - *The run*: 597 `Liked_3` images, read only, each configuration in a fresh process, on a quiet machine.
+  - *Main thread vs pool 3*: today's route took 95 ms per image, and its main thread was late by up to 325 ms (p99).
+    Pool 3 took 47 ms per image, with a p99 lateness of 15 ms, about one frame.
+  - *Pool 4*: 38 ms per image, at a peak working set 400 MB higher (2,041 MB vs 1,640 MB).
+  - *Why 3*: risk R2. The machine has 15.2 GB, of which 1.2 GB was free during the run.
+  - *Across the measurement*: the canary passed at every size, and every image took the worker route.
+
+**Review amendments (PR #87 review round 1, 2026-10-24).** None of them changes a hash or a user ruling.
+
+- **B11. JXL decodes for hashing run one at a time (§ 5.2).** The app has one JXL decode worker, which decodes one
+  request at a time, and `decodeJxl` starts its 15 s frame-0 timer when it posts a request. The pool's three slots
+  and its main lane asked at once, so the second request in the queue timed out behind the first. The reviewer's
+  verifier timed 8.2–11.8 s per 6000×4000 photo. Two fixes:
+  - every hash-initiated decode queues in the renderer (`_decodeJxlForHash`), so its wait is outside its timer, as
+    the one-file-at-a-time loop's was;
+  - a run puts at most one JXL on its workers at a time, so its other slots keep hashing images.
+
+  A stopped run's queued decode skips its turn. The queue moves on when the worker is done with the file, not at its
+  frame 0: the worker decodes every frame of an animated JXL before it takes the next request (round 2). Each wait, for
+  the frame and for the rest of the stream, is bounded at the main route's 30 s, so a decode that never settles cannot
+  hold the queue: `decodeJxl` arms its timer only at the post, after the worker's init. D6's fallback is unchanged.
+  (The real-JXL measurement, 2026-10-25, corrects two claims here.
+  - "Moves on when the worker is done" holds only for a stream under the 30 s bound. Generated animations streamed
+    for 43 s and 66 s under load, and the bound let the next request into a busy worker.
+  - "Its wait is outside its timer" holds for the worker lane and for `decodeJxl`'s timer, but not for the main
+    route's 30 s `hashFile` timer.
+
+  Six such JXLs through a sort's path: PR 2 hashed 4, `main`'s old loop 1. Left to a follow-up by the user's
+  ruling: plan Residual "A long animated JXL stalls the hash JXL queue".)
+- **B12. A held-open target is written in place (B2).** Measured on this machine: Windows refuses a rename over a
+  file another process holds open (`EPERM` after about 650 ms of retries), even when the reader shares it for delete.
+  An in-place write of the same file succeeds under the same handle. A rename still refused after its retries with
+  `EPERM`, `EACCES` or `EBUSY` now writes the target in place, as every write did before B2, after `assertFixedPath`
+  checks the target again. The flush is best effort: some volumes refuse it, and the writes before B2 had none.
+
+  An in-place write is not crash-safe, so, by the user's ruling (2026-10-24), the writer keeps its whole, flushed tmp
+  until that write is complete. When `.bulk_rated.json` does not parse, `readBulkRatedFile` reads the newest tmp that
+  does (`readRecoveryCopy`), and the renderer writes the file back at once. A missing file is never recovered, so
+  ratings the user deleted stay deleted. The orphan sweep now runs only after a successful write, so it cannot remove
+  the one whole copy a torn file has. Round 2: the tmp becomes the recovery copy only once the target is open, since
+  `'w'` truncates as it opens. A target that cannot be opened (a read-only file, a reader that refuses write sharing)
+  is left as it was, its tmp is removed, and the save fails as before B2. The in-place write is flushed before the tmp
+  goes.
+- **B13. One run per pool, and the canary is the run's own first step (B4, § 9.2).** Every caller makes a pool per
+  run, so the support for several runs at once (R-T4a's wake of every live run) was unreachable, and is gone: a second
+  `hashFiles` while one is live throws. An `'auto'` run awaits the memoized canary before its first worker post, so no
+  caller can skip it. A run of videos only needs none. Round 2: `hashThroughPool` races its own wait for the canary
+  with the signal, so a Cancel during a sort's canary ends the call at once; the wait inside `hashFiles` stays plain,
+  since the canary is bounded. The parity check awaits its canary unraced, so a Cancel there still waits ≤ ~25 s:
+  accepted, since it is a bounded diagnostic (review round 3).
+- **B14. One pool sequence (B4).** A run's hash phase and every placement hash through `HashPool.hashThroughPool`:
+  - the canary;
+  - each result stored only after the caller's liveness check;
+  - worker fallbacks and failures logged with file and reason (20 lines a call, then a count);
+  - the pool terminated in a `finally`.
+
+  A run's placement counts its hashes and saves them through the run's own hooks, so a Cancel during a cache hit's
+  placement keeps them and the perf line reports them. Every gen bump aborts the old gen's signal, which a
+  placement's pool hashes on, so a stale Show stops reading the old folder's files at once. The parity check is the
+  one caller that drives its pool itself, since it hashes each image on both routes.
+- **B15. D4's accepted class is measured on the pixels (the user's ruling, 2026-10-25, after smoke step 1).**
+  - **The finding.** Step 1 on `Liked_2` (14,204 images, 51 videos): `verdict=fail`, compared 14,154, identical
+    14,150. One 1-bit JPEG difference was accepted; three 2-bit JPEG differences were defects under B6, two with a
+    color profile and one without. The canary passed and no worker failed. 50 main-route failures were files the user
+    moved during the run.
+  - **The mechanism, measured.** All four were re-hashed in a fresh app, 3 times per route, and each hash was stable.
+    In each, every differing pixel is exactly 1 level off: F4's rounding. In each 2-bit case, the only change is that
+    the two blocks at the median (ranks 128 and 129) trade places, and their means differ by 0.003–0.04 levels.
+  - **Why D4's 1-bit wording was wrong.** `blockhash` sets a bit for a block strictly above the median block. When no
+    block mean ties with the median's, every hash has exactly 127 bits set, so any change moves one block up and one
+    down: 2 bits is the smallest difference the rounding can make. A 1-bit difference needs a tie at the median, as in
+    the accepted file, whose main route has 126 bits set. Ties elsewhere don't matter: one 2-bit file has 71 tied
+    blocks and still 127 bits. (Review round 5 corrected the first wording, "no two block means equal".)
+  - **The rule.** A difference on a JPEG or lossy WebP is accepted when its pixel measure reproduces both hashes and
+    no read-back byte differs by more than 1 level, whatever the bit count. Anything else is a defect, a difference
+    that was not measured included. The 0.5% cap stays.
+  - **As code.**
+    - `HashPool.comparePixels(path)` re-hashes one file on a worker and on the main route, with read-backs, and
+      compares them byte by byte, as the canary does.
+    - After both passes, `runHashParity` measures each differing JPEG or lossy WebP, one at a time, as its own
+      progress phase, "Parity: pixel check".
+    - A run already over the 0.5% cap fails whatever the measure says, so it measures only the first 200 (the
+      report's line limit) and notes the rest `not measured: over the 0.5% cap`. Otherwise a whole folder on a
+      wrong route would be re-hashed a third time with the app frozen.
+    - Each diff line ends `maxPixel=N`, plus `note=…` when the measure failed or did not reproduce.
+    - Review round 5: each call is raced with the signal, so a Cancel during the measure ends it at once, not after
+      its two 30 s bounds (B13's ≤ ~25 s canary wait is the parity check's only unraced one). The run's `finally`
+      terminates the pool, which ends the call. A candidate a cancelled run did not measure is noted
+      `not measured: cancelled`, so its line can't read as a measured defect.
+    - The canary is unchanged and still pixel-exact, so a raster-path change is still caught before a run.
+  - **Not chosen.** Accepting any 2-bit swap from the hashes alone, which can't tell rounding from a real decode
+    difference that flips 2 bits. Zero differences, which would put every JPEG back on the main thread: three
+    quarters of `Liked_2`'s images (11,690 of 15,589 on 2026-10-22).
+    R1's option B, which would not have covered the file without a color profile.

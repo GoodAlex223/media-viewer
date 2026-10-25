@@ -33,7 +33,7 @@
 > **Re-estimated at design, 2026-10-19: ~13 SP in two PRs** ([spec](../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) `47d870c`, D7, user ruling). **PR 1** (~6 SP; [plan](../archive/plans/2026-10-19_g2-hash-sort-pr1-end-of-sort-fixes.md), archived): the end-of-sort fixes on today's hashing route — snapshot, run token, saves, no-restore cancel, one apply function, the "Show" message — closing the three 🟤 [2026-10-12] entries. **PR 2** (~7 SP; a new branch after PR 1 merges): the background hashing route, the in-app parity mode, the canary and Thursday's smoke. The acceptance below is superseded where the spec differs: parity is checked by the in-app diagnostic on a same-day, same-build run (D4, D5; the December `.hash_cache.json` is not a valid reference, F6), and the "sorted order unchanged" check is dropped (my call 10). **G3 is expected to slip a day or two.** PR 1 leaves `sorting-worker.js` untouched, and PR 2's scope does not list it, so the Tier 2 plan review should not apply.
 > **PR 1 ✅ MERGED 2026-10-20 via PR #85 (`f668611`)**: the end-of-sort fixes, plus two user-approved additions. Restore Order now waits for render idle, and the AI sort never applies its order under a loading file. PR 1 ran well past its ~6 SP: Tasks 6–7 were added, and the reviews took three fix waves. The user approved each step. **Order from here (the user's ruling at the PR #85 review):**
 > 1. ✅ **Done: the data-loss fix**, TODO 🔴 "Stop the feature cache being wiped on a folder switch": MERGED 2026-10-22 via PR #86 (`654fb3e`); see DONE.md.
-> 2. **Next: G2 PR 2** (background hashing, the parity mode, the 24k smoke) on a new branch. Its plan must carry the atomic `write-folder-cache` (PR #85 review #5).
+> 2. **Next: G2 PR 2** (background hashing, the parity mode, the 24k smoke) on a new branch. Its plan must carry the atomic `write-folder-cache` (PR #85 review #5). **Plan written 2026-10-22** ([plan](plans/2026-10-22_g2-hash-sort-pr2-background-hashing.md), branch `g2-pr2-background-hashing`). It is re-estimated at ~9 SP, and the atomic writes now cover `.bulk_rated.json` too (spec § 17). Thursday's smoke could not run on Thursday, because PR 2 was not built yet. **The user moved it to Friday 2026-10-23** at plan approval. **PR #87** opened 2026-10-22. The smoke did not run on Friday: the perf log has no `Hash parity:` line through 2026-10-24. Review round 1's fixes landed 2026-10-24, and they change the hashing code, so the smoke runs on that head, on a date the user sets.
 > 3. G3 waits for PR 2.
 >
 > Details: DONE.md.
@@ -99,13 +99,14 @@
 
 ### Thursday, October 22 — PR2 smoke; the extraction starts
 
-- **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆 — the user's 24k smoke; review; merge (part 3 of 3). Re-planned: PR 2 (background hashing, parity mode) implement; the user's smoke on `Liked_2`; review; merge. G3 starts after PR 2 merges.
+- **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆 — the user's 24k smoke; review; merge (part 3 of 3). Re-planned: PR 2 (background hashing, parity mode) implement; the user's smoke on `Liked_2`; review; merge. G3 starts after PR 2 merges. **2026-10-22**: the PR 2 plan was written and approved, and implementation started; the smoke moved to Friday.
 - **[G3](#g3-zoommanager-extraction-v20-solo---renderer-modularization--5-sp)** 🔵 — `typescript@6` and the server check; before screenshots; spec and plan; extract (part 1 of 2)
 
 **Daily total**: ~5 SP
 
 ### Friday, October 23 — Extraction lands; refresh; reviews
 
+- **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆: **the user's 24k smoke on `Liked_2`**, on the PR 2 branch, moved here from Thursday (the user's ruling, 2026-10-22). Then the review and the merge.
 - **[G3](#g3-zoommanager-extraction-v20-solo---renderer-modularization--5-sp)** 🔵 — suites green; after screenshots; review; merge (part 2 of 2)
 - **[G5](#g5-strategic-doc-refresh-solo---strategic-docs--3-sp)** 🟡 — after G1–G3 merge; the user's board decisions
 - **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — trial read-outs first, then §§1–4
