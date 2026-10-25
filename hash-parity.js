@@ -185,7 +185,8 @@ export async function runHashParity(
     // B15: only where the measure can accept, a differing JPEG or lossy WebP; the measure must reproduce both hashes.
     // A run already over the 0.5% cap fails whatever the measure says (a whole folder on a wrong route differs
     // everywhere), so it measures only as many files as the report lists, not every image again with the app frozen.
-    // A candidate left unmeasured says why, so its line can't read as a measured defect. A cancelled run measures none.
+    // A candidate left unmeasured says why, so its line can't read as a measured defect. A run already cancelled here
+    // measures none.
     const pixels = new Map();
     const leaveUnmeasured = (list, why) => list.forEach((p) => pixels.set(p, { error: `not measured: ${why}` }));
     let compared = 0;
