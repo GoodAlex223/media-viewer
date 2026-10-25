@@ -12,12 +12,15 @@ const H0 = '0'.repeat(256);
 const flip = (bits) => '1'.repeat(bits) + '0'.repeat(256 - bits);
 
 const jpegInfo = { type: 'jpeg', format: 'I420', icc: false };
-/** A row both routes hashed; the main route's hash differs from the worker's by `bits`. */
-const row = (name, bits = 0, info = jpegInfo, kind = info.type) => ({
+// B15's pixel measure of a differing file: re-hashed with the same hashes, no read-back byte more than 1 level off.
+const onePixel = { maxDiff: 1, reproduced: true };
+/** A row both routes hashed; the main route's hash differs from the worker's by `bits`. `pixels`: its B15 measure. */
+const row = (name, bits = 0, info = jpegInfo, kind = info.type, pixels = undefined) => ({
     name,
     kind,
     worker: { hash: H0, info },
     main: { hash: flip(bits) },
+    ...(pixels ? { pixels } : {}),
 });
 const identicalRows = (n) => Array.from({ length: n }, (_, i) => row(`same${i}.jpg`));
 
@@ -25,6 +28,8 @@ describe('constants', () => {
     it('match the spec', () => {
         expect(PARITY_MAX_RATE).toBe(0.005);
         expect(MAX_PARITY_DETAIL_LINES).toBe(200);
+        expect(HashParity.PARITY_MAX_PIXEL_DIFF).toBe(1);
+        expect(HashParity.PHASE_PIXELS).toBe('Parity: pixel check');
     });
 });
 
@@ -56,49 +61,105 @@ describe('classifyParity (D4, B6)', () => {
     it('one 1-bit JPEG in 1,000 passes, accepted', () => {
         const r = classifyParity([
             ...identicalRows(999),
-            row('one.jpg', 1, { type: 'jpeg', format: 'I420', icc: true }),
+            row('one.jpg', 1, { type: 'jpeg', format: 'I420', icc: true }, 'jpeg', onePixel),
         ]);
         expect(r.verdict).toBe('pass');
         expect(r.diff1).toBe(1);
         expect(r.diffs).toEqual([
-            { name: 'one.jpg', bits: 1, cls: 'accepted', type: 'jpeg', format: 'I420', icc: true },
+            {
+                name: 'one.jpg',
+                bits: 1,
+                cls: 'accepted',
+                type: 'jpeg',
+                format: 'I420',
+                icc: true,
+                maxPixel: 1,
+                note: null,
+            },
         ]);
         expect(r.diffs.filter((d) => d.cls === 'accepted')).toHaveLength(1);
         expect(r.rate).toBe(0.001);
     });
 
-    it('a 1-bit PNG fails', () => {
-        const r = classifyParity([...identicalRows(99), row('a.png', 1, { type: 'png', format: null, icc: false })]);
+    it('a 1-bit PNG fails, even 1 level off', () => {
+        const r = classifyParity([
+            ...identicalRows(99),
+            row('a.png', 1, { type: 'png', format: null, icc: false }, 'png', onePixel),
+        ]);
         expect(r.verdict).toBe('fail');
         expect(r.diffs[0]).toMatchObject({ name: 'a.png', bits: 1, cls: 'defect', type: 'png', format: null });
     });
 
-    it('a 2-bit JPEG fails', () => {
-        const r = classifyParity([...identicalRows(999), row('two.jpg', 2)]);
-        expect(r.verdict).toBe('fail');
+    // B15 (the user's ruling, 2026-10-25): with no two block means equal, every hash has 127 bits set, so the
+    // smallest difference ±1 rounding can make is the two blocks at the median trading places: 2 bits.
+    it('a 2-bit JPEG at most 1 level off is accepted (B15)', () => {
+        const r = classifyParity([...identicalRows(999), row('two.jpg', 2, jpegInfo, 'jpeg', onePixel)]);
+        expect(r.verdict).toBe('pass');
         expect(r.diff2plus).toBe(1);
         expect(r.diff1).toBe(0);
-        expect(r.diffs[0]).toMatchObject({ bits: 2, cls: 'defect' });
+        expect(r.diffs[0]).toMatchObject({ bits: 2, cls: 'accepted', maxPixel: 1, note: null });
+    });
+
+    it('a JPEG diff 2 levels off is a defect, whatever its bits', () => {
+        const r = classifyParity([
+            ...identicalRows(999),
+            row('one.jpg', 1, jpegInfo, 'jpeg', { maxDiff: 2, reproduced: true }),
+        ]);
+        expect(r.verdict).toBe('fail');
+        expect(r.diffs[0]).toMatchObject({ bits: 1, cls: 'defect', maxPixel: 2, note: null });
+    });
+
+    it('a JPEG diff with no pixel measure is a defect', () => {
+        const r = classifyParity([...identicalRows(999), row('one.jpg', 1)]);
+        expect(r.verdict).toBe('fail');
+        expect(r.diffs[0]).toMatchObject({ bits: 1, cls: 'defect', maxPixel: null, note: null });
+    });
+
+    it('a JPEG diff whose measure did not reproduce its hashes is a defect', () => {
+        const r = classifyParity([
+            ...identicalRows(999),
+            row('two.jpg', 2, jpegInfo, 'jpeg', { maxDiff: 1, reproduced: false }),
+        ]);
+        expect(r.verdict).toBe('fail');
+        expect(r.diffs[0]).toMatchObject({ cls: 'defect', maxPixel: 1, note: 'not reproduced' });
+    });
+
+    it('a JPEG diff whose measure failed is a defect, with the reason', () => {
+        const r = classifyParity([
+            ...identicalRows(999),
+            row('two.jpg', 2, jpegInfo, 'jpeg', { error: 'Main route timed out' }),
+        ]);
+        expect(r.verdict).toBe('fail');
+        expect(r.diffs[0]).toMatchObject({ cls: 'defect', maxPixel: null, note: 'Main route timed out' });
     });
 
     it('a 1-bit WebP fails as BGRA and passes as I420', () => {
-        const bgra = classifyParity([...identicalRows(999), row('a.webp', 1, { type: 'webp', format: 'BGRA' })]);
+        const bgra = classifyParity([
+            ...identicalRows(999),
+            row('a.webp', 1, { type: 'webp', format: 'BGRA' }, 'webp', onePixel),
+        ]);
         expect(bgra.verdict).toBe('fail');
         expect(bgra.diffs[0].cls).toBe('defect');
-        const yuv = classifyParity([...identicalRows(999), row('a.webp', 1, { type: 'webp', format: 'I420' })]);
+        const yuv = classifyParity([
+            ...identicalRows(999),
+            row('a.webp', 1, { type: 'webp', format: 'I420' }, 'webp', onePixel),
+        ]);
         expect(yuv.verdict).toBe('pass');
         expect(yuv.diffs[0].cls).toBe('accepted');
     });
 
     it('a 1-bit JXL fails', () => {
         // The worker sniffs a JXL's PNG frame bytes as png; the row's kind says what the file is.
-        const r = classifyParity([...identicalRows(999), row('a.jxl', 1, { type: 'png', format: null }, 'jxl')]);
+        const r = classifyParity([
+            ...identicalRows(999),
+            row('a.jxl', 1, { type: 'png', format: null }, 'jxl', onePixel),
+        ]);
         expect(r.verdict).toBe('fail');
         expect(r.diffs[0]).toMatchObject({ name: 'a.jxl', type: 'jxl', cls: 'defect' });
     });
 
     it('5 one-bit JPEGs in 1,000 pass (0.50%, the boundary); 6 fail (0.60%)', () => {
-        const ones = (n) => Array.from({ length: n }, (_, i) => row(`d${i}.jpg`, 1));
+        const ones = (n) => Array.from({ length: n }, (_, i) => row(`d${i}.jpg`, 1, jpegInfo, 'jpeg', onePixel));
         const five = classifyParity([...identicalRows(995), ...ones(5)]);
         expect(five.rate).toBe(0.005);
         expect(five.verdict).toBe('pass');
@@ -156,7 +217,7 @@ describe('formatParityLines', () => {
             ...base,
             ...classifyParity([
                 row('ok.jpg'),
-                row('one.jpg', 1, { type: 'jpeg', format: 'I420', icc: true }),
+                row('one.jpg', 1, { type: 'jpeg', format: 'I420', icc: true }, 'jpeg', onePixel),
                 row('a.png', 3, { type: 'png', format: null, icc: false }),
                 { name: 'w.png', kind: null, worker: { error: 'decode failed' }, main: { hash: H0 } },
                 { name: 'm.jpg', kind: 'jpeg', worker: { hash: H0, info: jpegInfo }, main: { error: 'timeout' } },
@@ -166,10 +227,23 @@ describe('formatParityLines', () => {
             'Hash parity: outcome=done verdict=fail images=5 compared=3 identical=1 diff1=1 diff2plus=1 rate=66.67% ' +
                 'workerFailed=1 mainFailed=1 videos=2 canary=pass | worker=1234ms (pool 3) | main=5679ms | ' +
                 'order=worker,main | folder=C:\\pics',
-            'Hash parity diff: one.jpg bits=1 class=accepted type=jpeg format=I420 icc=yes',
-            'Hash parity diff: a.png bits=3 class=defect type=png format=- icc=no',
+            'Hash parity diff: one.jpg bits=1 class=accepted type=jpeg format=I420 icc=yes maxPixel=1',
+            'Hash parity diff: a.png bits=3 class=defect type=png format=- icc=no maxPixel=-',
             'Hash parity worker-failed: w.png error=decode failed',
             'Hash parity main-failed: m.jpg error=timeout',
+        ]);
+    });
+
+    it("a diff line names its pixel measure's max difference, and why it could not accept", () => {
+        const rows = [
+            row('two.jpg', 2, jpegInfo, 'jpeg', onePixel),
+            row('moved.jpg', 2, jpegInfo, 'jpeg', { maxDiff: 1, reproduced: false }),
+            row('slow.jpg', 2, jpegInfo, 'jpeg', { error: 'Main route timed out' }),
+        ];
+        expect(formatParityLines({ ...base, ...classifyParity(rows) }, { folder: '/f' }).slice(1)).toEqual([
+            'Hash parity diff: two.jpg bits=2 class=accepted type=jpeg format=I420 icc=no maxPixel=1',
+            'Hash parity diff: moved.jpg bits=2 class=defect type=jpeg format=I420 icc=no maxPixel=1 note=not reproduced',
+            'Hash parity diff: slow.jpg bits=2 class=defect type=jpeg format=I420 icc=no maxPixel=- note=Main route timed out',
         ]);
     });
 
@@ -186,7 +260,7 @@ describe('formatParityLines', () => {
         expect(lines[0]).toMatch(/^Hash parity: outcome=done verdict=fail .* canary=fail \| worker=/);
         expect(lines.slice(1)).toEqual([
             'Hash parity canary: canary-jpeg: 12 bytes differ, 0 bits',
-            'Hash parity diff: a.png bits=3 class=defect type=png format=- icc=no',
+            'Hash parity diff: a.png bits=3 class=defect type=png format=- icc=no maxPixel=-',
         ]);
         const passing = formatParityLines(
             { ...report, canary: 'pass', canaryDetail: 'canary-jpeg: 0 bytes differ, 0 bits' },
@@ -222,8 +296,11 @@ describe('runHashParity', () => {
      * A pool whose results depend on the requested route: `worker(path)` and `main(path)` each return a result's
      * body. The real pool's abort contract: nothing more is yielded once the signal aborts.
      */
-    function routePool({ worker, main, canary = { ok: true, detail: 'ok' }, size = 3 } = {}) {
+    function routePool({ worker, main, compare, canary = { ok: true, detail: 'ok' }, size = 3 } = {}) {
         const pool = fakeHashPool(async () => H0, { size, canary });
+        if (compare) {
+            pool.comparePixels = vi.fn(compare);
+        }
         pool.hashFiles = vi.fn(async function* (paths, { signal = null, route } = {}) {
             for (const path of paths) {
                 if (signal?.aborted) {
@@ -283,6 +360,7 @@ describe('runHashParity', () => {
                     ? { hash: H0, route: 'worker', info: { type: 'png', format: null, icc: false } }
                     : workerOk(),
             main: async (p) => ({ hash: p.endsWith('b.jpg') ? flip(1) : p.endsWith('.jxl') ? flip(1) : H0 }),
+            compare: async () => ({ workerHash: H0, mainHash: flip(1), maxPixelDiff: 1, bytesDiffer: 7 }),
         });
         const report = await runHashParity(pool, ['/f/a.jpg', '/f/b.jpg', '/f/c.jxl'], {
             isJxl: (p) => p.endsWith('.jxl'),
@@ -292,6 +370,171 @@ describe('runHashParity', () => {
             ['c.jxl', 'jxl', 'defect'],
         ]);
         expect(report.verdict).toBe('fail');
+    });
+
+    // B15: the measure re-hashes on both routes with read-backs, so it runs only where it can accept, and only once
+    // both passes are done (the parity order stays worker, then main).
+    it('measures the pixels of each differing JPEG or lossy WebP after both passes, and nothing else', async () => {
+        const events = [];
+        const info = {
+            'a.jpg': jpegInfo,
+            'b.jpg': jpegInfo,
+            'c.jxl': { type: 'png', format: null, icc: false },
+            'd.png': { type: 'png', format: null, icc: false },
+            'e.webp': { type: 'webp', format: 'I420', icc: false },
+            'f.webp': { type: 'webp', format: 'BGRA', icc: false },
+            'g.jpg': jpegInfo,
+        };
+        const name = (p) => p.split('/').pop();
+        const pool = routePool({
+            worker: async (p) => {
+                events.push('worker');
+                return { hash: H0, route: 'worker', info: info[name(p)] };
+            },
+            main: async (p) => {
+                events.push('main');
+                if (name(p) === 'g.jpg') {
+                    return { hash: null, route: 'none', error: 'timeout' };
+                }
+                return { hash: name(p) === 'a.jpg' ? H0 : flip(2) };
+            },
+            compare: async () => {
+                events.push('pixels');
+                return { workerHash: H0, mainHash: flip(2), maxPixelDiff: 1, bytesDiffer: 3 };
+            },
+        });
+        const paths = Object.keys(info).map((n) => `/f/${n}`);
+        const report = await runHashParity(pool, paths, { isJxl: (p) => p.endsWith('.jxl') });
+        expect(pool.comparePixels.mock.calls.map((c) => c[0])).toEqual(['/f/b.jpg', '/f/e.webp']);
+        expect(events.indexOf('pixels')).toBeGreaterThan(events.lastIndexOf('main'));
+        expect(report.diffs.map((d) => [d.name, d.cls, d.maxPixel])).toEqual([
+            ['b.jpg', 'accepted', 1],
+            ['c.jxl', 'defect', null],
+            ['d.png', 'defect', null],
+            ['e.webp', 'accepted', 1],
+            ['f.webp', 'defect', null],
+        ]);
+        expect(report.outcome).toBe('done');
+    });
+
+    it('the measure reports its own phase, after the main pass', async () => {
+        const pool = routePool({
+            worker: workerOk,
+            main: async (p) => ({ hash: p.endsWith('a.jpg') ? H0 : flip(2) }),
+            compare: async () => ({ workerHash: H0, mainHash: flip(2), maxPixelDiff: 1, bytesDiffer: 3 }),
+        });
+        const onProgress = vi.fn();
+        await runHashParity(pool, ['/f/a.jpg', '/f/b.jpg', '/f/c.jpg'], { onProgress });
+        const pixelCalls = onProgress.mock.calls.filter((c) => c[0] === 'Parity: pixel check');
+        expect(pixelCalls).toEqual([
+            ['Parity: pixel check', 0, 2],
+            ['Parity: pixel check', 1, 2],
+            ['Parity: pixel check', 2, 2],
+        ]);
+        const phases = onProgress.mock.calls.map((c) => c[0]);
+        expect(phases.indexOf('Parity: pixel check')).toBeGreaterThan(phases.lastIndexOf('Parity: main-thread route'));
+    });
+
+    it('with no difference to measure, reports no pixel phase', async () => {
+        const pool = routePool({ worker: workerOk, main: mainOk, compare: async () => ({}) });
+        const onProgress = vi.fn();
+        await runHashParity(pool, ['/f/a.jpg'], { onProgress });
+        expect(onProgress.mock.calls.filter((c) => c[0] === 'Parity: pixel check')).toEqual([]);
+        expect(pool.comparePixels).not.toHaveBeenCalled();
+    });
+
+    // A whole folder on a wrong route differs everywhere, and fails on the 0.5% cap whatever the measure says: it
+    // measures only as many files as the report lists, not every image again with the app frozen.
+    it('a run already over the 0.5% cap measures only as many files as the report lists', async () => {
+        const pool = routePool({
+            worker: workerOk,
+            main: async () => ({ hash: flip(2) }),
+            compare: async () => ({ workerHash: H0, mainHash: flip(2), maxPixelDiff: 1, bytesDiffer: 3 }),
+        });
+        const paths = Array.from({ length: 250 }, (_, i) => `/f/d${i}.jpg`);
+        const report = await runHashParity(pool, paths, {});
+        expect(pool.comparePixels).toHaveBeenCalledTimes(MAX_PARITY_DETAIL_LINES);
+        expect(report.diffs.slice(0, MAX_PARITY_DETAIL_LINES).every((d) => d.cls === 'accepted')).toBe(true);
+        expect(report.diffs.slice(MAX_PARITY_DETAIL_LINES).map((d) => [d.cls, d.note])).toEqual(
+            Array(50).fill(['defect', 'not measured: over the 0.5% cap'])
+        );
+        expect(report.verdict).toBe('fail');
+    });
+
+    it('a run within the 0.5% cap measures every candidate, past the report limit too', async () => {
+        const n = MAX_PARITY_DETAIL_LINES + 1;
+        const pool = routePool({
+            worker: workerOk,
+            main: async (p) => ({ hash: Number(p.match(/\d+/)[0]) < n ? flip(2) : H0 }),
+            compare: async () => ({ workerHash: H0, mainHash: flip(2), maxPixelDiff: 1, bytesDiffer: 3 }),
+        });
+        // 201 differing in 40,200 compared: exactly 0.5%.
+        const paths = Array.from({ length: 40_200 }, (_, i) => `/f/d${i}.jpg`);
+        const report = await runHashParity(pool, paths, {});
+        expect(pool.comparePixels).toHaveBeenCalledTimes(n);
+        expect(report.rate).toBe(0.005);
+        expect(report.verdict).toBe('pass');
+    });
+
+    it("a measure whose hashes are not the passes' does not accept", async () => {
+        const pool = routePool({
+            worker: workerOk,
+            main: async () => ({ hash: flip(2) }),
+            compare: async () => ({ workerHash: H0, mainHash: flip(4), maxPixelDiff: 1, bytesDiffer: 3 }),
+        });
+        const report = await runHashParity(pool, ['/f/a.jpg'], {});
+        expect(report.diffs[0]).toMatchObject({ cls: 'defect', maxPixel: 1, note: 'not reproduced' });
+        expect(report.verdict).toBe('fail');
+    });
+
+    it('a measure that rejects makes a defect with its reason, and the run still reports', async () => {
+        const pool = routePool({
+            worker: workerOk,
+            main: async () => ({ hash: flip(2) }),
+            compare: async () => {
+                throw new Error('Read-back sizes 262144 and 4');
+            },
+        });
+        const report = await runHashParity(pool, ['/f/a.jpg', '/f/b.jpg'], {});
+        expect(pool.comparePixels).toHaveBeenCalledTimes(2);
+        expect(report.outcome).toBe('done');
+        expect(report.diffs.map((d) => [d.cls, d.note])).toEqual([
+            ['defect', 'Read-back sizes 262144 and 4'],
+            ['defect', 'Read-back sizes 262144 and 4'],
+        ]);
+    });
+
+    it('an abort during the main pass measures no pixels', async () => {
+        const controller = new AbortController();
+        const pool = routePool({
+            worker: workerOk,
+            main: async (p) => {
+                if (p.endsWith('b.jpg')) {
+                    controller.abort();
+                }
+                return { hash: flip(2) };
+            },
+            compare: async () => ({ workerHash: H0, mainHash: flip(2), maxPixelDiff: 1, bytesDiffer: 3 }),
+        });
+        const report = await runHashParity(pool, ['/f/a.jpg', '/f/b.jpg'], { signal: controller.signal });
+        expect(report.outcome).toBe('cancelled');
+        expect(pool.comparePixels).not.toHaveBeenCalled();
+    });
+
+    it('an abort during the measure stops it, and the run is cancelled', async () => {
+        const controller = new AbortController();
+        const pool = routePool({
+            worker: workerOk,
+            main: async () => ({ hash: flip(2) }),
+            compare: async () => {
+                controller.abort();
+                return { workerHash: H0, mainHash: flip(2), maxPixelDiff: 1, bytesDiffer: 3 };
+            },
+        });
+        const report = await runHashParity(pool, ['/f/a.jpg', '/f/b.jpg', '/f/c.jpg'], { signal: controller.signal });
+        expect(pool.comparePixels).toHaveBeenCalledTimes(1);
+        expect(report.outcome).toBe('cancelled');
+        expect(report.verdict).toBe('incomplete');
     });
 
     it('excludes videos and counts them', async () => {

@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆; ~13 SP across two PRs, spec D7; this plan is **PR 2**, re-estimated ~9 SP below) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
 **Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved 2026-10-19; PR 1 amendments § 15, PR 1 execution notes § 16; **PR 2 amendments § 17: B1–B10 from planning, B11–B14 from the PR #87 review**)
 **Created**: 2026-10-22
-**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1 and 2 answered (2026-10-24). The `Liked_2` smoke has not run.
+**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and step 1 is to be re-run on the B15 head; steps 3–4 have not run.
 **Last Updated**: 2026-10-24
 **Branch**: `g2-pr2-background-hashing` (from `main` @ `bf5ec84`, after PR #86 merged as `654fb3e`)
 
@@ -166,7 +166,7 @@ Measured on `bf5ec84`, 2026-10-22; scripts in this session's scratchpad (`spike/
 - **B3. Today's route moves to `main-thread-hash.js`** (§ 5.1's builder call). `computePerceptualHash` stays on `MediaViewer` as a one-line delegate and serves as the pool's fallback. Its image draw is factored into `hashImageUrl`, which the canary also uses on a `blob:` URL; its messages are unchanged.
 - **B4. One pool per run** (§ 6.2, § 6.4). A run, or a placement with files to hash, creates a pool and terminates it in its `finally`. No worker outlives the run that made it, so "a stale run only lets its workers go" holds by construction.
 - **B5. Parity mode runs two passes, worker route first** (§ 9.1). The second pass reads files the first already read, so the speed-up it reports is conservative. Parity mode always asks first, because the second pass freezes the app. It writes no cache, and it leaves its report on the viewer as `lastHashParityReport` for the E2E.
-- **B6. D4's classes, as code.** A 1-bit difference is *accepted* when the bytes sniff as JPEG, or as WebP decoded to a YUV frame (lossy). Every other difference is a *defect*. A share of differing images above 0.5% of those compared fails the verdict too.
+- **B6. D4's classes, as code.** A 1-bit difference is *accepted* when the bytes sniff as JPEG, or as WebP decoded to a YUV frame (lossy). Every other difference is a *defect*. A share of differing images above 0.5% of those compared fails the verdict too. (Replaced 2026-10-25 by spec B15, the user's ruling after smoke step 1: the accepted class is measured on the pixels.)
 - **B7. PR 1 Improvement #1 (a per-run hash map) is not absorbed.**
   - The pool's results reach `perceptualHashes` through one store in the run's loop, after the token check, so the pool adds no write path.
   - The E2 gap the map would close needs a hash computed after a move. The pool cannot produce one: a moved file's read fails on both routes.
@@ -516,7 +516,7 @@ There is no `signal`: the caller's `isLive` is the only check, and a stale place
   - It imports `isYuvFormat` from `./hash-worker.js` and keeps no second copy of the YUV test. Importing that module outside a worker installs no handler (T3).
   - `classifyParity(rows)`, where each row is `{ name, kind, worker: { hash, info } | { error }, main: { hash } | { error } }` and `kind` is `'jxl'` for a JXL path, else the worker's `info.type`. It returns `{ images, compared, identical, diff1, diff2plus, rate, verdict, diffs, workerFailures, mainFailures }`:
     - each diff is `{ name, bits, cls: 'accepted'|'defect', type, format, icc }`;
-    - accepted means `bits === 1 && (type === 'jpeg' || (type === 'webp' && isYuvFormat(format)))`;
+    - accepted means `bits === 1 && (type === 'jpeg' || (type === 'webp' && isYuvFormat(format)))`; replaced 2026-10-25 by spec B15: a JPEG or lossy-WebP diff whose pixel measure (`HashPool.comparePixels`) reproduces both hashes, with no byte more than 1 level off, whatever its bits; each diff also carries `maxPixel` and `note`;
     - the verdict is `pass` only when no diff is a defect and `rate <= PARITY_MAX_RATE`;
     - `compared` counts rows where both routes produced a hash;
     - `rate = (diff1 + diff2plus) / compared`, or 0 when nothing was compared.
@@ -655,6 +655,9 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
    - Reading `Liked_2` cold from disk may add time to both, since T8 measured with a warm OS cache.
    - Do not cancel. A cancelled run logs `verdict=incomplete` and has to be run again.
    - **Pass**: all of `outcome=done`, `verdict=pass`, and every `Hash parity diff:` line `class=accepted`. Also note `workerFailed=`: each worker failure becomes a main-thread hash in a normal run. A `canary=fail` line comes with a `Hash parity canary:` line giving the reason.
+   - Since B15, each diff line ends `maxPixel=N`, plus a `note=` when its pixel measure failed or did not reproduce. After the main pass, the card shows "Parity: pixel check" for a few seconds: one file per differing JPEG (4 on 2026-10-25).
+   - Files moved during the run (rating is fine in the first pass) show up as `mainFailed=` with `Image load error`. They are not compared, so they don't affect the verdict.
+   - **Ran 2026-10-25** on `f6598fc` (Progress Log): `verdict=fail` on three 2-bit JPEG diffs → spec B15. Re-run on the B15 head.
 2. **Close the app, then `$env:MV_HASH_PARITY=$null`** (or open a new shell).
 3. **Normal run, cold.** `npm start` → open `Liked_2` → Sort by Similarity. While it hashes:
    - browse;
@@ -893,8 +896,30 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - The reviewer's note on the new Residual is recorded there: a `userData` fallback's merge must respect ratings cleared or undone since its copy was written.
   - Held back: all 5 pushed back, as the reviewer dropped or doubted them.
 - **2026-10-24** — **Review round 4 and close-out** (the re-review of `a9b1d6e`): no code issue. The close-out's one finding was a fixed BACKLOG entry with no check-off line. Added under Residuals beside T5's: "A Cancel during a cache hit's placement drops the placement's hashes". Held back: 3, all pushed back.
+- **2026-10-25** — **Smoke step 1 (parity) on `f6598fc`: `verdict=fail` → spec B15 (user ruling).**
+  - The user's run on `Liked_2`, with the CPU at 30–55% from other work:
+    - 14,255 files at load: 14,204 images and 51 videos;
+    - `compared=14154 identical=14150 diff1=1 diff2plus=3 rate=0.03% workerFailed=0 mainFailed=50 canary=pass`;
+    - worker pass 494 s (35 ms an image, pool 3), main pass 1,116 s (79 ms), both under T8's estimate.
+  - The 50 `mainFailed` lines, all `Image load error: Unknown error`, were the files the user liked during the worker pass: each 404'd file had been shown and moved to `Liked_3`, and the skipped ones were hashed. The verdict doesn't count them.
+  - The diffs: one 1-bit JPEG (accepted) and three 2-bit JPEGs (`class=defect`). Two of the three have a color profile and one has none, so R1's option B would not cover it. The file names stay out of this public repo; they are in the session's scratchpad probe log.
+  - **Probe**: copies of the four in a fresh E2E app, 3 runs per route (scratchpad `parity-diffs/`). Every hash was stable. Every differing pixel was exactly 1 level off (61–2,085 of 196,608 bytes). Each 2-bit case was the two blocks at ranks 128/129 trading places, 0.003–0.04 levels apart.
+  - D4's "2+ bits = defect" took 1 bit for the rounding's size. With no two block means equal, `blockhash` always sets 127 bits, so its smallest change is 2. The user chose "Accept ±1-pixel diffs" over a hash-only swap rule and over zero differences (every JPEG back on the main thread). Spec D4 and B15 updated.
+  - **Built** (TDD), test-first:
+    - `HashPool.comparePixels(path)`: one file on both routes, read-backs compared;
+    - `runHashParity` measures each differing JPEG or lossy WebP after both passes, as the phase "Parity: pixel check";
+    - a run already over the 0.5% cap measures only the first 200 and notes the rest, so a broken route is not re-hashed a third time with the app frozen (found on re-reading the diff before commit);
+    - `classifyParity` accepts on the measure, whatever the bits;
+    - diff lines end `maxPixel=N` and, when a measure failed or did not reproduce, `note=…`.
+  - 17 new unit tests replace "a 2-bit JPEG fails". 16 failed first. The 17th, "an abort during the main pass measures no pixels", passed on the old code, which measured nothing; its mutation (measure after a cancelled pass) is killed. Five changed tests (PNG, WebP, JXL, the 0.5% boundary, "classifies…") are type guards and passed throughout. Mutations: 17 of 17 killed, plus a no-op baseline that survived.
+  - The cap and the phase: 4 more tests, plus 2 constants in "match the spec". Three failed first; the other two, "with no difference to measure, reports no pixel phase" and "a run within the 0.5% cap measures every candidate…", guard the new code and passed on the old. Mutations: 9 of 9 killed, the two filter mutations re-pointed at the restructured loop. The E2E "the pixel measure reads both routes' pixels for a JPEG and a lossy WebP" was mutation-checked (no `wantPixels` → fails; baseline passes). `hash-parity.test.js` E2E 9/9.
+  - Unit: 2,292 → **2,312** passed, 1 skipped. `media-viewer.js` unchanged (11,942 lines).
+  - My error on the way: I first told the user no report had been written, from the perf log's directory listing. NTFS showed a stale time and size for a file the app holds open. The report had been written at 03:52:51. Saved to memory.
+  - **Next**: the user re-runs step 1 on the B15 head, then steps 3–4.
 
 ## Key Discoveries
+
+- **A median-split hash's smallest change is 2 bits.** `blockhash` sets a bit for a block strictly above the median block, so a hash with no equal block means has exactly 127 bits set, and any change moves one block each way. A 1-bit difference needs equal means at the median. A parity bar written in bits ("1 bit accepted, 2+ a defect") therefore rejected the very rounding it meant to accept; the bar has to measure the mechanism, the pixels (B15).
 
 - **A hash-equality canary cannot see a raster-path change.** The CPU path changed ~100k bytes of every candidate's read-back, but a median-split 256-bit hash absorbs most ±1 shifts: 5 of 7 hashes stayed identical, including both images the spec named. The detector has to compare what the change touches, the pixels, not the summary the change mostly leaves alone (B1).
 - **Unique tmp names stop a tear, not a reorder.** Two overlapping saves with distinct tmps each rename whole, but the older one can land last. For `.bulk_rated.json` that loses the newer rating, so the writer also serializes per target (B2).

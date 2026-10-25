@@ -673,6 +673,62 @@ export class HashPool {
         };
     }
 
+    // --- the parity check's pixel measure (B15) ----------------------------------------------------------------
+
+    /**
+     * One image on both routes, with their read-backs compared byte by byte, as the canary compares its own (spec
+     * § 17 B15): D4 accepts a difference only where no byte is more than 1 level off. For a file the main route
+     * draws from its URL (a JPEG or a WebP); never a JXL or a video. Rejects on either route's error, its timeout or
+     * a read-back of the wrong size.
+     * @returns {Promise<{ workerHash: string, mainHash: string, maxPixelDiff: number, bytesDiffer: number }>}
+     */
+    async comparePixels(path) {
+        if (this._terminated) {
+            throw new Error('Pool terminated');
+        }
+        const url = this.toMediaUrl(path);
+        let timer;
+        const mainTimeout = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('Main route timed out')), this.taskTimeoutMs);
+        });
+        const main = await Promise.race([this.hashMainUrlPixels(url), mainTimeout]).finally(() => clearTimeout(timer));
+        const slot = this._takeSlot();
+        if (!slot) {
+            throw new Error(this._terminated ? 'Pool terminated' : 'No free slot');
+        }
+        let reply;
+        try {
+            const { worker, error } = this._ensureWorker(slot);
+            if (!worker) {
+                throw new Error(error);
+            }
+            reply = await this._post(slot, { type: 'hash', url, wantPixels: true }, this.taskTimeoutMs);
+        } finally {
+            slot.busy = false;
+            if (this._run) {
+                this._pump(this._run); // as the canary does: a run started meanwhile may want the slot
+            }
+        }
+        if (!reply.ok) {
+            throw new Error(String(reply.error));
+        }
+        const a = new Uint8Array(reply.pixels || new ArrayBuffer(0));
+        const b = main && main.pixels ? main.pixels : [];
+        if (a.length !== CANARY_PIXEL_BYTES || b.length !== CANARY_PIXEL_BYTES) {
+            throw new Error(`Read-back sizes ${a.length} and ${b.length}`);
+        }
+        let maxPixelDiff = 0;
+        for (let i = 0; i < a.length; i++) {
+            maxPixelDiff = Math.max(maxPixelDiff, Math.abs(a[i] - b[i]));
+        }
+        return {
+            workerHash: String(reply.hash),
+            mainHash: String(main.hash),
+            maxPixelDiff,
+            bytesDiffer: countDifferences(a, b),
+        };
+    }
+
     // --- lifetime ----------------------------------------------------------------------------------------------
 
     // Ends the pool's life: stops the run and terminates every worker. Idempotent; a later hashFiles yields nothing.

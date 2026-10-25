@@ -181,6 +181,46 @@ test.describe('hash routes on generated fixtures', () => {
         ).toEqual([]);
     });
 
+    // B15: the parity check's pixel measure, on real files. The unit fakes cannot show the worker's URL fetch, the real
+    // read-backs or their sizes. Its two hashes must be the ones the two routes give, or a run's measure could never
+    // reproduce a difference and every one would read as a defect.
+    test("the pixel measure reads both routes' pixels for a JPEG and a lossy WebP", async () => {
+        const names = ['odd-257x255.jpg', 'lossy.webp'];
+        const paths = await page.evaluate(() => window.mediaViewer.mediaFiles.map((f) => [f.name, f.path]));
+        const byName = new Map(paths);
+        const rows = await page.evaluate(
+            async (list) => {
+                const viewer = window.mediaViewer;
+                const out = [];
+                for (const [name, path] of list) {
+                    const main = await viewer.computePerceptualHash(path);
+                    const pool = viewer._createHashPool();
+                    try {
+                        let worker;
+                        for await (const r of pool.hashFiles([path], { route: 'worker' })) {
+                            worker = r;
+                        }
+                        const m = await pool.comparePixels(path);
+                        out.push({ name, main, worker: worker.hash, format: worker.info?.format ?? null, ...m });
+                    } finally {
+                        pool.terminate();
+                    }
+                }
+                return out;
+            },
+            names.map((n) => [n, byName.get(n)])
+        );
+        for (const r of rows) {
+            expect({ name: r.name, workerHash: r.workerHash, mainHash: r.mainHash }).toEqual({
+                name: r.name,
+                workerHash: r.worker,
+                mainHash: r.main,
+            });
+            expect(r.format, r.name).toMatch(/^I4(20|22|44)$/); // the YUV path the measure is for
+            expect(r.maxPixelDiff, r.name).toBeLessThanOrEqual(1);
+        }
+    });
+
     test('the canary passes on this machine', async () => {
         const result = await page.evaluate(async () => {
             const pool = window.mediaViewer._createHashPool();

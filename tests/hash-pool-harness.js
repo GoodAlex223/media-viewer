@@ -31,6 +31,10 @@ export function fakeHashPool(hashFn, { size = 3, route = 'worker', canary = { ok
                 yield result;
             }
         }),
+        // The parity check's pixel measure (B15): a caller that needs one stubs it.
+        comparePixels: vi.fn(async () => {
+            throw new Error('fakeHashPool: no pixel measure');
+        }),
         terminate: vi.fn(),
     };
 }

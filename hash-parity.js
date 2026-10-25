@@ -9,11 +9,14 @@ import { countDifferences } from './perceptual-hash.js';
 
 // D4: more than 0.5% of the compared images differing fails the verdict, whatever the classes.
 export const PARITY_MAX_RATE = 0.005;
+// D4's accepted exception, measured (B15): F4's ±1 colour rounding, so no read-back byte more than 1 level off.
+export const PARITY_MAX_PIXEL_DIFF = 1;
 // A whole folder on a wrong route differs everywhere: the perf log gets the first lines and a count of the rest.
 export const MAX_PARITY_DETAIL_LINES = 200;
 
 export const PHASE_WORKER = 'Parity: background route';
 export const PHASE_MAIN = 'Parity: main-thread route';
+export const PHASE_PIXELS = 'Parity: pixel check';
 
 // The page's query, read once by the renderer (F15: the flag travels as a query, so no preload change).
 export function readParityFlag(search) {
@@ -22,10 +25,13 @@ export function readParityFlag(search) {
 
 const fileName = (path) => String(path).split(/[\\/]/).pop();
 const hasHash = (side) => !!side && typeof side.hash === 'string';
+// The types F4's rounding can reach: a JPEG, or a WebP decoded to a YUV frame (lossy). Only these are measured.
+const isRoundingType = (type, format) => type === 'jpeg' || (type === 'webp' && isYuvFormat(format));
 
 /**
- * D4's classes, as code (B6). Each row: `{ name, kind, worker: { hash, info } | { error }, main: { hash } | { error } }`;
- * `kind` is 'jxl' for a JXL path, else the worker's sniffed `info.type`. A route that never ran for a row (a cancelled
+ * D4's classes, as code (B6, B15). Each row: `{ name, kind, worker: { hash, info } | { error }, main: { hash } |
+ * { error }, pixels? }`; `kind` is 'jxl' for a JXL path, else the worker's sniffed `info.type`; `pixels` is the
+ * differing file's measure, `{ maxDiff, reproduced }` or `{ error }`. A route that never ran for a row (a cancelled
  * run) is left `undefined`: that row is neither compared nor listed as a failure.
  */
 export function classifyParity(rows) {
@@ -61,8 +67,12 @@ export function classifyParity(rows) {
         }
         const type = row.kind ?? null;
         const format = row.worker.info?.format ?? null;
-        // The accepted exception: F4's ±1 colour rounding, on a JPEG or on a lossy (YUV-decoded) WebP.
-        const accepted = bits === 1 && (type === 'jpeg' || (type === 'webp' && isYuvFormat(format)));
+        // The accepted exception (B15): F4's ±1 colour rounding, on a JPEG or a lossy (YUV-decoded) WebP, measured on
+        // the file's pixels, whatever the bit count: with no two block means equal, the smallest change it can make is
+        // the two blocks at the median trading places, 2 bits.
+        const px = row.pixels;
+        const maxPixel = typeof px?.maxDiff === 'number' ? px.maxDiff : null;
+        const accepted = isRoundingType(type, format) && px?.reproduced === true && maxPixel <= PARITY_MAX_PIXEL_DIFF;
         diffs.push({
             name: row.name,
             bits,
@@ -70,6 +80,8 @@ export function classifyParity(rows) {
             type,
             format,
             icc: !!row.worker.info?.icc,
+            maxPixel,
+            note: px?.error ?? (px && px.reproduced === false ? 'not reproduced' : null),
         });
     }
     const rate = compared > 0 ? (diff1 + diff2plus) / compared : 0;
@@ -105,7 +117,8 @@ export function formatParityLines(report, { folder }) {
         ...r.diffs.map(
             (d) =>
                 `Hash parity diff: ${d.name} bits=${d.bits} class=${d.cls} type=${d.type} ` +
-                `format=${d.format ?? '-'} icc=${d.icc ? 'yes' : 'no'}`
+                `format=${d.format ?? '-'} icc=${d.icc ? 'yes' : 'no'} maxPixel=${d.maxPixel ?? '-'}` +
+                (d.note ? ` note=${d.note}` : '')
         ),
         ...r.workerFailures.map((f) => `Hash parity worker-failed: ${f.name} error=${f.error}`),
         ...r.mainFailures.map((f) => `Hash parity main-failed: ${f.name} error=${f.error}`),
@@ -119,7 +132,8 @@ export function formatParityLines(report, { folder }) {
 
 /**
  * The two passes (B5): the canary (recorded, not enforced), every image on the worker route, then every image on the
- * main-thread route, each timed. An abort ends the run with the partial report, `outcome: 'cancelled'` and
+ * main-thread route, each timed. Then each differing JPEG or lossy WebP is measured on its pixels (B15), one at a
+ * time, outside the timed passes. An abort ends the run with the partial report, `outcome: 'cancelled'` and
  * `verdict: 'incomplete'`; it never throws for an abort. `videos` is the count of videos the caller left out; any
  * video still in `paths` is left out here and counted too (E16). The caller owns the pool and terminates it.
  */
@@ -163,6 +177,57 @@ export async function runHashParity(
         mainMs = await pass('main', PHASE_MAIN, mainResults);
     }
 
+    const kindOf = (p) => (isJxl(p) ? 'jxl' : (workerResults.get(p)?.info?.type ?? null));
+    // B15: only where the measure can accept, a differing JPEG or lossy WebP; the measure must reproduce both hashes.
+    // A run already over the 0.5% cap fails whatever the measure says (a whole folder on a wrong route differs
+    // everywhere), so it measures only as many files as the report lists, not every image again with the app frozen.
+    const pixels = new Map();
+    if (!cancelled) {
+        let compared = 0;
+        let differing = 0;
+        const candidates = [];
+        for (const p of images) {
+            const w = workerResults.get(p);
+            const m = mainResults.get(p);
+            if (!hasHash(w) || !hasHash(m)) {
+                continue;
+            }
+            compared++;
+            if (w.hash !== m.hash) {
+                differing++;
+                if (isRoundingType(kindOf(p), w.info?.format)) {
+                    candidates.push(p);
+                }
+            }
+        }
+        const overCap = compared > 0 && differing / compared > PARITY_MAX_RATE;
+        const measured = overCap ? candidates.slice(0, MAX_PARITY_DETAIL_LINES) : candidates;
+        for (const p of candidates.slice(measured.length)) {
+            pixels.set(p, { error: `not measured: over the ${PARITY_MAX_RATE * 100}% cap` });
+        }
+        if (measured.length > 0) {
+            onProgress(PHASE_PIXELS, 0, measured.length);
+        }
+        for (const [i, p] of measured.entries()) {
+            const w = workerResults.get(p);
+            const m = mainResults.get(p);
+            try {
+                const c = await pool.comparePixels(p);
+                pixels.set(p, {
+                    maxDiff: c.maxPixelDiff,
+                    reproduced: c.workerHash === w.hash && c.mainHash === m.hash,
+                });
+            } catch (err) {
+                pixels.set(p, { error: String(err?.message ?? err) });
+            }
+            onProgress(PHASE_PIXELS, i + 1, measured.length);
+            if (signal?.aborted) {
+                cancelled = true;
+                break;
+            }
+        }
+    }
+
     const side = (r, withInfo) => {
         if (!r) {
             return undefined; // this route never reached the file (a cancelled run)
@@ -174,15 +239,13 @@ export async function runHashParity(
     };
     const rows = images
         .filter((p) => workerResults.has(p) || mainResults.has(p))
-        .map((p) => {
-            const w = workerResults.get(p);
-            return {
-                name: fileName(p),
-                kind: isJxl(p) ? 'jxl' : (w?.info?.type ?? null),
-                worker: side(w, true),
-                main: side(mainResults.get(p), false),
-            };
-        });
+        .map((p) => ({
+            name: fileName(p),
+            kind: kindOf(p),
+            worker: side(workerResults.get(p), true),
+            main: side(mainResults.get(p), false),
+            ...(pixels.has(p) ? { pixels: pixels.get(p) } : {}),
+        }));
 
     const classified = classifyParity(rows);
     return {

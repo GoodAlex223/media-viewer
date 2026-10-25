@@ -2825,7 +2825,7 @@ describe('parity mode (PR 2 T6)', () => {
         expect(ctx.lastHashParityReport.verdict).toBe('fail');
         expect(parityNotices(ctx)).toEqual([['Parity check done — see the perf log', 'warning']]);
         expect(logPerf.mock.calls.map((c) => c[0]).slice(1)).toEqual([
-            'Hash parity diff: a.jpg bits=2 class=defect type=null format=- icc=no',
+            'Hash parity diff: a.jpg bits=2 class=defect type=null format=- icc=no maxPixel=-',
         ]);
     });
 

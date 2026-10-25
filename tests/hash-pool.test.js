@@ -829,3 +829,85 @@ describe('HashPool canary', () => {
         expect(pool.makeCanaryImages).not.toHaveBeenCalled();
     }, 1000);
 });
+
+// The parity check's D4 measure (spec § 17 B15, the user's ruling 2026-10-25): one image on both routes, their
+// read-backs compared byte by byte, as the canary compares its own images.
+describe('HashPool comparePixels (B15)', () => {
+    const PATH = 'C:\\pics\\a.jpg';
+    // The worker's read-back: zeros, but `set` = { byteIndex: value }.
+    const pixelsReply =
+        (set = {}) =>
+        (w, m) => {
+            const pixels = new ArrayBuffer(PIXEL_BYTES);
+            const view = new Uint8Array(pixels);
+            for (const [i, v] of Object.entries(set)) {
+                view[Number(i)] = v;
+            }
+            w.reply(m.id, { ok: true, hash: H('1'), info: { type: 'jpeg', format: 'I420', icc: false }, pixels });
+        };
+
+    it('hashes the file on a worker and on the main route, by its URL, and compares the read-backs', async () => {
+        const pool = makePool({ createWorker: factory(pixelsReply({ 0: 1, 5: 1, 9: 2 })) });
+        const result = await pool.comparePixels(PATH);
+        expect(result).toEqual({ workerHash: H('1'), mainHash: H('1'), maxPixelDiff: 2, bytesDiffer: 3 });
+        const url = MediaUrl.toMediaUrl(PATH);
+        expect(pool.hashMainUrlPixels).toHaveBeenCalledWith(url);
+        const posts = workers.flatMap((w) => w.posts);
+        expect(posts).toHaveLength(1);
+        expect(posts[0].message).toEqual({ type: 'hash', id: expect.any(Number), url, wantPixels: true });
+        pool.terminate();
+    }, 1000);
+
+    it("returns each route's hash, for the caller to check against its passes", async () => {
+        const pool = makePool({
+            createWorker: factory(pixelsReply()),
+            hashMainUrlPixels: vi.fn(async () => ({ hash: H('0'), pixels: new Uint8ClampedArray(PIXEL_BYTES) })),
+        });
+        expect(await pool.comparePixels(PATH)).toEqual({
+            workerHash: H('1'),
+            mainHash: H('0'),
+            maxPixelDiff: 0,
+            bytesDiffer: 0,
+        });
+        pool.terminate();
+    }, 1000);
+
+    it("rejects with the worker's error, and frees its slot", async () => {
+        let replies = 0;
+        const responder = (w, m) =>
+            replies++ === 0 ? w.reply(m.id, { ok: false, error: 'decode failed' }) : pixelsReply()(w, m);
+        const pool = makePool({ size: 1, createWorker: factory(responder) });
+        await expect(pool.comparePixels(PATH)).rejects.toThrow('decode failed');
+        // One slot: a second call that finds it still busy would reject with 'No free slot'.
+        await expect(pool.comparePixels(PATH)).resolves.toMatchObject({ maxPixelDiff: 0 });
+        pool.terminate();
+    }, 1000);
+
+    it('rejects when a read-back is not the canvas size', async () => {
+        const pool = makePool({
+            createWorker: factory(pixelsReply()),
+            hashMainUrlPixels: vi.fn(async () => ({ hash: H('1'), pixels: new Uint8ClampedArray(4) })),
+        });
+        await expect(pool.comparePixels(PATH)).rejects.toThrow(`Read-back sizes ${PIXEL_BYTES} and 4`);
+        pool.terminate();
+    }, 1000);
+
+    it('rejects when the main route does not answer within the task timeout', async () => {
+        const pool = makePool({
+            createWorker: factory(pixelsReply()),
+            hashMainUrlPixels: vi.fn(() => new Promise(() => {})),
+            taskTimeoutMs: 50,
+        });
+        await expect(pool.comparePixels(PATH)).rejects.toThrow('Main route timed out');
+        expect(allPosts()).toBe(0);
+        pool.terminate();
+    }, 1000);
+
+    it('on a terminated pool, rejects and reads nothing', async () => {
+        const pool = makePool({ createWorker: factory(pixelsReply()) });
+        pool.terminate();
+        await expect(pool.comparePixels(PATH)).rejects.toThrow('Pool terminated');
+        expect(pool.hashMainUrlPixels).not.toHaveBeenCalled();
+        expect(allPosts()).toBe(0);
+    }, 1000);
+});
