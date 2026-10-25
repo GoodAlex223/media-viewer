@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆; ~13 SP across two PRs, spec D7; this plan is **PR 2**, re-estimated ~9 SP below) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
 **Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved 2026-10-19; PR 1 amendments § 15, PR 1 execution notes § 16; **PR 2 amendments § 17: B1–B10 from planning, B11–B14 from the PR #87 review**)
 **Created**: 2026-10-22
-**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and step 1 is to be re-run on the B15 head; steps 3–4 have not run.
+**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and the re-run on `124fb69` passed. Steps 3–4 have not run.
 **Last Updated**: 2026-10-24
 **Branch**: `g2-pr2-background-hashing` (from `main` @ `bf5ec84`, after PR #86 merged as `654fb3e`)
 
@@ -657,7 +657,7 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
    - **Pass**: all of `outcome=done`, `verdict=pass`, and every `Hash parity diff:` line `class=accepted`. Also note `workerFailed=`: each worker failure becomes a main-thread hash in a normal run. A `canary=fail` line comes with a `Hash parity canary:` line giving the reason.
    - Since B15, each diff line ends `maxPixel=N`, plus a `note=` when its pixel measure failed or did not reproduce. After the main pass, the card shows "Parity: pixel check" for a few seconds: one file per differing JPEG (4 on 2026-10-25).
    - Files moved during the run (rating is fine in the first pass) show up as `mainFailed=` with `Image load error`. They are not compared, so they don't affect the verdict.
-   - **Ran 2026-10-25** on `f6598fc` (Progress Log): `verdict=fail` on three 2-bit JPEG diffs → spec B15. Re-run on the B15 head.
+   - **Ran 2026-10-25** on `f6598fc` (Progress Log): `verdict=fail` on three 2-bit JPEG diffs → spec B15. **Re-run on `124fb69`: `verdict=pass`**, all four diffs `class=accepted maxPixel=1`.
 2. **Close the app, then `$env:MV_HASH_PARITY=$null`** (or open a new shell).
 3. **Normal run, cold.** `npm start` → open `Liked_2` → Sort by Similarity. While it hashes:
    - browse;
@@ -916,6 +916,7 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - Unit: 2,292 → **2,312** passed, 1 skipped. `media-viewer.js` unchanged (11,942 lines).
   - My error on the way: I first told the user no report had been written, from the perf log's directory listing. NTFS showed a stale time and size for a file the app holds open. The report had been written at 03:52:51. Saved to memory.
   - **Next**: the user re-runs step 1 on the B15 head, then steps 3–4.
+- **2026-10-25** — **Smoke step 1 re-run on `124fb69`: `verdict=pass`.** `images=14150 compared=14150 identical=14146 diff1=1 diff2plus=3 rate=0.03% workerFailed=0 mainFailed=0 videos=51 canary=pass`. The same four JPEGs as the first run differ, so the differences repeat across sessions. Each is `class=accepted maxPixel=1`. The worker pass took 544 s (38 ms an image, pool 3) and the main pass 1,262 s (89 ms), under the same load. `Liked_2` held no `.hash_cache.json` or `.sort_cache.json`, so step 3 runs cold. Next: the user's step 3, then step 4's timing.
 
 ## Key Discoveries
 
