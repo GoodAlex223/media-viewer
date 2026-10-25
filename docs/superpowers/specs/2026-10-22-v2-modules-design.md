@@ -921,6 +921,9 @@ stays as it is.
        another writer made in the gap after step 1.
      - Main copies the verified bytes from the temp file, fsyncs and closes, then writes "filled" (review round 3,
        finding 1). Only after "filled" does it remove the temp file.
+     - **The ledger keeps the verified file's SHA-256**, recorded in the "creating" record. Verification already
+       computes it. A completeness check therefore never needs the temp file, which is gone after "filled"
+       (review round 4, finding 1).
 
      So whenever "filled" is missing, the verified temp file still exists.
   3. **Set the new file's mtime** to the original's.
@@ -951,7 +954,10 @@ stays as it is.
 
   **Recovery reads the disk, not only the last ledger record** (round 3, finding 1). Each record is written before
   its step runs, so recovery checks where the original is (in the folder, or in the holding folder) and whether
-  main's copy is complete (a "filled" record, and the copy's hash matching the verified temp file):
+  main's copy is complete: a "filled" record, and the copy's SHA-256 matching the hash the ledger recorded, which
+  works in every row. A "filled" copy whose hash does not match (damaged afterwards) is never treated as
+  complete. Continue then keeps the original in the folder, or moves it back without replacing anything, leaves
+  main's copy for Restore to remove, and reports the file.
 
   | State on disk | Restore | Continue |
   |---|---|---|
@@ -1548,9 +1554,10 @@ charters fix scope and the decisions those specs must honour.
 
 - **Per-folder files keep their names and formats**: `.feature_cache.json` v4, `.hash_cache.json`,
   `.sort_cache.json`, `.bulk_rated.json` v1, `.tournament_state.json` v2. Each is declared by its module. A format
-  change needs its own version bump and migration, as today. The one planned change keeps v4 and adds optional
-  fields (P4a, §12.2): a CLIP vector's model id (absent means `clip-b32-q8`) and, during the transition, a second
-  vector. Nothing is discarded.
+  change needs its own version bump and migration, as today. The one planned change keeps v4 and adds one
+  optional field (P4a, §12.2): `clipVectors`, holding fp32 vectors keyed by model id, during and after the
+  transition. The legacy `clipVector` only ever holds q8, carries no model id, and is dropped at the switch, so an
+  older build can never read fp32 as q8. Nothing else is discarded.
 - **`.sort_cache.json`'s `'clip'` orders** gain the model id that made them; a mismatch is a cache miss (§12.2).
 - **App data keeps its paths**: `ml-model-cache.json`, `folder-grants.json`. New module data goes under
   `userData/modules/<id>/`. New core files: `userData/modules.json`, `userData/tools.json`.
@@ -1907,3 +1914,4 @@ message. Folding that research in changed the following; everything else is as a
 | header, §4–§21, D26, D29–D36 | **The PR #88 review (2026-10-25), 16 findings and 15 held-back candidates:** <br>• the compression swap reordered so no step can replace or strand a file, plus the same-stem naming rule (§8.6, D33); <br>• the folder-file service keeps bulk-rated recovery and gains delete, with a tagged read result (§7.9, §8.2); <br>• renames carry source type, `pixelExact` and new size and mtime, are journaled write-ahead, and are applied by the readers before they prune (§7.3, §12.6); <br>• `features.training(folder)` gives `ai-sort` the training caches under the shared lock and isolation (§12.2); <br>• revert only touches files still as the run left them, and the ledger's app data cannot be deleted mid-run (§10, §12.6); <br>• `order.apply` gains named policies and the "refuse while a sort runs" rule (§7.3, §7.4); <br>• viewer, activity, undo-history and stage-overlay hooks, recorded as phase obligations (§7.5, §7.14); <br>• a JPEG XL decode pool before P5, and the preview measures sort and extraction too (§12.6); <br>• the fp32 migration re-embeds only CLIP in the background, with a model tag (§12.2, §13, D29); <br>• services and their events cross modules, and core can provide `features` (§7.11, D35); <br>• dormant shortcut remaps no longer collide (§7.8); <br>• `core/**` joins the app-scheme allowlist (§9); <br>• fetch tools write into a per-job scratch folder (§8.6, D34); <br>• counts, citations and change-log rows corrected (§4, §11.1, §14, §16, §21); <br>• personal details removed (header, §11.2, §12.5, §20). <br>Held back, now handled: one app instance per profile (D36); APNG skipped; tournament entry refused mid-run; batches time-bounded; activation failure cascades; per-launch E2E isolation; planted tests for the `ipcMain` ban and a dynamic-`require` ban; existing BACKLOG entries tagged and D30's reversal stated; "security review" citations replaced with code; the Linux libjxl floor hint; the host-group column; the schedule arithmetic; §8.8's phase column; §19's question tally. Total now 127–132 SP. |
 | §1, §6.2, §7.3, §8.6, §12.2, §12.5, §12.6, §13, §14, §16, D26, D29, D34 | **PR #88 review round 2 (2026-10-25), 5 findings and 4 held-back candidates:** <br>• the fp32 migration keeps v4 with optional model-id fields (no version bump), holds both vectors side by side until the switch, has every consumer read only the active model's vectors, and keys cached `'clip'` orders by model (§12.2, §13, D29); <br>• compression's journal intent is written once the name is chosen, is settled only by the run's own recovery (Restore or Continue), and recovery deletes only copies with a "created" ledger record; "nothing deletes" now names main's own-copy exceptions (§7.3, §8.6, D26); <br>• fetch archives record an item only once main has promoted it, from job-local copies, and cancel promotes finished items first (§8.6, §12.5, D34); <br>• §14's host-group column gains `files.onOrderChanged`, `actions.isBusy`, `ui.sortMenu`, `ui.settingsSection`, `ui.modal`, `ui.fileInfoSection` and `store.appData`; <br>• a sibling-repo folder name removed (§1). <br>Held back, now handled: sorts refuse to start during a compression run (§12.6); the non-literal `require()` ban covers every main-process file (§6.2); the JPEG XL decode pool became its own row, P4d (§14). Pushed back: main restoring a `recovered` file itself. Total now 131–136 SP; late March 2027 at the earliest. |
 | §7.1, §7.9, §7.14, §8.6, §12.2, §13, §14, §16, §21, D26, D29 | **PR #88 review round 3 (2026-10-25), 3 findings and 5 held-back candidates:** <br>• compression recovery reads the disk, not only the last ledger record: a "filled" record (written before the temp file goes) lets Continue redo a truncated fill, and Restore after step 4 moves the original back before removing main's copy; a state table replaces the prose (§8.6, D26); <br>• `host.media.decodeJxl(path, { purpose, signal })` gives `similarity` and `features` the JPEG XL decoder, over today's worker from P1b and onto P4d's pool (§7.1, §7.14, §14); <br>• §16's fp32 row narrowed to the training-set migration (§16). <br>Held back, now handled: P4a widens `feature-cache-transport.js` for the new field (§7.9, §12.2); fp32 vectors live only in a new field, never in the legacy `clipVector`, so an older build cannot misread them (§12.2, D29); a zero-byte file left at a "creating" name is main's own and is removed (§8.6); `'clip'` orders without a model id mean q8 (§12.2, §13); §21's round-2 row lists §7.3. SP unchanged (131–136): the decode API fits P1b's estimate, and the recovery rules fit P5's. |
+| §8.6, §13, §21 | **PR #88 review round 4 (2026-10-25), 2 findings:** <br>• the ledger records the verified file's SHA-256 in the "creating" record, so recovery's completeness check works after the temp file is gone; a "filled" copy whose hash does not match is never treated as complete (§8.6); <br>• §13 now describes round 3's layout: fp32 vectors only in `clipVectors`, the legacy `clipVector` q8-only and dropped at the switch (§13). |
