@@ -13,7 +13,7 @@ test-tooling and weekly-review specs in a second), a map of today's code at `mai
 secrets were not opened).
 **Research inputs:**
 - **AI sorting: folded in.** The report is `docs/research/2026-10-22-ai-sorting.md` in commit `96d9b22`. That
-  commit is on branch `research/local-ai-sorting`, and for now it is also the tip of `g2-pr2-background-hashing`.
+  commit is on branch `research/local-ai-sorting`; it was kept out of the G2 PR 2 merge.
   It is not in the planned `ai-sorting` worktree. It feeds §5.3, §12.1–§12.3, §13, §14, §16 and §17.
 - **Downloaders: still pending.** Due under `.claude/worktrees/fetch-research/docs/research/`. §12.5 names what
   it may change.
@@ -76,8 +76,8 @@ media_viewer's like/dislike folders in miniature). v2 puts that loop, plus compr
 two extracted and a third (MLManager) half done, with "done" defined as the remaining four (Zoom, Compare,
 Sorting, ML; MILESTONES:24). v2 *absorbs* it. The remaining extractions become module extractions (the
 SortingManager becomes the similarity-sort module, MLManager's sort half becomes the AI-sort module) or
-core-internal splits (ZoomManager, CompareManager). The board change belongs to Friday's strategic refresh
-(WEEKLY G5); see §19.
+core-internal splits (ZoomManager, CompareManager). The board change belongs to the strategic refresh (WEEKLY
+G5 of Oct 19–23, still open on 2026-10-25); see §19.
 
 ---
 
@@ -181,9 +181,10 @@ core-internal splits (ZoomManager, CompareManager). The board change belongs to 
   - Moving code out of the renderer means rewiring these tests in the same phase (§15).
 - **One renderer-editing group at a time** (WEEKLY rule). v2 phases are sequential where they touch the
   renderer.
-- **In-flight work.** G2 PR 2 (hashing off the renderer: `hash-pool.js`, `hash-worker.js`,
-  `perceptual-hash.js`, `atomic-write.js`) is unmerged. The similarity module (§12.1) starts after it lands and
-  takes those files in.
+- **G2 PR 2 has landed** (PR #87, merge `f5ddfa3`, 2026-10-25). Hashing now runs in a per-run worker pool
+  (`hash-pool.js`, `hash-worker.js`, `perceptual-hash.js`, `main-thread-hash.js`, `hash-parity.js`), and
+  folder-file writes go through `atomic-write.js`. The similarity module (§12.1) takes those files in. This
+  spec's line numbers still refer to `bf5ec84`, from before that merge; P1b re-maps them.
 
 ---
 
@@ -944,7 +945,8 @@ charters fix scope and the decisions those specs must honour.
 
 - **Moves in**:
   - `handleSortBySimilarity` and its offer/Show path (media-viewer.js:7313–8089);
-  - hashing (8090–8271, or G2 PR 2's pool and workers once merged);
+  - hashing: G2 PR 2's pool and workers (merged 2026-10-25), plus whatever hashing glue remains in the
+    renderer (8090–8271 at `bf5ec84`);
   - the sort worker and its cache IO (8272–8796);
   - `similarity-sort.js`;
   - the sort button, algorithm picker and K setting.
@@ -966,6 +968,10 @@ charters fix scope and the decisions those specs must honour.
 - **Why the pilot (C)**: the user already ruled that the SortingManager is the next extraction (WEEKLY), wants
   sorting as add-ons (U, L256), and G2 PR 2 has just made hashing module-shaped. It also exercises most of the
   host API at medium coupling.
+- **The graph build is now the long part of a cold sort.** BACKLOG 🔵 [2026-10-25], "The similarity sort's
+  graph-build phase is now the long part of a cold run", measured it at 361 s of a 943 s cold run on 14,201
+  files. The module owns that work once P1b lands. A parallel build that keeps results identical belongs there,
+  as its own task. A capped K needs the user's decision under the 2026-06-19 quality lock.
 - **After P4a, the CLIP sorter becomes the default (C, from the AI research).** The hash sort puts same-subject
   photos next to each other 10.5 % of the time, against about 6 % by chance; every faithful embedding gets
   71–77 % (research § 3). The hash sorters stay selectable, and stay the default while `features` is off. This is
@@ -1253,7 +1259,7 @@ Rough story points; the project's estimates have run about 1.9× low (WEEKLY), s
 
 | Phase | Scope | Host groups added | Exit criteria | SP |
 |---|---|---|---|---|
-| **P0** Prerequisites | G2 PR 2 merged; this spec approved; Friday's G5 board change and the new BACKLOG entries (§19) | — | spec approved; board shows v2 | — |
+| **P0** Prerequisites | G2 PR 2 merged (done: PR #87, `f5ddfa3`, 2026-10-25); this spec approved (done, 2026-10-22); the G5 board change and the new BACKLOG entries (§19) | — | spec approved; board shows v2 | — |
 | **P1a** Module host + Linux baseline | manifest schema, registry, `modules.json`, loader, failure isolation, the Modules tab (list, toggle, restart), app-scheme allowlist, lint M-2, static-adapter test (M-1), bridge-surface test, glob-based sink and `file:` checks, `folder-file-*` channels; first, today's app and suites run on Linux, and whatever fails there is fixed | basics, folder/visit, files (snapshot, events), storage | an empty module loads, fails safely and toggles; all suites green on Windows and Linux | ~10 |
 | **P1b** `similarity` | §12.1 | sorting, order, progress, settings, shortcuts, removed/restored hooks, services | §12.1 "done when" | ~10 |
 | **P2** Shell part 1 | side panel, jobs tray (the progress card moves into it), F1 tabs | `host.ui.panel`, `host.jobs` (UI half), `host.progress` | sorts report in the tray; panels open and close | ~6 |
@@ -1320,8 +1326,9 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
   registry and `PairView` first.
 
 **Scheduling:**
-- This week finishes G2 PR 2, then G3 (ZoomManager, which P7 later absorbs if not done).
-- Next week is Cleanup Week #5.
+- G2 PR 2 merged on 2026-10-25. The Oct 19–23 week's G3 (ZoomManager), G4, G5 (the strategic refresh) and G6
+  were still open then. If G3 does not happen, P7 absorbs the ZoomManager split.
+- Cleanup Week #5 runs Oct 26–30.
 - The earliest normal week for P1a is about Nov 2–6.
 - Each phase is a whole task (design → implement → verify) in one weekly group, as the user ruled on 2026-10-10.
 
@@ -1395,7 +1402,7 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
 | A new IPC weakens the security envelope | ipc-guard kinds, a bridge-surface test, a scan per phase, Tier-1 approval |
 | A renderer module misbehaves (trusted code) | M-2 lint, failure isolation at activation, first-party review |
 | Scope creep and estimate slip | phase exit criteria; a spillover line as soon as a slip is known (WEEKLY rule) |
-| Collisions with in-flight renderer work | one renderer-editing phase at a time; P1 waits for G2 PR 2 |
+| Collisions with in-flight renderer work | one renderer-editing phase at a time; G2 PR 2 has merged, so P1 waits only for its scheduled week (and for G3 if that is still running) |
 
 ---
 
@@ -1408,7 +1415,7 @@ scripts), **D1** (v2 absorbs v2.0) and **D14** (fetch engines and the Inbox).
 
 | # | Decision | Section |
 |---|---|---|
-| D1 | v2 absorbs the "v2.0 modularization" release; the board change goes to Friday's G5 | §2 |
+| D1 | v2 absorbs the "v2.0 modularization" release; the board change goes to the G5 strategic refresh | §2 |
 | D2 | Core = folder lifecycle (recent folders included), viewer, rating, compare, undo and shell services | §5.1 |
 | D3 | Sorting and tournament leave the core **(U)**, as modules `similarity`, `features`, `ai-sort`, `tournament` | §5.2 |
 | D4 | Existing features default on; fetch and compression default off | §5.2 |
@@ -1460,7 +1467,7 @@ scripts), **D1** (v2 absorbs v2.0) and **D14** (fetch engines and the Inbox).
 
 These are planning actions for the user's sessions, recorded here so they have a carrier.
 
-1. **Friday G5 (strategic refresh):**
+1. **G5, the strategic refresh (still open from the Oct 19–23 week on 2026-10-25):**
    - replace the "v2.0 Modularization" release with v2 (this spec);
    - move the add-on theme from *Later* to *Now*/*Next* as v2's phases;
    - re-baseline GOALS Objective 2 to §11.1's target.
@@ -1475,14 +1482,8 @@ These are planning actions for the user's sessions, recorded here so they have a
      utility process with fp32, SigLIP 2.
    - **Its open questions:**
      - **Answered by the user on 2026-10-22:** the fp32 switch (yes) and the real-data check (yes).
-     - **Still the user's: where the commit lives.** It is the tip of `origin/g2-pr2-background-hashing`, so PR #87
-       carries it. The research chat recommends dropping it from #87, either by the G2 session once it has nothing
-       uncommitted or by the user:
-       - a force-push of that branch back to `b7e07f9`, guarded by `--force-with-lease` at `96d9b22`;
-       - then `git reset --keep b7e07f9` in the G2 checkout, without which that checkout's next push would add the
-         commit back.
-
-       The files stay on `research/local-ai-sorting`.
+     - **Resolved: where the commit lives.** It was dropped from PR #87 before the merge (`f5ddfa3` does not
+       contain it) and lives on `research/local-ai-sorting`, also on origin. Its own PR is still to come.
      - **Still the user's:** CC0 as public domain, and DINOv3's licence.
    - **Run the research harness on the user's own like/dislike folders** (agreed 2026-10-22), locally, before A1.
      **This repository is public.** Only overall numbers go into git: AUC values, label counts, timings. The
@@ -1542,4 +1543,5 @@ message. Folding that research in changed the following; everything else is as a
 | §19 | The research's unfiled BACKLOG candidates and its open questions for the user. |
 | §12.2, §12.3, §16, §19, D28, D29 | The user's answers later on 2026-10-22: the fp32 switch accepted, with a note on other platforms (CPU everywhere, DirectML only on Windows); the real-data check agreed, as a follow-up before A1. |
 | §15, §19 | Nothing from the user's folders enters this public repo; the real-data check commits overall numbers only. |
+| §2, §4, §12.1, §14, §16, §19, D1 | 2026-10-25: G2 PR 2 merged (PR #87, `f5ddfa3`) without the research commit. The branch was rebased onto `main` `308d43c`, the references to that PR were updated, and the new graph-build BACKLOG entry was linked from §12.1. |
 | G-8, §3, §4, §6.4, §8.4–§8.6, §12.6, §14, §15, §16, §19, D21 | Linux becomes a supported platform beside Windows, because the user may move to Linux and others may use the public repo: Linux test runs at every phase exit; per-platform tool hints, process-tree kill and trash; a Linux baseline in P1a (~10 SP); optional packaging as P8; a LICENSE file to consider. |
