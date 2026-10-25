@@ -1124,9 +1124,10 @@ charters fix scope and the decisions those specs must honour.
   - **Order:** it needs the `features` utility process first (the research: "do before adding a model"). A
     zero-download first version can threshold the CLIP vectors already cached (76 %).
   - **History:**
-    - On 2026-08-28 the user skipped "SigLIP/DINOv2 backbone evaluation" (BACKLOG 🔵 [2026-08-28] "From:
-      manual testing"). The AI research the user commissioned on 2026-10-22 then evaluated DINOv2, so D30 revisits
-      that skip. It needs the user's confirmation when P4c is planned.
+    - BACKLOG 🔵 [2026-08-28] "From: manual testing" records "Skipped by user decision: SigLIP/DINOv2 backbone
+      evaluation". The AI research the user commissioned on 2026-10-22 then evaluated DINOv2.
+    - **Decided (U, 2026-10-25): adopt it.** Asked about it, the user was not sure they had skipped it, and chose
+      DINOv2 for Group copies. D30 is confirmed.
     - BACKLOG already has 🔵 "Near-duplicate detection and grouping via embedding cosine similarity (+ perceptual
       hashes)". P4c closes it rather than filing a new entry.
 
@@ -1273,11 +1274,19 @@ charters fix scope and the decisions those specs must honour.
     vectors lack (dims 42–47 and 54–61, G3-reuse F1). With training-set standardisation, those scoring-time zeros
     become one constant offset. Ranking is unchanged, but the % badges, which are probabilities, shift. Fix the
     skew first, or accept shifted badges.
-- **Skips stay out of training (unchanged; the research's recommendation, not yet the user's).** With the better
-  learner, passive skips used as weak dislikes cost 2–4 likes per 60 shown once the user also passes a fifth of the
-  files they would have liked. The confirm-then-F path already captures their reliable part (research § 2). The
-  research asked the user what a skip means (its open question 5), and that is still unanswered. If the user skips
-  only what they dislike, weak skips gained 2–3 likes, and A1's spec should revisit this.
+- **What a skip means (U, 2026-10-25).** The user's definition, answering the research's open question 5: a skip
+  means "I am not sure it is a like, but I don't want to dislike it yet; I can't decide now and will decide later,
+  and I won't object if it ends up disliked". They use it consistently that way.
+- **So skips stay out of training by default, and become dislikes only through the user (C).**
+  - **Why not train on them.** A skip is undecided, not a dislike, and some skips are files the user may still
+    like. That is the research's harmful case: with the better learner, passive skips used as weak dislikes cost
+    2–4 likes per 60 shown once a fifth of skips are files the user would have liked (research § 2).
+  - **How skips do become dislikes.** "Won't object to a dislike" is exactly what the existing confirm-then-F
+    path serves: "Dislike skipped" asks once, then dislikes the batch.
+  - **"Decide later"** is served by the re-sort chip, which brings un-disliked skips back first.
+  - **A1 may measure weak skips** (weight ≤ 0.3, a strongly regularised fit) behind a setting, off by default, to
+    see whether they help on the user's own data. Skips are session-only today, so A1 must first record them
+    (path and time, in `ai-sort`'s app data, never in git) before any real-data comparison is possible.
 - **Not in v2:**
   - SigLIP 2 and text search: research step 4, "when search is wanted"; the user skipped CLIP text search on
     2026-08-28 (BACKLOG L126);
@@ -1492,7 +1501,7 @@ Rough story points; the project's estimates have run about 1.9× low (WEEKLY), s
 | **A1** Learner fix (any time, outside the phases) | §12.3: standardise, then fit to convergence, in `ml-worker.js`/`ml-model.js` | — | the user's real-data check run; models rebuild; badges checked (§12.3's offset note) | ~3 |
 | **P4a** `features` | §12.2: the service, `features.training(folder)`, inference in a `utilityProcess`, CLIP fp32 with feature-cache v5's model tag and background re-embedding (accepted by the user), DirectML on Windows and the CPU elsewhere, face detection removed | the `features` provider moves from core to the module; `activity.*`; `embeddingsToggled` | features served through the service; clip sorter switched to it; the main thread's event-loop p99 stays at its idle level during extraction; re-embedding runs in the background, training folders first, with progress in the tray, and no AI sort waits on it | ~14 |
 | **P4b** `ai-sort` | §12.3 | scorer, pair provider, action contributions, `order.apply` (`wait-then-fail`), `runFileAction`'s `refuseWhileSorting`, undo kinds and `undo.entries()`, `tx.insertAt`/`tx.setCursor`, `viewer.*`, `ui.stageOverlay`, `scores`, `ratings.onFoldersChanged` | AI sort, like-or-skip, bulk rate behave as today (with A1's learner if it shipped); the real-worker E2E and `like-or-skip.test.js` pass | ~12 |
-| **P4c** Copies and default | §12.1: Group copies on DINOv2-small fp32; the CLIP sorter as default when `features` is on (the user confirms D30 first) | — | copy groups found on fixtures and on one real folder, threshold tuned there | ~4 |
+| **P4c** Copies and default | §12.1: Group copies on DINOv2-small fp32; the CLIP sorter as default when `features` is on (D30 confirmed by the user, 2026-10-25) | — | copy groups found on fixtures and on one real folder, threshold tuned there | ~4 |
 | **P5** `compression` | §12.6; renames in `similarity`, `features`, `ai-sort` and core; the rename journal in main (write-ahead) and its replay inside the readers; first, the pooled JPEG XL decode for hashing and extraction, and the long-JXL-stall fix | `onFileRenamed`, the rename journal, `replace` capability, `jobs.isFolderBusy()` | lossless round trips on fixtures (mislabelled files, text-chunk PNGs, APNG and same-stem pairs included); a kill at every ledger step recovers; revert and finalize, including converted files rated since; renames survive a module being off and a crash; measured browse speed, cold similarity sort and extraction on a converted 24k copy | ~18 |
 | **P6a** Control registry | the mode-aware action bar, `PairView`, the z-index scale (L223), the unified Sort ▾ menu (sort tests move from the header IDs to the menu) | modes, `ControlSpec`, `render.request`/`whenIdle` | single and compare run through the registry; overlay tests pass | ~10 |
 | **P6b** `tournament` | §12.4, `onFileRenamed` for its state | vetoes (`folder.onWillChange`, mode `leave`), `canUndo()`, `undo.remove()` | tournament suites pass with the same assertions (state reached through §7.13); compression stops refusing tournament folders | ~10 |
@@ -1686,9 +1695,9 @@ scripts), **D1** (v2 absorbs v2.0) and **D14** (fetch engines and the Inbox).
 | D27 | The unified Sort ▾ menu lands in P6a; until then module controls render in a header slot with today's IDs | §7.7, §12.1 |
 | D28 | The like-model learner fix (standardise, then converge) ships as its own task, A1, outside the module phases, gated by a real-data check the user agreed to **(U)** | §12.3, §14 |
 | D29 | P4a moves CLIP inference into a `utilityProcess` and switches CLIP to its fp32 file; the user accepted the switch **(U)**. The migration re-embeds only the CLIP halves in the background, tagged by model (feature-cache v5), and the AI sort switches once the training set is covered. DirectML on Windows; the CPU everywhere else | §12.2, §13 |
-| D30 | Group copies on DINOv2-small fp32 is a new `similarity` grouper (P4c), after the utility process. It revisits the user's 2026-08-28 skip of "SigLIP/DINOv2 backbone evaluation", so the user confirms it when P4c is planned | §12.1 |
+| D30 | Group copies on DINOv2-small fp32 is a new `similarity` grouper (P4c), after the utility process **(U, 2026-10-25: adopt it; this supersedes the 2026-08-28 "skipped" record)** | §12.1 |
 | D31 | After P4a, the CLIP sorter becomes the default similarity sort; hash sorters stay selectable | §12.1 |
-| D32 | SigLIP 2 and text search stay outside v2 until search is wanted; passive skips stay out of training (the research's recommendation; the research's question 5 to the user is still open) | §12.3 |
+| D32 | SigLIP 2 and text search stay outside v2 until search is wanted. Skips mean "undecided; fine to dislike later" **(U, 2026-10-25)**, so they stay out of training by default and become dislikes only through the confirm-then-F path; A1 may test weak skips behind a setting once it records them | §12.3 |
 | D33 | Compression places each new file by exclusive create, choosing `<stem>.jxl` or else `<stem>.<ext>.jxl`, and moves the original last; revert touches only files still as the run left them | §8.6, §12.6 |
 | D34 | Fetch tools write into a per-job scratch folder; main promotes finished files and deletes only its own scratch | §8.6, §12.5 |
 | D35 | Services are named separately from modules (`uses`), and core can provide one (`features` until P4a); cross-module reactions go through service events | §6.1, §7.11 |
@@ -1742,8 +1751,8 @@ These are planning actions for the user's sessions, recorded here so they have a
      - **Q2, the planning documents: carried here.** The BACKLOG entries to file are in item 2 above.
      - **Q6, downloads and GPU: answered (yes, 2026-10-22).**
      - **Q7, the real-data check: answered (yes, 2026-10-22).**
-     - **Still the user's:** Q3, CC0 as public domain; Q4, DINOv3's licence; Q5, what a skip means. D32 adopts
-       the research's recommendation on Q5, which the user has not confirmed.
+     - **Q5, what a skip means: answered (2026-10-25).** "Undecided; fine to dislike later" (§12.3, D32).
+     - **Still the user's:** Q3, CC0 as public domain; Q4, DINOv3's licence.
    - **Run the research harness on the user's own like/dislike folders** (agreed 2026-10-22), locally, before A1.
      **This repository is public.** Only overall numbers go into git: AUC values, label counts, timings. The
      file lists, per-file scores, embeddings and manifests made from the user's folders stay outside the repo
@@ -1799,6 +1808,7 @@ message. Folding that research in changed the following; everything else is as a
 | §19 | The research's unfiled BACKLOG candidates and its open questions for the user. |
 | §12.2, §12.3, §16, §19, D28, D29 | The user's answers later on 2026-10-22: the fp32 switch accepted, with a note on other platforms (CPU everywhere, DirectML only on Windows); the real-data check agreed, as a follow-up before A1. |
 | §15, §19 | Nothing from the user's folders enters this public repo; the real-data check commits overall numbers only. |
+| §12.1, §12.3, §14, §19, D30, D32 | The user's answers on 2026-10-25, after the review: adopt DINOv2 for Group copies (the user was not sure they had skipped it in August); a skip means "undecided; fine to dislike later", so skips stay out of training by default, become dislikes through the confirm-then-F path, and A1 may test weak skips behind a setting once it records them. |
 | header, §2, §4, §12.1, §14, §16, §19, D1 | 2026-10-25: G2 PR 2 merged (PR #87, `f5ddfa3`) without the research commit. The branch was rebased onto `main` `308d43c`, the references to that PR and the header's research inputs were updated, and the new graph-build BACKLOG entry was linked from §12.1. |
 | G-8, §3, §4, §6.4, §8.4–§8.6, §12.2, §12.5, §12.6, §14, §15, §16, §19, D21 | Linux becomes a supported platform beside Windows, because the user may move to Linux and others may use the public repo: Linux test runs at every phase exit; per-platform tool hints, process-tree kill and trash; a Linux baseline in P1a (~10 SP; the total became 119–124 SP); optional packaging as P8; a LICENSE file to consider. |
 | header, §4–§21, D26, D29–D36 | **The PR #88 review (2026-10-25), 16 findings and 15 held-back candidates:** <br>• the compression swap reordered so no step can replace or strand a file, plus the same-stem naming rule (§8.6, D33); <br>• the folder-file service keeps bulk-rated recovery and gains delete, with a tagged read result (§7.9, §8.2); <br>• renames carry source type, `pixelExact` and new size and mtime, are journaled write-ahead, and are applied by the readers before they prune (§7.3, §12.6); <br>• `features.training(folder)` gives `ai-sort` the training caches under the shared lock and isolation (§12.2); <br>• revert only touches files still as the run left them, and the ledger's app data cannot be deleted mid-run (§10, §12.6); <br>• `order.apply` gains named policies and the "refuse while a sort runs" rule (§7.3, §7.4); <br>• viewer, activity, undo-history and stage-overlay hooks, recorded as phase obligations (§7.5, §7.14); <br>• a JPEG XL decode pool before P5, and the preview measures sort and extraction too (§12.6); <br>• the fp32 migration re-embeds only CLIP in the background, with a model tag (§12.2, §13, D29); <br>• services and their events cross modules, and core can provide `features` (§7.11, D35); <br>• dormant shortcut remaps no longer collide (§7.8); <br>• `core/**` joins the app-scheme allowlist (§9); <br>• fetch tools write into a per-job scratch folder (§8.6, D34); <br>• counts, citations and change-log rows corrected (§4, §11.1, §14, §16, §21); <br>• personal details removed (header, §11.2, §12.5, §20). <br>Held back, now handled: one app instance per profile (D36); APNG skipped; tournament entry refused mid-run; batches time-bounded; activation failure cascades; per-launch E2E isolation; planted tests for the `ipcMain` ban and a dynamic-`require` ban; existing BACKLOG entries tagged and D30's reversal stated; "security review" citations replaced with code; the Linux libjxl floor hint; the host-group column; the schedule arithmetic; §8.8's phase column; §19's question tally. Total now 127–132 SP. |
