@@ -57,7 +57,7 @@ A module boundary with real controls is the structural answer.
 - media_viewer (view, rate, sort);
 - `media_compression` (a PowerShell lossless JPEG XL converter run by hand).
 
-The valuable idea in `media_parser` is the loop **fetch → rate → keep** (its `Liked_1`/`Liked_0` folders are
+The valuable idea in `media_parser` is the loop **fetch → rate → keep** (its liked and disliked folders are
 media_viewer's like/dislike folders in miniature). v2 puts that loop, plus compression, in one app.
 
 ---
@@ -343,7 +343,9 @@ Example manifest (values illustrative):
 never `require`s a file because a manifest named it. Every main-side adapter is required statically from
 `main/adapters/index.js`, so adding a module with a main part means a reviewed core change. A test pins this
 (§15). That test can only see literal paths, so lint also bans `require()` and `import()` with a non-literal
-argument in `main/**` and the adapters; both get a planted violation that must fail (§15).
+argument in every main-process file: `main.js` and the other top-level main modules, `main/**` and the adapters.
+Any existing non-literal use gets an explicit, reviewed disable comment. Both rules get a planted violation that
+must fail (§15).
 
 **Rule M-2 (C): module code talks to the app only through `host`.** Inside `modules/**/ui` and `workers`, lint
 bans `window.mediaViewer`, `window.electronAPI`, imports of `media-viewer.js` or `core/*` (except the type-only
@@ -513,9 +515,10 @@ even one that is off, or a folder the user has left, or after a crash. Otherwise
 
 So main records each rename in a rename journal (§8.6), marked pending for every module owning a folder file
 present in that folder.
-- **Write-ahead.** The journal entry is written as an intent before the swap's first step, and confirmed when the
-  swap completes. Recovery at launch confirms or drops each unconfirmed intent by what is on disk. A crash
-  between a swap and its journal entry therefore cannot leave a rename that no module learns of.
+- **Write-ahead.** The journal entry is written as an intent once the new name is chosen and before any file is
+  placed, and confirmed when the swap completes. An unconfirmed intent is settled only by the compression run's
+  own recovery: Restore drops it, Continue finishes the swap and confirms it (§8.6). A crash between a swap and
+  its journal entry therefore cannot leave a rename that no module learns of.
 - **While the folder is open**, the host calls `onFileRenamed`. When the module's promise resolves (its re-key is
   saved), the host acknowledges the entry for that module.
 - **On a later load of that folder**, `onLoaded(visit, files, { renames })` hands each module its pending
@@ -879,8 +882,16 @@ stays as it is.
   `.part` files, and yt-dlp's video-only `.fNNN.mp4` and `.temp.mp4` merge inputs.
   - **Promotion.** When the adapter reports an item finished, main moves that media file into the Inbox without
     replacing anything, with the same rule as move-file (main.js:486): a name clash gets a ` (n)` suffix.
-  - **Cancel, failure or crash.** Main deletes that job's scratch folder: its own scratch, never a user file.
-    The startup sweep removes any scratch folder left by a crash. Nothing partial ever appears in the Inbox.
+  - **An item counts as downloaded only once promoted** (review round 2, finding 3). Each job runs the tools
+    against a job-local copy of the persistent download archives, kept in its scratch folder. When main promotes
+    an item, it records that item's archive key in the persistent archive in `userData/modules/fetch/` (yt-dlp: one
+    text line; gallery-dl: one row in its SQLite archive). A tool that marked an item done which never reached the
+    Inbox therefore leaves no permanent trace, and a rerun fetches it again. The exact archive mechanics, SQLite
+    access from main included, are P3b's, with the downloader research.
+  - **Cancel or failure.** Main first promotes every item the adapter has already reported finished, then deletes
+    the job's scratch folder: its own scratch, never a user file.
+  - **Crash.** The startup sweep deletes any scratch folder a crash left behind. Its job-local archive goes with
+    it, so the unpromoted items are fetched again on the next run. Nothing partial ever appears in the Inbox.
   - **Reports.** Main reports the promoted files to the module. Anything unexpected that a tool left (a non-media
     file, a file outside its scratch folder) is reported, never deleted.
 - **`replace` (compression).** The tool never touches originals. It writes into
@@ -891,9 +902,10 @@ stays as it is.
      it (`a.jpg` and `a.png` both want `a.jxl`), it is `<stem>.<ext>.jxl`. If that also exists, the file is
      skipped and the original is untouched.
   2. **Create the target exclusively and fill it.** Main opens the name with `wx`, which fails if anything
-     appeared there, so nothing can be replaced. It copies the verified bytes from the temp file, fsyncs, closes,
-     and removes the temp file. A rename is not used: `fs.rename` replaces an existing target on Windows and POSIX.
-     A crash part-way leaves a partial target that the ledger records as main's own, and recovery removes it.
+     appeared there, so nothing can be replaced. Only once the open succeeds does main write a second ledger
+     record, "created", so the ledger shows the file is main's own and not something another writer made in the
+     gap after step 1. It copies the verified bytes from the temp file, fsyncs, closes, and removes the temp file.
+     A rename is not used: `fs.rename` replaces an existing target on Windows and POSIX.
   3. **Set the new file's mtime** to the original's.
   4. **Move the original** into `<folder>/.compression-originals/<runId>/`, under its own name; names are unique
      within one folder. If this step fails, main removes the file it created in step 2, so the folder is exactly as
@@ -901,13 +913,25 @@ stays as it is.
 
   Originals go to the Recycle Bin (`shell.trashItem`) only when the user finalizes the run. On Linux that is the
   desktop's freedesktop trash. Where no trash is available, finalizing refuses and the originals stay in the
-  holding folder. **Nothing in v2 deletes a media file permanently.**
+  holding folder. **Nothing in v2 deletes a user's media file permanently.** The only permanent deletes are of
+  main's own new copy: when step 4 fails, and when recovery removes a partial copy that has a "created" record.
 
-  Before step 1, main also appends the rename as an intent to the **rename journal**
-  (`userData/rename-journal.jsonl`) and confirms it after step 4 (write-ahead, §7.3). The entry holds the folder,
-  the old and new names, the `onFileRenamed` info (source type, `pixelExact`, old and new size and mtime) and the
-  modules pending. The pending list is every enabled or disabled module whose declared folder file exists in that
-  folder. The renderer acknowledges entries per module through a guarded channel (§7.3, §8.8).
+  **The rename journal entry is written between steps 1 and 2**, once the new name is known (review round 2,
+  finding 2a). It goes into `userData/rename-journal.jsonl` as an intent, write-ahead (§7.3). The entry holds the
+  folder, the old and new names, the `onFileRenamed` info (source type, `pixelExact`, old and new size and mtime)
+  and the modules pending. The pending list is every enabled or disabled module whose declared folder file exists
+  in that folder. The renderer acknowledges entries per module through a guarded channel (§7.3, §8.8).
+
+  **One recovery decides both the swap and its journal entry** (finding 2b). At launch, the compression run's
+  recovery reads the ledger for each unfinished swap and offers **Restore originals** or **Continue**. The journal
+  never settles an intent on its own:
+  - **Restore.** Main removes its "created" copy (if any) and the original stays where it is. Then the intent is
+    dropped.
+  - **Continue.** Main finishes steps 3 and 4, then confirms the intent.
+  - **No "created" record.** Nothing was placed, so the intent is dropped, and no file is touched under either
+    choice.
+
+  So a swap can never complete without a journal entry, and an intent never outlives its swap.
 
 ### 8.7 Logging
 
@@ -1136,7 +1160,8 @@ charters fix scope and the decisions those specs must honour.
 - **Moves in**:
   - the 64-dimension extractor and worker pool, and background extraction and its pause gate (10320–11458);
   - `computeFeatures` (9448);
-  - `FeatureCacheStore` and `.feature_cache.json` (v4 today; v5 adds the per-vector embedding-model tag in P4a);
+  - `FeatureCacheStore` and `.feature_cache.json` (v4; P4a adds optional per-vector model-id fields, with no version
+    bump);
   - the CLIP client side (`initClipModel`, `extractClipEmbedding`) and the CLIP lease.
 - **Provides** `features`: `get(path)`, `ensure(paths, { signal, onProgress })`, and `embeddings.acquire(modelId)` /
   `release()`. Acquiring *loads and pins* the model, so the "acquire does not ensure" trap in CLAUDE.md goes away.
@@ -1186,17 +1211,34 @@ charters fix scope and the decisions those specs must honour.
     - It would also discard the 64-dimension halves, which do not change.
     - Cached `'clip'` sort orders would keep serving q8-derived orders, since a cache hit never extracts.
 
-    Instead:
-    - **Tag each vector.** Each cache entry's CLIP vector carries the id of the model that made it. Feature-cache
-      v5 adds the field, and v4 entries read as `clip-b32-q8`. The 64-dimension half is kept.
-    - **Re-embed in the background.** `features` re-embeds stale-tagged vectors as a background job in the
-      utility process, with progress in the jobs tray. It does the training folders first, then each source folder
-      when it is next opened. Only the CLIP half is redone, through today's CLIP-only re-extraction path.
-    - **Switch only on full coverage.** The AI sort keeps training and scoring on the q8 vectors and model until
-      the fp32 vectors cover the training set. Then it switches in one step: the embedding model id is part of the
-      training fingerprint, so the next sort retrains on fp32. It never mixes the two models in one fit.
-    - **Drop stale sort orders.** On the switch, `similarity` deletes its `'clip'` sort-cache entries, as today's
-      CLIP toggle does for the same reason (≈2546–2549).
+    Instead (revised after review round 2, finding 1):
+    - **Optional fields inside v4; no version bump.** `FEATURE_CACHE_VERSION` stays 4. Both readers treat a
+      version mismatch as an empty or discarded cache (feature-cache-store.js:296, ml-training.js:245), which is
+      exactly the loss this migration avoids. An entry gains two optional fields: a model id for its CLIP vector
+      (absent means `clip-b32-q8`), and, during the transition only, a second vector with its own model id. Today's
+      readers ignore unknown fields.
+    - **Both vectors side by side until the switch.** `features` adds an fp32 vector beside each entry's q8 one
+      and never replaces the q8 vector before the switch. The q8 training set therefore stays whole, and a retrain
+      in the window (a new like changes the fingerprint) still fits on q8 alone.
+      - **Order and cost.** The training folders go first; each source folder follows when it is next opened.
+        Only the CLIP half is redone. The cost is temporary: about a second CLIP vector per entry until the
+        switch.
+      - **New files during the transition** get both vectors. The q8 model stays loadable beside fp32 until the
+        switch, and is dropped after it.
+    - **Every consumer reads exactly one model's vectors.** The scorer, training, the CLIP sorter, new-file
+      placement and Group copies each read the vectors of the active model only. An entry without one counts as
+      missing: today's rules apply, so it is extracted first or placed at the end. No cosine is ever taken between
+      a q8 and an fp32 vector (median cosine between them 0.915, research § 5).
+    - **The switch, once fp32 covers the training set.** The active model becomes fp32 in one step. The model id
+      is part of the training fingerprint, so the next AI sort retrains on fp32. Each entry's q8 vector is dropped
+      at its folder's next save.
+      - **Source folders not yet re-embedded.** After the switch, such a folder has no active vectors yet, so an AI
+        or CLIP sort there embeds them first, through the ordinary missing-vector path with the progress card, as
+        a first sort in a new folder does today. "No AI sort waits" holds for the training-set migration, not for
+        this one-time catch-up per folder.
+    - **Cached orders are keyed by model.** Each cached `'clip'` sort order records the embedding model id that
+      made it, and a mismatch is a cache miss. That reaches every folder, not only the open one, which today's
+      CLIP-toggle delete (≈2546–2549) cannot.
   - **Decided (U, 2026-10-22): yes.** The user accepted the fp32 switch, which answers the research's open
     question 6.
   - **Other platforms.** Only the GPU path is Windows-specific. The fp32 file runs on the CPU wherever
@@ -1335,7 +1377,8 @@ charters fix scope and the decisions those specs must honour.
 - **Output: the Inbox (C).** One granted folder, flat, so the viewer can open it directly; its listing is not
   recursive.
   - File names come from a per-engine template that includes the site and item id, so names never collide.
-  - Both tools skip existing files.
+  - Re-downloads are prevented by the download archives, which record an item only once main has promoted it
+    (§8.6). The tools themselves see only the job's empty scratch folder.
   - **The tools write into the job's scratch folder, `<Inbox>/.fetch-tmp/<jobId>/`, never into the Inbox
     itself** (§8.6). That includes `.part` files and yt-dlp's video-only `.fNNN.mp4` and `.temp.mp4` merge
     inputs. Main promotes each finished file into the Inbox and deletes the scratch folder on cancel, failure or
@@ -1343,7 +1386,8 @@ charters fix scope and the decisions those specs must honour.
 - **Rating**: the user rates the Inbox with the core viewer. Liked, disliked and special files move to the usual
   folders, so the Inbox empties like a mail inbox. This is `media_parser`'s fetch → rate → keep loop, without
   Telegram.
-- **Duplicates across runs**: each tool's download archive, kept in `userData/modules/fetch/`.
+- **Duplicates across runs**: each tool's download archive, kept in `userData/modules/fetch/`. A job works on a
+  job-local copy, and main records an item in the persistent archive only after promoting it (§8.6).
 - **Where a file came from**: `history.jsonl` in app data (time, page URL, engine, saved file names), shown in the
   file-info panel's Fetch section.
 - **Politeness**: a default delay between requests and a rate limit, one job per tool at a time, and the tools'
@@ -1399,7 +1443,9 @@ charters fix scope and the decisions those specs must honour.
     bounded to about 100 ms **(C)**, because a rating key pressed during a batch is quietly refused, as during any
     file action.
   - A file the user moved away is skipped at swap time.
-  - A tournament cannot start in the folder while the run is active (§12.4).
+  - A tournament cannot start in the folder while the run is active (§12.4). Neither can a similarity or AI sort:
+    both refuse to start while `jobs.isFolderBusy(folder)`, as the run refuses to start while a sort runs. A
+    similarity run would otherwise save hashes under old names after the rename re-key.
 - **Renames reach every module** through `onFileRenamed(old, new, info)`, whose `info` carries the source type,
   `pixelExact` and the old and new size and mtime (§7.3):
   - `features` re-keys the CLIP vector with the new size and mtime. The drift from a different decoder is
@@ -1446,10 +1492,10 @@ charters fix scope and the decisions those specs must honour.
   one file at a time app-wide: display, hashing (`_decodeJxlForHash`'s queue, media-viewer.js:8121–8136 at
   `308d43c`), 64-dimension extraction and CLIP input all share it. A converted 24k folder would make the next cold
   similarity sort hash every file serially, and each navigation would wait behind the decode in progress.
-  - **Prerequisite for P5:** JPEG XL decoding for hashing and extraction runs on a pool of decode workers kept
-    apart from display.
-  - **Also fixed before P5:** the 🟤 entry "A long animated JXL stalls the hash JXL queue". It was deferred because
-    the user's folders hold no JPEG XL files today, and compression ends that.
+  - **Prerequisite for P5, delivered by P4d** (its own row in §14, review round 2): JPEG XL decoding for hashing
+    and extraction runs on a pool of decode workers kept apart from display.
+  - **Also in P4d:** the fix for the 🟤 entry "A long animated JXL stalls the hash JXL queue". It was deferred
+    because the user's folders hold no JPEG XL files today, and compression ends that.
   - **The preview measures more than display**, per image: display, hash and 64-dimension extraction time. P5's
     exit criteria add a cold similarity sort and a feature extraction on the converted 24k copy.
 - **`media_compression` stays the reference, not a dependency (C)**. Its converter always exits 0, reports no
@@ -1464,8 +1510,10 @@ charters fix scope and the decisions those specs must honour.
 
 - **Per-folder files keep their names and formats**: `.feature_cache.json` v4, `.hash_cache.json`,
   `.sort_cache.json`, `.bulk_rated.json` v1, `.tournament_state.json` v2. Each is declared by its module. A format
-  change needs its own version bump and migration, as today. The one planned change is feature-cache v5's
-  per-vector embedding-model tag (P4a, §12.2): v4 entries read as `clip-b32-q8`, and nothing is discarded.
+  change needs its own version bump and migration, as today. The one planned change keeps v4 and adds optional
+  fields (P4a, §12.2): a CLIP vector's model id (absent means `clip-b32-q8`) and, during the transition, a second
+  vector. Nothing is discarded.
+- **`.sort_cache.json`'s `'clip'` orders** gain the model id that made them; a mismatch is a cache miss (§12.2).
 - **App data keeps its paths**: `ml-model-cache.json`, `folder-grants.json`. New module data goes under
   `userData/modules/<id>/`. New core files: `userData/modules.json`, `userData/tools.json`.
 - **Settings keep their keys.** Modules declare the `localStorage` keys they already use
@@ -1476,10 +1524,11 @@ charters fix scope and the decisions those specs must honour.
   re-extraction, caches untouched.
 - **The CLIP fp32 switch** (§12.2, accepted by the user) does not bump `FEATURE_CACHE_VERSION`.
   - **Download:** one ~352 MB, into `userData/models/`.
-  - **Re-embedding:** the CLIP halves are re-embedded in the background, training folders first. The 64-dimension
-    halves stay.
-  - **Switch:** the AI sort moves to fp32 only once the training set is fully covered.
-  - **Sort caches:** the `'clip'` sort-cache entries are dropped at that switch.
+  - **Re-embedding:** fp32 vectors are added beside the q8 ones in the background, training folders first. The
+    64-dimension halves stay.
+  - **Switch:** the active model becomes fp32 once the training set is fully covered; q8 vectors drop at each
+    folder's next save.
+  - **Sort caches:** cached `'clip'` orders made by the other model miss, in every folder.
 - **The learner fix** (§12.3) bumps `TRAINING_CONFIG_VERSION`, so cached models rebuild once.
 - **Moving today's q8 model cache** out of `node_modules` is moot after the switch: P4a downloads the fp32 file
   into `userData/models/` and can delete the old cache.
@@ -1494,28 +1543,33 @@ Rough story points; the project's estimates have run about 1.9× low (WEEKLY), s
 |---|---|---|---|---|
 | **P0** Prerequisites | G2 PR 2 merged (done: PR #87, `f5ddfa3`, 2026-10-25); this spec approved (done, 2026-10-22); the G5 board change and the new BACKLOG entries (§19) | — | spec approved; board shows v2 | — |
 | **P1a** Module host + Linux baseline | manifest schema, registry, `modules.json`, loader, failure isolation and cascade, the Modules tab (list, toggle, restart), the app-scheme allowlist for `core/**` and `modules/*`, lint M-1 and M-2 with planted violations, bridge-surface test, glob-based sink and `file:` checks, `folder-file-*` channels with tagged reads and delete, per-launch E2E isolation; first, today's app and suites run on Linux, and whatever fails there is fixed | basics (module, log, settings, notify), folder/visit, files (snapshot, removed/restored events), storage | an empty module loads, fails safely, cascades and toggles; all suites green on Windows and Linux | ~11 |
-| **P1b** `similarity` | §12.1 | sorting, `order.apply` (`offer`) and `restore`, `sorting.isRunning()`, progress, shortcuts, services with `uses` and core-provided `features` | §12.1 "done when" | ~10 |
+| **P1b** `similarity` | §12.1 | sorting, `order.apply` (`offer`) and `restore`, `sorting.isRunning()`, `actions.isBusy()` (Restore Order and Show refuse during a file action), progress, shortcuts, `ui.sortMenu` (the header slot), services with `uses` and core-provided `features` | §12.1 "done when" | ~10 |
 | **P2** Shell part 1 | side panel, jobs tray (the progress card moves into it), F1 tabs | `ui.panel`, the UI half of `jobs` | sorts report in the tray; panels open and close | ~6 |
-| **P3a** Job runner and tools | §8.4–§8.5, close/quit integration, the single-instance lock, `app-data-*` | jobs, tools, `lifecycle.onBeforeQuit` | a test adapter runs, cancels, kills its tree, survives quit | ~8 |
-| **P3b** `fetch` | §12.5 | `create` capability with per-job scratch folders | links → Inbox → rate; a rerun skips what it has; a cancelled or killed job leaves nothing in the Inbox | ~8 |
+| **P3a** Job runner and tools | §8.4–§8.5, close/quit integration, the single-instance lock, `app-data-*` | jobs, tools, `lifecycle.onBeforeQuit`, `store.appData` | a test adapter runs, cancels, kills its tree, survives quit | ~8 |
+| **P3b** `fetch` | §12.5 | `create` capability with per-job scratch folders and job-local archives promoted with each file; `ui.fileInfoSection` | links → Inbox → rate; a rerun skips what it has; a cancelled or killed job leaves nothing in the Inbox and loses no finished item | ~9 |
 | **A1** Learner fix (any time, outside the phases) | §12.3: standardise, then fit to convergence, in `ml-worker.js`/`ml-model.js` | — | the user's real-data check run; models rebuild; badges checked (§12.3's offset note) | ~3 |
-| **P4a** `features` | §12.2: the service, `features.training(folder)`, inference in a `utilityProcess`, CLIP fp32 with feature-cache v5's model tag and background re-embedding (accepted by the user), DirectML on Windows and the CPU elsewhere, face detection removed | the `features` provider moves from core to the module; `activity.*`; `embeddingsToggled` | features served through the service; clip sorter switched to it; the main thread's event-loop p99 stays at its idle level during extraction; re-embedding runs in the background, training folders first, with progress in the tray, and no AI sort waits on it | ~14 |
-| **P4b** `ai-sort` | §12.3 | scorer, pair provider, action contributions, `order.apply` (`wait-then-fail`), `runFileAction`'s `refuseWhileSorting`, undo kinds and `undo.entries()`, `tx.insertAt`/`tx.setCursor`, `viewer.*`, `ui.stageOverlay`, `scores`, `ratings.onFoldersChanged` | AI sort, like-or-skip, bulk rate behave as today (with A1's learner if it shipped); the real-worker E2E and `like-or-skip.test.js` pass | ~12 |
+| **P4a** `features` | §12.2: the service, `features.training(folder)`, inference in a `utilityProcess`, CLIP fp32 with optional model-id fields in v4, fp32 vectors added beside q8 in the background and a one-step switch (accepted by the user), DirectML on Windows and the CPU elsewhere, face detection removed | the `features` provider moves from core to the module; `activity.*`; `embeddingsToggled`; `ui.settingsSection` (the CLIP toggle) | features served through the service; clip sorter switched to it; the main thread's event-loop p99 stays at its idle level during extraction; re-embedding runs in the background, training folders first, with progress in the tray; no AI sort waits on the training-set migration, and no consumer ever mixes q8 and fp32 vectors | ~15 |
+| **P4b** `ai-sort` | §12.3 | scorer, pair provider, action contributions, `order.apply` (`wait-then-fail`), `runFileAction`'s `refuseWhileSorting`, undo kinds and `undo.entries()`, `tx.insertAt`/`tx.setCursor`, `files.onOrderChanged` (the like-or-skip token), `viewer.*`, `ui.stageOverlay`, `ui.modal` (the bulk-dislike confirm), `scores`, `ratings.onFoldersChanged` | AI sort, like-or-skip, bulk rate behave as today (with A1's learner if it shipped); the real-worker E2E and `like-or-skip.test.js` pass | ~12 |
 | **P4c** Copies and default | §12.1: Group copies on DINOv2-small fp32; the CLIP sorter as default when `features` is on (D30 confirmed by the user, 2026-10-25) | — | copy groups found on fixtures and on one real folder, threshold tuned there | ~4 |
-| **P5** `compression` | §12.6; renames in `similarity`, `features`, `ai-sort` and core; the rename journal in main (write-ahead) and its replay inside the readers; first, the pooled JPEG XL decode for hashing and extraction, and the long-JXL-stall fix | `onFileRenamed`, the rename journal, `replace` capability, `jobs.isFolderBusy()` | lossless round trips on fixtures (mislabelled files, text-chunk PNGs, APNG and same-stem pairs included); a kill at every ledger step recovers; revert and finalize, including converted files rated since; renames survive a module being off and a crash; measured browse speed, cold similarity sort and extraction on a converted 24k copy | ~18 |
+| **P4d** JPEG XL decode pool (core) | §12.6's prerequisite: a pool of JPEG XL decode workers for hashing and extraction, kept apart from display; the fix for the 🟤 "A long animated JXL stalls the hash JXL queue" | — | on a JPEG XL fixture folder, hashing and extraction decode in parallel while display stays responsive; the long-stream fixture no longer stalls the queue | ~4 |
+| **P5** `compression` | §12.6; renames in `similarity`, `features`, `ai-sort` and core; the rename journal in main (write-ahead, settled only by the run's recovery) and its replay inside the readers | `onFileRenamed`, the rename journal, `replace` capability, `jobs.isFolderBusy()` | lossless round trips on fixtures (mislabelled files, text-chunk PNGs, APNG and same-stem pairs included); a kill at every ledger step recovers, through both Restore and Continue; revert and finalize, including converted files rated since; renames survive a module being off and a crash; measured browse speed, cold similarity sort and extraction on a converted 24k copy | ~16 |
 | **P6a** Control registry | the mode-aware action bar, `PairView`, the z-index scale (L223), the unified Sort ▾ menu (sort tests move from the header IDs to the menu) | modes, `ControlSpec`, `render.request`/`whenIdle` | single and compare run through the registry; overlay tests pass | ~10 |
 | **P6b** `tournament` | §12.4, `onFileRenamed` for its state | vetoes (`folder.onWillChange`, mode `leave`), `canUndo()`, `undo.remove()` | tournament suites pass with the same assertions (state reached through §7.13); compression stops refusing tournament folders | ~10 |
 | **P7** Finish | responsive pass (L224), UI zoom (L261), the ZoomManager and CompareManager core splits, installing renderer-only modules from a file (§6.4), command palette (optional) | install/uninstall | `media-viewer.js` below 6,000 lines (§11.1) | ~13–18 |
 | **P8** Packaging (optional) | installable builds for people who will not run from source, for example with electron-builder: a Windows installer, a Linux AppImage or `.deb`. Includes serving `modules/` from the packed app, unpacking native modules (`sharp`, onnxruntime-node), and a first-run guide for outside tools. No auto-update or code signing (§3) | — | a fresh Windows and a fresh Linux machine install, open a folder and rate | ~5–8 |
 
-Total: about 127–132 SP nominal (A1 included, the optional P8 not). After the review, P1a, P4a, P4b and P5 grew
-by 1, 2, 2 and 3 SP for the review's additions.
-- At ~17 user-flagged SP per normal week, that is about 7.5 normal weeks.
-- With the ~1.9× historical slip, about 14 normal weeks.
-- With a Cleanup Week every ~3 weeks on top, about 19 calendar weeks.
+Total: about 131–136 SP nominal (A1 included, the optional P8 not).
+- **Review round 1** grew P1a, P4a, P4b and P5 by 1, 2, 2 and 3 SP.
+- **Review round 2** grew P3b and P4a by 1 SP each. It also split the JPEG XL decode pool into its own row, P4d
+  (~4 SP), which took 2 SP back out of P5.
 
-Starting around Nov 2, that lands in March 2027 at the earliest. A soft target is the end of Q1 2027, and Q2 is
-more likely.
+Schedule:
+- At ~17 user-flagged SP per normal week, that is about 8 normal weeks.
+- With the ~1.9× historical slip, about 15 normal weeks.
+- With a Cleanup Week every ~3 weeks on top, about 20 calendar weeks.
+
+Starting around Nov 2, that lands in late March 2027 at the earliest. A soft target is the end of Q1 2027, and Q2
+is more likely.
 
 **The AI research's order is kept** (learner, then copies, then the utility process with fp32, then SigLIP 2),
 with one change: the research's own rule that the utility process comes "before adding a model" puts P4a ahead of
@@ -1553,6 +1607,7 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
 | P1b → P6b | L1033 "Migrate path-conditional CLAUDE.md content to path-scoped rules", one module at a time |
 | P1a → P7 | as their phases ship: the [2026-04-08] add-on entries "Design add-on/extension system for the media viewer" and "Move all sorting options to add-ons"; [2026-10-04] "Move tournament mode out of the core app into an add-on/plugin"; [2026-05-30] "Lossless compression add-on (port from `media_compression` project)"; the [2026-05-25] overhaul pair; "Configure interface for different window sizes + Ctrl+/- UI zoom" |
 | P4c | 🔵 "Near-duplicate detection and grouping via embedding cosine similarity (+ perceptual hashes)" |
+| P4d | 🟤 "A long animated JXL stalls the hash JXL queue" |
 
 **Why this order (C):**
 - **Host first, proven on the pilot.** An API designed without a consumer drifts. Similarity is the consumer the
@@ -1641,7 +1696,7 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
 | Test-harness migration cost is underestimated | twelve source-reading test files and 456 end-to-end references are assigned to the phases that move their code; moved tests import directly; a shared extractor helper in P1a |
 | `CLAUDE.md` overflows its size trigger (2.4 KB of headroom at `308d43c`) | v2's rules go to path-scoped `.claude/rules/` files as code moves (§14) |
 | The fp32 switch re-embeds every CLIP vector once (hours at 24k files on the CPU) | only the CLIP halves, in the background, training folders first, with progress in the jobs tray; the AI sort keeps the q8 model until coverage is complete, so no sort waits; DirectML optional (§12.2) |
-| JPEG XL decoding serializes sorts and extraction on a converted folder | pooled JPEG XL decode for hashing and extraction before P5; the preview measures hash and extraction time too (§12.6) |
+| JPEG XL decoding serializes sorts and extraction on a converted folder | P4d's pooled JPEG XL decode for hashing and extraction, before P5; the preview measures hash and extraction time too (§12.6) |
 | Larger downloads and memory (CLIP fp32 352 MB, DINOv2 88 MB; 0.5–0.74 GB while loaded) | the utility process unloads when idle; the user accepted the cost on 2026-10-22 |
 | The research measured synthetic tastes on 500-px thumbnails | the learner fix waits for the real-data check the user agreed to on 2026-10-22; copy thresholds are tuned on a real folder (§12.1, §12.3) |
 | Community q8 model files that are silently broken | fp32 files only for SigLIP 2 and DINOv2; a fidelity check (cosine against fp32) before any new model file ships |
@@ -1691,15 +1746,15 @@ scripts), **D1** (v2 absorbs v2.0) and **D14** (fetch engines and the Inbox).
 | D23 | Every phase must show net renderer lines ≤ 0; a ratcheting blocking check is recommended to G5 | §11.1, §14 |
 | D24 | v2's `CLAUDE.md` rules move to path-scoped `.claude/rules/<id>.md` files as code moves (BACKLOG "Migrate path-conditional CLAUDE.md content to path-scoped rules") | §14 |
 | D25 | The JSDoc host types are documentation; the contract tests are the control; no `checkJs` in v2 | §7 |
-| D26 | Compression's renames go through a main-written, write-ahead rename journal that the readers apply before they prune; folder files declare `cache` or `data`; a folder switch stops a run at a batch boundary | §6.1, §7.3, §8.6, §12.6 |
+| D26 | Compression's renames go through a main-written, write-ahead rename journal: an intent once the name is chosen, settled only by the run's own recovery, and applied by the readers before they prune. A "created" ledger record guards recovery's deletes. Folder files declare `cache` or `data`; a folder switch stops a run at a batch boundary | §6.1, §7.3, §8.6, §12.6 |
 | D27 | The unified Sort ▾ menu lands in P6a; until then module controls render in a header slot with today's IDs | §7.7, §12.1 |
 | D28 | The like-model learner fix (standardise, then converge) ships as its own task, A1, outside the module phases, gated by a real-data check the user agreed to **(U)** | §12.3, §14 |
-| D29 | P4a moves CLIP inference into a `utilityProcess` and switches CLIP to its fp32 file; the user accepted the switch **(U)**. The migration re-embeds only the CLIP halves in the background, tagged by model (feature-cache v5), and the AI sort switches once the training set is covered. DirectML on Windows; the CPU everywhere else | §12.2, §13 |
+| D29 | P4a moves CLIP inference into a `utilityProcess` and switches CLIP to its fp32 file; the user accepted the switch **(U)**. The migration adds fp32 vectors beside the q8 ones in the background (optional model-id fields in v4, no version bump), every consumer reads only the active model's vectors, the switch comes once the training set is covered, and cached `'clip'` orders are keyed by model. DirectML on Windows; the CPU everywhere else | §12.2, §13 |
 | D30 | Group copies on DINOv2-small fp32 is a new `similarity` grouper (P4c), after the utility process **(U, 2026-10-25: adopt it; this supersedes the 2026-08-28 "skipped" record)** | §12.1 |
 | D31 | After P4a, the CLIP sorter becomes the default similarity sort; hash sorters stay selectable | §12.1 |
 | D32 | SigLIP 2 and text search stay outside v2 until search is wanted. Skips mean "undecided; fine to dislike later" **(U, 2026-10-25)**, so they stay out of training by default and become dislikes only through the confirm-then-F path; A1 may test weak skips behind a setting once it records them | §12.3 |
 | D33 | Compression places each new file by exclusive create, choosing `<stem>.jxl` or else `<stem>.<ext>.jxl`, and moves the original last; revert touches only files still as the run left them | §8.6, §12.6 |
-| D34 | Fetch tools write into a per-job scratch folder; main promotes finished files and deletes only its own scratch | §8.6, §12.5 |
+| D34 | Fetch tools write into a per-job scratch folder against job-local archives; main promotes finished files, records an item in the persistent archive only once promoted, and deletes only its own scratch | §8.6, §12.5 |
 | D35 | Services are named separately from modules (`uses`), and core can provide one (`features` until P4a); cross-module reactions go through service events | §6.1, §7.11 |
 | D36 | One app instance per profile (`requestSingleInstanceLock`), from P3a | §8.5 |
 
@@ -1812,3 +1867,4 @@ message. Folding that research in changed the following; everything else is as a
 | header, §2, §4, §12.1, §14, §16, §19, D1 | 2026-10-25: G2 PR 2 merged (PR #87, `f5ddfa3`) without the research commit. The branch was rebased onto `main` `308d43c`, the references to that PR and the header's research inputs were updated, and the new graph-build BACKLOG entry was linked from §12.1. |
 | G-8, §3, §4, §6.4, §8.4–§8.6, §12.2, §12.5, §12.6, §14, §15, §16, §19, D21 | Linux becomes a supported platform beside Windows, because the user may move to Linux and others may use the public repo: Linux test runs at every phase exit; per-platform tool hints, process-tree kill and trash; a Linux baseline in P1a (~10 SP; the total became 119–124 SP); optional packaging as P8; a LICENSE file to consider. |
 | header, §4–§21, D26, D29–D36 | **The PR #88 review (2026-10-25), 16 findings and 15 held-back candidates:** <br>• the compression swap reordered so no step can replace or strand a file, plus the same-stem naming rule (§8.6, D33); <br>• the folder-file service keeps bulk-rated recovery and gains delete, with a tagged read result (§7.9, §8.2); <br>• renames carry source type, `pixelExact` and new size and mtime, are journaled write-ahead, and are applied by the readers before they prune (§7.3, §12.6); <br>• `features.training(folder)` gives `ai-sort` the training caches under the shared lock and isolation (§12.2); <br>• revert only touches files still as the run left them, and the ledger's app data cannot be deleted mid-run (§10, §12.6); <br>• `order.apply` gains named policies and the "refuse while a sort runs" rule (§7.3, §7.4); <br>• viewer, activity, undo-history and stage-overlay hooks, recorded as phase obligations (§7.5, §7.14); <br>• a JPEG XL decode pool before P5, and the preview measures sort and extraction too (§12.6); <br>• the fp32 migration re-embeds only CLIP in the background, with a model tag (§12.2, §13, D29); <br>• services and their events cross modules, and core can provide `features` (§7.11, D35); <br>• dormant shortcut remaps no longer collide (§7.8); <br>• `core/**` joins the app-scheme allowlist (§9); <br>• fetch tools write into a per-job scratch folder (§8.6, D34); <br>• counts, citations and change-log rows corrected (§4, §11.1, §14, §16, §21); <br>• personal details removed (header, §11.2, §12.5, §20). <br>Held back, now handled: one app instance per profile (D36); APNG skipped; tournament entry refused mid-run; batches time-bounded; activation failure cascades; per-launch E2E isolation; planted tests for the `ipcMain` ban and a dynamic-`require` ban; existing BACKLOG entries tagged and D30's reversal stated; "security review" citations replaced with code; the Linux libjxl floor hint; the host-group column; the schedule arithmetic; §8.8's phase column; §19's question tally. Total now 127–132 SP. |
+| §1, §6.2, §8.6, §12.2, §12.5, §12.6, §13, §14, §16, D26, D29, D34 | **PR #88 review round 2 (2026-10-25), 5 findings and 4 held-back candidates:** <br>• the fp32 migration keeps v4 with optional model-id fields (no version bump), holds both vectors side by side until the switch, has every consumer read only the active model's vectors, and keys cached `'clip'` orders by model (§12.2, §13, D29); <br>• compression's journal intent is written once the name is chosen, is settled only by the run's own recovery (Restore or Continue), and recovery deletes only copies with a "created" ledger record; "nothing deletes" now names main's own-copy exceptions (§7.3, §8.6, D26); <br>• fetch archives record an item only once main has promoted it, from job-local copies, and cancel promotes finished items first (§8.6, §12.5, D34); <br>• §14's host-group column gains `files.onOrderChanged`, `actions.isBusy`, `ui.sortMenu`, `ui.settingsSection`, `ui.modal`, `ui.fileInfoSection` and `store.appData`; <br>• a sibling-repo folder name removed (§1). <br>Held back, now handled: sorts refuse to start during a compression run (§12.6); the non-literal `require()` ban covers every main-process file (§6.2); the JPEG XL decode pool became its own row, P4d (§14). Pushed back: main restoring a `recovered` file itself. Total now 131–136 SP; late March 2027 at the earliest. |
