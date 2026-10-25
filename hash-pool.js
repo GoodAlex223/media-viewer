@@ -26,10 +26,10 @@ const CANARY_TIMED_OUT = Symbol('canary timed out');
 const withWorkerErrors = (result, errors) =>
     errors && errors.length > 0 ? { ...result, workerErrors: errors } : result;
 
-const ABORTED = Symbol('aborted');
+export const ABORTED = Symbol('aborted');
 
 // `promise`'s outcome, or ABORTED as soon as `signal` aborts, whichever comes first. The promise itself runs on.
-function untilAborted(promise, signal) {
+export function untilAborted(promise, signal) {
     if (!signal) {
         return promise;
     }
@@ -687,11 +687,13 @@ export class HashPool {
             throw new Error('Pool terminated');
         }
         const url = this.toMediaUrl(path);
+        // Called before the timer is armed, as the canary does: a throw here leaves no timer to reject unhandled.
+        const mainPending = this.hashMainUrlPixels(url);
         let timer;
         const mainTimeout = new Promise((_, reject) => {
             timer = setTimeout(() => reject(new Error('Main route timed out')), this.taskTimeoutMs);
         });
-        const main = await Promise.race([this.hashMainUrlPixels(url), mainTimeout]).finally(() => clearTimeout(timer));
+        const main = await Promise.race([mainPending, mainTimeout]).finally(() => clearTimeout(timer));
         const slot = this._takeSlot();
         if (!slot) {
             throw new Error(this._terminated ? 'Pool terminated' : 'No free slot');

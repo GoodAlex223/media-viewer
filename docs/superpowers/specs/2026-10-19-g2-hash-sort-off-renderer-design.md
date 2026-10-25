@@ -582,10 +582,11 @@ process with the GPU raster path enabled. None of them changes a user ruling.
   - **The mechanism, measured.** All four were re-hashed in a fresh app, 3 times per route, and each hash was stable.
     In each, every differing pixel is exactly 1 level off: F4's rounding. In each 2-bit case, the only change is that
     the two blocks at the median (ranks 128 and 129) trade places, and their means differ by 0.003–0.04 levels.
-  - **Why D4's 1-bit wording was wrong.** `blockhash` sets a bit for a block strictly above the median block. With no
-    two block means equal, every hash has exactly 127 bits set, so any change moves one block up and one down: 2 bits
-    is the smallest difference the rounding can make. A 1-bit difference needs equal block means at the median, as
-    in the accepted file (72 equal blocks).
+  - **Why D4's 1-bit wording was wrong.** `blockhash` sets a bit for a block strictly above the median block. When no
+    block mean ties with the median's, every hash has exactly 127 bits set, so any change moves one block up and one
+    down: 2 bits is the smallest difference the rounding can make. A 1-bit difference needs a tie at the median, as in
+    the accepted file, whose main route has 126 bits set. Ties elsewhere don't matter: one 2-bit file has 71 tied
+    blocks and still 127 bits. (Review round 5 corrected the first wording, "no two block means equal".)
   - **The rule.** A difference on a JPEG or lossy WebP is accepted when its pixel measure reproduces both hashes and
     no read-back byte differs by more than 1 level, whatever the bit count. Anything else is a defect, a difference
     that was not measured included. The 0.5% cap stays.
@@ -598,6 +599,10 @@ process with the GPU raster path enabled. None of them changes a user ruling.
       report's line limit) and notes the rest `not measured: over the 0.5% cap`. Otherwise a whole folder on a
       wrong route would be re-hashed a third time with the app frozen.
     - Each diff line ends `maxPixel=N`, plus `note=…` when the measure failed or did not reproduce.
+    - Review round 5: each call is raced with the signal, so a Cancel during the measure ends it at once, not after
+      its two 30 s bounds (B13's ≤ ~25 s canary wait is the parity check's only unraced one). The run's `finally`
+      terminates the pool, which ends the call. A candidate a cancelled run did not measure is noted
+      `not measured: cancelled`, so its line can't read as a measured defect.
     - The canary is unchanged and still pixel-exact, so a raster-path change is still caught before a run.
   - **Not chosen.** Accepting any 2-bit swap from the hashes alone, which can't tell rounding from a real decode
     difference that flips 2 bits. Zero differences, which would put every JPEG back on the main thread: three

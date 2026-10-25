@@ -124,6 +124,12 @@ describe('classifyParity (D4, B6)', () => {
         expect(r.diffs[0]).toMatchObject({ cls: 'defect', maxPixel: 1, note: 'not reproduced' });
     });
 
+    it('a JPEG diff whose measure reproduced but has no max difference is a defect', () => {
+        const r = classifyParity([...identicalRows(999), row('two.jpg', 2, jpegInfo, 'jpeg', { reproduced: true })]);
+        expect(r.verdict).toBe('fail');
+        expect(r.diffs[0]).toMatchObject({ cls: 'defect', maxPixel: null });
+    });
+
     it('a JPEG diff whose measure failed is a defect, with the reason', () => {
         const r = classifyParity([
             ...identicalRows(999),
@@ -487,6 +493,17 @@ describe('runHashParity', () => {
         expect(report.verdict).toBe('fail');
     });
 
+    it("a measure whose worker hash is not the worker pass's does not accept", async () => {
+        const pool = routePool({
+            worker: workerOk,
+            main: async () => ({ hash: flip(2) }),
+            compare: async () => ({ workerHash: flip(4), mainHash: flip(2), maxPixelDiff: 1, bytesDiffer: 3 }),
+        });
+        const report = await runHashParity(pool, ['/f/a.jpg'], {});
+        expect(report.diffs[0]).toMatchObject({ cls: 'defect', maxPixel: 1, note: 'not reproduced' });
+        expect(report.verdict).toBe('fail');
+    });
+
     it('a measure that rejects makes a defect with its reason, and the run still reports', async () => {
         const pool = routePool({
             worker: workerOk,
@@ -519,6 +536,9 @@ describe('runHashParity', () => {
         const report = await runHashParity(pool, ['/f/a.jpg', '/f/b.jpg'], { signal: controller.signal });
         expect(report.outcome).toBe('cancelled');
         expect(pool.comparePixels).not.toHaveBeenCalled();
+        // a.jpg differed before the abort: its line says why it has no measure.
+        expect(report.diffs).toEqual([expect.objectContaining({ name: 'a.jpg', cls: 'defect', maxPixel: null })]);
+        expect(report.diffs[0].note).toBe('not measured: cancelled');
     });
 
     it('an abort during the measure stops it, and the run is cancelled', async () => {
@@ -535,7 +555,54 @@ describe('runHashParity', () => {
         expect(pool.comparePixels).toHaveBeenCalledTimes(1);
         expect(report.outcome).toBe('cancelled');
         expect(report.verdict).toBe('incomplete');
+        // The measure the abort cut short, and the two never started, each say why they have none.
+        expect(report.diffs.map((d) => [d.name, d.note])).toEqual([
+            ['a.jpg', 'not measured: cancelled'],
+            ['b.jpg', 'not measured: cancelled'],
+            ['c.jpg', 'not measured: cancelled'],
+        ]);
     });
+
+    it('an abort seen after a measure completes keeps that measure and notes the rest', async () => {
+        const controller = new AbortController();
+        const pool = routePool({
+            worker: workerOk,
+            main: async () => ({ hash: flip(2) }),
+            compare: async () => ({ workerHash: H0, mainHash: flip(2), maxPixelDiff: 1, bytesDiffer: 3 }),
+        });
+        const onProgress = (phase, current) => {
+            if (phase === HashParity.PHASE_PIXELS && current === 1) {
+                controller.abort();
+            }
+        };
+        const report = await runHashParity(pool, ['/f/a.jpg', '/f/b.jpg', '/f/c.jpg'], {
+            signal: controller.signal,
+            onProgress,
+        });
+        expect(pool.comparePixels).toHaveBeenCalledTimes(1);
+        expect(report.outcome).toBe('cancelled');
+        expect(report.diffs.map((d) => [d.name, d.cls, d.note])).toEqual([
+            ['a.jpg', 'accepted', null],
+            ['b.jpg', 'defect', 'not measured: cancelled'],
+            ['c.jpg', 'defect', 'not measured: cancelled'],
+        ]);
+    });
+
+    it('an abort ends a measure that does not answer at once, not after its timeouts', async () => {
+        const controller = new AbortController();
+        const pool = routePool({
+            worker: workerOk,
+            main: async () => ({ hash: flip(2) }),
+            compare: () => {
+                setTimeout(() => controller.abort(), 0);
+                return new Promise(() => {}); // an <img> whose load and error never fire, and a silent worker
+            },
+        });
+        const report = await runHashParity(pool, ['/f/a.jpg', '/f/b.jpg'], { signal: controller.signal });
+        expect(pool.comparePixels).toHaveBeenCalledTimes(1);
+        expect(report.outcome).toBe('cancelled');
+        expect(report.diffs.map((d) => d.note)).toEqual(['not measured: cancelled', 'not measured: cancelled']);
+    }, 1000);
 
     it('excludes videos and counts them', async () => {
         const pool = routePool({ worker: workerOk, main: mainOk });

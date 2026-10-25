@@ -3,10 +3,10 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆; ~13 SP across two PRs, spec D7; this plan is **PR 2**, re-estimated ~9 SP below) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
-**Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved 2026-10-19; PR 1 amendments § 15, PR 1 execution notes § 16; **PR 2 amendments § 17: B1–B10 from planning, B11–B14 from the PR #87 review**)
+**Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved 2026-10-19; PR 1 amendments § 15, PR 1 execution notes § 16; **PR 2 amendments § 17: B1–B10 from planning, B11–B14 from the PR #87 review, B15 from the smoke**)
 **Created**: 2026-10-22
-**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and the re-run on `124fb69` passed. Steps 3–4 passed the same day: the smoke is complete. The real-JXL measurement ran the same day; its long-stream finding goes to a follow-up by the user's ruling. Before merge: the reviewer's pass over `124fb69` and the user's go-ahead.
-**Last Updated**: 2026-10-24
+**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and the re-run on `124fb69` passed. Steps 3–4 passed the same day: the smoke is complete. The real-JXL measurement ran the same day; its long-stream finding goes to a follow-up by the user's ruling. Review round 5 (the pass over `124fb69` and the docs after it, run in the implementation chat through a fresh subagent at the user's request) found 4 low and 6 nit findings, all answered. Before merge: the user's go-ahead.
+**Last Updated**: 2026-10-25
 **Branch**: `g2-pr2-background-hashing` (from `main` @ `bf5ec84`, after PR #86 merged as `654fb3e`)
 
 **Goal:** A similarity sort hashes its images in background workers, so the app stays usable during a cold-cache sort of a large folder, with hashes that match today's route under the D4 bar. `.hash_cache.json`, `.sort_cache.json` and `.bulk_rated.json` can no longer be torn by a quit mid-save.
@@ -510,19 +510,20 @@ There is no `signal`: the caller's `isLive` is the only check, and a stale place
     1. Run `checkCanary()`, recorded but not enforced.
     2. The worker pass: `hashFiles(paths, { signal, route: 'worker' })`, timed.
     3. The main pass: `hashFiles(paths, { signal, route: 'main' })`, timed.
-    4. Then `classifyParity`.
+    4. Added by spec B15 (2026-10-25): each differing JPEG or lossy WebP is measured with `HashPool.comparePixels(path)`, one at a time, each call raced with the signal. A run over the 0.5% cap measures only the first `MAX_PARITY_DETAIL_LINES`. A candidate left unmeasured is noted `not measured: over the 0.5% cap` or `not measured: cancelled`.
+    5. Then `classifyParity`.
 
-    `onProgress(phase, current, total)` reports with the phases `Parity: background route` and `Parity: today's route`. An abort returns the partial report with `outcome: 'cancelled'`; it never throws for an abort.
+    `onProgress(phase, current, total)` reports with the phases `Parity: background route`, `Parity: main-thread route` and (B15) `Parity: pixel check`. An abort returns the partial report with `outcome: 'cancelled'`; it never throws for an abort.
   - It imports `isYuvFormat` from `./hash-worker.js` and keeps no second copy of the YUV test. Importing that module outside a worker installs no handler (T3).
-  - `classifyParity(rows)`, where each row is `{ name, kind, worker: { hash, info } | { error }, main: { hash } | { error } }` and `kind` is `'jxl'` for a JXL path, else the worker's `info.type`. It returns `{ images, compared, identical, diff1, diff2plus, rate, verdict, diffs, workerFailures, mainFailures }`:
-    - each diff is `{ name, bits, cls: 'accepted'|'defect', type, format, icc }`;
+  - `classifyParity(rows)`, where each row is `{ name, kind, worker: { hash, info } | { error }, main: { hash } | { error }, pixels? }` and `kind` is `'jxl'` for a JXL path, else the worker's `info.type`; `pixels` (B15) is `{ maxDiff, reproduced }` or `{ error }`. It returns `{ images, compared, identical, diff1, diff2plus, rate, verdict, diffs, workerFailures, mainFailures }`:
+    - each diff is `{ name, bits, cls: 'accepted'|'defect', type, format, icc, maxPixel, note }`;
     - accepted means `bits === 1 && (type === 'jpeg' || (type === 'webp' && isYuvFormat(format)))`; replaced 2026-10-25 by spec B15: a JPEG or lossy-WebP diff whose pixel measure (`HashPool.comparePixels`) reproduces both hashes, with no byte more than 1 level off, whatever its bits; each diff also carries `maxPixel` and `note`;
     - the verdict is `pass` only when no diff is a defect and `rate <= PARITY_MAX_RATE`;
     - `compared` counts rows where both routes produced a hash;
     - `rate = (diff1 + diff2plus) / compared`, or 0 when nothing was compared.
   - `formatParityLines(report, { folder }): string[]`:
     - the summary: `` `Hash parity: outcome=${outcome} verdict=${verdict} images=${images} compared=${compared} identical=${identical} diff1=${diff1} diff2plus=${diff2plus} rate=${(rate * 100).toFixed(2)}% workerFailed=${n} mainFailed=${n} videos=${videos} canary=${pass|fail} | worker=${ms}ms (pool ${size}) | main=${ms}ms | order=worker,main | folder=${folder}` ``;
-    - then, in this order: `Hash parity diff: ${name} bits=${bits} class=${cls} type=${type} format=${format ?? '-'} icc=${yes|no}`, `Hash parity worker-failed: ${name} error=${error}` and `Hash parity main-failed: ${name} error=${error}`;
+    - then, in this order: `Hash parity diff: ${name} bits=${bits} class=${cls} type=${type} format=${format ?? '-'} icc=${yes|no} maxPixel=${maxPixel ?? '-'}` (B15), plus ` note=${note}` when set, `Hash parity worker-failed: ${name} error=${error}` and `Hash parity main-failed: ${name} error=${error}`;
     - at most `MAX_PARITY_DETAIL_LINES` detail lines, then `Hash parity: ${n} more lines not written`.
 - `main.js`:
   - `await win.loadURL(process.env.MV_HASH_PARITY === '1' ? \`${INDEX_URL}?hashParity=1\` : INDEX_URL);`;
@@ -669,7 +670,7 @@ No production change unless the measurement moves `POOL_SIZE`. Scratch scripts s
    - A short hitch about every 1,000 hashes is the periodic hash-cache save (about 5 MB of JSON late in the run). Note whether you feel it.
    - Afterwards, the session log (`%APPDATA%\media_viewer\logs\media-viewer-<date>.log`) names each file that fell back to the main-thread route (`Hash worker: … -> hashed on the main route`) or failed (`Hash failed:`), at most 20 per run plus a count. A long list is a finding.
    - **Pass**: no stall you notice; "Similarity order ready — Show" appears at the end; Show applies the order; the rated files are absent; the undone file is present.
-4. **Timing.** Compare the `Similarity sort:` line of step 3 (`hash=… (new …, worker …, fallback …, pool …)`) against step 1's `worker=`/`main=` times. `fallback` includes `Liked_2`'s 60 videos, which always use the main-thread route. A fallback count far above 60 means images fell back too.
+4. **Timing.** Compare the `Similarity sort:` line of step 3 (`hash=… (new …, worker …, fallback …, pool …)`) against step 1's `worker=`/`main=` times. `fallback` includes `Liked_2`'s videos (60 at planning, 51 at the smoke), which always use the main-thread route. A fallback count far above the video count means images fell back too.
 
 A failure at step 1 is a D4 finding: stop and decide with the user (R1's option B is the known remedy). A stall at step 3 makes T8's pool size, or R3, the first suspect.
 
@@ -681,12 +682,12 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
-- **Videos still hash on the main thread** (spec non-goal). `Liked_2` holds 60, so each run spends a few seconds of main-thread work on them, spread across the run. → BACKLOG 🟤 only if the smoke shows a stall. **Smoke step 3 (2026-10-25): no stall with 51 videos, so no entry.**
+- **Videos still hash on the main thread** (spec non-goal). `Liked_2` held 60 at planning, so each run spends a few seconds of main-thread work on them, spread across the run. → BACKLOG 🟤 only if the smoke shows a stall. **Smoke step 3 (2026-10-25): no stall with 51 videos, so no entry.**
 - **A long animated JXL stalls the hash JXL queue** (the real-JXL measurement, 2026-10-25; the user's ruling: a follow-up PR) → BACKLOG 🟤.
   - The app has one JXL decode worker, and a timeout ends the renderer's wait, not the decode. The queue's 30 s stream bound lets the next request through while the worker is still streaming, and that request fails on `decodeJxl`'s 15 s frame-0 timer. The main-route fallback fails too, because `hashFile`'s 30 s timer is armed before its decode waits in the queue.
   - Measured under 20–34% load on generated files, 4 stills at 6000×4000 and two animations (1280×720×90 at 59 MB and 1920×1080×60 at 86 MB): the two streams took 43 s and 66 s.
   - Six such JXLs through a sort's path: PR 2 hashed 4; `main`'s old loop hashed 1. The stills fix holds: 3 concurrent stills went 3/3 through the queue, against 1/3 posted at once.
-  - The user's folders hold no JXL files (checked 2026-10-25: the seven granted folders, Downloads, Documents, Videos, OneDrive Pictures and Desktop), so no current folder is affected.
+  - The user's folders hold no JXL files (checked 2026-10-25: every granted folder and the usual Windows media folders), so no current folder is affected.
   - Fix direction: a hash-only JXL decoder, separate from the display's, terminated after frame 0 (a hash needs nothing more) or on a timeout, so each decode starts on an idle decoder. Also arm `hashFile`'s timer after the decode.
   - Acceptance, rebuilt from the recipe since the scripts were session-only:
     - stills and animations made with sharp (noise frames) plus `cjxl` at its defaults;
@@ -912,10 +913,10 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
     - 14,255 files at load: 14,204 images and 51 videos;
     - `compared=14154 identical=14150 diff1=1 diff2plus=3 rate=0.03% workerFailed=0 mainFailed=50 canary=pass`;
     - worker pass 494 s (35 ms an image, pool 3), main pass 1,116 s (79 ms), both under T8's estimate.
-  - The 50 `mainFailed` lines, all `Image load error: Unknown error`, were the files the user liked during the worker pass: each 404'd file had been shown and moved to `Liked_3`, and the skipped ones were hashed. The verdict doesn't count them.
+  - The 50 `mainFailed` lines, all `Image load error: Unknown error`, were the files the user liked during the worker pass: each 404'd file had been shown and moved to `Liked_3`, and the skipped ones were hashed. The verdict doesn't count them. (Checked in review round 5: all 50 are in `Liked_3` now and none in `Liked_2`, and that session's log has exactly 50 refused loads, `no such file`.)
   - The diffs: one 1-bit JPEG (accepted) and three 2-bit JPEGs (`class=defect`). Two of the three have a color profile and one has none, so R1's option B would not cover it. The file names stay out of this public repo; they are in the session's scratchpad probe log.
   - **Probe**: copies of the four in a fresh E2E app, 3 runs per route (scratchpad `parity-diffs/`). Every hash was stable. Every differing pixel was exactly 1 level off (61–2,085 of 196,608 bytes). Each 2-bit case was the two blocks at ranks 128/129 trading places, 0.003–0.04 levels apart.
-  - D4's "2+ bits = defect" took 1 bit for the rounding's size. With no two block means equal, `blockhash` always sets 127 bits, so its smallest change is 2. The user chose "Accept ±1-pixel diffs" over a hash-only swap rule and over zero differences (every JPEG back on the main thread). Spec D4 and B15 updated.
+  - D4's "2+ bits = defect" took 1 bit for the rounding's size. With no block mean tied with the median's, `blockhash` always sets 127 bits, so its smallest change is 2 (wording corrected in review round 5: it first read "no two block means equal", but one 2-bit file has 71 tied blocks and still 127 bits). The user chose "Accept ±1-pixel diffs" over a hash-only swap rule and over zero differences (every JPEG back on the main thread). Spec D4 and B15 updated.
   - **Built** (TDD), test-first:
     - `HashPool.comparePixels(path)`: one file on both routes, read-backs compared;
     - `runHashParity` measures each differing JPEG or lossy WebP after both passes, as the phase "Parity: pixel check";
@@ -942,10 +943,23 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - Parity on real JXL: the one animation both routes hashed was identical.
   - The user's folders hold no JXL files. The user's ruling: a follow-up PR. Residual "A long animated JXL stalls the hash JXL queue"; spec B11 corrected.
   - My script's first run lost 7 minutes of phases to one uncaught rejection. The re-run caught per phase and per file.
+- **2026-10-25** — **Review round 5**: the pass over `a9b1d6e..db119dc` (`124fb69` plus 5 docs commits). At the user's request it ran in this chat, through a fresh subagent given the code and spec B15, not my conclusions. It found 0 critical, high or medium findings, 4 low and 6 nits, and confirmed that nothing in the range changes a normal sort's hashes (`comparePixels` has one caller, in parity mode). It checked every docs figure against the logs, and they match. I verified each finding before acting on it.
+  - **L1, fixed**: a cancelled run listed its unmeasured JPEG or lossy-WebP differences as `class=defect maxPixel=-` with no note. They now read `note=not measured: cancelled`: before the measure, on the call a Cancel cut short, and on the rest.
+  - **L2, fixed**: a Cancel during the pixel phase waited for the call in flight, up to 30 s + 30 s in the hang case. The call is now raced with the signal (`untilAborted`, now exported from `hash-pool.js`), and `_runHashParity`'s `finally` terminates the pool, which ends it.
+  - **L3, test added**: dropping `Math.abs` survived, because every main read-back in the tests was all zeros; mutation run, SURVIVED. The new test has a main byte 3 above the worker's.
+  - **L4, test added**: dropping the worker half of "reproduces both hashes" survived (run, SURVIVED). The new test's measure returns a different worker hash.
+  - **N1, fixed**: `classifyParity` accepted `{ reproduced: true }` with no `maxDiff`, since `null <= 1`. It now needs `maxPixel !== null`. Unreachable from `runHashParity`.
+  - **N2, fixed**: `comparePixels` armed its main-route timer before calling the injected function, so a synchronous throw would have left a timer to reject unhandled. The call now comes first, as the canary's does. Unreachable in production.
+  - **N3, fixed**: T6's interface (pixel phase, phase names, row and diff shapes, diff line), the Spec pointer (B15), Last Updated, and step 4's and the videos Residual's "60 videos" (51 at the smoke).
+  - **N4, fixed**: "no two block means equal" corrected to "no block mean tied with the median's", in spec B15, this plan's log and Key Discovery, and the `hash-parity.js` comment. One 2-bit file has 71 tied blocks and still 127 bits set; the 1-bit file's main route has 126.
+  - **N5, fixed going forward**: the JXL Residual's list of searched folders, which named a cloud folder, now reads "every granted folder and the usual Windows media folders". The old text stays in pushed history (`db119dc`); it names no file and no path.
+  - **N6, fixed**: two `media-viewer.js` comments on `_decodeJxlForHash` stated the B11 claims `db119dc` corrected. They now carry the 30 s caveat and point at the JXL Residual. Comments only.
+  - Not verifiable from the files: B15's "11,690 of 15,589" JPEG count. It matches this plan's T8 figure of ~15,590 images, but its census was session-only.
+  - Tests first: 5 new unit tests and 2 extended abort tests. 5 of the 7 failed on the old code; the L3 and L4 tests passed on it by design (they kill mutants). A 6th new test, "an abort seen after a measure completes…", came after the fix: no test reached that second Cancel branch. Its mutation is killed. Mutations: 11 of 11 killed (L1 ×5, L2, L3, L4, N1, and N2 twice, once as a faithful revert of the old order), with a no-op baseline that survived. Unit 2,312 → **2,318** passed, 1 skipped.
 
 ## Key Discoveries
 
-- **A median-split hash's smallest change is 2 bits.** `blockhash` sets a bit for a block strictly above the median block, so a hash with no equal block means has exactly 127 bits set, and any change moves one block each way. A 1-bit difference needs equal means at the median. A parity bar written in bits ("1 bit accepted, 2+ a defect") therefore rejected the very rounding it meant to accept; the bar has to measure the mechanism, the pixels (B15).
+- **A median-split hash's smallest change is 2 bits.** `blockhash` sets a bit for a block strictly above the median block, so a hash where no block mean ties with the median's has exactly 127 bits set, and any change moves one block each way. A 1-bit difference needs a tie at the median (ties elsewhere don't matter). A parity bar written in bits ("1 bit accepted, 2+ a defect") therefore rejected the very rounding it meant to accept; the bar has to measure the mechanism, the pixels (B15).
 
 - **A hash-equality canary cannot see a raster-path change.** The CPU path changed ~100k bytes of every candidate's read-back, but a median-split 256-bit hash absorbs most ±1 shifts: 5 of 7 hashes stayed identical, including both images the spec named. The detector has to compare what the change touches, the pixels, not the summary the change mostly leaves alone (B1).
 - **Unique tmp names stop a tear, not a reorder.** Two overlapping saves with distinct tmps each rename whole, but the older one can land last. For `.bulk_rated.json` that loses the newer rating, so the writer also serializes per target (B2).

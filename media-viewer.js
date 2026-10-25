@@ -8130,7 +8130,9 @@ class MediaViewer {
     // Every JXL decode a hash asks for, one at a time app-wide (PR #87 review #1). The JXL worker decodes one request
     // at a time, and decodeJxl's 15 s frame-0 timer starts at the post, so decodes posted together timed each other
     // out (8-12 s each at 6000x4000) and the files went unsorted. Queued here, a decode waits outside its timer, as
-    // the one-file-at-a-time loop's did. `isStopped` lets a stopped run's queued decode skip its turn.
+    // the one-file-at-a-time loop's did; the main route's hashFile timer, armed before its decode, still counts the
+    // wait (plan Residual "A long animated JXL stalls the hash JXL queue"). `isStopped` lets a stopped run's queued
+    // decode skip its turn.
     _decodeJxlForHash(filePath, isStopped = null) {
         // Bounded like the main route: decodeJxl's own timer starts only at its post, after the worker's init and the
         // file read, so a decode, or a stream, that never settles would otherwise hold the queue for the session.
@@ -8153,7 +8155,8 @@ class MediaViewer {
             return bounded(this.decodeJxl(filePath));
         });
         // The hash has its frame 0 when the turn resolves, but the worker decodes every frame of an animated JXL
-        // before it takes the next request: the queue moves on when the stream completes (round 2 #2).
+        // before it takes the next request: the queue moves on when the stream completes (round 2 #2), or after 30 s.
+        // A longer stream lets the next request into a worker still streaming (the same Residual).
         this._hashJxlTail = turn
             .then((entry) => (entry?.whenComplete ? bounded(entry.whenComplete) : undefined))
             .then(

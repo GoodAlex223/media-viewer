@@ -872,6 +872,35 @@ describe('HashPool comparePixels (B15)', () => {
         pool.terminate();
     }, 1000);
 
+    it("counts a main read-back byte above the worker's as well as one below", async () => {
+        const main = new Uint8ClampedArray(PIXEL_BYTES);
+        main[7] = 3;
+        const pool = makePool({
+            createWorker: factory(pixelsReply()),
+            hashMainUrlPixels: vi.fn(async () => ({ hash: H('1'), pixels: main })),
+        });
+        expect(await pool.comparePixels(PATH)).toMatchObject({ maxPixelDiff: 3, bytesDiffer: 1 });
+        pool.terminate();
+    }, 1000);
+
+    it('a main route that throws at once rejects with its error and leaves no timer armed', async () => {
+        vi.useFakeTimers();
+        try {
+            const pool = makePool({
+                createWorker: factory(pixelsReply()),
+                hashMainUrlPixels: vi.fn(() => {
+                    throw new Error('bad url');
+                }),
+            });
+            await expect(pool.comparePixels(PATH)).rejects.toThrow('bad url');
+            // An armed timer would reject unhandled when it fired.
+            expect(vi.getTimerCount()).toBe(0);
+            pool.terminate();
+        } finally {
+            vi.useRealTimers();
+        }
+    }, 1000);
+
     it("rejects with the worker's error, and frees its slot", async () => {
         let replies = 0;
         const responder = (w, m) =>

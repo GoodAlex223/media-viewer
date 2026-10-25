@@ -3,7 +3,7 @@
 // the page with ?hashParity=1, and every similarity sort hashes every image through both routes (the worker route
 // first, then the main-thread route), sorts nothing, writes no cache, and writes a D4-classified report to the perf
 // log. Pure: the pool, the signal and the progress sink are injected, and nothing here touches a document.
-import { isVideoPath } from './hash-pool.js';
+import { ABORTED, isVideoPath, untilAborted } from './hash-pool.js';
 import { isYuvFormat } from './hash-worker.js';
 import { countDifferences } from './perceptual-hash.js';
 
@@ -68,11 +68,15 @@ export function classifyParity(rows) {
         const type = row.kind ?? null;
         const format = row.worker.info?.format ?? null;
         // The accepted exception (B15): F4's ±1 colour rounding, on a JPEG or a lossy (YUV-decoded) WebP, measured on
-        // the file's pixels, whatever the bit count: with no two block means equal, the smallest change it can make is
-        // the two blocks at the median trading places, 2 bits.
+        // the file's pixels, whatever the bit count: with no block mean tied with the median's, every hash has 127 bits
+        // set, so the smallest change it can make is the two blocks at the median trading places, 2 bits.
         const px = row.pixels;
         const maxPixel = typeof px?.maxDiff === 'number' ? px.maxDiff : null;
-        const accepted = isRoundingType(type, format) && px?.reproduced === true && maxPixel <= PARITY_MAX_PIXEL_DIFF;
+        const accepted =
+            isRoundingType(type, format) &&
+            px?.reproduced === true &&
+            maxPixel !== null &&
+            maxPixel <= PARITY_MAX_PIXEL_DIFF;
         diffs.push({
             name: row.name,
             bits,
@@ -181,50 +185,59 @@ export async function runHashParity(
     // B15: only where the measure can accept, a differing JPEG or lossy WebP; the measure must reproduce both hashes.
     // A run already over the 0.5% cap fails whatever the measure says (a whole folder on a wrong route differs
     // everywhere), so it measures only as many files as the report lists, not every image again with the app frozen.
+    // A candidate left unmeasured says why, so its line can't read as a measured defect. A cancelled run measures none.
     const pixels = new Map();
-    if (!cancelled) {
-        let compared = 0;
-        let differing = 0;
-        const candidates = [];
-        for (const p of images) {
-            const w = workerResults.get(p);
-            const m = mainResults.get(p);
-            if (!hasHash(w) || !hasHash(m)) {
-                continue;
-            }
-            compared++;
-            if (w.hash !== m.hash) {
-                differing++;
-                if (isRoundingType(kindOf(p), w.info?.format)) {
-                    candidates.push(p);
-                }
+    const leaveUnmeasured = (list, why) => list.forEach((p) => pixels.set(p, { error: `not measured: ${why}` }));
+    let compared = 0;
+    let differing = 0;
+    const candidates = [];
+    for (const p of images) {
+        const w = workerResults.get(p);
+        const m = mainResults.get(p);
+        if (!hasHash(w) || !hasHash(m)) {
+            continue;
+        }
+        compared++;
+        if (w.hash !== m.hash) {
+            differing++;
+            if (isRoundingType(kindOf(p), w.info?.format)) {
+                candidates.push(p);
             }
         }
-        const overCap = compared > 0 && differing / compared > PARITY_MAX_RATE;
-        const measured = overCap ? candidates.slice(0, MAX_PARITY_DETAIL_LINES) : candidates;
-        for (const p of candidates.slice(measured.length)) {
-            pixels.set(p, { error: `not measured: over the ${PARITY_MAX_RATE * 100}% cap` });
-        }
-        if (measured.length > 0) {
-            onProgress(PHASE_PIXELS, 0, measured.length);
-        }
-        for (const [i, p] of measured.entries()) {
-            const w = workerResults.get(p);
-            const m = mainResults.get(p);
-            try {
-                const c = await pool.comparePixels(p);
-                pixels.set(p, {
-                    maxDiff: c.maxPixelDiff,
-                    reproduced: c.workerHash === w.hash && c.mainHash === m.hash,
-                });
-            } catch (err) {
-                pixels.set(p, { error: String(err?.message ?? err) });
-            }
-            onProgress(PHASE_PIXELS, i + 1, measured.length);
-            if (signal?.aborted) {
+    }
+    const overCap = compared > 0 && differing / compared > PARITY_MAX_RATE;
+    const measured = cancelled ? [] : overCap ? candidates.slice(0, MAX_PARITY_DETAIL_LINES) : candidates;
+    leaveUnmeasured(
+        candidates.slice(measured.length),
+        cancelled ? 'cancelled' : `over the ${PARITY_MAX_RATE * 100}% cap`
+    );
+    if (measured.length > 0) {
+        onProgress(PHASE_PIXELS, 0, measured.length);
+    }
+    for (const [i, p] of measured.entries()) {
+        const w = workerResults.get(p);
+        const m = mainResults.get(p);
+        try {
+            // Raced with the signal, so a Cancel is seen at once, not after the measure's two 30 s bounds; the
+            // caller's terminate then ends the call in flight.
+            const c = await untilAborted(pool.comparePixels(p), signal);
+            if (c === ABORTED) {
                 cancelled = true;
+                leaveUnmeasured(measured.slice(i), 'cancelled');
                 break;
             }
+            pixels.set(p, {
+                maxDiff: c.maxPixelDiff,
+                reproduced: c.workerHash === w.hash && c.mainHash === m.hash,
+            });
+        } catch (err) {
+            pixels.set(p, { error: String(err?.message ?? err) });
+        }
+        onProgress(PHASE_PIXELS, i + 1, measured.length);
+        if (signal?.aborted) {
+            cancelled = true;
+            leaveUnmeasured(measured.slice(i + 1), 'cancelled');
+            break;
         }
     }
 
