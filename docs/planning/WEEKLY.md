@@ -5,6 +5,29 @@
 **Sources**: MILESTONES.md, ROADMAP.md, GOALS.md (all `Last Updated` 2026-08-27, 52 days; the 2-month bar falls on 2026-10-27, and last week's theme shipped off the board, so the 🟡 refresh is filed and scheduled as G5, see Notes → strategic docs), BACKLOG.md (📌 Process Rules; 🔵 [2026-10-17] and the open 🔵 pool; the 🟤 [2026-10-11] → [2026-10-18] closeout sections; an obsolescence check of last week's unverified reap list), TODO.md (🔴 I1, 🔴 24k-sort PR2 remainder, § Spawned Tasks), git log (last 2 weeks: the six Oct 11–18 merges `e5cd3a8`, `96467f7`, `bf6fcad`, `51af1ab`, `3fb797e`, `1954109` and their closeouts through `73527a9`), previous WEEKLY.md (Oct 12–16 — finished two days past its Friday, archived below), REVIEW-QUEUE.md (§§1–5; last run 2026-10-17). Live-config drift check: N/A — this repo keeps no live-config sync. OWNER-QUEUE.md: absent.
 **Cleanup Week?**: **No — normal week.** Cleanup Week #4 ran Oct 5–9; #5 is due **Oct 26–30**, next week. The 🟤-size trigger fires (66 new open 🟤 entries since 2026-10-11, 297 open in total, measured 2026-10-18), as it has continuously since June, so the cadence governs.
 **Context**: Roadmap phase _Scale & Modularize_; active milestone _v2.0 modularization_. The renderer grew 15% in one week (`media-viewer.js` 9,989 → **11,451** lines, 2026-10-10 → 10-18), while the roadmap's **Now** column stood still: PR2 has been open since June, and no extraction has shipped since 2026-09-10. This week's agreed theme is **"stop the renderer's growth"**: the first v2.0 extraction since then, ZoomManager (G3), and the last 24k slice, the hash/similarity sort off the renderer thread (🏆 G2), behind a front-loaded fix for G1's security residual I1 (G1). A formatter-hook speed-up (G4), the strategic-doc refresh (G5) and Weekly Reviews (G6) close the week.
+**Spillover** (recorded 2026-10-25): G2 PR 2 merged on 2026-10-25, two days past the Friday (PR #87, `f5ddfa3`). G3, G4, G5 and G6 had not run by then. The week's own drop order sends G4 to the next normal week and G5 to Cleanup Week #5. G3 is never dropped, and the Cleanup Week #5 planning pass places it and G6.
+
+---
+
+## Next Steps (recorded 2026-10-25, from the v2 modules session)
+
+In order:
+
+1. **Close out this week.** The Spillover is recorded above. The archive and the check-offs are done in the Cleanup Week #5 planning pass.
+2. **Plan Cleanup Week #5** (Oct 26–30) in its own planning session. G5 lands there. G5 is where the v2 board change goes: v2 replaces the "v2.0 modularization" release ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 2, D1). G5 also:
+   - decides D23's recommended blocking check, which ratchets the renderer's line ceiling down after each phase (spec § 11.1);
+   - files the spec's remaining § 19 entries, with `[possible-dup-of: …]` tags where entries exist:
+     - 🔵 the Fetch module and the shell redesign;
+     - 🔵 the update to "Lossless compression add-on (port from `media_compression` project)";
+     - 🟤 face-detection removal;
+     - 🟤 the AI research's four items;
+     - the README setup steps for Windows and Linux (G-8).
+3. ✅ **The v2 spec's PR is open: PR #88**, carrying the approved spec, this list and the 🔵 [2026-10-22] LICENSE entry. It merges after its review round closes.
+4. **Small tasks for any week:**
+   - the real-data check: the AI research harness on the user's like/dislike folders, with only overall numbers in git (spec § 19);
+   - then A1, the like-model learner fix (spec § 12.3);
+   - then the LICENSE file.
+5. **v2 P1a**, the module host plus a Linux baseline (spec § 14), in the week of Nov 2–6 at the earliest. Its plan is written when it is scheduled.
 
 ---
 
