@@ -535,6 +535,14 @@ process with the GPU raster path enabled. None of them changes a user ruling.
   frame 0: the worker decodes every frame of an animated JXL before it takes the next request (round 2). Each wait, for
   the frame and for the rest of the stream, is bounded at the main route's 30 s, so a decode that never settles cannot
   hold the queue: `decodeJxl` arms its timer only at the post, after the worker's init. D6's fallback is unchanged.
+  (The real-JXL measurement, 2026-10-25, corrects two claims here.
+  - "Moves on when the worker is done" holds only for a stream under the 30 s bound. Generated animations streamed
+    for 43 s and 66 s under load, and the bound let the next request into a busy worker.
+  - "Its wait is outside its timer" holds for the worker lane and for `decodeJxl`'s timer, but not for the main
+    route's 30 s `hashFile` timer.
+
+  Six such JXLs through a sort's path: PR 2 hashed 4, `main`'s old loop 1. Left to a follow-up by the user's
+  ruling: plan Residual "A long animated JXL stalls the hash JXL queue".)
 - **B12. A held-open target is written in place (B2).** Measured on this machine: Windows refuses a rename over a
   file another process holds open (`EPERM` after about 650 ms of retries), even when the reader shares it for delete.
   An in-place write of the same file succeeds under the same handle. A rename still refused after its retries with

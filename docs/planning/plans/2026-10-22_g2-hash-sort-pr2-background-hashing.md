@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) § G2 (🔵 🏆; ~13 SP across two PRs, spec D7; this plan is **PR 2**, re-estimated ~9 SP below) ← TODO 🔴 [2026-06-18] "Speed up AI / similarity sorting on large folders (24k+ files)", slice PR2
 **Spec**: [2026-10-19-g2-hash-sort-off-renderer-design.md](../../superpowers/specs/2026-10-19-g2-hash-sort-off-renderer-design.md) (approved 2026-10-19; PR 1 amendments § 15, PR 1 execution notes § 16; **PR 2 amendments § 17: B1–B10 from planning, B11–B14 from the PR #87 review**)
 **Created**: 2026-10-22
-**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and the re-run on `124fb69` passed. Steps 3–4 passed the same day: the smoke is complete.
+**Status**: In review — PR #87; plan approved by the user 2026-10-22 ("Looks good"). Review rounds 1–4 answered (2026-10-24). Smoke step 1 ran 2026-10-25 and failed D4 on three 2-bit JPEG differences, all F4's ±1 rounding. The user ruled to measure D4 on the pixels (spec B15), and the re-run on `124fb69` passed. Steps 3–4 passed the same day: the smoke is complete. The real-JXL measurement ran the same day; its long-stream finding goes to a follow-up by the user's ruling. Before merge: the reviewer's pass over `124fb69` and the user's go-ahead.
 **Last Updated**: 2026-10-24
 **Branch**: `g2-pr2-background-hashing` (from `main` @ `bf5ec84`, after PR #86 merged as `654fb3e`)
 
@@ -682,6 +682,16 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
 ## Residuals for Extract (found while designing and planning — not fixed here)
 
 - **Videos still hash on the main thread** (spec non-goal). `Liked_2` holds 60, so each run spends a few seconds of main-thread work on them, spread across the run. → BACKLOG 🟤 only if the smoke shows a stall. **Smoke step 3 (2026-10-25): no stall with 51 videos, so no entry.**
+- **A long animated JXL stalls the hash JXL queue** (the real-JXL measurement, 2026-10-25; the user's ruling: a follow-up PR) → BACKLOG 🟤.
+  - The app has one JXL decode worker, and a timeout ends the renderer's wait, not the decode. The queue's 30 s stream bound lets the next request through while the worker is still streaming, and that request fails on `decodeJxl`'s 15 s frame-0 timer. The main-route fallback fails too, because `hashFile`'s 30 s timer is armed before its decode waits in the queue.
+  - Measured under 20–34% load on generated files, 4 stills at 6000×4000 and two animations (1280×720×90 at 59 MB and 1920×1080×60 at 86 MB): the two streams took 43 s and 66 s.
+  - Six such JXLs through a sort's path: PR 2 hashed 4; `main`'s old loop hashed 1. The stills fix holds: 3 concurrent stills went 3/3 through the queue, against 1/3 posted at once.
+  - The user's folders hold no JXL files (checked 2026-10-25: the seven granted folders, Downloads, Documents, Videos, OneDrive Pictures and Desktop), so no current folder is affected.
+  - Fix direction: a hash-only JXL decoder, separate from the display's, terminated after frame 0 (a hash needs nothing more) or on a timeout, so each decode starts on an idle decoder. Also arm `hashFile`'s timer after the decode.
+  - Acceptance, rebuilt from the recipe since the scripts were session-only:
+    - stills and animations made with sharp (noise frames) plus `cjxl` at its defaults;
+    - a fresh E2E app;
+    - `main`'s old loop (`hashFile` with a direct `decodeJxl`) against `_hashThroughPool`, each from a fresh decoder, with per-file outcome and time, catching per phase.
 - **The similarity sort's own phase is now the long part of a cold run** (smoke step 3, 2026-10-25): `sort=361520ms` on 14,201 files (VP-Tree, `sorting-worker.js`), 38% of the run's 943 s, after a 580 s hash phase. It runs in the sorting worker, so the app stays usable, and PR 2 does not touch it. TODO 🔴 "Speed up AI / similarity sorting on large folders (24k+ files)" names this half too: "the neighbor-graph build is O(n·K) … with an O(n²) MST/greedy fallback". → At closeout, do not check that TODO off on PR 2 alone. Either keep it open for the sort phase or move that half to a 🟤 BACKLOG entry carrying this figure; ask the user which.
 - **Bulk-rated saves can still land out of order** (T1 review, minor 1; pre-existing) → BACKLOG 🟤, flagged as irreplaceable data.
   - The renderer fires an un-awaited `saveBulkRatedFile()` from `removeFileFromList` (`media-viewer.js:1491`), and a later save can overtake it. The IPC guard's async `grantedPath` check runs before the writer's per-target chain, so two overlapping saves can reach the chain in the opposite order.
@@ -925,6 +935,13 @@ A failure at step 1 is a D4 finding: stop and decide with the user (R1's option 
   - **Step 4, timing.** The hash phase took 580 s (41 ms a file) in the background, with the user working. Step 1's main-thread pass, today's route, took 1,262 s for the 14,150 images (89 ms each) with the app frozen. So a cold hash phase is about 2.2× faster and no longer blocks. T8's figures don't compare, given the load.
   - The VP-Tree sort phase, 361 s, is now 38% of the run. Residual added, carrying it to TODO 🔴 "Speed up AI / similarity sorting…".
   - **The smoke is complete.** Before merge: the reviewer's pass over `124fb69`, the real-JXL measurement, and the user's go-ahead.
+- **2026-10-25** — **The real-JXL measurement** (the user's go-ahead to run it under load; CPU 20–34% from other work). Generated files: 4 stills at 6000×4000, and animations at 1280×720×90 and 1920×1080×60. Each phase started from a fresh JXL decoder.
+  - One still alone: 11.6 s. Three at once, posted directly (the old pattern): 2 of 3 timed out at 15 s. Three through the queue (B11): 3 of 3 (10.4, 19.9 and 29.2 s). **The stills fix holds.**
+  - Streams alone: first frame at 0.9 / 1.6 s, the full stream at **42.9 / 65.7 s**. The next decode after one fails both ways: at 16 s posted directly, at 46 s through the queue. **B11's stream wait does not hold past its 30 s bound.**
+  - Six JXLs through each path: **`main`'s old loop hashed 1** (78 s); **PR 2's `_hashThroughPool` hashed 4** (186 s: 2 on a worker, 2 on the main fallback). The 2 it missed were stills behind the 66 s stream; their main-route fallback hit `hashFile`'s 30 s timer. Not a regression.
+  - Parity on real JXL: the one animation both routes hashed was identical.
+  - The user's folders hold no JXL files. The user's ruling: a follow-up PR. Residual "A long animated JXL stalls the hash JXL queue"; spec B11 corrected.
+  - My script's first run lost 7 minutes of phases to one uncaught rejection. The re-run caught per phase and per file.
 
 ## Key Discoveries
 
