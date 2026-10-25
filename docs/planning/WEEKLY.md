@@ -14,8 +14,15 @@
 In order:
 
 1. **Close out this week.** The Spillover is recorded above. The archive and the check-offs are done in the Cleanup Week #5 planning pass.
-2. **Plan Cleanup Week #5** (Oct 26–30) in its own planning session. G5 lands there. G5 is where the v2 board change goes: v2 replaces the "v2.0 modularization" release ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 2, D1). G5 also files the spec's remaining § 19 entries: the Fetch module, the shell redesign, the update to the compression entry L213, and the AI research's four 🟤 items.
-3. **The user pushes `v2-modules-design` and opens its PR**, which carries the approved v2 spec, this list and the 🔵 [2026-10-22] LICENSE entry. It is docs-only, so the pre-push hook skips E2E.
+2. **Plan Cleanup Week #5** (Oct 26–30) in its own planning session. G5 lands there. G5 is where the v2 board change goes: v2 replaces the "v2.0 modularization" release ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 2, D1). G5 also:
+   - decides D23's recommended blocking check, which ratchets the renderer's line ceiling down after each phase (spec § 11.1);
+   - files the spec's remaining § 19 entries, with `[possible-dup-of: …]` tags where entries exist:
+     - 🔵 the Fetch module and the shell redesign;
+     - 🔵 the update to "Lossless compression add-on (port from `media_compression` project)";
+     - 🟤 face-detection removal;
+     - 🟤 the AI research's four items;
+     - the README setup steps for Windows and Linux (G-8).
+3. ✅ **The v2 spec's PR is open: PR #88**, carrying the approved spec, this list and the 🔵 [2026-10-22] LICENSE entry. It merges after its review round closes.
 4. **Small tasks for any week:**
    - the real-data check: the AI research harness on the user's like/dislike folders, with only overall numbers in git (spec § 19);
    - then A1, the like-model learner fix (spec § 12.3);

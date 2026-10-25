@@ -3,14 +3,18 @@
 **Status:** approved by the user on 2026-10-22 ("Looks good"). The AI-sorting research report arrived with that
 approval and was folded in afterwards; §21 lists exactly what changed, for the user to read.
 **How it was made:** the user asked for a brainstorm and then chose to skip the question round. Every decision
-quoted from the user's own notes is marked **(U)**. Every other decision is Claude's call, marked **(C)**, and §17
-lists them all so they can be checked and flipped.
+quoted from the user's own notes or answers is marked **(U)**. Every other decision is Claude's call, marked
+**(C)**, and §17 lists them all. Since the approval, flipping one is a spec change, recorded in §21.
+**PR #88 review (2026-10-25):** 16 findings and 15 held-back candidates, all answered in the revision that §21's
+last row lists.
 **Inputs read:** `PROJECT.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_CONTEXT.md`, the planning docs
 (`GOALS`, `ROADMAP`, `MILESTONES`, `WEEKLY`, `TODO`, and searches of `BACKLOG`, `DONE`, `REVIEW-QUEUE`), all
 70 specs in `docs/superpowers/specs/` (53 product, security and strategy specs in a first pass; the 17 process,
-test-tooling and weekly-review specs in a second), a map of today's code at `main` `bf5ec84`, and the two sibling projects
-`C:\Users\alexm\Projects\media_parser` and `C:\Users\alexm\Projects\media_compression` (read only; their
-secrets were not opened).
+test-tooling and weekly-review specs in a second), a map of today's code at `main` `bf5ec84`, and the user's two
+sibling projects, `media_parser` and `media_compression` (read only; their secrets were not opened).
+**Other evidence:** findings attributed to "this design's security research" came from read-only research agents
+during the 2026-10-22 brainstorm. Their reports are not in the repo; each such claim also cites the code or spec
+it rests on.
 **Research inputs:**
 - **AI sorting: folded in.** The report is `docs/research/2026-10-22-ai-sorting.md` in commit `96d9b22`. That
   commit is on branch `research/local-ai-sorting`; it was kept out of the G2 PR 2 merge.
@@ -43,7 +47,7 @@ separate future brainstorm" (`2026-07-12-g4-strategic-docs-refresh-design.md`:45
 widened by the user on 2026-10-22 to include media fetching, compression, and a possible redesign.
 
 **The renderer keeps growing.** `media-viewer.js` went 6,650 lines (March) → 9,418 (August) → 12,190 (PR #85) →
-11,879 today, against a "< ~6,000" goal (GOALS:49). Since 2026-10-12 each feature ships a pure module beside the
+11,879 at `bf5ec84`, and 11,945 after PR #87, against a "< ~6,000" goal (GOALS:49). Since 2026-10-12 each feature ships a pure module beside the
 renderer, but the glue stays inside it, so it still grows. Every edit of the file also costs about 1.1 s in the
 formatter hook (`2026-10-17-weekly-reviews-run.md`:377–383). This week's theme is "stop the renderer's growth".
 A module boundary with real controls is the structural answer.
@@ -156,7 +160,8 @@ G5 of Oct 19–23, still open on 2026-10-25); see §19.
   state file. **No IPC writes media bytes, overwrites an entry, or deletes a media file.** Fetch and compression
   need new, narrow capabilities (§8.6).
 - **`sandbox: false`** stays for now. Its real dependency is probably `require('path')` in `preload.js`, used by
-  18 `electronAPI.path.*` call sites (inferred by the security review). Not changed by v2.
+  18 `electronAPI.path.*` call sites (`preload.js:2`; inferred by this design's security research). Not changed
+  by v2.
 - **Tier-1 files**: `preload.js` and the file-move handlers in `main.js` need explicit user approval to change
   (PROJECT.md:73–78). Every new IPC call in §8.8 is a preload change.
 - **No packaging, no CI.** Gates are the local Husky hooks. A module ships as files in the repo.
@@ -172,12 +177,15 @@ G5 of Oct 19–23, still open on 2026-10-25); see §19.
   unit tests for both.
 - **24k scale.** The user's real folders hold 24,000+ files. Real-scale checks are user-side smokes.
 - **Tests read renderer source and internals.**
-  - Twelve test files read `media-viewer.js` as text. The largest is `tests/media-viewer-utils.test.js` (8,792
-    lines), which extracts `MediaViewer` methods by brace-counting. The others are `keyboard-shortcuts`,
-    `ml-training`, `ml-pair-selection`, the three `*-glue` tests, `feature-cache-harness.js`,
-    `integration/cached-sort-path`, `video-release`, `app-protocol` and `media-url`. Several carry their own copy
-    of the extractor (BACKLOG L1442, "Extract `extractAsyncMethod` helper … on third use", long past).
-  - End-to-end tests reach app state through `window.mediaViewer` 430 times in 25 files.
+  - Twelve test files read `media-viewer.js` as text (measured at `308d43c`). The largest is
+    `tests/media-viewer-utils.test.js` (8,996 lines), which extracts `MediaViewer` methods by brace-counting. The
+    others are `keyboard-shortcuts`, `ml-training`, `ml-pair-selection`, the three `*-glue` tests,
+    `feature-cache-harness.js`, `integration/cached-sort-path`, `video-release`, `media-url` and
+    `perceptual-hash` (PR #87; it also scans the root `.js` files, so it breaks when P1b moves hashing).
+    `app-protocol.test.js` names the file but serves only a stub of it. Several carry their own copy of the
+    extractor (BACKLOG "Extract `extractAsyncMethod` helper to `tests/helpers/extract-method.js` on third use",
+    long past).
+  - End-to-end tests reach app state through `window.mediaViewer` 456 times in 27 files (`308d43c`).
   - Moving code out of the renderer means rewiring these tests in the same phase (§15).
 - **One renderer-editing group at a time** (WEEKLY rule). v2 phases are sequential where they touch the
   renderer.
@@ -212,10 +220,10 @@ module.
 
 | Module id | What moves into it | Default on? | Depends on |
 |---|---|---|---|
-| `similarity` | Similarity sort: the four sorters (vptree, mst, simple, clip), hashing (the G2 PR 2 pool), `.hash_cache.json`, `.sort_cache.json`, new-file placement, the sort button and algorithm picker | On | `features` (optional; needed only by the clip sorter) |
+| `similarity` | Similarity sort: the four sorters (vptree, mst, simple, clip), hashing (the G2 PR 2 pool), `.hash_cache.json`, `.sort_cache.json`, new-file placement, the sort button and algorithm picker | On | the `features` service (optional; only the clip sorter needs it; core provides it until P4a, §7.11) |
 | `features` | Media features service: the 64-dimension extractor and worker pool, the CLIP embedding client (the model runs in main until P4a moves it into a `utilityProcess`), background extraction, `.feature_cache.json` | On | — |
 | `ai-sort` | AI preference sort: scorer, `MlTrainingManager`, the model cache, % badges, the re-sort chip, "Rebuild model", and its two add-ons: like-or-skip (bulk-dislike skipped files) and bulk rate (compare "Both good / Both bad", `.bulk_rated.json`), plus best-vs-worst pairing in compare | On | `features` |
-| `tournament` | Tournament mode: engine, manager, the ~1,050 lines of renderer glue, modals, `.tournament_state.json`, tier apply | On | — |
+| `tournament` | Tournament mode: engine, manager, the ~1,050 lines of renderer glue, modals, `.tournament_state.json`, tier apply | On | the `scores` service of `ai-sort` (optional; AI seeding, §12.4) |
 | `fetch` | Downloading through gallery-dl and yt-dlp into an Inbox folder | **Off** | outside tools |
 | `compression` | Lossless JPEG XL conversion in place | **Off** | outside tools |
 
@@ -241,11 +249,8 @@ or scoring. A `FEATURE_VERSION` bump changes the training fingerprint, so the mo
 - **Out of v2:** the rest of the skew (dims 42–47 file metadata and 57–61, also G3-reuse F1) stays as filed.
   Fixing it changes model behaviour, against G-3; it belongs to the AI work that follows the research report.
 
-Lands with the `features` module (§12.2).
-
-**If P4a's fp32 switch ships** (§12.2), its `FEATURE_CACHE_VERSION` bump re-extracts every vector anyway, so face
-removal needs no zeroing step: re-extracted vectors carry zeros in dims 54–56 by construction. Zeroing at use is
-the fallback if the fp32 switch, which the user accepted, is ever dropped.
+Lands with the `features` module (§12.2). The fp32 CLIP switch no longer bumps `FEATURE_CACHE_VERSION` (§12.2,
+review finding 9), so zeroing at use is the mechanism, not a fallback.
 
 ---
 
@@ -290,6 +295,7 @@ Example manifest (values illustrative):
   "defaultEnabled": false,
   "requires": [],
   "optional": [],
+  "uses": [],
   "provides": [],
   "contributes": { "panels": ["fetch"], "settings": true, "shortcuts": [] },
   "folderFiles": [],
@@ -311,8 +317,9 @@ Example manifest (values illustrative):
 | `apiVersion` | the host API version the module targets | the host supports it, or the module is not loaded |
 | `entry`, `workers`, `styles` | paths inside the module folder (`styles` are CSS files the host links when the module activates, under the existing CSP) | no `..`, no absolute paths, file exists |
 | `defaultEnabled` | the toggle's state before the user touches it | boolean |
-| `requires` / `optional` | other module ids | exist; no cycles |
-| `provides` | service names other modules may `use` (§7.11) | unique across modules |
+| `requires` / `optional` | other module ids that must be on, or are welcome when on | exist; no cycles |
+| `uses` | service names the module calls, each `{ "name", "optional" }`, provided by core or by a module (§7.11). A service is not a module: core provides `features` until P4a, and then the `features` module provides it with the same interface | each required service has a provider, or the module is not loaded; a missing optional one is `null` at runtime |
+| `provides` | service names this module provides (§7.11) | unique across core and modules |
 | `contributes` | contribution points used (§7.7) | known point names |
 | `folderFiles` | per-folder files the module owns, by exact name, with a size cap and a `kind`: `cache` (recomputable; losing it costs time) or `data` (the user's work, such as bulk ratings or a saved tournament) | dot-file `.json` names; not owned by core or another module; a module owning a `data` file must handle renames (§7.3) before compression will run in a folder holding it |
 | `appData` | file names under `userData/modules/<id>/` | plain names, no separators |
@@ -335,7 +342,8 @@ Example manifest (values illustrative):
 **Rule M-1 (C): main never runs code it discovered on disk.** Main reads `modules/*/module.json` as *data*. It
 never `require`s a file because a manifest named it. Every main-side adapter is required statically from
 `main/adapters/index.js`, so adding a module with a main part means a reviewed core change. A test pins this
-(§15).
+(§15). That test can only see literal paths, so lint also bans `require()` and `import()` with a non-literal
+argument in `main/**` and the adapters; both get a planted violation that must fail (§15).
 
 **Rule M-2 (C): module code talks to the app only through `host`.** Inside `modules/**/ui` and `workers`, lint
 bans `window.mediaViewer`, `window.electronAPI`, imports of `media-viewer.js` or `core/*` (except the type-only
@@ -378,7 +386,8 @@ These are stated once here and enforced by the host API's shape (§7.12):
   modules in the user's media folders or online. P7 adds exactly one more root,
   `userData/modules-installed/`, filled only by the user's explicit install (below).
 - **Renderer modules are trusted code.** They run in the app frame, so ipc-guard cannot tell them from core
-  (security review § 2a). Rule M-2 keeps them honest; it does not contain a malicious module.
+  (`createIpcGuard` checks the sender frame and its URL, `ipc-guard.js:46–54`, not which code made the call).
+  Rule M-2 keeps them honest; it does not contain a malicious module.
 - **What main enforces, per module**, through its services (§8): which per-folder file names it may read and
   write, which job types it may start, which tools those jobs may run, and which file-write capability those
   jobs have. A module that is switched off loses all of them.
@@ -416,6 +425,9 @@ These are stated once here and enforced by the host API's shape (§7.12):
    host built for that module (§7). Each activation has a timeout (5 s **(C)**).
    - A module that throws or times out is marked *failed*. Its contributions are removed, the failure is logged
      and shown on the Modules page, and the app carries on.
+   - **Failure cascades.** A module that `requires` a failed module, or whose required service only a failed
+     module provides, is not activated either. Its row reads "disabled because <id> failed". Discovery-time drops
+     work the same way.
    - `activate` only registers things. Heavy work (workers, models, cache reads) starts on first use, as
      `mlWorker` does today, so startup to first media does not slow down.
 4. **Toggling takes effect on restart (C).** The Modules page offers "Restart now". It runs the normal close flow
@@ -469,15 +481,29 @@ host.files.current()               // the file on screen (single) or the pair (c
 host.files.onOrderChanged((kind) => …)       // 'folder' | 'similarity' | 'ai-fresh' | 'ai-resort' | 'restore' | …
 host.files.onFileRemoved((path) => stash | undefined)    // stash is kept on the history entry
 host.files.onFileRestored((path, stash) => …)
-host.files.onFileRenamed(async (oldPath, newPath, { samePixels, sameBytes }) => …)  // resolve once your re-key is saved; see §12.6
-host.order.apply(paths, { kind, startPath, offerIfUserActed }) // → 'applied' | 'offered' | 'declined'
+host.files.onFileRenamed(async (oldPath, newPath, info) => …)  // resolve once your re-key is saved; see §12.6
+//   info = { sourceType: 'jpeg' | 'png', pixelExact, from: { size, mtimeMs }, to: { size, mtimeMs } }
+//   pixelExact: true for PNG (pixels verified equal); false for JPEG, whose JPEG XL the viewer decodes with a
+//   different decoder than the original JPEG, so pixel-derived values (hashes) must be recomputed
+host.order.apply(paths, { kind, startPath, policy }) // → 'applied' | 'offered' | 'declined' | 'failed'
 host.order.restore()               // back to folder order (today's _restoreOriginalOrder, shared)
+host.sorting.isRunning()           // true while any sort or scorer run is in flight
 ```
 
-`host.order.apply` is today's `_applySimilarityOrder` (media-viewer.js:7897) made general: it waits for render
-idle, re-checks, commits synchronously, calls the order-changed path (`_onOrderChanged`, :1527), and offers a
-sticky "Show" when the user acted since the run started (`SimilaritySort.userActedSince`). It is the only way an
-order reaches the screen.
+`host.order.apply` is the only way an order reaches the screen. It commits synchronously after its wait,
+re-checks before committing, and calls the order-changed path (`_onOrderChanged`, :1527). Today's two sorts commit
+under different rules, and both are kept as named policies (review finding 6):
+- **`policy: 'offer'`** is today's `_applySimilarityOrder` (media-viewer.js:7897). It waits for render idle,
+  declines with `busy` while a file action runs (:7913–7916), and offers a sticky "Show" when the user acted since
+  the run started (`SimilaritySort.userActedSince`).
+- **`policy: 'wait-then-fail'`** is today's AI apply. It waits up to 30 s for both the render and any file action
+  (`AI_APPLY_WAIT_MS`, `_waitForRenderIdle(…, true, isLive)`), then applies, or returns `'failed'` and the sort
+  fails rather than apply past the cap.
+
+The host owns "a sort is running": `isRunning()` reads it, and `runFileAction`'s `refuseWhileSorting` option
+(§7.4) uses it. Bulk dislike, its undo, and tournament entry, Continue and Start refuse while a sort runs, as
+today (:5123, :5398, :5737, :6073, :6238). An order committed in the middle of such an action leaves the screen
+and the cursor on different files.
 
 **Renames are journaled (C).** Compression's renames must reach every module that keeps data keyed by file name,
 even one that is off, or a folder the user has left, or after a crash. Otherwise:
@@ -485,26 +511,39 @@ even one that is off, or a folder the user has left, or after a crash. Otherwise
   (training data);
 - `reconcileWithFiles` (tournament.js:134) drops renamed files from a saved tournament.
 
-So main records each rename it performs in a rename journal (§8.6), marked pending for every module owning a
-folder file present in that folder.
+So main records each rename in a rename journal (§8.6), marked pending for every module owning a folder file
+present in that folder.
+- **Write-ahead.** The journal entry is written as an intent before the swap's first step, and confirmed when the
+  swap completes. Recovery at launch confirms or drops each unconfirmed intent by what is on disk. A crash
+  between a swap and its journal entry therefore cannot leave a rename that no module learns of.
 - **While the folder is open**, the host calls `onFileRenamed`. When the module's promise resolves (its re-key is
   saved), the host acknowledges the entry for that module.
 - **On a later load of that folder**, `onLoaded(visit, files, { renames })` hands each module its pending
-  renames. The module applies them right after reading its folder file and before any pruning, saves, and
-  acknowledges them through `visit.ackRenames()`.
+  renames. Today's readers prune names missing from the folder, and entries whose size or mtime differ, *during*
+  the read (feature-cache-store.js:265–273; ml-training.js:270–275), so applying renames afterwards is too late.
+  The readers take the rename map as an input instead. An entry under an old name is re-keyed to the new name
+  with the new size and mtime, and only then do the existing prune rules run. The module saves, then
+  acknowledges through `visit.ackRenames()`.
 - **Entries are deleted** once every listed module has acknowledged them. A module that stays off keeps its
   entries pending until it next opens that folder.
 
 ### 7.4 File actions and undo
 
 ```js
-host.actions.runFileAction(label, async (tx) => { … })   // → result | { refused: reason }
+host.actions.runFileAction(label, async (tx) => { … }, { refuseWhileSorting })   // → result | { refused: reason }
 //   tx.move(path, 'like' | 'dislike' | 'special' | { folder }) → historyEntry
-//   tx.removeFromList(path, { deferSaves })   tx.render()
+//   tx.removeFromList(path, { deferSaves })   tx.insertAt(path, index)   tx.setCursor(path)   tx.render()
 host.undo.registerKind(kind, async (entry, tx) => …)     // runs inside a file action
 host.undo.push(kind, entry)
+host.undo.entries()                // read-only, identity-stable snapshot of the core history (counts by identity)
+host.undo.remove(entry)            // drop one entry the module owns (tournament's special-move twin)
 host.actions.isBusy()
 ```
+
+`tx.insertAt` and `tx.setCursor` exist for undo kinds that restore exact positions and the cursor (today's
+`skipBatch` undo, media-viewer.js:5325, :5352–5356). `undo.entries()` serves the re-sort chip, which counts
+history entries by identity (:9965). `undo.remove()` serves tournament's special-move undo, which removes its twin
+from the core history (:6709–6718).
 
 `runFileAction` is today's `_fileOpInFlight` discipline as an API. It takes the guard before the first `await`,
 refuses when busy (quietly for ratings and navigation, with "Wait for the move to finish" for header actions),
@@ -523,13 +562,22 @@ host.modes.register({
   view: 'single' | 'pair' | 'custom',    // 'pair' borrows core's PairView, never compare's internals
   render(ctx),                           // called by the host's single render owner
   controls: ControlSpec[],               // see §11.2
-  keymap: '<mode id>'                    // the shortcut map this mode uses
+  keymap: '<mode id>',                   // the shortcut map this mode uses
+  canUndo() → boolean                    // the empty-state undo check asks the active mode (tournament: engine.peekUndoKind())
 })
 host.lifecycle.onBeforeQuit(async () => 'ok' | 'stay')
+host.viewer.onNavigate(({ from, to, direction }) => …)   // after Next/Previous passed their guards (like-or-skip records skips here)
+host.viewer.onRender((view) => …)                        // after each render (button and chip refresh)
+host.activity.signal() / host.activity.onActivity(fn)    // user activity: core signals on navigation and rating; features pauses extraction
 ```
 
 Core registers *single* and *compare* through the same registry. A folder change asks every non-core mode to
 leave (with its veto), then lands in single mode, as today.
+
+The viewer and activity events replace today's direct calls (review finding 7):
+- `likeOrSkip.recordSkip` inside `nextMedia`, after its guards (media-viewer.js:1791–1797);
+- the bulk-rate, dislike-skipped and chip refreshes inside `showMedia` (:3873–3877);
+- the 14 core call sites of `signalUserActivity()` that pause background extraction.
 
 ### 7.6 Sorting
 
@@ -564,6 +612,7 @@ Cancel. An unknown sorter id is an error (today an unknown algorithm silently ru
 | `host.ui.settingsSection(title) → rootElement` | a section in F1 → Settings | AI badges, CLIP toggle |
 | `host.ui.modal(options)` | a modal that owns the keyboard while open (capture listeners, every close path cleans up) | tournament config, bulk-dislike confirm |
 | `host.ui.fileInfoSection(render)` | a section in the file-info panel | Fetch: the source page |
+| `host.ui.stageOverlay(id) → rootElement` | an overlay anchored to the media stage (today's `.media-container`), which outlives a render | AI % badges (today found by `document.getElementById`, :9880–9908, a lookup M-2 bans) |
 | `host.progress.start(label, { cancel }) → handle` | the one progress surface | sorts, training |
 | `host.jobs` | rows in the jobs tray (§7.10) | downloads, compression runs |
 
@@ -586,18 +635,33 @@ The core registry keeps today's rules:
 - **Versioned migrations** for changed defaults.
 - **Every registered mode gets a reverse map.** No mode's keys can silently do nothing.
 
-A switched-off module's actions are not registered, and its stored remaps are kept for when it returns. The F1
-panel shows a group per mode, including module modes. That also fixes the open item that tournament keys are
-never shown or saved (BACKLOG L772–L773).
+A switched-off module's actions are not registered, and its stored remaps are kept for when it returns. Kept
+remaps must not collide when the module returns (review finding 11). `saveShortcut` persists the whole mode
+object, so a dormant binding such as `bothGood: 'KeyD'` stays stored, and `_mergeModeShortcuts` settles only
+default-versus-stored clashes. So:
+- **At remap time**, the conflict check also scans the stored bindings of switched-off modules, and warns: "D is
+  stored for Both good (AI sort, off)".
+- **At load**, two stored bindings on one key in one mode leave the returning module's action unbound (`null`),
+  and `_reportShortcutCollisions` warns once. This is the rule `_mergeModeShortcuts` already applies to defaults.
+
+The F1 panel shows a group per mode, including module modes. That also fixes the open items that tournament keys
+are never shown or saved (BACKLOG "`saveShortcut()` silently drops the `tournament` mode …" and "No tournament
+section in the F1 help overlay …").
 
 ### 7.9 Storage
 
 ```js
 host.store.folderFile('.hash_cache.json')   // only names declared in folderFiles
-  .read(visit) → parsed | null | { error }      // the module validates; null = absent, never "0 entries"
+  .read(visit) → { status: 'ok', value, recovered } | { status: 'absent' } | { status: 'unreadable', reason }
   .write(visit, value)                          // atomic; refused if the visit ended or the ledger says stale
+  .delete(visit)                                // e.g. tournament Discard (today's deleteTournamentState, main.js:570)
 host.store.appData('history.jsonl')         // under userData/modules/<id>/; read/write/append
 ```
+
+The read result is tagged, so untrusted parsed JSON never shares a value space with the outcome (review finding
+2). `absent` is never "0 entries". `recovered: true` means main read the atomic writer's kept temp copy of a file
+that a crash tore, as `readBulkRatedFile` does today (main.js:614–636). The module must then write the value back
+promptly (today: media-viewer.js:9740); otherwise the writer's orphan sweep deletes the only whole copy.
 
 The feature cache keeps its streaming channels and ledger (wipe spec § 7.2). `features` owns it through a
 streaming variant of `folderFile` that wraps today's `featureCache*` calls.
@@ -609,6 +673,7 @@ host.jobs.start(type, params) → job       // type must be in the manifest's jo
 job.on('progress' | 'item' | 'done' | 'failed' | 'cancelled', handler)
 job.cancel()
 host.tools.status(toolId) → { found, path, version, meetsMinimum, hint }
+host.jobs.isFolderBusy(folder)            // true while a replace-capable job (a compression run) is active there
 ```
 
 The renderer passes typed `params` (for example `{ urls, inbox }`). Main validates them against the adapter's
@@ -617,9 +682,22 @@ schema and builds the command itself (§8.5).
 ### 7.11 Services between modules
 
 ```js
-host.services.provide('features', api)    // only names in the manifest's provides
-host.services.use('features')             // only ids in requires/optional; null when an optional one is off
+host.services.provide('scores', api)      // only names in the manifest's provides
+host.services.use('features')             // only names in the manifest's uses; null when an optional one has no provider
+api.on(event, fn)                         // a service may expose events; this is how one module reacts to another
 ```
+
+**Core provides services too.** Until P4a, core provides `features` over today's feature store, so P1b's clip
+sorter can `use` it. P4a moves the provider to the `features` module with the same interface. A manifest's `uses`
+names services, not modules (§6.1), so neither phase drops the pilot (review finding 12).
+
+**Known cross-module channels (review finding 10):**
+
+| Today's behaviour | v2 channel |
+|---|---|
+| Tournament's AI seeding reads `predictionScores` (`buildAiSeedingPairings`, media-viewer.js:6136, :6166, :6247) | `ai-sort` provides `scores` (`current()` returns a `Map<path, number>`, or null when there are no scores); `tournament` `uses` it as optional, and its config modal greys out AI seeding when it is null |
+| The CLIP toggle resets the model, clears the unload timer, reverts `sortAlgorithm` and `#sortAlgorithmSelect` to vptree **synchronously**, then deletes the `'clip'` sort cache (≈2520–2550; CLAUDE.md: the order matters) | `features` emits `embeddingsToggled(enabled)` and calls its subscribers synchronously, in dependency order, before any of its own async work. `similarity` reverts its picker and setting synchronously, then deletes its own `'clip'` sort cache; `ai-sort` resets its model |
+| Core's like/dislike folder controls call `resetMlModel()` (:823, :844, :861, :877) | core emits `host.ratings.onFoldersChanged()`; `ai-sort` resets its model |
 
 ### 7.12 The invariants the API encodes
 
@@ -631,6 +709,9 @@ host.services.use('features')             // only ids in requires/optional; null
 | Single render owner; never await a render inside a pass | `host.render.request()` returns nothing to await |
 | Every reorder goes through `_onOrderChanged` | only `host.order.apply/restore` assign the list (source-scan test, §15) |
 | One apply function after render idle; run tokens | `host.order.apply` + visit/run `isLive()` |
+| The AI sort waits up to 30 s for render and file action, then applies or fails; the similarity sort declines during a file action and offers "Show" | `order.apply`'s `'wait-then-fail'` and `'offer'` policies |
+| Bulk dislike, its undo and tournament entry refuse while a sort runs | `runFileAction(…, { refuseWhileSorting })` + `host.sorting.isRunning()` |
+| The CLIP toggle's ordered reset (synchronous revert before the async cache delete) | `features`' `embeddingsToggled` event, subscribers called synchronously (§7.11) |
 | One per-file cleanup; undo restores what was purged | `onFileRemoved` stash → history entry → `onFileRestored` |
 | A visit owns cache IO; "never read" is not "0 entries"; frozen-copy saves | `folderFile.read/write(visit)`, `onVisitEnd` synchronous |
 | One folder load at a time; folder change exits non-core modes | core folder lifecycle + mode `leave` vetoes |
@@ -644,13 +725,34 @@ host.services.use('features')             // only ids in requires/optional; null
 
 ### 7.13 Test access (C)
 
-End-to-end tests read app state through `window.mediaViewer` today (430 references in 25 files). That object
-stays. `activate` may return a `testApi` beside `deactivate`, and core attaches it as
+End-to-end tests read app state through `window.mediaViewer` today (456 references in 27 files at `308d43c`).
+That object stays. `activate` may return a `testApi` beside `deactivate`, and core attaches it as
 `window.mediaViewer.modules[<id>]`. Rule M-2 bars module code from reading `window.mediaViewer`; tests may.
 
 When state moves into a module, its end-to-end tests keep the same assertions and change only the access path,
 for example `window.mediaViewer.tournament.engine` → `window.mediaViewer.modules.tournament.engine`. Each
 phase lists the test files it rewires (§15).
+
+**Per-launch isolation.** Each `launchApp()` already gets a fresh grant store (`MV_E2E_GRANTS_FILE`). From P1a
+it also gets fresh `modules.json`, `tools.json`, rename-journal and module app-data stores, through the same
+kind of override, so no test inherits another's toggles, tool grants or compression runs.
+
+### 7.14 Obligations by phase (review findings 4, 6, 7, 10)
+
+The PR #88 review found capabilities that today's AI and tournament features use and that §7 first lacked. They
+are now in §7 above. This table records which phase must deliver each one, so the phase specs carry them rather
+than rediscover them:
+
+| Capability | Today's code it replaces | Phase |
+|---|---|---|
+| `uses` and core-provided services | P1b's clip sorter needs `features` before the module exists | P1b |
+| `order.apply` policies; `sorting.isRunning()` | `_applySimilarityOrder` (similarity); `AI_APPLY_WAIT_MS` (AI) | P1b (`offer`), P4b (`wait-then-fail`) |
+| `runFileAction(…, { refuseWhileSorting })`; `tx.insertAt`, `tx.setCursor`; `undo.entries()` | the bulk-dislike batch and its `skipBatch` undo; the re-sort chip's identity count | P4b |
+| `viewer.onNavigate`, `viewer.onRender`, `activity.*` | `recordSkip` in `nextMedia`; the refreshes in `showMedia`; 14 `signalUserActivity()` call sites | P4a (`activity`), P4b (`viewer`) |
+| `ui.stageOverlay` | badges hung off `.media-container` | P4b |
+| `features.training(folder)` (§12.2) | `MlTrainingManager`'s injected `loadFolder`, `computeFeatures(…, { useHostCache: false })`, `acquireLock` and streaming IO | P4a, used in P4b |
+| `scores` service; `embeddingsToggled`; `ratings.onFoldersChanged` | `predictionScores` read by seeding; the CLIP toggle's ordered reset; `resetMlModel()` from the folder controls | P4a (`embeddingsToggled`), P4b (`scores`, `onFoldersChanged`) |
+| `modes` `canUndo()`; `undo.remove()` | `engine.peekUndoKind()` in the empty-state check; the special-move twin removal | P6b |
 
 ---
 
@@ -668,14 +770,17 @@ and what it declared.
 ### 8.2 Folder-file service
 
 `main/folder-files.js` generalizes `read-folder-cache` / `write-folder-cache`, the tournament-state channels and
-the bulk-rated channels into one pair, `folder-file-read` and `folder-file-write`, with these rules:
+the bulk-rated channels into `folder-file-read`, `folder-file-write` and `folder-file-delete`, with these rules:
 - Arguments `(moduleId, folder, name, value?)`: the folder must be granted, and the name must be declared by that
   enabled module (or core).
 - `assertFixedPath` refuses planted links (main.js:312–325).
 - Size caps come from the manifest.
 - Writes go through the atomic writer (G2 PR 2's `atomic-write.js`: unique temp, fsync, rename, one write per
   target at a time).
-- The renderer gets `null` for an absent file and a distinct error for an unreadable one.
+- **Reads return a tagged result** (§7.9): `ok` (with `recovered` when the value came from the writer's kept temp
+  copy of a torn file, as `readBulkRatedFile` does today), `absent`, or `unreadable`. Every recovery path today's
+  per-file channels have is kept.
+- **Delete** removes one declared file, as `deleteTournamentState` does today (main.js:570).
 
 Existing file names and formats are unchanged (§13). The feature cache keeps its streaming channels and ledger.
 
@@ -705,6 +810,9 @@ Linux; Homebrew on macOS.
   version and the update hint.
 - **No hash pinning (C)**: Scoop updates would trip it constantly. The path is fixed by the grant, and the
   version is checked before every job.
+- **When a distribution's package is below the floor** (some Linux distributions ship an older libjxl), the hint
+  points to libjxl's own release binaries or Homebrew on Linux, and the user grants that executable. The floor
+  does not move: folder content is untrusted.
 
 ### 8.5 Job runner and adapters
 
@@ -741,7 +849,11 @@ The supervisor:
   - Closing the window while jobs run asks to stop them, joining today's close-confirm flow (main.js:229–235,
     363–374).
   - Quitting cancels every job and waits briefly.
-  - Startup sweeps leftover job temp folders. Nothing does that today (security review § 4).
+  - Startup sweeps leftover job temp folders. Nothing does that today: main's `will-quit` handler only
+    unregisters shortcuts and closes the logger.
+  - **One app instance per profile (C).** Main takes `app.requestSingleInstanceLock()` (keyed by the
+    `userData` folder, so `MV_USER_DATA_DIR` profiles still run side by side). A second instance would otherwise
+    sweep the first one's job folders and replay its unfinished compression run. P3a adds it.
 - **Concurrency.** One compression run at a time per app. Fetch runs one job per tool unless the adapter allows
   more.
 - **Events.** Results go to the renderer as `job-event` pushes. They are delivered only to the app page's
@@ -761,31 +873,47 @@ ledger makes an interrupted run recoverable (§12.6).
 Two new capabilities, each available only to jobs whose module declares it. Main's "never replace" move rule
 stays as it is.
 
-- **`create` (fetch).** The job's output folder must be inside a granted folder (the Inbox, granted through the
-  folder dialog). Main lists the folder before and after the job, reports the new files to the module, and
-  reports, but never deletes, anything unexpected (a non-media file, a file outside the folder the tool was
-  told to use).
-- **`replace` (compression).** The tool never touches originals. It writes into a temp folder inside the source
-  folder, and main itself performs each swap, recording each step in a run ledger
-  (`userData/modules/compression/runs/<runId>.jsonl`) before doing it:
-  1. The original is moved into `<folder>/.compression-originals/<runId>/`.
-  2. The verified file is moved to its final name.
-  3. The new file's mtime is set to the original's.
-  4. A swap whose target name exists is refused.
+- **`create` (fetch).** The tools never write into the Inbox itself (review finding 13). Each job gets its own
+  scratch folder, `<Inbox>/.fetch-tmp/<jobId>/`: a dot folder, so the non-recursive listing never shows it, and
+  on the same volume, so promotion is a rename. The tools write there, partial and intermediate files included:
+  `.part` files, and yt-dlp's video-only `.fNNN.mp4` and `.temp.mp4` merge inputs.
+  - **Promotion.** When the adapter reports an item finished, main moves that media file into the Inbox without
+    replacing anything, with the same rule as move-file (main.js:486): a name clash gets a ` (n)` suffix.
+  - **Cancel, failure or crash.** Main deletes that job's scratch folder: its own scratch, never a user file.
+    The startup sweep removes any scratch folder left by a crash. Nothing partial ever appears in the Inbox.
+  - **Reports.** Main reports the promoted files to the module. Anything unexpected that a tool left (a non-media
+    file, a file outside its scratch folder) is reported, never deleted.
+- **`replace` (compression).** The tool never touches originals. It writes into
+  `<folder>/.compression-tmp/<runId>/`, and main itself performs each swap. Every step is recorded in a run ledger
+  (`userData/modules/compression/runs/<runId>.jsonl`) before it is done. The order guarantees that no step can
+  replace or lose a file (review finding 1):
+  1. **Choose the target name.** It is `<stem>.jxl`. If that name exists, or an earlier file in the same run took
+     it (`a.jpg` and `a.png` both want `a.jxl`), it is `<stem>.<ext>.jxl`. If that also exists, the file is
+     skipped and the original is untouched.
+  2. **Create the target exclusively and fill it.** Main opens the name with `wx`, which fails if anything
+     appeared there, so nothing can be replaced. It copies the verified bytes from the temp file, fsyncs, closes,
+     and removes the temp file. A rename is not used: `fs.rename` replaces an existing target on Windows and POSIX.
+     A crash part-way leaves a partial target that the ledger records as main's own, and recovery removes it.
+  3. **Set the new file's mtime** to the original's.
+  4. **Move the original** into `<folder>/.compression-originals/<runId>/`, under its own name; names are unique
+     within one folder. If this step fails, main removes the file it created in step 2, so the folder is exactly as
+     before.
 
   Originals go to the Recycle Bin (`shell.trashItem`) only when the user finalizes the run. On Linux that is the
   desktop's freedesktop trash. Where no trash is available, finalizing refuses and the originals stay in the
   holding folder. **Nothing in v2 deletes a media file permanently.**
 
-  With each swap, main also appends the rename to the **rename journal** (`userData/rename-journal.jsonl`):
-  folder, old name, new name, `samePixels`/`sameBytes`, and the modules pending. The pending list is every
-  enabled or disabled module whose declared folder file exists in that folder. The renderer acknowledges
-  entries per module through a guarded channel (§7.3, §8.8).
+  Before step 1, main also appends the rename as an intent to the **rename journal**
+  (`userData/rename-journal.jsonl`) and confirms it after step 4 (write-ahead, §7.3). The entry holds the folder,
+  the old and new names, the `onFileRenamed` info (source type, `pixelExact`, old and new size and mtime) and the
+  modules pending. The pending list is every enabled or disabled module whose declared folder file exists in that
+  folder. The renderer acknowledges entries per module through a guarded channel (§7.3, §8.8).
 
 ### 8.7 Logging
 
 Each module's lines are prefixed with its id. Main strips newlines and caps length on every renderer-supplied log
-string, which also fixes today's forgeable `source` field (security review § 4). Job logs record tool, version,
+string, which also fixes today's forgeable `source` field (`logger.js`'s `normalizeRendererLogEntry` takes the
+renderer's string as given). Job logs record tool, version,
 exit code, counts and durations. URLs in logs keep only their host and path: query strings and credentials are
 removed.
 
@@ -793,15 +921,15 @@ removed.
 
 Each of these is a `preload.js` change, so each needs explicit user approval when it is built (PROJECT.md tiers).
 Each gets ipc-guard kinds and a line in a new test that pins the bridge's exact surface (no such test exists
-today, security review § 1).
+today).
 
 | Channel(s) | Phase |
 |---|---|
-| `list-modules`, `set-module-enabled`, `restart-app` | P1 |
-| `folder-file-read`, `folder-file-write` (replacing the per-file cache and state channels as each moves) | P1–P6 |
-| `app-data-read`, `app-data-write`, `app-data-append`, `module-app-data-delete` (the Modules page's delete, §10) | P3 |
-| `tool-status`, `tool-choose` (main's dialog) | P3 |
-| `job-start`, `job-cancel`, `onJobEvent` | P3 |
+| `list-modules`, `set-module-enabled`, `restart-app` | P1a |
+| `folder-file-read`, `folder-file-write`, `folder-file-delete` (replacing the per-file cache and state channels as each moves) | P1a–P6b |
+| `app-data-read`, `app-data-write`, `app-data-append`, `module-app-data-delete` (the Modules page's delete, §10) | P3a |
+| `tool-status`, `tool-choose` (main's dialog) | P3a |
+| `job-start`, `job-cancel`, `onJobEvent` | P3a |
 | `compression-run-revert`, `compression-run-finalize`, `rename-journal-pending`, `rename-journal-ack` | P5 |
 | `set-ui-zoom` (Ctrl + / − through `webFrame` in the preload) | P7 |
 | `module-install` (main's dialog), `module-uninstall` | P7 |
@@ -817,7 +945,7 @@ today, security review § 1).
 | ipc-guard: top-level app page, typed arguments | kept; every new channel registers through it |
 | Folder grants, dialog-only | kept; the Inbox and every compression folder are granted folders |
 | Media-only content reads, `assertFixedPath` | kept; extended to every module folder file |
-| App scheme allowlist | **extended**: serve `modules/*/module.json`, `modules/*/ui/**`, `modules/*/workers/**` (`.js .json .css .wasm`), never `modules/*/main/**` |
+| App scheme allowlist | **extended**: serve `core/**` (`.js .css`), plus `modules/*/module.json`, `modules/*/ui/**` and `modules/*/workers/**` (`.js .json .css .wasm`); never `main/**` or `modules/*/main/**`. Today `app-protocol.js` serves only depth-1 `.html/.css/.js` files and four named trees (`TOP_LEVEL_FILE`, `SERVED_TREES`), so without this P1a's loader in `core/` gets a 404 (review finding 12). P1a widens it, with a test for each new tree and for each refused one |
 | CSP | kept unchanged (module code is `'self'`) |
 | Renderer has no network | kept. Fetching happens in child processes main starts |
 | Main's own network | unchanged: only model downloads, made from main or, from P4a, from the embeddings utility process; §12.2 pins each model revision and moves the cache to `userData` |
@@ -828,7 +956,7 @@ today, security review § 1).
 | `ffmpeg`/`ffprobe` local only | kept |
 | **New**: tool grants, job runner without shell or passthrough, kill-tree, quit sweep | §8.4–§8.5 |
 | **New**: module boundary lint (M-2), static adapter list (M-1), bridge-surface test | §6.2, §15 |
-| **New**: lint blocks for every new tree; the bare-`ipcMain` ban extended from `main.js` to `main/**` and the adapters | §6.2 |
+| **New**: lint blocks for every new tree; the bare-`ipcMain` ban extended from `main.js` to `main/**` and the adapters, with a planted violation proving it fires there; a ban on non-literal `require()`/`import()` in main-side code | §6.2, §15 |
 | **New**: no secrets stored | Fetch uses the browser's cookies through the tool's own option or a cookies file the user picks (path stored, file not copied); no passwords or tokens are stored. `safeStorage` only if a later module must store one |
 
 **Network policy (C).** The renderer stays offline. Main's only own traffic is the CLIP model download. Programs
@@ -849,7 +977,8 @@ non-goal.
   - name, version, a one-line description;
   - an on/off toggle;
   - status: *on*, *off*, *failed* (with the error), *needs connecting*, *disabled because <module> is off*;
-  - badges: "Uses the internet", "Writes new files", "Replaces files", "Downloads an 87 MB model".
+  - badges: "Uses the internet", "Writes new files", "Replaces files", "Downloads a 352 MB model" (CLIP fp32 from
+    P4a; today's q8 file is 89 MB).
 - **Connecting a tool.** A module that needs outside programs shows each one with its detected path and version,
   whether it meets the minimum, and buttons **Detect again**, **Choose…** (main's file dialog, a tool grant) and
   **How to install** (the catalogue's hint). A module whose required tool is missing can be turned on, but its
@@ -862,6 +991,9 @@ non-goal.
 - **Turning a module off never deletes its data.** Its folder files and app data stay on disk.
   - **App data** (`userData/modules/<id>/`) can be removed with an explicit "Delete this module's app data"
     action on its row. A confirmation lists the files first.
+  - **Refused while compression has an unfinished run** (review finding 5). Neither the delete nor the off toggle
+    is offered while any compression run is neither reverted nor finalized. The run ledgers live in that app data,
+    and Revert, Finalize and launch-time recovery all depend on them. The row says why and links to the run.
   - **Per-folder files** stay where they are. Main cannot know every folder a module ever wrote into, and the
     files are small dot-files that nothing reads while the module is off. A per-folder cleanup is out of scope.
 
@@ -879,10 +1011,12 @@ non-goal.
   `FeatureCacheStore` and `MlTrainingManager` is the model for the host itself.
 - **Tests move with the code.** Each phase moves the tests for the methods it moves from
   `tests/media-viewer-utils.test.js` to direct imports of the new files.
-- **Size target (C, soft):** the renderer plus `core/*.js` together stay below today's 11,879 lines, and
-  `media-viewer.js` alone drops below 6,000 lines by the end of P6. The clusters that move out make that
-  reachable: similarity and hashing ~1,500 lines, features, AI and bulk/like-or-skip ~2,500–3,000, tournament
-  glue ~1,050.
+- **Size target (C, soft):** the renderer plus `core/*.js` together stay below the 11,945 lines `media-viewer.js`
+  had at `308d43c`, the base P1a starts from. `media-viewer.js` alone drops below 6,000 lines by the end of P7.
+  - The clusters that move out by the end of P6 come to about 5,050–5,550 lines: similarity and hashing ~1,500;
+    features, AI and bulk/like-or-skip ~2,500–3,000; tournament glue ~1,050. That leaves roughly 6,300–6,900.
+  - P7's core splits (ZoomManager, CompareManager, and the core services moved to `core/*.js`) close the rest.
+  - P7's exit criterion is this target; P6b's is the per-phase rule below.
 - **The renderer may not grow, with teeth (C).** Every phase's exit criteria include "net `wc -l
   media-viewer.js` ≤ 0", measured in the phase's PR. The never-blocking warning this week's G5 is weighing
   cannot enforce an anti-goal on its own. A blocking check that ratchets the ceiling down after each phase is the
@@ -892,7 +1026,7 @@ non-goal.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ ▣ Liked_2 · 24,013 ▾   [ Single | Compare | Tournament ]   Sort ▾   ⚙ F1  ▤ │  top bar (auto-hides, as today)
+│ ▣ Folder · 24,013 ▾    [ Single | Compare | Tournament ]   Sort ▾   ⚙ F1  ▤ │  top bar (auto-hides, as today)
 ├───────────────────────────────────────────────────────────┬──────────────┤
 │                                                           │ side panel   │
 │                                                           │ ┌──────────┐ │
@@ -952,18 +1086,20 @@ charters fix scope and the decisions those specs must honour.
   - the sort button, algorithm picker and K setting.
 - **Host groups it adds**: sorting (§7.6), `host.order.apply/restore`, `folderFile` (for `.hash_cache.json` and
   `.sort_cache.json`), progress, settings, shortcuts, visit tokens, `onFileRemoved`/`onFileRestored` (today's
-  `perceptualHash` stash on history entries), and services (the clip sorter `use`s `features`).
-- **Until `features` exists**, core provides a thin `features` service over today's feature store, so the clip
-  sorter works from day one.
+  `perceptualHash` stash on history entries), and services (the clip sorter declares `features` in `uses`).
+- **Until `features` exists**, core provides a thin `features` service over today's feature store (§7.11), so the
+  clip sorter works from day one, and P4a swaps the provider without the pilot changing.
 - **UI stays as it is**: the module renders today's controls into the host's header slot with their current IDs
   (`#sortSimilarityBtn`, `#sortAlgorithmSelect`, `#sortSettings`, `#sortKValue`). The unified Sort ▾ menu waits
   for P6a.
 - **Done when**:
   - the four sorters run as registered sorters;
   - `media-viewer.js` loses those clusters;
-  - the similarity end-to-end tests pass with the same assertions, `similarity-sort.test.js` and the
-    similarity parts of `rating-safety`, `sort-progress` and `security-csp-walk` reaching moved state through
-    §7.13;
+  - the similarity end-to-end tests pass with the same assertions, reaching moved state through §7.13. They are
+    `similarity-sort.test.js`, `hash-parity.test.js` (PR #87), and the similarity parts of `rating-safety`,
+    `sort-progress` and `security-csp-walk`;
+  - `tests/perceptual-hash.test.js`, which reads the renderer and scans the root `.js` files, is rewired to the
+    module's files;
   - a 24k smoke matches today's timings.
 - **Why the pilot (C)**: the user already ruled that the SortingManager is the next extraction (WEEKLY), wants
   sorting as add-ons (U, L256), and G2 PR 2 has just made hashing module-shaped. It also exercises most of the
@@ -987,17 +1123,38 @@ charters fix scope and the decisions those specs must honour.
     A dedicated review view is for its own spec.
   - **Order:** it needs the `features` utility process first (the research: "do before adding a model"). A
     zero-download first version can threshold the CLIP vectors already cached (76 %).
+  - **History:**
+    - On 2026-08-28 the user skipped "SigLIP/DINOv2 backbone evaluation" (BACKLOG 🔵 [2026-08-28] "From:
+      manual testing"). The AI research the user commissioned on 2026-10-22 then evaluated DINOv2, so D30 revisits
+      that skip. It needs the user's confirmation when P4c is planned.
+    - BACKLOG already has 🔵 "Near-duplicate detection and grouping via embedding cosine similarity (+ perceptual
+      hashes)". P4c closes it rather than filing a new entry.
 
 ### 12.2 `features` (shared service)
 
 - **Moves in**:
   - the 64-dimension extractor and worker pool, and background extraction and its pause gate (10320–11458);
   - `computeFeatures` (9448);
-  - `FeatureCacheStore` and `.feature_cache.json` v4;
+  - `FeatureCacheStore` and `.feature_cache.json` (v4 today; v5 adds the per-vector embedding-model tag in P4a);
   - the CLIP client side (`initClipModel`, `extractClipEmbedding`) and the CLIP lease.
 - **Provides** `features`: `get(path)`, `ensure(paths, { signal, onProgress })`, and `embeddings.acquire(modelId)` /
   `release()`. Acquiring *loads and pins* the model, so the "acquire does not ensure" trap in CLAUDE.md goes away.
-  A failed load comes back as an error, not as a silent `null`.
+  A failed load comes back as an error, not as a silent `null`. It also emits `embeddingsToggled` (§7.11).
+- **Training folders: `features.training(folder)` (review finding 4).** `ai-sort`'s training reads and writes the
+  like and dislike folders' own `.feature_cache.json` files. Today `MlTrainingManager` gets that through injected
+  `loadFolder`, `computeFeatures(…, { useHostCache: false })`, `featureCacheStore.acquireLock()` and the streaming
+  channels (media-viewer.js:231–270). In v2 `features` provides it as an isolated handle:
+  - **Granted folders only.** It works on any granted folder, not just the open visit, and lists the folder
+    through core.
+  - **Isolated.** It reads, ensures and saves that folder's cache without touching the visit's maps. That is
+    today's `useHostCache: false` isolation, which CLAUDE.md calls load-bearing.
+  - **One lock.** It shares the single IO lock with the visit store, so a training write can never race the
+    visit's streaming read when a like folder is also the open folder (the Windows EPERM the lock prevents,
+    feature-cache-store.js:628–630).
+
+  `ai-sort` gets no folder-file access to `.feature_cache.json`, which `features` alone owns (§6.1). A contract
+  test runs the real `features` and the real `ai-sort` together, because this isolation once shipped broken behind
+  a green mock (ML spec § 13).
 - **Decisions**:
   - face detection removed (§5.3);
   - the model revision pinned;
@@ -1014,19 +1171,37 @@ charters fix scope and the decisions those specs must honour.
 - **CLIP switches from its q8 file to fp32, in the same change (C, from the AI research).**
   - **Why:** the q8 file moves the vectors (median cosine 0.915 with fp32) and erases most of the learnable
     quality signal. A quality taste reached AUC 0.55 on q8 against 0.66 on fp32, and strict copy detection drops
-    from 0.80 to 0.76. The q8 file also crashed the process on DirectML (research § 5).
+    from 0.80 to 0.76 (research § 5). The q8 file also crashed the process on DirectML (research § 8).
   - **Cost:**
     - 352 MB instead of 89 MB;
     - 0.5–0.74 GB while loaded instead of 0.15–0.24 GB, released when the utility process unloads;
     - about 1.3–1.5× the CPU time;
-    - one re-extraction: `FEATURE_CACHE_VERSION` is bumped, so each folder's cache re-extracts in the background
-      the first time an AI or CLIP sort needs it there.
+    - one re-embedding of every CLIP vector, done in the background (below).
+  - **Migration: re-embed CLIP only, in the background (C, review finding 9).** A `FEATURE_CACHE_VERSION` bump
+    would be wrong on three counts:
+    - Each training folder would load as empty (ml-training.js:245), and `ensureTrainedModel` would re-extract
+      every miss inside the first AI sort, in the foreground. At the 2026-10-13 rates that is roughly 2.5–3 hours
+      for the training folders' ~29k files (archived plan `2026-10-13_g3-training-video-extraction.md`).
+    - It would also discard the 64-dimension halves, which do not change.
+    - Cached `'clip'` sort orders would keep serving q8-derived orders, since a cache hit never extracts.
+
+    Instead:
+    - **Tag each vector.** Each cache entry's CLIP vector carries the id of the model that made it. Feature-cache
+      v5 adds the field, and v4 entries read as `clip-b32-q8`. The 64-dimension half is kept.
+    - **Re-embed in the background.** `features` re-embeds stale-tagged vectors as a background job in the
+      utility process, with progress in the jobs tray. It does the training folders first, then each source folder
+      when it is next opened. Only the CLIP half is redone, through today's CLIP-only re-extraction path.
+    - **Switch only on full coverage.** The AI sort keeps training and scoring on the q8 vectors and model until
+      the fp32 vectors cover the training set. Then it switches in one step: the embedding model id is part of the
+      training fingerprint, so the next sort retrains on fp32. It never mixes the two models in one fit.
+    - **Drop stale sort orders.** On the switch, `similarity` deletes its `'clip'` sort-cache entries, as today's
+      CLIP toggle does for the same reason (≈2546–2549).
   - **Decided (U, 2026-10-22): yes.** The user accepted the fp32 switch, which answers the research's open
     question 6.
   - **Other platforms.** Only the GPU path is Windows-specific. The fp32 file runs on the CPU wherever
     onnxruntime-node runs.
     - Off Windows it costs about 1.3–1.5× today's per-image CPU time (research § 8), inside the utility process,
-      so browsing is not affected. The one-time re-extraction simply takes longer.
+      so browsing is not affected. The one-time background re-embedding simply takes longer.
     - ONNX Runtime has GPU paths for macOS (CoreML) and Linux (CUDA), but the research did not measure them, so
       v2 does not promise them.
     - The service picks its accelerator at runtime, with the CPU as the fallback everywhere, and adds a provider
@@ -1053,8 +1228,17 @@ charters fix scope and the decisions those specs must honour.
   - like-or-skip (`like-or-skip.js` + glue);
   - bulk rate (`applyBulkRating`, `undoBulkRating`, `.bulk_rated.json`);
   - the best-vs-worst compare pairing (as a pair provider).
-- **Host groups it adds**: scorer, pair provider, compare and single action contributions, `undo.registerKind`
-  (bulk and `skipBatch`), and `onOrderChanged` (the like-or-skip token).
+- **Host groups it adds** (§7.14):
+  - the scorer and the pair provider;
+  - compare and single action contributions;
+  - `order.apply`'s `'wait-then-fail'` policy;
+  - `runFileAction(…, { refuseWhileSorting })` for the bulk-dislike batch and its undo;
+  - `undo.registerKind` (bulk and `skipBatch`), `undo.entries()`, `tx.insertAt` and `tx.setCursor`;
+  - `onOrderChanged` (the like-or-skip token), `viewer.onNavigate` (skips) and `viewer.onRender` (button and chip
+    refresh);
+  - `ui.stageOverlay` (badges);
+  - the `scores` service and `ratings.onFoldersChanged`;
+  - `features.training(folder)` for the like/dislike caches (§12.2).
 - **UI stays as it is.** Moved controls keep their IDs: `#sortPredictionBtn`, `#resortPredictionBtn`,
   `#dislikeSkippedBtn`, `#rebuildModelBtn`, `#bothGoodBtn` and `#bothBadBtn`.
 - **Test access.** The seven end-to-end files that use AI internals reach them through §7.13's `testApi`. That
@@ -1089,9 +1273,11 @@ charters fix scope and the decisions those specs must honour.
     vectors lack (dims 42–47 and 54–61, G3-reuse F1). With training-set standardisation, those scoring-time zeros
     become one constant offset. Ranking is unchanged, but the % badges, which are probabilities, shift. Fix the
     skew first, or accept shifted badges.
-- **Skips stay out of training (unchanged, confirmed by the research).** With the better learner, passive skips
-  used as weak dislikes cost 2–4 likes per 60 shown once the user also passes a fifth of the files they would have
-  liked. The confirm-then-F path already captures their reliable part (research § 2).
+- **Skips stay out of training (unchanged; the research's recommendation, not yet the user's).** With the better
+  learner, passive skips used as weak dislikes cost 2–4 likes per 60 shown once the user also passes a fifth of the
+  files they would have liked. The confirm-then-F path already captures their reliable part (research § 2). The
+  research asked the user what a skip means (its open question 5), and that is still unanswered. If the user skips
+  only what they dislike, weak skips gained 2–3 likes, and A1's spec should revisit this.
 - **Not in v2:**
   - SigLIP 2 and text search: research step 4, "when search is wanted"; the user skipped CLIP text search on
     2026-08-28 (BACKLOG L126);
@@ -1115,6 +1301,15 @@ charters fix scope and the decisions those specs must honour.
   - its `engine.history` stack wired into the undo dispatcher as the active mode's handler.
 - **Must keep**: the single render owner (§7.5), Save/Discard/Cancel on every exit, `UNDO_HISTORY_CAP`, the
   history-free v2 state file, and validation at load.
+- **Uses**:
+  - **AI seeding.** The `scores` service of `ai-sort` is optional (§7.11). The config modal's AI seeding greys
+    out when it is null, and `tournament-mode.test.js`'s AI-seeded runs turn `ai-sort` on.
+  - **Undo.** `undo.remove()` for the special-move twin, and the mode's `canUndo()` for the empty-state check
+    (§7.14).
+  - **Discard.** `folderFile.delete` removes the state file.
+- **Refuses entry, Continue and Start** while a sort runs (as today), and while a compression run is active on
+  the open folder (`host.jobs.isFolderBusy()`, §7.10). Compression's start-time refusal alone would let a
+  tournament begin mid-run.
 - **Adds `onFileRenamed`** support so compression can re-key saved state (§12.6).
 
 ### 12.5 `fetch`
@@ -1127,13 +1322,15 @@ charters fix scope and the decisions those specs must honour.
 - **Inputs**:
   - pasted links (one per line);
   - a text file of links;
-  - a browser session export in Tab Session Manager's JSON format (the format of the session files the user
-    already keeps beside `media_parser`), with a domain filter and de-duplication.
+  - a browser session export in Tab Session Manager's JSON format, with a domain filter and de-duplication.
 - **Output: the Inbox (C).** One granted folder, flat, so the viewer can open it directly; its listing is not
   recursive.
   - File names come from a per-engine template that includes the site and item id, so names never collide.
   - Both tools skip existing files.
-  - Partial downloads stay in the tools' own `.part` files and are removed on cancel.
+  - **The tools write into the job's scratch folder, `<Inbox>/.fetch-tmp/<jobId>/`, never into the Inbox
+    itself** (§8.6). That includes `.part` files and yt-dlp's video-only `.fNNN.mp4` and `.temp.mp4` merge
+    inputs. Main promotes each finished file into the Inbox and deletes the scratch folder on cancel, failure or
+    crash. The viewer therefore never offers a partial or silent clip for rating (review finding 13).
 - **Rating**: the user rates the Inbox with the core viewer. Liked, disliked and special files move to the usual
   folders, so the Inbox empties like a mail inbox. This is `media_parser`'s fetch → rate → keep loop, without
   Telegram.
@@ -1158,6 +1355,8 @@ charters fix scope and the decisions those specs must honour.
   - PNG → JPEG XL lossless (pixel-exact at the image's own bit depth).
   - GIF is out: its payoff is about 0.98 of the original size, about 27 s per file, and some files grow. WebP and
     video are also out.
+  - **Animated PNG (APNG) is out**, detected by its `acTL` chunk. Verification decodes only the first frame
+    (`sharp`'s default), so a lost or changed later frame would pass unnoticed.
 - **Files are routed by their content**, sniffed from the bytes, not by extension. The user's collection has 832
   `.png` files that are WebP and 228 `.jpg` files that are PNG (media_compression archive spec § 1.2).
 - **Per file**:
@@ -1187,17 +1386,28 @@ charters fix scope and the decisions those specs must honour.
   §8.6). Bulk ratings and saved tournaments survive either way.
 - **During a run**:
   - The user can keep browsing and rating.
-  - Swaps commit in small batches through `runFileAction`, so they never overlap a user's move.
+  - Swaps commit in small batches through `runFileAction`, so they never overlap a user's move. Each batch is
+    bounded to about 100 ms **(C)**, because a rating key pressed during a batch is quietly refused, as during any
+    file action.
   - A file the user moved away is skipped at swap time.
-- **Renames reach every module** through `onFileRenamed(old, new, { samePixels: true, sameBytes: false })`:
-  - `features` re-keys CLIP vectors; the 64-dimension vector is re-extracted if any of its dimensions depend on
-    file size or format (the builder checks `feature-extractor.js`).
-  - `similarity` re-keys PNG hashes and recomputes JPEG hashes, because decoders can differ by a few pixels.
-  - `ai-sort` re-keys `.bulk_rated.json`; sort caches rewrite paths.
+  - A tournament cannot start in the folder while the run is active (§12.4).
+- **Renames reach every module** through `onFileRenamed(old, new, info)`, whose `info` carries the source type,
+  `pixelExact` and the old and new size and mtime (§7.3):
+  - `features` re-keys the CLIP vector with the new size and mtime. The drift from a different decoder is
+    negligible for its uses. It recomputes the 64-dimension half, whose file-metadata dimensions see the new size
+    and format.
+  - `similarity` re-keys a hash when `pixelExact` (PNG), and recomputes it otherwise (JPEG): the viewer decodes the
+    JPEG XL with jxl-oxide, not the JPEG decoder that made the old hash, and hashes keep bit-exact parity rules.
+  - `ai-sort` re-keys `.bulk_rated.json`. Sort caches rewrite paths.
   - Core rewrites the file list and the current file.
 - **Revert and finalize**: the Compression panel lists runs with **Revert run** (originals back, JPEG XL files to
   the Recycle Bin, renames reversed through the same hook) and **Finalize run** (originals to the Recycle Bin).
   Compression is not on the Ctrl+A undo stack.
+  - **Revert works per file, and only on files still as the run left them** (review finding 5): at their
+    converted path, with their converted size and mtime. A converted file the user has since rated or moved, or
+    that changed, is skipped and listed. It keeps its rating and its place in a training folder, and its original
+    stays in the holding folder until Finalize. Revert never trashes a JPEG XL file that has moved, and never brings
+    back an unrated duplicate beside a rated one.
 - **Crash safety**: the run ledger is written before each step. On launch, an incomplete run is reported with
   **Restore originals** and **Continue**. Every file is recoverable at every point.
 - **Load**:
@@ -1223,11 +1433,21 @@ charters fix scope and the decisions those specs must honour.
     they rate daily as they are.
   - **P5's exit criteria** still include measuring navigation on a converted 24k copy before the user converts
     the main collection.
+- **Display is not the only JPEG XL cost (review finding 8).** Today every JPEG XL decode goes through one worker,
+  one file at a time app-wide: display, hashing (`_decodeJxlForHash`'s queue, media-viewer.js:8121–8136 at
+  `308d43c`), 64-dimension extraction and CLIP input all share it. A converted 24k folder would make the next cold
+  similarity sort hash every file serially, and each navigation would wait behind the decode in progress.
+  - **Prerequisite for P5:** JPEG XL decoding for hashing and extraction runs on a pool of decode workers kept
+    apart from display.
+  - **Also fixed before P5:** the 🟤 entry "A long animated JXL stalls the hash JXL queue". It was deferred because
+    the user's folders hold no JPEG XL files today, and compression ends that.
+  - **The preview measures more than display**, per image: display, hash and 64-dimension extraction time. P5's
+    exit criteria add a cold similarity sort and a feature extraction on the converted 24k copy.
 - **`media_compression` stays the reference, not a dependency (C)**. Its converter always exits 0, reports no
   progress, trusts unverified outputs on resume, and writes a separate tree. Its encoder settings, verification
   rules and lessons are carried over: temp-then-rename, content sniffing, keep-if-smaller, the cjxl version floor.
   Its cold-archive track is out of scope. This follows the user's own expectation that it "will need rewriting"
-  (L213).
+  (BACKLOG 🔵 "Lossless compression add-on (port from `media_compression` project)").
 
 ---
 
@@ -1235,7 +1455,8 @@ charters fix scope and the decisions those specs must honour.
 
 - **Per-folder files keep their names and formats**: `.feature_cache.json` v4, `.hash_cache.json`,
   `.sort_cache.json`, `.bulk_rated.json` v1, `.tournament_state.json` v2. Each is declared by its module. A format
-  change needs its own version bump and migration, as today.
+  change needs its own version bump and migration, as today. The one planned change is feature-cache v5's
+  per-vector embedding-model tag (P4a, §12.2): v4 entries read as `clip-b32-q8`, and nothing is discarded.
 - **App data keeps its paths**: `ml-model-cache.json`, `folder-grants.json`. New module data goes under
   `userData/modules/<id>/`. New core files: `userData/modules.json`, `userData/tools.json`.
 - **Settings keep their keys.** Modules declare the `localStorage` keys they already use
@@ -1243,13 +1464,16 @@ charters fix scope and the decisions those specs must honour.
   `module.<id>.` prefix. `customShortcuts` stays one object; module actions are added to its per-mode maps under
   the existing collision rules, with no version bump for additive actions.
 - **Face-detection removal** zeroes dims 54–56 at use and bumps `FEATURE_VERSION` (§5.3): one retrain, no
-  re-extraction, caches untouched. If the fp32 switch ships, it rides that re-extraction instead.
-- **The CLIP fp32 switch** (§12.2, accepted by the user) bumps `FEATURE_CACHE_VERSION`. Every folder's
-  `.feature_cache.json` then re-extracts once, in the background and lazily, the first time an AI or CLIP sort
-  needs that folder. It costs one ~352 MB download.
+  re-extraction, caches untouched.
+- **The CLIP fp32 switch** (§12.2, accepted by the user) does not bump `FEATURE_CACHE_VERSION`.
+  - **Download:** one ~352 MB, into `userData/models/`.
+  - **Re-embedding:** the CLIP halves are re-embedded in the background, training folders first. The 64-dimension
+    halves stay.
+  - **Switch:** the AI sort moves to fp32 only once the training set is fully covered.
+  - **Sort caches:** the `'clip'` sort-cache entries are dropped at that switch.
 - **The learner fix** (§12.3) bumps `TRAINING_CONFIG_VERSION`, so cached models rebuild once.
-- **The CLIP model cache move** (§12.2) costs one ~87 MB download, unless the builder copies the existing cache
-  across.
+- **Moving today's q8 model cache** out of `node_modules` is moot after the switch: P4a downloads the fp32 file
+  into `userData/models/` and can delete the old cache.
 
 ---
 
@@ -1260,24 +1484,29 @@ Rough story points; the project's estimates have run about 1.9× low (WEEKLY), s
 | Phase | Scope | Host groups added | Exit criteria | SP |
 |---|---|---|---|---|
 | **P0** Prerequisites | G2 PR 2 merged (done: PR #87, `f5ddfa3`, 2026-10-25); this spec approved (done, 2026-10-22); the G5 board change and the new BACKLOG entries (§19) | — | spec approved; board shows v2 | — |
-| **P1a** Module host + Linux baseline | manifest schema, registry, `modules.json`, loader, failure isolation, the Modules tab (list, toggle, restart), app-scheme allowlist, lint M-2, static-adapter test (M-1), bridge-surface test, glob-based sink and `file:` checks, `folder-file-*` channels; first, today's app and suites run on Linux, and whatever fails there is fixed | basics, folder/visit, files (snapshot, events), storage | an empty module loads, fails safely and toggles; all suites green on Windows and Linux | ~10 |
-| **P1b** `similarity` | §12.1 | sorting, order, progress, settings, shortcuts, removed/restored hooks, services | §12.1 "done when" | ~10 |
-| **P2** Shell part 1 | side panel, jobs tray (the progress card moves into it), F1 tabs | `host.ui.panel`, `host.jobs` (UI half), `host.progress` | sorts report in the tray; panels open and close | ~6 |
-| **P3a** Job runner and tools | §8.4–§8.5, close/quit integration, `app-data-*` | jobs, tools | a test adapter runs, cancels, kills its tree, survives quit | ~8 |
-| **P3b** `fetch` | §12.5 | `create` capability | links → Inbox → rate; a rerun skips what it has | ~8 |
+| **P1a** Module host + Linux baseline | manifest schema, registry, `modules.json`, loader, failure isolation and cascade, the Modules tab (list, toggle, restart), the app-scheme allowlist for `core/**` and `modules/*`, lint M-1 and M-2 with planted violations, bridge-surface test, glob-based sink and `file:` checks, `folder-file-*` channels with tagged reads and delete, per-launch E2E isolation; first, today's app and suites run on Linux, and whatever fails there is fixed | basics (module, log, settings, notify), folder/visit, files (snapshot, removed/restored events), storage | an empty module loads, fails safely, cascades and toggles; all suites green on Windows and Linux | ~11 |
+| **P1b** `similarity` | §12.1 | sorting, `order.apply` (`offer`) and `restore`, `sorting.isRunning()`, progress, shortcuts, services with `uses` and core-provided `features` | §12.1 "done when" | ~10 |
+| **P2** Shell part 1 | side panel, jobs tray (the progress card moves into it), F1 tabs | `ui.panel`, the UI half of `jobs` | sorts report in the tray; panels open and close | ~6 |
+| **P3a** Job runner and tools | §8.4–§8.5, close/quit integration, the single-instance lock, `app-data-*` | jobs, tools, `lifecycle.onBeforeQuit` | a test adapter runs, cancels, kills its tree, survives quit | ~8 |
+| **P3b** `fetch` | §12.5 | `create` capability with per-job scratch folders | links → Inbox → rate; a rerun skips what it has; a cancelled or killed job leaves nothing in the Inbox | ~8 |
 | **A1** Learner fix (any time, outside the phases) | §12.3: standardise, then fit to convergence, in `ml-worker.js`/`ml-model.js` | — | the user's real-data check run; models rebuild; badges checked (§12.3's offset note) | ~3 |
-| **P4a** `features` | §12.2: the service, inference in a `utilityProcess`, CLIP fp32 with its cache-version bump (accepted by the user), DirectML on Windows and the CPU elsewhere, face detection removed | services | features served through the service; clip sorter switched to it; the main thread's event-loop p99 stays at its idle level during extraction; re-extraction runs in the background with progress in the tray | ~12 |
-| **P4b** `ai-sort` | §12.3 | scorer, pair provider, action contributions, undo kinds | AI sort, like-or-skip, bulk rate behave as today (with A1's learner if it shipped); the real-worker E2E passes | ~10 |
-| **P4c** Copies and default | §12.1: Group copies on DINOv2-small fp32; the CLIP sorter as default when `features` is on | — | copy groups found on fixtures and on one real folder, threshold tuned there | ~4 |
-| **P5** `compression` | §12.6; renames in `similarity`, `features`, `ai-sort` and core; the rename journal in main and its replay in `onLoaded` | `onFileRenamed`, the rename journal, `replace` capability | lossless round trips on fixtures (mislabelled files and text-chunk PNGs included); crash-in-the-middle recovery tested; revert and finalize; renames survive a module being off and a crash (journal replay tested); a measured browse speed on a converted 24k copy | ~15 |
-| **P6a** Control registry | the mode-aware action bar, `PairView`, the z-index scale (L223), the unified Sort ▾ menu (sort tests move from the header IDs to the menu) | modes, `ControlSpec` | single and compare run through the registry; overlay tests pass | ~10 |
-| **P6b** `tournament` | §12.4, `onFileRenamed` for its state | vetoes | tournament suites pass with the same assertions (state reached through §7.13); compression stops refusing tournament folders | ~10 |
-| **P7** Finish | responsive pass (L224), UI zoom (L261), the ZoomManager and CompareManager core splits, installing renderer-only modules from a file (§6.4), command palette (optional) | install/uninstall | the §11.1 size target | ~13–18 |
+| **P4a** `features` | §12.2: the service, `features.training(folder)`, inference in a `utilityProcess`, CLIP fp32 with feature-cache v5's model tag and background re-embedding (accepted by the user), DirectML on Windows and the CPU elsewhere, face detection removed | the `features` provider moves from core to the module; `activity.*`; `embeddingsToggled` | features served through the service; clip sorter switched to it; the main thread's event-loop p99 stays at its idle level during extraction; re-embedding runs in the background, training folders first, with progress in the tray, and no AI sort waits on it | ~14 |
+| **P4b** `ai-sort` | §12.3 | scorer, pair provider, action contributions, `order.apply` (`wait-then-fail`), `runFileAction`'s `refuseWhileSorting`, undo kinds and `undo.entries()`, `tx.insertAt`/`tx.setCursor`, `viewer.*`, `ui.stageOverlay`, `scores`, `ratings.onFoldersChanged` | AI sort, like-or-skip, bulk rate behave as today (with A1's learner if it shipped); the real-worker E2E and `like-or-skip.test.js` pass | ~12 |
+| **P4c** Copies and default | §12.1: Group copies on DINOv2-small fp32; the CLIP sorter as default when `features` is on (the user confirms D30 first) | — | copy groups found on fixtures and on one real folder, threshold tuned there | ~4 |
+| **P5** `compression` | §12.6; renames in `similarity`, `features`, `ai-sort` and core; the rename journal in main (write-ahead) and its replay inside the readers; first, the pooled JPEG XL decode for hashing and extraction, and the long-JXL-stall fix | `onFileRenamed`, the rename journal, `replace` capability, `jobs.isFolderBusy()` | lossless round trips on fixtures (mislabelled files, text-chunk PNGs, APNG and same-stem pairs included); a kill at every ledger step recovers; revert and finalize, including converted files rated since; renames survive a module being off and a crash; measured browse speed, cold similarity sort and extraction on a converted 24k copy | ~18 |
+| **P6a** Control registry | the mode-aware action bar, `PairView`, the z-index scale (L223), the unified Sort ▾ menu (sort tests move from the header IDs to the menu) | modes, `ControlSpec`, `render.request`/`whenIdle` | single and compare run through the registry; overlay tests pass | ~10 |
+| **P6b** `tournament` | §12.4, `onFileRenamed` for its state | vetoes (`folder.onWillChange`, mode `leave`), `canUndo()`, `undo.remove()` | tournament suites pass with the same assertions (state reached through §7.13); compression stops refusing tournament folders | ~10 |
+| **P7** Finish | responsive pass (L224), UI zoom (L261), the ZoomManager and CompareManager core splits, installing renderer-only modules from a file (§6.4), command palette (optional) | install/uninstall | `media-viewer.js` below 6,000 lines (§11.1) | ~13–18 |
 | **P8** Packaging (optional) | installable builds for people who will not run from source, for example with electron-builder: a Windows installer, a Linux AppImage or `.deb`. Includes serving `modules/` from the packed app, unpacking native modules (`sharp`, onnxruntime-node), and a first-run guide for outside tools. No auto-update or code signing (§3) | — | a fresh Windows and a fresh Linux machine install, open a folder and rate | ~5–8 |
 
-Total: about 119–124 SP nominal (A1 included, the optional P8 not), so roughly seven normal weeks of v2 at full
-user-flagged capacity, or twelve to fourteen with the historical slip and the Cleanup Weeks. A soft target is Q1
-2027.
+Total: about 127–132 SP nominal (A1 included, the optional P8 not). After the review, P1a, P4a, P4b and P5 grew
+by 1, 2, 2 and 3 SP for the review's additions.
+- At ~17 user-flagged SP per normal week, that is about 7.5 normal weeks.
+- With the ~1.9× historical slip, about 14 normal weeks.
+- With a Cleanup Week every ~3 weeks on top, about 19 calendar weeks.
+
+Starting around Nov 2, that lands in March 2027 at the earliest. A soft target is the end of Q1 2027, and Q2 is
+more likely.
 
 **The AI research's order is kept** (learner, then copies, then the utility process with fp32, then SigLIP 2),
 with one change: the research's own rule that the utility process comes "before adding a model" puts P4a ahead of
@@ -1286,7 +1515,7 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
 **Every phase also (C):**
 1. Shows net `wc -l media-viewer.js` ≤ 0 in its PR (§11.1), and passes the unit and end-to-end suites on Linux as
    well as Windows (G-8).
-2. Rewires the tests that read the code it moves (§4 lists the twelve source-reading files and the 430
+2. Rewires the tests that read the code it moves (§4 lists the twelve source-reading files and the 456
    end-to-end references), and its plan names each file.
 3. Sweeps unit tests, end-to-end tests, comments and `CLAUDE.md` for every symbol it moves (CLAUDE.md § Best
    Practices; `2026-07-10-cw-p-process-dx-guardrails-design.md`:147–153).
@@ -1294,16 +1523,17 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
    (or `core/**`).
    - It keeps every cited heading and runs the rule-loss check with a planted deletion (G5 size audit spec
      :100, :140).
-   - `CLAUDE.md` is 63,634 bytes, 5.4 KB below its 69,000-byte trigger, so v2's rules cannot all land there.
-   - This makes v2 the vehicle for BACKLOG L1033 ("Migrate path-conditional CLAUDE.md content to path-scoped
-     rules"). The G5 audit judged that migration low-payoff only while nearly every rule concerned
+   - `CLAUDE.md` is 66,578 bytes at `308d43c`, 2.4 KB below its 69,000-byte trigger, so v2's rules cannot land
+     there.
+   - This makes v2 the vehicle for BACKLOG "Migrate path-conditional CLAUDE.md content to path-scoped rules
+     (`.claude/rules/`)". The G5 audit judged that migration low-payoff only while nearly every rule concerned
      `media-viewer.js` (:52).
 5. Keeps `docs/ARCHITECTURE.md` current. P1a rewrites its file tree and replaces its "Extension Points"
    section with the module architecture.
 6. Indexes its spec and plan in `docs/README.md`, and checks off the BACKLOG entries it closes in its closeout
    commit.
 
-**BACKLOG entries each phase closes**, cited by title:
+**BACKLOG entries each phase closes**, cited by title (the line numbers are at `bf5ec84` and have moved since):
 
 | Phase | Entry |
 |---|---|
@@ -1312,7 +1542,8 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
 | P4b | L1810 "Batch removal support" (`tx.removeFromList` with deferred saves, used by the bulk-dislike batch); L1560 "Centralized `insertFileIntoList()` method" (the undo dispatcher's restore path) |
 | P6b | L772 "`saveShortcut()` silently drops the `tournament` mode …"; L773 "No tournament section in the F1 help overlay …" |
 | P1b → P6b | L1033 "Migrate path-conditional CLAUDE.md content to path-scoped rules", one module at a time |
-| P1a → P7 | the [2026-04-08] add-on entries L255–L256, the [2026-10-04] tournament entry L122, the [2026-05-30] compression entry L213, the [2026-05-25] overhaul pair L223–L224, L261 (UI zoom), as their phases ship |
+| P1a → P7 | as their phases ship: the [2026-04-08] add-on entries "Design add-on/extension system for the media viewer" and "Move all sorting options to add-ons"; [2026-10-04] "Move tournament mode out of the core app into an add-on/plugin"; [2026-05-30] "Lossless compression add-on (port from `media_compression` project)"; the [2026-05-25] overhaul pair; "Configure interface for different window sizes + Ctrl+/- UI zoom" |
+| P4c | 🔵 "Near-duplicate detection and grouping via embedding cosine similarity (+ perceptual hashes)" |
 
 **Why this order (C):**
 - **Host first, proven on the pilot.** An API designed without a consumer drifts. Similarity is the consumer the
@@ -1358,16 +1589,25 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
   end-to-end tests read `tournament.engine` internals (CW-2 :62–119) that P6b moves (§7.13).
 - **Controls, as tests or lint**:
   - a manifest-schema test over `modules/*`;
-  - a test that main requires no file under `modules/**/main` except from `main/adapters/index.js` (M-1);
+  - a test that main requires no file under `modules/**/main` except from `main/adapters/index.js` (M-1), plus the
+    lint ban on non-literal `require()`/`import()` in main-side code, which that test cannot see;
+  - the bare-`ipcMain` ban, with a planted violation under `main/**` and one in an adapter;
   - the M-2 lint;
   - a bridge-surface test;
   - glob-based sink and `file:` checks;
   - the `_onOrderChanged` source scan, widened to "only `core/order.js` assigns the list".
 - **Data safety.**
-  - Fetch: never overwrites (a clash fixture), and cancel leaves no partial files in the Inbox.
-  - Compression: verify-failure fixtures (bad encode, size not smaller, mislabelled types, text-chunk PNGs), a
-    kill at every ledger step followed by recovery, and revert/finalize round trips.
-  - Folder files: the wipe-spec probes re-run against the folder-file service.
+  - Fetch: never overwrites (a clash fixture), and a cancelled or killed job leaves nothing in the Inbox, because
+    tools write only into its scratch folder (§8.6).
+  - Compression:
+    - verify-failure fixtures: a bad encode, a size not smaller, mislabelled types, text-chunk PNGs, APNG;
+    - a same-stem pair (`a.jpg` + `a.png`) and an existing `a.jxl`, all kept;
+    - a kill at every ledger step, followed by recovery;
+    - revert and finalize round trips, including a converted file rated since.
+  - Rename journal: a crash between intent and confirm; a module switched off during a run; a reader that
+    re-keys before it prunes.
+  - Folder files: the wipe-spec probes re-run against the folder-file service, plus a torn `.bulk_rated.json`
+    that comes back `recovered` and is written back.
 - **Real scale.** The user runs a 24k smoke after P1b, P4b, P5 and P6b. Each phase writes down the timings it must
   match: startup to first media, navigation, and sort times.
 - **Linux runs (G-8).** Every phase exit runs the unit and end-to-end suites on Linux as well as Windows.
@@ -1389,9 +1629,10 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
 |---|---|
 | The host API grows too big, too early | built per phase (§14); nothing speculative |
 | An extraction breaks a 24k behaviour the fixtures cannot show | user smokes with recorded timings; phases small enough to revert |
-| Test-harness migration cost is underestimated | twelve source-reading test files and 430 end-to-end references are assigned to the phases that move their code; moved tests import directly; a shared extractor helper (L1442) in P1a |
-| `CLAUDE.md` overflows its size trigger | v2's rules go to path-scoped `.claude/rules/` files as code moves (§14) |
-| The fp32 switch re-extracts every folder once (hours at 24k files on the CPU) | background and lazy, per folder, only when an AI or CLIP sort needs it; progress in the jobs tray; DirectML optional; the user decides first (§12.2 gate) |
+| Test-harness migration cost is underestimated | twelve source-reading test files and 456 end-to-end references are assigned to the phases that move their code; moved tests import directly; a shared extractor helper in P1a |
+| `CLAUDE.md` overflows its size trigger (2.4 KB of headroom at `308d43c`) | v2's rules go to path-scoped `.claude/rules/` files as code moves (§14) |
+| The fp32 switch re-embeds every CLIP vector once (hours at 24k files on the CPU) | only the CLIP halves, in the background, training folders first, with progress in the jobs tray; the AI sort keeps the q8 model until coverage is complete, so no sort waits; DirectML optional (§12.2) |
+| JPEG XL decoding serializes sorts and extraction on a converted folder | pooled JPEG XL decode for hashing and extraction before P5; the preview measures hash and extraction time too (§12.6) |
 | Larger downloads and memory (CLIP fp32 352 MB, DINOv2 88 MB; 0.5–0.74 GB while loaded) | the utility process unloads when idle; the user accepted the cost on 2026-10-22 |
 | The research measured synthetic tastes on 500-px thumbnails | the learner fix waits for the real-data check the user agreed to on 2026-10-22; copy thresholds are tuned on a real folder (§12.1, §12.3) |
 | Community q8 model files that are silently broken | fp32 files only for SigLIP 2 and DINOv2; a fidelity check (cosine against fp32) before any new model file ships |
@@ -1408,8 +1649,9 @@ P4c's DINOv2 part. A1 needs no module work and can ship first.
 
 ## 17. Decisions made in this session
 
-The user skipped the question round on 2026-10-22. These are therefore Claude's calls unless marked (U); each can
-be flipped before approval. The five most worth checking first: **D6** (no install/uninstall until P7), **D16**
+The user skipped the question round on 2026-10-22, so these are Claude's calls unless marked (U). The user
+approved the spec on 2026-10-22; changing a decision now is a spec change, recorded in §21. The five most worth
+checking first: **D6** (no install/uninstall until P7), **D16**
 (compression replaces files in place), **D15** (compression re-implemented, not driven through the PowerShell
 scripts), **D1** (v2 absorbs v2.0) and **D14** (fetch engines and the Inbox).
 
@@ -1438,15 +1680,19 @@ scripts), **D1** (v2 absorbs v2.0) and **D14** (fetch engines and the Inbox).
 | D21 | Windows and Linux, from source, both tested at every phase exit **(U, 2026-10-22: the user may move to Linux, and others may use the public repo)**; macOS untested; packaging is an optional P8; no auto-update or code signing | §3, §4, §14, §15 |
 | D22 | End-to-end tests keep their assertions and reach moved state through `window.mediaViewer.modules[<id>]` (`testApi`); element IDs are kept when markup moves | §7.13, G-3 |
 | D23 | Every phase must show net renderer lines ≤ 0; a ratcheting blocking check is recommended to G5 | §11.1, §14 |
-| D24 | v2's `CLAUDE.md` rules move to path-scoped `.claude/rules/<id>.md` files as code moves (BACKLOG L1033) | §14 |
+| D24 | v2's `CLAUDE.md` rules move to path-scoped `.claude/rules/<id>.md` files as code moves (BACKLOG "Migrate path-conditional CLAUDE.md content to path-scoped rules") | §14 |
 | D25 | The JSDoc host types are documentation; the contract tests are the control; no `checkJs` in v2 | §7 |
-| D26 | Compression's renames go through a main-written rename journal that modules replay; folder files declare `cache` or `data`; a folder switch stops a run at a batch boundary | §7.3, §8.6, §12.6 |
+| D26 | Compression's renames go through a main-written, write-ahead rename journal that the readers apply before they prune; folder files declare `cache` or `data`; a folder switch stops a run at a batch boundary | §6.1, §7.3, §8.6, §12.6 |
 | D27 | The unified Sort ▾ menu lands in P6a; until then module controls render in a header slot with today's IDs | §7.7, §12.1 |
 | D28 | The like-model learner fix (standardise, then converge) ships as its own task, A1, outside the module phases, gated by a real-data check the user agreed to **(U)** | §12.3, §14 |
-| D29 | P4a moves CLIP inference into a `utilityProcess` and switches CLIP to its fp32 file with a `FEATURE_CACHE_VERSION` bump; the user accepted the switch **(U)**. DirectML on Windows; the CPU everywhere else | §12.2 |
-| D30 | Group copies on DINOv2-small fp32 is a new `similarity` grouper (P4c), after the utility process | §12.1 |
+| D29 | P4a moves CLIP inference into a `utilityProcess` and switches CLIP to its fp32 file; the user accepted the switch **(U)**. The migration re-embeds only the CLIP halves in the background, tagged by model (feature-cache v5), and the AI sort switches once the training set is covered. DirectML on Windows; the CPU everywhere else | §12.2, §13 |
+| D30 | Group copies on DINOv2-small fp32 is a new `similarity` grouper (P4c), after the utility process. It revisits the user's 2026-08-28 skip of "SigLIP/DINOv2 backbone evaluation", so the user confirms it when P4c is planned | §12.1 |
 | D31 | After P4a, the CLIP sorter becomes the default similarity sort; hash sorters stay selectable | §12.1 |
-| D32 | SigLIP 2 and text search stay outside v2 until search is wanted; passive skips stay out of training | §12.3 |
+| D32 | SigLIP 2 and text search stay outside v2 until search is wanted; passive skips stay out of training (the research's recommendation; the research's question 5 to the user is still open) | §12.3 |
+| D33 | Compression places each new file by exclusive create, choosing `<stem>.jxl` or else `<stem>.<ext>.jxl`, and moves the original last; revert touches only files still as the run left them | §8.6, §12.6 |
+| D34 | Fetch tools write into a per-job scratch folder; main promotes finished files and deletes only its own scratch | §8.6, §12.5 |
+| D35 | Services are named separately from modules (`uses`), and core can provide one (`features` until P4a); cross-module reactions go through service events | §6.1, §7.11 |
+| D36 | One app instance per profile (`requestSingleInstanceLock`), from P3a | §8.5 |
 
 ---
 
@@ -1459,7 +1705,7 @@ scripts), **D1** (v2 absorbs v2.0) and **D14** (fetch engines and the Inbox).
 - The compression threshold, worker defaults and the free-space formula.
 - Whether the side panel docks left or right (right in the sketch).
 - Test file layout under `tests/modules/`.
-- How `features` copies or re-downloads the CLIP model when its cache moves.
+- The JPEG XL decode pool's size and how it shares work with display.
 
 ---
 
@@ -1470,21 +1716,34 @@ These are planning actions for the user's sessions, recorded here so they have a
 1. **G5, the strategic refresh (still open from the Oct 19–23 week on 2026-10-25):**
    - replace the "v2.0 Modularization" release with v2 (this spec);
    - move the add-on theme from *Later* to *Now*/*Next* as v2's phases;
-   - re-baseline GOALS Objective 2 to §11.1's target.
-2. **BACKLOG intake (🔵, user-raised on 2026-10-22):**
-   - a Fetch module entry (no home today; the nearest are L257 and L258);
-   - a v2 shell-redesign entry, if it should be tracked apart from L223–L224;
-   - an update to the compression entry L213: in-place swap, Windows and Linux, re-implemented.
-   - Face-detection removal is Claude-surfaced: 🟤.
+   - re-baseline GOALS Objective 2 to §11.1's target;
+   - decide D23's recommended control: a blocking check that ratchets the renderer's line ceiling down after
+     each phase (§11.1).
+2. **BACKLOG intake.** The 📌 Process Rules apply: one entry per item, and a `[possible-dup-of: …]` tag where an
+   entry already exists.
+   - 🔵, user-raised on 2026-10-22:
+     - a Fetch module entry (no home today; the nearest are "Add platform integration add-ons (YouTube, TikTok,
+       Twitter, Instagram, Civitai.com)" and "Add ability to rate media from links in text files");
+     - a v2 shell-redesign entry, if it should be tracked apart from the [2026-05-25] overhaul pair;
+     - an update to "Lossless compression add-on (port from `media_compression` project)": in-place swap,
+       Windows and Linux, re-implemented.
+   - 🟤, Claude-surfaced:
+     - face-detection removal, `[possible-dup-of: 🟤 "Face detection is an un-fingerprinted ambient training
+       input…"]`;
+     - the research's four candidates (below). Its copy-grouping step is already covered by 🔵 "Near-duplicate
+       detection and grouping via embedding cosine similarity (+ perceptual hashes)" and gets the tag.
 3. **Research reports:**
    - **The AI-sorting report is folded in** (§21).
    - **Its four 🟤 BACKLOG candidates are not filed.** They are the report's steps 1–4: learner, copies,
      utility process with fp32, SigLIP 2.
-   - **Its open questions:**
-     - **Answered by the user on 2026-10-22:** the fp32 switch (yes) and the real-data check (yes).
-     - **Resolved: where the commit lives.** It was dropped from PR #87 before the merge (`f5ddfa3` does not
+   - **Its seven open questions:**
+     - **Q1, where the commit lives: resolved.** It was dropped from PR #87 before the merge (`f5ddfa3` does not
        contain it) and lives on `research/local-ai-sorting`, also on origin. Its own PR is still to come.
-     - **Still the user's:** CC0 as public domain, and DINOv3's licence.
+     - **Q2, the planning documents: carried here.** The BACKLOG entries to file are in item 2 above.
+     - **Q6, downloads and GPU: answered (yes, 2026-10-22).**
+     - **Q7, the real-data check: answered (yes, 2026-10-22).**
+     - **Still the user's:** Q3, CC0 as public domain; Q4, DINOv3's licence; Q5, what a skip means. D32 adopts
+       the research's recommendation on Q5, which the user has not confirmed.
    - **Run the research harness on the user's own like/dislike folders** (agreed 2026-10-22), locally, before A1.
      **This repository is public.** Only overall numbers go into git: AUC values, label counts, timings. The
      file lists, per-file scores, embeddings and manifests made from the user's folders stay outside the repo
@@ -1496,8 +1755,8 @@ These are planning actions for the user's sessions, recorded here so they have a
    partners. Under this design they become references, not dependencies.
 5. **For other users (G-8):**
    - `package.json` declares `"license": "MIT"`, but the repository has no LICENSE file, so its terms are not
-     stated where people look. **Filed** as 🔵 BACKLOG [2026-10-22] "Add a LICENSE file (MIT, as `package.json`
-     already declares)".
+     stated where people look. (`README.md` already has a "License: MIT" section.) **Filed** as 🔵 BACKLOG
+     [2026-10-22] "Add a LICENSE file (MIT, as `package.json` already declares)".
    - The README needs setup steps for Windows and Linux, including how to install the outside tools.
 
 ---
@@ -1518,11 +1777,8 @@ These are planning actions for the user's sessions, recorded here so they have a
 - **AI-sorting research:** `docs/research/2026-10-22-ai-sorting.md` and `prototypes/ai-sorting/`, commit
   `96d9b22` (branch `research/local-ai-sorting`): § 1 (learner), § 2 (skips), § 3 (similarity grouping), § 4
   (near-duplicates), § 5 (q8 files), § 8 (main-process stalls), Recommendation, Open questions.
-- **Sibling projects:**
-  - `media_parser` (`media_downloader.py`, `media_telegram_bot.py`, two commits, July 2025);
-  - `media_compression` (`scripts/lib/MediaCompression.psm1`, `Convert-MediaToJxl.ps1`,
-    `Remove-VerifiedOriginals.ps1`, `docs/superpowers/specs/2026-05-15-jxl-conversion-design.md`,
-    `2026-08-27-cold-archive-design.md`).
+- **Sibling projects:** the user's `media_parser` (a Python downloader and Telegram bot, July 2025) and
+  `media_compression` (a PowerShell lossless JPEG XL converter with its design specs and a cold-archive track).
 
 ---
 
@@ -1533,15 +1789,16 @@ message. Folding that research in changed the following; everything else is as a
 
 | Where | Change |
 |---|---|
-| §12.2, D29 | Inference moves into a `utilityProcess` in P4a (it was a late optional step), because CLIP calls measurably freeze the main process. CLIP switches from its q8 file to fp32, with a `FEATURE_CACHE_VERSION` bump and one background re-extraction, if the user accepts the download. The embeddings service becomes multi-model. DirectML optional. |
+| §12.2, D29 | Inference moves into a `utilityProcess` in P4a (it was a late optional step), because CLIP calls measurably freeze the main process. CLIP switches from its q8 file to fp32 if the user accepts the download (they did, in a later row). The migration as first written, a `FEATURE_CACHE_VERSION` bump, was replaced after the PR #88 review (last row). The embeddings service becomes multi-model. DirectML optional. |
 | §12.3, D28 | The like-model learner fix is the biggest win. It ships as its own task, A1, outside the module phases, gated by the user's real-data check. A note covers the badge offset that the training/scoring skew causes under standardisation. |
 | §12.1, D30, D31 | New in P4c: Group copies on DINOv2-small fp32, and the CLIP sorter becomes the default once `features` is on. |
-| §12.3, D32 | Confirmed: passive skips stay out of training. SigLIP 2 and text search stay outside v2. |
-| §5.3, §13 | Face removal rides the fp32 re-extraction if that ships; zeroing at use is the fallback. |
-| §14 | New rows A1 and P4c; P4a grows to ~12 SP; the total becomes ~117–122 SP. |
+| §12.3, D32 | Adopted the research's recommendation that passive skips stay out of training (not yet confirmed by the user). SigLIP 2 and text search stay outside v2. |
+| §5.3, §13 | Face removal was to ride the fp32 re-extraction; since the review it always zeroes at use (last row). |
+| §14 | New rows A1 and P4c; P4a grows to ~12 SP; the total becomes ~117–122 SP (119–124 after the Linux row, 127–132 after the review). |
 | §16 | Four new risks: re-extraction time, download and memory growth, synthetic research tastes, broken q8 files. |
 | §19 | The research's unfiled BACKLOG candidates and its open questions for the user. |
 | §12.2, §12.3, §16, §19, D28, D29 | The user's answers later on 2026-10-22: the fp32 switch accepted, with a note on other platforms (CPU everywhere, DirectML only on Windows); the real-data check agreed, as a follow-up before A1. |
 | §15, §19 | Nothing from the user's folders enters this public repo; the real-data check commits overall numbers only. |
-| §2, §4, §12.1, §14, §16, §19, D1 | 2026-10-25: G2 PR 2 merged (PR #87, `f5ddfa3`) without the research commit. The branch was rebased onto `main` `308d43c`, the references to that PR were updated, and the new graph-build BACKLOG entry was linked from §12.1. |
-| G-8, §3, §4, §6.4, §8.4–§8.6, §12.6, §14, §15, §16, §19, D21 | Linux becomes a supported platform beside Windows, because the user may move to Linux and others may use the public repo: Linux test runs at every phase exit; per-platform tool hints, process-tree kill and trash; a Linux baseline in P1a (~10 SP); optional packaging as P8; a LICENSE file to consider. |
+| header, §2, §4, §12.1, §14, §16, §19, D1 | 2026-10-25: G2 PR 2 merged (PR #87, `f5ddfa3`) without the research commit. The branch was rebased onto `main` `308d43c`, the references to that PR and the header's research inputs were updated, and the new graph-build BACKLOG entry was linked from §12.1. |
+| G-8, §3, §4, §6.4, §8.4–§8.6, §12.2, §12.5, §12.6, §14, §15, §16, §19, D21 | Linux becomes a supported platform beside Windows, because the user may move to Linux and others may use the public repo: Linux test runs at every phase exit; per-platform tool hints, process-tree kill and trash; a Linux baseline in P1a (~10 SP; the total became 119–124 SP); optional packaging as P8; a LICENSE file to consider. |
+| header, §4–§21, D26, D29–D36 | **The PR #88 review (2026-10-25), 16 findings and 15 held-back candidates:** <br>• the compression swap reordered so no step can replace or strand a file, plus the same-stem naming rule (§8.6, D33); <br>• the folder-file service keeps bulk-rated recovery and gains delete, with a tagged read result (§7.9, §8.2); <br>• renames carry source type, `pixelExact` and new size and mtime, are journaled write-ahead, and are applied by the readers before they prune (§7.3, §12.6); <br>• `features.training(folder)` gives `ai-sort` the training caches under the shared lock and isolation (§12.2); <br>• revert only touches files still as the run left them, and the ledger's app data cannot be deleted mid-run (§10, §12.6); <br>• `order.apply` gains named policies and the "refuse while a sort runs" rule (§7.3, §7.4); <br>• viewer, activity, undo-history and stage-overlay hooks, recorded as phase obligations (§7.5, §7.14); <br>• a JPEG XL decode pool before P5, and the preview measures sort and extraction too (§12.6); <br>• the fp32 migration re-embeds only CLIP in the background, with a model tag (§12.2, §13, D29); <br>• services and their events cross modules, and core can provide `features` (§7.11, D35); <br>• dormant shortcut remaps no longer collide (§7.8); <br>• `core/**` joins the app-scheme allowlist (§9); <br>• fetch tools write into a per-job scratch folder (§8.6, D34); <br>• counts, citations and change-log rows corrected (§4, §11.1, §14, §16, §21); <br>• personal details removed (header, §11.2, §12.5, §20). <br>Held back, now handled: one app instance per profile (D36); APNG skipped; tournament entry refused mid-run; batches time-bounded; activation failure cascades; per-launch E2E isolation; planted tests for the `ipcMain` ban and a dynamic-`require` ban; existing BACKLOG entries tagged and D30's reversal stated; "security review" citations replaced with code; the Linux libjxl floor hint; the host-group column; the schedule arithmetic; §8.8's phase column; §19's question tally. Total now 127–132 SP. |
