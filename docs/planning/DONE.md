@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-25 <!-- Group G2: Hash and similarity sort off the renderer thread, PR 2 of 2 (background hashing, parity mode, atomic folder writes; 🔵 🏆, Oct 19–23). MERGED 2026-10-25 via PR #87 (merge f5ddfa3) after a final review with a fix wave, five PR review rounds, the user's Liked_2 smoke (B15 ruling) and a real-JXL measurement. Closes G2 and TODO 🔴 "Speed up AI / similarity sorting…". -->
+**Last Updated**: 2026-10-25 <!-- v2 modules and redesign spec (design only, unplanned spare-usage work, 2026-10-22). MERGED 2026-10-25 via PR #88 (merge e1c4e03) after five PR review rounds (16 → 5 → 3 → 2 → 1 findings) and a close-out that accepted every response. -->
+<!-- Previous: Group G2: Hash and similarity sort off the renderer thread, PR 2 of 2 (background hashing, parity mode, atomic folder writes; 🔵 🏆, Oct 19–23). MERGED 2026-10-25 via PR #87 (merge f5ddfa3) after a final review with a fix wave, five PR review rounds, the user's Liked_2 smoke (B15 ruling) and a real-JXL measurement. Closes G2 and TODO 🔴 "Speed up AI / similarity sorting…". -->
 <!-- Previous: Stop the feature cache being wiped on a folder switch (TODO 🔴, ahead of G2 PR 2). MERGED 2026-10-22 via PR #86 (merge 654fb3e) after a 15-finding PR review and three close-out rounds, all fixed. -->
 <!-- Previous: Group G2: Hash and similarity sort off the renderer thread, PR 1 of 2 (end-of-sort fixes, 🔵 🏆, Oct 19–23). MERGED 2026-10-20 via PR #85 (merge f668611) after a final review with a fix wave, a 24-finding PR review with three fix waves, and two user-approved additions (Tasks 6–7). G2 stays open for PR 2. -->
 <!-- Previous: Group G1: Confine page-side file loads to the granted folders (residual I1, 🟤, Oct 19–23). MERGED 2026-10-19 via PR #84 (merge 4548269) after one PR review round: 1 finding, fixed, with its open trade-off accepted. -->
@@ -28,6 +29,58 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-25 — v2 modules and redesign spec (design only; unplanned, spare weekly usage) — **MERGED `e1c4e03`** (PR #88)
+
+**Spec**: [2026-10-22-v2-modules-design.md](../superpowers/specs/2026-10-22-v2-modules-design.md). § 17 lists decisions D1–D36; § 21 lists every change after the user's approval, the five review rounds included.
+**Plan**: none. A brainstorm produced the spec directly; there was no implementation to plan.
+**Branch**: `v2-modules-design`, cut from `main` at `bf5ec84` and rebased onto `308d43c` after PR #87 merged. It was deleted on the remote and locally after the merge.
+
+✅ **Status: MERGED 2026-10-25 via PR #88** (merge `e1c4e03`, 11 commits, docs only). The work ran outside the Oct 19–23 groups, on spare weekly usage on 2026-10-22, before the weekly reset. It closes 🔵 [2026-04-08] "Design add-on/extension system for the media viewer" as designed; the build is the spec's phases.
+
+**What shipped:**
+- **The v2 design.** A small core (folder lifecycle, viewer, rating, compare, undo, shell) plus six first-party modules the user switches on and off: `similarity`, `features`, `ai-sort`, `tournament`, and two new ones, `fetch` and `compression`.
+  - A module is a manifest, a renderer ES module handed a host API (§ 7, with the phase that adds each part in § 7.14), workers, and optional main-side adapters that main requires by name. Main never runs discovered code (M-1), and module code reaches the app only through `host` (M-2), both lint-enforced.
+  - Main gains a folder-file service, an app-data store, tool grants and a supervised job runner (§ 8).
+  - `fetch` writes through per-job scratch folders; `compression` replaces files in place behind a write-ahead ledger, a rename journal and a disk-state recovery table (§ 8.6).
+  - The shell redesign adds a mode-driven action bar, a side panel, a jobs tray and a Modules tab (§ 11).
+  - Build order P0–P8 plus A1, 131–136 SP, about 20 calendar weeks (§ 14). Windows and Linux are both tested at every phase exit (G-8).
+- **The AI-sorting research, folded in** (§ 21, D28–D32): the learner fix as task A1, inference in a `utilityProcess` with CLIP fp32 (one optional `clipVectors` field, no `FEATURE_CACHE_VERSION` bump), and Group copies on DINOv2.
+- **Planning:** the 🔵 [2026-10-22] LICENSE entry, WEEKLY's Oct 19–23 Spillover line and its Next Steps list.
+
+**Verification:**
+- Every commit ran the full pre-commit hook (2,318 unit tests, the docs-index guard). Pushes were docs-only, so the pre-push hook skipped E2E.
+- A GFM table check over all 16 tables, indented ones included, and scans for local paths, personal folder names and credential details.
+
+**Review:**
+- PR #88 had five rounds in a separate chat: 16 findings and 15 held-back candidates, then 5 and 4, 3 and 5, 2, and 1 and 1. The re-review at `4a38af9` found none, and its close-out accepted every response: 2 pushbacks, 5 fixed differently, 2 deferrals.
+- Round 1's biggest defects:
+  - a compression swap that could destroy a same-stem file, because `fs.rename` replaces on Windows;
+  - a dropped recovery for a torn `.bulk_rated.json`;
+  - readers that prune renamed entries before re-keying them;
+  - no path from `ai-sort` to the training caches;
+  - a `FEATURE_CACHE_VERSION` bump that would have run a ~3 h foreground re-extraction inside the first AI sort.
+- Round 3 found the ledger's recovery keyed only on the last record, so Restore after the original was held lost the file.
+
+**User rulings:**
+- skip the question round, so § 17 marks every call Claude made;
+- approved on 2026-10-22 ("Looks good");
+- fp32 CLIP yes; the real-data check on the user's own folders yes, with only overall numbers in git;
+- Linux becomes a goal; file a LICENSE entry;
+- DINOv2 adopted for Group copies; a skip means "undecided; fine to dislike later", so skips stay out of training by default;
+- Q3 and Q4 (licences) can wait;
+- push and open the PR on 2026-10-25, then merge.
+
+**Key learnings:**
+- ⭐ A design spec's data-safety steps need a trace through today's code and each failure path, step by step. A builder read missed all of round 1's biggest defects.
+- ⭐ Each fix round added a smaller defect in its own new text (16 → 5 → 3 → 2 → 1). New prose about where a value comes from needs the same trace.
+- ⭐ With a write-ahead log, recovery must read the disk state at each step, not only the last record.
+- ⭐ Check a public-repo spec for outside-repo details and personal data before the first commit. Five unpushed commits had to be squashed into one.
+- A fresh worktree runs no hooks until `npm ci`.
+
+**Propagation check:** the spec changes no code, so `CLAUDE.md` and `PROJECT.md` assert nothing it changed. The strategic docs change through WEEKLY G5 (spec § 19 item 1); `docs/README.md`'s row now records the merge.
+
+**Follow-ups:** BACKLOG 🟤 [2026-10-25] (v2 modules spec closeout): the AI-sorting research's own PR, and the downloader research before P3b. The rest of spec § 19 is in WEEKLY's Next Steps (G5 files it in the Cleanup Week #5 planning pass). Licence questions Q3 and Q4 stay with the user.
 
 ### 2026-10-25 — Group G2: Hash and similarity sort off the renderer thread, PR 2 of 2 (background hashing, parity mode, atomic folder writes) 🔵 🏆 (Oct 19–23) — **MERGED `f5ddfa3`** (PR #87)
 

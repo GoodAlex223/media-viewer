@@ -22,7 +22,7 @@ In order:
      - 🟤 face-detection removal;
      - 🟤 the AI research's four items;
      - the README setup steps for Windows and Linux (G-8).
-3. ✅ **The v2 spec's PR is open: PR #88**, carrying the approved spec, this list and the 🔵 [2026-10-22] LICENSE entry. It merges after its review round closes.
+3. ✅ **The v2 spec merged: PR #88** (merge `e1c4e03`, 2026-10-25, after five review rounds), carrying the approved spec, this list and the 🔵 [2026-10-22] LICENSE entry. Its closeout filed two 🟤 [2026-10-25] entries: the AI-sorting research's own PR, and the downloader research before P3b.
 4. **Small tasks for any week:**
    - the real-data check: the AI research harness on the user's like/dislike folders, with only overall numbers in git (spec § 19);
    - then A1, the like-model learner fix (spec § 12.3);

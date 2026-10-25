@@ -5,8 +5,8 @@ approval and was folded in afterwards; §21 lists exactly what changed, for the 
 **How it was made:** the user asked for a brainstorm and then chose to skip the question round. Every decision
 quoted from the user's own notes or answers is marked **(U)**. Every other decision is Claude's call, marked
 **(C)**, and §17 lists them all. Since the approval, flipping one is a spec change, recorded in §21.
-**PR #88 review (2026-10-25):** 16 findings and 15 held-back candidates, all answered in the revision that §21's
-last row lists.
+**PR #88 review (2026-10-25):** five rounds (16, 5, 3, 2 and 1 findings, plus held-back candidates), all
+answered; §21's last five rows list each revision. **Merged** on 2026-10-25 (merge `e1c4e03`).
 **Inputs read:** `PROJECT.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_CONTEXT.md`, the planning docs
 (`GOALS`, `ROADMAP`, `MILESTONES`, `WEEKLY`, `TODO`, and searches of `BACKLOG`, `DONE`, `REVIEW-QUEUE`), all
 70 specs in `docs/superpowers/specs/` (53 product, security and strategy specs in a first pass; the 17 process,
