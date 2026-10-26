@@ -679,3 +679,14 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
   - **Task 5 Step 3 — the full E2E run is owed.** The `npm run test:e2e` run of 242 tests was **stopped by Claude Code's low-memory guard**, not by a test failure. Tests 1–21 passed. From test 22 on, every Electron launch failed: `electron.launch: Process failed to launch!` and `worker process exited unexpectedly`, both with exit code `3221225794` (`0xC0000142`, `STATUS_DLL_INIT_FAILED`). That is consistent with the machine having 1.2 GB free of 15.2 GB, with no Electron process of the suite's left behind.
     - Per the guard's notice, it was not restarted. The full suite runs again at the user's request, and the pre-push hook runs it anyway.
     - What did run green on this code: the unit suite (2363 passed, 1 skipped, at the T4 commit; no code has changed since), lint (0 errors), Prettier on every tracked file, the 79-test zoom-related E2E subset at T3, and the 13-test zoom file at T3's completion.
+  - **Task 5 Step 5, hand-off.** The user ruled:
+    - (1) do the manual pass together;
+    - (2) let the pre-push hook run the full E2E;
+    - (3) run the final whole-branch review in a separate chat;
+    - (4) push and open the PR.
+  - **Manual pass (with the user, `npm start` on `f553149`).** It used a throwaway profile (`MV_USER_DATA_DIR` in the scratchpad) and a generated folder: four grid images, `playable-64x64.mp4` and `animated-64x64.jxl`. **All passed**, as the user reported:
+    - Round 1, single mode (MANUAL_TESTING.md L26–29): wheel, double-click 100 → 200 → 400 → 100%, drag-pan with the edge stop, Escape, and the popover's −/+/slider.
+    - Round 2, compare (L38, L87): per-side zoom; fullscreen at 100% entered and exited by click; zoomed fullscreen, where a click stays, a drag pans and Escape exits and resets; a double-click on the video in fullscreen exits with no zoom; Z/X.
+    - Round 3 (L90): single mode after compare (wheel, double-click, pan, popover), the next file resetting to 100% and closing the popover, the video zoom, and the animated JXL zoom while playing.
+    - The first app window was closed between rounds. Its session log ended "Session ended (clean quit)" with no errors.
+  - **The user's questions in round 2**: why a click in a zoomed fullscreen pane does not exit, and why a double-click in fullscreen does not zoom. Both are deliberate and unchanged by G3. The user asked to backlog both for consistency across the app. Filed as 🔵 [2026-10-26] "From: G3 manual testing" (two entries, the click one tagged `possible-dup-of` the 2026-07-11 entry).

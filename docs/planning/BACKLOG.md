@@ -66,6 +66,23 @@ prompt had no source concept).
 
 ## 🔵 User-Flagged Ideas
 
+### [2026-10-26] From: G3 manual testing (ZoomManager extraction)
+
+**Origin**: the user, during the G3 manual pass on branch `g3-zoom-manager-extraction`, asked why a click while zoomed in compare-mode fullscreen does not exit, and why a double-click there does not zoom as it does in single mode. Both are today's deliberate behaviour, unchanged by G3. The user: "backlog all, I think it would be good to be consistent throughout the entire application". The two entries below are one design question (which gesture means exit, and which means zoom), so they want one short design note together.
+
+- [ ] **Double-click should zoom in fullscreen too, as it does everywhere else**
+  - **Today**: `attachToMedia`'s `dblclick` handler returns inside `.fullscreen` (`zoom.js` ~L411, "disabled in fullscreen - conflicts with click-to-exit"; since `64ec894`, 2026-02-05). There, a single click exits fullscreen at 100%, and every double-click starts with a single click.
+  - By a code reading (not yet observed frame by frame), a double-click on an image in fullscreen at 100% behaves like this: the first click exits, and the second lands on the normal pane, whose click handler (`showCompareMedia`, ~L4163) enters fullscreen again. That is a flicker, ending in fullscreen with no zoom. While zoomed, nothing happens.
+  - **Design**: tell a click from a double-click before acting on the click, for example by delaying the exit ~250 ms and cancelling it on `dblclick`. Or move "exit" to a gesture that does not collide. This is settled together with the next entry.
+  - **Tests that change with it**: E2E `tests/e2e/zoom.test.js` case E pins today's click rule. `docs/MANUAL_TESTING.md` L87 ("double-click video in fullscreen → exits (no zoom)") states today's behaviour.
+  - Affected: `zoom.js` (`attachToMedia`), `fullscreen.js` (`exitHandler`), `media-viewer.js` (`showCompareMedia`'s wrapper click handlers).
+- [ ] **A click in a zoomed fullscreen pane should exit, as it does at 100%** [possible-dup-of: 🔵 [2026-07-11] "Clicking empty space should exit fullscreen regardless of zoom"]
+  - **Re-raised**: the user re-raised it in the G3 manual pass ("clicking on media or near while zoomed … do not exit from full screen").
+  - **Today**: `fullscreen.js` `exitHandler` returns while `isZoomed(wrapper)` (~L75), which is now `ZoomManager.isWrapperZoomed`. Escape (exit and reset in one press) or Z/X are the ways out. A click while zoomed does nothing; it does not reset the zoom. The July entry's "only resets zoom (a second click is needed)" does not match today's code, so check it before the design.
+  - **The constraint the guard exists for**: a pan stroke (mousedown, drag, mouseup inside the pane) ends with a `click` event on release. Exiting on every click would end every pan in an exit. The design must tell a click from a drag, for example by the pointer moving less than a few px between `mousedown` and `click`. `ZoomManager`'s pan start/end could report whether a drag happened.
+  - **Tests that change with it**: E2E case E (pins "a click does not exit while zoomed"), `docs/MANUAL_TESTING.md` § Compare Mode.
+  - Affected: `fullscreen.js`, `zoom.js`, `tests/e2e/zoom.test.js`.
+
 ### [2026-10-26] From: G4 session (PR #89)
 
 **Origin**: the user, while PR #89's third pre-push E2E run was going: "Do we need to run so much E2E tests? And they take really much time. We need to file it and think what we can to do with it."
