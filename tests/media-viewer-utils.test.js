@@ -5088,7 +5088,7 @@ describe('switchToSingleModeUI wrapper teardown', () => {
             fileInfo: { style: styleStub() },
             infoToggleBtn: { style: styleStub() },
             hidePredictionBadges: vi.fn(),
-            closeAllZoomPopovers: vi.fn(),
+            zoom: { hideAllPopovers: vi.fn() },
             fullscreen: { cleanup: vi.fn() },
             leftMediaWrapper: null,
             rightMediaWrapper: null,
@@ -5113,6 +5113,7 @@ describe('switchToSingleModeUI wrapper teardown', () => {
         expect(right.remove).toHaveBeenCalledTimes(1);
         expect(ctx.leftMediaWrapper).toBeNull();
         expect(ctx.rightMediaWrapper).toBeNull();
+        expect(ctx.zoom.hideAllPopovers).toHaveBeenCalled();
     });
 
     it('is a no-op for wrapper teardown when wrappers are already null', () => {
@@ -7019,8 +7020,7 @@ describe('addMediaOverlayControls — slot targeting and button order (G2)', () 
     function ctx() {
         return {
             customSpecialFolder: 'C:/special',
-            removeZoomPopover: vi.fn(),
-            createZoomPopover: vi.fn(),
+            zoom: { removePopover: vi.fn(), createPopover: vi.fn() },
             handleLeftLike: vi.fn(),
             handleRightLike: vi.fn(),
             handleLeftDislike: vi.fn(),
@@ -7077,6 +7077,16 @@ describe('addMediaOverlayControls — slot targeting and button order (G2)', () 
         expect(special.disabled).toBe(true);
         expect(special.title).toContain('Settings');
     });
+
+    it("drops the side's old popover before creating the new one", () => {
+        const c = ctx();
+        addMediaOverlayControls.call(c, 'left');
+
+        const { removePopover, createPopover } = c.zoom;
+        expect(removePopover).toHaveBeenCalledWith('left');
+        expect(createPopover).toHaveBeenCalledWith('left', expect.anything(), expect.anything());
+        expect(removePopover.mock.invocationCallOrder[0]).toBeLessThan(createPopover.mock.invocationCallOrder[0]);
+    });
 });
 
 describe('displayPredictionBadge — container anchoring (G2)', () => {
@@ -7126,52 +7136,6 @@ describe('displayPredictionBadge — container anchoring (G2)', () => {
 
         expect(c.appended[0].textContent).toBe('87%');
         expect(c.appended[0].className).toBe('prediction-badge high');
-    });
-});
-
-describe('removeZoomPopover — dismisses the popover, keeps the button (G2)', () => {
-    let removeZoomPopover;
-
-    beforeEach(() => {
-        removeZoomPopover = extractMethod('removeZoomPopover');
-    });
-
-    function entryFor(parentRemove) {
-        return {
-            abortController: { abort: vi.fn() },
-            container: { parentNode: {}, remove: vi.fn() },
-            toggleBtn: { parentNode: { remove: parentRemove } },
-        };
-    }
-
-    it('does NOT remove the toggle button wrapper', () => {
-        const parentRemove = vi.fn();
-        const ctx = { zoomControlsMap: { left: entryFor(parentRemove) } };
-
-        removeZoomPopover.call(ctx, 'left');
-
-        // This is the G2 contract: deleting the BUTTON is the caller's job. Doing it here used
-        // to strip the zoom control from every tournament pair after the first, because
-        // showTournamentPairFast calls cleanupCompareMedia (which calls this) and — before this
-        // fix — never re-ran addMediaOverlayControls. It now does, right after the cleanup
-        // phase, so this method stays free to be a pure "dismiss the popover" op.
-        expect(parentRemove).not.toHaveBeenCalled();
-    });
-
-    it('still aborts listeners, removes the popover and forgets the entry', () => {
-        const entry = entryFor(vi.fn());
-        const ctx = { zoomControlsMap: { left: entry } };
-
-        removeZoomPopover.call(ctx, 'left');
-
-        expect(entry.abortController.abort).toHaveBeenCalled();
-        expect(entry.container.remove).toHaveBeenCalled();
-        expect(ctx.zoomControlsMap.left).toBeUndefined();
-    });
-
-    it('is a no-op for a target with no popover', () => {
-        const ctx = { zoomControlsMap: {} };
-        expect(() => removeZoomPopover.call(ctx, 'right')).not.toThrow();
     });
 });
 

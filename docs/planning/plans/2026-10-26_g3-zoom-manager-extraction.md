@@ -491,16 +491,16 @@ git commit -m "feat(zoom): ZoomManager module with direct unit tests (G3 T2)"
 - Consumes: Task 2's `ZoomManager` API.
 - Produces: `MediaViewer#zoom` (a `ZoomManager`); no zoom state or methods left on `MediaViewer`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - In `tests/media-viewer-utils.test.js` `switchToSingleModeUI wrapper teardown` (L5073): the ctx line `closeAllZoomPopovers: vi.fn()` → `zoom: { hideAllPopovers: vi.fn() }`. Add `expect(ctx.zoom.hideAllPopovers).toHaveBeenCalled()` to its first test.
   - In `addMediaOverlayControls — slot targeting and button order (G2)` (L6969): `removeZoomPopover`/`createZoomPopover` → `zoom: { removePopover: vi.fn(), createPopover: vi.fn() }`. Add a test `'drops the side's old popover before creating the new one'`: after `addMediaOverlayControls.call(c, 'left')`, `removePopover` was called with `'left'`, `createPopover` with `('left', expect.anything(), expect.anything())`, and `removePopover.mock.invocationCallOrder[0] < createPopover.mock.invocationCallOrder[0]`.
   - In `tests/zoom-manager.test.js`, add `'media-viewer.js keeps no copy of the zoom code'`. It reads `media-viewer.js` and expects no match for `/^\s{4}(sliderToScale|scaleToSlider|setupZoomPopovers|createZoomPopover|removeZoomPopover|closeAllZoomPopovers|getZoomTarget|getMediaElement|setZoom|resetZoom|zoomAtPoint|cycleZoomStep|handleWheelZoom|handlePanStart|handlePanMove|handlePanEnd|updateZoomIndicator|isZoomed|setupZoomEvents)\(/m` and none for `/this\.(zoomState|zoomControlsMap)\b/`.
 
-- [ ] **Step 2: Run to verify they fail.**
+- [x] **Step 2: Run to verify they fail.**
 Run: `npx vitest run tests/media-viewer-utils.test.js tests/zoom-manager.test.js`
 Expected: FAIL. The two context tests fail with `this.closeAllZoomPopovers is not a function` / `this.removeZoomPopover is not a function`, and the scan reports the first old definition. Log the messages.
 
-- [ ] **Step 3: Edit `media-viewer.js`** (delete the later block first, so the earlier line numbers hold):
+- [x] **Step 3: Edit `media-viewer.js`** (delete the later block first, so the earlier line numbers hold):
   1. Delete L8846–9085: the `// ==================== ZOOM METHODS ====================` header through `setupZoomEvents` and its trailing blank line. `getZoomTarget` and `getMediaElement` go with it.
   2. Delete L2977–3138: `sliderToScale` through `closeAllZoomPopovers` and the trailing blank line.
   3. L2763–2770: delete the `// Global pan event listeners for zoom` comment and both document listeners. In the wheel handler comment (L2783), the sentence becomes: `A wheel over media still zooms: the media element's own listener (ZoomManager.handleWheel) runs first and stops propagation.` Re-read L2788–2793 too: it describes the bubble order and needs no name change.
@@ -512,14 +512,14 @@ Expected: FAIL. The two context tests fail with `this.closeAllZoomPopovers is no
   9. Call sites, per spec § 3.2. `resetZoom(` → `zoom.reset(` (L3926, L4112–4113, L6449–6450). `closeAllZoomPopovers()` → `zoom.hideAllPopovers()` (L3998, L4363, L5729, L6889). `removeZoomPopover(side)` → `zoom.removePopover(side)` (L4454, L7250). `createZoomPopover(` → `zoom.createPopover(` (L4455). `setupZoomEvents(` → `zoom.attachToMedia(` (L4472, L4527, L4578, L4625, L4643).
   10. Re-read every comment next to the call sites above, for example L7249 "Clean up zoom popover and its document-level listeners".
 
-- [ ] **Step 4: Remove the ported tests.** Delete the `describe('removeZoomPopover — dismisses the popover, keeps the button (G2)'…)` block from `tests/media-viewer-utils.test.js` (L7132–7176). Its three tests live in `tests/zoom-manager.test.js` now.
+- [x] **Step 4: Remove the ported tests.** Delete the `describe('removeZoomPopover — dismisses the popover, keeps the button (G2)'…)` block from `tests/media-viewer-utils.test.js` (L7132–7176). Its three tests live in `tests/zoom-manager.test.js` now.
 
-- [ ] **Step 5: Run to verify they pass.**
+- [x] **Step 5: Run to verify they pass.**
 Run: `npx vitest run` → all pass. Expected count: Task 2's total + 2 new − 3 ported. Then `npx eslint media-viewer.js zoom.js` → clean. Then `npx playwright test tests/e2e/zoom.test.js tests/e2e/overlay-controls.test.js tests/e2e/fullscreen.test.js tests/e2e/compare-mode.test.js tests/e2e/recent-folders.test.js tests/e2e/tournament-mode.test.js` → all pass, A–J included, **with `tests/e2e/zoom.test.js` byte-identical to Task 1's commit** (`git diff HEAD~1 -- tests/e2e/zoom.test.js` is empty).
 
-- [ ] **Step 6: Measure.** `wc -l media-viewer.js`. Log before (11,945) and after, plus the net. Expected about −420; anything above −400 is explained before moving on. Log every LSP diagnostic the harness shows for `media-viewer.js` after these edits, and whether any names a removed method (spec § 6.4).
+- [x] **Step 6: Measure.** `wc -l media-viewer.js`. Log before (11,945) and after, plus the net. Expected about −420; anything above −400 is explained before moving on. Log every LSP diagnostic the harness shows for `media-viewer.js` after these edits, and whether any names a removed method (spec § 6.4).
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add media-viewer.js tests/media-viewer-utils.test.js tests/zoom-manager.test.js
@@ -655,3 +655,11 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     - **The existing control (Improvement 1).** `media-url.test.js` already fails for a loaded module missing from its list. Spec § 4.7's "no check enforces these" holds for two of the three lists, not all three; T4 corrects the spec.
     - **LSP.** `documentSymbol` on `zoom.js` returned the class with all 18 methods and the constructor, down to the listener callbacks (`element.addEventListener('wheel') callback`, …). `findReferences` on `ZoomManager` found 3 references across 2 files: the definition, plus the test's import (L2) and its `new` (L46). This is unlike `media-viewer.js`, whose tests reach it through source text, which the LSP cannot see. grep finds the same 3.
     - LSP diagnostics on `zoom.js` and the test file: none arrived.
+  - **Task 3.** Step 2 RED, 8 failures. The two mock contexts failed in all their tests, not only the two the plan named, because each describe shares one context: `TypeError: this.closeAllZoomPopovers is not a function` (2) and `TypeError: this.removeZoomPopover is not a function` (5, the new order test included). The scan reported `expected '    sliderToScale(' to be null`.
+    - Step 3 edits: three `sed` range deletes in one pass (L8846–9085, L2977–3138, and L2763–2771; the last includes the blank line after the pan listeners, so no double blank line is left behind), then the call-site renames. There were 19 `this.zoom.*` sites: 7 `reset`/`isZoomed`, 4 `hideAllPopovers`, 2 `removePopover`, 1 `createPopover` and 5 `attachToMedia`. Then the construction, the fullscreen callback, `init()`, the import and the wheel comment.
+    - Re-read comments: every comment within three lines of a changed call still describes the code ("Setup zoom events…", "Clean up zoom popover and its document-level listeners (AbortController)"). A sweep of every renderer comment that mentions zoom found no stale prose.
+    - Step 5 GREEN. Unit: **2363 passed, 1 skipped** (2364 + 2 − 3). ESLint clean, apart from one pre-existing `no-shadow` warning at `media-viewer-utils.test.js:3417` that predates this task. Prettier clean. E2E subset (zoom, overlay-controls, fullscreen, compare-mode, recent-folders, tournament-mode): **79 passed** in 3.4 min, A–J included. `git diff --quiet cd81b9b -- tests/e2e/zoom.test.js` was clean (byte-identical).
+    - **Step 6: lines.** `media-viewer.js` went from 11,945 to **11,529 (−416)**, within the ≤ −400 acceptance. Out: 436 (240 + 162 + 9 in the three blocks, the 8-line callback, the 13 constructor lines, 3 in `initializeElements` and the old comment line). In: 20 (the 1-line callback, the 14-line construction, 2 in `initializeElements`, the 2-line comment, the import). Spec § 3.1 estimated about 430 out and about 12 in; the construction's callback bodies make the in-count higher. `zoom.js` is 436 lines.
+    - **§ 6.4 diagnostics check.** The harness's diagnostics batches on `media-viewer.js` after the edits held only the old kinds (`electronAPI` 2568, `pause` 2568). It shows 10 at a time, so a whole-file `tsc --noEmit --allowJs --checkJs` run (typescript 6.0.3) was added. It found 1,692 diagnostics, **0** of them naming a removed zoom member.
+    - Planted control: a scratch copy with one `this.resetZoom('single')` and one `this.zoom.closeAllZoomPopovers()` gave exactly 2, `TS2339 Property 'resetZoom' does not exist on type 'MediaViewer'` and `… 'closeAllZoomPopovers' does not exist on type 'ZoomManager'`. So the check catches a stale name on either side.
+    - An old-name `git grep` over code and tests found only the `getMediaElement` callback (kept by name, spec § 4.2) and the scan regex.

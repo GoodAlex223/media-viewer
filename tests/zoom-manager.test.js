@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'fs';
 import { ZoomManager } from '../zoom.js';
 
 // ZoomManager (G3, spec docs/superpowers/specs/2026-10-26-g3-zoom-manager-extraction-design.md § 6.2), imported
@@ -270,4 +271,13 @@ describe('ZoomManager', () => {
         const own = globalThis.document.addEventListener.mock.calls.filter((c) => c[2] === undefined).map((c) => c[0]);
         expect(own).toEqual(['click', 'mousemove', 'mouseup']);
     });
+});
+
+// One copy of the zoom code: the renderer delegates to this.zoom and defines none of the old methods or state.
+it('media-viewer.js keeps no copy of the zoom code', () => {
+    const src = readFileSync(new URL('../media-viewer.js', import.meta.url), 'utf8');
+    const oldMethod =
+        /^\s{4}(sliderToScale|scaleToSlider|setupZoomPopovers|createZoomPopover|removeZoomPopover|closeAllZoomPopovers|getZoomTarget|getMediaElement|setZoom|resetZoom|zoomAtPoint|cycleZoomStep|handleWheelZoom|handlePanStart|handlePanMove|handlePanEnd|updateZoomIndicator|isZoomed|setupZoomEvents)\(/m;
+    expect(src.match(oldMethod)?.[0] ?? null).toBeNull();
+    expect(src.match(/this\.(zoomState|zoomControlsMap)\b/)?.[0] ?? null).toBeNull();
 });
