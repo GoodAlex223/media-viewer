@@ -536,24 +536,24 @@ git commit -m "refactor(zoom): MediaViewer delegates to ZoomManager; old zoom co
 **Interfaces:**
 - Consumes: the names from Task 2.
 
-- [ ] **Step 1: Sweep.**
+- [x] **Step 1: Sweep.**
 Run: `git grep -n -E "zoomState|zoomControlsMap|setupZoomPopovers|createZoomPopover|removeZoomPopover|closeAllZoomPopovers|resetZoom|cycleZoomStep|handleWheelZoom|updateZoomIndicator|setupZoomEvents|getZoomTarget|getMediaElement"`
 Expected after Steps 2–4: hits only in dated history. That means `docs/archive/`, `docs/planning/DONE.md`, `docs/planning/BACKLOG.md` entry bodies (renamed at closeout where open, spec § 7 row 5), `docs/planning/WEEKLY.md`, specs dated before 2026-10-26, this spec and this plan, plus the regex inside `tests/zoom-manager.test.js`. Every other hit gets fixed.
 
-- [ ] **Step 2: `CLAUDE.md`.**
+- [x] **Step 2: `CLAUDE.md`.**
   - § Architecture: a line after `fullscreen.js`: `├── zoom.js              # ZoomManager ES module (v2.0 pattern): zoom/pan state, the zoom popovers, each media element's wheel/dblclick/pan listeners; host callbacks getMediaElement, isCompareMode, createIcons`.
   - § Code Conventions → Patterns: add `ZoomManager` to the v2.0 list.
   - Imports: add `zoom.js` to the extracted-modules list.
   - § UI Components: `Zoom via this.zoom (ZoomManager, zoom.js): createPopover(target,...)/removePopover(target)`. `removePopover` must not remove the toggle button's parent. In the recent-folders menu sentence, `handleWheelZoom` → `ZoomManager.handleWheel`.
   - The pre-commit size warning may report growth: it warns and never blocks. Log what it prints.
 
-- [ ] **Step 3: `.claude/agents/regression-checker.md`.** § 6 Zoom Controls Lifecycle uses the new names (`this.zoom.popovers`, `createPopover`/`removePopover`, `init()`). The v2.0 paragraph changes to "Extracted today: `FullscreenManager` (`fullscreen.js`), `ZoomManager` (`zoom.js`)…", and `ZoomManager` comes off the "Planned" list.
+- [x] **Step 3: `.claude/agents/regression-checker.md`.** § 6 Zoom Controls Lifecycle uses the new names (`this.zoom.popovers`, `createPopover`/`removePopover`, `init()`). The v2.0 paragraph changes to "Extracted today: `FullscreenManager` (`fullscreen.js`), `ZoomManager` (`zoom.js`)…", and `ZoomManager` comes off the "Planned" list.
 
-- [ ] **Step 4: `docs/ARCHITECTURE.md`.** In § State Management, replace the three zoom lines (`zoomLevel`, `panX`, `panY`) with `// Zoom and pan: ZoomManager (zoom.js), this.zoom` and `zoom: ZoomManager,`. Nothing else in that block changes (spec § 4.7).
+- [x] **Step 4: `docs/ARCHITECTURE.md`.** In § State Management, replace the three zoom lines (`zoomLevel`, `panX`, `panY`) with `// Zoom and pan: ZoomManager (zoom.js), this.zoom` and `zoom: ZoomManager,`. Nothing else in that block changes (spec § 4.7).
 
-- [ ] **Step 5: Verify.** Re-run Step 1's grep (expected: history only). `npm run lint` and `npm run format:check` → clean. `node scripts/check-docs-index.js` → exit 0.
+- [x] **Step 5: Verify.** Re-run Step 1's grep (expected: history only). `npm run lint` and `npm run format:check` → clean. `node scripts/check-docs-index.js` → exit 0.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add CLAUDE.md .claude/agents/regression-checker.md docs/ARCHITECTURE.md
@@ -663,3 +663,15 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     - **§ 6.4 diagnostics check.** The harness's diagnostics batches on `media-viewer.js` after the edits held only the old kinds (`electronAPI` 2568, `pause` 2568). It shows 10 at a time, so a whole-file `tsc --noEmit --allowJs --checkJs` run (typescript 6.0.3) was added. It found 1,692 diagnostics, **0** of them naming a removed zoom member.
     - Planted control: a scratch copy with one `this.resetZoom('single')` and one `this.zoom.closeAllZoomPopovers()` gave exactly 2, `TS2339 Property 'resetZoom' does not exist on type 'MediaViewer'` and `… 'closeAllZoomPopovers' does not exist on type 'ZoomManager'`. So the check catches a stale name on either side.
     - An old-name `git grep` over code and tests found only the `getMediaElement` callback (kept by name, spec § 4.2) and the scan regex.
+  - **Task 4.** Sweep hits outside dated history:
+    - `CLAUDE.md:55`: the new `zoom.js` line names the `getMediaElement` callback, which is correct.
+    - `docs/README.md` L105 and L257: rows describing the G2 plan and spec, which are history.
+    - The `zoom.js`, `media-viewer.js` callback and test-regex hits.
+    - Open BACKLOG bodies (L124, L1225, L1534, L1882, L1890), renamed at closeout. L1534 ("`_jxlObjectURLs` shared…") names `zoomControlsMap` and is outside spec § 7's rows; it is renamed at closeout too.
+  - **Task 4 edits.**
+    - `CLAUDE.md`: the Architecture line, the Patterns list, Imports, and § UI Components (3 renames, including the recent-folders sentence's `ZoomManager.handleWheel`).
+    - `regression-checker.md` § 6: `this.zoom.*` names, plus an `attachToMedia` line and check. Its v2.0 paragraph now lists all five extracted modules. It had listed only `FullscreenManager`, which was stale since TournamentManager, so it was corrected rather than just appended to.
+    - `docs/ARCHITECTURE.md`: the two zoom lines.
+    - The spec's § 4.7 correction note (the T2 finding).
+  - **Task 4 Step 5.** `npm run lint`: 0 errors, 2 pre-existing `no-shadow` warnings (`media-viewer-utils.test.js:3417`, `ml-model.test.js:284`). `check-docs-index`: exit 0.
+    - `npm run format:check` exits 1, **identically on the committed tree** (checked with the edits stashed). All 10 files are under local `CLAUDE-SECURITY-*` scan folders. Each has its own `.gitignore: *`, which git honours, but `prettier --check .` reads only the root ignore files. So it is not a tracked file and not this branch; every tracked file passed `prettier --check`.

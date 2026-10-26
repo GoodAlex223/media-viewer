@@ -54,12 +54,13 @@ Check: Does the change add a new user action that should pause extraction but do
 Check: Does the change add async extraction callbacks without the generation check?
 
 ### 6. Zoom Controls Lifecycle
-- `zoomControlsMap` keyed by target (`'single'`, `'left'`, `'right'`)
-- `createZoomPopover()` creates, `removeZoomPopover(target)` cleans up
-- Single mode: static button, initialized by `setupZoomPopovers()`
+- Owned by `this.zoom` (`ZoomManager`, `zoom.js`): `this.zoom.popovers` keyed by target (`'single'`, `'left'`, `'right'`)
+- `this.zoom.createPopover()` creates, `this.zoom.removePopover(target)` cleans up (never the toggle button's parent)
+- Single mode: static button, initialized by `this.zoom.init()`, which also installs the document click/pan listeners
 - Compare mode: dynamic buttons via `addMediaOverlayControls()`
+- Media elements get their wheel/dblclick/pan listeners from `this.zoom.attachToMedia(element, target)`
 
-Check: Does the change create zoom controls without registering in the map? Does it destroy panes without calling `removeZoomPopover()`?
+Check: Does the change create zoom controls without registering in the map? Does it destroy panes without calling `this.zoom.removePopover()`? Does a new media element skip `attachToMedia`?
 
 ### 7. Compare Mode File Validation
 - `showCompareMedia()` validates both files exist via `checkFileExists` IPC
@@ -70,7 +71,7 @@ Check: Does the change create zoom controls without registering in the map? Does
 Check: Does the change alter validation flow or retry logic?
 
 ### 8. v2.0 Modular Subsystems
-MediaViewer is being incrementally extracted into focused manager classes. Extracted today: `FullscreenManager` (`fullscreen.js`). Planned: `ZoomManager`, `CompareManager`, `SortingManager`, `MLManager`.
+MediaViewer is being incrementally extracted into focused manager classes. Extracted today: `FullscreenManager` (`fullscreen.js`), `ZoomManager` (`zoom.js`), `TournamentManager` (`tournament.js`), `MlTrainingManager` (`ml-training.js`), `FeatureCacheStore` (`feature-cache-store.js`). Planned: `CompareManager`, `SortingManager`, `MLManager`.
 
 Pattern: stateful manager class + constructor-injected callbacks for host dependencies (e.g., FullscreenManager receives `isZoomed`, `pauseOtherVideos`).
 

@@ -150,6 +150,8 @@ The callback keeps its shape `(wrapper) => boolean`, and its body becomes `(wrap
 
 ### 4.7 Lists a new renderer module must join (no check enforces these)
 
+> **Correction (execution, 2026-10-26).** One of these lists does have a check. `tests/media-url.test.js` "the list names every app file the page loads" walks `index.html`'s scripts, imports and workers, and fails for a loaded module missing from its `RENDERER_FILES`. Block 2c and `lint-guard.test.js`'s list have no check (plan Improvement 1).
+
 - `eslint.config.mjs` block 2c `files`, plus its header comment (L11). This brings `htmlSinkGuard` and `no-undef` with it.
 - `tests/lint-guard.test.js` `RENDERER_FILES`, which proves the sink guard fires there.
 - `tests/media-url.test.js` `RENDERER_FILES`, the no-`file:`-URL control.
