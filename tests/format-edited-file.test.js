@@ -1,13 +1,13 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
 const require = createRequire(import.meta.url);
-const { planFormat, createIsIgnored } = require('../.claude/hooks/format-edited-file.js');
+const { planFormat, createIsIgnored, LEFT_TO_COMMIT } = require('../.claude/hooks/format-edited-file.js');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOOK = path.join(ROOT, '.claude', 'hooks', 'format-edited-file.js');
@@ -179,9 +179,9 @@ describe('createIsIgnored — the same verdict as Prettier', { timeout: 30000 },
     it('agrees with prettier.getFileInfo on every tracked file and on a probe per pattern class', async () => {
         const prettier = await import('prettier');
         const ignorePath = [path.join(ROOT, '.gitignore'), path.join(ROOT, '.prettierignore')];
-        const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
-            .stdout.split('\0')
-            .filter(Boolean);
+        const listing = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' });
+        expect(listing.status, listing.error?.message ?? listing.stderr).toBe(0);
+        const tracked = listing.stdout.split('\0').filter(Boolean);
         expect(tracked.length).toBeGreaterThan(100);
 
         const isIgnored = createIsIgnored(ROOT);
@@ -211,6 +211,68 @@ describe('createIsIgnored — the same verdict as Prettier', { timeout: 30000 },
             expect(isIgnored('src/a.js')).toBe(false);
         } finally {
             fs.rmSync(empty, { recursive: true, force: true });
+        }
+    });
+
+    it('throws on a read error other than ENOENT, as Prettier does, so the hook lets Prettier run and report it', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fmt-unreadable-'));
+        try {
+            fs.mkdirSync(path.join(root, '.prettierignore')); // EISDIR on read
+            expect(() => createIsIgnored(root)).toThrow();
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    // getFileInfo has no default ignore path, so the parity test above hands it the hook's own list.
+    // The CLI's default is what the hook mirrors: ask the CLI about a path only .gitignore matches and
+    // one only .prettierignore matches. A default that dropped either file would make the hook skip
+    // files Prettier formats. (A default that gained a file would only make the hook spawn more.)
+    it("matches the CLI's default ignore files: .gitignore and .prettierignore", () => {
+        const fileInfo = (relPath, ...flags) => {
+            const result = spawnSync(
+                process.execPath,
+                [path.join(ROOT, 'node_modules', 'prettier', 'bin', 'prettier.cjs'), '--file-info', relPath, ...flags],
+                { cwd: ROOT, encoding: 'utf8' }
+            );
+            expect(result.status, result.stderr).toBe(0);
+            return JSON.parse(result.stdout).ignored;
+        };
+        const isIgnored = createIsIgnored(ROOT);
+        for (const relPath of ['logs/a.js', 'docs/x.js']) {
+            expect(fileInfo(relPath), relPath).toBe(true);
+            expect(isIgnored(relPath), relPath).toBe(true);
+        }
+        expect(fileInfo('new-module.js')).toBe(false);
+        // Controls: each probe is matched by one file only, so a default without it would read false.
+        expect(fileInfo('logs/a.js', '--ignore-path', '.prettierignore')).toBe(false);
+        expect(fileInfo('docs/x.js', '--ignore-path', '.gitignore')).toBe(false);
+    });
+
+    it('uses the ignore version Prettier bundles', () => {
+        const notices = fs.readFileSync(path.join(ROOT, 'node_modules', 'prettier', 'THIRD-PARTY-NOTICES.md'), 'utf8');
+        const bundled = [...notices.matchAll(/^## ignore@v(\S+)$/gm)].map((match) => match[1]);
+        expect(bundled).toHaveLength(1);
+        expect(require('ignore/package.json').version).toBe(bundled[0]);
+    });
+});
+
+// The renderer is left to lint-staged on the premise that lint-staged formats it at commit. Ask
+// lint-staged's own matcher, with the package.json config, rather than trust the comment.
+describe('LEFT_TO_COMMIT — lint-staged formats each one at commit', () => {
+    it('gives every exempt path a task that runs prettier --write; a narrower config gives none', async () => {
+        const { generateTasks } = await import(
+            pathToFileURL(path.join(ROOT, 'node_modules', 'lint-staged', 'lib', 'generateTasks.js')).href
+        );
+        const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))['lint-staged'];
+        const formatsAtCommit = (cfg, relPath) =>
+            generateTasks({ config: cfg, cwd: ROOT, files: [path.join(ROOT, relPath)], relative: true }).some(
+                (task) => task.fileList.includes(relPath) && task.commands.some((c) => c.startsWith('prettier --write'))
+            );
+        expect(LEFT_TO_COMMIT.size).toBeGreaterThan(0);
+        for (const relPath of LEFT_TO_COMMIT) {
+            expect(formatsAtCommit(config, relPath), relPath).toBe(true);
+            expect(formatsAtCommit({ '*.cjs': ['prettier --write'] }, relPath), relPath).toBe(false);
         }
     });
 });
@@ -326,8 +388,17 @@ describe('format-edited-file CLI — skips before spawning Prettier', { timeout:
 
     it('asks Prettier, as before the check existed, when the ignore library cannot load', () => {
         makeRoot();
+        // A throwing `ignore` the copy resolves before any ancestor's or global node_modules, so the
+        // test does not depend on what the machine has installed. It leaves a sentinel to prove it ran.
+        const stub = path.join(tmpRoot, 'node_modules', 'ignore');
+        fs.mkdirSync(stub, { recursive: true });
+        fs.writeFileSync(
+            path.join(stub, 'index.js'),
+            "require('fs').writeFileSync(__dirname + '/loaded', '');\nthrow new Error('ignore stub');\n"
+        );
         const result = runCopiedHook('a.md', envWithout('NODE_PATH'));
         expect(result.status).toBe(0);
+        expect(fs.existsSync(path.join(stub, 'loaded'))).toBe(true);
         expect(result.stderr).toContain('prettier did not format a.md');
     });
 });

@@ -98,8 +98,9 @@ formatted file is still formatted.
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | The pre-check skips a file Prettier would format | Med: unformatted until commit (lint-staged formats `js/cjs/json/css/html`) | The parity test over every tracked file plus probes |
-| Prettier upgrades its bundled `ignore` or its default ignore paths | Low | The parity test reads the installed Prettier, so it fails on drift |
+| Prettier upgrades its bundled `ignore` or its default ignore paths | Low | Three tests read the installed Prettier and fail on drift: the parity test, the CLI default ignore files, and the bundled `ignore` version (PR #89 review round 1, findings 1–2) |
 | Mid-session `npm test` reads an unformatted renderer | Low: `extractMethod` matches `^\s{4}name(…) {`, and edits keep the file's indentation | Commit-time vitest runs after lint-staged |
+| A commit that bypasses lint-staged (`SKIP=lint-staged`, `--no-verify`) commits the renderer unformatted | Low: cosmetic; the next commit that stages it carries the reformat diff | **Residual**, stated in the hook's header; `npm run format` repairs it. The premise that lint-staged formats it is now a test (review finding 3) |
 
 ---
 
@@ -197,6 +198,33 @@ hook's own header comment both assert what the hook formats; both are in the tab
   Controls on the final hook (`time-hook.js`): planted unformatted `.js` formatted PASS; planted
   unformatted ignored `.md` untouched PASS; `git status` unchanged.
 
+### 2026-10-26 — PHASE: Review round 1 (PR #89, light, separate session)
+
+Five findings, each checked against the code before any change, and all five accepted:
+
+1. **The parity test could not see the CLI's default.** It passed the hook's own list to `getFileInfo`,
+   which has no default ignore path. New test: `prettier --file-info` (the CLI, so the default applies)
+   on `logs/a.js`, which only `.gitignore` matches, and `docs/x.js`, which only `.prettierignore`
+   matches. Both must read ignored, and `new-module.js` must not. Controls: each probe reads *not*
+   ignored under the other file alone, so a default that dropped either file fails the test. Adding a
+   default file is not covered, by design: the hook would then only spawn more.
+2. **Nothing tied the pin to Prettier.** New test: the installed `ignore` version equals the single
+   `## ignore@v…` line in Prettier's `THIRD-PARTY-NOTICES.md`.
+3. **The renderer rests on lint-staged.** New test: lint-staged's own `generateTasks` (imported from
+   `node_modules/lint-staged/lib`), with `package.json`'s config, gives every `LEFT_TO_COMMIT` path a
+   task that runs `prettier --write`. Control: a `*.cjs`-only config gives none. `LEFT_TO_COMMIT` is
+   exported. The bypass case is a residual (§ 2 Risks), stated in the hook's header.
+4. **Read errors.** `createIsIgnored` now rethrows anything but `ENOENT`, as Prettier's `readFile`
+   does, so `planFormat`'s catch hands the edit to Prettier, which reports the error. New test:
+   `.prettierignore` as a directory (EISDIR) throws.
+5. **The unloadable-library test depended on the machine.** It now plants a throwing
+   `<tmpRoot>/node_modules/ignore`, which the copied hook resolves before any ancestor's or global
+   `node_modules`. The stub leaves a sentinel file, which proves it ran.
+
+Also the held-back nit: the `git ls-files` spawn's status is asserted. RED: 2 of the 5 new tests failed
+on the round-0 hook (findings 3 and 4); the other three pass by design and carry their own controls.
+Mutations: 10 of 10 killed (M10: swallow every read error). Full suite 48 files / 2,333 passed / 1 skipped.
+
 ---
 
 ## 5. Key Discoveries
@@ -232,7 +260,7 @@ hook's own header comment both assert what the hook formats; both are in the tab
 
 | Item | Why It Exists | Impact | Remediation |
 |------|---------------|--------|-------------|
-| `ignore` pinned to Prettier's bundled version by hand | Exact mirror of Prettier's matcher | L | The parity test flags drift; re-pin on a Prettier upgrade |
+| `ignore` pinned to Prettier's bundled version by hand | Exact mirror of Prettier's matcher | L | The bundled-version test fails on drift; re-pin on a Prettier upgrade |
 
 ---
 
@@ -250,9 +278,9 @@ hook's own header comment both assert what the hook formats; both are in the tab
 
 | Test | Result | Notes |
 |------|--------|-------|
-| `tests/format-edited-file.test.js` | Pass (25) | 7 new `planFormat` cases, 2 parity, 2 CLI no-spawn |
-| Full `npx vitest run` | Pass | 48 files, 2,329 passed, 1 skipped |
-| Mutations | 9 / 9 killed | § 4 |
+| `tests/format-edited-file.test.js` | Pass (29) | 7 new `planFormat` cases, 2 parity, 2 CLI no-spawn; review round 1: read error, CLI default, bundled version, lint-staged premise |
+| Full `npx vitest run` | Pass | 48 files, 2,333 passed, 1 skipped (review round 1) |
+| Mutations | 10 / 10 killed | § 4 |
 | ESLint, Prettier (changed files), `check-docs-index.js` | Pass | |
 | E2E | Not run | The hook is outside the app; the pre-push hook runs the suite |
 

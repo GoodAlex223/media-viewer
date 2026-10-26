@@ -14,11 +14,13 @@
 // - A path Prettier would ignore. `createIsIgnored` is Prettier's own check, so the skip changes
 //   nothing Prettier does: its default ignore files (.gitignore, .prettierignore), each with
 //   `node_modules` appended, matched by the `ignore` version it bundles (pinned exactly in
-//   package.json), ignored when any file matches. The tests compare it with the installed Prettier
-//   over every tracked file, so a Prettier upgrade that changes the rule fails there.
+//   package.json), ignored when any file matches. The tests hold it to the installed Prettier three
+//   ways — the same verdict on every tracked file, the CLI's default ignore files, the bundled
+//   `ignore` version — so a Prettier upgrade that changes the rule fails there.
 // - The root media-viewer.js: Prettier's parse and print of it is ~1.1 s, so lint-staged formats it
-//   at commit instead. Not `"async": true`: Prettier writes output computed from its own earlier
-//   read, so an edit that lands mid-format would be overwritten.
+//   at commit instead (a test asks lint-staged's own matcher). A commit that bypasses lint-staged
+//   (`SKIP=lint-staged`, `--no-verify`) leaves it unformatted. Not `"async": true`: Prettier writes
+//   output computed from its own earlier read, so an edit that lands mid-format would be overwritten.
 //
 // `planFormat` and `createIsIgnored` are unit-tested (tests/format-edited-file.test.js). The CLI
 // always exits 0: a PostToolUse hook cannot undo the edit, and a syntax error is lint-staged's to report.
@@ -74,15 +76,19 @@ function createIsIgnored(root) {
         let content = '';
         try {
             content = fs.readFileSync(path.join(root, name), 'utf8');
-        } catch (_err) {
-            // An unreadable file adds no patterns; Prettier then decides for itself.
+        } catch (err) {
+            // As in Prettier: a missing file adds no patterns, and any other read error throws, which
+            // planFormat turns into a Prettier run that reports it.
+            if (err.code !== 'ENOENT') {
+                throw err;
+            }
         }
         return ignore({ allowRelativePaths: true }).add(`${content}\nnode_modules`);
     });
     return (posixRelPath) => matchers.some((matcher) => matcher.checkIgnore(posixRelPath).ignored);
 }
 
-module.exports = { planFormat, createIsIgnored };
+module.exports = { planFormat, createIsIgnored, LEFT_TO_COMMIT };
 
 // --- CLI: read the hook's stdin JSON, format the edited file, always exit 0 ---
 if (require.main === module) {
