@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-26 <!-- Group G4: Formatter hook per-edit cost (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #89 (merge 7f75013) after a 5-finding review, a docs round and a clean round 3. -->
+**Last Updated**: 2026-10-26 <!-- Group G3: ZoomManager extraction (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #90 (merge 082e3b2) after four review rounds (15 → 1 → 0 → 0 findings) and a close-out that accepted every response. -->
+<!-- Previous: Group G4: Formatter hook per-edit cost (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #89 (merge 7f75013) after a 5-finding review, a docs round and a clean round 3. -->
 <!-- Previous: v2 modules and redesign spec (design only, unplanned spare-usage work, 2026-10-22). MERGED 2026-10-25 via PR #88 (merge e1c4e03) after five PR review rounds (16 → 5 → 3 → 2 → 1 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G2: Hash and similarity sort off the renderer thread, PR 2 of 2 (background hashing, parity mode, atomic folder writes; 🔵 🏆, Oct 19–23). MERGED 2026-10-25 via PR #87 (merge f5ddfa3) after a final review with a fix wave, five PR review rounds, the user's Liked_2 smoke (B15 ruling) and a real-JXL measurement. Closes G2 and TODO 🔴 "Speed up AI / similarity sorting…". -->
 <!-- Previous: Stop the feature cache being wiped on a folder switch (TODO 🔴, ahead of G2 PR 2). MERGED 2026-10-22 via PR #86 (merge 654fb3e) after a 15-finding PR review and three close-out rounds, all fixed. -->
@@ -30,6 +31,69 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-26 — Group G3: ZoomManager extraction (v2.0) 🔵 (Oct 19–23, run after the week) — **MERGED `082e3b2`** (PR #90)
+
+**Plan**: [2026-10-26_g3-zoom-manager-extraction.md](../archive/plans/2026-10-26_g3-zoom-manager-extraction.md). **Spec**: [2026-10-26-g3-zoom-manager-extraction-design.md](../superpowers/specs/2026-10-26-g3-zoom-manager-extraction-design.md). The user skipped the brainstorm's questions; spec § 11 lists Claude's calls, and § 12 the review round's ruling.
+**Branch**: `g3-zoom-manager-extraction`, cut from `main` at `5230b69`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: MERGED 2026-10-26 via PR #90** (merge commit `082e3b2`, 17 commits). It closes 🔵 [2026-10-18] "Extract ZoomManager from the renderer", plus four 🟤 zoom entries: the clipping check (by evidence), the wrapper-aware `isZoomed`, the `closeAllZoomPopovers` rename (by construction), and the `WheelEvent` E2E.
+
+**What shipped:**
+- **`zoom.js`: `ZoomManager`**, on the v2.0 pattern. A stateful class built from three host callbacks (`getMediaElement`, `isCompareMode`, `createIcons`), with no reference to `MediaViewer`.
+  - It owns the zoom/pan state, the popovers, each media element's listeners (`attachToMedia`) and its three document listeners (`init`).
+  - `MediaViewer` builds `this.zoom` and calls eight methods.
+  - `FullscreenManager`'s `isZoomed` callback delegates to `isWrapperZoomed`.
+  - The dead `getZoomTarget` is gone.
+- **`media-viewer.js` went 11,945 → 11,529 lines (−416).** `zoom.js` is 471.
+- **Four older zoom bugs fixed on purpose in review**, by the user's ruling (spec § 12):
+  - the pan bound used the scaled box, s times too loose; in round 2, also a letterboxed photo larger than the window, now bounded by `pictureSize`;
+  - a wheel past 8× slid the image until a notch changed the file;
+  - a round trip left `1.0000000000000002`, still "zoomed";
+  - `deltaY` 0 zoomed in.
+- **Docs**: CLAUDE.md, `.claude/agents/regression-checker.md` (now covering the extracted modules) and `docs/ARCHITECTURE.md`.
+
+**Verification:**
+- **Characterization E2E first**, on the unchanged renderer: `tests/e2e/zoom.test.js` § "Zoom input (G3 characterization)".
+  - Cases A–J, then K in review. They cover the wheel, double-click, pan and edge, compare, compare fullscreen, the next file, video, animated JXL, the second tournament pair, single → compare → single, and a letterboxed photo.
+  - A–F each failed at their named assertion under a planted mutation (8 of 8).
+  - The file stayed byte-identical through the host switch.
+- **Unit**: `tests/zoom-manager.test.js`, 30 tests, by direct import. The new ones each failed first, or were shown able to fail by a planted mutation (6 invariants, 2 stale-call scans).
+- **Suite counts**: unit 2,333 → **2,375** passed, 1 skipped. E2E 225 → **236** passed; 6 → 7 skipped (the opt-in evidence block).
+- **Screenshots**: the before/after pair, in single and compare mode, is **0 differing pixels** (the PNGs are byte-identical). A determinism control gave 0, against a planted control of 1,318,209. A re-capture after the review fixes also gave 0.
+- **Old names**: a whole-file `tsc --checkJs` found 0 diagnostics naming a removed zoom member out of 1,692; a planted control gave 2.
+- **Manual**: two hand passes with the user, one before the review fixes and one after them. All passed.
+
+**Review** (a separate session):
+- **Round 1**: 15 findings and 21 held back.
+  - Fixed the PR's own items (#2, #5, #11–#15), and #3, #4 and #7 by ruling.
+  - Filed #1, #6, #8, #9, #10 and the inactive `curly` rule (🟤 [2026-10-26] "From: PR #90 review").
+- **Round 2**: 1 finding. The #2 fix missed media that `fitMediaToScreen` letterboxes: my round-1 premise came from the stylesheet only. Fixed by `pictureSize` and E2E case K.
+- **Rounds 3–4 and the close-out**: no issues; every response was accepted.
+
+**User rulings:** skip the questions; native execution; the manual pass together; let the pre-push hook run the full E2E; review in a separate chat; push and PR; fix #3, #4 and #7 in this PR; backlog the two fullscreen gestures for consistency across the app (🔵 [2026-10-26]); merge with `--merge` and delete the branch.
+
+**`typescript-lsp` trial (its last vehicle):**
+- Navigation answers matched grep.
+- One diagnostic was acted on (ESLint covers it too). The harness shows about 10 diagnostics per batch, so the "no stale name" proof came from `tsc` run directly.
+- Cost: 1.29 GB committed for two idle stacks.
+- Evidence is in REVIEW-QUEUE § 5; G6 reads it out.
+
+**Key learnings:**
+- ⭐ A float round-trip check at one length proves nothing about longer ones. One notch was exact, and four or more were not.
+- ⭐ A stylesheet read misses inline styles set by code. Fixtures smaller than every threshold sample only one sizing branch.
+- `git log -S` on a comment dates the comment, not the code beside it.
+- Under memory pressure, check committed memory, not just free RAM. Electron launches failed with `0xC0000142`, and idle tsservers sit out of RAM but in the commit charge.
+
+**Propagation check:**
+- The live surfaces the review changed: CLAUDE.md (#13), the regression checker (#14), ARCHITECTURE (#15) and spec § 12 / row C. Each was corrected in the PR.
+- The plan's own premise and its manual-check scope are corrected in the archived plan.
+- No live doc still states the layout-box bound.
+
+**Follow-ups:**
+- BACKLOG 🟤 [2026-10-26] "From: PR #90 review" (#1, #6, #8, #9, #10, `curly`) and "From: G3 closeout" (the module-list control, the overlapping wheel guards).
+- BACKLOG 🔵 [2026-10-26] "From: G3 manual testing" (double-click and click in fullscreen).
+- WEEKLY G5 (the v2.0 status after G3), G6 (the `typescript-lsp` read-out).
 
 ### 2026-10-26 — Group G4: Formatter hook per-edit cost 🔵 (Oct 19–23, run after the week) — **MERGED `7f75013`** (PR #89)
 

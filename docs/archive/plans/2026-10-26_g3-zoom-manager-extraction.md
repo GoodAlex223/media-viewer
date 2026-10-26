@@ -2,10 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) Oct 19–23 § G3 (🔵, 5 SP → ~6 SP); BACKLOG 🔵 [2026-10-18] "Extract ZoomManager from the renderer (v2.0 modularization, the third manager)"
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) Oct 19–23 § G3 (🔵, 5 SP → ~6 SP); BACKLOG 🔵 [2026-10-18] "Extract ZoomManager from the renderer (v2.0 modularization, the third manager)"
 **Spec**: [2026-10-26-g3-zoom-manager-extraction-design.md](../../superpowers/specs/2026-10-26-g3-zoom-manager-extraction-design.md). The user skipped the question round; spec § 11 lists Claude's calls.
 **Created**: 2026-10-26
-**Status**: Implemented (T1–T5, native execution 2026-10-26); [PR #90](https://github.com/GoodAlex223/media-viewer/pull/90) open. The final whole-branch review runs in a separate chat (the user's ruling), then merge and Closeout.
+**Status**: ✅ **Merged 2026-10-26 via [PR #90](https://github.com/GoodAlex223/media-viewer/pull/90) (merge `082e3b2`)**, after four review rounds and a close-out in a separate chat. Closed out and archived the same day.
 **Last Updated**: 2026-10-26
 **Branch**: `g3-zoom-manager-extraction` (from `main` @ `5230b69`). Baseline `3509bca`: before screenshots and `typescript@6`, with `media-viewer.js` unchanged at **11,945** lines.
 **Trial vehicle**: `typescript-lsp` (REVIEW-QUEUE § 5; last vehicle). Log every LSP answer and diagnostic in the Progress Log (spec § 8).
@@ -597,14 +597,14 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
 
 ## Closeout (after merge; `~/.claude/rules/planning-closeout.md`)
 
-- [ ] BACKLOG:
+- [x] BACKLOG:
   - Check off 🔵 [2026-10-18] "Extract ZoomManager…" and the 🟤 entries in spec § 7 rows 1 (with the screenshot as evidence), 2, 3 and 6.
   - Rename `removeZoomPopover` in row 5's text, and `zoomState`-era names in row 4's.
   - Add `zoom.js` to 🟤 "`docs/ARCHITECTURE.md`'s file tree omits every extracted module".
   - File the Improvements below.
-- [ ] WEEKLY: G3 → `✅ PR #N`, its two Daily Schedule rows, and the Summary Table status. DONE.md entry, with the line count and test deltas.
-- [ ] REVIEW-QUEUE § 5: hand the `typescript-lsp` log to G6's read-out (no verdict here).
-- [ ] Archive this plan to `docs/archive/plans/`, `git rm` the original, and link it from `docs/README.md`.
+- [x] WEEKLY: G3 → `✅ PR #N`, its two Daily Schedule rows, and the Summary Table status. DONE.md entry, with the line count and test deltas.
+- [x] REVIEW-QUEUE § 5: hand the `typescript-lsp` log to G6's read-out (no verdict here).
+- [x] Archive this plan to `docs/archive/plans/`, `git rm` the original, and link it from `docs/README.md`.
 
 ## Improvements (to BACKLOG 🟤 at closeout)
 
@@ -761,3 +761,10 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     - the round-1 premise line above is corrected;
     - the manual re-check's item 1 is scoped;
     - the trial-log reading is labelled as an inference.
+- **2026-10-26: merged and closed out.**
+  - **Merge.** Round 4 (6418526838) found no issues, and the close-out (6418661960) accepted every response; the reviewer's messages held no near-miss. PR #90 merged with `--merge` as `082e3b2`. The branch was deleted on the remote and locally, and `main` was pulled.
+  - **BACKLOG.**
+    - Checked off: 🔵 [2026-10-18] "Extract ZoomManager…", plus 🟤 rows 1 (clipping, by the compare screenshots), 2 (`isWrapperZoomed`), 3 (`hideAllPopovers`) and 6 (the `WheelEvent` E2E).
+    - Renamed: rows 4 and 5, the `_jxlObjectURLs` entry's `zoomControlsMap`, and `zoom.js` added to the ARCHITECTURE file-tree entry.
+    - Filed: Improvements 1 and 2 as 🟤 [2026-10-26] "From: G3 closeout". Improvement 3 was already filed with the review's #10.
+  - **Elsewhere:** WEEKLY G3 shows ✅ `082e3b2` (PR #90) and its two Daily rows; a DONE.md entry; a REVIEW-QUEUE § 5 evidence row for G6's `typescript-lsp` read-out. This plan moved to `docs/archive/plans/`.

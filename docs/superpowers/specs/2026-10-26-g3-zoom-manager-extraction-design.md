@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 19–23 § G3 (🔵, 5 SP → **~6 SP**, § 10) ← BACKLOG 🔵 [2026-10-18] "Extract ZoomManager from the renderer (v2.0 modularization, the third manager)"
 **Created**: 2026-10-26
-**Status**: Approved by the user 2026-10-26 ("Looks good"), with § 11's calls as written. **The user skipped the question round**, so § 11 lists every call Claude made.
+**Status**: ✅ **Implemented and merged 2026-10-26** via [PR #90](https://github.com/GoodAlex223/media-viewer/pull/90) (merge `082e3b2`); [plan](../../archive/plans/2026-10-26_g3-zoom-manager-extraction.md) archived. Approved by the user 2026-10-26 ("Looks good"), with § 11's calls as written; § 12 records the review round's ruling. **The user skipped the question round**, so § 11 lists every call Claude made.
 **Branch**: `g3-zoom-manager-extraction` (from `main` @ `5230b69`; one PR)
 **Baseline**: `3509bca` — the before screenshots and `typescript@6`, with `media-viewer.js` unchanged at **11,945** lines.
 **Trial vehicle**: `typescript-lsp` (REVIEW-QUEUE § 5; its last vehicle, stop rule) — § 8.
