@@ -732,3 +732,11 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     - **The machine:** commit **44.0 GB used of a 46.5 GB limit**, and 0.5 GB of RAM free. The large committers were the WSL VM (`vmmemWSL`, 10.3 GB private, 3.3 GB in RAM), four Claude Code sessions (~2.9 GB private together), VS Code (1.1 GB) and the helpers (1.3 GB).
     - **Reading.** The day's failures fit a nearly exhausted commit limit better than a lack of free RAM: E2E launches exiting `0xC0000142`, the guard killing background shells, and the 15–35 s unit-test timeouts. The helpers are about 1.3 GB of the ~44 GB committed, which is a real share but not the main one. T5's entry above named only the processes with the largest working sets, which is how the helpers went uncounted.
     - **For the trial verdict:** each Claude Code session that starts the plugin adds about 0.6 GB of commit while idle. G3's LSP use ended in T3, so turning the plugin off now costs this trial no data.
+  - **2026-10-26: manual re-check of the round-1 behaviour changes** (with the user, `npm start` on `94fc346`, the same throwaway profile and generated folder). A side agent's note pointed out that the first manual pass ran on `f553149`, before `3f593f9` changed four behaviours. **All 7 passed**, as the user reported:
+    1. The drag limit at 200% and 400%: the image's edge stops at the pane's edge in every direction, with no empty area.
+    2. At 800%, further wheel-up notches off-centre leave the image still and the file unchanged.
+    3. Six notches in and six out read 100%, and the Zoom button is no longer active.
+    4. A sideways wheel or touchpad swipe neither zooms nor navigates.
+    5. Wheel toward the pointer, the double-click cycle and Escape are unchanged.
+    6. In compare mode, each side's drag stops at its own pane's edge.
+    7. A fullscreen click exits after a six-in, six-out round trip.
