@@ -721,3 +721,9 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     - H3: the gesture entry dates the guard from `d3b08bb`, and gives the double-click outcomes by where the second click lands. My first dating came from a `-S` search on the comment text, not a reading of the diff.
     - H1 and H14: comments.
   - **Trial log addition (held back, `package.json:46`).** `typescript@6` exists only so the project-scoped `typescript-lsp` plugin can start. The reviewer measured its two tsserver stacks at 1.24 GB private / 0.75 GB working set, with 362 MB free. That cost belongs in G6's read-out. It is also a likely contributor to T5's low-memory E2E failure, which the T5 entry above blamed only on other processes.
+  - **Committed and pushed:** `3f593f9` (code and tests) and `80dc7c6` (docs). The pre-push full E2E gave **235 passed, 7 skipped, 0 failed** (10.2 min). Both hooks gave 2371 passed, 1 skipped.
+  - **Two held-back clean-ups in `tests/e2e/zoom.test.js`, after that push:**
+    - **H6:** `openFolder` uses `createTempFixtureDir` (five imports and the fixtures constant dropped).
+    - **H17:** case A's comment said the wait was "past the document handler's 300 ms wheel debounce". But that handler navigates at once (the 300 ms is a lockout), so the comment now gives the real reason: `page.mouse.wheel` does not wait for the page's handlers, and the case asserts a non-event. Case E's wait got the same note.
+    - The header comment now says case C's bound changed in round 1.
+    - Run: 13/13.

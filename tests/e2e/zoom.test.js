@@ -1,12 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { cp, mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
-import { dirname, join, resolve } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { launchApp, closeApp, loadFolder, createTempFixtureDir, waitForMedia } from './helpers/electron-app.js';
 import { writeGridImage } from './fixtures/grid-image.js';
-
-const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
 test.describe('Zoom Controls', () => {
     let electronApp, page, tmpFixtures;
@@ -91,10 +86,11 @@ test.describe('Zoom Controls', () => {
 });
 
 // G3 characterization (spec 2026-10-26-g3-zoom-manager-extraction-design.md § 6.1): real input events through the
-// transform, pan and wheel layer, asserted on the DOM only, so this file runs unchanged before and after the
-// ZoomManager extraction. A–F were each shown able to fail by a planted mutation (plan Task 1, Progress Log).
+// transform, pan and wheel layer, asserted on the DOM only, so the same cases ran before and after the ZoomManager
+// extraction (the file was byte-identical through it). A–F were each shown able to fail by a planted mutation (plan
+// Task 1, Progress Log). PR #90 review round 1 corrected case C's edge bound (spec § 12).
 test.describe('Zoom input (G3 characterization)', () => {
-    let electronApp, page, root;
+    let electronApp, page, tmp;
 
     test.afterEach(async () => {
         if (page) {
@@ -109,23 +105,20 @@ test.describe('Zoom input (G3 characterization)', () => {
         if (electronApp) {
             await closeApp(electronApp);
         }
-        if (root) {
-            await rm(root, { recursive: true, force: true });
-            root = null;
+        if (tmp) {
+            await tmp.cleanup();
+            tmp = null;
         }
     });
 
     // Grid images: a solid-colour fixture cannot show a pan.
     async function openFolder({ grids = 2, fixtures = [] } = {}) {
-        root = await mkdtemp(join(tmpdir(), 'mv-e2e-zoom-'));
+        tmp = await createTempFixtureDir(fixtures);
         for (let i = 0; i < grids; i++) {
-            await writeGridImage(join(root, `grid-${i}.png`), 210 + i * 60);
-        }
-        for (const name of fixtures) {
-            await cp(join(FIXTURES, name), join(root, name));
+            await writeGridImage(join(tmp.dir, `grid-${i}.png`), 210 + i * 60);
         }
         ({ electronApp, page } = await launchApp());
-        await loadFolder(page, root);
+        await loadFolder(page, tmp.dir);
         await waitForMedia(page);
     }
 
@@ -162,7 +155,9 @@ test.describe('Zoom input (G3 characterization)', () => {
         await wheelOver(singleMedia(), -100);
         await expect(singleValue()).toHaveText('115%');
         expect((await transformOf(singleMedia())).scale).toBeCloseTo(1.15, 5);
-        await page.waitForTimeout(400); // past the document handler's 300 ms wheel debounce
+        // A bounded wait before asserting a non-event: the document handler would navigate at once (its 300 ms is a
+        // lockout, not a delay), but page.mouse.wheel does not wait for the page's handlers to run.
+        await page.waitForTimeout(400);
         expect(await page.evaluate(() => window.mediaViewer.currentIndex)).toBe(0);
     });
 
@@ -237,7 +232,7 @@ test.describe('Zoom input (G3 characterization)', () => {
         await expect(sideValue('left')).toHaveText('115%');
         c = await centerOf(sideMedia('left'));
         await page.mouse.click(c.x, c.y);
-        await page.waitForTimeout(200);
+        await page.waitForTimeout(200); // a non-event: give a wrong exit time to happen before asserting it did not
         await expect(wrapper).toHaveClass(/\bfullscreen\b/);
     });
 
