@@ -250,7 +250,9 @@ this section's E2E row, which could not yet carry `2890eb0`'s own pre-push run; 
 - Tests: 29 in the hook's file, 48 files / 2,333 passed / 1 skipped in the full suite, E2E 225 passed /
   6 skipped on each of the three pushes.
 - Documentation: `CLAUDE.md` § Architecture `.claude/` line, the hook's header.
-- Improvements: 3 to BACKLOG 🟤 [2026-10-26] (§ 6). The user raised the E2E gate's cost during the
+- Improvements: 3 to BACKLOG 🟤 [2026-10-26] (§ 6), and a fourth after the closeout: a side agent noted that
+  a Prettier update bundling another `ignore` blocks every commit, with no warning beforehand and no
+  fix named in the failure. Filed by user ruling (`796a715`). The user raised the E2E gate's cost during the
   task; that is 🔵 [2026-10-26], and its option 1 is in TODO 🟠 by user ruling (§ 6 Spawned Tasks).
 
 ---
@@ -338,7 +340,7 @@ this section's E2E row, which could not yet carry `2890eb0`'s own pre-push run; 
 
 | Artifact | Done / N/A + reason |
 |----------|---------------------|
-| `BACKLOG.md` — improvements extracted (min 2, routed by source) | Done: 3 under 🟤 `[2026-10-26] From: G4 closeout`; the user-raised E2E entry under 🔵 `[2026-10-26]` |
+| `BACKLOG.md` — improvements extracted (min 2, routed by source) | Done: 3 under 🟤 `[2026-10-26] From: G4 closeout`, plus a fourth filed after the closeout by user ruling (`796a715`, moving the `ignore` pin with Prettier); the user-raised E2E entry under 🔵 `[2026-10-26]` |
 | `TODO.md` — actionable items, plus § Spawned Tasks rows for out-of-tree work | Done: 🟠 E2E gate option 1 (user ruling). No out-of-tree work |
 | `docs/archive/plans/` — plan moved here, original deleted | Done (`git mv`) |
 | `DONE.md` — entry with plan link, summary, key changes | Done |

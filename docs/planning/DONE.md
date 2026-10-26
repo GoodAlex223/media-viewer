@@ -85,7 +85,7 @@ Completed tasks with implementation details and learnings.
 **Propagation check:** the review's late facts reached the hook's header (`2890eb0`). `CLAUDE.md:78` holds no claim that the review changed. `PROJECT.md` and `docs/ARCHITECTURE.md` say nothing about the hook.
 
 **Follow-ups:**
-- BACKLOG 🟤 [2026-10-26] (G4 closeout), three entries: unknown-type skip, the `extractMethod` lookup, a committed timing probe.
+- BACKLOG 🟤 [2026-10-26] (G4 closeout), four entries: unknown-type skip, the `extractMethod` lookup, a committed timing probe, and moving the `ignore` pin with Prettier (filed after the closeout, `796a715`, by user ruling).
 - BACKLOG 🔵 [2026-10-26], the pre-push E2E gate's cost; its option 1 is TODO 🟠.
 
 ### 2026-10-25 — v2 modules and redesign spec (design only; unplanned, spare weekly usage) — **MERGED `e1c4e03`** (PR #88)
