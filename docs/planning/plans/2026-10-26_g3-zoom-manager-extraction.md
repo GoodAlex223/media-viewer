@@ -698,7 +698,7 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     - #3: translate −382 → −405 → −427 → −450 at a pinned 8×.
     - #4: 4+ notches in and out end at `1.0000000000000002` with `isZoomed()` true; 1–3 notches are exact, which is why planning's 1-notch check missed it.
     - #7: `deltaY` 0 → 115%.
-    - #2: by code and CSS. Every `.media-display` rule is `width/height: auto` under max limits, so the layout box is the rendered media.
+    - #2: by code and CSS. Every `.media-display` rule is `width/height: auto` under max limits, so the layout box is the rendered media. *Wrong for one case, found in round 2:* `fitMediaToScreen` sets an inline `100vw × 100vh` box with `object-fit: contain` on single-mode media larger than the window, and a stylesheet read cannot see an inline style set by code. See the round 2 entry below.
   - **RED → GREEN** (`tests/zoom-manager.test.js`). The fake media now reports `offsetWidth`/`offsetHeight` plus a transform-aware `getBoundingClientRect()`; the old static rect hid #2. Five tests failed first:
     - the pan clamp (`expected 400 to be 200`);
     - the `zoomAtPoint` clamp (`expected 3000 to be 1400`);
@@ -730,7 +730,7 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
   - **2026-10-26: `typescript-lsp` memory, measured (trial log, for G6).** A side agent's note said the helpers' memory was never counted against the day's low-memory failures. Measured on this machine after round 1:
     - **Two language-server stacks**, one per Claude Code session that had started the plugin (this one and the reviewer's). Each is a `typescript-language-server` plus two `tsserver`s. Together they hold **1,286 MB private (committed)** and only **67 MB in RAM**; they were paged out while idle. This agrees with the reviewer's 1.24 GB.
     - **The machine:** commit **44.0 GB used of a 46.5 GB limit**, and 0.5 GB of RAM free. The large committers were the WSL VM (`vmmemWSL`, 10.3 GB private, 3.3 GB in RAM), four Claude Code sessions (~2.9 GB private together), VS Code (1.1 GB) and the helpers (1.3 GB).
-    - **Reading.** The day's failures fit a nearly exhausted commit limit better than a lack of free RAM: E2E launches exiting `0xC0000142`, the guard killing background shells, and the 15–35 s unit-test timeouts. The helpers are about 1.3 GB of the ~44 GB committed, which is a real share but not the main one. T5's entry above named only the processes with the largest working sets, which is how the helpers went uncounted.
+    - **Reading (an inference; the repo cannot check it).** The day's failures fit a nearly exhausted commit limit better than a lack of free RAM: E2E launches exiting `0xC0000142`, the guard killing background shells, and the 15–35 s unit-test timeouts. The helpers are about 1.3 GB of the ~44 GB committed, which is a real share but not the main one. T5's entry above named only the processes with the largest working sets, which is how the helpers went uncounted.
     - **For the trial verdict:** each Claude Code session that starts the plugin adds about 0.6 GB of commit while idle. G3's LSP use ended in T3, so turning the plugin off now costs this trial no data.
   - **2026-10-26: manual re-check of the round-1 behaviour changes** (with the user, `npm start` on `94fc346`, the same throwaway profile and generated folder). A side agent's note pointed out that the first manual pass ran on `f553149`, before `3f593f9` changed four behaviours. **All 7 passed**, as the user reported:
     1. The drag limit at 200% and 400%: the image's edge stops at the pane's edge in every direction, with no empty area.
@@ -740,3 +740,24 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     5. Wheel toward the pointer, the double-click cycle and Escape are unchanged.
     6. In compare mode, each side's drag stops at its own pane's edge.
     7. A fullscreen click exits after a six-in, six-out round trip.
+
+    *Scope, per review round 3:* item 1 holds for the media tested, all smaller than the window. That folder cannot reach the letterboxed case (round 2's finding).
+- **2026-10-26: PR #90 review, rounds 2 and 3** (comments 6416774672 at `4130473` and 6417519983 at `fe2eeaf`).
+  - **Round 2** accepted every round-1 response except #2, which it accepted in part, and found **1 issue**. #2's fix holds only where the layout box is the picture. In single mode, `fitMediaToScreen` gives media larger than the window an inline `100vw × 100vh` box with `object-fit: contain`, so the picture is letterboxed and the bound on that axis stays too loose. The reviewer's probe: a 4000×3000 photo in a 1600×900 box gives a bound of 2400 px at 4×, against a picture 800 px wide on screen.
+    - Round 2 also held back four candidates as not defects, and **round 3** found no new issue but pointed out that finding 1 was still unanswered.
+    - The reviewer's visible messages added no remark beyond the comments.
+  - **Verified:** `fitMediaToScreen` (`media-viewer.js` ~L4552) sets `width: 100vw; height: 100vh; object-fit: contain` when `naturalWidth > innerWidth || naturalHeight > innerHeight`, and the natural size otherwise. The same holds for video, by `videoWidth`/`videoHeight`.
+  - **Fix: `ZoomManager.pictureSize(element)`**, natural size × min(box / natural), used by both clamps.
+    - It equals the box when the box has the picture's shape: the stylesheet case, and `fitMediaToScreen`'s small-media branch, where the box is the natural size.
+    - A canvas, or a video before its metadata, has no natural size and keeps the box.
+    - **RED → GREEN:** `handlePanMove` failed with `expected 2400 to be 1800`, `zoomAtPoint` with `expected 5600 to be 4200`, and the letterboxed video with `expected 600 to be 450`. A no-natural-size control kept the box; it passes, and guards against applying the formula where it doesn't belong. 30/30 afterwards.
+  - **E2E case K:** a 3200×2400 grid (`writeGridImage`'s new `scale` option) in the 1200×800 window.
+    - It proves the letterbox branch ran: `style.width` is `100vw`, and the box is more than 50 px wider than the picture.
+    - It then double-clicks to 400%, drags five strokes, and expects translate = picture width × 3 / 2.
+    - 14/14 passed. With `pictureSize` forced back to the box (round 1's bound), case K **failed**: expected 1490, received 1722.
+    - `writeGridImage`'s default output is byte-identical to the old generator's (compared against a PNG the old code wrote), so the evidence screenshots stay reproducible.
+  - **Docs:**
+    - spec § 12's #2 and § 6.1 row C now define the bound by the displayed picture, with the round-1 premise named as wrong;
+    - the round-1 premise line above is corrected;
+    - the manual re-check's item 1 is scoped;
+    - the trial-log reading is labelled as an inference.
