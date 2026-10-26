@@ -5,14 +5,30 @@ import { ZoomManager } from '../zoom.js';
 // ZoomManager (G3, spec docs/superpowers/specs/2026-10-26-g3-zoom-manager-extraction-design.md § 6.2), imported
 // directly. Vitest runs in node, so media elements, popover nodes and `document` are small fakes.
 
+// A media element as the browser reports it: offsetWidth/offsetHeight are the layout box, while
+// getBoundingClientRect() includes the element's own transform (translate, then scale about its centre).
+// A static rect hid PR #90 review #2: the clamps read the scaled box, s times too loose.
 function fakeMedia({ width = 200, height = 100 } = {}) {
     return {
         style: {},
         listeners: {},
+        offsetWidth: width,
+        offsetHeight: height,
         addEventListener(type, fn, opts) {
             this.listeners[type] = { fn, opts };
         },
-        getBoundingClientRect: () => ({ left: 0, top: 0, width, height }),
+        getBoundingClientRect() {
+            const m = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\) scale\(([\d.e+-]+)\)/.exec(
+                this.style.transform ?? ''
+            );
+            const [tx, ty, s] = m ? m.slice(1).map(Number) : [0, 0, 1];
+            return {
+                left: width / 2 + tx - (width * s) / 2,
+                top: height / 2 + ty - (height * s) / 2,
+                width: width * s,
+                height: height * s,
+            };
+        },
         closest: () => null,
     };
 }
@@ -139,7 +155,9 @@ describe('ZoomManager', () => {
         zm.setZoom('left', 2, 0, 0);
         expect(zm.isWrapperZoomed(wrapper('left-media-wrapper'))).toBe(true);
         expect(zm.isWrapperZoomed(wrapper('right-media-wrapper'))).toBe(false);
-        expect(zm.isWrapperZoomed(wrapper(null))).toBe(false); // no side class: the single-mode state
+        // No side class reads the single-mode state. No production path sends such a wrapper today (every
+        // fullscreen.toggle caller passes the left or right wrapper); kept because the body moved verbatim (spec § 4.6).
+        expect(zm.isWrapperZoomed(wrapper(null))).toBe(false);
         zm.setZoom('single', 2, 0, 0);
         expect(zm.isWrapperZoomed(wrapper(null))).toBe(true);
     });
@@ -154,7 +172,7 @@ describe('ZoomManager', () => {
         expect(media.single.style.cursor).toBe('grabbing');
     });
 
-    it('handlePanMove clamps translate to rect.width × (scale − 1) / 2', () => {
+    it('handlePanMove clamps translate to the layout width × (scale − 1) / 2', () => {
         const { zm, media } = makeManager({ media: { single: fakeMedia({ width: 400, height: 200 }) } });
         zm.setZoom('single', 2, 0, 0);
         zm.handlePanStart({ clientX: 0, clientY: 0 }, 'single');
@@ -164,6 +182,64 @@ describe('ZoomManager', () => {
         zm.handlePanEnd();
         expect(zm.isPanning).toBe(false);
         expect(media.single.style.cursor).toBe('grab');
+    });
+
+    // PR #90 review #2: the scaled box made the bound s × too loose (at 4× a drag emptied the pane).
+    it('zoomAtPoint clamps translate to the layout box, not the scaled one', () => {
+        const { zm } = makeManager({ media: { single: fakeMedia({ width: 400, height: 200 }) } });
+        zm.setZoom('single', 4, 0, 0);
+        zm.zoomAtPoint('single', 8, -2800, 100); // 3000 px left of centre: unclamped translateX would be 3000
+        expect(zm.state.single.translateX).toBe(1400); // 400 × (8 − 1) / 2
+    });
+
+    // PR #90 review #3: at the cap, each further notch slid the image until a notch missed it and changed the file.
+    it('a wheel past the 8× cap leaves the scale and the position alone', () => {
+        const { zm } = makeManager();
+        zm.setZoom('single', 8, 0, 0);
+        const e = wheel(-100);
+        e.clientX = 150; // 50 px right of centre
+        zm.handleWheel(e, 'single');
+        expect(zm.state.single).toEqual({ scale: 8, translateX: 0, translateY: 0 });
+        expect(e.preventDefault).toHaveBeenCalledTimes(1);
+        expect(e.stopPropagation).toHaveBeenCalledTimes(1);
+    });
+
+    // PR #90 review #4: 1.15 and its rounded reciprocal drift, so a round trip of 4+ notches ended at
+    // 1.0000000000000002, which read 100% while isZoomed() said true (a click no longer left fullscreen).
+    it('the same number of steps in and out lands exactly on 100%, by wheel or by the popover', () => {
+        const { zm } = makeManager();
+        for (const n of [4, 5, 10, 14]) {
+            zm.reset('single');
+            for (let i = 0; i < n; i++) {
+                zm.handleWheel({ ...wheel(-100), clientX: 150 }, 'single');
+            }
+            for (let i = 0; i < n; i++) {
+                zm.handleWheel({ ...wheel(100), clientX: 150 }, 'single');
+            }
+            expect(zm.state.single).toEqual({ scale: 1, translateX: 0, translateY: 0 });
+            expect(zm.isZoomed()).toBe(false);
+        }
+
+        zm.createPopover('single', fakeEl('div'), fakeEl('button'));
+        const { zoomInBtn, zoomOutBtn } = zm.popovers.single;
+        for (let i = 0; i < 10; i++) {
+            zoomInBtn.listeners.click[0]({ stopPropagation: vi.fn() });
+        }
+        for (let i = 0; i < 10; i++) {
+            zoomOutBtn.listeners.click[0]({ stopPropagation: vi.fn() });
+        }
+        expect(zm.state.single.scale).toBe(1);
+        expect(zm.isZoomed()).toBe(false);
+    });
+
+    // PR #90 review #7: a horizontal wheel or a sideways touchpad swipe (deltaY 0) zoomed in 15% per event.
+    it('a wheel with deltaY 0 does not zoom, and is still kept from the document handler', () => {
+        const { zm } = makeManager();
+        const e = wheel(0);
+        zm.handleWheel(e, 'single');
+        expect(zm.state.single.scale).toBe(1);
+        expect(e.preventDefault).toHaveBeenCalledTimes(1);
+        expect(e.stopPropagation).toHaveBeenCalledTimes(1);
     });
 
     it('attachToMedia wires dblclick, a non-passive wheel and mousedown', () => {
@@ -217,6 +293,62 @@ describe('ZoomManager', () => {
         expect(zm.popovers.left.container.classList.contains('show')).toBe(false);
         expect(zm.popovers.right.container.classList.contains('show')).toBe(false);
         expect(Object.keys(zm.popovers)).toEqual(['left', 'right']);
+    });
+
+    // Spec § 3.3 invariants 3, 4 and 6, which no test could fail for before PR #90 review #11.
+    describe('invariants the move must keep (spec § 3.3)', () => {
+        it('a click or mousedown inside a popover stops there, so the document click cannot close it', () => {
+            const { zm } = makeManager();
+            zm.createPopover('single', fakeEl('div'), fakeEl('button'));
+            const popover = zm.popovers.single.container;
+            for (const type of ['click', 'mousedown']) {
+                const e = { stopPropagation: vi.fn() };
+                popover.listeners[type][0](e);
+                expect(e.stopPropagation, type).toHaveBeenCalledTimes(1);
+            }
+        });
+
+        it("'+' zooms in and '−' zooms out by 1.15 about the media centre", () => {
+            const { zm } = makeManager();
+            zm.createPopover('single', fakeEl('div'), fakeEl('button'));
+            const click = (btn) => zm.popovers.single[btn].listeners.click[0]({ stopPropagation: vi.fn() });
+            click('zoomInBtn');
+            click('zoomInBtn');
+            expect(zm.state.single.scale).toBeCloseTo(1.3225, 10);
+            click('zoomOutBtn');
+            expect(zm.state.single.scale).toBeCloseTo(1.15, 10);
+            expect(zm.state.single.translateX).toBeCloseTo(0, 10);
+        });
+
+        it('a double-click inside fullscreen leaves the zoom alone; outside it steps', () => {
+            const { zm } = makeManager();
+            const el = fakeMedia();
+            let inFullscreen = true;
+            el.closest = (selector) => (selector === '.fullscreen' && inFullscreen ? {} : null);
+            zm.attachToMedia(el, 'single');
+            const e = { clientX: 100, clientY: 50, preventDefault: vi.fn(), stopPropagation: vi.fn() };
+            el.listeners.dblclick.fn(e);
+            expect(zm.state.single.scale).toBe(1);
+            expect(e.preventDefault).not.toHaveBeenCalled();
+            inFullscreen = false;
+            el.listeners.dblclick.fn(e);
+            expect(zm.state.single.scale).toBe(2);
+        });
+
+        it('only the left button starts a pan', () => {
+            const { zm } = makeManager();
+            const el = fakeMedia();
+            zm.attachToMedia(el, 'single');
+            zm.setZoom('single', 2, 0, 0);
+            const right = { button: 2, clientX: 0, clientY: 0, preventDefault: vi.fn() };
+            el.listeners.mousedown.fn(right);
+            expect(zm.isPanning).toBe(false);
+            expect(right.preventDefault).not.toHaveBeenCalled();
+            const left = { ...right, button: 0, preventDefault: vi.fn() };
+            el.listeners.mousedown.fn(left);
+            expect(zm.isPanning).toBe(true);
+            expect(left.preventDefault).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('removePopover — dismisses the popover, keeps the button (G2)', () => {
@@ -279,5 +411,9 @@ it('media-viewer.js keeps no copy of the zoom code', () => {
     const oldMethod =
         /^\s{4}(sliderToScale|scaleToSlider|setupZoomPopovers|createZoomPopover|removeZoomPopover|closeAllZoomPopovers|getZoomTarget|getMediaElement|setZoom|resetZoom|zoomAtPoint|cycleZoomStep|handleWheelZoom|handlePanStart|handlePanMove|handlePanEnd|updateZoomIndicator|isZoomed|setupZoomEvents)\(/m;
     expect(src.match(oldMethod)?.[0] ?? null).toBeNull();
-    expect(src.match(/this\.(zoomState|zoomControlsMap)\b/)?.[0] ?? null).toBeNull();
+    // Any member access too: a stale call such as this.resetZoom('single') on a line G3 never touched merges
+    // cleanly and passes ESLint, then throws at runtime (PR #90 review #12).
+    const oldMember =
+        /\bthis\.(zoomState|zoomControlsMap|zoomSteps|minZoom|maxZoom|zoomFactor|isPanning|currentPanTarget|panStart|panStartTranslate|sliderToScale|scaleToSlider|setupZoomPopovers|createZoomPopover|removeZoomPopover|closeAllZoomPopovers|getZoomTarget|getMediaElement|setZoom|resetZoom|zoomAtPoint|cycleZoomStep|handleWheelZoom|handlePanStart|handlePanMove|handlePanEnd|updateZoomIndicator|isZoomed|setupZoomEvents)\b/;
+    expect(src.match(oldMember)?.[0] ?? null).toBeNull();
 });

@@ -67,6 +67,8 @@ export class ZoomManager {
         return ((Math.log(clamped) - Math.log(this.minZoom)) / (Math.log(this.maxZoom) - Math.log(this.minZoom))) * 100;
     }
 
+    // Builds a fresh popover for target. The caller removes the previous one first (removePopover), as
+    // addMediaOverlayControls does: a second call for the same target would leave the old popover and listeners.
     createPopover(target, wrapper, toggleBtn) {
         // Build popover DOM: [-] [slider] [+] [100%]
         const popover = document.createElement('div');
@@ -208,9 +210,14 @@ export class ZoomManager {
         const state = this.state[target];
         if (!state) return;
 
-        state.scale = Math.max(this.minZoom, Math.min(this.maxZoom, scale));
-        state.translateX = translateX;
-        state.translateY = translateY;
+        // A scale within float noise of minZoom (100%) snaps to it, centred: 1.15 and its rounded reciprocal
+        // drift, so 4+ wheel notches (or '+' presses) in and out ended at 1.0000000000000002, which read 100%
+        // while isZoomed() still said true (PR #90 review #4).
+        const clamped = Math.max(this.minZoom, Math.min(this.maxZoom, scale));
+        const atRest = Math.abs(clamped - this.minZoom) < 1e-9;
+        state.scale = atRest ? this.minZoom : clamped;
+        state.translateX = atRest ? 0 : translateX;
+        state.translateY = atRest ? 0 : translateY;
 
         const element = this.getMediaElement(target);
         if (element) {
@@ -253,10 +260,11 @@ export class ZoomManager {
         let newTranslateX = state.translateX - offsetX * (scaleRatio - 1);
         let newTranslateY = state.translateY - offsetY * (scaleRatio - 1);
 
-        // Constrain pan to reasonable bounds when zoomed
+        // Constrain pan to reasonable bounds when zoomed. The bound comes from the layout box: the rect above
+        // already includes this element's own scale, which made it s times too loose (PR #90 review #2).
         if (newScale > 1) {
-            const maxTranslateX = (rect.width * (newScale - 1)) / 2;
-            const maxTranslateY = (rect.height * (newScale - 1)) / 2;
+            const maxTranslateX = (element.offsetWidth * (newScale - 1)) / 2;
+            const maxTranslateY = (element.offsetHeight * (newScale - 1)) / 2;
             newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
             newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
         } else {
@@ -295,9 +303,15 @@ export class ZoomManager {
         e.preventDefault();
         e.stopPropagation();
 
+        // A horizontal wheel or a sideways touchpad swipe has no vertical step to zoom by (PR #90 review #7)
+        if (e.deltaY === 0) return;
+
         const state = this.state[target];
         const delta = e.deltaY > 0 ? -1 : 1;
-        const newScale = state.scale * Math.pow(this.zoomFactor, delta);
+        // Clamped before zoomAtPoint: at a cap the unclamped ratio kept sliding the image while the scale
+        // stayed put, until a notch missed the image and the document handler changed the file (PR #90 review #3)
+        const newScale = Math.max(this.minZoom, Math.min(this.maxZoom, state.scale * Math.pow(this.zoomFactor, delta)));
+        if (newScale === state.scale) return;
 
         this.zoomAtPoint(target, newScale, e.clientX, e.clientY);
     }
@@ -333,10 +347,10 @@ export class ZoomManager {
         let newTranslateX = this.panStartTranslate.x + deltaX;
         let newTranslateY = this.panStartTranslate.y + deltaY;
 
-        // Constrain pan to image bounds
-        const rect = element.getBoundingClientRect();
-        const maxTranslateX = (rect.width * (state.scale - 1)) / 2;
-        const maxTranslateY = (rect.height * (state.scale - 1)) / 2;
+        // Constrain pan to image bounds: the layout box, not getBoundingClientRect(), which includes this
+        // element's own scale and let the image leave the pane (PR #90 review #2)
+        const maxTranslateX = (element.offsetWidth * (state.scale - 1)) / 2;
+        const maxTranslateY = (element.offsetHeight * (state.scale - 1)) / 2;
 
         newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
         newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
@@ -400,6 +414,8 @@ export class ZoomManager {
         return this.state[target] && this.state[target].scale > 1;
     }
 
+    // Wires one media element; nothing is detached here. The host calls it once per element it builds, so
+    // attaching the same element twice would double its listeners.
     attachToMedia(element, target) {
         if (!element) return;
 

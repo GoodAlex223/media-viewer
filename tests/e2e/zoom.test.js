@@ -198,14 +198,16 @@ test.describe('Zoom input (G3 characterization)', () => {
         await page.mouse.up();
         expect((await transformOf(media)).x - start.x).toBeCloseTo(100, 0);
 
-        // Two more strokes run past the edge; the clamp holds translate at rect.width × (scale − 1) / 2.
+        // Two more strokes run past the edge; the clamp holds translate at the layout width × (scale − 1) / 2, where
+        // the zoomed image's edge meets the box's. offsetWidth is the layout width: no scale and no running transition
+        // changes it, unlike getBoundingClientRect() (PR #90 review #2 and #5). Both sides are settled values.
         for (let i = 0; i < 2; i++) {
             await page.mouse.move(c.x + 10, c.y);
             await page.mouse.down();
             await page.mouse.move(c.x + 610, c.y, { steps: 10 });
             await page.mouse.up();
         }
-        const bound = await media.evaluate((el) => el.getBoundingClientRect().width / 2); // scale 2
+        const bound = await media.evaluate((el) => (el.offsetWidth * (2 - 1)) / 2);
         expect((await transformOf(media)).x).toBeCloseTo(bound, 0);
     });
 
