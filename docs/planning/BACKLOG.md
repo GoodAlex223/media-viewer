@@ -71,8 +71,12 @@ prompt had no source concept).
 **Origin**: the user, during the G3 manual pass on branch `g3-zoom-manager-extraction`, asked why a click while zoomed in compare-mode fullscreen does not exit, and why a double-click there does not zoom as it does in single mode. Both are today's deliberate behaviour, unchanged by G3. The user: "backlog all, I think it would be good to be consistent throughout the entire application". The two entries below are one design question (which gesture means exit, and which means zoom), so they want one short design note together.
 
 - [ ] **Double-click should zoom in fullscreen too, as it does everywhere else**
-  - **Today**: `attachToMedia`'s `dblclick` handler returns inside `.fullscreen` (`zoom.js` ~L411, "disabled in fullscreen - conflicts with click-to-exit"; since `64ec894`, 2026-02-05). There, a single click exits fullscreen at 100%, and every double-click starts with a single click.
-  - By a code reading (not yet observed frame by frame), a double-click on an image in fullscreen at 100% behaves like this: the first click exits, and the second lands on the normal pane, whose click handler (`showCompareMedia`, ~L4163) enters fullscreen again. That is a flicker, ending in fullscreen with no zoom. While zoomed, nothing happens.
+  - **Today**: `attachToMedia`'s `dblclick` handler returns inside `.fullscreen` (`zoom.js` ~L411, "disabled in fullscreen - conflicts with click-to-exit"). The guard dates from `d3b08bb` (2026-01-02), which also guarded the wheel and pan. `64ec894` (2026-02-05) dropped those two and wrote today's comment (PR #90 review, held back: the first version of this entry dated the guard from the comment). There, a single click exits fullscreen at 100%, and every double-click starts with a single click.
+  - By a code reading (not observed frame by frame), at 100% the first click exits and the pane shrinks back to its normal box. What follows depends on where the second click lands:
+    - over the normal-size pane, its click handler (`showCompareMedia`, ~L4163) enters fullscreen again: a flicker, ending in fullscreen;
+    - outside it, the pane stays out of fullscreen, which is what the G3 manual pass saw on the small video.
+
+    Either way nothing zooms. While zoomed, both clicks and the double-click do nothing. The compare-mode half of this, where a click or a pan release on a pane *not* in fullscreen enters it, is 🟤 [2026-10-26] "From: PR #90 review" #1.
   - **Design**: tell a click from a double-click before acting on the click, for example by delaying the exit ~250 ms and cancelling it on `dblclick`. Or move "exit" to a gesture that does not collide. This is settled together with the next entry.
   - **Tests that change with it**: E2E `tests/e2e/zoom.test.js` case E pins today's click rule. `docs/MANUAL_TESTING.md` L87 ("double-click video in fullscreen → exits (no zoom)") states today's behaviour.
   - Affected: `zoom.js` (`attachToMedia`), `fullscreen.js` (`exitHandler`), `media-viewer.js` (`showCompareMedia`'s wrapper click handlers).
@@ -205,7 +209,7 @@ prompt had no source concept).
 
 - [x] **Auto-hide tournament header bar + shared control buttons, reveal on hover** — ✅ **Resolved 2026-07-21** (Group G2 Task 5, PR #65, merge `937084c`): `.tournament-header` + `.tournament-controls` are now `opacity:0; pointer-events:none` at rest, revealed by an edge band (top `clientY<110`, bottom `>innerH-110`) or hover and hidden 3s after the pointer leaves, via a `_setupAutoHide` helper extracted from `setupHeaderVisibility`; both reveal once on tournament entry so the PR #58 exit button stays discoverable. The final review also dropped a leftover `.tournament-pause` `pointer-events:auto` that had left `#tournamentExitBtn` invisible-but-clickable (`0848723`). _Original:_ In tournament mode the top tournament header bar and the shared (common-to-both-media) control buttons should stay hidden by default and appear only on mouse hover — mirroring the existing `.header` auto-hide (`.show`) pattern — to maximize the media viewing area (русский оригинал: Верхняя полоса как и общие для 2х медиа кнопки турнир мода должны быть скрыты и появляться при наведении на них / Турнир строку лучше скрывать постоянно и показывать при наведении. Тоже самое и для общих кнопок); affected: `styles.css:~2279-2340` (`.tournament-header`, `.tournament-controls`), `media-viewer.js:~2158` (`setupHeaderVisibility` auto-hide pattern to mirror)
 - [x] **Don't re-train likes/dislikes model when only the source folder changed** — ⬆️ **Promoted to TODO.md Planned 🟠 2026-08-28** (re-confirmed by the [2026-08-28] manual-testing intake; full text + refreshed line refs moved to TODO.md; the new re-report stays in the [2026-08-28] group above as a possible-dup — not merged)
-- [ ] **Add image panning / scrolling as a feature (horizontal + vertical, both directions)** — Add the ability to pan/scroll across an image both vertically and horizontally (and in the reverse directions) as a dedicated feature. Today panning only works while zoomed in (`handlePanStart` returns early when `scale <= 1`); the request is for general scroll/pan navigation of the image. Needs a design pass (drag vs. wheel vs. keys; interaction with existing zoom-pan and wheel-navigation) (русский оригинал: Добавить возможность скрола по изображению(paninig)(как вертикально так и горизонтально так и в обратных направлениях) как функцию); affected: `media-viewer.js:~6273-6326` (`handlePanStart`/`handlePanMove`/`handlePanEnd` — currently zoom-gated)
+- [ ] **Add image panning / scrolling as a feature (horizontal + vertical, both directions)** — Add the ability to pan/scroll across an image both vertically and horizontally (and in the reverse directions) as a dedicated feature. Today panning only works while zoomed in (`ZoomManager.handlePanStart` returns early when `scale <= 1`); the request is for general scroll/pan navigation of the image. Needs a design pass (drag vs. wheel vs. keys; interaction with existing zoom-pan and wheel-navigation) (русский оригинал: Добавить возможность скрола по изображению(paninig)(как вертикально так и горизонтально так и в обратных направлениях) как функцию); affected: `zoom.js` (`ZoomManager.handlePanStart`/`handlePanMove`/`handlePanEnd`, ~L317–370 — currently zoom-gated; moved out of `media-viewer.js` by G3, PR #90)
 - [ ] **Clicking empty space should exit fullscreen regardless of zoom** — When zoomed in fullscreen, clicking empty space currently only resets zoom (a second click is needed to exit); the expectation is that a click on empty space exits fullscreen directly, regardless of the current zoom level. NOTE: this reverses a deliberate design — `fullscreen.js`'s `exitHandler` returns early when `isZoomed(wrapper)` — so it needs a short design note before implementing (русский оригинал: Чтобы выйти из полноэкранного режима, когда был использован зум, нажатием на пустое пространство нужно сначала выйти из зума(восстановить 100% масштаб), а затем уже можно выйти из полноэкранного режима. Ожидается что при нажатии на пустое пространство произойдет выход из полноэкранного режима не зависимо от зума); affected: `fullscreen.js:~66-77` (`exitHandler` `isZoomed` guard) [possible-dup-of: Document fullscreen zoom decision reversal — BACKLOG [2026-02-05] (doc-only note, same code path)]
 
 ### [2026-07-01] Manual testing intake (24k+ folder dogfooding)
@@ -430,6 +434,55 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-10-26] From: PR #90 review (G3 ZoomManager extraction)
+
+**Origin**: the pre-merge review of [PR #90](https://github.com/GoodAlex223/media-viewer/pull/90) (comment 6415665685, round 1). All of these predate G3: the code was moved verbatim into `zoom.js`. By the user's ruling, PR #90 itself fixed #2, #3, #4 and #7 (part). The rest is filed here, numbered as in the review. Claude-surfaced.
+
+- [ ] **#1: In compare and tournament mode, a pan release or a double-click toggles fullscreen** [related: 🔵 [2026-10-26] "From: G3 manual testing"]
+  - **Where**: the wrapper's click-to-enter-fullscreen handler (`media-viewer.js` `showCompareMedia`, ~L4163) has no zoom or drag check, so the clicks that ZoomManager's gestures produce reach it.
+  - **Effects**:
+    - Releasing a pan inside a zoomed pane that is not fullscreen enters fullscreen.
+    - A double-click at >100% lands in fullscreen at the same zoom, instead of stepping. Click 1 enters fullscreen, `fullscreen.js` ~L75's zoomed guard swallows click 2, and the `dblclick` returns inside `.fullscreen` (`zoom.js` ~L411).
+    - At 100%, a double-click flashes fullscreen in and out, and `pauseOtherVideos` leaves the other pane's video paused.
+  - Tournament reuses these wrappers. This is code-read; no E2E or manual step covers it.
+  - **One design question** with the two 🔵 gesture entries (which gesture enters, exits and zooms): a click that ended a drag must not count as a click anywhere. Settle all three in one design note.
+  - Affected: `media-viewer.js`, `fullscreen.js`, `zoom.js` (`isWrapperZoomed` stands in for "did this click end a drag?"; review held-back `zoom.js:394`).
+- [ ] **#6: A wheel during a pair's 100 ms video cleanup re-zooms the next pair**
+  - **Where**: `showTournamentPairFast` (~L6273) and `showCompareMedia` (~L3936) reset a side's zoom *before* awaiting `cleanupCompareMedia`. That function's 100 ms video wait keeps the outgoing `<video>` attached as `this.leftMedia`/`rightMedia`, with its `attachToMedia` listeners live.
+  - **Effect**: a wheel in that window zooms `state[side]`, and the next pair inherits it under a fresh "100%" popover. Then:
+    - the first Escape only resets instead of pausing;
+    - a fullscreen click does not exit at a visible 100%;
+    - the next wheel jumps from 100% to 132%.
+  - The window is narrow. Code-read.
+  - **Fix**: reset after the cleanup await, or null the side's media before the wait.
+  - Affected: `media-viewer.js`.
+- [ ] **#8: Wheel zoom anchors on a stale centre while the previous zoom is still animating, and wheel steps ignore the delta's size**
+  - **Stale centre**: `zoomAtPoint` measures the cursor offset from `getBoundingClientRect()` while `.media-display`'s `transition: all 0.3s` is still animating the previous transform. Ticks under ~200 ms apart drift the point under the cursor; the reviewer's model gives ~20–80 px over 6 notches, and hundreds for a touchpad stream.
+  - **Fixed step**: every event is a full 15% step, so 10 touchpad events of 2 px reach 4.05×. Review #7's second half; PR #90 fixed only `deltaY === 0`.
+  - Both are modelled, not run.
+  - **Fix**: anchor on the settled transform (the state, not the rect), and scale the step by `|deltaY|`. Needs a feel check on a mouse wheel and a touchpad.
+  - Affected: `zoom.js`, `styles.css` (the transition).
+- [ ] **#9: A pan can stick after the window loses mouse capture mid-drag**
+  - **Where**: a pan ends only on a document `mouseup` (`init()`); `handlePanMove` never checks `e.buttons`, and `reset()` does not clear `isPanning`.
+  - **Effect**: after Alt+Tab, the Win key or the lock screen, with the button released outside the app, the zoomed image may follow the bare pointer until the next click, and the state survives a file change. Not observed on Chromium for Windows.
+  - **Fix**: `if (!(e.buttons & 1)) return this.handlePanEnd();`, plus a window `blur` → `handlePanEnd`. The unit fixtures then need `buttons: 1`.
+  - Fold in the review's held-back `zoom.js:35` here: `isPanning` and `currentPanTarget` always hold the same fact.
+  - Affected: `zoom.js`, `tests/zoom-manager.test.js`.
+- [ ] **#10: `setZoom` writes an inline cursor on every call, which shadows the stylesheet**
+  - **Effects**:
+    - Any zoom action that ends at 100% leaves a compare/tournament media element with inline `cursor: default`, overriding the click-to-fullscreen pointer from `.media-wrapper` (`styles.css` ~L1851) until the next pair renders. Those actions include '−', Escape resetting both sides, a wheel round trip, and (before PR #90's clamp) a wheel-down at 100%.
+    - The same write turns `'grabbing'` back into `'grab'` on the first pan move. That was G3 plan Improvement 3, folded in here.
+    - The `.media-display.zoomed`/`.panning` cursor rules are dead: nothing adds either class.
+  - **Fix**: write `''` at scale 1, and toggle the existing classes instead of inline cursors. Case C (`tests/e2e/zoom.test.js`) then reads the cursor after the first move, and the unit test that pins the inline write (`setZoom … writes the transform and cursor`) changes.
+  - Affected: `zoom.js`, `styles.css`, `tests/zoom-manager.test.js`, `tests/e2e/zoom.test.js`.
+- [ ] **The `curly: ['error', 'all']` rule never fires: `eslint-config-prettier`, applied last, turns it off for every file**
+  - `npx eslint --print-config media-viewer.js` shows `curly: [0, "all"]`. `CLAUDE.md` § Formatting & Linting and `eslint.config.mjs`'s shared rules both present it as active.
+  - Choose:
+    - re-enable it after the Prettier config, with a `--fix` pass over the braceless `if (…) return;` lines across the renderer;
+    - or drop it, and say so in `CLAUDE.md`.
+  - Found by the PR #90 review (held back; outside G3's scope).
+  - Affected: `eslint.config.mjs`, `CLAUDE.md`.
 
 ### [2026-10-26] From: G4 closeout (PR #89 — formatter hook per-edit cost)
 

@@ -1,15 +1,15 @@
 ---
 name: regression-checker
-description: Check media-viewer.js changes for state management regressions across zoom, fullscreen, compare mode, and extraction features
+description: Check renderer changes (media-viewer.js and the manager modules it delegates to - zoom.js, fullscreen.js, tournament.js, ml-training.js, feature-cache-store.js) for state management regressions across zoom, fullscreen, compare mode, and extraction features
 ---
 
 # Media Viewer Regression Checker
 
-You are a regression analysis agent for `media-viewer.js`, a ~7400 line single-file Electron renderer with deeply interconnected state.
+You are a regression analysis agent for the Electron renderer: `media-viewer.js` (the `MediaViewer` class, ~11,500 lines, deeply interconnected state) and the v2.0 manager modules it delegates to (§ 8).
 
 ## Your Task
 
-Analyze recent changes to `media-viewer.js` (use `git diff` or compare against `main`) and check for regressions in the areas below. Only report issues where you have **high confidence** (>80%) that a regression exists — do not report speculative concerns.
+Analyze recent changes to `media-viewer.js` **and** to the extracted modules (`zoom.js`, `fullscreen.js`, `tournament.js`, `ml-training.js`, `feature-cache-store.js`), e.g. `git diff main...HEAD -- media-viewer.js zoom.js fullscreen.js tournament.js ml-training.js feature-cache-store.js`, and check for regressions in the areas below. A change confined to one module still needs the host call sites that use it. Only report issues where you have **high confidence** (>80%) that a regression exists — do not report speculative concerns.
 
 ## Critical State Systems to Check
 

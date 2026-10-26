@@ -608,9 +608,9 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
 
 ## Improvements (to BACKLOG 🟤 at closeout)
 
-1. **Two of a new renderer module's three lists have no control.** `media-url.test.js` `RENDERER_FILES` already has one: "the list names every app file the page loads" walks `index.html`'s scripts, imports and workers, and fails for an unlisted module. Found in T2, which corrects spec § 4.7's "no check enforces these". Block 2c `files` and `lint-guard.test.js` `RENDERER_FILES` are kept by hand. A test could reuse that walk (`loadedByThePage`) and assert each loaded browser module appears in both (memory `feedback_convention_is_not_a_control`). `tests/`, `eslint.config.mjs`.
+1. **Two of a new renderer module's three lists have no control.** `media-url.test.js` `RENDERER_FILES` already has one: "the list names every app file the page loads" walks `index.html`'s scripts, imports and workers, and fails for an unlisted module. Found in T2, which corrects spec § 4.7's "no check enforces these". Block 2c `files` and `lint-guard.test.js` `RENDERER_FILES` are kept by hand. A test could reuse that walk (`loadedByThePage`) and assert each loaded browser module appears in both (memory `feedback_convention_is_not_a_control`). The PR #90 review (held back, `tests/lint-guard.test.js:19`) adds two facts. `lint-guard`'s `RENDERER_FILES` already omits six page-loaded files. And a module missing from every ESLint block lints with 0 active rules, so the control matters for block 2c most. `tests/`, `eslint.config.mjs`.
 2. **The wheel-over-media path has two overlapping guards** (spec § 3.3 item 2): `handleWheel`'s `stopPropagation` and the document handler's `isOverMedia` check. Either alone stops navigation, and the comments at `media-viewer.js` ~L2780–2793 describe them separately. Decide whether both stay, and say so in one comment. Low. `media-viewer.js`, `zoom.js`.
-3. **The `grabbing` cursor is lost on the first pan move** (found by T1 case C, run 1). `handlePanStart` sets `cursor: grabbing`, but every `handlePanMove` calls `setZoom`, which writes `grab` whenever `scale > 1`, so mid-drag the cursor reads `grab`. Kept as is here (no behaviour change); case C reads the cursor on the mousedown and its comment says why. A fix would let `setZoom` leave the cursor alone while `isPanning`, and move case C's check after the move. Low (cosmetic). `zoom.js`, `tests/e2e/zoom.test.js`.
+3. **Already filed; do not extract it again at closeout.** It went in with the PR #90 review's #10, 🟤 [2026-10-26] "From: PR #90 review" "#10: `setZoom` writes an inline cursor…". The original text: **The `grabbing` cursor is lost on the first pan move** (found by T1 case C, run 1). `handlePanStart` sets `cursor: grabbing`, but every `handlePanMove` calls `setZoom`, which writes `grab` whenever `scale > 1`, so mid-drag the cursor reads `grab`. Kept as is here (no behaviour change); case C reads the cursor on the mousedown and its comment says why. A fix would let `setZoom` leave the cursor alone while `isPanning`, and move case C's check after the move. Low (cosmetic). `zoom.js`, `tests/e2e/zoom.test.js`.
 
 ## Residuals
 
@@ -692,3 +692,32 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
   - **The user's questions in round 2**: why a click in a zoomed fullscreen pane does not exit, and why a double-click in fullscreen does not zoom. Both are deliberate and unchanged by G3. The user asked to backlog both for consistency across the app. Filed as 🔵 [2026-10-26] "From: G3 manual testing" (two entries, the click one tagged `possible-dup-of` the 2026-07-11 entry).
   - **The commit for that, first try, was refused.** The hook's unit run had 8 failures, all timeouts (15–35 s) in tests that spawn `git`, `sh` or node CLIs, or wait on the filesystem: `atomic-write`, `check-claude-md-size`, `check-secrets`, `format-edited-file`, `guard-preload-bash`, `husky-skip`, `path-grants`. The test app was still running (4 `electron` processes on the throwaway profile) with about 1.5 GB free. After stopping it, 2.3 GB was free, and the unchanged staged set committed with **2363 passed, 1 skipped** (`8155120`). The failures were environmental, not the change.
   - **Push (Step 3 completed by the hook).** The pre-push hook ran the full E2E suite at `8155120`: **235 passed, 7 skipped, 0 failed** (10.5 min). Pushed as a new branch; **[PR #90](https://github.com/GoodAlex223/media-viewer/pull/90)** opened. Its commit list matches `main..HEAD` exactly (9 commits, head `8155120`).
+- **2026-10-26: PR #90 review, round 1** (comment 6415665685 at `fa69a45`, 15 findings plus 21 held-back candidates; reviewer session `677e8da4`). Its one extra remark, a scope recommendation, appeared only in its visible messages.
+  - **User ruling** (asked because the spec says no behaviour change): fix the PR's own items (#2, #5, #11–#15, the held-back docs). Also fix the confirmed pre-existing #3, #4 and #7. File #1, #6, #8, #9 and #10 in BACKLOG 🟤 [2026-10-26] "From: PR #90 review". Recorded in spec § 12.
+  - **Verified before acting**, on the real `zoom.js`:
+    - #3: translate −382 → −405 → −427 → −450 at a pinned 8×.
+    - #4: 4+ notches in and out end at `1.0000000000000002` with `isZoomed()` true; 1–3 notches are exact, which is why planning's 1-notch check missed it.
+    - #7: `deltaY` 0 → 115%.
+    - #2: by code and CSS. Every `.media-display` rule is `width/height: auto` under max limits, so the layout box is the rendered media.
+  - **RED → GREEN** (`tests/zoom-manager.test.js`). The fake media now reports `offsetWidth`/`offsetHeight` plus a transform-aware `getBoundingClientRect()`; the old static rect hid #2. Five tests failed first:
+    - the pan clamp (`expected 400 to be 200`);
+    - the `zoomAtPoint` clamp (`expected 3000 to be 1400`);
+    - the wheel at the 8× cap (translate drifted);
+    - the 4/5/10/14-notch and the 10× '+'/'−' round trips (`1.0000000000000002`);
+    - `deltaY` 0 (zoomed).
+
+    After the four `zoom.js` changes: 22/22.
+  - **#11:** four tests for the § 3.3 invariants (popover click/mousedown propagation, the +/− directions, the double-click guard in fullscreen, the left-button pan). They pass by design, and their RED is 6 planted mutations, each failing exactly its own test. **#12:** the scan also matches any `this.<old member>` access. Two planted stale calls (`this.resetZoom('single')` after `init()`, `this.setupZoomEvents(media, side)`) each failed it. 26/26, files restored byte-identical.
+  - **#2/#5, E2E case C.** The bound is now `offsetWidth × (2 − 1) / 2` (320). It is a settled value, so no transition can move it. 13/13 passed. Three mutations each failed case C at the named assertion:
+    - the pre-fix rect bound: expected 320, received 419.156, a box in mid-transition, which confirms #5;
+    - the clamp deleted: received 1300.23;
+    - the 100% early return deleted: the cursor read `grabbing`.
+  - **The screenshots still hold.** A re-capture on the fixed code gave 0 of 1,494,592 differing pixels in both modes, against the committed before images. The round-1 PNGs were deleted.
+  - **Docs:**
+    - #13: CLAUDE.md's header pin moves to the menu sentence.
+    - #14: regression-checker.md's description and task cover the five extracted modules; the stale "~7400 line" figure is updated.
+    - #15: ARCHITECTURE's responsibilities line, and the panning entry now points at `zoom.js`.
+    - H2: the plan is listed in both active-plans tables, and the spec row says PR #90.
+    - H3: the gesture entry dates the guard from `d3b08bb`, and gives the double-click outcomes by where the second click lands. My first dating came from a `-S` search on the comment text, not a reading of the diff.
+    - H1 and H14: comments.
+  - **Trial log addition (held back, `package.json:46`).** `typescript@6` exists only so the project-scoped `typescript-lsp` plugin can start. The reviewer measured its two tsserver stacks at 1.24 GB private / 0.75 GB working set, with 362 MB free. That cost belongs in G6's read-out. It is also a likely contributor to T5's low-memory E2E failure, which the T5 entry above blamed only on other processes.
