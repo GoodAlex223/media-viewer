@@ -198,7 +198,7 @@ hook's own header comment both assert what the hook formats; both are in the tab
   Controls on the final hook (`time-hook.js`): planted unformatted `.js` formatted PASS; planted
   unformatted ignored `.md` untouched PASS; `git status` unchanged.
 
-### 2026-10-26 — PHASE: Review round 1 (PR #89, light, separate session)
+### 2026-10-26 — PHASE: Review round 1 (PR #89, `/code-review` at `medium`, separate session)
 
 Five findings, each checked against the code before any change, and all five accepted:
 
@@ -224,6 +224,16 @@ Five findings, each checked against the code before any change, and all five acc
 Also the held-back nit: the `git ls-files` spawn's status is asserted. RED: 2 of the 5 new tests failed
 on the round-0 hook (findings 3 and 4); the other three pass by design and carry their own controls.
 Mutations: 10 of 10 killed (M10: swallow every read error). Full suite 48 files / 2,333 passed / 1 skipped.
+
+### 2026-10-26 — PHASE: Review round 2 (PR #89, inline review of `c91d12b..3ba954b`)
+
+All five round-1 responses accepted. One finding, low and docs-only: this plan said "E2E | Not run" and
+called round 1 "light", contradicting the PR reply. Fixed: § 7 carries both E2E runs, and the round-1
+heading names `/code-review` at `medium`. Two of the three held-back items taken, since each was a line
+or two: the header no longer overclaims ("fails there" now names the direction it covers: an upgrade
+that would make the hook skip a file Prettier formats), and the EISDIR test asserts `error.code`,
+not a bare `.toThrow()`. Left as held back: the lint-staged import by path, which fails loudly on a
+layout change.
 
 ---
 
@@ -282,7 +292,7 @@ Mutations: 10 of 10 killed (M10: swallow every read error). Full suite 48 files 
 | Full `npx vitest run` | Pass | 48 files, 2,333 passed, 1 skipped (review round 1) |
 | Mutations | 10 / 10 killed | § 4 |
 | ESLint, Prettier (changed files), `check-docs-index.js` | Pass | |
-| E2E | Not run | The hook is outside the app; the pre-push hook runs the suite |
+| E2E (pre-push hook) | Pass | 225 passed, 6 skipped on `c91d12b` (9.9 min) and on `3ba954b` (11.7 min) |
 
 ---
 

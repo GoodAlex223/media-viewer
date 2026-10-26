@@ -218,7 +218,13 @@ describe('createIsIgnored — the same verdict as Prettier', { timeout: 30000 },
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fmt-unreadable-'));
         try {
             fs.mkdirSync(path.join(root, '.prettierignore')); // EISDIR on read
-            expect(() => createIsIgnored(root)).toThrow();
+            let error;
+            try {
+                createIsIgnored(root);
+            } catch (err) {
+                error = err;
+            }
+            expect(error?.code).toBe('EISDIR');
         } finally {
             fs.rmSync(root, { recursive: true, force: true });
         }

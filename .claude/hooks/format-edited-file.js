@@ -16,7 +16,8 @@
 //   `node_modules` appended, matched by the `ignore` version it bundles (pinned exactly in
 //   package.json), ignored when any file matches. The tests hold it to the installed Prettier three
 //   ways — the same verdict on every tracked file, the CLI's default ignore files, the bundled
-//   `ignore` version — so a Prettier upgrade that changes the rule fails there.
+//   `ignore` version — so a Prettier upgrade that would make the hook skip a file Prettier formats
+//   fails there. (One that only adds a default ignore file passes: the hook then just spawns more.)
 // - The root media-viewer.js: Prettier's parse and print of it is ~1.1 s, so lint-staged formats it
 //   at commit instead (a test asks lint-staged's own matcher). A commit that bypasses lint-staged
 //   (`SKIP=lint-staged`, `--no-verify`) leaves it unformatted. Not `"async": true`: Prettier writes
