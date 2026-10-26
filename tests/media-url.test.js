@@ -29,6 +29,7 @@ describe('renderer media URLs (G1 I1)', () => {
     const RENDERER_FILES = [
         'media-viewer.js',
         'fullscreen.js',
+        'zoom.js',
         'tournament.js',
         'ml-training.js',
         'like-or-skip.js',

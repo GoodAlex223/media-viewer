@@ -360,7 +360,7 @@ git commit -m "test(zoom): characterization E2E for wheel, double-click, pan and
   - Internal but public: `sliderToScale(value): number`, `scaleToSlider(scale): number`, `setZoom(target, scale, tx, ty)`, `zoomAtPoint(target, newScale, clientX, clientY)`, `cycleStep(target, clientX, clientY)`, `handleWheel(e, target)`, `handlePanStart(e, target): boolean`, `handlePanMove(e)`, `handlePanEnd()`, `updateIndicator(target)`.
   - State: `state` `{single,left,right}` → `{scale, translateX, translateY}`, and `popovers` (keyed by target; entry `{container, slider, zoomInBtn, zoomOutBtn, valueDisplay, toggleBtn, isSliderDragging, abortController}`).
 
-- [ ] **Step 1: Write the failing tests** in `tests/zoom-manager.test.js`:
+- [x] **Step 1: Write the failing tests** in `tests/zoom-manager.test.js`:
 
 ```js
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -434,11 +434,11 @@ const wheel = (deltaY) => ({ deltaY, clientX: 100, clientY: 50, preventDefault: 
 
 Document stub for the popover tests (`beforeEach`/`afterEach` restore the original): `globalThis.document = { createElement: fakeEl, addEventListener: vi.fn(), getElementById: (id) => ids[id] ?? null }`.
 
-- [ ] **Step 2: Run to verify they fail.**
+- [x] **Step 2: Run to verify they fail.**
 Run: `npx vitest run tests/zoom-manager.test.js`
 Expected: FAIL. The file cannot import `../zoom.js` ("Failed to load url" / "Cannot find module"). Log the message.
 
-- [ ] **Step 3: Create `zoom.js`.** Header JSDoc on `fullscreen.js`'s model (v2.0 pattern, the three callbacks, "no reference to MediaViewer"). The constructor stores the callbacks and initialises the state from spec § 4.3, with the same values as `media-viewer.js` L392–403 plus `currentPanTarget = null` and `popovers = {}`. Method bodies move verbatim from `media-viewer.js` (L2978–3137 and L8866–9084, skipping `getZoomTarget`/`getMediaElement`), renamed per the Interfaces, with spec § 4.4's three edits. Two bodies are new composition:
+- [x] **Step 3: Create `zoom.js`.** Header JSDoc on `fullscreen.js`'s model (v2.0 pattern, the three callbacks, "no reference to MediaViewer"). The constructor stores the callbacks and initialises the state from spec § 4.3, with the same values as `media-viewer.js` L392–403 plus `currentPanTarget = null` and `popovers = {}`. Method bodies move verbatim from `media-viewer.js` (L2978–3137 and L8866–9084, skipping `getZoomTarget`/`getMediaElement`), renamed per the Interfaces, with spec § 4.4's three edits. Two bodies are new composition:
 
 ```js
     init() {
@@ -465,15 +465,15 @@ Expected: FAIL. The file cannot import `../zoom.js` ("Failed to load url" / "Can
 
 Keep `removePopover`'s G2 comment (why it never touches the toggle button), updated to the new names. `updateIndicator` drops its `this.zoomControlsMap &&` guard (spec § 4.3).
 
-- [ ] **Step 4: Register the module.** Add `'zoom.js'` to `eslint.config.mjs` block 2c `files` and the L11 header list; add it to `RENDERER_FILES` in `tests/lint-guard.test.js` and `tests/media-url.test.js`.
+- [x] **Step 4: Register the module.** Add `'zoom.js'` to `eslint.config.mjs` block 2c `files` and the L11 header list; add it to `RENDERER_FILES` in `tests/lint-guard.test.js` and `tests/media-url.test.js`.
 
-- [ ] **Step 5: Run to verify they pass.**
+- [x] **Step 5: Run to verify they pass.**
 Run: `npx vitest run tests/zoom-manager.test.js tests/lint-guard.test.js tests/media-url.test.js && npx eslint zoom.js`
 Expected: all pass; ESLint clean. Then `npx vitest run`. Expected: 2333 + the new count passed, 1 skipped.
 
-- [ ] **Step 6: LSP check (trial).** Run `documentSymbol` on `zoom.js` and log the symbol list. Run `findReferences` on `ZoomManager` and log whether it reaches the test file.
+- [x] **Step 6: LSP check (trial).** Run `documentSymbol` on `zoom.js` and log the symbol list. Run `findReferences` on `ZoomManager` and log whether it reaches the test file.
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add zoom.js tests/zoom-manager.test.js eslint.config.mjs tests/lint-guard.test.js tests/media-url.test.js
@@ -608,7 +608,7 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
 
 ## Improvements (to BACKLOG 🟤 at closeout)
 
-1. **No control makes a new renderer module join its three lists.** Block 2c, `lint-guard.test.js` `RENDERER_FILES` and `media-url.test.js` `RENDERER_FILES` are kept by hand (spec § 4.7). A test could read `media-viewer.js`'s `import … from './x.js'` lines and assert each module appears in all three (memory `feedback_convention_is_not_a_control`). `tests/`, `eslint.config.mjs`.
+1. **Two of a new renderer module's three lists have no control.** `media-url.test.js` `RENDERER_FILES` already has one: "the list names every app file the page loads" walks `index.html`'s scripts, imports and workers, and fails for an unlisted module. Found in T2, which corrects spec § 4.7's "no check enforces these". Block 2c `files` and `lint-guard.test.js` `RENDERER_FILES` are kept by hand. A test could reuse that walk (`loadedByThePage`) and assert each loaded browser module appears in both (memory `feedback_convention_is_not_a_control`). `tests/`, `eslint.config.mjs`.
 2. **The wheel-over-media path has two overlapping guards** (spec § 3.3 item 2): `handleWheel`'s `stopPropagation` and the document handler's `isOverMedia` check. Either alone stops navigation, and the comments at `media-viewer.js` ~L2780–2793 describe them separately. Decide whether both stay, and say so in one comment. Low. `media-viewer.js`, `zoom.js`.
 3. **The `grabbing` cursor is lost on the first pan move** (found by T1 case C, run 1). `handlePanStart` sets `cursor: grabbing`, but every `handlePanMove` calls `setZoom`, which writes `grab` whenever `scale > 1`, so mid-drag the cursor reads `grab`. Kept as is here (no behaviour change); case C reads the cursor on the mousedown and its comment says why. A fix would let `setZoom` leave the cursor alone while `isPanning`, and move case C's check after the move. Low (cosmetic). `zoom.js`, `tests/e2e/zoom.test.js`.
 
@@ -649,3 +649,9 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     - Diagnostics attachment on `tests/e2e/visual-evidence.test.js`: 6133 "`createRequire` is declared but its value is never read", right after the generator moved out. Acted on: the import was replaced with the `writeGridImage` import. ESLint's `no-unused-vars` (warn) covers the same case.
     - On `tests/e2e/zoom.test.js`: 6192/6133 on the new imports. These were transient, between the import edit and the appended cases, and cleared once the uses landed. Not acted on.
     - `media-viewer.js` (not edited in this task) kept receiving suggestion batches of 10: `electronAPI` on `Window` (2568) and `pause` on an image/video/canvas union (2568). These are the planning session's kinds, none zoom-related, and none were acted on.
+  - **Task 2.** Step 2 RED: `Cannot find module '../zoom.js' imported from '…/tests/zoom-manager.test.js'` (0 tests ran).
+    - Step 5 GREEN: `zoom-manager` 17, `media-url` 11 and `lint-guard` 203 passed. The full suite: **2364 passed, 1 skipped**: 2333, plus 17 new, plus 14 from `lint-guard`'s per-file block for `zoom.js`. ESLint and Prettier are clean, after one fix: the test's bare `document` became `globalThis.document`, since the unit-test block has node globals.
+    - The import-error RED shows only that the module was missing, so three mutations of `zoom.js` were planted. Each turned exactly its own test red (16 of 17 passed): `{ passive: false }` deleted, `handleWheel`'s `stopPropagation` deleted, and `init`'s `mousemove` listener deleted. The file was restored byte-identical.
+    - **The existing control (Improvement 1).** `media-url.test.js` already fails for a loaded module missing from its list. Spec § 4.7's "no check enforces these" holds for two of the three lists, not all three; T4 corrects the spec.
+    - **LSP.** `documentSymbol` on `zoom.js` returned the class with all 18 methods and the constructor, down to the listener callbacks (`element.addEventListener('wheel') callback`, …). `findReferences` on `ZoomManager` found 3 references across 2 files: the definition, plus the test's import (L2) and its `new` (L46). This is unlike `media-viewer.js`, whose tests reach it through source text, which the LSP cannot see. grep finds the same 3.
+    - LSP diagnostics on `zoom.js` and the test file: none arrived.

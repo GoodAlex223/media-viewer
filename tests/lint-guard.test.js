@@ -20,6 +20,7 @@ const RENDERER_FILES = [
     'media-viewer.js',
     'tournament.js',
     'fullscreen.js',
+    'zoom.js',
     'ml-training.js',
     'face-detector.js',
     'recent-folders.js',
