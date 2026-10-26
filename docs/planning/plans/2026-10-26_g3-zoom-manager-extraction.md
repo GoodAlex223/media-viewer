@@ -69,9 +69,9 @@
 **Interfaces:**
 - Produces: `writeGridImage(path: string, hue: number): Promise<void>`. It writes a 640×480 PNG: an `hsl(hue,35%,88%)` background, a 40 px grid in `#556`, a circle, a rectangle and a triangle. The body moves verbatim from `zoomEvidenceImage` in `visual-evidence.test.js`, ending in `.toFile(path)`.
 
-- [ ] **Step 1: Move the generator.** Create `grid-image.js` (`createRequire(import.meta.url)('sharp')`, as `hash-fixtures.js` does). Point the G3 evidence block at it: `await writeGridImage(join(dir, 'a-640x480.png'), 210)` and `(…'b-640x480.png'), 30)`. Run `npx eslint tests/e2e/fixtures/grid-image.js tests/e2e/visual-evidence.test.js`. Expected: clean.
+- [x] **Step 1: Move the generator.** Create `grid-image.js` (`createRequire(import.meta.url)('sharp')`, as `hash-fixtures.js` does). Point the G3 evidence block at it: `await writeGridImage(join(dir, 'a-640x480.png'), 210)` and `(…'b-640x480.png'), 30)`. Run `npx eslint tests/e2e/fixtures/grid-image.js tests/e2e/visual-evidence.test.js`. Expected: clean.
 
-- [ ] **Step 2: Determinism control for the pixel diff.** Still on the unchanged renderer, capture into a throwaway stage and diff it against the committed before images. This shows that a re-capture reproduces them pixel for pixel, which Task 5's after-diff relies on. Save as `pixel-diff.cjs` in your scratchpad directory (not committed):
+- [x] **Step 2: Determinism control for the pixel diff.** Still on the unchanged renderer, capture into a throwaway stage and diff it against the committed before images. This shows that a re-capture reproduces them pixel for pixel, which Task 5's after-diff relies on. Save as `pixel-diff.cjs` in your scratchpad directory (not committed):
 
 ```js
 const sharp = require('sharp');
@@ -97,7 +97,7 @@ const sharp = require('sharp');
 Run (PowerShell): `$env:G3_EVIDENCE_STAGE='control'; npx playwright test tests/e2e/visual-evidence.test.js -g "zoom popover"; $env:G3_EVIDENCE_STAGE=$null`. Then, for `single` and `compare`: `node <scratchpad>/pixel-diff.cjs docs/superpowers/specs/assets/g3-zoom-<mode>-before.png docs/superpowers/specs/assets/g3-zoom-<mode>-control.png`.
 Expected: `differing pixels: 0` for both. Planted control: `single-before` vs `compare-before` must report a large count (measured at planning: 1,318,209 of 1,494,592). Delete the two `*-control.png` files. If the control is not 0, stop: the after-diff cannot be used as written, so record the count and ask the user.
 
-- [ ] **Step 3: Write the characterization cases.** Add to `tests/e2e/zoom.test.js` (new imports: `cp, mkdtemp, rm` from `fs/promises`, `tmpdir`, `dirname, join, resolve`, `fileURLToPath`, `writeGridImage`):
+- [x] **Step 3: Write the characterization cases.** Add to `tests/e2e/zoom.test.js` (new imports: `cp, mkdtemp, rm` from `fs/promises`, `tmpdir`, `dirname, join, resolve`, `fileURLToPath`, `writeGridImage`):
 
 ```js
 const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -319,11 +319,11 @@ test.describe('Zoom input (G3 characterization)', () => {
 
 If a selector or wait does not match the app (for example `.media-container .media-display`, or the tournament idle flags), fix the test, not the app: the renderer is unchanged in this task. Log each such fix.
 
-- [ ] **Step 4: Run on the unchanged renderer.**
+- [x] **Step 4: Run on the unchanged renderer.**
 Run: `npx playwright test tests/e2e/zoom.test.js`
 Expected: 3 existing + 10 new passed. These pass by construction (characterization); their RED is Step 5.
 
-- [ ] **Step 5: Prove A–F can fail.** For each row: apply the one edit to `media-viewer.js` (line numbers at `3509bca`), run `npx playwright test tests/e2e/zoom.test.js -g "<letter>:"`, and confirm it **fails at the named assertion**. Then `git checkout -- media-viewer.js` and `git diff --quiet media-viewer.js` (exit 0). Log each failure message.
+- [x] **Step 5: Prove A–F can fail.** For each row: apply the one edit to `media-viewer.js` (line numbers at `3509bca`), run `npx playwright test tests/e2e/zoom.test.js -g "<letter>:"`, and confirm it **fails at the named assertion**. Then `git checkout -- media-viewer.js` and `git diff --quiet media-viewer.js` (exit 0). Log each failure message.
 
 | Case | Edit | Must fail at |
 | --- | --- | --- |
@@ -338,7 +338,7 @@ Expected: 3 existing + 10 new passed. These pass by construction (characterizati
 
 A mutation that leaves its case green means the case does not test what it claims. Find out why (memory `feedback_test_must_fail_against_unfixed_code`), fix the test, and re-run its mutation.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add tests/e2e/fixtures/grid-image.js tests/e2e/visual-evidence.test.js tests/e2e/zoom.test.js
@@ -610,6 +610,7 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
 
 1. **No control makes a new renderer module join its three lists.** Block 2c, `lint-guard.test.js` `RENDERER_FILES` and `media-url.test.js` `RENDERER_FILES` are kept by hand (spec § 4.7). A test could read `media-viewer.js`'s `import … from './x.js'` lines and assert each module appears in all three (memory `feedback_convention_is_not_a_control`). `tests/`, `eslint.config.mjs`.
 2. **The wheel-over-media path has two overlapping guards** (spec § 3.3 item 2): `handleWheel`'s `stopPropagation` and the document handler's `isOverMedia` check. Either alone stops navigation, and the comments at `media-viewer.js` ~L2780–2793 describe them separately. Decide whether both stay, and say so in one comment. Low. `media-viewer.js`, `zoom.js`.
+3. **The `grabbing` cursor is lost on the first pan move** (found by T1 case C, run 1). `handlePanStart` sets `cursor: grabbing`, but every `handlePanMove` calls `setZoom`, which writes `grab` whenever `scale > 1`, so mid-drag the cursor reads `grab`. Kept as is here (no behaviour change); case C reads the cursor on the mousedown and its comment says why. A fix would let `setZoom` leave the cursor alone while `isPanning`, and move case C's check after the move. Low (cosmetic). `zoom.js`, `tests/e2e/zoom.test.js`.
 
 ## Residuals
 
@@ -628,3 +629,23 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     3. Two of the first-draft mutations could not fail their tests: dropping `stopPropagation` is masked by `isOverMedia`, and the 100% pan is clamped to 0. Both were replaced, spec § 6.1.
   - **A side-agent note at hand-off** warned that only the slider is tested, so wheel, double-click and pan could break with every check green, and that the task says not to take that entry on. It described the state before this plan. Task 1's cases A–J are exactly those paths, each A–F shown able to fail (spec § 11 call 1 takes the entry on). The note is still a reason to run the manual wheel/pan pass in Task 5 Step 5.
   - The user approved the spec and plan ("Looks good"); execution follows a `/compact`.
+- **2026-10-26 (execution session, native, Opus 5.5).** The user chose native execution ("go native"). Ledger: `.superpowers/sdd/2026-10-26_g3-zoom-manager-extraction/progress.md` (git-ignored).
+  - **Task 1 Step 1.** `writeGridImage` moved to `tests/e2e/fixtures/grid-image.js`; the evidence block imports it. ESLint and Prettier clean.
+  - **Step 2, determinism control.** The `control` capture against the committed before images: `single` 0 of 1,494,592 differing pixels, `compare` 0 (the PNGs are byte-identical too, so the moved generator writes the same image). Planted control (`single-before` vs `compare-before`): 1,318,209 of 1,494,592, as measured at planning. The control PNGs were deleted.
+  - **Step 4.** Run 1: 12 passed, 1 failed. Case C's mid-drag `toBe('grabbing')` received `"grab"`: every `handlePanMove` calls `setZoom`, which writes `grab` when `scale > 1`, so `grabbing` holds only from the mousedown to the first move. The test was wrong about the app, so the test changed: the check now runs right after the mousedown (comment in the test). The flip is today's behaviour, kept, and filed as Improvement 3. Run 3: **13 passed** (3 existing + 10 new).
+  - **Step 5, mutations** (one at a time, each reverted, `git diff --quiet media-viewer.js` clean after each). Every case failed at its named assertion:
+
+    | Case | Edit | Failed at | Message |
+    | --- | --- | --- | --- |
+    | A | L8958 delta signs swapped | L163 `toHaveText('115%')` | received `"100%"` |
+    | B | L397 `[1, 3, 4]` | L174 first `toHaveText` | expected `"200%"`, received `"300%"` |
+    | C (edge) | L9000–9001 clamps deleted | L209 the `bound` assertion | expected 412.5, received 1300.23 |
+    | C (100%) | L8966 early return deleted | L187 `not.toBe('grabbing')` | received `"grabbing"` |
+    | D | L9070 target `'single'` | L216 left `toHaveText('115%')` | received `"100%"` |
+    | E | L379 `return false;` | L239 the last `toHaveClass(/fullscreen/)` | received `"media-wrapper left-media-wrapper"` |
+    | F (reset) | L3926 deleted | L251 `toHaveText('100%')` | received `"115%"` |
+    | F (popover) | L3998 deleted | L252 `not.toHaveClass(/show/)` | received `"zoom-popover show"` |
+  - **LSP (trial).**
+    - Diagnostics attachment on `tests/e2e/visual-evidence.test.js`: 6133 "`createRequire` is declared but its value is never read", right after the generator moved out. Acted on: the import was replaced with the `writeGridImage` import. ESLint's `no-unused-vars` (warn) covers the same case.
+    - On `tests/e2e/zoom.test.js`: 6192/6133 on the new imports. These were transient, between the import edit and the appended cases, and cleared once the uses landed. Not acted on.
+    - `media-viewer.js` (not edited in this task) kept receiving suggestion batches of 10: `electronAPI` on `Window` (2568) and `pause` on an image/video/canvas union (2568). These are the planning session's kinds, none zoom-related, and none were acted on.

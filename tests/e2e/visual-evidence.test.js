@@ -12,7 +12,7 @@ import { cp, mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+import { writeGridImage } from './fixtures/grid-image.js';
 
 // Capture-only: no assertions. These produce the committed visual evidence WEEKLY G2 requires.
 // The stem is passed in so the same file can run on `main` (before) and on the branch (after).
@@ -297,23 +297,6 @@ test.describe('G4 recent folders visual evidence', () => {
 // blocks above. Capture:
 // G3_EVIDENCE_STAGE=before|after npx playwright test tests/e2e/visual-evidence.test.js -g "zoom popover"
 const G3_STAGE = process.env.G3_EVIDENCE_STAGE;
-const sharp = createRequire(import.meta.url)('sharp');
-
-// A grid with coloured shapes: the committed fixtures are one solid colour, where a zoom cannot show, and a
-// flat-shaded pattern keeps the committed PNGs small (photo-like noise made them ~2 MB each).
-function zoomEvidenceImage(hue) {
-    const lines = [];
-    for (let x = 0; x <= 640; x += 40) lines.push(`<line x1="${x}" y1="0" x2="${x}" y2="480"/>`);
-    for (let y = 0; y <= 480; y += 40) lines.push(`<line x1="0" y1="${y}" x2="640" y2="${y}"/>`);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480">
-        <rect width="640" height="480" fill="hsl(${hue},35%,88%)"/>
-        <g stroke="#556" stroke-width="2">${lines.join('')}</g>
-        <circle cx="200" cy="180" r="90" fill="hsl(${hue},70%,50%)"/>
-        <rect x="380" y="240" width="160" height="120" fill="hsl(${(hue + 120) % 360},70%,45%)"/>
-        <polygon points="320,60 380,160 260,160" fill="hsl(${(hue + 240) % 360},70%,50%)"/>
-    </svg>`;
-    return sharp(Buffer.from(svg)).png();
-}
 
 test.describe('G3 zoom visual evidence', () => {
     test.skip(!G3_STAGE, 'Opt-in only — set G3_EVIDENCE_STAGE=before|after to (re)capture');
@@ -348,8 +331,9 @@ test.describe('G3 zoom visual evidence', () => {
         for (const sub of ['Photos', 'Liked', 'Disliked']) {
             await mkdir(join(root, sub));
         }
-        await zoomEvidenceImage(210).toFile(join(dir, 'a-640x480.png'));
-        await zoomEvidenceImage(30).toFile(join(dir, 'b-640x480.png'));
+        // Grid images (fixtures/grid-image.js): a zoom cannot show on the committed solid-colour fixtures.
+        await writeGridImage(join(dir, 'a-640x480.png'), 210);
+        await writeGridImage(join(dir, 'b-640x480.png'), 30);
         ({ electronApp, page } = await launchApp());
         await seedLocalStorage(page, {
             customLikeFolder: join(root, 'Liked'),
