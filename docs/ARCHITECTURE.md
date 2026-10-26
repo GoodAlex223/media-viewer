@@ -82,7 +82,7 @@ Exposes named, single-purpose calls via `contextBridge` (`window.electronAPI.*`)
 - DOM manipulation and event handling
 - View mode management (single/compare)
 - Media display (images and videos)
-- Zoom and pan functionality
+- Zoom and pan: delegated to `ZoomManager` (`zoom.js`, `this.zoom`); MediaViewer resets a side's zoom on each render and attaches each new media element
 - Rating workflow
 - Similarity sorting orchestration
 - Settings management
@@ -209,10 +209,8 @@ User clicks Like/Dislike
   viewMode: 'single',       // 'single' | 'compare'
   compareIndex: 1,          // Second image index in compare mode
 
-  // Zoom state (per image)
-  zoomLevel: 1,
-  panX: 0,
-  panY: 0,
+  // Zoom and pan: ZoomManager (zoom.js), this.zoom
+  zoom: ZoomManager,
 
   // Sorting state
   isSorting: false,

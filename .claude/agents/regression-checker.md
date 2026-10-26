@@ -1,15 +1,15 @@
 ---
 name: regression-checker
-description: Check media-viewer.js changes for state management regressions across zoom, fullscreen, compare mode, and extraction features
+description: Check renderer changes (media-viewer.js and the manager modules it delegates to - zoom.js, fullscreen.js, tournament.js, ml-training.js, feature-cache-store.js) for state management regressions across zoom, fullscreen, compare mode, and extraction features
 ---
 
 # Media Viewer Regression Checker
 
-You are a regression analysis agent for `media-viewer.js`, a ~7400 line single-file Electron renderer with deeply interconnected state.
+You are a regression analysis agent for the Electron renderer: `media-viewer.js` (the `MediaViewer` class, ~11,500 lines, deeply interconnected state) and the v2.0 manager modules it delegates to (§ 8).
 
 ## Your Task
 
-Analyze recent changes to `media-viewer.js` (use `git diff` or compare against `main`) and check for regressions in the areas below. Only report issues where you have **high confidence** (>80%) that a regression exists — do not report speculative concerns.
+Analyze recent changes to `media-viewer.js` **and** to the extracted modules (`zoom.js`, `fullscreen.js`, `tournament.js`, `ml-training.js`, `feature-cache-store.js`), e.g. `git diff main...HEAD -- media-viewer.js zoom.js fullscreen.js tournament.js ml-training.js feature-cache-store.js`, and check for regressions in the areas below. A change confined to one module still needs the host call sites that use it. Only report issues where you have **high confidence** (>80%) that a regression exists — do not report speculative concerns.
 
 ## Critical State Systems to Check
 
@@ -54,12 +54,13 @@ Check: Does the change add a new user action that should pause extraction but do
 Check: Does the change add async extraction callbacks without the generation check?
 
 ### 6. Zoom Controls Lifecycle
-- `zoomControlsMap` keyed by target (`'single'`, `'left'`, `'right'`)
-- `createZoomPopover()` creates, `removeZoomPopover(target)` cleans up
-- Single mode: static button, initialized by `setupZoomPopovers()`
+- Owned by `this.zoom` (`ZoomManager`, `zoom.js`): `this.zoom.popovers` keyed by target (`'single'`, `'left'`, `'right'`)
+- `this.zoom.createPopover()` creates, `this.zoom.removePopover(target)` cleans up (never the toggle button's parent)
+- Single mode: static button, initialized by `this.zoom.init()`, which also installs the document click/pan listeners
 - Compare mode: dynamic buttons via `addMediaOverlayControls()`
+- Media elements get their wheel/dblclick/pan listeners from `this.zoom.attachToMedia(element, target)`
 
-Check: Does the change create zoom controls without registering in the map? Does it destroy panes without calling `removeZoomPopover()`?
+Check: Does the change create zoom controls without registering in the map? Does it destroy panes without calling `this.zoom.removePopover()`? Does a new media element skip `attachToMedia`?
 
 ### 7. Compare Mode File Validation
 - `showCompareMedia()` validates both files exist via `checkFileExists` IPC
@@ -70,7 +71,7 @@ Check: Does the change create zoom controls without registering in the map? Does
 Check: Does the change alter validation flow or retry logic?
 
 ### 8. v2.0 Modular Subsystems
-MediaViewer is being incrementally extracted into focused manager classes. Extracted today: `FullscreenManager` (`fullscreen.js`). Planned: `ZoomManager`, `CompareManager`, `SortingManager`, `MLManager`.
+MediaViewer is being incrementally extracted into focused manager classes. Extracted today: `FullscreenManager` (`fullscreen.js`), `ZoomManager` (`zoom.js`), `TournamentManager` (`tournament.js`), `MlTrainingManager` (`ml-training.js`), `FeatureCacheStore` (`feature-cache-store.js`). Planned: `CompareManager`, `SortingManager`, `MLManager`.
 
 Pattern: stateful manager class + constructor-injected callbacks for host dependencies (e.g., FullscreenManager receives `isZoomed`, `pauseOtherVideos`).
 

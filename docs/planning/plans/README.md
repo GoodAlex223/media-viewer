@@ -78,7 +78,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| _None currently active_ | — | — |
+| [2026-10-26_g3-zoom-manager-extraction.md](2026-10-26_g3-zoom-manager-extraction.md) | G3 (ZoomManager extraction) | Implemented; [PR #90](https://github.com/GoodAlex223/media-viewer/pull/90) in review (round 1 fixes) |
 
 <!-- 2026-10-26 (Group G4 closeout): 2026-10-26_g4-formatter-hook-cost.md left this table on archive.
      Merged `7f75013` via PR #89, moved to docs/archive/plans/ with `git mv`, and indexed in

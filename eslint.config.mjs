@@ -8,9 +8,9 @@
 //   1b. Electron preload             — preload.js (Node + browser hybrid)
 //   2a. Browser renderer (module)    — media-viewer.js (loaded as type="module")
 //   2b. Browser renderer (script)    — face-detector.js (loaded as plain <script>)
-//   2c. Browser renderer modules     — fullscreen.js, ml-training.js, perceptual-hash.js, main-thread-hash.js,
-//                                      hash-pool.js, hash-parity.js, … (ES modules the renderer imports, directly
-//                                      or through another module)
+//   2c. Browser renderer modules     — fullscreen.js, zoom.js, ml-training.js, perceptual-hash.js,
+//                                      main-thread-hash.js, hash-pool.js, hash-parity.js, … (ES modules the
+//                                      renderer imports, directly or through another module)
 //   3a. Web Workers                  — sorting-worker.js, ml-worker.js, feature-worker.js
 //   3a-jxl. Module Web Workers       — jxl-decode-worker.js, hash-worker.js (ES module workers)
 //   3b. Shared libs (worker+browser) — feature-extractor.js, ml-model.js, media-formats.js
@@ -173,6 +173,7 @@ export default [
     {
         files: [
             'fullscreen.js',
+            'zoom.js',
             'tournament-engine.js',
             'tournament.js',
             'ml-training.js',

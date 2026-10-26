@@ -12,6 +12,7 @@ import { cp, mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { writeGridImage } from './fixtures/grid-image.js';
 
 // Capture-only: no assertions. These produce the committed visual evidence WEEKLY G2 requires.
 // The stem is passed in so the same file can run on `main` (before) and on the branch (after).
@@ -286,5 +287,69 @@ test.describe('G4 recent folders visual evidence', () => {
             await captureScreenshot(page, 'g4-header-menu-after');
             await page.keyboard.press('Escape');
         }
+    });
+});
+
+// G3 ZoomManager extraction (2026-10-26, spec docs/superpowers/specs/2026-10-26-g3-zoom-manager-extraction-design.md):
+// a refactor, so the acceptance is NO visual change — the same scenario on both runs, the popover open and the media
+// zoomed through its slider, in single and in compare mode. The compare shot is also the clipping check the held-back
+// 🟤 [2026-03-22] "Verify zoom popover not clipped by `overflow: hidden` on `.media-wrapper`" needs. Opt-in, like the
+// blocks above. Capture:
+// G3_EVIDENCE_STAGE=before|after npx playwright test tests/e2e/visual-evidence.test.js -g "zoom popover"
+const G3_STAGE = process.env.G3_EVIDENCE_STAGE;
+
+test.describe('G3 zoom visual evidence', () => {
+    test.skip(!G3_STAGE, 'Opt-in only — set G3_EVIDENCE_STAGE=before|after to (re)capture');
+
+    let electronApp, page, root;
+
+    test.afterEach(async () => {
+        if (electronApp) {
+            await closeApp(electronApp);
+        }
+        if (root) {
+            await rm(root, { recursive: true, force: true });
+            root = null;
+        }
+    });
+
+    // Slider 50 is scale 8^0.5 (283%): far enough from 100% that a lost transform shows.
+    async function openPopoverAndZoom(toggle, popover) {
+        await toggle.hover({ force: true });
+        await toggle.click({ force: true });
+        await expect(popover).toHaveClass(/\bshow\b/);
+        await popover.locator('.zoom-slider').fill('50');
+        await popover.locator('.zoom-slider').dispatchEvent('input');
+        await expect(popover.locator('.zoom-value')).toHaveText('283%');
+        await toggle.hover({ force: true });
+        await page.waitForTimeout(300);
+    }
+
+    test('zoom popover open and zoomed, single and compare mode', async () => {
+        root = await mkdtemp(join(tmpdir(), 'mv-e2e-g3ev-'));
+        const dir = join(root, 'Photos');
+        for (const sub of ['Photos', 'Liked', 'Disliked']) {
+            await mkdir(join(root, sub));
+        }
+        // Grid images (fixtures/grid-image.js): a zoom cannot show on the committed solid-colour fixtures.
+        await writeGridImage(join(dir, 'a-640x480.png'), 210);
+        await writeGridImage(join(dir, 'b-640x480.png'), 30);
+        ({ electronApp, page } = await launchApp());
+        await seedLocalStorage(page, {
+            customLikeFolder: join(root, 'Liked'),
+            customDislikeFolder: join(root, 'Disliked'),
+        });
+        await loadFolder(page, dir);
+        await waitForMedia(page);
+
+        await openPopoverAndZoom(page.locator('#zoomToggleBtn'), page.locator('#zoomBtnWrapper .zoom-popover'));
+        await expect(page.locator('.controls')).toHaveClass(/\bshow\b/);
+        await captureScreenshot(page, `g3-zoom-single-${G3_STAGE}`);
+
+        await page.evaluate(() => window.mediaViewer.switchMode('compare'));
+        await page.waitForFunction(() => window.mediaViewer.isCompareMode && !window.mediaViewer.isLoading);
+        const leftSlot = page.locator('.overlay-bar-slot[data-side="left"]');
+        await openPopoverAndZoom(leftSlot.locator('.overlay-zoom-btn'), leftSlot.locator('.zoom-popover'));
+        await captureScreenshot(page, `g3-zoom-compare-${G3_STAGE}`);
     });
 });

@@ -1,4 +1,5 @@
 import { FullscreenManager } from './fullscreen.js';
+import { ZoomManager } from './zoom.js';
 import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
 import { FeatureCacheStore } from './feature-cache-store.js';
@@ -370,14 +371,7 @@ class MediaViewer {
 
         // Fullscreen manager (v2.0 module pattern — stateful manager with callbacks)
         this.fullscreen = new FullscreenManager({
-            isZoomed: (wrapper) => {
-                const target = wrapper.classList.contains('left-media-wrapper')
-                    ? 'left'
-                    : wrapper.classList.contains('right-media-wrapper')
-                      ? 'right'
-                      : 'single';
-                return this.zoomState[target] && this.zoomState[target].scale > 1;
-            },
+            isZoomed: (wrapper) => this.zoom.isWrapperZoomed(wrapper),
             pauseOtherVideos: (wrapper) => {
                 if (this.leftMedia && this.leftMedia.tagName === 'VIDEO' && this.leftMediaWrapper !== wrapper) {
                     this.leftMedia.pause();
@@ -388,19 +382,20 @@ class MediaViewer {
             },
         });
 
-        // Zoom state for each view
-        this.zoomState = {
-            single: { scale: 1, translateX: 0, translateY: 0 },
-            left: { scale: 1, translateX: 0, translateY: 0 },
-            right: { scale: 1, translateX: 0, translateY: 0 },
-        };
-        this.zoomSteps = [1, 2, 4]; // Click-to-zoom levels
-        this.minZoom = 1;
-        this.maxZoom = 8;
-        this.zoomFactor = 1.15; // Wheel zoom factor per tick
-        this.isPanning = false;
-        this.panStart = { x: 0, y: 0 };
-        this.panStartTranslate = { x: 0, y: 0 };
+        // Zoom manager (v2.0 module pattern — stateful manager with callbacks)
+        this.zoom = new ZoomManager({
+            getMediaElement: (target) => {
+                if (target === 'left') return this.leftMedia;
+                if (target === 'right') return this.rightMedia;
+                return this.currentMedia;
+            },
+            isCompareMode: () => this.isCompareMode,
+            createIcons: (root) => {
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons({ root });
+                }
+            },
+        });
 
         this.initializeElements();
         this.setupEventListeners();
@@ -528,8 +523,7 @@ class MediaViewer {
         this.resortPredictionBtn = document.getElementById('resortPredictionBtn');
 
         // Zoom popover controls
-        this.zoomControlsMap = {};
-        this.setupZoomPopovers();
+        this.zoom.init();
     }
 
     updateSortSettingsVisibility() {
@@ -2690,8 +2684,8 @@ class MediaViewer {
                 if (this.rightMediaWrapper && this.rightMediaWrapper.classList.contains('fullscreen')) {
                     this.fullscreen.cleanup(this.rightMediaWrapper);
                 }
-                if (this.isZoomed()) {
-                    this.resetZoom('all');
+                if (this.zoom.isZoomed()) {
+                    this.zoom.reset('all');
                     return;
                 }
                 // Tournament: Escape pauses (exits to single mode, state preserved)
@@ -2760,15 +2754,6 @@ class MediaViewer {
             }
         });
 
-        // Global pan event listeners for zoom
-        document.addEventListener('mousemove', (e) => {
-            this.handlePanMove(e);
-        });
-
-        document.addEventListener('mouseup', () => {
-            this.handlePanEnd();
-        });
-
         // Mouse wheel navigation (or zoom when over media)
         document.addEventListener(
             'wheel',
@@ -2780,7 +2765,8 @@ class MediaViewer {
                 // Nor while the recent-folders menu is open, wherever the pointer is (G4 final review F6): the menu
                 // owns the keyboard, and no wheel navigates behind it (G4 spec § 7). Its own wheel listener covers
                 // only the pointer over it; elsewhere a wheel would change the file, and on the AI order record a
-                // skip. A wheel over media still zooms: handleWheelZoom stops propagation before this handler.
+                // skip. A wheel over media still zooms: the media element's own listener
+                // (ZoomManager.handleWheel) runs first and stops propagation.
                 if (this._recentMenuCleanup) {
                     return;
                 }
@@ -2972,168 +2958,6 @@ class MediaViewer {
                 hideControls();
             });
         });
-    }
-
-    // Logarithmic mapping for zoom slider: 0-100 → scale 1-8
-    sliderToScale(value) {
-        const normalized = value / 100;
-        return Math.exp(Math.log(this.minZoom) + normalized * (Math.log(this.maxZoom) - Math.log(this.minZoom)));
-    }
-
-    scaleToSlider(scale) {
-        const clamped = Math.max(this.minZoom, Math.min(this.maxZoom, scale));
-        return ((Math.log(clamped) - Math.log(this.minZoom)) / (Math.log(this.maxZoom) - Math.log(this.minZoom))) * 100;
-    }
-
-    setupZoomPopovers() {
-        // Only set up the single-mode zoom (static HTML button)
-        // Compare-mode zoom buttons are added dynamically in addMediaOverlayControls
-        const wrapper = document.getElementById('zoomBtnWrapper');
-        const toggleBtn = document.getElementById('zoomToggleBtn');
-        if (wrapper && toggleBtn) {
-            this.createZoomPopover('single', wrapper, toggleBtn);
-        }
-
-        // Close popovers on outside click
-        document.addEventListener('click', () => this.closeAllZoomPopovers());
-    }
-
-    createZoomPopover(target, wrapper, toggleBtn) {
-        // Build popover DOM: [-] [slider] [+] [100%]
-        const popover = document.createElement('div');
-        popover.className = 'zoom-popover';
-
-        const zoomOutBtn = document.createElement('button');
-        zoomOutBtn.className = 'zoom-pop-btn';
-        zoomOutBtn.title = 'Zoom out';
-        zoomOutBtn.innerHTML = '<i data-lucide="minus"></i>';
-
-        const slider = document.createElement('input');
-        slider.type = 'range';
-        slider.className = 'zoom-slider';
-        slider.min = '0';
-        slider.max = '100';
-        slider.value = '0';
-        slider.step = '1';
-        slider.title = 'Zoom level';
-
-        const zoomInBtn = document.createElement('button');
-        zoomInBtn.className = 'zoom-pop-btn';
-        zoomInBtn.title = 'Zoom in';
-        zoomInBtn.innerHTML = '<i data-lucide="plus"></i>';
-
-        const valueDisplay = document.createElement('span');
-        valueDisplay.className = 'zoom-value';
-        valueDisplay.textContent = '100%';
-
-        popover.appendChild(zoomOutBtn);
-        popover.appendChild(slider);
-        popover.appendChild(zoomInBtn);
-        popover.appendChild(valueDisplay);
-
-        wrapper.appendChild(popover);
-
-        // Store references
-        const zoomAbort = new AbortController();
-        this.zoomControlsMap[target] = {
-            container: popover,
-            slider,
-            zoomInBtn,
-            zoomOutBtn,
-            valueDisplay,
-            toggleBtn,
-            isSliderDragging: false,
-            abortController: zoomAbort,
-        };
-
-        // Toggle popover on button click
-        toggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isOpen = popover.classList.contains('show');
-            this.closeAllZoomPopovers();
-            if (!isOpen) popover.classList.add('show');
-        });
-
-        // Zoom center helper
-        const zoomCenter = () => {
-            const element = this.getMediaElement(target);
-            if (!element) return null;
-            const rect = element.getBoundingClientRect();
-            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-        };
-
-        zoomInBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const state = this.zoomState[target];
-            const newScale = Math.min(this.maxZoom, state.scale * this.zoomFactor);
-            const center = zoomCenter();
-            if (center) this.zoomAtPoint(target, newScale, center.x, center.y);
-        });
-
-        zoomOutBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const state = this.zoomState[target];
-            const newScale = Math.max(this.minZoom, state.scale / this.zoomFactor);
-            if (newScale <= this.minZoom) {
-                this.resetZoom(target);
-            } else {
-                const center = zoomCenter();
-                if (center) this.zoomAtPoint(target, newScale, center.x, center.y);
-            }
-        });
-
-        slider.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            this.zoomControlsMap[target].isSliderDragging = true;
-        });
-        slider.addEventListener('input', (e) => {
-            const newScale = this.sliderToScale(parseFloat(e.target.value));
-            if (newScale <= this.minZoom + 0.01) {
-                this.resetZoom(target);
-            } else {
-                const center = zoomCenter();
-                if (center) this.zoomAtPoint(target, newScale, center.x, center.y);
-            }
-        });
-        document.addEventListener(
-            'mouseup',
-            () => {
-                if (this.zoomControlsMap[target]) {
-                    this.zoomControlsMap[target].isSliderDragging = false;
-                }
-            },
-            { signal: zoomAbort.signal }
-        );
-
-        // Prevent popover clicks from closing via document handler
-        popover.addEventListener('mousedown', (e) => e.stopPropagation());
-        popover.addEventListener('click', (e) => e.stopPropagation());
-
-        // Initialize Lucide icons
-        if (typeof lucide !== 'undefined') {
-            lucide.createIcons({ root: popover });
-        }
-    }
-
-    // Dismiss a zoom popover and drop its listeners. Deliberately does NOT remove the toggle
-    // button: the button belongs to whoever built it (addMediaOverlayControls rebuilds the whole
-    // group, single mode's #zoomBtnWrapper is static markup). Removing it here used to delete
-    // the zoom control from every tournament pair after the first — showTournamentPairFast calls
-    // cleanupCompareMedia, which calls this, and (before this fix) never rebuilt the group (G2).
-    // showTournamentPairFast now rebuilds both groups itself right after the cleanup phase (see
-    // its own comment above) — this method stays a pure "dismiss the popover" op either way.
-    removeZoomPopover(target) {
-        const entry = this.zoomControlsMap[target];
-        if (!entry) return;
-        if (entry.abortController) entry.abortController.abort();
-        if (entry.container.parentNode) entry.container.remove();
-        delete this.zoomControlsMap[target];
-    }
-
-    closeAllZoomPopovers() {
-        for (const entry of Object.values(this.zoomControlsMap)) {
-            entry.container.classList.remove('show');
-        }
     }
 
     async openFolderDialog() {
@@ -3923,7 +3747,7 @@ class MediaViewer {
         this.showLoadingSpinner();
 
         // Reset zoom when changing files
-        this.resetZoom('single');
+        this.zoom.reset('single');
 
         // Properly cleanup previous media
         if (this.currentMedia) {
@@ -3995,7 +3819,7 @@ class MediaViewer {
             this.finishJxlCanvasDisplay(file);
         }
 
-        this.closeAllZoomPopovers();
+        this.zoom.hideAllPopovers();
 
         this.updateBasicFileInfo(file);
         // For the animated-JXL canvas there is no async 'load' to call
@@ -4109,8 +3933,8 @@ class MediaViewer {
         this.showLoadingSpinner();
 
         // Reset zoom when changing files
-        this.resetZoom('left');
-        this.resetZoom('right');
+        this.zoom.reset('left');
+        this.zoom.reset('right');
 
         // Cleanup previous media in parallel
         const cleanupPromises = [];
@@ -4360,7 +4184,7 @@ class MediaViewer {
         this.mediaContainer.appendChild(this.leftMediaWrapper);
         this.mediaContainer.appendChild(this.rightMediaWrapper);
 
-        this.closeAllZoomPopovers();
+        this.zoom.hideAllPopovers();
 
         // Initialize Lucide icons for overlay controls (must be after DOM append).
         // Scope to the bar, not the wrappers: the control groups moved there in G2, and a
@@ -4451,8 +4275,8 @@ class MediaViewer {
         slot.appendChild(controls);
 
         // Clean up old zoom popover for this side and create new one
-        this.removeZoomPopover(side);
-        this.createZoomPopover(side, zoomWrapper, zoomBtn);
+        this.zoom.removePopover(side);
+        this.zoom.createPopover(side, zoomWrapper, zoomBtn);
     }
 
     setupCompareImageHandlers(media, file, side, opts = {}) {
@@ -4469,7 +4293,7 @@ class MediaViewer {
                 }
 
                 // Setup zoom events for the loaded image
-                this.setupZoomEvents(media, side);
+                this.zoom.attachToMedia(media, side);
 
                 // Check if both media are loaded
                 const bothLoaded =
@@ -4524,7 +4348,7 @@ class MediaViewer {
                 }
 
                 // Setup zoom events for the loaded video
-                this.setupZoomEvents(media, side);
+                this.zoom.attachToMedia(media, side);
 
                 // Check if both media are loaded
                 const bothLoaded =
@@ -4575,7 +4399,7 @@ class MediaViewer {
                 this.mediaNavigationInProgress = false;
                 this.updateFileInfoWithDimensions(file);
                 // Setup zoom events for the loaded image
-                this.setupZoomEvents(this.currentMedia, 'single');
+                this.zoom.attachToMedia(this.currentMedia, 'single');
                 // Update prediction badges
                 this.updatePredictionBadges();
             }
@@ -4622,7 +4446,7 @@ class MediaViewer {
         canvas.style.display = 'block';
         this.isLoading = false;
         this.mediaNavigationInProgress = false;
-        this.setupZoomEvents(canvas, 'single');
+        this.zoom.attachToMedia(canvas, 'single');
         this.updatePredictionBadges();
     }
 
@@ -4640,7 +4464,7 @@ class MediaViewer {
                 this.updateFileInfoWithDimensions(file);
                 this.setupVideoProgressTracking();
                 // Setup zoom events for the loaded video
-                this.setupZoomEvents(this.currentMedia, 'single');
+                this.zoom.attachToMedia(this.currentMedia, 'single');
                 // Update prediction badges
                 this.updatePredictionBadges();
             }
@@ -5726,7 +5550,7 @@ class MediaViewer {
         this.leftMedia = null;
         this.rightMedia = null;
         this.hidePredictionBadges();
-        this.closeAllZoomPopovers();
+        this.zoom.hideAllPopovers();
     }
 
     // Show the floating Compare-mode Undo button when in compare mode (not tournament) with undo history available
@@ -6446,8 +6270,8 @@ class MediaViewer {
             return;
         }
         const t0 = performance.now();
-        this.resetZoom('left');
-        this.resetZoom('right');
+        this.zoom.reset('left');
+        this.zoom.reset('right');
         this.compareLeftFile = leftFile;
         this.compareRightFile = rightFile;
         this.updateBulkRateButtonsVisibility();
@@ -6886,7 +6710,7 @@ class MediaViewer {
         // Hide prediction badges before switching modes
         this.hidePredictionBadges();
 
-        this.closeAllZoomPopovers();
+        this.zoom.hideAllPopovers();
 
         // Clean up media from previous mode before switching
         if (this.isCompareMode) {
@@ -7247,7 +7071,7 @@ class MediaViewer {
         if (!media) return;
 
         // Clean up zoom popover and its document-level listeners (AbortController)
-        this.removeZoomPopover(side);
+        this.zoom.removePopover(side);
 
         this.isBeingCleaned = true;
 
@@ -8841,246 +8665,6 @@ class MediaViewer {
         }
 
         return result;
-    }
-
-    // ==================== ZOOM METHODS ====================
-
-    getZoomTarget(element) {
-        // Determine which zoom state to use based on the element
-        if (this.isCompareMode) {
-            if (element === this.leftMedia || element === this.leftMediaWrapper) {
-                return 'left';
-            } else if (element === this.rightMedia || element === this.rightMediaWrapper) {
-                return 'right';
-            }
-        }
-        return 'single';
-    }
-
-    getMediaElement(target) {
-        if (target === 'left') return this.leftMedia;
-        if (target === 'right') return this.rightMedia;
-        return this.currentMedia;
-    }
-
-    setZoom(target, scale, translateX, translateY) {
-        const state = this.zoomState[target];
-        if (!state) return;
-
-        state.scale = Math.max(this.minZoom, Math.min(this.maxZoom, scale));
-        state.translateX = translateX;
-        state.translateY = translateY;
-
-        const element = this.getMediaElement(target);
-        if (element) {
-            element.style.transform = `translate(${state.translateX}px, ${state.translateY}px) scale(${state.scale})`;
-            element.style.cursor = state.scale > 1 ? 'grab' : 'default';
-        }
-
-        this.updateZoomIndicator(target);
-    }
-
-    resetZoom(target) {
-        if (target === 'all') {
-            this.resetZoom('single');
-            this.resetZoom('left');
-            this.resetZoom('right');
-            return;
-        }
-
-        this.setZoom(target, 1, 0, 0);
-    }
-
-    zoomAtPoint(target, newScale, clientX, clientY) {
-        const element = this.getMediaElement(target);
-        if (!element) return;
-
-        const state = this.zoomState[target];
-        const rect = element.getBoundingClientRect();
-
-        // Calculate cursor position relative to element center
-        const elementCenterX = rect.left + rect.width / 2;
-        const elementCenterY = rect.top + rect.height / 2;
-
-        // Cursor offset from center in screen coordinates
-        const offsetX = clientX - elementCenterX;
-        const offsetY = clientY - elementCenterY;
-
-        // Calculate new translate to keep point under cursor
-        const scaleRatio = newScale / state.scale;
-
-        let newTranslateX = state.translateX - offsetX * (scaleRatio - 1);
-        let newTranslateY = state.translateY - offsetY * (scaleRatio - 1);
-
-        // Constrain pan to reasonable bounds when zoomed
-        if (newScale > 1) {
-            const maxTranslateX = (rect.width * (newScale - 1)) / 2;
-            const maxTranslateY = (rect.height * (newScale - 1)) / 2;
-            newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
-            newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
-        } else {
-            newTranslateX = 0;
-            newTranslateY = 0;
-        }
-
-        this.setZoom(target, newScale, newTranslateX, newTranslateY);
-    }
-
-    cycleZoomStep(target, clientX, clientY) {
-        const state = this.zoomState[target];
-        const currentScale = state.scale;
-
-        // Find next zoom step
-        let nextStep = this.zoomSteps[0];
-        for (let i = 0; i < this.zoomSteps.length; i++) {
-            if (currentScale < this.zoomSteps[i]) {
-                nextStep = this.zoomSteps[i];
-                break;
-            }
-            // If we're at or beyond the last step, reset to 1
-            if (i === this.zoomSteps.length - 1) {
-                nextStep = this.zoomSteps[0];
-            }
-        }
-
-        if (nextStep === 1) {
-            this.resetZoom(target);
-        } else {
-            this.zoomAtPoint(target, nextStep, clientX, clientY);
-        }
-    }
-
-    handleWheelZoom(e, target) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const state = this.zoomState[target];
-        const delta = e.deltaY > 0 ? -1 : 1;
-        const newScale = state.scale * Math.pow(this.zoomFactor, delta);
-
-        this.zoomAtPoint(target, newScale, e.clientX, e.clientY);
-    }
-
-    handlePanStart(e, target) {
-        const state = this.zoomState[target];
-        if (state.scale <= 1) return false;
-
-        this.isPanning = true;
-        this.currentPanTarget = target;
-        this.panStart = { x: e.clientX, y: e.clientY };
-        this.panStartTranslate = { x: state.translateX, y: state.translateY };
-
-        const element = this.getMediaElement(target);
-        if (element) {
-            element.style.cursor = 'grabbing';
-        }
-
-        return true;
-    }
-
-    handlePanMove(e) {
-        if (!this.isPanning) return;
-
-        const target = this.currentPanTarget;
-        const state = this.zoomState[target];
-        const element = this.getMediaElement(target);
-        if (!element) return;
-
-        const deltaX = e.clientX - this.panStart.x;
-        const deltaY = e.clientY - this.panStart.y;
-
-        let newTranslateX = this.panStartTranslate.x + deltaX;
-        let newTranslateY = this.panStartTranslate.y + deltaY;
-
-        // Constrain pan to image bounds
-        const rect = element.getBoundingClientRect();
-        const maxTranslateX = (rect.width * (state.scale - 1)) / 2;
-        const maxTranslateY = (rect.height * (state.scale - 1)) / 2;
-
-        newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
-        newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
-
-        this.setZoom(target, state.scale, newTranslateX, newTranslateY);
-    }
-
-    handlePanEnd() {
-        if (!this.isPanning) return;
-
-        const element = this.getMediaElement(this.currentPanTarget);
-        if (element) {
-            const state = this.zoomState[this.currentPanTarget];
-            element.style.cursor = state.scale > 1 ? 'grab' : 'default';
-        }
-
-        this.isPanning = false;
-        this.currentPanTarget = null;
-    }
-
-    updateZoomIndicator(target) {
-        const entry = this.zoomControlsMap && this.zoomControlsMap[target];
-        if (!entry) return;
-
-        const state = this.zoomState[target];
-
-        // Sync slider and percentage display (skip during slider drag to avoid feedback loop)
-        if (!entry.isSliderDragging) {
-            entry.slider.value = this.scaleToSlider(state.scale);
-        }
-        entry.valueDisplay.textContent = `${Math.round(state.scale * 100)}%`;
-
-        // Enable/disable buttons at boundaries
-        entry.zoomOutBtn.disabled = state.scale <= this.minZoom;
-        entry.zoomInBtn.disabled = state.scale >= this.maxZoom;
-
-        // Toggle button active state when zoomed
-        if (entry.toggleBtn) {
-            if (state.scale > 1) {
-                entry.toggleBtn.classList.add('active');
-            } else {
-                entry.toggleBtn.classList.remove('active');
-            }
-        }
-    }
-
-    isZoomed() {
-        if (this.isCompareMode) {
-            return this.zoomState.left.scale > 1 || this.zoomState.right.scale > 1;
-        }
-        return this.zoomState.single.scale > 1;
-    }
-
-    setupZoomEvents(element, target) {
-        if (!element) return;
-
-        // Helper to check if element is in fullscreen mode
-        const isInFullscreen = () => element.closest('.fullscreen') !== null;
-
-        // Double-click to cycle zoom (disabled in fullscreen - conflicts with click-to-exit)
-        element.addEventListener('dblclick', (e) => {
-            if (isInFullscreen()) return;
-            e.preventDefault();
-            e.stopPropagation();
-            this.cycleZoomStep(target, e.clientX, e.clientY);
-        });
-
-        // Wheel zoom (works in fullscreen)
-        element.addEventListener(
-            'wheel',
-            (e) => {
-                this.handleWheelZoom(e, target);
-            },
-            { passive: false }
-        );
-
-        // Pan start (works in fullscreen when zoomed)
-        element.addEventListener('mousedown', (e) => {
-            if (e.button === 0) {
-                // Left click only
-                if (this.handlePanStart(e, target)) {
-                    e.preventDefault();
-                }
-            }
-        });
     }
 
     // ==================== ML PREDICTION METHODS ====================
