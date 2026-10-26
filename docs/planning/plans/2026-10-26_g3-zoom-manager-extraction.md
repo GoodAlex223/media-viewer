@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) Oct 19–23 § G3 (🔵, 5 SP → ~6 SP); BACKLOG 🔵 [2026-10-18] "Extract ZoomManager from the renderer (v2.0 modularization, the third manager)"
 **Spec**: [2026-10-26-g3-zoom-manager-extraction-design.md](../../superpowers/specs/2026-10-26-g3-zoom-manager-extraction-design.md). The user skipped the question round; spec § 11 lists Claude's calls.
 **Created**: 2026-10-26
-**Status**: Approved by the user 2026-10-26. Execution runs after a `/compact`. Recommended: native (superpowers:executing-plans) on Sonnet · `high`, then one whole-branch review on the most capable model. Task 1 is next.
+**Status**: Implemented (T1–T5, native execution 2026-10-26); [PR #90](https://github.com/GoodAlex223/media-viewer/pull/90) open. The final whole-branch review runs in a separate chat (the user's ruling), then merge and Closeout.
 **Last Updated**: 2026-10-26
 **Branch**: `g3-zoom-manager-extraction` (from `main` @ `5230b69`). Baseline `3509bca`: before screenshots and `typescript@6`, with `media-viewer.js` unchanged at **11,945** lines.
 **Trial vehicle**: `typescript-lsp` (REVIEW-QUEUE § 5; last vehicle). Log every LSP answer and diagnostic in the Progress Log (spec § 8).
@@ -573,7 +573,7 @@ git commit -m "docs(zoom): CLAUDE.md, the regression checker and ARCHITECTURE na
 - [x] **Step 2: Pixel diff.** `node <scratchpad>/pixel-diff.cjs …-before.png …-after.png` for `single` and `compare`.
 Expected: `differing pixels: 0` for both (Task 1 Step 2 showed a re-capture is exact). Any other count is explained before the PR. Log both counts.
 
-- [ ] **Step 3: Full verification.** `npm test`, `npm run lint`, `npm run format:check`, then `npm run test:e2e`. Log the counts: unit passed/skipped, E2E passed/skipped.
+- [x] **Step 3: Full verification.** `npm test`, `npm run lint`, `npm run format:check`, then `npm run test:e2e`. Log the counts: unit passed/skipped, E2E passed/skipped.
 
 - [x] **Step 4: Commit.**
 
@@ -582,7 +582,7 @@ git add docs/superpowers/specs/assets/g3-zoom-single-after.png docs/superpowers/
 git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G3 T5)"
 ```
 
-- [ ] **Step 5: Hand-off to the user.** This step ends the task: no push, no PR, no review without the user's go-ahead. Report:
+- [x] **Step 5: Hand-off to the user.** This step ends the task: no push, no PR, no review without the user's go-ahead. Report:
   - the line count;
   - the pixel diff;
   - the suite counts;
@@ -690,3 +690,5 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     - Round 3 (L90): single mode after compare (wheel, double-click, pan, popover), the next file resetting to 100% and closing the popover, the video zoom, and the animated JXL zoom while playing.
     - The first app window was closed between rounds. Its session log ended "Session ended (clean quit)" with no errors.
   - **The user's questions in round 2**: why a click in a zoomed fullscreen pane does not exit, and why a double-click in fullscreen does not zoom. Both are deliberate and unchanged by G3. The user asked to backlog both for consistency across the app. Filed as 🔵 [2026-10-26] "From: G3 manual testing" (two entries, the click one tagged `possible-dup-of` the 2026-07-11 entry).
+  - **The commit for that, first try, was refused.** The hook's unit run had 8 failures, all timeouts (15–35 s) in tests that spawn `git`, `sh` or node CLIs, or wait on the filesystem: `atomic-write`, `check-claude-md-size`, `check-secrets`, `format-edited-file`, `guard-preload-bash`, `husky-skip`, `path-grants`. The test app was still running (4 `electron` processes on the throwaway profile) with about 1.5 GB free. After stopping it, 2.3 GB was free, and the unchanged staged set committed with **2363 passed, 1 skipped** (`8155120`). The failures were environmental, not the change.
+  - **Push (Step 3 completed by the hook).** The pre-push hook ran the full E2E suite at `8155120`: **235 passed, 7 skipped, 0 failed** (10.5 min). Pushed as a new branch; **[PR #90](https://github.com/GoodAlex223/media-viewer/pull/90)** opened. Its commit list matches `main..HEAD` exactly (9 commits, head `8155120`).
