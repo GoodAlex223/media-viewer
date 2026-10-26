@@ -1,5 +1,5 @@
 // PostToolUse hook (.claude/settings.json): run Prettier on the ONE file an Edit/Write just
-// changed — never on the session's working directory.
+// changed — never on the session's working directory — and only where that run buys something.
 //
 // The hook this replaces ran `npx prettier --write "$CLAUDE_FILE_PATH"`. Claude Code sets no
 // such variable (hook input arrives as JSON on stdin), so every edit ran `prettier --write ""`,
@@ -9,18 +9,35 @@
 // files under ~/.claude are Edit/Write targets in every session), and runs Prettier from the
 // repo root, so .prettierignore and .gitignore apply wherever the session's cwd is.
 //
-// `planFormat` is pure and unit-tested (tests/format-edited-file.test.js). The CLI always exits
-// 0: a PostToolUse hook cannot undo the edit, and a syntax error is lint-staged's to report.
+// The hook blocks every edit until it exits, so two more paths skip before Prettier starts
+// (re-timed 2026-10-26: an ignored .md cost 213 ms, media-viewer.js 1,133 ms, node alone 60 ms):
+// - A path Prettier would ignore. `createIsIgnored` is Prettier's own check, so the skip changes
+//   nothing Prettier does: its default ignore files (.gitignore, .prettierignore), each with
+//   `node_modules` appended, matched by the `ignore` version it bundles (pinned exactly in
+//   package.json), ignored when any file matches. The tests compare it with the installed Prettier
+//   over every tracked file, so a Prettier upgrade that changes the rule fails there.
+// - The root media-viewer.js: Prettier's parse and print of it is ~1.1 s, so lint-staged formats it
+//   at commit instead. Not `"async": true`: Prettier writes output computed from its own earlier
+//   read, so an edit that lands mid-format would be overwritten.
+//
+// `planFormat` and `createIsIgnored` are unit-tested (tests/format-edited-file.test.js). The CLI
+// always exits 0: a PostToolUse hook cannot undo the edit, and a syntax error is lint-staged's to report.
 
+const fs = require('fs');
 const path = require('path');
+
+// Root-relative posix paths that lint-staged formats at commit (`*.{js,cjs}` in package.json).
+const LEFT_TO_COMMIT = new Set(['media-viewer.js']);
+// Prettier's default --ignore-path (node_modules/prettier/internal/legacy-cli.mjs).
+const IGNORE_FILES = ['.gitignore', '.prettierignore'];
 
 /**
  * Decide whether the edited file gets formatted.
- * @param {{filePath: unknown, root: string}} input
+ * @param {{filePath: unknown, root: string, isIgnored?: (posixRelPath: string) => boolean}} input
  * @param {typeof path} [pathImpl] - injectable so win32 behaviour is testable on any OS
  * @returns {{action: 'skip', reason: string} | {action: 'format', relPath: string}}
  */
-function planFormat({ filePath, root }, pathImpl = path) {
+function planFormat({ filePath, root, isIgnored = () => false }, pathImpl = path) {
     if (typeof filePath !== 'string' || filePath.trim() === '') {
         return { action: 'skip', reason: 'no file path' };
     }
@@ -30,14 +47,45 @@ function planFormat({ filePath, root }, pathImpl = path) {
     if (relPath === '' || escapes || pathImpl.isAbsolute(relPath)) {
         return { action: 'skip', reason: 'outside the project' };
     }
+    const posixPath = relPath.split(pathImpl.sep).join('/');
+    if (LEFT_TO_COMMIT.has(posixPath)) {
+        return { action: 'skip', reason: 'left to lint-staged at commit' };
+    }
+    let ignored = false;
+    try {
+        ignored = isIgnored(posixPath);
+    } catch (_err) {
+        // Prettier decides, as it did before this check existed.
+    }
+    if (ignored) {
+        return { action: 'skip', reason: 'ignored by Prettier' };
+    }
     return { action: 'format', relPath };
 }
 
-module.exports = { planFormat };
+/**
+ * Prettier's own ignore check for files under `root` (see the header).
+ * @param {string} root
+ * @returns {(posixRelPath: string) => boolean}
+ */
+function createIsIgnored(root) {
+    const ignore = require('ignore');
+    const matchers = IGNORE_FILES.map((name) => {
+        let content = '';
+        try {
+            content = fs.readFileSync(path.join(root, name), 'utf8');
+        } catch (_err) {
+            // An unreadable file adds no patterns; Prettier then decides for itself.
+        }
+        return ignore({ allowRelativePaths: true }).add(`${content}\nnode_modules`);
+    });
+    return (posixRelPath) => matchers.some((matcher) => matcher.checkIgnore(posixRelPath).ignored);
+}
+
+module.exports = { planFormat, createIsIgnored };
 
 // --- CLI: read the hook's stdin JSON, format the edited file, always exit 0 ---
 if (require.main === module) {
-    const fs = require('fs');
     const { spawnSync } = require('child_process');
     const root = path.resolve(__dirname, '..', '..');
 
@@ -49,7 +97,12 @@ if (require.main === module) {
         process.exit(0);
     }
 
-    const plan = planFormat({ filePath, root });
+    // Built on first use (~15 ms), so the paths that skip without it never pay for it. If `ignore`
+    // does not load (node_modules missing or partial), planFormat catches the throw and Prettier decides.
+    let matcher;
+    const isIgnored = (posixRelPath) => (matcher ??= createIsIgnored(root))(posixRelPath);
+
+    const plan = planFormat({ filePath, root, isIgnored });
     if (plan.action === 'format') {
         const prettierBin = path.join(root, 'node_modules', 'prettier', 'bin', 'prettier.cjs');
         const result = spawnSync(

@@ -7,7 +7,7 @@ import os from 'os';
 import path from 'path';
 
 const require = createRequire(import.meta.url);
-const { planFormat } = require('../.claude/hooks/format-edited-file.js');
+const { planFormat, createIsIgnored } = require('../.claude/hooks/format-edited-file.js');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOOK = path.join(ROOT, '.claude', 'hooks', 'format-edited-file.js');
@@ -74,6 +74,145 @@ describe('planFormat — which edited file gets formatted', () => {
             reason: 'outside the project',
         });
     });
+
+    it('win32: skips a path Prettier ignores, asking with the posix root-relative path', () => {
+        const asked = [];
+        const isIgnored = (relPath) => {
+            asked.push(relPath);
+            return true;
+        };
+        const root = String.raw`C:\Users\a\repo`;
+        const filePath = String.raw`C:\Users\a\repo\docs\planning\TODO.md`;
+        expect(planFormat({ filePath, root, isIgnored }, path.win32)).toEqual({
+            action: 'skip',
+            reason: 'ignored by Prettier',
+        });
+        expect(asked).toEqual(['docs/planning/TODO.md']);
+    });
+
+    it('formats a path the ignore check passes', () => {
+        expect(
+            planFormat({ filePath: '/r/repo/src/a.js', root: '/r/repo', isIgnored: () => false }, path.posix)
+        ).toEqual({ action: 'format', relPath: 'src/a.js' });
+    });
+
+    it('formats when the ignore check throws: Prettier decides, as before the check existed', () => {
+        const isIgnored = () => {
+            throw new Error('boom');
+        };
+        expect(planFormat({ filePath: '/r/repo/src/a.js', root: '/r/repo', isIgnored }, path.posix).action).toBe(
+            'format'
+        );
+    });
+
+    it('never asks the ignore check about a path outside the project (the ignore library throws on ../)', () => {
+        const isIgnored = () => {
+            throw new Error('asked about an outside path');
+        };
+        expect(planFormat({ filePath: '/r/b.js', root: '/r/repo', isIgnored }, path.posix)).toEqual({
+            action: 'skip',
+            reason: 'outside the project',
+        });
+    });
+
+    it('leaves the root media-viewer.js to lint-staged at commit', () => {
+        expect(planFormat({ filePath: '/r/repo/media-viewer.js', root: '/r/repo' }, path.posix)).toEqual({
+            action: 'skip',
+            reason: 'left to lint-staged at commit',
+        });
+        const root = String.raw`C:\Users\a\repo`;
+        expect(planFormat({ filePath: String.raw`C:\Users\a\repo\media-viewer.js`, root }, path.win32).action).toBe(
+            'skip'
+        );
+    });
+
+    it('skips the renderer without consulting the ignore check (the CLI builds it only on first use)', () => {
+        const isIgnored = () => {
+            throw new Error('consulted');
+        };
+        expect(planFormat({ filePath: '/r/repo/media-viewer.js', root: '/r/repo', isIgnored }, path.posix).reason).toBe(
+            'left to lint-staged at commit'
+        );
+    });
+
+    it('formats a nested file that only shares the renderer name', () => {
+        expect(planFormat({ filePath: '/r/repo/tests/media-viewer.js', root: '/r/repo' }, path.posix)).toEqual({
+            action: 'format',
+            relPath: 'tests/media-viewer.js',
+        });
+    });
+});
+
+// The hook skips before spawning Prettier only where Prettier itself would skip, so its matcher
+// must agree with Prettier's own: the installed Prettier is the reference, and a Prettier upgrade
+// that changes its bundled `ignore` or its default ignore files fails here.
+describe('createIsIgnored — the same verdict as Prettier', { timeout: 30000 }, () => {
+    // One path per pattern class in .gitignore / .prettierignore, plus their negations; none is tracked.
+    const PROBES = [
+        'node_modules/x/index.js',
+        'tests/node_modules/a.js',
+        'docs/new-note.js',
+        'NEW.md',
+        'tests/UPPER.MD',
+        'package-lock.json',
+        'tests/e2e/fixtures/new.json',
+        'vendor/lucide/new.js',
+        'vendor/other/new.js',
+        '.trunk/x.json',
+        '.claude/settings.local.json',
+        '.claude/worktrees/w/main.js',
+        '.claude/hooks/new-hook.js',
+        '.claude/settings.json',
+        'logs/a.js',
+        'a.log',
+        '.env',
+        '.env.local',
+        '.env.example',
+        'coverage/a.js',
+        'dist/a.js',
+        'test-results/a.json',
+        '.superpowers/brainstorm/a.html',
+        '.mcp.json',
+        'new-module.js',
+    ];
+
+    it('agrees with prettier.getFileInfo on every tracked file and on a probe per pattern class', async () => {
+        const prettier = await import('prettier');
+        const ignorePath = [path.join(ROOT, '.gitignore'), path.join(ROOT, '.prettierignore')];
+        const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
+            .stdout.split('\0')
+            .filter(Boolean);
+        expect(tracked.length).toBeGreaterThan(100);
+
+        const isIgnored = createIsIgnored(ROOT);
+        const mismatches = [];
+        let ignoredCount = 0;
+        for (const relPath of [...tracked, ...PROBES]) {
+            const { ignored } = await prettier.getFileInfo(path.join(ROOT, relPath), { ignorePath });
+            if (ignored) {
+                ignoredCount++;
+            }
+            if (isIgnored(relPath) !== ignored) {
+                mismatches.push(`${relPath}: hook ${!ignored}, prettier ${ignored}`);
+            }
+        }
+        expect(mismatches).toEqual([]);
+        // Not vacuous: both verdicts occur (every .md under docs/ is ignored; every .js at the root is not).
+        expect(ignoredCount).toBeGreaterThan(50);
+        expect(ignoredCount).toBeLessThan(tracked.length);
+    });
+
+    it('ignores only node_modules when neither ignore file exists, as Prettier does', () => {
+        const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'fmt-noignore-'));
+        try {
+            const isIgnored = createIsIgnored(empty);
+            expect(isIgnored('node_modules/a.js')).toBe(true);
+            expect(isIgnored('a.md')).toBe(false);
+            expect(isIgnored('src/a.js')).toBe(false);
+        } finally {
+            fs.rmSync(empty, { recursive: true, force: true });
+        }
+    });
 });
 
 // Each test spawns node (and Prettier): above vitest's 5 s default under Windows spawn latency
@@ -134,5 +273,61 @@ describe('format-edited-file CLI — run as Claude Code runs it', { timeout: 200
         expect(result.status).toBe(0);
         expect(fs.readFileSync(bad, 'utf8')).toBe('const = ;\n');
         expect(result.stderr).toContain('prettier did not format');
+    });
+});
+
+// The hook's saving is that it never starts Prettier for these paths, and an untouched file cannot
+// show that: Prettier leaves ignored files untouched itself. So the hook runs from a copy in a temp
+// root with no Prettier installed, where every spawn fails loudly on stderr. A skipped path is silent;
+// a formatted one (the control) reports the failed spawn.
+describe('format-edited-file CLI — skips before spawning Prettier', { timeout: 20000 }, () => {
+    let tmpRoot;
+    const NODE_PATH = path.join(ROOT, 'node_modules'); // lets the copied hook load `ignore`, not Prettier
+    const runCopiedHook = (relPath, env) =>
+        spawnSync(process.execPath, [path.join(tmpRoot, '.claude', 'hooks', 'format-edited-file.js')], {
+            input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: path.join(tmpRoot, relPath) } }),
+            cwd: tmpRoot,
+            encoding: 'utf8',
+            env,
+        });
+    const envWithout = (name) => Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== name));
+
+    afterEach(() => {
+        if (tmpRoot) {
+            fs.rmSync(tmpRoot, { recursive: true, force: true });
+            tmpRoot = undefined;
+        }
+    });
+
+    const makeRoot = () => {
+        tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fmt-root-'));
+        fs.mkdirSync(path.join(tmpRoot, '.claude', 'hooks'), { recursive: true });
+        fs.copyFileSync(HOOK, path.join(tmpRoot, '.claude', 'hooks', 'format-edited-file.js'));
+        fs.writeFileSync(path.join(tmpRoot, '.prettierignore'), '*.md\n');
+        fs.writeFileSync(path.join(tmpRoot, '.gitignore'), 'build/\n');
+        fs.mkdirSync(path.join(tmpRoot, 'build'));
+        for (const name of ['a.md', 'build/out.js', 'media-viewer.js', 'b.js']) {
+            fs.writeFileSync(path.join(tmpRoot, name), UGLY_JS);
+        }
+    };
+
+    it('starts no Prettier for a .prettierignore path, a .gitignore path or the renderer; the control does', () => {
+        makeRoot();
+        const env = { ...envWithout('NODE_PATH'), NODE_PATH };
+        for (const relPath of ['a.md', 'build/out.js', 'media-viewer.js']) {
+            const result = runCopiedHook(relPath, env);
+            expect(result.status).toBe(0);
+            expect(result.stderr, relPath).toBe('');
+        }
+        const control = runCopiedHook('b.js', env);
+        expect(control.status).toBe(0);
+        expect(control.stderr).toContain('prettier did not format b.js');
+    });
+
+    it('asks Prettier, as before the check existed, when the ignore library cannot load', () => {
+        makeRoot();
+        const result = runCopiedHook('a.md', envWithout('NODE_PATH'));
+        expect(result.status).toBe(0);
+        expect(result.stderr).toContain('prettier did not format a.md');
     });
 });
