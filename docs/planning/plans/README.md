@@ -78,7 +78,11 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| [2026-10-26_g4-formatter-hook-cost.md](2026-10-26_g4-formatter-hook-cost.md) | G4 | In Progress |
+| _None currently active_ | — | — |
+
+<!-- 2026-10-26 (Group G4 closeout): 2026-10-26_g4-formatter-hook-cost.md left this table on archive.
+     Merged `7f75013` via PR #89, moved to docs/archive/plans/ with `git mv`, and indexed in
+     docs/README.md as "G4 Formatter Hook Cost Plan" in the same commit. No spec: a 2-SP task. -->
 
 <!-- 2026-10-25 (Group G2 PR 2 closeout): 2026-10-22_g2-hash-sort-pr2-background-hashing.md left this table on
      archive. Merged `f5ddfa3` via PR #87, moved to docs/archive/plans/ with `git mv`, and indexed in

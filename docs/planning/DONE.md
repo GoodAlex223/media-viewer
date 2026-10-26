@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-25 <!-- v2 modules and redesign spec (design only, unplanned spare-usage work, 2026-10-22). MERGED 2026-10-25 via PR #88 (merge e1c4e03) after five PR review rounds (16 → 5 → 3 → 2 → 1 findings) and a close-out that accepted every response. -->
+**Last Updated**: 2026-10-26 <!-- Group G4: Formatter hook per-edit cost (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #89 (merge 7f75013) after a 5-finding review, a docs round and a clean round 3. -->
+<!-- Previous: v2 modules and redesign spec (design only, unplanned spare-usage work, 2026-10-22). MERGED 2026-10-25 via PR #88 (merge e1c4e03) after five PR review rounds (16 → 5 → 3 → 2 → 1 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G2: Hash and similarity sort off the renderer thread, PR 2 of 2 (background hashing, parity mode, atomic folder writes; 🔵 🏆, Oct 19–23). MERGED 2026-10-25 via PR #87 (merge f5ddfa3) after a final review with a fix wave, five PR review rounds, the user's Liked_2 smoke (B15 ruling) and a real-JXL measurement. Closes G2 and TODO 🔴 "Speed up AI / similarity sorting…". -->
 <!-- Previous: Stop the feature cache being wiped on a folder switch (TODO 🔴, ahead of G2 PR 2). MERGED 2026-10-22 via PR #86 (merge 654fb3e) after a 15-finding PR review and three close-out rounds, all fixed. -->
 <!-- Previous: Group G2: Hash and similarity sort off the renderer thread, PR 1 of 2 (end-of-sort fixes, 🔵 🏆, Oct 19–23). MERGED 2026-10-20 via PR #85 (merge f668611) after a final review with a fix wave, a 24-finding PR review with three fix waves, and two user-approved additions (Tasks 6–7). G2 stays open for PR 2. -->
@@ -29,6 +30,63 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-26 — Group G4: Formatter hook per-edit cost 🔵 (Oct 19–23, run after the week) — **MERGED `7f75013`** (PR #89)
+
+**Plan**: [2026-10-26_g4-formatter-hook-cost.md](../archive/plans/2026-10-26_g4-formatter-hook-cost.md). A short plan and no spec (2 SP): the user skipped the brainstorm's questions, so the plan records the design calls.
+**Branch**: `g4-formatter-hook-cost`, cut from `main` at `8449566`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: MERGED 2026-10-26 via PR #89** (merge commit `7f75013`, 4 commits). Closes 🔵 [2026-10-17] "Cut the formatter hook's per-edit cost…".
+
+**What shipped** (`.claude/hooks/format-edited-file.js`):
+- **No Prettier run for a path Prettier ignores.** `createIsIgnored` is Prettier's own check: its default ignore files (`.gitignore` and `.prettierignore`), each with `node_modules` appended, matched by the `ignore` version it bundles (`7.0.5`, pinned exactly as a devDependency). The matcher is built on first use.
+- **The root `media-viewer.js` is left to lint-staged at commit** (`LEFT_TO_COMMIT`). A commit that bypasses lint-staged leaves it unformatted: a recorded residual, stated in the hook's header.
+- **Read errors other than `ENOENT` rethrow**, as in Prettier, so the edit goes to Prettier, which reports them.
+- `CLAUDE.md`'s `.claude/` line says what the hook formats. `.claude/settings.json` is unchanged.
+
+**Measured** (interleaved A/B: main's hook and the new one swapped in place, 3 × 10 runs, median / max):
+- the renderer 1,384 / 1,599 → **65 / 87 ms**;
+- an ignored doc 229 / 300 → **83 / 109 ms**;
+- a formatted file (398 ms) and the out-of-project path (71 ms): unchanged.
+
+**Rejected**:
+- `"async": true`: the hooks reference says Claude Code does not wait for it, and Prettier's `formatFiles` writes output from its own earlier read, so a concurrent edit would be overwritten.
+- A `Stop` hook: its input carries no edited-file list, so it needs a recorder (M), and it would still cost 1.1 s per turn.
+
+**Verification:**
+- `tests/format-edited-file.test.js`, 29 tests:
+  - parity with `prettier.getFileInfo` over every tracked file plus one probe per pattern class;
+  - the CLI's default ignore files, via `--file-info` with discriminating controls;
+  - the bundled `ignore` version;
+  - lint-staged's own `generateTasks` for each `LEFT_TO_COMMIT` path;
+  - two no-spawn CLI tests from a temp root without Prettier.
+- 10 of 10 mutations killed.
+- Full suite: 48 files, 2,333 passed, 1 skipped.
+- E2E: 225 passed and 6 skipped on each of the three pushes.
+- Positive control: a planted unformatted `.js` comes back formatted. Race probe: two same-message edits to one file both kept.
+
+**Review** (a separate session):
+- `/code-review` at `medium`: 5 findings, all fixed in `3ba954b`:
+  - the parity test could not see the CLI's default;
+  - the pin was not tied to Prettier;
+  - the lint-staged premise was unchecked;
+  - non-ENOENT errors were swallowed;
+  - a machine-dependent test.
+- Round 2: 1 docs finding (the plan contradicted the reply), fixed in `2890eb0` with two held-back items taken.
+- A close-out written on `3ba954b` before that push landed, then round 3: no issues.
+
+**User rulings:** skip the brainstorm questions; commit, push and PR; answer each round; merge with `--merge` and delete the branch. During the third E2E run the user raised the gate's cost: filed 🔵 [2026-10-26], and its option 1 became the next task (TODO 🟠).
+
+**Key learnings:**
+- ⭐ A parity test that hands the reference tool the hook's own configuration compares the hook with itself on that axis. `getFileInfo` has no default ignore path; only the CLI shows the default.
+- ⭐ Hook timings drift tens of milliseconds within minutes. A sequential before/after misread unchanged code by 15 ms, so compare versions interleaved.
+- An untouched file cannot prove a spawn was skipped. Run from a root where the spawn fails loudly, with a control path that spawns.
+
+**Propagation check:** the review's late facts reached the hook's header (`2890eb0`). `CLAUDE.md:78` holds no claim that the review changed. `PROJECT.md` and `docs/ARCHITECTURE.md` say nothing about the hook.
+
+**Follow-ups:**
+- BACKLOG 🟤 [2026-10-26] (G4 closeout), three entries: unknown-type skip, the `extractMethod` lookup, a committed timing probe.
+- BACKLOG 🔵 [2026-10-26], the pre-push E2E gate's cost; its option 1 is TODO 🟠.
 
 ### 2026-10-25 — v2 modules and redesign spec (design only; unplanned, spare weekly usage) — **MERGED `e1c4e03`** (PR #88)
 

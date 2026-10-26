@@ -5,7 +5,7 @@
 **Sources**: MILESTONES.md, ROADMAP.md, GOALS.md (all `Last Updated` 2026-08-27, 52 days; the 2-month bar falls on 2026-10-27, and last week's theme shipped off the board, so the 🟡 refresh is filed and scheduled as G5, see Notes → strategic docs), BACKLOG.md (📌 Process Rules; 🔵 [2026-10-17] and the open 🔵 pool; the 🟤 [2026-10-11] → [2026-10-18] closeout sections; an obsolescence check of last week's unverified reap list), TODO.md (🔴 I1, 🔴 24k-sort PR2 remainder, § Spawned Tasks), git log (last 2 weeks: the six Oct 11–18 merges `e5cd3a8`, `96467f7`, `bf6fcad`, `51af1ab`, `3fb797e`, `1954109` and their closeouts through `73527a9`), previous WEEKLY.md (Oct 12–16 — finished two days past its Friday, archived below), REVIEW-QUEUE.md (§§1–5; last run 2026-10-17). Live-config drift check: N/A — this repo keeps no live-config sync. OWNER-QUEUE.md: absent.
 **Cleanup Week?**: **No — normal week.** Cleanup Week #4 ran Oct 5–9; #5 is due **Oct 26–30**, next week. The 🟤-size trigger fires (66 new open 🟤 entries since 2026-10-11, 297 open in total, measured 2026-10-18), as it has continuously since June, so the cadence governs.
 **Context**: Roadmap phase _Scale & Modularize_; active milestone _v2.0 modularization_. The renderer grew 15% in one week (`media-viewer.js` 9,989 → **11,451** lines, 2026-10-10 → 10-18), while the roadmap's **Now** column stood still: PR2 has been open since June, and no extraction has shipped since 2026-09-10. This week's agreed theme is **"stop the renderer's growth"**: the first v2.0 extraction since then, ZoomManager (G3), and the last 24k slice, the hash/similarity sort off the renderer thread (🏆 G2), behind a front-loaded fix for G1's security residual I1 (G1). A formatter-hook speed-up (G4), the strategic-doc refresh (G5) and Weekly Reviews (G6) close the week.
-**Spillover** (recorded 2026-10-25): G2 PR 2 merged on 2026-10-25, two days past the Friday (PR #87, `f5ddfa3`). G3, G4, G5 and G6 had not run by then. The week's own drop order sends G4 to the next normal week and G5 to Cleanup Week #5. G3 is never dropped, and the Cleanup Week #5 planning pass places it and G6.
+**Spillover** (recorded 2026-10-25): G2 PR 2 merged on 2026-10-25, two days past the Friday (PR #87, `f5ddfa3`). G3, G4, G5 and G6 had not run by then. The week's own drop order sends G4 to the next normal week and G5 to Cleanup Week #5. G3 is never dropped, and the Cleanup Week #5 planning pass places it and G6. **2026-10-26**: G4 ran before that pass after all (PR #89, `7f75013`), and its check-offs are done.
 
 ---
 
@@ -84,7 +84,8 @@ In order:
 > Independent of G1–G3; Wednesday, so the renderer edits in G3 already run on the faster hook. Writes under `.claude/` are protected-path writes. A solo 2-SP group by exception: no 🔵 domain-mate among this week's tasks (Notes).
 > **Model:** start Sonnet · `medium` → same session, no switch (the 1–2 SP row); review light (`medium`), one level up to `high` if it touches `.claude/settings.json`, which carries the `permissions.ask` rules — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **Cut the formatter hook's per-edit cost** — per 🔵 [2026-10-17]: (1) skip every path `.prettierignore` matches before spawning Prettier, reading `.prettierignore` itself (the `ignore` package as a devDependency), ~150 ms per doc edit with no behaviour change; (2) for the renderer's 1.1 s, the narrower matcher (leave `media-viewer.js` to lint-staged at commit) unless a measurement favours the `Stop` hook or `async`. **Acceptance**: re-timed with the entry's own probe (10 runs per file, median and max) before and after, with its positive control (a planted unformatted file comes back formatted). `.claude/hooks/format-edited-file.js`, `tests/format-edited-file.test.js`, `package.json`, possibly `.claude/settings.json` (2) — 🔵 [2026-10-17] Weekly Reviews § 4 inbound
+- [x] ✅ **MERGED 2026-10-26 via PR #89 (merge `7f75013`)**, at ~2 SP as planned, three days past the Friday (Spillover); see [DONE.md](DONE.md). Both remedies shipped. The hook skips every path Prettier ignores before Prettier starts, using Prettier's own check (`.gitignore` too). It leaves the root `media-viewer.js` to lint-staged. Interleaved re-time, median: 1,384 → 65 ms and 229 → 83 ms. `async` was ruled out by mechanism, and `.claude/settings.json` is untouched. The original task follows.
+- **Cut the formatter hook's per-edit cost** — per 🔵 [2026-10-17]: (1) skip every path `.prettierignore` matches before spawning Prettier, reading `.prettierignore` itself (the `ignore` package as a devDependency), ~150 ms per doc edit with no behaviour change; (2) for the renderer's 1.1 s, the narrower matcher (leave `media-viewer.js` to lint-staged at commit) unless a measurement favours the `Stop` hook or `async`. **Acceptance**: re-timed with the entry's own probe (10 runs per file, median and max) before and after, with its positive control (a planted unformatted file comes back formatted). `.claude/hooks/format-edited-file.js`, `tests/format-edited-file.test.js`, `package.json`, possibly `.claude/settings.json` (2) — 🔵 [2026-10-17] Weekly Reviews § 4 inbound
 
 ### G5. Strategic-doc refresh `[solo]` 🟡 — strategic docs — 3 SP
 
@@ -125,7 +126,7 @@ In order:
 ### Wednesday, October 21 — PR2 build; hook cost
 
 - ✅ **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆 — implement; parity tests; perf lines (part 2 of 3). Re-planned: PR 1 (end-of-sort fixes) implement, review, merge; then PR 2's plan. **PR 1 ✅ `f668611` (PR #85, merged 2026-10-20).** Its review ran into Wednesday; PR 2's plan has not started.
-- **[G4](#g4-formatter-hook-per-edit-cost-solo---claude-code-hooks--2-sp)** 🔵 — both remedies; re-time; review; merge
+- ✅ **[G4](#g4-formatter-hook-per-edit-cost-solo---claude-code-hooks--2-sp)** 🔵 — both remedies; re-time; review; merge. Ran on Monday 2026-10-26, after the week: PR #89 merged `7f75013` after three review rounds and a close-out.
 
 **Daily total**: ~6 SP
 
@@ -155,7 +156,7 @@ In order:
 | G1  | Confine page-side file loads (I1) `[solo]`                   | Main process + CSP         | 🟤 Auto     | 1     | 5        | Mon–Tue | ✅ `4548269` (PR #84) |
 | G2  | Hash and similarity sort off the renderer thread `[solo]` 🏆 | Sorting pipeline           | 🔵 User     | 1     | 8        | Tue–Thu | ✅ `f5ddfa3` (PR #87); PR 1 `f668611` (PR #85) |
 | G3  | ZoomManager extraction `[solo]`                              | Renderer modularization    | 🔵 User     | 1     | 5        | Thu–Fri | ☐ Planned  |
-| G4  | Formatter hook per-edit cost `[solo]`                        | Claude Code hooks          | 🔵 User     | 1     | 2        | Wed     | ☐ Planned  |
+| G4  | Formatter hook per-edit cost `[solo]`                        | Claude Code hooks          | 🔵 User     | 1     | 2        | Wed     | ✅ `7f75013` (PR #89) |
 | G5  | Strategic-doc refresh `[solo]`                               | Strategic docs             | 🟡 Ops      | 1     | 3        | Fri     | ☐ Planned  |
 | G6  | Weekly Reviews `[batch]`                                     | Research / process         | ⚪ Overhead | 4     | 5        | Fri     | ☐ Planned  |
 |     | **Total (quota-counted)**                                    |                            |             | **5** | **23**   |         |            |

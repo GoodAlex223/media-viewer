@@ -1,8 +1,8 @@
 # G4 Formatter Hook Per-Edit Cost - Implementation Plan
 
-**Task Reference**: [WEEKLY.md § G4](../WEEKLY.md#g4-formatter-hook-per-edit-cost-solo---claude-code-hooks--2-sp) · BACKLOG 🔵 [2026-10-17] "Cut the formatter hook's per-edit cost: 1.1 s on each `media-viewer.js` edit, 0.2 s on each ignored `.md` edit"
+**Task Reference**: [WEEKLY.md § G4](../../planning/WEEKLY.md#g4-formatter-hook-per-edit-cost-solo---claude-code-hooks--2-sp) · BACKLOG 🔵 [2026-10-17] "Cut the formatter hook's per-edit cost: 1.1 s on each `media-viewer.js` edit, 0.2 s on each ignored `.md` edit"
 **Created**: 2026-10-26
-**Status**: In Progress
+**Status**: Complete — merged 2026-10-26 via PR #89 (merge `7f75013`)
 **Last Updated**: 2026-10-26
 
 > A 2-SP task (the 1–2 SP row of WORKFLOW.md § 1.0), so the checkpoints are shortened: no spec, and no
@@ -142,7 +142,8 @@ hook's own header comment both assert what the hook formats; both are in the tab
 5. [x] Header comment and `CLAUDE.md:78`.
 6. [x] Full `npx vitest run`, ESLint and Prettier on the changed files; re-time after with both
        controls; `git status` unchanged.
-7. [ ] Hand to the user: commit and PR on approval; code review in a separate chat.
+7. [x] Hand to the user: commit and PR on approval; code review in a separate chat. PR #89, three
+       review rounds and a close-out (§ 4), merged `7f75013`.
 
 ---
 
@@ -235,6 +236,23 @@ that would make the hook skip a file Prettier formats), and the EISDIR test asse
 not a bare `.toThrow()`. Left as held back: the lint-staged import by path, which fails loudly on a
 layout change.
 
+### 2026-10-26 — PHASE: Review close-out and round 3 (PR #89)
+
+The reviewer's close-out was written on `3ba954b` while `2890eb0` was still in its pre-push E2E run.
+It accepted every round-1 response and re-raised only the round-2 finding. The round-2 reply answered
+both. Round 3, on `2890eb0`, accepted every response and found no issues. Its one held-back item is
+this section's E2E row, which could not yet carry `2890eb0`'s own pre-push run; § 7 adds it at closeout.
+
+### 2026-10-26 — PHASE: Complete
+
+- Merged 2026-10-26 via PR #89 (merge commit `7f75013`, `--merge`); the branch was deleted on the
+  remote and locally.
+- Tests: 29 in the hook's file, 48 files / 2,333 passed / 1 skipped in the full suite, E2E 225 passed /
+  6 skipped on each of the three pushes.
+- Documentation: `CLAUDE.md` § Architecture `.claude/` line, the hook's header.
+- Improvements: 3 to BACKLOG 🟤 [2026-10-26] (§ 6). The user raised the E2E gate's cost during the
+  task; that is 🔵 [2026-10-26], and its option 1 is in TODO 🟠 by user ruling (§ 6 Spawned Tasks).
+
 ---
 
 ## 5. Key Discoveries
@@ -254,6 +272,11 @@ layout change.
   fails loudly, with a control path that does spawn.
 - Hook timings drift by tens of milliseconds within minutes: compare versions interleaved.
 
+**Anti-Patterns Avoided** (caught in review):
+- A parity test that hands the reference tool the hook's own configuration compares the hook with
+  itself on that axis. `prettier.getFileInfo` has no default ignore path, so only the CLI could show
+  the default the hook mirrors (round 1, finding 1).
+
 ---
 
 ## 6. Future Improvements
@@ -271,6 +294,12 @@ layout change.
 | Item | Why It Exists | Impact | Remediation |
 |------|---------------|--------|-------------|
 | `ignore` pinned to Prettier's bundled version by hand | Exact mirror of Prettier's matcher | L | The bundled-version test fails on drift; re-pin on a Prettier upgrade |
+
+### Spawned Tasks
+
+| Task | Origin | Priority | Added to TODO.md |
+|------|--------|----------|------------------|
+| Cut the pre-push E2E gate's cost (231 tests, 10–12 min a push) | The user, during PR #89's third E2E run | H | Option 1 (skip paths the app never loads) [x] Yes, 🟠 by user ruling; options 2–4 stay in BACKLOG 🔵 [2026-10-26] |
 
 ---
 
@@ -292,15 +321,16 @@ layout change.
 | Full `npx vitest run` | Pass | 48 files, 2,333 passed, 1 skipped (review round 1) |
 | Mutations | 10 / 10 killed | § 4 |
 | ESLint, Prettier (changed files), `check-docs-index.js` | Pass | |
-| E2E (pre-push hook) | Pass | 225 passed, 6 skipped on `c91d12b` (9.9 min) and on `3ba954b` (11.7 min) |
+| E2E (pre-push hook) | Pass | 225 passed, 6 skipped on `c91d12b` (9.9 min), on `3ba954b` (11.7 min) and on `2890eb0` (10.4 min) |
 
 ---
 
 ## 8. Review
 
-- [ ] Self-review complete
-- [ ] Code review (light, separate chat)
-- [ ] User approved
+- [x] Self-review complete
+- [x] Code review in a separate session: `/code-review` at `medium` (5 findings, all fixed), round 2
+      (1 finding, fixed), a close-out on `3ba954b`, round 3 on `2890eb0` (no issues)
+- [x] User approved: merge requested 2026-10-26
 
 ---
 
@@ -308,13 +338,13 @@ layout change.
 
 | Artifact | Done / N/A + reason |
 |----------|---------------------|
-| `BACKLOG.md` — improvements extracted (min 2, routed by source) | |
-| `TODO.md` — actionable items, plus § Spawned Tasks rows for out-of-tree work | |
-| `docs/archive/plans/` — plan moved here, original deleted | |
-| `DONE.md` — entry with plan link, summary, key changes | |
-| `WEEKLY.md` — Summary-Table Status an identifier, never a bare ✅; Daily-Schedule entry marked done | |
-| `BACKLOG.md` / `TODO.md` — every entry this task closed checked off, in the closeout commit | |
-| Deploy record | |
-| Live docs — every late finding corrected where a live doc asserts it | |
-| `docs/README.md` — plan indexed | |
-| Memory — durable decisions and patterns captured | |
+| `BACKLOG.md` — improvements extracted (min 2, routed by source) | Done: 3 under 🟤 `[2026-10-26] From: G4 closeout`; the user-raised E2E entry under 🔵 `[2026-10-26]` |
+| `TODO.md` — actionable items, plus § Spawned Tasks rows for out-of-tree work | Done: 🟠 E2E gate option 1 (user ruling). No out-of-tree work |
+| `docs/archive/plans/` — plan moved here, original deleted | Done (`git mv`) |
+| `DONE.md` — entry with plan link, summary, key changes | Done |
+| `WEEKLY.md` — Summary-Table Status an identifier, never a bare ✅; Daily-Schedule entry marked done | Done: `✅ 7f75013 (PR #89)`; the G4 task box and the Wednesday entry |
+| `BACKLOG.md` / `TODO.md` — every entry this task closed checked off, in the closeout commit | Done: 🔵 [2026-10-17] "Cut the formatter hook's per-edit cost…". G4 came straight from BACKLOG, so no TODO item closes |
+| Deploy record | N/A: a dev-tooling hook; nothing ships to users |
+| Live docs — every late finding corrected where a live doc asserts it | Done: the review's late facts are in the hook's header (`2890eb0`). `CLAUDE.md:78` needed no change after review |
+| `docs/README.md` — plan indexed | Done: "G4 Formatter Hook Cost Plan" under Archived Plans. No spec |
+| Memory — durable decisions and patterns captured | Done: a session file and two feedback memories (the parity test fed its own config; interleaved timings) |
