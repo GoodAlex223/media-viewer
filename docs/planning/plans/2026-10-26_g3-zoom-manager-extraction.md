@@ -568,14 +568,14 @@ git commit -m "docs(zoom): CLAUDE.md, the regression checker and ARCHITECTURE na
 - Create: `docs/superpowers/specs/assets/g3-zoom-single-after.png`, `g3-zoom-compare-after.png`
 - Modify: this plan (Progress Log), `docs/README.md` (spec row status)
 
-- [ ] **Step 1: Capture.** `$env:G3_EVIDENCE_STAGE='after'; npx playwright test tests/e2e/visual-evidence.test.js -g "zoom popover"; $env:G3_EVIDENCE_STAGE=$null`. Read both images: same popover, controls and zoomed grid as the before pair.
+- [x] **Step 1: Capture.** `$env:G3_EVIDENCE_STAGE='after'; npx playwright test tests/e2e/visual-evidence.test.js -g "zoom popover"; $env:G3_EVIDENCE_STAGE=$null`. Read both images: same popover, controls and zoomed grid as the before pair.
 
-- [ ] **Step 2: Pixel diff.** `node <scratchpad>/pixel-diff.cjs …-before.png …-after.png` for `single` and `compare`.
+- [x] **Step 2: Pixel diff.** `node <scratchpad>/pixel-diff.cjs …-before.png …-after.png` for `single` and `compare`.
 Expected: `differing pixels: 0` for both (Task 1 Step 2 showed a re-capture is exact). Any other count is explained before the PR. Log both counts.
 
 - [ ] **Step 3: Full verification.** `npm test`, `npm run lint`, `npm run format:check`, then `npm run test:e2e`. Log the counts: unit passed/skipped, E2E passed/skipped.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add docs/superpowers/specs/assets/g3-zoom-single-after.png docs/superpowers/specs/assets/g3-zoom-compare-after.png docs/planning/plans/2026-10-26_g3-zoom-manager-extraction.md docs/README.md
@@ -675,3 +675,7 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     - The spec's § 4.7 correction note (the T2 finding).
   - **Task 4 Step 5.** `npm run lint`: 0 errors, 2 pre-existing `no-shadow` warnings (`media-viewer-utils.test.js:3417`, `ml-model.test.js:284`). `check-docs-index`: exit 0.
     - `npm run format:check` exits 1, **identically on the committed tree** (checked with the edits stashed). All 10 files are under local `CLAUDE-SECURITY-*` scan folders. Each has its own `.gitignore: *`, which git honours, but `prettier --check .` reads only the root ignore files. So it is not a tracked file and not this branch; every tracked file passed `prettier --check`.
+  - **Task 5 Steps 1–2.** The `after` capture passed (1 test). By eye, both images match the before pair: the popover is open at 283%, the controls are unchanged, and the grid is zoomed. **Pixel diff: `single` 0 of 1,494,592, `compare` 0 of 1,494,592**, and both PNGs are byte-identical to the before images (65,513 and 100,667 B). `docs/README.md`'s spec row now reads "Approved and implemented".
+  - **Task 5 Step 3 — the full E2E run is owed.** The `npm run test:e2e` run of 242 tests was **stopped by Claude Code's low-memory guard**, not by a test failure. Tests 1–21 passed. From test 22 on, every Electron launch failed: `electron.launch: Process failed to launch!` and `worker process exited unexpectedly`, both with exit code `3221225794` (`0xC0000142`, `STATUS_DLL_INIT_FAILED`). That is consistent with the machine having 1.2 GB free of 15.2 GB, with no Electron process of the suite's left behind.
+    - Per the guard's notice, it was not restarted. The full suite runs again at the user's request, and the pre-push hook runs it anyway.
+    - What did run green on this code: the unit suite (2363 passed, 1 skipped, at the T4 commit; no code has changed since), lint (0 errors), Prettier on every tracked file, the 79-test zoom-related E2E subset at T3, and the 13-test zoom file at T3's completion.
