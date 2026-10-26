@@ -5,7 +5,7 @@
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) Oct 19–23 § G3 (🔵, 5 SP → ~6 SP); BACKLOG 🔵 [2026-10-18] "Extract ZoomManager from the renderer (v2.0 modularization, the third manager)"
 **Spec**: [2026-10-26-g3-zoom-manager-extraction-design.md](../../superpowers/specs/2026-10-26-g3-zoom-manager-extraction-design.md). The user skipped the question round; spec § 11 lists Claude's calls.
 **Created**: 2026-10-26
-**Status**: Draft, awaiting the user's review of the spec and plan
+**Status**: Approved by the user 2026-10-26. Execution runs after a `/compact`. Recommended: native (superpowers:executing-plans) on Sonnet · `high`, then one whole-branch review on the most capable model. Task 1 is next.
 **Last Updated**: 2026-10-26
 **Branch**: `g3-zoom-manager-extraction` (from `main` @ `5230b69`). Baseline `3509bca`: before screenshots and `typescript@6`, with `media-viewer.js` unchanged at **11,945** lines.
 **Trial vehicle**: `typescript-lsp` (REVIEW-QUEUE § 5; last vehicle). Log every LSP answer and diagnostic in the Progress Log (spec § 8).
@@ -626,3 +626,5 @@ git commit -m "docs(zoom): after screenshots, pixel diff and verification log (G
     1. `getZoomTarget` is dead.
     2. The pan document listeners can move without an observable reorder (no `mousemove`/`mouseup` `stopImmediatePropagation`).
     3. Two of the first-draft mutations could not fail their tests: dropping `stopPropagation` is masked by `isOverMedia`, and the 100% pan is clamped to 0. Both were replaced, spec § 6.1.
+  - **A side-agent note at hand-off** warned that only the slider is tested, so wheel, double-click and pan could break with every check green, and that the task says not to take that entry on. It described the state before this plan. Task 1's cases A–J are exactly those paths, each A–F shown able to fail (spec § 11 call 1 takes the entry on). The note is still a reason to run the manual wheel/pan pass in Task 5 Step 5.
+  - The user approved the spec and plan ("Looks good"); execution follows a `/compact`.
