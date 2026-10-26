@@ -260,11 +260,12 @@ export class ZoomManager {
         let newTranslateX = state.translateX - offsetX * (scaleRatio - 1);
         let newTranslateY = state.translateY - offsetY * (scaleRatio - 1);
 
-        // Constrain pan to reasonable bounds when zoomed. The bound comes from the layout box: the rect above
-        // already includes this element's own scale, which made it s times too loose (PR #90 review #2).
+        // Constrain pan to reasonable bounds when zoomed, by the picture's unscaled size (pictureSize): the rect
+        // above already includes this element's own scale, which made the bound s times too loose (PR #90 review #2).
         if (newScale > 1) {
-            const maxTranslateX = (element.offsetWidth * (newScale - 1)) / 2;
-            const maxTranslateY = (element.offsetHeight * (newScale - 1)) / 2;
+            const picture = this.pictureSize(element);
+            const maxTranslateX = (picture.width * (newScale - 1)) / 2;
+            const maxTranslateY = (picture.height * (newScale - 1)) / 2;
             newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
             newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
         } else {
@@ -333,6 +334,23 @@ export class ZoomManager {
         return true;
     }
 
+    // The unscaled size of the picture an element shows, which is what the pan bounds keep on screen. Usually that is
+    // the layout box (offsetWidth/offsetHeight; no transform changes it). But object-fit: contain can letterbox the
+    // media inside a larger box: fitMediaToScreen gives media larger than the window a 100vw × 100vh box (PR #90
+    // review round 2). natural size × the contain fit covers both, since it equals the box when the box already
+    // has the picture's shape. A canvas, or a video before its metadata, has no natural size and keeps the box.
+    pictureSize(element) {
+        const boxWidth = element.offsetWidth;
+        const boxHeight = element.offsetHeight;
+        const naturalWidth = element.naturalWidth || element.videoWidth || 0;
+        const naturalHeight = element.naturalHeight || element.videoHeight || 0;
+        if (!naturalWidth || !naturalHeight) {
+            return { width: boxWidth, height: boxHeight };
+        }
+        const fit = Math.min(boxWidth / naturalWidth, boxHeight / naturalHeight);
+        return { width: naturalWidth * fit, height: naturalHeight * fit };
+    }
+
     handlePanMove(e) {
         if (!this.isPanning) return;
 
@@ -347,10 +365,11 @@ export class ZoomManager {
         let newTranslateX = this.panStartTranslate.x + deltaX;
         let newTranslateY = this.panStartTranslate.y + deltaY;
 
-        // Constrain pan to image bounds: the layout box, not getBoundingClientRect(), which includes this
-        // element's own scale and let the image leave the pane (PR #90 review #2)
-        const maxTranslateX = (element.offsetWidth * (state.scale - 1)) / 2;
-        const maxTranslateY = (element.offsetHeight * (state.scale - 1)) / 2;
+        // Constrain pan to image bounds: the picture's unscaled size (pictureSize), not getBoundingClientRect(),
+        // which includes this element's own scale and let the image leave the pane (PR #90 review #2)
+        const picture = this.pictureSize(element);
+        const maxTranslateX = (picture.width * (state.scale - 1)) / 2;
+        const maxTranslateY = (picture.height * (state.scale - 1)) / 2;
 
         newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
         newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));

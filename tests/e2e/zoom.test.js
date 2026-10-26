@@ -300,4 +300,38 @@ test.describe('Zoom input (G3 characterization)', () => {
         await wheelOver(singleMedia(), -100);
         await expect(singleValue()).toHaveText('115%');
     });
+
+    // PR #90 review round 2: fitMediaToScreen gives media larger than the window a 100vw × 100vh box with
+    // object-fit: contain, so the box is the window and the picture is letterboxed inside it. The pan bound must
+    // follow the picture shown, or at 400% a drag uncovers half the screen. Grids A–J are smaller than the window.
+    test('K: a photo larger than the window pans only as far as its own edges, not the letterbox', async () => {
+        tmp = await createTempFixtureDir([]);
+        await writeGridImage(join(tmp.dir, 'large-grid.png'), 210, { scale: 5 }); // 3200 × 2400 (4:3)
+        ({ electronApp, page } = await launchApp());
+        await loadFolder(page, tmp.dir);
+        await waitForMedia(page);
+        const media = singleMedia();
+
+        // Prove the letterbox branch ran: a window-sized box, wider than the 4:3 picture it holds.
+        await expect.poll(() => media.evaluate((el) => el.style.width)).toBe('100vw');
+        const { pictureWidth, boxWidth } = await media.evaluate((el) => {
+            const fit = Math.min(el.offsetWidth / el.naturalWidth, el.offsetHeight / el.naturalHeight);
+            return { pictureWidth: el.naturalWidth * fit, boxWidth: el.offsetWidth };
+        });
+        expect(boxWidth - pictureWidth).toBeGreaterThan(50);
+
+        const c = await centerOf(media);
+        await page.mouse.dblclick(c.x, c.y);
+        await page.mouse.dblclick(c.x, c.y);
+        await expect(singleValue()).toHaveText('400%');
+        for (let i = 0; i < 5; i++) {
+            await page.mouse.move(c.x - 300, c.y);
+            await page.mouse.down();
+            await page.mouse.move(c.x + 300, c.y, { steps: 10 });
+            await page.mouse.up();
+        }
+        // The picture's edge meets its unzoomed edge: picture width × (4 − 1) / 2. The box would allow
+        // boxWidth × 3 / 2, about 250 px more.
+        expect((await transformOf(media)).x).toBeCloseTo((pictureWidth * (4 - 1)) / 2, 0);
+    });
 });

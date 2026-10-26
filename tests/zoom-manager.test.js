@@ -192,6 +192,52 @@ describe('ZoomManager', () => {
         expect(zm.state.single.translateX).toBe(1400); // 400 × (8 − 1) / 2
     });
 
+    // PR #90 review round 2: fitMediaToScreen gives media larger than the window a 100vw × 100vh box with
+    // object-fit: contain, so the box is the window and the picture is letterboxed inside it. The bound must
+    // follow the picture shown (natural size × the contain fit), or a drag leaves the screen blank at 4×.
+    describe('letterboxed media: the bound follows the picture, not the box', () => {
+        // A 4000 × 3000 photo in a 1600 × 900 box is shown at 1200 × 900.
+        const letterboxed = () => Object.assign(fakeMedia({ width: 1600, height: 900 }), naturalSize(4000, 3000));
+        const naturalSize = (w, h) => ({ naturalWidth: w, naturalHeight: h });
+
+        it('handlePanMove', () => {
+            const { zm } = makeManager({ media: { single: letterboxed() } });
+            zm.setZoom('single', 4, 0, 0);
+            zm.handlePanStart({ clientX: 0, clientY: 0 }, 'single');
+            zm.handlePanMove({ clientX: 5000, clientY: 5000 });
+            expect(zm.state.single.translateX).toBe(1800); // 1200 × (4 − 1) / 2, not the box's 2400
+            expect(zm.state.single.translateY).toBe(1350); // 900 × (4 − 1) / 2
+        });
+
+        it('zoomAtPoint', () => {
+            const { zm } = makeManager({ media: { single: letterboxed() } });
+            zm.setZoom('single', 4, 0, 0);
+            zm.zoomAtPoint('single', 8, -10000, 450); // far left of centre
+            expect(zm.state.single.translateX).toBe(4200); // 1200 × (8 − 1) / 2, not the box's 5600
+        });
+
+        it('a letterboxed video reads videoWidth/videoHeight', () => {
+            // A 1920 × 1080 video in a 1600 × 1200 box is shown at 1600 × 900.
+            const video = Object.assign(fakeMedia({ width: 1600, height: 1200 }), {
+                videoWidth: 1920,
+                videoHeight: 1080,
+            });
+            const { zm } = makeManager({ media: { single: video } });
+            zm.setZoom('single', 2, 0, 0);
+            zm.handlePanStart({ clientX: 0, clientY: 0 }, 'single');
+            zm.handlePanMove({ clientX: 0, clientY: 5000 });
+            expect(zm.state.single.translateY).toBe(450); // 900 × (2 − 1) / 2, not the box's 600
+        });
+
+        it('media with no natural size (a canvas, a video before its metadata) keeps the box', () => {
+            const { zm } = makeManager({ media: { single: fakeMedia({ width: 400, height: 200 }) } });
+            zm.setZoom('single', 2, 0, 0);
+            zm.handlePanStart({ clientX: 0, clientY: 0 }, 'single');
+            zm.handlePanMove({ clientX: 5000, clientY: 0 });
+            expect(zm.state.single.translateX).toBe(200);
+        });
+    });
+
     // PR #90 review #3: at the cap, each further notch slid the image until a notch missed it and changed the file.
     it('a wheel past the 8× cap leaves the scale and the position alone', () => {
         const { zm } = makeManager();
