@@ -350,6 +350,26 @@ One optional nit, **fixed**: the evidence for feature-flag fetching named the wr
   quotes the interactive-mode doc: the mod needs feature-flag fetching. The closed BACKLOG entry gets a
   parenthetical pointing to that correction.
 
+Merged `c5ac35f` on 2026-10-27.
+
+## Improvements (extracted at closeout)
+
+Extracted 2026-10-27 to BACKLOG 🟤 `[2026-10-27] From: G6 closeout (PR #92, merge c5ac35f — Weekly Reviews 2026-10-27 run)`.
+
+1. **A trial question names the incumbent it must beat.** Add a line to REVIEW-QUEUE § 5 Policy: an `adopt`'s trial
+   question asks whether the candidate found or answered something a named incumbent (grep, ESLint, an existing
+   hook) did not. Evidence that only equals the incumbent reads `drop`. Evidence: D3 and key discovery 1. 🟤, effort
+   XS. Affected: `docs/planning/REVIEW-QUEUE.md`.
+2. **An "in use here" list is re-measured from the settings files each run.** Add a line to REVIEW-QUEUE §1: before
+   a run cites its "Already in use here" list, re-read `~/.claude/settings.json`, `.claude/settings.json` and
+   `.claude/settings.local.json`, and the `.mcp.json` server switches. They change outside this repo. Evidence: D7
+   and key discovery 3. 🟤, effort XS. Affected: `docs/planning/REVIEW-QUEUE.md`.
+3. **A probe that runs a downloaded package asks for the user's authorization at the checkpoint, not after a
+   refusal.** Add a line to the canonical methodology's research rule: a probe that installs and runs a third-party
+   package, even in the scratchpad, is named in the checkpoint as an action the user authorizes, because the
+   auto-mode classifier refuses it otherwise. Evidence: D5 and the §2 denial count. 🟤, effort XS. Affected:
+   `docs/superpowers/specs/2026-06-26-weekly-reviews-first-run-design.md` § Methodology.
+
 ---
 
 ## Appendix A — hand-off note for `claude-code-universal-config`

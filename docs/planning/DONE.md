@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-27 <!-- Group G5: Strategic-doc refresh (🟡, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #91 (merge 7fb9978) after three review rounds (7 → 1 → 0 findings) and a close-out that accepted every response. -->
+**Last Updated**: 2026-10-27 <!-- Group G6: Weekly Reviews (2026-10-27 run, ⚪ Overhead, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #92 (merge c5ac35f) after two review rounds: 6 findings and 2 nits (one finding fixed differently), then 1 optional nit. -->
+<!-- Previous: Group G5: Strategic-doc refresh (🟡, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #91 (merge 7fb9978) after three review rounds (7 → 1 → 0 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G3: ZoomManager extraction (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #90 (merge 082e3b2) after four review rounds (15 → 1 → 0 → 0 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G4: Formatter hook per-edit cost (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #89 (merge 7f75013) after a 5-finding review, a docs round and a clean round 3. -->
 <!-- Previous: v2 modules and redesign spec (design only, unplanned spare-usage work, 2026-10-22). MERGED 2026-10-25 via PR #88 (merge e1c4e03) after five PR review rounds (16 → 5 → 3 → 2 → 1 findings) and a close-out that accepted every response. -->
@@ -32,6 +33,43 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-27 — Group G6: Weekly Reviews ⚪ (2026-10-27 run, Oct 19–23, run after the week) — **4/4, MERGED `c5ac35f`** (PR #92)
+
+**Run-card**: [2026-10-27-weekly-reviews-run.md](../superpowers/specs/2026-10-27-weekly-reviews-run.md) (codified-repeat ⚪ overhead, so no plan file and nothing to archive). The user skipped the brainstorm's questions, so the measurements came first and one checkpoint carried the rulings. Its Outcome section holds the verdicts, the rulings, the discoveries, five deviations and both review rounds. Appendix A is the hand-off note for the sibling, which the user holds to pass on after the merge.
+**Branch**: `g6-weekly-reviews`, cut from `main` at `0712e04`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: 4/4 categories. MERGED 2026-10-27 via PR #92** (merge `c5ac35f`). It ran on 2026-10-27, four days past the Friday slot. Two review rounds ran in a separate chat:
+- **Round 1** (head `7e61741`): 6 findings and 2 nits, each checked at its source. Five findings and both nits were fixed; finding 3 was fixed differently, because the `/auto-mode-setup` 2.1.304 floor applies only without feature-flag fetching. Fixing finding 6 surfaced one more error in the § 5 stocktake. All in `74abd8a`.
+- **Round 2**: no issue, and the reviewer accepted the finding-3 pushback. One optional nit, fixed in `4c95572`: the fetching evidence had named `CLAUDE_CODE_ENABLE_TELEMETRY`, which only turns on OpenTelemetry export.
+
+**Summary**: The 8th Weekly Reviews run. **§ 5 first:** `onFailure: "block"` on the guard hook read out **`keep`**, and `typescript-lsp` read out **`drop`**, by user ruling. The trial queue went 2 → **0**. **1 adopt / 3 pass:**
+- §1a `session-report` (Anthropic) adopted as ordinary work. Its analyzer, run read-only from the catalog clone, gives usage-side token figures and is now a step in § 5's recurring read-out. Neither catalog grew (315; 2,283).
+- §1b `eslint-plugin-sonarjs` 4.2.2 passed, after a probe the user authorized once (the classifier had refused it): 361 errors over 132 tracked files, one real defect (filed 🟤).
+- §2 `/auto-mode-setup` passed: 4 auto-mode denials in 30 days of transcripts, none of the class it fixes.
+- §3 Codex's content-bound plugin-hook approval passed: every hook-bearing plugin here comes through Anthropic's catalog.
+
+§ 4: one propagation, by hand-off only (user ruling): a reviewer traces a proposed fix through every state it reads. The two G5 rows were re-handed. Inbound: one row, noted. Context7 is off in this repo's local settings, and seven plugins are off at user scope, so §1's in-use line was corrected.
+
+**Key changes**:
+- **Config (why the PR was not docs-only)**: `typescript-lsp` set to `false` in `.claude/settings.json`, and the `typescript` devDependency removed. The pre-push E2E ran once: 236 passed, 7 skipped.
+- **REVIEW-QUEUE**:
+  - the 2026-10-27 baselines (official `a29a80b`, community `06ec7b6`);
+  - four verdict rows and the refreshed Next-up lists;
+  - the version-gate host convention (§2) and the matched-scope convention (§ 4), both 🟤 `[2026-10-18]` ride-alongs;
+  - § 4 rows: one outbound row, three outcome-log rows and one inbound row;
+  - § 5: the stocktake, two read-out rows, the usage step, and a new rule that an evidence row quotes what it relies on when its vehicle runs (transcripts are deleted after 30 days by default);
+  - the round-2 correction of the older *You should know* gate lines.
+- **BACKLOG**: 🟤 `[2026-10-27]` Weekly Reviews (the usage step, done; the dead `rgbPixels` allocation, open). The `onFailure`, `typescript-lsp` and both `[2026-10-18]` entries are checked off, and the profile-path entry gains the encoded-folder pattern. Closeout extract: 🟤 `[2026-10-27]` G6 closeout.
+- **TODO § Spawned Tasks**: the two G5 rows re-handed, and one new row (the proposed-fix trace, handed over).
+- **GOALS.md and the v2 spec**: neither says `typescript-lsp` is in use or that `checkJs` needs `typescript@6` any more.
+- **Out of repo**: none, apart from scratchpad probes. Two side-agent notes changed the run: the 30-day transcript retention (a new § 5 rule) and holding the hand-off note until the merge.
+
+**Learnings**:
+- A trial question that a redundant tool can satisfy cannot fail usefully. `typescript-lsp` met "did it answer a navigation question?" with answers equal to grep, so the read-out ruled on gain. A trial question should name the incumbent it must beat.
+- A list of what is "in use here" goes stale from outside the repo. The sibling's G1 changed this repo's local settings and the user-scope plugin set, and six names on REVIEW-QUEUE's list went stale with no change in this repo.
+- Evidence for a gate has to cite the gate's own switch. Both the 2.1.304 version floor and the telemetry variable were near-misses: the right conclusion, backed by the wrong fact.
+- A post gated on the PR head refused right after a push, because GitHub reported the old head for a few seconds. Re-poll the head before posting; never drop the gate.
 
 ### 2026-10-27 — Group G5: Strategic-doc refresh 🟡 (Oct 19–23, run after the week) — **MERGED `7fb9978`** (PR #91)
 
