@@ -93,7 +93,7 @@ npm run format        # Prettier (format:check to verify only)
 
 ### Code Patterns
 
-- **Renderer under modularization**: most UI logic in `media-viewer.js` (class-based); v2.0 extracts subsystems into ES modules (FullscreenManager, TournamentManager, MlTrainingManager done)
+- **Renderer under modularization**: most UI logic in `media-viewer.js` (class-based); subsystems move into ES modules on the v2.0 pattern (FullscreenManager, TournamentManager, MlTrainingManager, FeatureCacheStore, ZoomManager done), and [v2](docs/superpowers/specs/2026-10-22-v2-modules-design.md) carries the rest into `core/` and `modules/`
 - **IPC Communication**: Main process handles file operations, renderer handles UI
 - **Event-driven**: DOM events trigger state changes and UI updates
 - **Web Workers**: CPU-intensive operations (sorting, ML) run in workers
@@ -144,7 +144,7 @@ npm run format        # Prettier (format:check to verify only)
 
 ## Known Limitations
 
-1. **Large renderer file**: `media-viewer.js` is ~9,400 lines - modularization underway (v2.0, 2 of 6 managers extracted)
+1. **Large renderer file**: `media-viewer.js` is 11,529 lines (2026-10-27) - v2 shrinks it phase by phase, and no phase may grow it ([GOALS.md](docs/planning/GOALS.md) Objective 2)
 2. **No TypeScript**: Plain JavaScript with no type checking
 3. **No CI service**: all gates are local Husky hooks; a bypassed hook has no server-side backstop
 4. **Sandbox disabled**: Required for file operations but reduces security
