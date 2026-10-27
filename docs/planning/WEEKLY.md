@@ -101,10 +101,11 @@ In order:
 > Read [REVIEW-QUEUE.md](REVIEW-QUEUE.md) first. **Window ≈ 6 days** (last run 2026-10-17). **D4 order**: read out any trial whose vehicle ran first — G1's `onFailure`, G3's `typescript-lsp` (its last vehicle) — then §§1–3. § 5 stands at **2** outstanding trials, under the cap. §1 diffs plugin names from the pinned baselines (official `ea10b21`, community `06ec7b6`). Docs-only: merge or dated-defer in-session.
 > **Model:** Opus · `medium`, named directly because ⚪ overhead fits no row of the § 1.0 table: research and verdicts, with each claim checked against its primary source; Sonnet · `medium` is enough for the routine sourcing searches.
 
-- [ ] **Plugins (2 SP)** — two independent tops: official catalog + wider internet, each with `source:`.
-- [ ] **Claude best-practices (1 SP)** — fresh check vs. the parked list; name the host any version gate reads (🟤 [2026-10-18]).
-- [ ] **Non-Claude AI best-practices (1 SP)**
-- [ ] **Cross-project propagation (1 SP)** — outbound: this week's shipped work (G1–G5) and memory files changed since 2026-10-17, at the high bar, with matched scopes on both sides of any count (🟤 [2026-10-18]); inbound: new sibling rows naming this repo; and the status of the two TODO § Spawned Tasks rows handed over on 2026-10-17.
+- ◐ **Branch complete, unmerged (2026-10-27, branch `g6-weekly-reviews`)**, four days past the Friday (Spillover); [run-card](../superpowers/specs/2026-10-27-weekly-reviews-run.md). § 5 first: `onFailure` read out **`keep`**, and `typescript-lsp` **`drop`**, by user ruling, with its removal in this PR. That makes the PR not docs-only, so the pre-push E2E runs. The queue is at 0. **1 adopt / 3 pass**, as below. § 4: one propagation, by hand-off only (user ruling).
+- [x] **Plugins (2 SP)** — two independent tops: official catalog + wider internet, each with `source:`. §1a `session-report` **adopt**, as ordinary work done in-run; §1b `eslint-plugin-sonarjs` **pass**, after a probe the user authorized, which found one dead allocation (🟤 filed). Neither catalog grew (315; 2,283).
+- [x] **Claude best-practices (1 SP)** — fresh check vs. the parked list; name the host any version gate reads (🟤 [2026-10-18]). `/auto-mode-setup` **pass**, measured: 4 denials in 30 days, none of the class it fixes. The host convention line is in REVIEW-QUEUE §2 (terminal 2.1.303, extension 2.1.310).
+- [x] **Non-Claude AI best-practices (1 SP)** — Codex's content-bound plugin hook approval: **pass**, since every hook-bearing plugin here comes through Anthropic's catalog.
+- [x] **Cross-project propagation (1 SP)** — outbound: this week's shipped work (G1–G5) and memory files changed since 2026-10-17, at the high bar, with matched scopes on both sides of any count (🟤 [2026-10-18]); inbound: new sibling rows naming this repo; and the status of the two TODO § Spawned Tasks rows handed over on 2026-10-17. Outbound: one propagation by hand-off; the 57 files matched on both sides. Inbound: one row, `noted` (Context7 is off in local settings). The two 10-17 rows are still unapplied, and are re-handed.
 
 ---
 
@@ -144,7 +145,7 @@ In order:
 - ✅ **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆: **the user's 24k smoke on `Liked_2`**, on the PR 2 branch, moved here from Thursday (the user's ruling, 2026-10-22). Then the review and the merge. The smoke ran on Sunday 2026-10-25 instead, and PR 2 merged the same day: `f5ddfa3` (PR #87).
 - ✅ **[G3](#g3-zoommanager-extraction-v20-solo---renderer-modularization--5-sp)** 🔵 — suites green; after screenshots; review; merge (part 2 of 2). Merged `082e3b2` (PR #90) on Monday 2026-10-26, after four review rounds and a close-out in a separate chat, and two hand passes with the user.
 - ✅ **[G5](#g5-strategic-doc-refresh-solo---strategic-docs--3-sp)** 🟡 — after G1–G3 merge; the user's board decisions. Ran on Tuesday 2026-10-27, after the week: PR #91 merged `7fb9978` after three review rounds and a close-out.
-- **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — trial read-outs first, then §§1–4
+- ◐ **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — trial read-outs first, then §§1–4. Ran on Tuesday 2026-10-27, after the week: branch complete, unmerged.
 - Buffer for review rounds. Closeout per group, **after its merge**: Summary-Table Status → `✅ PR #N`, the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — in the closeout commit.
 
 **Daily total**: ~5 SP + 5 overhead + buffer
@@ -160,7 +161,7 @@ In order:
 | G3  | ZoomManager extraction `[solo]`                              | Renderer modularization    | 🔵 User     | 1     | 5        | Thu–Fri | ✅ `082e3b2` (PR #90) |
 | G4  | Formatter hook per-edit cost `[solo]`                        | Claude Code hooks          | 🔵 User     | 1     | 2        | Wed     | ✅ `7f75013` (PR #89) |
 | G5  | Strategic-doc refresh `[solo]`                               | Strategic docs             | 🟡 Ops      | 1     | 3        | Fri     | ✅ `7fb9978` (PR #91) |
-| G6  | Weekly Reviews `[batch]`                                     | Research / process         | ⚪ Overhead | 4     | 5        | Fri     | ☐ Planned  |
+| G6  | Weekly Reviews `[batch]`                                     | Research / process         | ⚪ Overhead | 4     | 5        | Fri     | ◐ Branch complete, unmerged |
 |     | **Total (quota-counted)**                                    |                            |             | **5** | **23**   |         |            |
 |     | **Total (incl. ⚪ overhead)**                                |                            |             | **9** | **28**   |         |            |
 
