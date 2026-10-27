@@ -5,7 +5,7 @@
 **Sources**: MILESTONES.md, ROADMAP.md, GOALS.md (all `Last Updated` 2026-08-27, 52 days; the 2-month bar falls on 2026-10-27, and last week's theme shipped off the board, so the 🟡 refresh is filed and scheduled as G5, see Notes → strategic docs), BACKLOG.md (📌 Process Rules; 🔵 [2026-10-17] and the open 🔵 pool; the 🟤 [2026-10-11] → [2026-10-18] closeout sections; an obsolescence check of last week's unverified reap list), TODO.md (🔴 I1, 🔴 24k-sort PR2 remainder, § Spawned Tasks), git log (last 2 weeks: the six Oct 11–18 merges `e5cd3a8`, `96467f7`, `bf6fcad`, `51af1ab`, `3fb797e`, `1954109` and their closeouts through `73527a9`), previous WEEKLY.md (Oct 12–16 — finished two days past its Friday, archived below), REVIEW-QUEUE.md (§§1–5; last run 2026-10-17). Live-config drift check: N/A — this repo keeps no live-config sync. OWNER-QUEUE.md: absent.
 **Cleanup Week?**: **No — normal week.** Cleanup Week #4 ran Oct 5–9; #5 is due **Oct 26–30**, next week. The 🟤-size trigger fires (66 new open 🟤 entries since 2026-10-11, 297 open in total, measured 2026-10-18), as it has continuously since June, so the cadence governs.
 **Context**: Roadmap phase _Scale & Modularize_; active milestone _v2.0 modularization_. The renderer grew 15% in one week (`media-viewer.js` 9,989 → **11,451** lines, 2026-10-10 → 10-18), while the roadmap's **Now** column stood still: PR2 has been open since June, and no extraction has shipped since 2026-09-10. This week's agreed theme is **"stop the renderer's growth"**: the first v2.0 extraction since then, ZoomManager (G3), and the last 24k slice, the hash/similarity sort off the renderer thread (🏆 G2), behind a front-loaded fix for G1's security residual I1 (G1). A formatter-hook speed-up (G4), the strategic-doc refresh (G5) and Weekly Reviews (G6) close the week.
-**Spillover** (recorded 2026-10-25): G2 PR 2 merged on 2026-10-25, two days past the Friday (PR #87, `f5ddfa3`). G3, G4, G5 and G6 had not run by then. The week's own drop order sends G4 to the next normal week and G5 to Cleanup Week #5. G3 is never dropped, and the Cleanup Week #5 planning pass places it and G6. **2026-10-26**: G4 ran before that pass after all (PR #89, `7f75013`), and its check-offs are done. G3 ran the same day (PR #90, `082e3b2`), and its check-offs are done too.
+**Spillover** (recorded 2026-10-25): G2 PR 2 merged on 2026-10-25, two days past the Friday (PR #87, `f5ddfa3`). G3, G4, G5 and G6 had not run by then. The week's own drop order sends G4 to the next normal week and G5 to Cleanup Week #5. G3 is never dropped, and the Cleanup Week #5 planning pass places it and G6. **2026-10-26**: G4 ran before that pass after all (PR #89, `7f75013`), and its check-offs are done. G3 ran the same day (PR #90, `082e3b2`), and its check-offs are done too. **2026-10-27**: G5 ran before that pass as well (PR #91, `7fb9978`), and its check-offs are done.
 
 ---
 
@@ -14,14 +14,12 @@
 In order:
 
 1. **Close out this week.** The Spillover is recorded above. The archive and the check-offs are done in the Cleanup Week #5 planning pass.
-2. **Plan Cleanup Week #5** (Oct 26–30) in its own planning session. G5 lands there. G5 is where the v2 board change goes: v2 replaces the "v2.0 modularization" release ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 2, D1). G5 also:
-   - decides D23's recommended blocking check, which ratchets the renderer's line ceiling down after each phase (spec § 11.1);
-   - files the spec's remaining § 19 entries, with `[possible-dup-of: …]` tags where entries exist:
-     - 🔵 the Fetch module and the shell redesign;
-     - 🔵 the update to "Lossless compression add-on (port from `media_compression` project)";
-     - 🟤 face-detection removal;
-     - 🟤 the AI research's four items;
-     - the README setup steps for Windows and Linux (G-8).
+2. **Plan Cleanup Week #5** (Oct 26–30) in its own planning session. ✅ **G5 ran before it, on 2026-10-27: PR #91, merge `7fb9978`**. Done:
+   - v2 replaced the "v2.0 modularization" release on the board ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) D1);
+   - D23 was ruled: a blocking line ratchet (🟤 [2026-10-27]; its gate is under item 5);
+   - the spec's § 19 entries were filed: 🔵 [2026-10-22] Fetch and the shell redesign, the compression update, and 🟤 [2026-10-27] face-detection removal, the real-data check, the research's four steps and the README setup steps.
+
+   The planning pass reads the refreshed docs, and it also decides v2's weekly share (item 5).
 3. ✅ **The v2 spec merged: PR #88** (merge `e1c4e03`, 2026-10-25, after five review rounds), carrying the approved spec, this list and the 🔵 [2026-10-22] LICENSE entry. Its closeout filed two 🟤 [2026-10-25] entries: the AI-sorting research's own PR, and the downloader research before P3b.
 4. **Small tasks for any week:**
    - the real-data check: the AI research harness on the user's like/dislike folders, with only overall numbers in git (spec § 19);
@@ -95,7 +93,8 @@ In order:
 > **Friday, after G1–G3 merge**, so the docs record them. The user decides where the shipped themes sit on the board. Docs-only.
 > **Model:** start Opus · `xhigh` (the Strategic planning row: where shipped themes sit on the board is strategic judgment — deeper reasoning) → execute Sonnet · `medium` for the mechanical fact edits; review standard (`high`): counts and dates — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **Refresh MILESTONES.md / ROADMAP.md / GOALS.md** — per 🟡 [2026-10-18]: place the Oct 12–16 work on the board (or record it as a drained theme), update the v2.0 status after G3 and Objective 1's PR2 Key Result after G2, correct the renderer line count where the strategic text states it, and bump each `Last Updated`. **Re-baseline the "< ~6,000 lines" target** (GOALS Objective 2): it needs ~5,400 lines out, and four extractions of ZoomManager's size cannot reach that while the renderer grows. The user also decides whether new subsystems must land in their own modules; if yes, back the rule with a control, not prose alone — a never-blocking `media-viewer.js` line-count warning on the `scripts/check-claude-md-size.js` pattern, filed to BACKLOG (added at planning, 2026-10-18, from a side-agent note). The derived-count sweep stays with 🟤 [2026-09-02]. `MILESTONES.md`, `ROADMAP.md`, `GOALS.md`, `PROJECT.md` (3) — 🟡 [2026-10-18]
+- [x] ✅ **MERGED 2026-10-27 via PR #91 (merge `7fb9978`)**, at ~5 SP against 3 planned, four days past the Friday (Spillover); see [DONE.md](DONE.md). v2 replaced the v2.0 release (D1). Objective 1 was marked achieved, and Objective 2 was re-baselined to spec § 11.1. The off-board work became a drained note, and the mission was widened: the user's four rulings. Each v2 date now states its capacity assumption. BACKLOG took § 19's intake. Three review rounds: 7 → 1 → 0, plus a close-out. The original task follows.
+- **Refresh MILESTONES.md / ROADMAP.md / GOALS.md** — per 🟡 [2026-10-18]: place the Oct 12–16 work on the board (or record it as a drained theme), update the v2.0 status after G3 and Objective 1's PR2 Key Result after G2, correct the renderer line count where the strategic text states it, and bump each `Last Updated`. **Re-baseline the "< ~6,000 lines" target** (GOALS Objective 2): it needs ~5,400 lines out, and four extractions of ZoomManager's size cannot reach that while the renderer grows. The user also decides whether new subsystems must land in their own modules; if yes, back the rule with a control, not prose alone — a never-blocking `media-viewer.js` line-count warning on the `scripts/check-claude-md-size.js` pattern, filed to BACKLOG (added at planning, 2026-10-18, from a side-agent note). The derived-count sweep stays with 🟤 [2026-09-02]. `MILESTONES.md`, `ROADMAP.md`, `GOALS.md`, `PROJECT.md` (3) — 🟡 [2026-10-18]
 
 ### G6. Weekly Reviews `[batch]` ⚪ Overhead — research / process — 5 SP
 
@@ -144,7 +143,7 @@ In order:
 
 - ✅ **[G2](#g2-hash-and-similarity-sort-off-the-renderer-thread-24k-pr2-solo----sorting-pipeline--8-sp)** 🔵 🏆: **the user's 24k smoke on `Liked_2`**, on the PR 2 branch, moved here from Thursday (the user's ruling, 2026-10-22). Then the review and the merge. The smoke ran on Sunday 2026-10-25 instead, and PR 2 merged the same day: `f5ddfa3` (PR #87).
 - ✅ **[G3](#g3-zoommanager-extraction-v20-solo---renderer-modularization--5-sp)** 🔵 — suites green; after screenshots; review; merge (part 2 of 2). Merged `082e3b2` (PR #90) on Monday 2026-10-26, after four review rounds and a close-out in a separate chat, and two hand passes with the user.
-- **[G5](#g5-strategic-doc-refresh-solo---strategic-docs--3-sp)** 🟡 — after G1–G3 merge; the user's board decisions
+- ✅ **[G5](#g5-strategic-doc-refresh-solo---strategic-docs--3-sp)** 🟡 — after G1–G3 merge; the user's board decisions. Ran on Tuesday 2026-10-27, after the week: PR #91 merged `7fb9978` after three review rounds and a close-out.
 - **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — trial read-outs first, then §§1–4
 - Buffer for review rounds. Closeout per group, **after its merge**: Summary-Table Status → `✅ PR #N`, the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — in the closeout commit.
 
@@ -160,7 +159,7 @@ In order:
 | G2  | Hash and similarity sort off the renderer thread `[solo]` 🏆 | Sorting pipeline           | 🔵 User     | 1     | 8        | Tue–Thu | ✅ `f5ddfa3` (PR #87); PR 1 `f668611` (PR #85) |
 | G3  | ZoomManager extraction `[solo]`                              | Renderer modularization    | 🔵 User     | 1     | 5        | Thu–Fri | ✅ `082e3b2` (PR #90) |
 | G4  | Formatter hook per-edit cost `[solo]`                        | Claude Code hooks          | 🔵 User     | 1     | 2        | Wed     | ✅ `7f75013` (PR #89) |
-| G5  | Strategic-doc refresh `[solo]`                               | Strategic docs             | 🟡 Ops      | 1     | 3        | Fri     | ☐ Planned  |
+| G5  | Strategic-doc refresh `[solo]`                               | Strategic docs             | 🟡 Ops      | 1     | 3        | Fri     | ✅ `7fb9978` (PR #91) |
 | G6  | Weekly Reviews `[batch]`                                     | Research / process         | ⚪ Overhead | 4     | 5        | Fri     | ☐ Planned  |
 |     | **Total (quota-counted)**                                    |                            |             | **5** | **23**   |         |            |
 |     | **Total (incl. ⚪ overhead)**                                |                            |             | **9** | **28**   |         |            |

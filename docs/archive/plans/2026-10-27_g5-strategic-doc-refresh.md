@@ -1,8 +1,8 @@
 # G5 Strategic-Doc Refresh - Implementation Plan
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) G5 (Oct 19–23 week, spilled) ← BACKLOG 🟡 [2026-10-18] "Refresh MILESTONES.md / ROADMAP.md / GOALS.md: last week's theme shipped off the board, and their 2-month bar falls on 2026-10-27"; [v2 spec](../../superpowers/specs/2026-10-22-v2-modules-design.md) § 19 item 1 (the board change), item 2 (BACKLOG intake), item 5 (README setup steps)
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) G5 (Oct 19–23 week, spilled) ← BACKLOG 🟡 [2026-10-18] "Refresh MILESTONES.md / ROADMAP.md / GOALS.md: last week's theme shipped off the board, and their 2-month bar falls on 2026-10-27"; [v2 spec](../../superpowers/specs/2026-10-22-v2-modules-design.md) § 19 item 1 (the board change), item 2 (BACKLOG intake), item 5 (README setup steps)
 **Created**: 2026-10-27
-**Status**: In Progress
+**Status**: Complete — MERGED 2026-10-27 via PR #91 (merge `7fb9978`)
 **Last Updated**: 2026-10-27
 
 ---
@@ -20,14 +20,14 @@
 The board still shows v2.0 at "2 of 6 managers" and a ~9,400-line renderer. Cleanup Week #5 (Oct 26–30) has not been planned yet, and its planning pass reads these docs, so they are refreshed first.
 
 **Success Criteria**:
-- [ ] v2 replaces the v2.0 release on the board, the milestones and GOALS Objective 2 (spec § 19 item 1, D1); v2.0 is recorded as absorbed, naming what it extracted.
-- [ ] Objective 1 is recorded as achieved (ruling 2).
-- [ ] The off-board Oct 12–23 work is a dated drained note (ruling 3).
-- [ ] The mission and vision name the fetch → rate → keep loop (ruling 4).
-- [ ] Every renderer line count in strategic text is a dated measurement, and no derived count (test totals, "N of 6 managers", Health-Summary tallies) is restated.
-- [ ] Each `Last Updated` reads 2026-10-27.
-- [ ] The § 19 entries are filed once each, with `[possible-dup-of: …]` tags where an entry exists. D23's control is filed as the ruling chose it (ruling 1).
-- [ ] The docs-index guard passes, and every new relative link resolves.
+- [x] v2 replaces the v2.0 release on the board, the milestones and GOALS Objective 2 (spec § 19 item 1, D1); v2.0 is recorded as absorbed, naming what it extracted.
+- [x] Objective 1 is recorded as achieved (ruling 2).
+- [x] The off-board Oct 12–23 work is a dated drained note (ruling 3).
+- [x] The mission and vision name the fetch → rate → keep loop (ruling 4).
+- [x] Every renderer line count in strategic text is a dated measurement, and no derived count (test totals, "N of 6 managers", Health-Summary tallies) is restated.
+- [x] Each `Last Updated` reads 2026-10-27.
+- [x] The § 19 entries are filed once each, with `[possible-dup-of: …]` tags where an entry exists. D23's control is filed as the ruling chose it (ruling 1).
+- [x] The docs-index guard passes, and every new relative link resolves.
 
 ---
 
@@ -158,8 +158,8 @@ B. No separate spec: the v2 spec and the four rulings are the design, and this p
 4. [x] PROJECT.md lines 96 and 147
 5. [x] BACKLOG.md intake + sweep annotation + `Last Updated`; planning README example list
 6. [x] Verify: links resolve; `node scripts/check-docs-index.js`; live-surface grep returns only the expected hits; Prettier is not involved (it ignores `docs/` and `*.md`)
-7. [ ] Commit on `g5-strategic-doc-refresh`; ask before push; PR; review in a separate chat (memory: ask before an in-chat review)
-8. [ ] After merge: closeout on `main` (§ 9)
+7. [x] Commit on `g5-strategic-doc-refresh`; ask before push; PR; review in a separate chat (memory: ask before an in-chat review)
+8. [x] After merge: closeout on `main` (§ 9)
 
 ---
 
@@ -211,6 +211,24 @@ The review's held-back question, whether the ninth entry is 🔵 or 🟤, stays 
   - But the round-2 comment says no capped pass ran, and the reviewer session's last message records "round 1 won't be re-run with a higher limit".
   - The discrepancy is raised with the user; it is not resolved here.
 
+### 2026-10-27 — PHASE: Review round 3 and close-out (PR #91, at `8cb8397`)
+
+- **Round 3**: no issues. It held back one nit at the ratchet entry's Known limits: "Both cases … are caught by the closeout push" groups the same-change over-count, a wrong refusal at push time, with the cases that slip through. The closeout reworded it on `main`, so the reviewed head stayed unchanged.
+- **Close-out**: no issues. It ruled on all 21 bullets of the round-2 response, with evidence. It independently confirmed the docs-index guard, the unit suite (49 files, 2,375 passed, 1 skipped) and the E2E gate's SKIP over `e0b2a16..8cb8397` (8 Markdown files).
+- **The findings cap, settled.** The reviewer read round 1's own prompt in its transcript. That run was `high 91` with no `--max-findings`, and its prompt read "≤10 findings" and "a JSON array of at most 10 objects"; it returned 10. So "The review hit its 10-candidate cap" (round 1 above) is correct. No uncapped run is visible from either session, and the user ruled no re-run is needed.
+- **Messages found only in the reviewer's transcript** (read each round, as the user asked): the user's two answers and the offer to post them (round 2), and an offer to check this closeout once it lands (close-out). None changes a finding.
+
+### 2026-10-27 — PHASE: Complete
+
+- **Merged** 2026-10-27 via PR #91, merge `7fb9978`, with `--merge`. The remote and local branches were deleted, and `main` was pulled. P0's "done 2026-10-27" stays true, so no re-date was needed.
+- **Final approach**: as planned (§ 2), plus four later additions, each recorded above:
+  - the capacity assumption next to each v2 date (side-agent note);
+  - the compression entry's path removal and the ninth 🟤 entry (user-approved);
+  - review round 1 (7 findings);
+  - review round 2 (1 finding).
+- **Rounds**: 7 → 1 → 0 findings, plus a close-out.
+- **Improvements documented**: 2 (§ 6), filed to BACKLOG 🟤 [2026-10-27] "From: G5 closeout".
+
 ---
 
 ## 6. Future Improvements
@@ -236,10 +254,10 @@ _(Filed to BACKLOG at closeout: Extract reads this table.)_
 
 ### Test Plan
 
-- [ ] Every relative link added resolves (a script over the changed files)
-- [ ] `node scripts/check-docs-index.js` passes
-- [ ] The live-surface grep shows no stale `2 of 6` / `~9,400` / "v2.0 … In Progress" left in a live doc
-- [ ] The pre-commit hook passes (the unit suite runs on every commit)
+- [x] Every relative link added resolves (a script over the changed files)
+- [x] `node scripts/check-docs-index.js` passes
+- [x] The live-surface grep shows no stale `2 of 6` / `~9,400` / "v2.0 … In Progress" left in a live doc
+- [x] The pre-commit hook passes (the unit suite runs on every commit)
 
 ---
 
@@ -247,14 +265,14 @@ _(Filed to BACKLOG at closeout: Extract reads this table.)_
 
 | Artifact | Done / N/A + reason |
 |---|---|
-| `BACKLOG.md`: improvements extracted (min 2, routed by source) | |
-| `TODO.md`: actionable items, plus § Spawned Tasks rows for out-of-tree work | |
-| `docs/archive/plans/`: plan moved here, original deleted | |
-| `DONE.md`: entry with plan link, summary, key changes | |
-| `WEEKLY.md`: Summary-Table Status an identifier, never a bare ✅; Daily-Schedule entry marked done; Next Steps item 2 | |
-| `BACKLOG.md` / `TODO.md`: every entry this task closed checked off, in the closeout commit (🟡 [2026-10-18]) | |
+| `BACKLOG.md`: improvements extracted (min 2, routed by source) | Done: both § 6 ideas → 🟤 [2026-10-27] "From: G5 closeout (PR #91, merge `7fb9978`)" (Claude-surfaced) |
+| `TODO.md`: actionable items, plus § Spawned Tasks rows for out-of-tree work | N/A: none. The one spawned task, the line ratchet, is BACKLOG 🟤 [2026-10-27]; nothing leaves this repo. The `Last Updated` comment records that nothing transitions |
+| `docs/archive/plans/`: plan moved here, original deleted | Done (`git mv`) |
+| `DONE.md`: entry with plan link, summary, key changes | Done: 2026-10-27, G5 |
+| `WEEKLY.md`: Summary-Table Status an identifier, never a bare ✅; Daily-Schedule entry marked done; Next Steps item 2 | Done: ✅ `7fb9978` (PR #91); Friday's G5 row; Next Steps item 2; the Spillover line; the G5 task box |
+| `BACKLOG.md` / `TODO.md`: every entry this task closed checked off, in the closeout commit (🟡 [2026-10-18]) | Done: 🟡 [2026-10-18] checked off. No TODO entry existed |
 | Deploy record | N/A: no deploy (Electron app, no Deploy Window) |
-| ROADMAP v2 table P0 row and MILESTONES v2-complete status: "P0 done 2026-10-27" re-dated to the merge date if the merge lands after 2026-10-27 (PR #91 review #3) | |
-| Live docs: every late finding corrected where a live doc asserts it | |
-| `docs/README.md`: plan indexed | |
-| Memory: durable decisions and patterns captured | |
+| ROADMAP v2 table P0 row and MILESTONES v2-complete status: "P0 done 2026-10-27" re-dated to the merge date if the merge lands after 2026-10-27 (PR #91 review #3) | N/A: merged 2026-10-27 |
+| Live docs: every late finding corrected where a live doc asserts it | Done: the review rounds' fixes landed in the live docs themselves. Round 3's held-back nit was reworded in BACKLOG in this closeout. The cap evidence went to this plan (not a live-doc claim). `CLAUDE.md`, `README.md` and `docs/ARCHITECTURE.md` assert nothing G5 changed |
+| `docs/README.md`: plan indexed | Done: "G5 Strategic-Doc Refresh 2026-10 Plan" row |
+| Memory: durable decisions and patterns captured | Done: the session file plus two feedback memories (§ 5 of the session file) |

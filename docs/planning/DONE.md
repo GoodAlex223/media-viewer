@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-26 <!-- Group G3: ZoomManager extraction (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #90 (merge 082e3b2) after four review rounds (15 → 1 → 0 → 0 findings) and a close-out that accepted every response. -->
+**Last Updated**: 2026-10-27 <!-- Group G5: Strategic-doc refresh (🟡, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #91 (merge 7fb9978) after three review rounds (7 → 1 → 0 findings) and a close-out that accepted every response. -->
+<!-- Previous: Group G3: ZoomManager extraction (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #90 (merge 082e3b2) after four review rounds (15 → 1 → 0 → 0 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G4: Formatter hook per-edit cost (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #89 (merge 7f75013) after a 5-finding review, a docs round and a clean round 3. -->
 <!-- Previous: v2 modules and redesign spec (design only, unplanned spare-usage work, 2026-10-22). MERGED 2026-10-25 via PR #88 (merge e1c4e03) after five PR review rounds (16 → 5 → 3 → 2 → 1 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G2: Hash and similarity sort off the renderer thread, PR 2 of 2 (background hashing, parity mode, atomic folder writes; 🔵 🏆, Oct 19–23). MERGED 2026-10-25 via PR #87 (merge f5ddfa3) after a final review with a fix wave, five PR review rounds, the user's Liked_2 smoke (B15 ruling) and a real-JXL measurement. Closes G2 and TODO 🔴 "Speed up AI / similarity sorting…". -->
@@ -31,6 +32,48 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-27 — Group G5: Strategic-doc refresh 🟡 (Oct 19–23, run after the week) — **MERGED `7fb9978`** (PR #91)
+
+**Plan**: [2026-10-27_g5-strategic-doc-refresh.md](../archive/plans/2026-10-27_g5-strategic-doc-refresh.md). A plan and no spec: the [v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) (§ 19 item 1, D1) and four user rulings are the design. The user skipped the brainstorm's question round, so the plan records the calls Claude made.
+**Branch**: `g5-strategic-doc-refresh`, cut from `main` at `e0b2a16`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: MERGED 2026-10-27 via PR #91** (merge commit `7fb9978`, 6 commits). Closes 🟡 [2026-10-18] "Refresh MILESTONES.md / ROADMAP.md / GOALS.md: last week's theme shipped off the board, and their 2-month bar falls on 2026-10-27".
+
+**The user's rulings** (2026-10-27, one batch, each the recommended option):
+1. D23's control is a **blocking line ratchet**: a pre-push check against a committed ceiling, lowered by each v2 phase, with a raise allowed as an explicit edit. It is filed, not built.
+2. **Objective 1 is achieved** (2026-10-25); speed at 24k carries on as a v2 rule.
+3. The off-board Oct 12–23 work becomes a **drained note**, with its follow-ups as BACKLOG picks beside v2.
+4. The **mission is widened**: "collecting, reviewing, rating and keeping".
+
+**What shipped** (`docs/planning/` GOALS, ROADMAP, MILESTONES, BACKLOG, README, WEEKLY; `PROJECT.md`):
+- **The board**: v2 replaces the v2.0 release. The record of v2.0 names what it extracted (FullscreenManager, TournamentManager, `MlTrainingManager`, `FeatureCacheStore`, ZoomManager) and where its remaining managers went in v2. The theme board follows spec § 14, and the 24k theme and the off-board work are dated drained notes.
+- **The goals**: Objective 2's Key Results are the spec's goals G-1 to G-8, with § 11.1's line target. GOALS gains a "Public repository" constraint and two v2 non-goals.
+- **The milestones**: a v2 pilot milestone (P1a + P1b, mid-December 2026, soft) and a v2-complete one (end of Q1 2027, soft); "v2.0 modularization complete" is retired.
+- **The capacity assumption**: every v2 date says it assumes v2 takes the whole 🔵 share of each normal week (~17 SP, spec § 14), from a side-agent note. The share itself is the user's decision before P1a, carried in WEEKLY Next Steps item 5.
+- **Counts**: line counts are dated measurements (11,529 at `e0b2a16`). "2 of 6 managers", the Health Summary tally and a stale test count were deleted rather than refreshed, and three wrong "counts in PROJECT.md" pointers were fixed.
+- **BACKLOG**: spec § 19's intake, with existing entries tagged `possible-dup-of`.
+  - 🔵 [2026-10-22]: the Fetch module and the shell redesign; the compression entry updated in place, its local path with the Windows user name removed.
+  - 🟤 [2026-10-27]: the line ratchet (with a merge-aware rule from the review), face-detection removal, the real-data check, A1, Group copies, the utility process with fp32, SigLIP 2 (parked), the README setup steps, and a user-approved sweep of local profile paths and real folder names.
+
+**Verification**: the relative links in the changed docs resolve (a scratchpad checker). `node scripts/check-docs-index.js` passes. A live-doc grep shows no stale v2.0 status or line count left. The pre-commit hook passed on every commit (unit suite: 49 files, 2,375 passed, 1 skipped). Every push was docs-only, so E2E was skipped.
+
+**Review** (a separate session, `/code-review high`):
+- **Round 1**: 7 findings, all fixed in `2327230`. One fix was done differently: the reviewer's ratchet remedy would have refused a stale branch that never touched the renderer, so the check measures the merge instead. The other six were the WEEKLY gate, the P0 re-date row, the Origin note, a position range, the PROJECT.md pointers (four places) and the timeline caveat.
+- **Round 2**: 1 finding, fixed in `8cb8397` with the reviewer's rule. "The lower of the two ceilings" would have made the ruled raise impossible without `SKIP`, so the ceiling is now the one the merge would carry.
+- **Round 3**: no issues. Then a close-out ruling on all 21 response bullets, with independent checks.
+- **The cap**: round 1's capped pass (10 of 10) was confirmed from its own prompt, and the user ruled no re-run is needed.
+
+**Key learnings:**
+- ⭐ A date copied from a spec carries the spec's capacity assumption. A ruling made in the same session (follow-ups as picks beside v2) broke it, and only a side agent saw it. When a ruling claims the same capacity a schedule spends, re-derive the date or state its assumption.
+- ⭐ A merge-aware check must take **every** input from the merge. Round 1 fixed the count, and round 2 found that the ceiling was still taken from the wrong side. Fixing one operand of a comparison for staleness needs the same question asked of the other.
+- A planted test that fails under every candidate rule proves nothing about which rule was built. Plant the cases that tell the rules apart.
+
+**Propagation check**: every late finding went into the live docs within its round. Round 3's held-back nit (the ratchet entry's Known limits) was reworded in this closeout. `CLAUDE.md`, `README.md` and `docs/ARCHITECTURE.md` assert nothing G5 changed. Their "v2.0 pattern" mentions name the manager pattern, which v2 keeps.
+
+**Follow-ups:**
+- BACKLOG 🟤 [2026-10-27] "From: G5 closeout", two entries: a planning-time staleness check, and v2 phase closeouts flipping their board rows.
+- WEEKLY Next Steps item 5: decide v2's weekly 🔵 share before P1a, and have the ratchet in place before P1a merges.
 
 ### 2026-10-26 — Group G3: ZoomManager extraction (v2.0) 🔵 (Oct 19–23, run after the week) — **MERGED `082e3b2`** (PR #90)
 
