@@ -128,6 +128,7 @@ B. No separate spec: the v2 spec and the four rulings are the design, and this p
 | `PROJECT.md` | Modify | L96 extracted-module list; L147 Known Limitations line count and v2 |
 | `docs/planning/BACKLOG.md` | Modify | § 19 intake (2 🔵 + 1 update, 8 🟤); annotate the 🟤 [2026-09-02] sweep; `Last Updated` line |
 | `docs/planning/README.md` | Modify | The convention's example list ("2 of 6 managers" removed 2026-10-27) |
+| `docs/planning/WEEKLY.md` | Modify | Next Steps item 5: the v2 share decision (side-agent note) and the ratchet's gate (PR #91 review #2). Added after the plan; the rest of WEEKLY waits for the closeout |
 | this plan | Create | — |
 
 **Live-surface preflight:** grep of `README.md`, `PROJECT.md`, `CLAUDE.md`, `docs/README.md`, `docs/PROJECT_CONTEXT.md`, `docs/ARCHITECTURE.md`, `docs/planning/README.md` and the three docs for `2 of 6`, `v2.0`, `9,400`, `6,000` (2026-10-27):
@@ -182,8 +183,21 @@ B. No separate spec: the v2 spec and the four rulings are the design, and this p
 - **After PR #91 opened (2026-10-27)**:
   - The user approved removing the compression entry's local path (`2753fd4`).
   - A whole-repo search then found the same class elsewhere: profile paths in 2 live BACKLOG entries and 6 frozen docs, and real folder names in 4 live planning docs and 11 frozen docs. The tests' profile paths are made-up names.
-  - The user asked for an entry, filed as the ninth 🟤 [2026-10-27] entry. It covers the live edits, a pre-commit check keyed on `os.userInfo().username`, and leaves the frozen docs and history to the user. It names no path or folder.
+  - Claude offered an entry and the user approved filing it ("yes, file"). It went in as the ninth 🟤 [2026-10-27] entry, routed 🟤 because Claude surfaced it (the precedent for Claude-found, user-approved entries). It covers the live edits, a pre-commit check keyed on `os.userInfo().username`, and leaves the frozen docs and history to the user. It names no path or folder.
 - **Verified**: 45 relative links in the changed docs resolve (a scratchpad script), plus the new BACKLOG links; `node scripts/check-docs-index.js` exits 0. The live-surface grep for `2 of 6`, `9,400` and the old v2.0 status leaves only the retired-milestone records and the planning README's dated note.
+
+### 2026-10-27 — PHASE: Review round 1 (PR #91, at `95cf322`)
+
+Seven findings, all checked first-hand against `95cf322` and accepted. One of them (#1) was accepted with a different fix:
+1. **The ratchet does not cover merges** (PRs merge on GitHub; no hook runs there). Accepted. The suggested fix, "the lower of the tip's and `origin/main`'s ceiling against the tip's count", would refuse a stale branch that never touched the renderer, since its tip still carries the old, larger file. The entry now measures the merge instead: `origin/main`'s count plus the branch's net change since the merge base, against the lower ceiling.
+2. **WEEKLY Next Steps lacked the ratchet's gate.** Added under item 5.
+3. **No closeout row for the P0 re-date.** Added to § 9.
+4. **The 🟤 Origin did not describe the ninth entry.** Added.
+5. **"Entries 3–7" was a position range.** The entries are now named.
+6. **"Counts in PROJECT.md" pointed at a file with no counts.** Fixed in all four carriers: ROADMAP (new in this PR), MILESTONES and GOALS (older, but in docs this PR refreshes; the review held the GOALS one back), and the sweep annotation.
+7. **ROADMAP's Current Phase Timeline lacked the capacity assumption.** A pointer was added.
+
+The review's held-back question, whether the ninth entry is 🔵 or 🟤, stays 🟤 by the precedent, and is raised with the user. The review hit its 10-candidate cap.
 
 ---
 
@@ -228,6 +242,7 @@ _(Filed to BACKLOG at closeout: Extract reads this table.)_
 | `WEEKLY.md`: Summary-Table Status an identifier, never a bare ✅; Daily-Schedule entry marked done; Next Steps item 2 | |
 | `BACKLOG.md` / `TODO.md`: every entry this task closed checked off, in the closeout commit (🟡 [2026-10-18]) | |
 | Deploy record | N/A: no deploy (Electron app, no Deploy Window) |
+| ROADMAP v2 table P0 row and MILESTONES v2-complete status: "P0 done 2026-10-27" re-dated to the merge date if the merge lands after 2026-10-27 (PR #91 review #3) | |
 | Live docs: every late finding corrected where a live doc asserts it | |
 | `docs/README.md`: plan indexed | |
 | Memory: durable decisions and patterns captured | |

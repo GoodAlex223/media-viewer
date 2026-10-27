@@ -16,7 +16,7 @@ Make Media Viewer the most efficient tool for collecting, reviewing, rating and 
 
 **Phase**: v2 — modules and redesign ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md))
 **Focus**: Build v2 inside the working app, one shippable phase at a time (no rewrite), with the renderer shrinking in every phase and the 24k-folder gains held
-**Timeline**: Nov 2026 – end of Q1 2027 (soft); Q2 2027 more likely (spec § 14)
+**Timeline**: Nov 2026 – end of Q1 2027 (soft); Q2 2027 more likely (spec § 14). The date assumes v2 takes the whole 🔵 share of each normal week (§ Releases, the v2 Target note)
 
 ---
 
@@ -71,7 +71,7 @@ Named features:
 | Video fullscreen toggle | ✅ Shipped 2026-02 | Later extracted into FullscreenManager              |
 | Visual scale controls   | ✅ Shipped         | Zoom slider + popover; E2E-covered (`zoom.test.js`) |
 
-Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engine, persistence, session undo), JXL + animated-JXL viewer, CLIP semantic sorting + 576-dim ML pipeline, bulk-rate corrective training, an automated unit + E2E test suite (current counts in PROJECT.md), keyboard-shortcut customization, local quality gates (pre-commit secret scan/lint/unit; conditional pre-push E2E).
+Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engine, persistence, session undo), JXL + animated-JXL viewer, CLIP semantic sorting + 576-dim ML pipeline, bulk-rate corrective training, an automated unit + E2E test suite (`npm test` / `npm run test:e2e` give the current counts), keyboard-shortcut customization, local quality gates (pre-commit secret scan/lint/unit; conditional pre-push E2E).
 
 ### v2 — Modules and Redesign 🔄 In Progress
 

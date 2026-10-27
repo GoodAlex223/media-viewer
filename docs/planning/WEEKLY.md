@@ -28,6 +28,7 @@ In order:
    - then A1, the like-model learner fix (spec § 12.3);
    - then the LICENSE file.
 5. **v2 P1a**, the module host plus a Linux baseline (spec § 14), in the week of Nov 2–6 at the earliest. Its plan is written when it is scheduled.
+   - **The blocking renderer line ratchet must be in place before P1a's PR merges**, so P1a is its first measured phase (🟤 [2026-10-27] "Build the blocking renderer line ratchet…", the user's ruling at G5). It may ride P1a or ship alone.
    - **Decide v2's weekly share of the 🔵 SP before scheduling it** (the Cleanup Week #5 planning pass, or the Nov 2–6 one at the latest; added 2026-10-27 at G5 from a side-agent note). The roadmap's end-of-Q1 date assumes v2 takes the whole share, about 17 SP a week (spec § 14). The user also ruled at G5 that the sorting-session follow-ups stay weekly picks beside v2. So either the date moves out, or those picks wait. The ROADMAP, GOALS and MILESTONES dates carry that assumption until the share is set.
 
 ---
