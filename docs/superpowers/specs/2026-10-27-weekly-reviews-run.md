@@ -293,6 +293,12 @@ authorized, after the checkpoint.
    reached the lint step, so the user's one-run authorization was used once on the target.
 4. **Appendix A carries a new candidate** (item 4), beyond the "refreshed note" the ruling named. It is text the user
    passes on, so it changes nothing outside the repo.
+5. **A § 5 policy line added after the commit, approved by the user** (the second commit). A *You should know*
+   note pointed out that Claude Code deletes local transcripts after 30 days by default. The data-usage docs
+   confirm it ("for 30 days by default … Adjust the period with `cleanupPeriodDays`"), and none of the three settings
+   files sets the key. Transcripts take 5.2 GB across all projects for the 30 days kept, 1.2 GB of it this repo. The
+   new line says an evidence row quotes what it relies on when its vehicle runs. Raising `cleanupPeriodDays` is a
+   user-level setting, so it stays the user's call (not in Appendix A).
 
 ---
 

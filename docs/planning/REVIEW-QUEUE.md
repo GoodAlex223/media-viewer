@@ -252,6 +252,13 @@ Reviewed-log rows are never rewritten — a trial outcome lands here and cross-r
   `defer`, not `adopt`. Reviews stay hands-off (D4 unchanged: file the entry, install nothing); what is
   new is that a verdict must state _how it would ever be consumed_.
 - **Trials run in batches**, in Cleanup Weeks by default, and each writes a row to the log below.
+- **An evidence row quotes what it relies on, when its vehicle runs** (added 2026-10-27, from a *You should know*
+  note, user-approved). Claude Code keeps local session transcripts under `~/.claude/projects/` "for 30 days by
+  default" (data-usage docs; `cleanupPeriodDays`, which none of this machine's settings files sets). A read-out
+  that comes later than that cannot re-check its evidence from transcripts. So the row written when the vehicle
+  runs quotes each decisive line, count and timestamp, and names the transcript file it came from. On 2026-10-27
+  the oldest transcript kept for this repo was from 2026-10-04, and the 10-18 denial this run used as a positive
+  control will be gone around 11-17.
 - **Queue cap**: while more than **3** adopts are outstanding (filed, no outcome row), a new candidate
   is parked under its section's **Next-up** instead of being filed as `adopt`.
 - **Not every `adopt` is a trial.** An adopt that is simply implementation work with a known shape (the
