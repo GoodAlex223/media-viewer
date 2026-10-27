@@ -2,41 +2,56 @@
 
 Long-term vision, active themes, and releases.
 
-**Last Updated**: 2026-08-27 <!-- 2026-10-09: status flip only (G5 Weekly Reviews ride-along, completed in PR #77's review) — the v2.0 status line and the MLManager row. Not a refresh; the 2-month clock still runs from 2026-08-27. -->
+**Last Updated**: 2026-10-27 <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): v2 replaces the v2.0 release (v2 spec D1), the board follows the spec's § 14 build order, and two drained notes are added, by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
 
 ---
 
 ## Vision
 
-Make Media Viewer the most efficient tool for reviewing and organizing large media collections with intelligent sorting and prediction capabilities.
+Make Media Viewer the most efficient tool for collecting, reviewing, rating and keeping large media collections, with intelligent sorting and prediction capabilities.
 
 ---
 
 ## Current Phase
 
-**Phase**: Scale & Modularize
-**Focus**: Hold the 24k-folder gains while carving the renderer into modules
-**Timeline**: H2 2026
+**Phase**: v2 — modules and redesign ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md))
+**Focus**: Build v2 inside the working app, one shippable phase at a time (no rewrite), with the renderer shrinking in every phase and the 24k-folder gains held
+**Timeline**: Nov 2026 – end of Q1 2027 (soft); Q2 2027 more likely (spec § 14). The date assumes v2 takes the whole 🔵 share of each normal week (§ Releases, the v2 Target note)
 
 ---
 
 ## Theme Board
 
-Work flows each planning session from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](WEEKLY.md); this board is the strategic map of where the themes sit, not a duplicate task list.
+Work flows each planning session from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](WEEKLY.md); this board is the strategic map of where the themes sit, not a duplicate task list. The v2 phase IDs (P1a, P1b, …) are the spec's § 14 rows.
 
 ### Now
 
-- **24k-folder performance — remainder** — the AI-sort half shipped (PR #64, smoke-verified on a 20,929-file folder). What remains is the **PR2 slice: hash/similarity sort off the renderer thread**. Tracked as TODO 🔴 "Speed up AI / similarity sorting on large folders (24k+)", which stays open.
-- **v2.0 modularization** — extract ZoomManager, CompareManager, SortingManager, MLManager (see the v2.0 release below). **Promoted from Next on 2026-08-27**: the renderer grew ~1,550 lines between July and August while extraction was paused, so modularization is losing ground to feature work. This is where the architecture effort should go next.
+- **v2 P1a — the module host and a Linux baseline**: the manifest, registry and loader; failure isolation; the Modules tab; checks M-1 and M-2; and first, today's app and suites running on Linux. In the week of Nov 2–6 at the earliest, after Cleanup Week #5. Then **P1b, the `similarity` module**, the pilot, which absorbs the planned SortingManager extraction.
+- **Small tasks, any week, before or beside P1a**:
+  - the AI research harness on the user's own like/dislike folders, with only overall numbers committed;
+  - then **A1**, the like-model learner fix (spec § 12.3);
+  - the LICENSE file;
+  - the blocking renderer line ratchet (user ruling 2026-10-27, spec D23), in place before P1a's PR merges so P1a is its first measured phase.
 
 ### Next
 
-- **UI architecture overhaul** — mode-aware control registry, centralized z-index scale (CSS custom properties), responsive pass for window sizes / large counts. BACKLOG [2026-05-25]; explicitly a prerequisite before any 4th mode ships.
+- **v2 P2 — shell part 1**: the side panel, the jobs tray (the progress card moves into it), and F1 tabs.
+- **v2 P3a/P3b — the job runner, then `fetch`**: links → an Inbox folder → rate. Its plan waits for the downloader research (BACKLOG 🟤 [2026-10-25]).
+- **v2 P4a–P4d — `features`, `ai-sort`, Group copies and the JPEG XL decode pool**: CLIP in a utility process with fp32, then the AI sort as a module, which absorbs MLManager's sort half. P3 and P4 may swap if the AI work becomes more urgent (spec § 14).
 
 ### Later
 
-- **Add-on / extension system** — design first (define core-app identity: what is core, what is an add-on), then in dependency order: sorting-as-add-ons, lossless-compression port (`media_compression` project), platform integrations (YouTube/TikTok/Twitter/Instagram/Civitai), link-based rating. BACKLOG [2026-04-08] cluster + [2026-05-30] compression entry.
-- **Progressive loading** — thumbnail / lowest-quality-first display while full media loads. BACKLOG [2026-04-08].
+- **v2 P5 — `compression`**: lossless JPEG XL in place, revertible until Finalize. It ports the user's `media_compression` idea, re-implemented in the app.
+- **v2 P6a/P6b — the control registry, then `tournament`**: the [2026-05-25] UI-architecture overhaul (mode-aware controls, the z-index scale) lands here, then tournament mode moves out.
+- **v2 P7 — finish**: the responsive pass, UI zoom, the CompareManager core split, and installing renderer-only modules from a file. `media-viewer.js` ends below 6,000 lines.
+- **v2 P8 — packaging (optional)**: installers for Windows and Linux.
+- **Progressive loading** — thumbnail / lowest-quality-first display while full media loads. BACKLOG [2026-04-08]. Not part of v2.
+
+> **Moved into v2 on 2026-10-27**: the _add-on / extension system_ (Later) was designed as v2 (PR #88, merge `e1c4e03`), and its steps are v2's phases above. Platform integrations and link-based rating became `fetch` (P3b), and the compression port became `compression` (P5). The _UI architecture overhaul_ (Next) became P2, P6a and P7.
+
+> **Drained on 2026-10-27**: the _24k-folder performance_ theme. The AI-sort half shipped in PR #64 (2026-07-20), and the similarity sort moved off the renderer in PR #85 and PR #87 (2026-10-25), closing GOALS Objective 1. Speed at 24k is now a v2 rule, checked by the user's smokes (spec § 15). The graph-build phase is BACKLOG 🔵 [2026-10-25].
+
+> **Drained on 2026-10-27**: the work that shipped outside the board, Oct 12–23. The sorting-session workflow: like-or-skip (PR #79), the retrain fix (PR #80) and recently opened folders (PR #81). The security findings fix (PR #78) and page-load confinement (PR #84). The feature-cache wipe fix (PR #86). None holds a board slot. Their follow-ups (keeping the hash and AI sorts from running together, a Delete action, file-size weighting) stay in BACKLOG and come in as weekly picks beside v2 (user ruling 2026-10-27). The Sep 2 – Oct 9 work (rating and tournament UX, ML integrity) came in through BACKLOG intake, as the 2026-08-27 note below expected.
 
 > **Drained on 2026-08-27**: the _rating & tournament UX polish_ theme is no longer a standing Now item — tournament undo reliability, the mouse-wheel guard, header auto-hide (PR #65) and bulk-rate re-pair avoidance (PR #66) all shipped. Further items of this kind re-enter through normal BACKLOG intake from 24k dogfooding rather than holding a board slot.
 
@@ -56,28 +71,52 @@ Named features:
 | Video fullscreen toggle | ✅ Shipped 2026-02 | Later extracted into FullscreenManager              |
 | Visual scale controls   | ✅ Shipped         | Zoom slider + popover; E2E-covered (`zoom.test.js`) |
 
-Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engine, persistence, session undo), JXL + animated-JXL viewer, CLIP semantic sorting + 576-dim ML pipeline, bulk-rate corrective training, automated test suite (513 unit + 55 E2E), keyboard-shortcut customization, local quality gates (pre-commit secret scan/lint/unit; conditional pre-push E2E).
+Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engine, persistence, session undo), JXL + animated-JXL viewer, CLIP semantic sorting + 576-dim ML pipeline, bulk-rate corrective training, an automated unit + E2E test suite (`npm test` / `npm run test:e2e` give the current counts), keyboard-shortcut customization, local quality gates (pre-commit secret scan/lint/unit; conditional pre-push E2E).
 
-### v2.0 — Modularization 🔄 In Progress
+### v2 — Modules and Redesign 🔄 In Progress
+
+**Theme**: A small core with first-party modules that can be switched on and off, a module host, and a redesigned shell, built incrementally inside the working app ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 2)
+**Status**: 🔄 In Progress — P0 (the prerequisites) done 2026-10-27; P1a not started
+**Done when**: P1a–P7 meet their exit criteria (spec § 14; P8 is optional), with `media-viewer.js` below 6,000 lines and the unit and E2E suites green on Windows and Linux at every phase exit.
+
+| Phase | Scope | Status |
+| ----- | ----- | ------ |
+| P0 Prerequisites | G2 PR 2 merged (PR #87); the spec approved (2026-10-22, merged in PR #88); the board change and the § 19 BACKLOG entries (G5) | ✅ Done 2026-10-27 |
+| P1a | Module host + Linux baseline | ⬜ Planned |
+| P1b | `similarity` (the pilot) | ⬜ Planned |
+| P2 | Shell part 1: side panel, jobs tray, F1 tabs | ⬜ Planned |
+| P3a / P3b | Job runner and tools / `fetch` | ⬜ Planned |
+| A1 | The like-model learner fix (any time, outside the phases) | ⬜ Planned |
+| P4a–P4d | `features` / `ai-sort` / Group copies / JPEG XL decode pool | ⬜ Planned |
+| P5 | `compression` | ⬜ Planned |
+| P6a / P6b | Control registry / `tournament` | ⬜ Planned |
+| P7 | Finish: responsive pass, UI zoom, CompareManager, install from a file | ⬜ Planned |
+| P8 | Packaging (optional) | ⬜ Optional |
+
+**Every phase** shows net `wc -l media-viewer.js` ≤ 0 in its PR (spec § 11.1), enforced by the blocking line ratchet once built. `media-viewer.js` was 11,529 lines at `e0b2a16` (2026-10-27).
+
+**Target**: end of Q1 2027 (soft), Q2 2027 more likely — about 131–136 SP nominal, with estimates historically ~1.9× low (spec § 14)
+
+> **The date assumes v2 takes the whole 🔵 share of every normal week**, about 17 SP (spec § 14: "At ~17 user-flagged SP per normal week, that is about 8 normal weeks"). Every 🔵 pick outside v2 moves it later, the drained follow-ups above included. v2's weekly share is still to be decided; it is decided before P1a is scheduled (WEEKLY.md Next Steps).
+
+### v2.0 — Modularization ↪ Absorbed into v2 (2026-10-27)
 
 **Theme**: Carve the monolithic renderer into manager modules (v2.0 pattern: stateful manager class + constructor-injected host callbacks)
-**Status**: 🔄 In Progress — 2 of 6 managers extracted, a third partly (MLManager's training half, `MlTrainingManager`, PR #68)
-**Done when**: ZoomManager, CompareManager, SortingManager, and MLManager are extracted with unit + E2E suites green.
+**Status**: ↪ Absorbed into v2 on 2026-10-27 (v2 spec D1). The v2.0 pattern still applies inside v2's core (spec § 11.1).
 
-| Module                                                                          | Status       |
-| ------------------------------------------------------------------------------- | ------------ |
+| Module                                                                          | Outcome |
+| ------------------------------------------------------------------------------- | ------- |
 | FullscreenManager (`fullscreen.js`)                                             | ✅ Extracted |
-| TournamentManager (`tournament.js`) + TournamentEngine (`tournament-engine.js`) | ✅ Extracted |
-| ZoomManager                                                                     | ⬜ Planned   |
-| CompareManager                                                                  | ⬜ Planned   |
-| SortingManager                                                                  | ⬜ Planned   |
-| MLManager                                                                       | 🟡 Training half extracted (`ml-training.js`) |
+| TournamentManager (`tournament.js`) + TournamentEngine (`tournament-engine.js`) | ✅ Extracted; the whole of tournament mode becomes the `tournament` module in P6b |
+| MLManager                                                                       | 🟡 Training half extracted (`ml-training.js`, PR #68); the sort half becomes `ai-sort` in P4b |
+| `FeatureCacheStore` (`feature-cache-store.js`)                                  | ✅ Extracted (PR #86, not in the original plan) |
+| ZoomManager (`zoom.js`)                                                         | ✅ Extracted (PR #90, `082e3b2`), before v2 began; P7 keeps only the CompareManager split |
+| SortingManager                                                                  | ↪ Becomes the `similarity` module (P1b) |
+| CompareManager                                                                  | ↪ A core split in P7 |
 
 Originally-planned v2.0 features delivered early: automated testing (Vitest + Playwright, hook-enforced), keyboard-shortcut customization.
 
-> **Losing ground.** `media-viewer.js` went from ~7,900 lines (2026-07-12) to ~9,400 (2026-08-27) — +1,550, with no extraction in that window. Feature work is adding to the renderer faster than modularization is removing from it. This is the reason v2.0 moved into the **Now** column.
-
-**Target**: Q4 2026 (soft)
+> **Why it was absorbed.** `media-viewer.js` went from ~7,900 lines (2026-07-12) to 9,418 (2026-08-27) and 11,945 (2026-10-25), while only `MlTrainingManager` and `FeatureCacheStore` moved out in that window. Extracting one manager at a time lost ground to feature work. v2 gives features a module boundary to land behind, and forbids renderer growth in any phase.
 
 ---
 
@@ -110,6 +149,7 @@ Originally-planned v2.0 features delivered early: automated testing (Vitest + Pl
 1. **Efficiency first**: Operations should feel instant for the user
 2. **No data loss**: File operations must be safe and reversible (undo)
 3. **Progressive enhancement**: Advanced features (ML, similarity) enhance but don't block core workflow
+4. **The core stays small**: new features land in modules by default, behind an enforced boundary (v2 spec G-1; the user's April note: don't clutter the core "with functionality the user may not even need")
 
 ---
 

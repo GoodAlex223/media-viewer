@@ -2,7 +2,7 @@
 
 Key targets with dates.
 
-**Last Updated**: 2026-08-27 <!-- 2026-10-09: status flip only (G5 Weekly Reviews ride-along, per README § Strategic Review) — the v2.0 status line. Not a refresh; the 2-month clock still runs from 2026-08-27. -->
+**Last Updated**: 2026-10-27 <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): the v2 pilot and v2-complete milestones replace "v2.0 modularization complete", which is retired as absorbed into v2 (spec D1); the 24k scope note closed; the Health Summary's Count column dropped (derived counts). The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
 
 ---
 
@@ -18,44 +18,66 @@ Milestones are significant checkpoints. They should be:
 
 ## Upcoming Milestones
 
-### 🎯 v2.0 modularization complete
+### 🎯 v2 pilot: the module host and the `similarity` module (P1a + P1b)
 
-**Target Date**: Q4 2026 (soft)
-**Status**: 🟡 In Progress — 2 of 6 managers extracted, a third partly (MLManager's training half, `MlTrainingManager`, PR #68)
+**Target Date**: mid-December 2026 (soft)
+**Status**: ⬜ Not started — P1a's earliest week is Nov 2–6, after Cleanup Week #5
 
-**Definition of Done**:
+**Definition of Done** ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 14 exit criteria):
 
-- [ ] ZoomManager extracted
-- [ ] CompareManager extracted
-- [ ] SortingManager extracted
-- [ ] MLManager extracted
-- [ ] Unit + E2E suites green after each extraction
-- [ ] CLAUDE.md architecture section updated per extraction
+- [ ] An empty module loads, fails safely, cascades and toggles from the Modules tab (P1a)
+- [ ] Today's app and both suites run on Linux as well as Windows (P1a)
+- [ ] The similarity sort runs as the `similarity` module with no change in behaviour, its tests keeping their assertions (P1b, § 12.1)
+- [ ] The user's 24k smoke after P1b, with startup, navigation and sort timings recorded against today's (§ 15)
+- [ ] Net `wc -l media-viewer.js` ≤ 0 in each phase's PR, under the blocking line ratchet
 
-**Dependencies**: none hard; sits in the roadmap's **Now** column as of 2026-08-27
+**Dependencies**: Cleanup Week #5 first; the blocking line ratchet in place before P1a's PR merges
 
 **Risks**:
 
-- Extractions compete for weekly capacity with user-flagged work (the ≥50% 🔵 quota floor)
-- The renderer is currently growing faster than extraction shrinks it (~7,900 → ~9,400 lines, Jul → Aug 2026), so the "< ~6,000" target recedes with every feature week that skips an extraction
+- P1a's Linux baseline is an unknown: WSL2 is a candidate for the Electron runs, not yet tried (spec § 15)
+- Estimates have run ~1.9× low; P1a (~11 SP) and P1b (~10 SP) can each fill more than a week
+- The date assumes P1a and P1b get the whole 🔵 share of their weeks; 🔵 picks outside v2 push it later
+
+### 🎯 v2 complete
+
+**Target Date**: end of Q1 2027 (soft); Q2 2027 more likely (spec § 14)
+**Status**: 🟡 In Progress — P0 done 2026-10-27
+
+**Definition of Done**:
+
+- [ ] P1a–P7 meet their exit criteria (spec § 14); P8 packaging is optional
+- [ ] `media-viewer.js` below 6,000 lines by the end of P7, and the renderer plus `core/*.js` below 11,945 lines (§ 11.1)
+- [ ] Unit and E2E suites green on Windows and Linux at every phase exit (G-8)
+- [ ] `CLAUDE.md` rules for moved code live in path-scoped `.claude/rules/` files (§ 14, D24)
+
+**Dependencies**: the downloader research before P3b's plan (BACKLOG 🟤 [2026-10-25])
+
+**Risks**:
+
+- The date assumes v2 takes the whole 🔵 share of each normal week (~17 SP, spec § 14). User-flagged picks outside v2 (the sorting-session follow-ups kept in BACKLOG, for example) come out of the same share, so each one moves the date later. v2's weekly share is decided before P1a is scheduled
+- About 131–136 SP nominal; at the historical slip, about 20 calendar weeks with Cleanup Weeks included (spec § 14)
 
 ---
 
 ## Milestone Timeline
 
 ```
-2026
-Q3                          Q4
- │                           │
- ▼                           ▼
-[24k AI-sort smooth] ✅     [v2.0 modularization]
-shipped 2026-07-20          4 manager extractions
+2026                                  2027
+Q3                 Q4                 Q1
+ │                  │                  │
+ ▼                  ▼                  ▼
+[24k AI-sort] ✅   [v2 pilot]         [v2 complete]
+2026-07-20         mid-Dec 2026       end of Q1 2027 (soft)
+                   P1a + P1b          P1a–P7
 ```
 
-| Milestone                     | Target Date    | Status                   |
-| ----------------------------- | -------------- | ------------------------ |
-| 24k AI-sort smooth end-to-end | July 2026      | ✅ Complete (2026-07-20) |
-| v2.0 modularization complete  | Q4 2026 (soft) | 🟡 In Progress (2/6)     |
+| Milestone                     | Target Date                | Status                   |
+| ----------------------------- | -------------------------- | ------------------------ |
+| 24k AI-sort smooth end-to-end | July 2026                  | ✅ Complete (2026-07-20) |
+| v2 pilot (P1a + P1b)          | mid-December 2026 (soft)   | ⬜ Not started           |
+| v2 complete                   | end of Q1 2027 (soft)      | 🟡 In Progress           |
+| v2.0 modularization complete  | Q4 2026 (soft)             | ↪ Retired 2026-10-27     |
 
 ---
 
@@ -75,7 +97,7 @@ shipped 2026-07-20          4 manager extractions
 
 Shipped via PR #64 (merge `b6ff4ac`). Two defects were found and fixed **before** merge rather than deferred: an external-review data-loss regression (`b8b5636`) and a smoke-triggered cache-corruption route (`2777bdf` + `c947081`).
 
-> **Scope note**: this milestone covered the _AI-sort_ path only. The separate PR2 slice — hash/similarity sort off the renderer thread — remains open and is tracked as a 🔴 Key Result under [GOALS.md](GOALS.md) Objective 1, not as part of this milestone.
+> **Scope note**: this milestone covered the _AI-sort_ path only. The separate PR2 slice — hash/similarity sort off the renderer thread — shipped on 2026-10-25 (PR #85 and PR #87) and closed [GOALS.md](GOALS.md) Objective 1; it was a Key Result there, never part of this milestone.
 
 ### ✅ v1.1 Polish Release
 
@@ -86,7 +108,7 @@ Shipped via PR #64 (merge `b6ff4ac`). Two defects were found and fixed **before*
 
 - [x] Video fullscreen toggle — shipped 2026-02-05, later extracted into FullscreenManager
 - [x] Visual scale controls — zoom slider + popover, E2E-covered (`zoom.test.js`)
-- [x] "Manual testing checklist passed" — superseded: hook-enforced unit + E2E suites (current counts in PROJECT.md), plus per-PR manual smokes
+- [x] "Manual testing checklist passed" — superseded: hook-enforced unit + E2E suites (`npm test` / `npm run test:e2e` give the current counts), plus per-PR manual smokes
 - [x] "All documentation up to date" — satisfied by the 2026-08-27 strategic-doc refresh
 
 Beyond scope: Tournament mode, JXL viewer, CLIP semantic sorting, bulk-rate training, automated test suite, shortcut customization, local quality gates.
@@ -110,12 +132,25 @@ Beyond scope: Tournament mode, JXL viewer, CLIP semantic sorting, bulk-rate trai
 
 ---
 
+## Retired Milestones
+
+### ↪ v2.0 modularization complete
+
+**Retired**: 2026-10-27 — absorbed into v2 ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) D1; see [ROADMAP.md](ROADMAP.md) § Releases for what it extracted)
+**Original target**: Q4 2026 (soft)
+
+Its Definition of Done named four extractions. ZoomManager shipped (PR #90, 2026-10-26). SortingManager becomes the `similarity` module (P1b), MLManager's sort half becomes `ai-sort` (P4b), and CompareManager becomes a core split (P7). Its line target, "< ~6,000 after the four extractions", was re-baselined to v2's (GOALS Objective 2, G-7).
+
+---
+
 ## Health Summary
 
-| Status         | Count | Milestones                                          |
-| -------------- | ----- | --------------------------------------------------- |
-| ✅ Complete    | 3     | v1.0 Core Features, v1.1 Polish, 24k AI-sort smooth |
-| 🟡 In Progress | 1     | v2.0 modularization                                 |
+| Status         | Milestones                                                  |
+| -------------- | ----------------------------------------------------------- |
+| ✅ Complete    | v1.0 Core Features, v1.1 Polish, 24k AI-sort smooth         |
+| 🟡 In Progress | v2 complete                                                 |
+| ⬜ Not started | v2 pilot (P1a + P1b)                                        |
+| ↪ Retired      | v2.0 modularization complete                                |
 
 ---
 
