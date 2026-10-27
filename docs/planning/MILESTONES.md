@@ -37,6 +37,7 @@ Milestones are significant checkpoints. They should be:
 
 - P1a's Linux baseline is an unknown: WSL2 is a candidate for the Electron runs, not yet tried (spec § 15)
 - Estimates have run ~1.9× low; P1a (~11 SP) and P1b (~10 SP) can each fill more than a week
+- The date assumes P1a and P1b get the whole 🔵 share of their weeks; 🔵 picks outside v2 push it later
 
 ### 🎯 v2 complete
 
@@ -54,7 +55,7 @@ Milestones are significant checkpoints. They should be:
 
 **Risks**:
 
-- v2 competes for weekly capacity with user-flagged features outside it (the ≥50% 🔵 quota floor counts both)
+- The date assumes v2 takes the whole 🔵 share of each normal week (~17 SP, spec § 14). User-flagged picks outside v2 (the sorting-session follow-ups kept in BACKLOG, for example) come out of the same share, so each one moves the date later. v2's weekly share is decided before P1a is scheduled
 - About 131–136 SP nominal; at the historical slip, about 20 calendar weeks with Cleanup Weeks included (spec § 14)
 
 ---

@@ -31,7 +31,7 @@ Provide the most efficient desktop tool for collecting, reviewing, rating and ke
 | G-7 The renderer shrinks | Net `wc -l media-viewer.js` ≤ 0 in every phase's PR, enforced by a blocking line ratchet (user ruling 2026-10-27); the renderer plus `core/*.js` below 11,945 lines (`308d43c`); `media-viewer.js` below 6,000 by the end of P7 (§ 11.1) | 11,529 lines at `e0b2a16` (2026-10-27); the ratchet is filed, not built | 🔴 |
 | G-8 Runs on Windows and Linux: both suites on both platforms at every phase exit | From P1a's Linux baseline | Windows only | 🔴 |
 
-**Timeline**: P1a from the week of Nov 2–6, 2026 at the earliest; end of Q1 2027 (soft), Q2 2027 more likely (spec § 14)
+**Timeline**: P1a from the week of Nov 2–6, 2026 at the earliest; end of Q1 2027 (soft), Q2 2027 more likely (spec § 14). The date assumes v2 takes the whole 🔵 share of each normal week (~17 SP); 🔵 picks outside v2 move it later ([ROADMAP.md](ROADMAP.md) § Releases)
 **Owner**: goodalex223
 
 > **Why the re-baseline.** The August target, "< ~6,000 lines after the four extractions", needed ~5,400 lines out, while the renderer grew from 9,418 lines (2026-08-27) to 11,945 (2026-10-25). Four extractions of ZoomManager's size (−416 lines) could not reach it. v2's target moves whole clusters out (§ 11.1: about 5,050–5,550 lines by the end of P6) and forbids growth in any phase.

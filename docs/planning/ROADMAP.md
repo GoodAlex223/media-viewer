@@ -97,6 +97,8 @@ Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engin
 
 **Target**: end of Q1 2027 (soft), Q2 2027 more likely — about 131–136 SP nominal, with estimates historically ~1.9× low (spec § 14)
 
+> **The date assumes v2 takes the whole 🔵 share of every normal week**, about 17 SP (spec § 14: "At ~17 user-flagged SP per normal week, that is about 8 normal weeks"). Every 🔵 pick outside v2 moves it later, the drained follow-ups above included. v2's weekly share is still to be decided; it is decided before P1a is scheduled (WEEKLY.md Next Steps).
+
 ### v2.0 — Modularization ↪ Absorbed into v2 (2026-10-27)
 
 **Theme**: Carve the monolithic renderer into manager modules (v2.0 pattern: stateful manager class + constructor-injected host callbacks)
