@@ -126,7 +126,7 @@ B. No separate spec: the v2 spec and the four rulings are the design, and this p
 | `docs/planning/ROADMAP.md` | Modify | Vision; Current Phase; theme board (Now/Next/Later from § 14); drained notes; v2.0 → absorbed; v2 release table; v1.1 count; Principle 4; `Last Updated` |
 | `docs/planning/MILESTONES.md` | Modify | The v2 pilot and v2-complete milestones; v2.0 retired; 24k scope note; timeline, table, Health Summary; `Last Updated` |
 | `PROJECT.md` | Modify | L96 extracted-module list; L147 Known Limitations line count and v2 |
-| `docs/planning/BACKLOG.md` | Modify | § 19 intake (2 🔵 + 1 update, 8 🟤); annotate the 🟤 [2026-09-02] sweep; `Last Updated` line |
+| `docs/planning/BACKLOG.md` | Modify | § 19 intake (2 🔵 + 1 update, 8 🟤); annotate the 🟤 [2026-09-02] sweep; `Last Updated` line. Added after the plan (§ 4): the compression entry's local path removed, and a ninth 🟤 entry, the profile-path and folder-name sweep |
 | `docs/planning/README.md` | Modify | The convention's example list ("2 of 6 managers" removed 2026-10-27) |
 | `docs/planning/WEEKLY.md` | Modify | Next Steps item 5: the v2 share decision (side-agent note) and the ratchet's gate (PR #91 review #2). Added after the plan; the rest of WEEKLY waits for the closeout |
 | this plan | Create | — |
@@ -198,6 +198,18 @@ Seven findings, all checked first-hand against `95cf322` and accepted. One of th
 7. **ROADMAP's Current Phase Timeline lacked the capacity assumption.** A pointer was added.
 
 The review's held-back question, whether the ninth entry is 🔵 or 🟤, stays 🟤 by the precedent, and is raised with the user. The review hit its 10-candidate cap.
+
+### 2026-10-27 — PHASE: Review round 2 (PR #91, at `2327230`)
+
+- **Finding 1 accepted, with the reviewer's fix (walked through each case first-hand).** "The lower of the two ceilings" made the ruled raise impossible without `SKIP`. The ratchet entry now takes the ceiling the merge would carry: the branch's value if the branch changed the ceiling file, else `origin/main`'s, and it refuses when both sides changed it. Its tests gain the planted cases that tell the rules apart.
+- **Held-back items**:
+  - The over-count when both sides made the same change is now written in the entry as a known limit.
+  - The two-branches case was already covered by the closeout push.
+  - The files table's BACKLOG row now lists the later additions.
+- **The user's rulings, 2026-10-27**: the ninth entry stays 🟤.
+  - On the cap, the user told this session "already ran with --max-findings all".
+  - But the round-2 comment says no capped pass ran, and the reviewer session's last message records "round 1 won't be re-run with a higher limit".
+  - The discrepancy is raised with the user; it is not resolved here.
 
 ---
 

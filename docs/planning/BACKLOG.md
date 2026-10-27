@@ -464,12 +464,18 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
     - each v2 phase's PR lowers the ceiling to its new count;
     - raising it is an explicit edit of that file, visible in the diff.
   - **The builder's calls**: the file's name and format; a `SKIP=<token>` like every other check (`.husky/skip.sh`); reading the pushed ref, not the working tree; running before the E2E decision, so a refused push costs seconds.
-  - **Merges** (PR #91 review, #1): PRs merge on GitHub, where no hook runs. A branch cut before a phase lowered the ceiling still carries the old, higher ceiling file, so a check against the tip's own file passes growth that `main` now forbids.
-    - The check therefore reads `origin/main`'s ceiling too (fetched first) and uses the lower of the two.
-    - Comparing the tip's own count with that ceiling is not enough. A stale branch that never touched the renderer still carries the old, larger file and would be refused.
-    - So it measures the merge: `origin/main`'s count plus the branch's net renderer change since the merge base, against the lower ceiling.
-    - Anything that still slips through (the GitHub merge itself runs no check) is caught by the closeout push to `main`, which runs the check on the merged tree.
-  - **Tests** on the `scripts/` pattern (pure exported functions plus a CLI), with a planted over-ceiling case that must fail.
+  - **Merges** (PR #91 review, rounds 1 and 2): PRs merge on GitHub, where no hook runs. A branch cut before a phase lowered the ceiling still carries the old, higher ceiling file, so a check against the tip's own files passes growth that `main` now forbids. So the check fetches `origin/main` first and measures what the merge would carry, on both sides:
+    - **The count**: `origin/main`'s count plus the branch's net renderer change since the merge base. Not the tip's own count, because a stale branch that never touched the renderer still carries the old, larger file and would be refused.
+    - **The ceiling**: the branch's value if the branch changed the ceiling file since the merge base, else `origin/main`'s. If both sides changed it, the check refuses with "merge `origin/main` first": GitHub would hit a conflict on that file anyway, and resolving it moves the merge base. Not "the lower of the two", which would make the ruled raise impossible without `SKIP`, a direct push to `main` included.
+    - **Known limits**: the count over-counts when both sides made the same renderer change, since git applies it once. That errs toward refusal, and a rebase fixes it. Two branches that each pass alone can go over together. Both cases, and anything else that slips through (the GitHub merge itself runs no check), are caught by the closeout push to `main`, which runs the check on the merged tree.
+  - **Tests** on the `scripts/` pattern (pure exported functions plus a CLI). The planted cases must tell the candidate rules apart (PR #91 review, round 2):
+    - a branch over the ceiling fails;
+    - a stale branch that did not touch the renderer passes;
+    - a stale branch that grew it fails;
+    - an explicit raise passes;
+    - a ceiling changed on both sides is refused.
+
+    The over-ceiling case alone fails under every candidate rule, so it cannot show which rule was built.
   - **Starting ceiling**: the count on `main` when it lands (11,529 at `e0b2a16`).
   - **Gate**: in place before P1a's PR merges, so P1a is its first measured phase. It may ride P1a or ship alone.
   - Effort: S. Affected: a new `scripts/` check and its ceiling file, `.husky/pre-push`, `tests/`, `CLAUDE.md` (the pre-push line), `docs/planning/GOALS.md` (the "No CI service" constraint row).
