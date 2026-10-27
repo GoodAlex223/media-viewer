@@ -116,8 +116,10 @@ and a reference memory records the local edit.
 **D8 — Ride-alongs (both 🟤 `[2026-10-18]`, effort XS, REVIEW-QUEUE only), done and checked off:** a host-naming
 convention line in §2, and a matched-scope line in § 4 Conventions.
 
-**D9 — No `CLAUDE.md` edit.** One strategic-doc line changes, as D3's consequence: GOALS.md's "No TypeScript" row
-says `typescript-lsp` "provides code navigation", which stops being true with this PR.
+**D9 — No `CLAUDE.md` edit.** Two docs change as D3's consequence. GOALS.md's "No TypeScript" row says
+`typescript-lsp` "provides code navigation", which stops being true with this PR. The v2 spec's paragraph
+"The typedefs are documentation, not a control" said `tsc --noEmit` "needs `typescript@6`" and "can follow if
+the `typescript-lsp` trial earns its place"; it gets a dated correction (added in PR #92's review, finding 1).
 
 **D10 — One branch and a PR.** No longer docs-only (D3): methodology rule #3's docs-only skip does not apply, and
 the pre-push E2E gate runs. Push and PR only on explicit approval.
@@ -157,7 +159,7 @@ catalogs, the upstream changelog, `openai/codex#54619` and `openai/codex-plugin-
 | 5 | `typescript-lsp` | **drop**, closed | User ruling. Navigation equal to grep, one diagnostic ESLint also reports, ~0.6 GB per idle session. Disabled and its devDependency removed in this PR. |
 | 1a | `session-report` (Anthropic) | **adopt**, ordinary work, not a trial | Its analyzer ran read-only on this host and gives the usage-side figures § 5's caveats lacked. Done in-run: one step in § 5's recurring read-out. |
 | 1b | `eslint-plugin-sonarjs` 4.2.2 | pass | The probe: 361 errors over 132 tracked files, which would block every commit; one real defect among them (filed 🟤). |
-| 2 | `/auto-mode-setup` (2.1.304) | pass | 4 auto-mode denials in 30 days of this project's transcripts; none is the missing-infrastructure class the command fixes. |
+| 2 | `/auto-mode-setup` (changelog 2.1.304) | pass | 4 auto-mode denials in 30 days of this project's transcripts; none is the missing-infrastructure class the command fixes. |
 | 3 | Codex: bind plugin hook approval to plugin contents | pass | Every hook-bearing plugin enabled here is Anthropic's own or SHA-pinned in Anthropic's catalog. |
 | 4 out | 9 merges and 69 memory files | 1 propagate, by hand-off (user ruling D6) | Matched scope: 57 files, content-identical on both sides; controls 10/10, 28/28, 17/17, 8/8, 3/3. |
 | 4 in | 1 new row | noted | Context7 off in this repo's local settings; the §1 in-use line corrected. |
@@ -175,7 +177,7 @@ authorized, after the checkpoint.
 - **Run read-only from the clone**, no install: `node analyze-sessions.mjs --json --since 30d`, 73 s, output to the
   scratchpad (473,534 bytes). The transcripts it found span 2026-09-27 → 2026-10-27, and an all-time run saw 581
   sessions against 576 for 30 days, so little older history is kept on disk.
-- **This project** (`c--Users-alexm-Projects-media-viewer`): 118 sessions; **6.34B** input tokens, 97.7% cached;
+- **This project** (its transcript folder): 118 sessions; **6.34B** input tokens, 97.7% cached;
   **21.1M** output; 585 subagent calls for **3.15B** tokens.
 - **`claude-security`'s agents** (all projects, 30 days): researchers 46 calls / 35.6M tokens, verifiers 30 /
   13.1M, patch-generator 8 / 15.7M, patch-verifier 8 / 14.1M. This is the per-scan cost the 2026-09-24 row left
@@ -275,10 +277,12 @@ authorized, after the checkpoint.
 1. **A trial question that redundant answers satisfy cannot fail usefully.** `typescript-lsp` met its question
    literally, with navigation that matched grep, so the read-out turned on gain over the existing tool rather than
    on the question's words. A future trial question should name the incumbent it must beat.
-2. **The hand-off channel stalled.** Ten days after the 10-17 note, none of its 16 rows has moved at the origin.
+2. **The hand-off channel stalled.** Ten days after the 10-17 note, none of the 14 rows it returned has moved at the origin, and its two G5 items
+   are still absent.
    Appendix A item 1 says so, and asks whether the note arrived.
 3. **This repo's tool set changed from outside it** (D7). The sibling's G1 turned Context7 off in this repo's local
-   settings, and at user scope Playwright (by the row's own account) and four more plugins are off. REVIEW-QUEUE's
+   settings, and at user scope seven plugins are off, Playwright among them (by the row's own account; D7 lists
+   all seven). REVIEW-QUEUE's
    in-use line had gone stale in six names with no change in this repo.
 4. **ESLint's `no-unused-vars` misses a write-only array**; sonarjs's `no-unused-collection` caught one on a
    per-image path.
@@ -300,6 +304,37 @@ authorized, after the checkpoint.
    new line says an evidence row quotes what it relies on when its vehicle runs. Raising `cleanupPeriodDays` is a
    user-level setting, so it stays the user's call (not in Appendix A).
 
+### PR #92 review, round 1 (2026-10-27)
+
+Six findings and two nits, at head `7e61741`. Each was checked at its source before fixing:
+
+1. **Fixed.** The v2 spec's typedefs paragraph said `tsc --noEmit` "needs `typescript@6`" and "can follow if the
+   `typescript-lsp` trial earns its place". It now has a dated correction in place, quoting the old wording, and D9
+   names both docs.
+2. **Fixed.** §1a named this repo's transcript folder by its encoded name, which contains the user name. It now
+   names the folder by property. The BACKLOG profile-path entry gains a second pattern for that encoded form: live
+   0 after the fix; frozen 2 archived plans, both already counted by the entry's first grep.
+3. **Fixed differently.** The row's wording was wrong, but not the conclusion that the host can run the command. The
+   doc puts the 2.1.304 floor only on sessions where feature-flag fetching is off ("Telemetry off, third-party
+   provider, or Claude apps gateway"). This session is first-party, with telemetry on
+   (`CLAUDE_CODE_ENABLE_TELEMETRY=1`; neither off switch set). Its gate is therefore v2.1.233 (native Windows, Pro,
+   Max or Team) or v2.1.283 (Enterprise or a Console API key), and the terminal's 2.1.303 clears both. The row now
+   names that gate and both hosts. The command was not run, and the `pass` stands.
+4. **Fixed.** "16 rows" now reads 14 rows returned, plus the two G5 items still absent.
+5. **Fixed**, as suggested.
+6. **Fixed.** The in-use correction and the inbound row now list all seven plugins off at user scope, and key
+   discovery 3 says seven. **Found while fixing it**: the § 5 stocktake said five plugins went off after the 2026-10-08
+   table, but that table already shows `playground` and `claude-code-setup` disabled at user scope. It now names
+   only what changed: `code-review` and `playwright`, plus Context7's server and `typescript-lsp`.
+
+**Nits, both fixed.**
+- An `_Original entry:_` label now precedes each old body after a closing note. That covers four entries, including
+  the `typescript-lsp` one, which had the same defect.
+- Appendix A item 1 now says the 10-17 note's formatter re-time has shipped (G4, PR #89). The user holds the note
+  until this PR merges.
+
+**Held back items**: agreed, no change.
+
 ---
 
 ## Appendix A — hand-off note for `claude-code-universal-config`
@@ -310,7 +345,8 @@ authorized, after the checkpoint.
 >    `handed-over (2026-10-16) — in media_viewer's 2026-10-16 catch-up list; not applied yet`, and its items 1 and 2
 >    are still absent (items 2 and 3 below). If it never reached intake, this note replaces it. Its items 3–5 stand
 >    as written (media_viewer `docs/superpowers/specs/2026-10-17-weekly-reviews-run.md`, Appendix A): the status
->    correction for the 14 rows, the `typescript-lsp` TypeScript-6 procedure, and the formatter-hook re-time.
+>    correction for the 14 rows, the `typescript-lsp` TypeScript-6 procedure, and the formatter-hook re-time. The
+>    re-time's follow-up has since shipped here (G4, PR #89, merge `7f75013`), so that row can close as done.
 > 2. **The global `CLAUDE.md` audit trigger needs an exception for a project with a byte trigger** (re-sent; item 1
 >    of 10-17). Live `~/.claude/CLAUDE.md:101` still reads "whenever one crosses ~200 lines", with no size-trigger
 >    clause (`size trigger` 0). media_viewer's `CLAUDE.md` § Maintenance says "Lines are not the trigger here" and

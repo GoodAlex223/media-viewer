@@ -451,8 +451,11 @@ keys, folder files, app data, jobs and services. The contract is written as JSDo
 
 **The typedefs are documentation, not a control (C).** Without `checkJs`, nothing checks a module against them
 (`2026-10-17-weekly-reviews-run.md`:293–295). The control is the contract tests in §15. Adding `checkJs`, a
-`jsconfig.json` and `tsc --noEmit` (which needs `typescript@6`) is left out of v2. It can follow if the
-`typescript-lsp` trial earns its place.
+`jsconfig.json` and `tsc --noEmit` is left out of v2. It can follow as its own decision: the global `tsc` 7.0.2
+runs `--checkJs` (measured 2026-10-17), and whether v2 then pins a TypeScript in `devDependencies` is part of
+that decision. *(Corrected 2026-10-27 in PR #92's review: this read "which needs `typescript@6`" and "can
+follow if the `typescript-lsp` trial earns its place". That trial read out `drop`, and the `typescript@6`
+constraint was the language server's, not `tsc`'s.)*
 
 **Built incrementally (C).** The host grows phase by phase: each extraction adds only the groups it needs (§14
 lists them). Nothing below is built speculatively.
