@@ -316,8 +316,8 @@ Six findings and two nits, at head `7e61741`. Each was checked at its source bef
    0 after the fix; frozen 2 archived plans, both already counted by the entry's first grep.
 3. **Fixed differently.** The row's wording was wrong, but not the conclusion that the host can run the command. The
    doc puts the 2.1.304 floor only on sessions where feature-flag fetching is off ("Telemetry off, third-party
-   provider, or Claude apps gateway"). This session is first-party, with telemetry on
-   (`CLAUDE_CODE_ENABLE_TELEMETRY=1`; neither off switch set). Its gate is therefore v2.1.233 (native Windows, Pro,
+   provider, or Claude apps gateway"). This session is first-party, and none of the four
+   variables that turn fetching off is set (evidence corrected in round 2, below). Its gate is therefore v2.1.233 (native Windows, Pro,
    Max or Team) or v2.1.283 (Enterprise or a Console API key), and the terminal's 2.1.303 clears both. The row now
    names that gate and both hosts. The command was not run, and the `pass` stands.
 4. **Fixed.** "16 rows" now reads 14 rows returned, plus the two G5 items still absent.
@@ -334,6 +334,21 @@ Six findings and two nits, at head `7e61741`. Each was checked at its source bef
   until this PR merges.
 
 **Held back items**: agreed, no change.
+
+### PR #92 review, round 2 (2026-10-27)
+
+At head `74abd8a`, no issue. All six findings and both nits were confirmed first-hand, and the pushback on finding 3
+was accepted. The reviewer reproduced `--checkJs` on the global `tsc` 7.0.2 with a control, and checked the
+2026-10-08 table behind the extra stocktake correction.
+
+One optional nit, **fixed**: the evidence for feature-flag fetching named the wrong variable.
+`CLAUDE_CODE_ENABLE_TELEMETRY` turns on OpenTelemetry export (env-vars doc). Fetching is off when any of
+`DISABLE_GROWTHBOOK`, `DISABLE_TELEMETRY`, `DO_NOT_TRACK` or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set, and none of the four is set here, so the conclusions hold.
+- **Fixed in place**: the `/auto-mode-setup` row and round 1's item 3 above, both new in this PR.
+- **Older lines, corrected without rewriting**: the frozen §2 row of 2026-10-09 and the § 5 row of 2026-10-12 make
+  the same attribution about *You should know*. They get a dated correction in REVIEW-QUEUE §2 Next-up, which
+  quotes the interactive-mode doc: the mod needs feature-flag fetching. The closed BACKLOG entry gets a
+  parenthetical pointing to that correction.
 
 ---
 
