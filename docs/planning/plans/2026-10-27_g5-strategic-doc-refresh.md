@@ -179,6 +179,10 @@ B. No separate spec: the v2 spec and the four rulings are the design, and this p
   - The 🔵 [2026-05-30] compression entry carries a local path with the Windows user name. It is pre-existing and was left as it is; it is raised with the user at hand-off.
 - **Dated "P0 done 2026-10-27"** (ROADMAP's v2 table, MILESTONES' v2-complete status) assumes the merge lands today. The closeout re-dates both if it does not.
 - **Side-agent note after commit `a92204b`, checked against spec § 14 and accepted**: v2's end-of-Q1 date (and the pilot's mid-December one, call 1) assumes v2 takes the whole 🔵 share of a normal week, ~17 SP. Spec § 14 says so: "At ~17 user-flagged SP per normal week, that is about 8 normal weeks". Ruling 3 keeps the sorting follow-ups as 🔵 picks beside v2, so each pick moves the date. The docs had named only "v2 competes for weekly capacity". Now ROADMAP's v2 Target, GOALS Objective 2's Timeline and both MILESTONES risk lists state the assumption. **The share itself is the user's decision, not taken here**: it is carried in WEEKLY.md Next Steps item 5, for the Cleanup Week #5 planning or the Nov 2–6 planning at the latest. WEEKLY.md joins § 3's files for that one line.
+- **After PR #91 opened (2026-10-27)**:
+  - The user approved removing the compression entry's local path (`2753fd4`).
+  - A whole-repo search then found the same class elsewhere: profile paths in 2 live BACKLOG entries and 6 frozen docs, and real folder names in 4 live planning docs and 11 frozen docs. The tests' profile paths are made-up names.
+  - The user asked for an entry, filed as the ninth 🟤 [2026-10-27] entry. It covers the live edits, a pre-commit check keyed on `os.userInfo().username`, and leaves the frozen docs and history to the user. It names no path or folder.
 - **Verified**: 45 relative links in the changed docs resolve (a scratchpad script), plus the new BACKLOG links; `node scripts/check-docs-index.js` exits 0. The live-surface grep for `2 of 6`, `9,400` and the old v2.0 status leaves only the retired-milestone records and the planning README's dated note.
 
 ---
