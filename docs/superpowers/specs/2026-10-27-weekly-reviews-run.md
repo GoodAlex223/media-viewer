@@ -350,7 +350,8 @@ One optional nit, **fixed**: the evidence for feature-flag fetching named the wr
   quotes the interactive-mode doc: the mod needs feature-flag fetching. The closed BACKLOG entry gets a
   parenthetical pointing to that correction.
 
-Merged `c5ac35f` on 2026-10-27.
+Merged `c5ac35f` on 2026-10-27. Round 3, the reviewer's close-out at the merged head, found no issue and nothing to carry
+forward.
 
 ## Improvements (extracted at closeout)
 

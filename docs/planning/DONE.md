@@ -2,7 +2,7 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-27 <!-- Group G6: Weekly Reviews (2026-10-27 run, ⚪ Overhead, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #92 (merge c5ac35f) after two review rounds: 6 findings and 2 nits (one finding fixed differently), then 1 optional nit. -->
+**Last Updated**: 2026-10-27 <!-- Group G6: Weekly Reviews (2026-10-27 run, ⚪ Overhead, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #92 (merge c5ac35f) after two review rounds: 6 findings and 2 nits (one finding fixed differently), then 1 optional nit; a round-3 close-out found no issue. -->
 <!-- Previous: Group G5: Strategic-doc refresh (🟡, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #91 (merge 7fb9978) after three review rounds (7 → 1 → 0 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G3: ZoomManager extraction (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #90 (merge 082e3b2) after four review rounds (15 → 1 → 0 → 0 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G4: Formatter hook per-edit cost (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #89 (merge 7f75013) after a 5-finding review, a docs round and a clean round 3. -->
@@ -42,6 +42,7 @@ Completed tasks with implementation details and learnings.
 ✅ **Status: 4/4 categories. MERGED 2026-10-27 via PR #92** (merge `c5ac35f`). It ran on 2026-10-27, four days past the Friday slot. Two review rounds ran in a separate chat:
 - **Round 1** (head `7e61741`): 6 findings and 2 nits, each checked at its source. Five findings and both nits were fixed; finding 3 was fixed differently, because the `/auto-mode-setup` 2.1.304 floor applies only without feature-flag fetching. Fixing finding 6 surfaced one more error in the § 5 stocktake. All in `74abd8a`.
 - **Round 2**: no issue, and the reviewer accepted the finding-3 pushback. One optional nit, fixed in `4c95572`: the fetching evidence had named `CLAUDE_CODE_ENABLE_TELEMETRY`, which only turns on OpenTelemetry export.
+- **Round 3** (the reviewer's close-out at the merged head `4c95572`): no issue, every response point confirmed first-hand, and nothing carries forward.
 
 **Summary**: The 8th Weekly Reviews run. **§ 5 first:** `onFailure: "block"` on the guard hook read out **`keep`**, and `typescript-lsp` read out **`drop`**, by user ruling. The trial queue went 2 → **0**. **1 adopt / 3 pass:**
 - §1a `session-report` (Anthropic) adopted as ordinary work. Its analyzer, run read-only from the catalog clone, gives usage-side token figures and is now a step in § 5's recurring read-out. Neither catalog grew (315; 2,283).
