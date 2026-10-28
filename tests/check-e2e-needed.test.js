@@ -137,10 +137,21 @@ describe('CLI on a real repo', { timeout: 30_000 }, () => {
     const SCRIPT = fileURLToPath(new URL('../scripts/check-e2e-needed.js', import.meta.url));
     const repos = [];
 
+    // Vitest runs inside the pre-commit hook, where git exports GIT_INDEX_FILE (and, in a worktree,
+    // an absolute GIT_DIR). Inherited, they would aim the temp repo's init/add/commit and the CLI's
+    // diff at the real repo. Built per call, so a test can plant them.
+    const gitEnv = () => {
+        const env = { ...process.env };
+        delete env.GIT_DIR;
+        delete env.GIT_INDEX_FILE;
+        delete env.GIT_WORK_TREE;
+        return env;
+    };
     const git = (repo, ...args) =>
         execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'core.autocrlf=false', ...args], {
             cwd: repo,
             encoding: 'utf8',
+            env: gitEnv(),
         }).trim();
     const commit = (repo, message) => {
         git(repo, 'add', '-A');
@@ -164,6 +175,7 @@ describe('CLI on a real repo', { timeout: 30_000 }, () => {
             cwd: repo,
             input: `refs/heads/x ${head} refs/heads/x ${base}\n`,
             encoding: 'utf8',
+            env: gitEnv(),
         });
 
     afterEach(() => {
@@ -188,6 +200,29 @@ describe('CLI on a real repo', { timeout: 30_000 }, () => {
         const { repo, base } = makeRepo();
         git(repo, 'mv', 'main.js', 'docs/main.js');
         expect(decide(repo, base, commit(repo, 'move main into docs')).stdout).toBe('RUN');
+    });
+
+    // A worktree's pre-commit hook exports both as absolute paths (measured, git 2.38).
+    it('keeps every git call in its temp repo when a hook exports GIT_DIR and GIT_INDEX_FILE', () => {
+        const decoy = makeRepo();
+        const planted = {
+            GIT_DIR: path.join(decoy.repo, '.git'),
+            GIT_INDEX_FILE: path.join(decoy.repo, '.git', 'index'),
+        };
+        const saved = Object.fromEntries(Object.keys(planted).map((k) => [k, process.env[k]]));
+        Object.assign(process.env, planted);
+        try {
+            const { repo, base } = makeRepo();
+            fs.appendFileSync(path.join(repo, 'scripts', 'a.js'), "console.log('b');\n");
+            expect(decide(repo, base, commit(repo, 'edit a script')).stdout).toBe('SKIP');
+        } finally {
+            for (const [k, v] of Object.entries(saved)) {
+                if (v === undefined) delete process.env[k];
+                else process.env[k] = v;
+            }
+        }
+        expect(git(decoy.repo, 'rev-parse', 'HEAD')).toBe(decoy.base);
+        expect(git(decoy.repo, 'status', '--porcelain')).toBe('');
     });
 });
 
