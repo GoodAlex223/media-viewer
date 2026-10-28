@@ -51,8 +51,7 @@ describe('classifyPaths', () => {
         expect(classifyPaths(['docs/planning/WEEKLY.md', 'media-viewer.js'])).toBe(true);
     });
 
-    it('returns true (run) for hook/config/html/css runtime paths', () => {
-        expect(classifyPaths(['.husky/pre-push'])).toBe(true);
+    it('returns true (run) for config/html/css runtime paths', () => {
         expect(classifyPaths(['index.html'])).toBe(true);
         expect(classifyPaths(['styles.css'])).toBe(true);
         expect(classifyPaths(['package.json'])).toBe(true);
@@ -65,5 +64,65 @@ describe('classifyPaths', () => {
 
     it('treats a root-level .md as docs (skip)', () => {
         expect(classifyPaths(['CLAUDE.md'])).toBe(false);
+    });
+});
+
+describe('classifyPaths — paths the app never loads skip E2E', () => {
+    it.each([
+        '.claude/hooks/format-edited-file.js',
+        '.claude/settings.json',
+        'scripts/check-e2e-needed.js',
+        '.husky/pre-push',
+        'prototypes/ai-sorting/harness.py',
+        'tests/check-e2e-needed.test.js',
+        'tests/integration/tournament-flow.test.js',
+        'tests/feature-cache-harness.js',
+        'tests/hash-pool-harness.js',
+        'vitest.config.js',
+        'eslint.config.mjs',
+        '.prettierrc.json',
+        '.prettierignore',
+    ])('%s → SKIP', (p) => {
+        expect(classifyPaths([p])).toBe(false);
+    });
+
+    it('skips a push made only of SKIP paths across classes', () => {
+        expect(classifyPaths(['scripts/a.js', 'tests/a.test.js', '.claude/x.json', 'docs/x.txt', 'CLAUDE.md'])).toBe(
+            false
+        );
+    });
+});
+
+describe('classifyPaths — near misses and look-alikes run E2E', () => {
+    it.each([
+        'tests/e2e/navigation.test.js',
+        'tests/e2e/helpers/electron-app.js',
+        'tests/e2e/fixtures/hash-fixtures.js',
+        'tests/sub/nested.test.js',
+        'tests/new-helper.js',
+        'tests/integrationx/a.test.js',
+        'scripts.js',
+        'scriptsx/a.js',
+        '.claudex/a.js',
+        '.husky-old/pre-push',
+        'docs-old/a.txt',
+        'prototypes.js',
+        'Scripts/a.js',
+        'scripts\\a.js',
+        '"scripts/\\303\\251.js"',
+        'playwright.config.js',
+        'package.json',
+        'package-lock.json',
+        'LICENSE',
+        '.mcp.json.example',
+        'vendor/lucide/lucide.min.js',
+        'vitest.config.js.bak',
+        'sub/vitest.config.js',
+    ])('%s → RUN', (p) => {
+        expect(classifyPaths([p])).toBe(true);
+    });
+
+    it('runs when one runtime path sits among SKIP paths', () => {
+        expect(classifyPaths(['scripts/a.js', 'tests/a.test.js', '.claude/x.json', 'media-viewer.js'])).toBe(true);
     });
 });

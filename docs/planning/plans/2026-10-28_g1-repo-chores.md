@@ -137,7 +137,7 @@ Re-estimated after planning: **3 SP** holds (gate 2, Context7 0.5, LICENSE 0.5).
 **Interfaces:**
 - Produces: `classifyPaths(files: string[]): boolean`, with an unchanged signature: `true` = RUN, `false` = SKIP. Tasks 2 and 3 rely on it.
 
-- [ ] **Step 1: Write the failing tests.** In the existing `classifyPaths` test, remove `.husky/pre-push` from "returns true (run) for hook/config/html/css runtime paths", since it is a SKIP path now. Add:
+- [x] **Step 1: Write the failing tests.** In the existing `classifyPaths` test, remove `.husky/pre-push` from "returns true (run) for hook/config/html/css runtime paths", since it is a SKIP path now. Add:
 
 ```js
 describe('classifyPaths — paths the app never loads skip E2E', () => {
@@ -199,10 +199,10 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 });
 ```
 
-- [ ] **Step 2: Run them and see them fail.** Run `npx vitest run tests/check-e2e-needed.test.js` from `C:/Users/alexm/Projects/media_viewer`. Expect 14 failures: all 13 SKIP rows and the all-SKIP mixed case, since today each of those paths classifies RUN. The 24 RUN cases already pass. They guard against an over-broad fix and are not the RED.
-- [ ] **Step 3: Implement.** In `scripts/check-e2e-needed.js`, add module-level constants above `classifyPaths`: `SKIP_DIRS` (prefixes ending in `/`: `docs/`, `.claude/`, `scripts/`, `.husky/`, `prototypes/`, `tests/integration/`), `SKIP_FILES` (a `Set` of the six exact paths), and `UNIT_TEST = /^tests\/[^/]+\.test\.js$/`. Add a comment saying these are paths the app never loads, and that anything else runs. `classifyPaths` keeps its empty-list and blank-entry handling, and a path is SKIP when it ends in `.md`, starts with a `SKIP_DIRS` entry, is in `SKIP_FILES`, or matches `UNIT_TEST`. Rewrite the header's "Conservative: RUN unless EVERY changed path is docs/markdown" sentence and the JSDoc to describe the list. Change the SKIP stderr line to `'pre-push: no path the app loads changed — skipping E2E.\n'`.
-- [ ] **Step 4: Run them and see them pass.** Same command. Expect PASS: 11 + 13 + 1 + 23 + 1 = 49 tests.
-- [ ] **Step 5: Commit.** `git add scripts/check-e2e-needed.js tests/check-e2e-needed.test.js`, then `git commit -m "feat(scripts): skip pre-push E2E for paths the app never loads"`.
+- [x] **Step 2: Run them and see them fail.** Run `npx vitest run tests/check-e2e-needed.test.js` from `C:/Users/alexm/Projects/media_viewer`. Expect 14 failures: all 13 SKIP rows and the all-SKIP mixed case, since today each of those paths classifies RUN. The 24 RUN cases already pass. They guard against an over-broad fix and are not the RED.
+- [x] **Step 3: Implement.** In `scripts/check-e2e-needed.js`, add module-level constants above `classifyPaths`: `SKIP_DIRS` (prefixes ending in `/`: `docs/`, `.claude/`, `scripts/`, `.husky/`, `prototypes/`, `tests/integration/`), `SKIP_FILES` (a `Set` of the six exact paths), and `UNIT_TEST = /^tests\/[^/]+\.test\.js$/`. Add a comment saying these are paths the app never loads, and that anything else runs. `classifyPaths` keeps its empty-list and blank-entry handling, and a path is SKIP when it ends in `.md`, starts with a `SKIP_DIRS` entry, is in `SKIP_FILES`, or matches `UNIT_TEST`. Rewrite the header's "Conservative: RUN unless EVERY changed path is docs/markdown" sentence and the JSDoc to describe the list. Change the SKIP stderr line to `'pre-push: no path the app loads changed — skipping E2E.\n'`.
+- [x] **Step 4: Run them and see them pass.** Same command. Expect PASS: 11 + 13 + 1 + 23 + 1 = 49 tests.
+- [x] **Step 5: Commit.** `git add scripts/check-e2e-needed.js tests/check-e2e-needed.test.js`, then `git commit -m "feat(scripts): skip pre-push E2E for paths the app never loads"`.
 
 ### Task 2: Count both paths of a moved file
 
@@ -278,6 +278,11 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 - Branch `g1-repo-chores` from `main` `a3d00e8`. Brainstormed in chat: the user approved the gate design ("looks right"), the Context7 part and the `.mcp.json` delete ("Yes, OK"), and the copyright line Claude suggested.
 - Found in recon: a rename lists only its new path (a probe in a throwaway repo). This widens with the SKIP list, and it already exists for `docs/`. Added `--no-renames` (Task 2).
 - Baseline: 49 unit files, 2,375 passed, 1 skipped; `tests/check-e2e-needed.test.js` has 11.
+
+### 2026-10-28 — PHASE: Execution (Native)
+
+- Ledger: `.superpowers/sdd/2026-10-28_g1-repo-chores/progress.md` (git-ignored). The whole-branch review is not run in this session: `max`, in a separate session, asked first.
+- **Task 1** (SKIP list): RED 14 failed / 35 passed of 49, as planned; GREEN 49/49. Renamed the edited test to "returns true (run) for config/html/css runtime paths", since its one hook path left it. The constants' comment also names `package.json` and the lockfile as never-SKIP (Global Constraints).
 
 ---
 
