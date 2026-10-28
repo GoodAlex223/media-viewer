@@ -132,27 +132,29 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
     });
 });
 
+// Vitest runs inside the pre-commit hook, where git exports GIT_INDEX_FILE (and, in a worktree, an
+// absolute GIT_DIR). Inherited, they would aim a temp repo's init/add/commit and the CLI's diff at the
+// real repo. Built per call, so a test can plant them.
+const gitEnv = () => {
+    const env = { ...process.env };
+    delete env.GIT_DIR;
+    delete env.GIT_INDEX_FILE;
+    delete env.GIT_WORK_TREE;
+    return env;
+};
+// git in a temp repo, with an identity and LF line endings.
+const git = (repo, ...args) =>
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'core.autocrlf=false', ...args], {
+        cwd: repo,
+        encoding: 'utf8',
+        env: gitEnv(),
+    }).trim();
+
 // The CLI against a throwaway repo: what `git diff` lists for a moved file, which no pure test can show.
 describe('CLI on a real repo', { timeout: 30_000 }, () => {
     const SCRIPT = fileURLToPath(new URL('../scripts/check-e2e-needed.js', import.meta.url));
     const repos = [];
 
-    // Vitest runs inside the pre-commit hook, where git exports GIT_INDEX_FILE (and, in a worktree,
-    // an absolute GIT_DIR). Inherited, they would aim the temp repo's init/add/commit and the CLI's
-    // diff at the real repo. Built per call, so a test can plant them.
-    const gitEnv = () => {
-        const env = { ...process.env };
-        delete env.GIT_DIR;
-        delete env.GIT_INDEX_FILE;
-        delete env.GIT_WORK_TREE;
-        return env;
-    };
-    const git = (repo, ...args) =>
-        execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'core.autocrlf=false', ...args], {
-            cwd: repo,
-            encoding: 'utf8',
-            env: gitEnv(),
-        }).trim();
     const commit = (repo, message) => {
         git(repo, 'add', '-A');
         git(repo, 'commit', '-qm', message);
@@ -309,7 +311,36 @@ const findSkipListImports = (files) => {
     return found;
 };
 
-describe('guard: nothing a RUN path loads is on the SKIP list', () => {
+// Every tracked RUN-classified .js/.cjs/.mjs/.html file outside vendor/, with its index copy: inside the
+// hook that is what the commit holds (`env` defaults to this process's, so git follows the hook's
+// GIT_INDEX_FILE), and a file deleted on disk but not staged still has one. An entry with no stage-0
+// blob (an unmerged path) is left out rather than failing the commit.
+const readTrackedRunSources = (root, env = process.env) => {
+    const paths = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8', env })
+        .split('\0')
+        .filter((p) => p && classifyPaths([p]) && /\.(c|m)?js$|\.html$/.test(p) && !p.startsWith('vendor/'));
+    const out = execFileSync('git', ['cat-file', '--batch'], {
+        cwd: root,
+        env,
+        input: paths.map((p) => `:${p}\n`).join(''),
+        maxBuffer: 256 * 1024 * 1024,
+    });
+    const sources = [];
+    let at = 0;
+    for (const p of paths) {
+        const eol = out.indexOf(10, at);
+        const header = out.toString('utf8', at, eol); // `<sha> blob <size>`, or `:<path> missing`
+        at = eol + 1;
+        const blob = /^[0-9a-f]+ blob (\d+)$/.exec(header);
+        if (!blob) continue;
+        const size = Number(blob[1]);
+        sources.push({ path: p, source: out.toString('utf8', at, at + size) });
+        at += size + 1;
+    }
+    return sources;
+};
+
+describe('guard: nothing a RUN path loads is on the SKIP list', { timeout: 30_000 }, () => {
     it('flags a planted import of a SKIP path (control)', () => {
         expect(
             findSkipListImports([
@@ -320,12 +351,30 @@ describe('guard: nothing a RUN path loads is on the SKIP list', () => {
         ).toEqual(['tests/e2e/a.test.js → scripts/x.js', 'index.html → scripts/x.js', 'main.js → scripts']);
     });
 
+    it('reads tracked files from the index, so one deleted on disk but not staged cannot fail it', () => {
+        const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-guard-'));
+        try {
+            git(repo, 'init', '-q');
+            fs.writeFileSync(path.join(repo, 'gone.js'), 'module.exports = 1;\n');
+            fs.writeFileSync(path.join(repo, 'main.js'), "require('./app.js');\n");
+            git(repo, 'add', '-A');
+            fs.rmSync(path.join(repo, 'gone.js'));
+            fs.writeFileSync(path.join(repo, 'main.js'), 'an unstaged edit\n');
+            expect(readTrackedRunSources(repo, gitEnv())).toEqual([
+                { path: 'gone.js', source: 'module.exports = 1;\n' },
+                { path: 'main.js', source: "require('./app.js');\n" },
+            ]);
+        } finally {
+            try {
+                fs.rmSync(repo, { recursive: true, force: true });
+            } catch {
+                // Windows can briefly hold a .git pack handle; a leaked temp dir is harmless.
+            }
+        }
+    });
+
     it('no tracked file that runs E2E imports a file on the SKIP list', () => {
-        const root = fileURLToPath(new URL('..', import.meta.url));
-        const files = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
-            .split('\0')
-            .filter((p) => p && classifyPaths([p]) && /\.(c|m)?js$|\.html$/.test(p) && !p.startsWith('vendor/'))
-            .map((p) => ({ path: p, source: fs.readFileSync(path.join(root, p), 'utf8') }));
+        const files = readTrackedRunSources(fileURLToPath(new URL('..', import.meta.url)));
         expect(files.length).toBeGreaterThan(20);
         expect(findSkipListImports(files)).toEqual([]);
     });
