@@ -2,16 +2,17 @@
 //
 // Reads git's pre-push stdin (one `<local_ref> <local_sha> <remote_ref> <remote_sha>`
 // line per pushed ref), computes the changed-file set for the outgoing range, and prints
-// `RUN` or `SKIP` to stdout. `.husky/pre-push` runs the Playwright E2E suite only on
-// `RUN`. Conservative: SKIP only when EVERY changed path is on an explicit list of paths the
-// app never loads (docs, Claude Code config, maintenance scripts, git hooks, prototypes, unit
-// tests and the unit/lint/format configs); any other path is RUN.
+// `RUN` or `SKIP` to stdout. `.husky/pre-push` runs the Playwright E2E suite unless the
+// output is exactly `SKIP`. Conservative: SKIP only when EVERY changed path is on an explicit
+// list of paths the app never loads (docs, Claude Code config, maintenance scripts, git hooks,
+// prototypes, unit tests and the unit/lint/format configs); any other path is RUN.
 //
-// `parsePushRefs` and `classifyPaths` are pure and unit-tested. The CLI section (added in
-// Task 2) is a thin, fail-safe git wrapper: it prints RUN on any git/parse failure so a
-// broken lookup never silently skips the suite, and it never exits non-zero for a decision
-// (the hook decides whether to run E2E from the printed token, so the script itself never
-// blocks the push).
+// `parsePushRefs` and `classifyPaths` are pure and unit-tested. The CLI section is a thin,
+// fail-safe git wrapper: it prints RUN on any git failure or unreadable stdin so a broken
+// lookup never silently skips the suite, and it never exits non-zero for a decision (the
+// hook decides whether to run E2E from the printed token, so the script itself never blocks
+// the push). Stdin lines without a local SHA are dropped as branch deletions, so input that
+// is not git's ref lines at all prints SKIP; git always sends well-formed lines.
 
 const ZERO_SHA = /^0+$/;
 
@@ -34,10 +35,14 @@ function parsePushRefs(stdin) {
     return refs;
 }
 
+// Checked before every SKIP rule, so nothing else can match them (`tests/e2e/README.md` is not
+// docs here): only an E2E run checks `tests/e2e/` and `playwright.config.js`, and
+// `package.json` and `package-lock.json` carry the dependencies and the entry point.
+const NEVER_SKIP_DIRS = ['tests/e2e/'];
+const NEVER_SKIP_FILES = new Set(['playwright.config.js', 'package.json', 'package-lock.json']);
+
 // Paths the app never loads, so a change to them alone cannot break an E2E run. Anything not
-// matched here is RUN: a new kind of file runs the suite until someone lists it. `tests/e2e/`
-// and `playwright.config.js` must never match, since only an E2E run checks them; nor must
-// `package.json` or `package-lock.json`, which carry the dependencies and the entry point.
+// matched here is RUN: a new kind of file runs the suite until someone lists it.
 const SKIP_DIRS = ['docs/', '.claude/', 'scripts/', '.husky/', 'prototypes/', 'tests/integration/'];
 const SKIP_FILES = new Set([
     'tests/feature-cache-harness.js',
@@ -52,9 +57,9 @@ const UNIT_TEST = /^tests\/[^/]+\.test\.js$/;
 
 /**
  * Decide whether the E2E suite must run for a set of changed paths. Returns true (RUN) if
- * ANY path is off the SKIP list; false (SKIP) only when every path is `*.md`, under a
- * `SKIP_DIRS` prefix, one of `SKIP_FILES`, a top-level unit test (`UNIT_TEST`), or the list
- * is empty. Conservative — an unrecognized path counts as runtime.
+ * ANY path is a never-skip path or off the SKIP list; false (SKIP) only when every path is
+ * `*.md`, under a `SKIP_DIRS` prefix, one of `SKIP_FILES`, a top-level unit test
+ * (`UNIT_TEST`), or the list is empty. Conservative — an unrecognized path counts as runtime.
  * @param {string[]} files
  * @returns {boolean}
  */
@@ -63,6 +68,7 @@ function classifyPaths(files) {
     return files.some((f) => {
         const p = (f || '').trim();
         if (!p) return false;
+        if (NEVER_SKIP_DIRS.some((dir) => p.startsWith(dir)) || NEVER_SKIP_FILES.has(p)) return true;
         if (p.endsWith('.md')) return false;
         if (SKIP_DIRS.some((dir) => p.startsWith(dir))) return false;
         if (SKIP_FILES.has(p)) return false;
@@ -133,7 +139,7 @@ if (require.main === module) {
             allFiles.push(...files);
         }
         if (classifyPaths(allFiles)) {
-            process.stderr.write('pre-push: runtime code changed — running E2E.\n');
+            process.stderr.write('pre-push: a path off the SKIP list changed — running E2E.\n');
             return 'RUN';
         }
         process.stderr.write('pre-push: no path the app loads changed — skipping E2E.\n');

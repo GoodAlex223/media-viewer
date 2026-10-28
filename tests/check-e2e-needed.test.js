@@ -52,15 +52,13 @@ describe('classifyPaths', () => {
         expect(classifyPaths(['docs/superpowers/specs/x.md', 'docs/planning/notes.txt'])).toBe(false);
     });
 
-    it('returns true (run) when any path is a JS source file', () => {
+    it('returns true (run) when an app file sits among docs paths', () => {
         expect(classifyPaths(['docs/planning/WEEKLY.md', 'media-viewer.js'])).toBe(true);
     });
 
-    it('returns true (run) for config/html/css runtime paths', () => {
+    it('returns true (run) for the page and its stylesheet', () => {
         expect(classifyPaths(['index.html'])).toBe(true);
         expect(classifyPaths(['styles.css'])).toBe(true);
-        expect(classifyPaths(['package.json'])).toBe(true);
-        expect(classifyPaths(['tests/e2e/navigation.test.js'])).toBe(true);
     });
 
     it('returns false (skip) for an empty list', () => {
@@ -103,6 +101,9 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
         'tests/e2e/navigation.test.js',
         'tests/e2e/helpers/electron-app.js',
         'tests/e2e/fixtures/hash-fixtures.js',
+        'tests/e2e/README.md',
+        'tests/e2e/fixtures/notes.md',
+        'tests/e2e/package.json',
         'tests/sub/nested.test.js',
         'tests/new-helper.js',
         'tests/integrationx/a.test.js',
