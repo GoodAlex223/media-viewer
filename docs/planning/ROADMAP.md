@@ -2,7 +2,7 @@
 
 Long-term vision, active themes, and releases.
 
-**Last Updated**: 2026-10-27 <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): v2 replaces the v2.0 release (v2 spec D1), the board follows the spec's § 14 build order, and two drained notes are added, by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
+**Last Updated**: 2026-10-28 <!-- Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28), so the v2 date moves to about May 2027. The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): v2 replaces the v2.0 release (v2 spec D1), the board follows the spec's § 14 build order, and two drained notes are added, by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
 
 ---
 
@@ -16,7 +16,7 @@ Make Media Viewer the most efficient tool for collecting, reviewing, rating and 
 
 **Phase**: v2 — modules and redesign ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md))
 **Focus**: Build v2 inside the working app, one shippable phase at a time (no rewrite), with the renderer shrinking in every phase and the 24k-folder gains held
-**Timeline**: Nov 2026 – end of Q1 2027 (soft); Q2 2027 more likely (spec § 14). The date assumes v2 takes the whole 🔵 share of each normal week (§ Releases, the v2 Target note)
+**Timeline**: Nov 2026 – about May 2027 (soft). The date assumes v2 takes ~12 SP of each normal week's 🔵 share (user ruling 2026-10-28; § Releases, the v2 Target note)
 
 ---
 
@@ -95,9 +95,9 @@ Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engin
 
 **Every phase** shows net `wc -l media-viewer.js` ≤ 0 in its PR (spec § 11.1), enforced by the blocking line ratchet once built. `media-viewer.js` was 11,529 lines at `e0b2a16` (2026-10-27).
 
-**Target**: end of Q1 2027 (soft), Q2 2027 more likely — about 131–136 SP nominal, with estimates historically ~1.9× low (spec § 14)
+**Target**: about May 2027 (soft) — about 131–136 SP nominal, with estimates historically ~1.9× low (spec § 14, whose end-of-Q1 date assumed the whole 🔵 share)
 
-> **The date assumes v2 takes the whole 🔵 share of every normal week**, about 17 SP (spec § 14: "At ~17 user-flagged SP per normal week, that is about 8 normal weeks"). Every 🔵 pick outside v2 moves it later, the drained follow-ups above included. v2's weekly share is still to be decided; it is decided before P1a is scheduled (WEEKLY.md Next Steps).
+> **The date assumes v2 takes ~12 SP of each normal week's ~17 user-flagged SP** (user ruling 2026-10-28, at Cleanup Week #5's planning: the "Most" option). The other ~5 SP stay for 🔵 picks outside v2, the drained follow-ups above included (the G5 ruling). The spec's end-of-Q1 date assumed the whole share (spec § 14: "At ~17 user-flagged SP per normal week, that is about 8 normal weeks"); at ~12 SP, the spec's own method (the ~1.9× slip, Cleanup Weeks included) gives about May 2027. A normal week that gives v2 less moves it later.
 
 ### v2.0 — Modularization ↪ Absorbed into v2 (2026-10-27)
 

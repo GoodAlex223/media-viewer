@@ -2,7 +2,7 @@
 
 Key targets with dates.
 
-**Last Updated**: 2026-10-27 <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): the v2 pilot and v2-complete milestones replace "v2.0 modularization complete", which is retired as absorbed into v2 (spec D1); the 24k scope note closed; the Health Summary's Count column dropped (derived counts). The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
+**Last Updated**: 2026-10-28 <!-- Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28): v2 complete moves to about May 2027, and the pilot, scaled the same way, to early January 2027 (the planner's call). The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): the v2 pilot and v2-complete milestones replace "v2.0 modularization complete", which is retired as absorbed into v2 (spec D1); the 24k scope note closed; the Health Summary's Count column dropped (derived counts). The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
 
 ---
 
@@ -20,7 +20,7 @@ Milestones are significant checkpoints. They should be:
 
 ### 🎯 v2 pilot: the module host and the `similarity` module (P1a + P1b)
 
-**Target Date**: mid-December 2026 (soft)
+**Target Date**: early January 2027 (soft)
 **Status**: ⬜ Not started — P1a's earliest week is Nov 2–6, after Cleanup Week #5
 
 **Definition of Done** ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 14 exit criteria):
@@ -37,11 +37,11 @@ Milestones are significant checkpoints. They should be:
 
 - P1a's Linux baseline is an unknown: WSL2 is a candidate for the Electron runs, not yet tried (spec § 15)
 - Estimates have run ~1.9× low; P1a (~11 SP) and P1b (~10 SP) can each fill more than a week
-- The date assumes P1a and P1b get the whole 🔵 share of their weeks; 🔵 picks outside v2 push it later
+- The date assumes P1a and P1b get ~12 SP of their weeks' 🔵 share (user ruling 2026-10-28, "Most"). It was mid-December at the whole share (~17 SP); scaled by 17/12, that is early January (the planner's call, 2026-10-28). A week that gives them less pushes it later
 
 ### 🎯 v2 complete
 
-**Target Date**: end of Q1 2027 (soft); Q2 2027 more likely (spec § 14)
+**Target Date**: about May 2027 (soft); the spec's end of Q1 assumed the whole 🔵 share (spec § 14)
 **Status**: 🟡 In Progress — P0 done 2026-10-27
 
 **Definition of Done**:
@@ -55,8 +55,8 @@ Milestones are significant checkpoints. They should be:
 
 **Risks**:
 
-- The date assumes v2 takes the whole 🔵 share of each normal week (~17 SP, spec § 14). User-flagged picks outside v2 (the sorting-session follow-ups kept in BACKLOG, for example) come out of the same share, so each one moves the date later. v2's weekly share is decided before P1a is scheduled
-- About 131–136 SP nominal; at the historical slip, about 20 calendar weeks with Cleanup Weeks included (spec § 14)
+- The date assumes v2 takes ~12 SP of each normal week's ~17 🔵 SP (user ruling 2026-10-28, "Most"), leaving ~5 SP for picks outside v2, such as the sorting-session follow-ups kept in BACKLOG. A normal week that gives v2 less moves the date later
+- About 131–136 SP nominal; at the historical slip, about 20 calendar weeks at the whole share (spec § 14), and about 28 at ~12 SP a week, with Cleanup Weeks included
 
 ---
 
@@ -64,19 +64,19 @@ Milestones are significant checkpoints. They should be:
 
 ```
 2026                                  2027
-Q3                 Q4                 Q1
+Q3                 Q4 / Q1            Q2
  │                  │                  │
  ▼                  ▼                  ▼
 [24k AI-sort] ✅   [v2 pilot]         [v2 complete]
-2026-07-20         mid-Dec 2026       end of Q1 2027 (soft)
+2026-07-20         early Jan 2027     ~May 2027 (soft)
                    P1a + P1b          P1a–P7
 ```
 
 | Milestone                     | Target Date                | Status                   |
 | ----------------------------- | -------------------------- | ------------------------ |
 | 24k AI-sort smooth end-to-end | July 2026                  | ✅ Complete (2026-07-20) |
-| v2 pilot (P1a + P1b)          | mid-December 2026 (soft)   | ⬜ Not started           |
-| v2 complete                   | end of Q1 2027 (soft)      | 🟡 In Progress           |
+| v2 pilot (P1a + P1b)          | early January 2027 (soft)  | ⬜ Not started           |
+| v2 complete                   | about May 2027 (soft)      | 🟡 In Progress           |
 | v2.0 modularization complete  | Q4 2026 (soft)             | ↪ Retired 2026-10-27     |
 
 ---
