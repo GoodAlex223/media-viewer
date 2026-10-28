@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import { createRequire } from 'module';
 import { execFileSync, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -225,6 +225,66 @@ describe('CLI on a real repo', { timeout: 30_000 }, () => {
         expect(git(decoy.repo, 'status', '--porcelain')).toBe('');
     });
 });
+
+// `.husky/pre-push` itself, with stub `node` (the gate) and `npx` (the E2E run) first on PATH. The stub
+// gate prints its canned answer only when it received git's ref lines, so the SKIP control also fails
+// if a hook step before the gate swallows stdin (the real gate would then see no refs and skip).
+const shAvailable = spawnSync('sh', ['-c', 'exit 0']).status === 0;
+describe.skipIf(!shAvailable)(
+    'the pre-push hook runs E2E unless the gate prints exactly SKIP',
+    { timeout: 30_000 },
+    () => {
+        const ROOT = fileURLToPath(new URL('..', import.meta.url));
+        const REFS = `refs/heads/x ${SHA_A} refs/heads/x ${SHA_B}`;
+        let bin;
+
+        beforeAll(() => {
+            bin = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-pre-push-'));
+            fs.writeFileSync(
+                path.join(bin, 'node'),
+                '#!/bin/sh\ninput=$(cat)\n' +
+                    'if [ "$input" = "$EXPECT_STDIN" ]; then printf "%s" "$STUB_OUT"; else printf STDIN-LOST; fi\n' +
+                    'exit "${STUB_EXIT:-0}"\n'
+            );
+            fs.writeFileSync(path.join(bin, 'npx'), '#!/bin/sh\necho "E2E-RAN $*"\n');
+        });
+        afterAll(() => {
+            try {
+                fs.rmSync(bin, { recursive: true, force: true });
+            } catch {
+                // a leaked temp dir is harmless
+            }
+        });
+
+        const runHook = (stubOut, stubExit = 0) => {
+            const env = { ...process.env, PATH: bin + path.delimiter + process.env.PATH };
+            Object.assign(env, { STUB_OUT: stubOut, STUB_EXIT: String(stubExit), EXPECT_STDIN: REFS });
+            delete env.SKIP;
+            return spawnSync('sh', ['.husky/pre-push', 'origin', 'url'], {
+                cwd: ROOT,
+                env,
+                input: `${REFS}\n`,
+                encoding: 'utf8',
+            });
+        };
+
+        it('skips E2E when the gate prints SKIP (control: the stubs reach the hook)', () => {
+            const result = runHook('SKIP');
+            expect(result.status).toBe(0);
+            expect(result.stdout).not.toContain('E2E-RAN');
+        });
+
+        it.each([
+            ['RUN', 0],
+            ['RUN', 1],
+            ['SKIP', 1],
+            ['', 0],
+            ['RUN\nwarning: something', 0],
+        ])('runs E2E when the gate prints %j and exits %i', (out, code) => {
+            expect(runHook(out, code).stdout).toContain('E2E-RAN playwright test');
+        });
+    }
+);
 
 // The SKIP list is safe only while nothing that runs E2E loads a file on it: a change to that
 // file alone would skip the suite that exercises it. Finds literal relative specifiers only —
