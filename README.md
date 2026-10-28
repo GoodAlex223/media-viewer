@@ -99,7 +99,7 @@ media_viewer/
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE). The libraries under `vendor/` keep their own licenses.
 
 ---
 
