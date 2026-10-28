@@ -248,15 +248,15 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 - Delete: `.mcp.json` (untracked), `.mcp.json.example`
 - Modify: `.claude/settings.local.json` (gitignored), `docs/planning/REVIEW-QUEUE.md` (after line 57)
 
-- [ ] **Step 1: Re-read `.mcp.json`, masking any value.** Confirm that `context7` is still its only server and that the `--api-key` argument is still empty. If either has changed, stop and ask: the user's approval covered the file as described.
-- [ ] **Step 2: Delete both files.** Remove `.mcp.json` (approved by the user 2026-10-28), then `git rm .mcp.json.example`.
-- [ ] **Step 3: Edit `.claude/settings.local.json`.** Remove the `disabledMcpjsonServers` key and keep `enabledPlugins`. Verify with `node -e "JSON.parse(require('fs').readFileSync('.claude/settings.local.json','utf8'))"`, which should exit 0.
-- [ ] **Step 4: Add the REVIEW-QUEUE correction.** Insert a new bullet beneath line 57, in the style of the 2026-10-27 one: `- _**Corrected 2026-10-28** (G1): Context7's \`.mcp.json\` server is retired. The local \`.mcp.json\` and the tracked \`.mcp.json.example\` are deleted, and \`disabledMcpjsonServers\` is gone from \`.claude/settings.local.json\`. The plugin copy stays off there and at user scope._`
-- [ ] **Step 5: Verify.**
+- [x] **Step 1: Re-read `.mcp.json`, masking any value.** Confirm that `context7` is still its only server and that the `--api-key` argument is still empty. If either has changed, stop and ask: the user's approval covered the file as described.
+- [x] **Step 2: Delete both files.** Remove `.mcp.json` (approved by the user 2026-10-28), then `git rm .mcp.json.example`.
+- [x] **Step 3: Edit `.claude/settings.local.json`.** Remove the `disabledMcpjsonServers` key and keep `enabledPlugins`. Verify with `node -e "JSON.parse(require('fs').readFileSync('.claude/settings.local.json','utf8'))"`, which should exit 0.
+- [x] **Step 4: Add the REVIEW-QUEUE correction.** Insert a new bullet beneath line 57, in the style of the 2026-10-27 one: `- _**Corrected 2026-10-28** (G1): Context7's \`.mcp.json\` server is retired. The local \`.mcp.json\` and the tracked \`.mcp.json.example\` are deleted, and \`disabledMcpjsonServers\` is gone from \`.claude/settings.local.json\`. The plugin copy stays off there and at user scope._`
+- [x] **Step 5: Verify.**
   - `git check-ignore -v .mcp.json` prints `.gitignore:1:.mcp.json`.
   - `test ! -e .mcp.json && test ! -e .mcp.json.example` passes.
   - `git grep -n "mcp.json.example"` hits only dated or frozen text: `DONE.md`, `docs/security/`, `docs/superpowers/`, `docs/archive/`, and the BACKLOG, TODO and WEEKLY entries that Closeout ticks.
-- [ ] **Step 6: Commit.** `git add docs/planning/REVIEW-QUEUE.md` (the deletion is already staged), then `git commit -m "chore: retire the unused Context7 MCP server"`.
+- [x] **Step 6: Commit.** `git add docs/planning/REVIEW-QUEUE.md` (the deletion is already staged), then `git commit -m "chore: retire the unused Context7 MCP server"`.
 
 ### Task 5: Add the LICENSE file
 
@@ -285,6 +285,7 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 - **Task 1** (SKIP list): RED 14 failed / 35 passed of 49, as planned; GREEN 49/49. Renamed the edited test to "returns true (run) for config/html/css runtime paths", since its one hook path left it. The constants' comment also names `package.json` and the lockfile as never-SKIP (Global Constraints). The pre-commit full run hit one unrelated load flake (`tests/path-grants.test.js`'s case-sensitive-folder test timed out at 5.6 s against 5 s: an `fsutil.exe` spawn under the parallel suite; it passes alone). The refused commit left its files staged, and the retry was green: 2,413 passed, 1 skipped (2,375 + 38).
 - **Task 2** (moved files): RED: the scripts/-only control printed SKIP, and both move tests printed SKIP (expected RUN). GREEN 52/52 with `--no-renames`; no `mv-e2e-gate-*` repo left in the temp folder. The CLI is spawned with `process.execPath` rather than `'node'`, so the test runs the same Node as Vitest. `CLAUDE.md:31` and `PROJECT.md:65` updated; no other live file says "docs-only".
 - **Task 3** (guard): both tests passed on first run (54/54), as planned; the tree has no offender. Mutation (a), the helper returning `[]`, failed the control with all three entries missing; mutation (b), no `/x.js` probe, lost only `main.js → scripts`. Both reverted. Beyond the plan: a temporary intent-to-add `tests/e2e/zz-guard-probe.js` requiring `../../scripts/check-secrets.js` failed the real-tree test (`tests/e2e/zz-guard-probe.js → scripts/check-secrets.js`), which shows the `git ls-files` → filter → read path can fail too; the probe was removed. The real-tree test also asserts that it scanned more than 20 files, so an empty file list cannot pass it. The CLI tests' git helper now passes `-c core.autocrlf=false`, which silences the LF→CRLF warnings the system config printed into every pre-commit run.
+- **Task 4** (Context7): re-read `.mcp.json` with values masked: `context7` was still its only server, with an empty `--api-key`, so the approval held. Deleted it and `git rm`'d `.mcp.json.example`. `.claude/settings.local.json` now holds only `enabledPlugins` (parses). REVIEW-QUEUE correction added at line 58. `git check-ignore -v .mcp.json` → `.gitignore:1:.mcp.json`. The remaining `mcp.json.example` hits are dated or frozen (the 2026-06-11 audit in `docs/archive/`, `docs/security/` and `docs/superpowers/specs/`, `DONE.md`, this plan, and the BACKLOG and WEEKLY entries closeout ticks), plus the `.mcp.json.example → RUN` test row, which tests a path string, not the file.
 
 ---
 
