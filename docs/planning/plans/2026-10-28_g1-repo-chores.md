@@ -215,17 +215,17 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 - Consumes: Task 1's SKIP list (`scripts/` must be SKIP for the RED below).
 - Produces: none for later tasks.
 
-- [ ] **Step 1: Write the failing tests.** Add a `describe('CLI on a real repo', { timeout: 30_000 }, …)`. A helper builds a repo under `fs.mkdtempSync(path.join(os.tmpdir(), 'mv-e2e-gate-'))`: `git init -q`, then write `main.js`, `scripts/a.js` and `docs/a.md` (each a few lines), then commit with `git -c user.name=t -c user.email=t@t commit -qm base`. A `decide(repo, base, head)` helper runs `spawnSync('node', [SCRIPT], { cwd: repo, input: \`refs/heads/x ${head} refs/heads/x ${base}\n\`, encoding: 'utf8' })`, where `SCRIPT` is `fileURLToPath(new URL('../scripts/check-e2e-needed.js', import.meta.url))`. A non-zero remote SHA makes the CLI diff against it, so no `origin` is needed. Remove each repo in `afterEach` with `fs.rmSync(dir, { recursive: true, force: true })`. Three tests:
+- [x] **Step 1: Write the failing tests.** Add a `describe('CLI on a real repo', { timeout: 30_000 }, …)`. A helper builds a repo under `fs.mkdtempSync(path.join(os.tmpdir(), 'mv-e2e-gate-'))`: `git init -q`, then write `main.js`, `scripts/a.js` and `docs/a.md` (each a few lines), then commit with `git -c user.name=t -c user.email=t@t commit -qm base`. A `decide(repo, base, head)` helper runs `spawnSync('node', [SCRIPT], { cwd: repo, input: \`refs/heads/x ${head} refs/heads/x ${base}\n\`, encoding: 'utf8' })`, where `SCRIPT` is `fileURLToPath(new URL('../scripts/check-e2e-needed.js', import.meta.url))`. A non-zero remote SHA makes the CLI diff against it, so no `origin` is needed. Remove each repo in `afterEach` with `fs.rmSync(dir, { recursive: true, force: true })`. Three tests:
   - `'prints SKIP for a push that changes only scripts/ (control: the CLI can skip)'`: edit `scripts/a.js` and commit. Expect `stdout === 'SKIP'` and `stderr` to contain `skipping E2E`.
   - `'prints RUN when a runtime file moves into scripts/'`: `git mv main.js scripts/main.js` and commit. Expect `stdout === 'RUN'`.
   - `'prints RUN when a runtime file moves into docs/'`: `git mv main.js docs/main.js` and commit. Expect `stdout === 'RUN'`.
-- [ ] **Step 2: Run them and see them fail.** Expect both move tests to FAIL with `stdout` `SKIP`, and the control to PASS. If the control fails too, the harness is broken: fix that first, because a CLI that never prints SKIP would make the move tests pass vacuously.
-- [ ] **Step 3: Implement.** Add `'--no-renames'` to the `git diff --name-only` arguments in `changedFilesForRef`, with a one-line comment saying a rename otherwise lists only its new path, so a runtime file moved into a SKIP area would skip.
-- [ ] **Step 4: Run them and see them pass.** Expect PASS: 52 tests in the file.
-- [ ] **Step 5: Update the live docs.**
+- [x] **Step 2: Run them and see them fail.** Expect both move tests to FAIL with `stdout` `SKIP`, and the control to PASS. If the control fails too, the harness is broken: fix that first, because a CLI that never prints SKIP would make the move tests pass vacuously.
+- [x] **Step 3: Implement.** Add `'--no-renames'` to the `git diff --name-only` arguments in `changedFilesForRef`, with a one-line comment saying a rename otherwise lists only its new path, so a runtime file moved into a SKIP area would skip.
+- [x] **Step 4: Run them and see them pass.** Expect PASS: 52 tests in the file.
+- [x] **Step 5: Update the live docs.**
   - `CLAUDE.md:31`: replace `(SKIP only when EVERY changed path is \`*.md\` or under \`docs/\`; any failure falls back to RUN)` with `(SKIP only when every changed path, a moved file's old path included, is one the app never loads: \`*.md\`, \`docs/\`, \`.claude/\`, \`scripts/\`, \`.husky/\`, \`prototypes/\`, the top-level unit tests and their two harnesses, \`tests/integration/\`, and the Vitest, ESLint and Prettier configs, never \`tests/e2e/\` or \`playwright.config.js\`; any failure falls back to RUN)`.
   - `PROJECT.md:65`: `(skipped for docs-only pushes)` becomes `(skipped when a push changes only paths the app never loads)`.
-- [ ] **Step 6: Commit.** `git add scripts/check-e2e-needed.js tests/check-e2e-needed.test.js CLAUDE.md PROJECT.md`, then `git commit -m "fix(scripts): count both paths of a moved file in the pre-push E2E gate"`.
+- [x] **Step 6: Commit.** `git add scripts/check-e2e-needed.js tests/check-e2e-needed.test.js CLAUDE.md PROJECT.md`, then `git commit -m "fix(scripts): count both paths of a moved file in the pre-push E2E gate"`.
 
 ### Task 3: Guard — nothing a RUN path loads is on the SKIP list
 
@@ -282,7 +282,8 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 ### 2026-10-28 — PHASE: Execution (Native)
 
 - Ledger: `.superpowers/sdd/2026-10-28_g1-repo-chores/progress.md` (git-ignored). The whole-branch review is not run in this session: `max`, in a separate session, asked first.
-- **Task 1** (SKIP list): RED 14 failed / 35 passed of 49, as planned; GREEN 49/49. Renamed the edited test to "returns true (run) for config/html/css runtime paths", since its one hook path left it. The constants' comment also names `package.json` and the lockfile as never-SKIP (Global Constraints).
+- **Task 1** (SKIP list): RED 14 failed / 35 passed of 49, as planned; GREEN 49/49. Renamed the edited test to "returns true (run) for config/html/css runtime paths", since its one hook path left it. The constants' comment also names `package.json` and the lockfile as never-SKIP (Global Constraints). The pre-commit full run hit one unrelated load flake (`tests/path-grants.test.js`'s case-sensitive-folder test timed out at 5.6 s against 5 s: an `fsutil.exe` spawn under the parallel suite; it passes alone). The refused commit left its files staged, and the retry was green: 2,413 passed, 1 skipped (2,375 + 38).
+- **Task 2** (moved files): RED: the scripts/-only control printed SKIP, and both move tests printed SKIP (expected RUN). GREEN 52/52 with `--no-renames`; no `mv-e2e-gate-*` repo left in the temp folder. The CLI is spawned with `process.execPath` rather than `'node'`, so the test runs the same Node as Vitest. `CLAUDE.md:31` and `PROJECT.md:65` updated; no other live file says "docs-only".
 
 ---
 
@@ -301,6 +302,7 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 | Force RUN when the push changes `scripts/check-e2e-needed.js` itself | the new gate judges its own push; a bug that wrongly SKIPs would let a runtime change in that same push through | XS | L |
 | Name the path that forced RUN in the stderr note | today it says only "runtime code changed"; naming the path shows the user why a push waits, and which file to add to the list | XS | L |
 | Add `LICENSE`, `.vscode/`, `.superpowers/`, `.gitignore` and `.gitattributes` to the SKIP list | none is loaded by the app; left RUN in G1 to keep the list to what the plan named | XS | L |
+| Give `tests/path-grants.test.js`'s case-sensitive-folder test a longer timeout (🟤) | it spawns `fsutil.exe`, and under the parallel pre-commit run it took 5.6 s against Vitest's 5 s default, which refused a G1 commit (2026-10-28); it passes alone. Measure its spawn time under load before choosing a figure | XS | L |
 
 ### Spawned Tasks
 

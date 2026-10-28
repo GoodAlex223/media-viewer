@@ -94,7 +94,9 @@ if (require.main === module) {
             // Explicit maxBuffer, matching check-secrets.js: the default 1 MB can truncate a
             // wide-ranging push's file list, and execFileSync throws ENOBUFS rather than
             // returning short — which this catch turns into a fail-safe RUN, not a silent SKIP.
-            return execFileSync('git', ['diff', '--name-only', base, ref.localSha], {
+            // `--no-renames`: a rename otherwise lists only its new path, so a runtime file moved
+            // into a SKIP area (`git mv main.js docs/`) would skip.
+            return execFileSync('git', ['diff', '--name-only', '--no-renames', base, ref.localSha], {
                 encoding: 'utf8',
                 maxBuffer: 64 * 1024 * 1024,
             })

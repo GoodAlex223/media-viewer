@@ -62,7 +62,7 @@ npm run lint          # ESLint (lint:fix to auto-fix)
 npm run format        # Prettier (format:check to verify only)
 # No type checking (plain JavaScript)
 # Husky pre-commit: secret scan -> docs-index guard -> CLAUDE.md size warning (never blocks) -> lint-staged -> unit tests
-# Husky pre-push: conditional E2E (skipped for docs-only pushes)
+# Husky pre-push: conditional E2E (skipped when a push changes only paths the app never loads)
 # Per-check bypass: SKIP=<check> git commit|push — secrets, docs-index, lint-staged, vitest | e2e (see CLAUDE.md)
 ```
 
