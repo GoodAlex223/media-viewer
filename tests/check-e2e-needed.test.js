@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { createRequire } from 'module';
 import { execFileSync, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -143,89 +143,103 @@ const gitEnv = () => {
     delete env.GIT_WORK_TREE;
     return env;
 };
-// git in a temp repo, with an identity and LF line endings.
+// git in a temp repo: an identity, LF line endings, and no commit signing, which a user's global config
+// may turn on (a missing signer fails the commit; a prompting one hangs this synchronous call).
+const GIT_CONFIG = [
+    '-c',
+    'user.name=t',
+    '-c',
+    'user.email=t@t',
+    '-c',
+    'core.autocrlf=false',
+    '-c',
+    'commit.gpgsign=false',
+];
 const git = (repo, ...args) =>
-    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'core.autocrlf=false', ...args], {
-        cwd: repo,
-        encoding: 'utf8',
-        env: gitEnv(),
-    }).trim();
+    execFileSync('git', [...GIT_CONFIG, ...args], { cwd: repo, encoding: 'utf8', env: gitEnv() }).trim();
 
-// The CLI against a throwaway repo: what `git diff` lists for a moved file, which no pure test can show.
+// The CLI against one throwaway repo with a straight history: what `git diff` lists for a moved file,
+// and the base a new branch diffs against, which no pure test can show.
 describe('CLI on a real repo', { timeout: 30_000 }, () => {
     const SCRIPT = fileURLToPath(new URL('../scripts/check-e2e-needed.js', import.meta.url));
-    const repos = [];
+    const sha = {};
+    let repo;
 
-    const commit = (repo, message) => {
+    const commit = (message) => {
         git(repo, 'add', '-A');
         git(repo, 'commit', '-qm', message);
         return git(repo, 'rev-parse', 'HEAD');
     };
-    const makeRepo = () => {
-        const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-e2e-gate-'));
-        repos.push(repo);
-        git(repo, 'init', '-q');
-        fs.mkdirSync(path.join(repo, 'scripts'));
-        fs.mkdirSync(path.join(repo, 'docs'));
-        fs.writeFileSync(path.join(repo, 'main.js'), "console.log('app');\nmodule.exports = {};\n");
-        fs.writeFileSync(path.join(repo, 'scripts', 'a.js'), "console.log('a');\n");
-        fs.writeFileSync(path.join(repo, 'docs', 'a.md'), '# A\n');
-        return { repo, base: commit(repo, 'base') };
-    };
-    // A non-zero remote SHA makes the CLI diff against it, so the repo needs no `origin`.
-    const decide = (repo, base, head) =>
-        spawnSync(process.execPath, [SCRIPT], {
+    // The CLI on one ref line. A decision always exits 0: the hook reads only the printed token.
+    const decide = (head, remote) => {
+        const result = spawnSync(process.execPath, [SCRIPT], {
             cwd: repo,
-            input: `refs/heads/x ${head} refs/heads/x ${base}\n`,
+            input: `refs/heads/x ${head} refs/heads/x ${remote}\n`,
             encoding: 'utf8',
             env: gitEnv(),
         });
+        expect(result.status).toBe(0);
+        return result;
+    };
 
-    afterEach(() => {
-        for (const dir of repos.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+    beforeAll(() => {
+        repo = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-e2e-gate-'));
+        git(repo, 'init', '-q');
+        fs.mkdirSync(path.join(repo, 'scripts'));
+        fs.mkdirSync(path.join(repo, 'docs'));
+        fs.writeFileSync(path.join(repo, 'main.js'), "console.log('main');\n");
+        fs.writeFileSync(path.join(repo, 'app.js'), "console.log('app');\n");
+        fs.writeFileSync(path.join(repo, 'scripts', 'a.js'), "console.log('a');\n");
+        fs.writeFileSync(path.join(repo, 'docs', 'a.md'), '# A\n');
+        sha.base = commit('base');
+        fs.appendFileSync(path.join(repo, 'scripts', 'a.js'), "console.log('b');\n");
+        sha.script = commit('edit a script');
+        git(repo, 'mv', 'main.js', 'scripts/main.js');
+        sha.intoScripts = commit('move main.js into scripts/');
+        git(repo, 'mv', 'app.js', 'docs/app.js');
+        sha.intoDocs = commit('move app.js into docs/');
+        // What a new branch's push diffs against: its merge-base with origin/main.
+        git(repo, 'update-ref', 'refs/remotes/origin/main', sha.base);
+    });
+    afterAll(() => {
+        try {
+            fs.rmSync(repo, { recursive: true, force: true });
+        } catch {
+            // Windows can briefly hold a .git pack handle; a leaked temp dir is harmless.
+        }
     });
 
     it('prints SKIP for a push that changes only scripts/ (control: the CLI can skip)', () => {
-        const { repo, base } = makeRepo();
-        fs.appendFileSync(path.join(repo, 'scripts', 'a.js'), "console.log('b');\n");
-        const result = decide(repo, base, commit(repo, 'edit a script'));
+        const result = decide(sha.script, sha.base);
         expect(result.stdout).toBe('SKIP');
         expect(result.stderr).toContain('skipping E2E');
     });
 
     it('prints RUN when a runtime file moves into scripts/', () => {
-        const { repo, base } = makeRepo();
-        git(repo, 'mv', 'main.js', 'scripts/main.js');
-        expect(decide(repo, base, commit(repo, 'move main into scripts')).stdout).toBe('RUN');
+        expect(decide(sha.intoScripts, sha.script).stdout).toBe('RUN');
     });
 
     it('prints RUN when a runtime file moves into docs/', () => {
-        const { repo, base } = makeRepo();
-        git(repo, 'mv', 'main.js', 'docs/main.js');
-        expect(decide(repo, base, commit(repo, 'move main into docs')).stdout).toBe('RUN');
+        expect(decide(sha.intoDocs, sha.intoScripts).stdout).toBe('RUN');
     });
 
-    // A worktree's pre-commit hook exports both as absolute paths (measured, git 2.38).
-    it('keeps every git call in its temp repo when a hook exports GIT_DIR and GIT_INDEX_FILE', () => {
-        const decoy = makeRepo();
-        const planted = {
-            GIT_DIR: path.join(decoy.repo, '.git'),
-            GIT_INDEX_FILE: path.join(decoy.repo, '.git', 'index'),
-        };
-        const saved = Object.fromEntries(Object.keys(planted).map((k) => [k, process.env[k]]));
-        Object.assign(process.env, planted);
+    it('diffs a new branch (all-zero remote SHA) against its merge-base with origin/main', () => {
+        expect(decide(sha.script, ZEROS).stdout).toBe('SKIP');
+        expect(decide(sha.intoScripts, ZEROS).stdout).toBe('RUN');
+    });
+
+    // A worktree's pre-commit hook exports both as absolute paths (measured, git 2.38). Pointed at a
+    // folder that holds no repo, either one inherited makes git fail.
+    it('keeps its git calls off the GIT_DIR and GIT_INDEX_FILE a hook exports', () => {
+        const nowhere = path.join(repo, 'no-such-dir', '.git');
+        vi.stubEnv('GIT_DIR', nowhere);
+        vi.stubEnv('GIT_INDEX_FILE', path.join(nowhere, 'index'));
         try {
-            const { repo, base } = makeRepo();
-            fs.appendFileSync(path.join(repo, 'scripts', 'a.js'), "console.log('b');\n");
-            expect(decide(repo, base, commit(repo, 'edit a script')).stdout).toBe('SKIP');
+            expect(git(repo, 'rev-parse', 'HEAD')).toBe(sha.intoDocs);
+            expect(decide(sha.script, sha.base).stdout).toBe('SKIP');
         } finally {
-            for (const [k, v] of Object.entries(saved)) {
-                if (v === undefined) delete process.env[k];
-                else process.env[k] = v;
-            }
+            vi.unstubAllEnvs();
         }
-        expect(git(decoy.repo, 'rev-parse', 'HEAD')).toBe(decoy.base);
-        expect(git(decoy.repo, 'status', '--porcelain')).toBe('');
     });
 });
 
