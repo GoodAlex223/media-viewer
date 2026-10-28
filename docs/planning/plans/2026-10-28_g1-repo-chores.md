@@ -4,7 +4,7 @@
 
 **Task Reference**: [WEEKLY.md § G1](../WEEKLY.md#g1-repo-chores-batch---repo-tooling--3-sp) · TODO 🟠 "Skip the pre-push E2E run when a push changes only paths the app never loads" (option 1 of BACKLOG 🔵 [2026-10-26] "Cut the pre-push E2E gate's cost: 10–12 min on every push that touches a non-docs file") · BACKLOG 🔵 [2026-10-28] "Retire the unused Context7 MCP server from `.mcp.json` and `.mcp.json.example`" · BACKLOG 🔵 [2026-10-22] "Add a LICENSE file (MIT, as `package.json` already declares)"
 **Created**: 2026-10-28
-**Status**: Approved — execute Native (user, 2026-10-28)
+**Status**: Executed (Native, 2026-10-28) — awaiting the push (E2E), PR and review
 **Last Updated**: 2026-10-28
 
 **Goal:** A push that changes only paths the app never loads skips the 10–12 min E2E run; the unused Context7 configuration is gone; the repo has a LICENSE file.
@@ -41,12 +41,12 @@
 **Context**: PR #89 ran the 231-test suite (10–12 min) three times. Two of those runs changed only files the app never loads: `.claude/hooks/`, a unit test and the plan. G2's and G5's pushes this week are the same kind of change.
 
 **Success Criteria**:
-- [ ] Every class on the SKIP list skips, and a near-miss for each class runs (Task 1).
-- [ ] A runtime file moved into `scripts/` or `docs/` runs E2E. A push that changes only `scripts/` skips, which shows the CLI can print SKIP at all (Task 2).
-- [ ] No RUN-classified tracked file imports a SKIP-classified one, and the guard flags a planted import (Task 3).
-- [ ] Run over this branch's own history, the CLI prints SKIP for the range through Task 3 and RUN for the whole branch (§ 7).
-- [ ] `.mcp.json` and `.mcp.json.example` are gone, and `.gitignore:1` still ignores `.mcp.json` (Task 4).
-- [ ] `LICENSE` matches GitHub's MIT template with the ruled copyright line, and README links to it (Task 5).
+- [x] Every class on the SKIP list skips, and a near-miss for each class runs (Task 1).
+- [x] A runtime file moved into `scripts/` or `docs/` runs E2E. A push that changes only `scripts/` skips, which shows the CLI can print SKIP at all (Task 2).
+- [x] No RUN-classified tracked file imports a SKIP-classified one, and the guard flags a planted import (Task 3).
+- [x] Run over this branch's own history, the CLI prints SKIP for the range through Task 3 and RUN for the whole branch (§ 7).
+- [x] `.mcp.json` and `.mcp.json.example` are gone, and `.gitignore:1` still ignores `.mcp.json` (Task 4).
+- [x] `LICENSE` matches GitHub's MIT template with the ruled copyright line, and README links to it (Task 5).
 
 ---
 
@@ -320,23 +320,29 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 
 ### Test Plan
 
-- [ ] Unit: Tasks 1–3 (both ways per class, CLI on a real repo, guard with its planted control)
-- [ ] Full `npx vitest run` from `C:/Users/alexm/Projects/media_viewer`: expect 49 files, and 2,375 + 43 = 2,418 passed, 1 skipped (Task 1 adds 38, Task 2 adds 3, Task 3 adds 2). Check the count, not just the exit code
-- [ ] `npm run lint`; `npx prettier --check scripts/check-e2e-needed.js tests/check-e2e-needed.test.js`; `node scripts/check-docs-index.js`
-- [ ] **Dogfood, both ways, on this branch's history.** `printf "refs/heads/g1-repo-chores <Task-3 SHA> refs/heads/g1-repo-chores $(git rev-parse origin/main)\n" | node scripts/check-e2e-needed.js` should print `SKIP`. The same with `HEAD` should print `RUN`, because Task 4 deletes `.mcp.json.example` and Task 5 adds `LICENSE`
+- [x] Unit: Tasks 1–3 (both ways per class, CLI on a real repo, guard with its planted control)
+- [x] Full `npx vitest run` from `C:/Users/alexm/Projects/media_viewer`: expect 49 files, and 2,375 + 43 = 2,418 passed, 1 skipped (Task 1 adds 38, Task 2 adds 3, Task 3 adds 2). Check the count, not just the exit code
+- [x] `npm run lint`; `npx prettier --check scripts/check-e2e-needed.js tests/check-e2e-needed.test.js`; `node scripts/check-docs-index.js`
+- [x] **Dogfood, both ways, on this branch's history.** `printf "refs/heads/g1-repo-chores <Task-3 SHA> refs/heads/g1-repo-chores $(git rev-parse origin/main)\n" | node scripts/check-e2e-needed.js` should print `SKIP`. The same with `HEAD` should print `RUN`, because Task 4 deletes `.mcp.json.example` and Task 5 adds `LICENSE`
 - [ ] Push: the hook prints RUN and the full E2E suite passes. If only the known flake fails (TODO 🟠 "Ctrl+A undo restores the previous pair after a pick", G2's item), re-push once and record it here
 
 ### Test Results
 
 | Test | Result | Notes |
 |------|--------|-------|
-| | | |
+| `tests/check-e2e-needed.test.js` | 55/55 | 11 → 55: Task 1 +38, Task 2 +3, Task 3 +2, plus 1 for the hook-environment fix (`acd19e0`), which the plan did not foresee |
+| Full `npx vitest run` (pre-commit of `4d05359`) | 49 files; 2,419 passed, 1 skipped | the plan expected 2,418; the +1 is the hook-environment test. One unrelated load flake (path-grants, § 4) refused the first Task 1 commit |
+| `npm run lint` | 0 errors, 2 warnings | both pre-existing `no-shadow` warnings in files this branch does not touch (`tests/media-viewer-utils.test.js:3417`, `tests/ml-model.test.js:284`) |
+| `npx prettier --check` (script + test) | clean | |
+| `node scripts/check-docs-index.js` | exit 0 | |
+| Dogfood vs `origin/main` `a3d00e8` | `c4e9411` (Task 3) → SKIP; HEAD → RUN | stderr "no path the app loads changed" / "runtime code changed"; HEAD's RUN comes from `.mcp.json.example` and `LICENSE`, the only RUN paths in the range |
+| Push (pre-push E2E) | pending | needs the user's approval |
 
 ---
 
 ## 8. Review
 
-- [ ] Self-review complete
+- [x] Self-review complete
 - [ ] Code review in a separate session at `max`
 - [ ] User approved
 

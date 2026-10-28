@@ -78,7 +78,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| [2026-10-28_g1-repo-chores.md](2026-10-28_g1-repo-chores.md) | G1 Repo chores (Cleanup Week #5) | Planning |
+| [2026-10-28_g1-repo-chores.md](2026-10-28_g1-repo-chores.md) | G1 Repo chores (Cleanup Week #5) | Executed — awaiting push, PR and review |
 
 <!-- 2026-10-26 (Group G3 closeout): 2026-10-26_g3-zoom-manager-extraction.md left this table on archive.
      Merged `082e3b2` via PR #90, moved to docs/archive/plans/ with `git mv`, and indexed in
