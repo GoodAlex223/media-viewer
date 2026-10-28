@@ -138,7 +138,7 @@ describe('CLI on a real repo', { timeout: 30_000 }, () => {
     const repos = [];
 
     const git = (repo, ...args) =>
-        execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], {
+        execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'core.autocrlf=false', ...args], {
             cwd: repo,
             encoding: 'utf8',
         }).trim();
@@ -188,5 +188,50 @@ describe('CLI on a real repo', { timeout: 30_000 }, () => {
         const { repo, base } = makeRepo();
         git(repo, 'mv', 'main.js', 'docs/main.js');
         expect(decide(repo, base, commit(repo, 'move main into docs')).stdout).toBe('RUN');
+    });
+});
+
+// The SKIP list is safe only while nothing that runs E2E loads a file on it: a change to that
+// file alone would skip the suite that exercises it. Finds literal relative specifiers only —
+// a path built from separate parts (`path.join(__dirname, 'scripts', name)`) is not seen.
+const findSkipListImports = (files) => {
+    const found = [];
+    for (const file of files) {
+        const specs = new Set([...file.source.matchAll(/(['"`])(\.\.?\/[^'"`\s]*)\1/g)].map((m) => m[2]));
+        if (file.path.endsWith('.html')) {
+            for (const m of file.source.matchAll(/\b(?:src|href)="([^"]*)"/g)) {
+                if (!/[:#]/.test(m[1])) specs.add(m[1]);
+            }
+        }
+        for (const spec of specs) {
+            const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file.path), spec));
+            // The `/x.js` probe catches a SKIP folder named without its trailing slash (`'./scripts'`).
+            if (!classifyPaths([resolved]) || !classifyPaths([resolved + '/x.js'])) {
+                found.push(`${file.path} → ${resolved}`);
+            }
+        }
+    }
+    return found;
+};
+
+describe('guard: nothing a RUN path loads is on the SKIP list', () => {
+    it('flags a planted import of a SKIP path (control)', () => {
+        expect(
+            findSkipListImports([
+                { path: 'tests/e2e/a.test.js', source: "const x = require('../../scripts/x.js');" },
+                { path: 'index.html', source: '<script src="scripts/x.js"></script>' },
+                { path: 'main.js', source: "path.join(__dirname, './scripts')" },
+            ])
+        ).toEqual(['tests/e2e/a.test.js → scripts/x.js', 'index.html → scripts/x.js', 'main.js → scripts']);
+    });
+
+    it('no tracked file that runs E2E imports a file on the SKIP list', () => {
+        const root = fileURLToPath(new URL('..', import.meta.url));
+        const files = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
+            .split('\0')
+            .filter((p) => p && classifyPaths([p]) && /\.(c|m)?js$|\.html$/.test(p) && !p.startsWith('vendor/'))
+            .map((p) => ({ path: p, source: fs.readFileSync(path.join(root, p), 'utf8') }));
+        expect(files.length).toBeGreaterThan(20);
+        expect(findSkipListImports(files)).toEqual([]);
     });
 });
