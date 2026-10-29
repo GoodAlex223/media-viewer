@@ -303,27 +303,33 @@ describe.skipIf(!shAvailable)(
     }
 );
 
-// The SKIP list is safe only while nothing that runs E2E loads a file on it: a change to that
-// file alone would skip the suite that exercises it. Finds literal relative specifiers only —
-// a path built from separate parts (`path.join(__dirname, 'scripts', name)`) is not seen.
+// The SKIP list is safe only while nothing that runs E2E loads a file on it: a change to that file
+// alone would skip the suite that exercises it. This checks quoted literals that look like paths (no
+// space or `:`; a leading `./` or `../`, or a `/` inside), including html `src`/`href` values. A
+// relative one is resolved from the file's folder and from the repo root, the cwd of Playwright and
+// `npm start`; any other is resolved from the root, as `path.join(__dirname, 'scripts/x.js')` in a
+// root file is. Each resolved path is tried lower-cased (Windows matches either case, and every SKIP
+// rule is lower-case), with `.js` added (an extensionless require) and as a folder (`'./scripts'`).
+// Backslashes count as slashes. Not seen: a path built from separate parts
+// (`path.join(__dirname, 'scripts', name)`).
 const findSkipListImports = (files) => {
-    const found = [];
+    const found = new Set();
     for (const file of files) {
-        const specs = new Set([...file.source.matchAll(/(['"`])(\.\.?\/[^'"`\s]*)\1/g)].map((m) => m[2]));
-        if (file.path.endsWith('.html')) {
-            for (const m of file.source.matchAll(/\b(?:src|href)="([^"]*)"/g)) {
-                if (!/[:#]/.test(m[1])) specs.add(m[1]);
-            }
-        }
-        for (const spec of specs) {
-            const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file.path), spec));
-            // The `/x.js` probe catches a SKIP folder named without its trailing slash (`'./scripts'`).
-            if (!classifyPaths([resolved]) || !classifyPaths([resolved + '/x.js'])) {
-                found.push(`${file.path} → ${resolved}`);
-            }
+        for (const m of file.source.matchAll(/(['"`])([^'"`\s:]+)\1/g)) {
+            const spec = m[2].replace(/\\+/g, '/');
+            const relative = /^\.\.?\//.test(spec);
+            if (!relative && !spec.includes('/')) continue;
+            const bases = relative ? [path.posix.dirname(file.path), '.'] : ['.'];
+            const hit = bases
+                .map((base) => path.posix.normalize(path.posix.join(base, spec)))
+                .find((p) => {
+                    const lc = p.toLowerCase();
+                    return [lc, `${lc}.js`, `${lc}/x.js`].some((v) => !classifyPaths([v]));
+                });
+            if (hit) found.add(`${file.path} → ${hit}`);
         }
     }
-    return found;
+    return [...found];
 };
 
 // Every tracked RUN-classified .js/.cjs/.mjs/.html file outside vendor/, with its index copy: inside the
@@ -356,14 +362,33 @@ const readTrackedRunSources = (root, env = process.env) => {
 };
 
 describe('guard: nothing a RUN path loads is on the SKIP list', { timeout: 30_000 }, () => {
-    it('flags a planted import of a SKIP path (control)', () => {
+    // One planted literal per form the helper resolves; each row is the only one its check catches.
+    it('flags a planted import of a SKIP path in each form it resolves (control)', () => {
         expect(
             findSkipListImports([
                 { path: 'tests/e2e/a.test.js', source: "const x = require('../../scripts/x.js');" },
                 { path: 'index.html', source: '<script src="scripts/x.js"></script>' },
                 { path: 'main.js', source: "path.join(__dirname, './scripts')" },
+                { path: 'tests/e2e/b.test.js', source: "require('../hash-pool-harness.js')" },
+                { path: 'tests/e2e/c.test.js', source: 'require(`../../docs/y.js`)' },
+                { path: 'tests/e2e/d.test.js', source: "require('../feature-cache-harness')" },
+                { path: 'tests/e2e/e.test.js', source: String.raw`require('..\\..\\.claude\\z.js')` },
+                { path: 'tests/e2e/f.test.js', source: "require('../../Prototypes/w.js')" },
+                { path: 'tests/e2e/g.test.js', source: "fs.readFileSync('./tests/integration/x.json')" },
+                { path: 'app-protocol.js', source: "path.join(__dirname, '.husky/v')" },
             ])
-        ).toEqual(['tests/e2e/a.test.js → scripts/x.js', 'index.html → scripts/x.js', 'main.js → scripts']);
+        ).toEqual([
+            'tests/e2e/a.test.js → scripts/x.js',
+            'index.html → scripts/x.js',
+            'main.js → scripts',
+            'tests/e2e/b.test.js → tests/hash-pool-harness.js',
+            'tests/e2e/c.test.js → docs/y.js',
+            'tests/e2e/d.test.js → tests/feature-cache-harness',
+            'tests/e2e/e.test.js → .claude/z.js',
+            'tests/e2e/f.test.js → Prototypes/w.js',
+            'tests/e2e/g.test.js → tests/integration/x.json',
+            'app-protocol.js → .husky/v',
+        ]);
     });
 
     it('reads tracked files from the index, so one deleted on disk but not staged cannot fail it', () => {
@@ -388,9 +413,17 @@ describe('guard: nothing a RUN path loads is on the SKIP list', { timeout: 30_00
         }
     });
 
-    it('no tracked file that runs E2E imports a file on the SKIP list', () => {
+    it('no tracked RUN file names a SKIP path in a literal the helper resolves', () => {
         const files = readTrackedRunSources(fileURLToPath(new URL('..', import.meta.url)));
         expect(files.length).toBeGreaterThan(20);
         expect(findSkipListImports(files)).toEqual([]);
+    });
+
+    // `UNIT_TEST` and `tests/integration/` may skip only because Playwright collects nothing outside
+    // tests/e2e/: a second `testDir` (a project's own) or a wider one would make them E2E tests.
+    it('Playwright collects tests from tests/e2e/ only', () => {
+        const config = fs.readFileSync(new URL('../playwright.config.js', import.meta.url), 'utf8');
+        expect(config.match(/testDir/g)).toHaveLength(1);
+        expect(config).toMatch(/^\s*testDir: '\.\/tests\/e2e',$/m);
     });
 });
