@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_     | —                                      |
+| [G1 Repo Chores Plan](planning/plans/2026-10-28_g1-repo-chores.md) | G1 (Cleanup Week #5): pre-push E2E SKIP list, Context7 retirement, MIT LICENSE; [PR #93](https://github.com/GoodAlex223/media-viewer/pull/93) in review |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md

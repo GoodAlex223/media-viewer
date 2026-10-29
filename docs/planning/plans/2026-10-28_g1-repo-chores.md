@@ -4,7 +4,7 @@
 
 **Task Reference**: [WEEKLY.md § G1](../WEEKLY.md#g1-repo-chores-batch---repo-tooling--3-sp) · TODO 🟠 "Skip the pre-push E2E run when a push changes only paths the app never loads" (option 1 of BACKLOG 🔵 [2026-10-26] "Cut the pre-push E2E gate's cost: 10–12 min on every push that touches a non-docs file") · BACKLOG 🔵 [2026-10-28] "Retire the unused Context7 MCP server from `.mcp.json` and `.mcp.json.example`" · BACKLOG 🔵 [2026-10-22] "Add a LICENSE file (MIT, as `package.json` already declares)"
 **Created**: 2026-10-28
-**Status**: Executed (Native, 2026-10-28) — awaiting the push (E2E), PR and review
+**Status**: Executed (Native, 2026-10-28); PR #93 open; review round 1 fixed 2026-10-30, round 2 pending
 **Last Updated**: 2026-10-28
 
 **Goal:** A push that changes only paths the app never loads skips the 10–12 min E2E run; the unused Context7 configuration is gone; the repo has a LICENSE file.
@@ -199,7 +199,7 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 });
 ```
 
-- [x] **Step 2: Run them and see them fail.** Run `npx vitest run tests/check-e2e-needed.test.js` from `C:/Users/alexm/Projects/media_viewer`. Expect 14 failures: all 13 SKIP rows and the all-SKIP mixed case, since today each of those paths classifies RUN. The 24 RUN cases already pass. They guard against an over-broad fix and are not the RED.
+- [x] **Step 2: Run them and see them fail.** Run `npx vitest run tests/check-e2e-needed.test.js` from the repo root, with an uppercase drive letter. Expect 14 failures: all 13 SKIP rows and the all-SKIP mixed case, since today each of those paths classifies RUN. The 24 RUN cases already pass. They guard against an over-broad fix and are not the RED.
 - [x] **Step 3: Implement.** In `scripts/check-e2e-needed.js`, add module-level constants above `classifyPaths`: `SKIP_DIRS` (prefixes ending in `/`: `docs/`, `.claude/`, `scripts/`, `.husky/`, `prototypes/`, `tests/integration/`), `SKIP_FILES` (a `Set` of the six exact paths), and `UNIT_TEST = /^tests\/[^/]+\.test\.js$/`. Add a comment saying these are paths the app never loads, and that anything else runs. `classifyPaths` keeps its empty-list and blank-entry handling, and a path is SKIP when it ends in `.md`, starts with a `SKIP_DIRS` entry, is in `SKIP_FILES`, or matches `UNIT_TEST`. Rewrite the header's "Conservative: RUN unless EVERY changed path is docs/markdown" sentence and the JSDoc to describe the list. Change the SKIP stderr line to `'pre-push: no path the app loads changed — skipping E2E.\n'`.
 - [x] **Step 4: Run them and see them pass.** Same command. Expect PASS: 11 + 13 + 1 + 23 + 1 = 49 tests.
 - [x] **Step 5: Commit.** `git add scripts/check-e2e-needed.js tests/check-e2e-needed.test.js`, then `git commit -m "feat(scripts): skip pre-push E2E for paths the app never loads"`.
@@ -287,7 +287,20 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 - **Task 3** (guard): both tests passed on first run (54/54), as planned; the tree has no offender. Mutation (a), the helper returning `[]`, failed the control with all three entries missing; mutation (b), no `/x.js` probe, lost only `main.js → scripts`. Both reverted. Beyond the plan: a temporary intent-to-add `tests/e2e/zz-guard-probe.js` requiring `../../scripts/check-secrets.js` failed the real-tree test (`tests/e2e/zz-guard-probe.js → scripts/check-secrets.js`), which shows the `git ls-files` → filter → read path can fail too; the probe was removed. The real-tree test also asserts that it scanned more than 20 files, so an empty file list cannot pass it. The CLI tests' git helper now passes `-c core.autocrlf=false`, which silences the LF→CRLF warnings the system config printed into every pre-commit run.
 - **Task 4** (Context7): re-read `.mcp.json` with values masked: `context7` was still its only server, with an empty `--api-key`, so the approval held. Deleted it and `git rm`'d `.mcp.json.example`. `.claude/settings.local.json` now holds only `enabledPlugins` (parses). REVIEW-QUEUE correction added at line 58. `git check-ignore -v .mcp.json` → `.gitignore:1:.mcp.json`. The remaining `mcp.json.example` hits are dated or frozen (the 2026-06-11 audit in `docs/archive/`, `docs/security/` and `docs/superpowers/specs/`, `DONE.md`, this plan, and the BACKLOG and WEEKLY entries closeout ticks), plus the `.mcp.json.example → RUN` test row, which tests a path string, not the file.
 - **Fix to Task 2's CLI tests** (a side agent's note, relayed by the user mid-Task 5): the tests' git calls and the CLI spawn inherited the hook's environment. Measured with git 2.38 in a throwaway repo, a pre-commit hook gets `GIT_INDEX_FILE=.git/index` (relative) in a normal checkout, and absolute `GIT_DIR` and `GIT_INDEX_FILE` in a worktree. In a worktree commit, the temp repo's `init`/`add`/`commit` would then have run against the real worktree's repo and index. No harm came from the three commits already made here (normal checkout): no stray commits on any ref, each commit holds only its own files, and the tree is clean. Fix, in the idiom of `tests/check-claude-md-size.test.js`: `gitEnv()` deletes `GIT_DIR`, `GIT_INDEX_FILE` and `GIT_WORK_TREE`, and is built per call so a test can plant them. New test: plant both, absolute, pointing at a decoy repo. RED: `git add -A` failed with "this operation must be run in a work tree". GREEN 55/55. Mutation: without the env on the CLI spawn, the test fails (`RUN`, expected `SKIP`), since the CLI's diff went to the decoy. Commit `acd19e0`; full run 2,419 passed, 1 skipped.
-- **Task 5** (LICENSE): GitHub's MIT template via `gh api licenses/mit --jq .body` (1,070 bytes), with `[year]` → `2025` and `[fullname]` → `GoodAlex223`, LF, trailing newline. The diff against the substituted template is empty (the template already ends in a newline), `grep -c "Copyright (c) 2025 GoodAlex223" LICENSE` → 1, and there are no CR bytes. README § License links it. Both vendored libraries carry their own license files (`vendor/lucide/LICENSE`, `vendor/jxl-oxide-wasm/LICENSE-MIT` and `LICENSE-APACHE`), so "keep their own licenses" holds.
+- **Task 5** (LICENSE): GitHub's MIT template via `gh api licenses/mit --jq .body` (1,070 bytes), with `[year]` → `2025` and `[fullname]` → `GoodAlex223`, LF, trailing newline. The diff against the substituted template is empty (the template already ends in a newline), `grep -c "Copyright (c) 2025 GoodAlex223" LICENSE` → 1, and there are no CR bytes. README § License links it. Both vendored libraries carry their own license files (`vendor/lucide/LICENSE`, `vendor/jxl-oxide-wasm/LICENSE-MIT` and `LICENSE-APACHE`), so "keep their own licenses" holds. _Superseded 2026-10-30: the empty diff proved nothing about the end of the file. `--jq` adds a newline after a body that already ends in one, on both sides of the diff, so `LICENSE` ended in a blank line (review finding 14, fixed in round 1)._
+
+### 2026-10-30 — PHASE: Review round 1 (PR #93)
+
+- **The review**: a `max` review in a separate session, posted as one PR comment at `23e1115`. It has 15 findings and 7 held-back items, and its transcript holds nothing beyond the comment. I checked every claim first-hand before fixing. In particular, I reproduced the hook's fail-open with stub `node`/`npx`: the gate printing `RUN` then exiting 1, or printing nothing, made the hook skip E2E. I also confirmed the `.md` ordering and the LICENSE bytes.
+- **Fixes**, each with a test that failed first or a mutation that its test catches:
+  - `a1e59c2`: the hook runs E2E unless the gate prints exactly `SKIP`. This deviates from the Global Constraint "`.husky/pre-push` is not edited", which was a scope line, not the user's ruling. The reviewer's other remedy, keeping the hook and gate on RUN by name, would have changed the user-approved SKIP list.
+  - `47cb17d`: the guard reads the index, not the disk.
+  - `10bfab6`: the never-skip paths are checked before the `*.md` rule, and touched texts are corrected.
+  - `5c12f0a`: the CLI tests share one repo. New tests cover the new-branch merge-base and the exit status, signing is off, and cleanup is tolerant.
+  - `3cd950c`: the guard covers more load forms, has one control row per check (nine mutations), and pins `testDir`.
+  - This commit: the docs.
+- **The test file**: 55 → 67 tests, 8.0 s in the full run (the review measured 6.7–13.9 s at `23e1115`). Full suite: 2,431 passed, 1 skipped.
+- **A slip during the mutation runs**: a mutation script's `print` crashed on the console's cp1252 encoding after it had written a mutant into the test file. I restored the file from its backup and checked it byte for byte before going on. The script was then rewritten to restore in a `finally` and to log to a UTF-8 file.
 
 ---
 
@@ -304,9 +317,11 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 | Idea | Rationale | Effort | Priority |
 |------|-----------|--------|----------|
 | Force RUN when the push changes `scripts/check-e2e-needed.js` itself | the new gate judges its own push; a bug that wrongly SKIPs would let a runtime change in that same push through | XS | L |
-| Name the path that forced RUN in the stderr note | today it says only "runtime code changed"; naming the path shows the user why a push waits, and which file to add to the list | XS | L |
+| Name the path that forced RUN in the stderr note | today it says only "a path off the SKIP list changed"; naming the path shows the user why a push waits, and which file to add to the list | XS | L |
 | Add `LICENSE`, `.vscode/`, `.superpowers/`, `.gitignore` and `.gitattributes` to the SKIP list | none is loaded by the app; left RUN in G1 to keep the list to what the plan named | XS | L |
 | Give `tests/path-grants.test.js`'s case-sensitive-folder test a longer timeout (🟤) | it spawns `fsutil.exe`, and under the parallel pre-commit run it took 5.6 s against Vitest's 5 s default, which refused a G1 commit (2026-10-28); it passes alone. Measure its spawn time under load before choosing a figure | XS | L |
+| Extract one shared temp-repo git-env helper for the unit tests (🟤) | PR #93 review, held back: `tests/check-e2e-needed.test.js` holds the third hand-written copy of the hook-env scrub, and the `tests/check-secrets.test.js` copy omits `GIT_WORK_TREE`. That omission is harmless as measured (no hook exports it, git 2.38), but the copies can drift. The repo's own note (`tests/integration/cached-sort-path.test.js`) says to extract a duplicated helper once a third file needs it | S | L |
+| Make the gate print RUN for stdin that is not git's ref lines (🟤) | PR #93 review, held back: a non-blank line without four fields is dropped like a branch deletion, so `garbage` prints SKIP. This predates G1, and git always sends well-formed lines. The header now says so instead of claiming "RUN on any parse failure" | XS | L |
 
 ### Spawned Tasks
 
@@ -321,7 +336,7 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 ### Test Plan
 
 - [x] Unit: Tasks 1–3 (both ways per class, CLI on a real repo, guard with its planted control)
-- [x] Full `npx vitest run` from `C:/Users/alexm/Projects/media_viewer`: expect 49 files, and 2,375 + 43 = 2,418 passed, 1 skipped (Task 1 adds 38, Task 2 adds 3, Task 3 adds 2). Check the count, not just the exit code
+- [x] Full `npx vitest run` from the repo root, with an uppercase drive letter: expect 49 files, and 2,375 + 43 = 2,418 passed, 1 skipped (Task 1 adds 38, Task 2 adds 3, Task 3 adds 2). Check the count, not just the exit code
 - [x] `npm run lint`; `npx prettier --check scripts/check-e2e-needed.js tests/check-e2e-needed.test.js`; `node scripts/check-docs-index.js`
 - [x] **Dogfood, both ways, on this branch's history.** `printf "refs/heads/g1-repo-chores <Task-3 SHA> refs/heads/g1-repo-chores $(git rev-parse origin/main)\n" | node scripts/check-e2e-needed.js` should print `SKIP`. The same with `HEAD` should print `RUN`, because Task 4 deletes `.mcp.json.example` and Task 5 adds `LICENSE`
 - [ ] Push: the hook prints RUN and the full E2E suite passes. If only the known flake fails (TODO 🟠 "Ctrl+A undo restores the previous pair after a pick", G2's item), re-push once and record it here
@@ -336,14 +351,15 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 | `npx prettier --check` (script + test) | clean | |
 | `node scripts/check-docs-index.js` | exit 0 | |
 | Dogfood vs `origin/main` `a3d00e8` | `c4e9411` (Task 3) → SKIP; HEAD → RUN | stderr "no path the app loads changed" / "runtime code changed"; HEAD's RUN comes from `.mcp.json.example` and `LICENSE`, the only RUN paths in the range |
-| Push (pre-push E2E) | pending | needs the user's approval |
+| Push (pre-push E2E) | RUN; 236 passed, 7 skipped, none flaky (11.2 min) | `23e1115`, pushed 2026-10-28 as PR #93 |
+| Review round 1 fixes | test file 67/67; full suite 2,431 passed, 1 skipped | see § 4, 2026-10-30 |
 
 ---
 
 ## 8. Review
 
 - [x] Self-review complete
-- [ ] Code review in a separate session at `max`
+- [ ] Code review in a separate session at `max` (round 1: 15 findings + 7 held back, all answered in the PR; round 2 pending)
 - [ ] User approved
 
 ---
@@ -356,5 +372,9 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 | `TODO.md` — tick the 🟠 SKIP-list item | |
 | `DONE.md` — entry with plan link, summary, key changes | |
 | `WEEKLY.md` — G1's Summary-Table Status and its Daily-Schedule row, each `✅ <merge-SHA>` | |
-| `docs/README.md` — plan under Archived Plans (no spec) | |
+| `BACKLOG.md` — annotate 🟤 "Add CLI-layer regression tests for `scripts/check-e2e-needed.js`": PR #93 delivered the moved-file, new-branch merge-base and exit-status cases; still missing are git failure → RUN and stdin failure → RUN (review finding 12) | |
+| `docs/README.md` — plan under Archived Plans (no spec), and its Active Plans row removed | |
 | `docs/archive/plans/` — plan moved here, original deleted | |
+| Deploy record | N/A: a dev-tooling change, nothing deploy-tied |
+| Live docs — every late finding corrected where a live doc asserts it (round 1 corrected `GOALS.md:83` and `CLAUDE.md`'s pre-push sentence; re-sweep after each round) | |
+| Memory — durable decisions and patterns captured | |
